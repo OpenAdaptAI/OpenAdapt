@@ -1,6 +1,6 @@
-# GUI Process Automation with Transformers
+# PuterBot: GUI Process Automation with Transformers
 
-Welcome to GUI Process Automation with Transformers! We are working with a dataset of user input events, screenshots, and window events. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the original goal of the user in the recording is accomplished, while accounting for differences in screen resolution, window size, and application behavior.
+Welcome to PuterBot: GUI Process Automation with Transformers! We are working with a dataset of user input events, screenshots, and window events. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the original goal of the user in the recording is accomplished, while accounting for differences in screen resolution, window size, and application behavior.
 
 ## Problem Statement
 
@@ -18,7 +18,7 @@ You can assume that you have access to the following functions:
 - `get_recording()`: Gets the latest recording. 
 - `get_events(recording)`: Returns a list of `InputEvent` objects for the given recording.
 
-## Requirements 
+## Contributing 
 
 1. Fork this repository and clone it to your local machine. 
 2. Get puterbot up and running by following the instructions in puterbot/README.md
@@ -32,7 +32,7 @@ This function should return a new `InputEvent` object that can be used to replay
 
 4. Write unit tests for your implementation.
 
-## Evaluation Criteria
+### Evaluation Criteria
 
 Your submission will be evaluated based on the following criteria: 
 
@@ -54,7 +54,7 @@ Your submission will be evaluated based on the following criteria:
 
 4. Bonus: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is strongly encouraged. If you choose to do so, please include the full transcript.
 
-## Getting Started
+### Getting Started
 
 Here are some stubs and suggestions to help you get started with your implementation: 
 
@@ -111,7 +111,7 @@ d. Create a new InputEvent object based on the predicted properties and return i
 
 2. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
 
-## Wrapping Up
+### Wrapping Up
 
 Once you have implemented the `generate_input_event` function and written unit tests, commit your changes to your forked repository, create a pull request, and provide a brief summary of your approach, assumptions, and library integrations.
 
