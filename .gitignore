@@ -10,3 +10,6 @@ cache
 
 # Vim
 *.sw[m-p]
+
+# db
+*.db

@@ -2,10 +2,10 @@
 
 ```
 cd puterbot
-python3.10 -m venv env
-source env/bin/activate
+python3.10 -m venv .venv
+source .venv/bin/activate
 pip install wheel
-pip install -r requirements
+pip install -r requirements.txt
 pip install -e .
 alembic upgrade head
 ```
