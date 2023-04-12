@@ -1,10 +1,10 @@
 # PuterBot: GUI Process Automation with Transformers
 
-Welcome to PuterBot: GUI Process Automation with Transformers! We are working with a dataset of user input events, screenshots, and window events. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the original goal of the user in the recording is accomplished, while accounting for differences in screen resolution, window size, and application behavior.
+Welcome to PuterBot: GUI Process Automation with Transformers! We are working with a dataset of user input events, screenshots, and window events. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the task in the recording is accomplished, while accounting for differences in screen resolution, window size, application behavior, etc.
 
 ## Problem Statement
 
-Given a new Screenshot, we want to generate the appropriate InputEvent(s) based on the previously recorded InputEvents, where each Screenshot is taken immediately before its associated InputEvent. We need to account for differences in screen resolution, window size, and application behavior. InputEvents contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
+Given a new Screenshot, we want to generate the appropriate InputEvent(s) based on the previously recorded InputEvents, where each Screenshot is taken immediately before its associated InputEvent. We need to account for differences in screen resolution, window size, application behavior, etc. InputEvents contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
 
 ## Dataset
 
@@ -24,7 +24,7 @@ You can assume that you have access to the following functions:
 2. Get puterbot up and running by following the instructions in puterbot/README.md
 3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
-- `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from the original recording, with each InputEvent having an associated Screenshot.
+- `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from a previous recording, with each InputEvent having an associated Screenshot.
 
 This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and application behavior.
 
