@@ -52,7 +52,7 @@ Your submission will be evaluated based on the following criteria:
 
 3. In your pull request, include a brief summary of your approach, any assumptions you made, and how you integrated the SegmentAnything, GPT-J, and PaddleOCR libraries.
 
-4. Bonus: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is strongly encouraged. If you choose to do so, please include the full transcript.
+4. *Bonus*: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is encouraged. If you choose to do so, please include the full transcript.
 
 ### Getting Started
 
@@ -106,15 +106,9 @@ c. Generate textual prompts based on the segmented objects and extracted text, a
 
 d. Create a new InputEvent object based on the predicted properties and return it. 
 
+e. *Bonus*: Use the HuggingFace transformers library to extract features from Screenshots and InputEvents and generate InputEvent replay sequences directly (end-to-end).
+
 6. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
-
-
-### Bonus
-
-7. Use the HuggingFace transformers library to extract features from Screenshots and InputEvents and generate
-InputEvent replay sequences directly (end-to-end).
-
-
 
 ### Wrapping Up
 
