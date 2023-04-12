@@ -22,9 +22,9 @@ You can assume that you have access to the following functions:
 
 1. Fork this repository and clone it to your local machine. 
 2. Get puterbot up and running by following the instructions in puterbot/README.md
-3. Implement a Python function `generate_input_event(new_screenshot, input_events)`, where: 
+3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
-- `input_events`: A list of `InputEvent` objects from the original recording, with each InputEvent having an associated Screenshot.
+- `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from the original recording, with each InputEvent having an associated Screenshot.
 
 This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and application behavior.
 
