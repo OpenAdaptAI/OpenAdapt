@@ -1,0 +1,525 @@
+from collections import Counter, defaultdict, namedtuple
+from functools import partial
+import multiprocessing
+import os
+import queue
+import signal
+import sys
+import threading
+import time
+import zlib
+
+from loguru import logger
+from pynput import keyboard, mouse
+import matplotlib.pyplot as plt
+import mss
+import mss.tools
+import pygetwindow as pgw
+
+from puterbot.config import ROOT_DIRPATH
+from puterbot.crud import (
+    insert_input_event,
+    insert_screenshot,
+    insert_recording,
+    insert_window_event,
+)
+from puterbot.utils import (
+    configure_logging,
+    get_double_click_distance_pixels,
+    get_double_click_interval_seconds,
+    get_monitor_dims,
+    set_start_time,
+    get_timestamp,
+)
+
+
+EVENT_TYPES = ("screen", "input", "window")
+LOG_LEVEL = "INFO"
+PROC_WRITE_BY_EVENT_TYPE = {
+    "screen": True,
+    "input": True,
+    "window": True,
+}
+DIRNAME_PERFORMANCE_PLOTS = "performance"
+PLOT_PERFORMANCE = False
+
+
+Event = namedtuple("Event", ("timestamp", "type", "data"))
+
+
+def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
+    if PROC_WRITE_BY_EVENT_TYPE[event.type]:
+        write_q.put(event)
+    else:
+        write_fn(recording_timestamp, event, perf_q)
+
+
+def process_events(
+    event_q,
+    screen_write_q,
+    input_write_q,
+    window_write_q,
+    perf_q,
+    recording_timestamp,
+    terminate_event,
+):
+    configure_logging(logger, LOG_LEVEL)
+    set_start_time(recording_timestamp)
+    logger.info(f"starting")
+
+    prev_event = None
+    prev_screen_event = None
+    prev_window_event = None
+    prev_saved_screen_timestamp = 0
+    prev_saved_window_timestamp = 0
+    while not terminate_event.is_set() or not event_q.empty():
+        event = event_q.get()
+        logger.debug(f"{event=}")
+        assert event.type in EVENT_TYPES, event
+        if prev_event is not None:
+            assert event.timestamp > prev_event.timestamp, (event, prev_event)
+        if event.type == "screen":
+            prev_screen_event = event
+        elif event.type == "window":
+            prev_window_event = event
+        elif event.type == "input":
+            if prev_screen_event is None:
+                logger.warning("discarding input that came before screen")
+                continue
+            if prev_window_event is None:
+                logger.warning("discarding input that came before window")
+                continue
+            event.data["screenshot_timestamp"] = prev_screen_event.timestamp
+            event.data["window_event_timestamp"] = prev_window_event.timestamp
+            process_event(
+                event,
+                input_write_q,
+                write_input_event,
+                recording_timestamp,
+                perf_q,
+            )
+            if prev_saved_screen_timestamp < prev_screen_event.timestamp:
+                process_event(
+                    prev_screen_event,
+                    screen_write_q,
+                    write_screen_event,
+                    recording_timestamp,
+                    perf_q,
+                )
+                prev_saved_screen_timestamp = prev_screen_event.timestamp
+            if prev_saved_window_timestamp < prev_window_event.timestamp:
+                process_event(
+                    prev_window_event,
+                    window_write_q,
+                    write_window_event,
+                    recording_timestamp,
+                    perf_q,
+                )
+                prev_saved_window_timestamp = prev_window_event.timestamp
+        else:
+            raise Exception(f"unhandled {event.type=}")
+        prev_event = event
+    logger.info("done")
+
+
+def write_input_event(recording_timestamp, event, perf_q):
+    assert event.type == "input", event
+    insert_input_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, get_timestamp()))
+
+
+def write_screen_event(recording_timestamp, event, perf_q):
+    assert event.type == "screen", event
+    screenshot = event.data
+    png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+    event_data = {"png_data": png_data}
+    insert_screenshot(recording_timestamp, event.timestamp, event_data)
+    perf_q.put((event.type, event.timestamp, get_timestamp()))
+
+
+def write_window_event(recording_timestamp, event, perf_q):
+    assert event.type == "window", event
+    insert_window_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, get_timestamp()))
+
+
+def write_events(
+    event_type,
+    write_fn,
+    write_q,
+    perf_q,
+    recording_timestamp,
+    terminate_event,
+):
+    configure_logging(logger, LOG_LEVEL)
+    set_start_time(recording_timestamp)
+    logger.info(f"{event_type=} starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while not terminate_event.is_set() or not write_q.empty():
+        try:
+            event = write_q.get_nowait()
+        except queue.Empty:
+            continue
+        assert event.type == event_type, (event_type, event)
+        write_fn(recording_timestamp, event, perf_q)
+    logger.info(f"{event_type=} done")
+
+
+def trigger_input_event(event_q, input_event_args):
+    event_q.put(Event(get_timestamp(), "input", input_event_args))
+
+
+def on_move(event_q, x, y, injected):
+    logger.debug(f"{x=} {y=} {injected=}")
+    if not injected:
+        trigger_input_event(
+            event_q,
+            {
+                "name": "move",
+                "mouse_x": x,
+                "mouse_y": y,
+            }
+        )
+
+
+def on_click(event_q, x, y, button, pressed, injected):
+    logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
+    if not injected:
+        trigger_input_event(
+            event_q,
+            {
+                "name": "click",
+                "mouse_x": x,
+                "mouse_y": y,
+                "mouse_button_name": button.name,
+                "mouse_pressed": pressed,
+            }
+        )
+
+
+def on_scroll(event_q, x, y, dx, dy, injected):
+    logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
+    if not injected:
+        trigger_input_event(
+            event_q,
+            {
+                "name": "scroll",
+                "mouse_x": x,
+                "mouse_y": y,
+                "mouse_dx": dx,
+                "mouse_dy": dy,
+            }
+        )
+
+
+def handle_key(event_q, event_name, key, canonical_key):
+    attr_names = [
+        "name",
+        "char",
+        "vk",
+    ]
+    attrs = {
+        f"key_{attr_name}": getattr(key, attr_name, None)
+        for attr_name in attr_names
+    }
+    logger.debug(f"{attrs=}")
+    canonical_attrs = {
+        f"canonical_key_{attr_name}": getattr(canonical_key, attr_name, None)
+        for attr_name in attr_names
+    }
+    logger.debug(f"{canonical_attrs=}")
+    trigger_input_event(
+        event_q,
+        {
+            "name": event_name,
+            **attrs,
+            **canonical_attrs
+        }
+    )
+
+
+def read_screen_events(event_q, terminate_event, recording_timestamp):
+    configure_logging(logger, LOG_LEVEL)
+    set_start_time(recording_timestamp)
+    logger.info(f"starting")
+    while not terminate_event.is_set():
+        with mss.mss() as sct:
+            # monitor 0 is all in one
+            monitor = sct.monitors[0]
+            screenshot = sct.grab(monitor)
+        if screenshot is None:
+            logger.warning("screenshot was None")
+            continue
+        event_q.put(Event(get_timestamp(), "screen", screenshot))
+    logger.info("done")
+
+
+def read_window_events(event_q, terminate_event, recording_timestamp):
+    configure_logging(logger, LOG_LEVEL)
+    set_start_time(recording_timestamp)
+    logger.info(f"starting")
+    prev_title = None
+    prev_geometry = None
+    while not terminate_event.is_set():
+        # TODO: save window identifier (a window's title can change, or
+        # multiple windows can have the same title)
+        if sys.platform == "darwin":
+            # pywinctl performance on mac is unusable, see:
+            # https://github.com/Kalmat/PyWinCtl/issues/29
+            title = pgw.getActiveWindow()
+            geometry = pgw.getWindowGeometry(title)
+            if geometry is None:
+                logger.warning(f"{geometry=}")
+                continue
+        else:
+            window = pgw.getActiveWindow()
+            if not window:
+                logger.warning(f"{window=}")
+                continue
+            title = window.title
+            geometry = window.box
+        if title != prev_title or geometry != prev_geometry:
+
+            # TODO: fix exception sometimes triggered by the next line on win32:
+            #   File "\Python39\lib\threading.py" line 917, in run
+            #   File "...\puterbot\record.py", line 277, in read window events
+            #   File "...\env\lib\site-packages\loguru\logger.py" line 1977, in info
+            #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
+            #       for handler in core.handlers.values):
+            #   RuntimeError: dictionary changed size during iteration
+            logger.info(f"{title=} {prev_title=} {geometry=} {prev_geometry=}")
+
+            left, top, width, height = geometry
+            event_q.put(Event(
+                get_timestamp(),
+                "window",
+                {
+                    "title": title,
+                    "left": left,
+                    "top": top,
+                    "width": width,
+                    "height": height,
+                }
+            ))
+        prev_title = title
+        prev_geometry = geometry
+
+
+def plot_performance(recording_timestamp, perf_q):
+    type_to_prev_start_time = defaultdict(list)
+    type_to_start_time_deltas = defaultdict(list)
+    type_to_proc_times = defaultdict(list)
+    type_to_count = Counter()
+    type_to_timestamps = defaultdict(list)
+    while not perf_q.empty():
+        event_type, start_time, end_time = perf_q.get()
+        prev_start_time = type_to_prev_start_time.get(event_type, start_time)
+        start_time_delta = start_time - prev_start_time
+        type_to_start_time_deltas[event_type].append(start_time_delta)
+        type_to_prev_start_time[event_type] = start_time
+        type_to_proc_times[event_type].append(end_time - start_time)
+        type_to_count[event_type] += 1
+        type_to_timestamps[event_type].append(start_time)
+
+    if not PLOT_PERFORMANCE:
+        return
+
+    y_data = {"proc_times": {}, "start_time_deltas": {}}
+    for i, event_type in enumerate(type_to_count):
+        type_count = type_to_count[event_type]
+        start_time_deltas = type_to_start_time_deltas[event_type]
+        proc_times = type_to_proc_times[event_type]
+        y_data["proc_times"][event_type] = proc_times
+        y_data["start_time_deltas"][event_type] = start_time_deltas
+
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
+    for i, data_type in enumerate(y_data):
+        for event_type in y_data[data_type]:
+            x = type_to_timestamps[event_type]
+            y = y_data[data_type][event_type]
+            axes[i].scatter(x, y, label=event_type)
+        axes[i].set_title(data_type)
+        axes[i].legend()
+    # TODO: add PROC_WRITE_BY_EVENT_TYPE
+    fname_parts = ["performance", f"{recording_timestamp}"]
+    fname = "-".join(fname_parts) + ".png"
+    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
+    logger.info(f"{fpath=}")
+    plt.savefig(fpath)
+    os.system(f"open {fpath}")
+
+
+def create_recording():
+    timestamp = set_start_time()
+    monitor_width, monitor_height = get_monitor_dims()
+    double_click_distance_pixels = get_double_click_distance_pixels()
+    double_click_interval_seconds = get_double_click_interval_seconds()
+    recording_data = {
+        "timestamp": timestamp,
+        "monitor_width": monitor_width,
+        "monitor_height": monitor_height,
+        "double_click_distance_pixels": double_click_distance_pixels,
+        "double_click_interval_seconds": double_click_interval_seconds,
+        "platform": sys.platform,
+    }
+    recording = insert_recording(recording_data)
+    logger.info(f"{recording=}")
+    return recording
+
+
+def read_keyboard_events(event_q, terminate_event, recording_timestamp):
+
+
+    def on_press(event_q, key, injected):
+        canonical_key = keyboard_listener.canonical(key)
+        logger.debug(f"{key=} {injected=} {canonical_key=}")
+        if not injected:
+            handle_key(event_q, "press", key, canonical_key)
+
+
+    def on_release(event_q, key, injected):
+        canonical_key = keyboard_listener.canonical(key)
+        logger.debug(f"{key=} {injected=} {canonical_key=}")
+        if not injected:
+            handle_key(event_q, "release", key, canonical_key)
+
+
+    set_start_time(recording_timestamp)
+    keyboard_listener = keyboard.Listener(
+        on_press=partial(on_press, event_q),
+        on_release=partial(on_release, event_q),
+    )
+    keyboard_listener.start()
+    terminate_event.wait()
+    keyboard_listener.stop()
+
+
+def read_mouse_events(event_q, terminate_event, recording_timestamp):
+    set_start_time(recording_timestamp)
+    mouse_listener = mouse.Listener(
+        on_move=partial(on_move, event_q),
+        on_click=partial(on_click, event_q),
+        on_scroll=partial(on_scroll, event_q),
+    )
+    mouse_listener.start()
+    terminate_event.wait()
+    mouse_listener.stop()
+
+
+def main():
+    configure_logging(logger, LOG_LEVEL)
+
+    recording = create_recording()
+    recording_timestamp = recording.timestamp
+
+    event_q = queue.Queue()
+    screen_write_q = multiprocessing.Queue()
+    input_write_q = multiprocessing.Queue()
+    window_write_q = multiprocessing.Queue()
+    # TODO: save write times to DB; display performance plot in visualize.py
+    perf_q = multiprocessing.Queue()
+    terminate_event = multiprocessing.Event()
+
+    window_event_reader = threading.Thread(
+        target=read_window_events,
+        args=(event_q, terminate_event, recording_timestamp),
+    )
+    window_event_reader.start()
+
+    screen_event_reader = threading.Thread(
+        target=read_screen_events,
+        args=(event_q, terminate_event, recording_timestamp),
+    )
+    screen_event_reader.start()
+
+    keyboard_event_reader = threading.Thread(
+        target=read_keyboard_events,
+        args=(event_q, terminate_event, recording_timestamp),
+    )
+    keyboard_event_reader.start()
+
+    mouse_event_reader = threading.Thread(
+        target=read_mouse_events,
+        args=(event_q, terminate_event, recording_timestamp),
+    )
+    mouse_event_reader.start()
+
+    event_processor = threading.Thread(
+        target=process_events,
+        args=(
+            event_q,
+            screen_write_q,
+            input_write_q,
+            window_write_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+        ),
+    )
+    event_processor.start()
+
+    screen_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "screen",
+            write_screen_event,
+            screen_write_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+        ),
+    )
+    screen_event_writer.start()
+
+    input_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "input",
+            write_input_event,
+            input_write_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+        ),
+    )
+    input_event_writer.start()
+
+    window_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "window",
+            write_window_event,
+            window_write_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+        ),
+    )
+    window_event_writer.start()
+
+    # TODO: discard events until everything is ready
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        terminate_event.set()
+
+    logger.info(f"joining...")
+    keyboard_event_reader.join()
+    mouse_event_reader.join()
+    screen_event_reader.join()
+    window_event_reader.join()
+    event_processor.join()
+    screen_event_writer.join()
+    input_event_writer.join()
+    window_event_writer.join()
+
+    plot_performance(recording_timestamp, perf_q)
+
+    logger.info("done")
+
+
+if __name__ == "__main__":
+    main()
