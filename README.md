@@ -63,9 +63,6 @@ Here are some stubs and suggestions to help you get started with your implementa
 2. Create a new file, `gui_process_automation.py`, and import the necessary libraries:
 
 ```python
-
-import cv2
-import numpy as np
 from segment_anything import SamPredictor, sam_model_registry
 from transformers import GPTJForCausalLM, GPT2Tokenizer
 from paddleocr import PaddleOCR
@@ -93,23 +90,31 @@ ocr = PaddleOCR()
 
 ```python
 
-def generate_input_event(new_screenshot, input_events):
-    # TODO: Implement the function to generate a new InputEvent based on the previous InputEvents and the new Screenshot
+def generate_input_event(new_screenshot, recording):
+    # TODO: Implement the function to generate a new InputEvent based on the new Screenshot and the previous Recording
     pass
 ```
 
  
 5. In the `generate_input_event` function, you may want to follow these steps:
 
-a. Use the Segment Anything library to segment the objects in the new screenshot.
+a. Use the Segment Anything library to segment the objects in the new and previous screenshots.
 
-b. Use the PaddleOCR library to extract text information from the new screenshot.
+b. Use the PaddleOCR library to extract text information from the new and previous screenshots.
 
 c. Generate textual prompts based on the segmented objects and extracted text, and use the GPT-J model to predict the next InputEvent properties.
 
 d. Create a new InputEvent object based on the predicted properties and return it. 
 
 6. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
+
+
+### Bonus
+
+7. Use the HuggingFace transformers library to extract features from Screenshots and InputEvents and generate
+InputEvent replay sequences directly (end-to-end).
+
+
 
 ### Wrapping Up
 
