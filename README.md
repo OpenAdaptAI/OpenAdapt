@@ -28,9 +28,9 @@ You can assume that you have access to the following functions:
 
 This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and application behavior.
 
-3. Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment. 
+4. Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment.
 
-4. Write unit tests for your implementation.
+5. Write unit tests for your implementation.
 
 ### Evaluation Criteria
 
@@ -72,7 +72,7 @@ from paddleocr import PaddleOCR
 ```
 
 
-1. Initialize the models:
+3. Initialize the models:
 
 ```python
 
@@ -89,7 +89,7 @@ ocr = PaddleOCR()
 ```
 
  
-1. Create the `generate_input_event` function:
+4. Create the `generate_input_event` function:
 
 ```python
 
@@ -99,7 +99,7 @@ def generate_input_event(new_screenshot, input_events):
 ```
 
  
-1. In the `generate_input_event` function, you may want to follow these steps:
+5. In the `generate_input_event` function, you may want to follow these steps:
 
 a. Use the Segment Anything library to segment the objects in the new screenshot.
 
@@ -109,7 +109,7 @@ c. Generate textual prompts based on the segmented objects and extracted text, a
 
 d. Create a new InputEvent object based on the predicted properties and return it. 
 
-2. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
+6. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
 
 ### Wrapping Up
 
@@ -122,5 +122,5 @@ We hope that these stubs and suggestions will help you get started with your imp
 Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
 following information:
 
-- Problem description (include any relevant console output and/or screenshots)
-- Steps to reproduce (required in order for others to help you)
+- Problem description (please include any relevant console output and/or screenshots)
+- Steps to reproduce (please help others to help you!)
