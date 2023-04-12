@@ -116,3 +116,11 @@ d. Create a new InputEvent object based on the predicted properties and return i
 Once you have implemented the `generate_input_event` function and written unit tests, commit your changes to your forked repository, create a pull request, and provide a brief summary of your approach, assumptions, and library integrations.
 
 We hope that these stubs and suggestions will help you get started with your implementation. Good luck!
+
+## Submitting an Issue
+
+Please submit any issues to https://github.com/MLDSAI/PAT/issues with the
+following information:
+
+- Problem description (include any relevant console output and/or screenshots)
+- Steps to reproduce (required in order for others to help you)
