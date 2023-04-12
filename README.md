@@ -1,4 +1,4 @@
-# GUI Process Automation with Transformers
+# Process Automation with Transformers
 
 Welcome to the GUI Process Automation with Transformers takehome assignment! In this assignment, you will be working with a dataset of user input events, screenshots, and window events. Your task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the original goal of the user in the recording is accomplished, while accounting for differences in screen resolution, window size, and application behavior.
 ## Problem Statement
