@@ -1,9 +1,8 @@
 ## Setup
 
 ```
-git clone https://github.com/MLDSAI/puterbot.git
 cd puterbot
-python3.9 -m venv env
+python3.10 -m venv env
 source env/bin/activate
 pip install wheel
 pip install -r requirements
