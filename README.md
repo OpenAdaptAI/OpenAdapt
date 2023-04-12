@@ -119,7 +119,7 @@ We hope that these stubs and suggestions will help you get started with your imp
 
 ## Submitting an Issue
 
-Please submit any issues to https://github.com/MLDSAI/PAT/issues with the
+Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
 following information:
 
 - Problem description (include any relevant console output and/or screenshots)

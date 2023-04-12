@@ -1,6 +1,7 @@
 ## Setup
 
 ```
+git clone https://github.com/MLDSAI/puterbot.git
 cd puterbot
 python3.10 -m venv .venv
 source .venv/bin/activate
