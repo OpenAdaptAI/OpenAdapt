@@ -8,12 +8,12 @@ import numpy as np
 
 
 # Initialize Segment Anything model
-sam = sam_model_registry["<model_type>"](checkpoint="<path/to/checkpoint>")
+sam = sam_model_registry["vit_h"](checkpoint="sam_vit_h_4b8939.pth")
 sam_predictor = SamPredictor(sam)
 
 # Initialize GPT-J model
-tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B") # <-- consider using smaller model
+model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B") # <-- consider using smaller model
 
 # Initialize PaddleOCR model
 ocr = PaddleOCR()
