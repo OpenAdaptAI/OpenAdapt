@@ -12,4 +12,14 @@ def test_generate_input_event():
     generated_input_event = generate_input_event(new_screenshot, recording)
 
     # Perform any assertions or checks on the generated input event
-    print(generated_input_event)
+    print(generated_input_event.mouse_pressed)
+    print(generate_input_event.mouse_button_name)
+    print(generate_input_event.mouse_x)
+    print(generate_input_event.mouse_y)
+    print(generate_input_event.mouse_dx)
+    print(generate_input_event.mouse_dy)
+    print(generate_input_event.key_name)
+    print(generate_input_event.key_char)
+
+if __name__ == "__main__":
+    test_generate_input_event()
