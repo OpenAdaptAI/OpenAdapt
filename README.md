@@ -21,7 +21,7 @@ You can assume that you have access to the following functions:
 ## Contributing 
 
 1. Fork this repository and clone it to your local machine. 
-2. Get puterbot up and running by following the instructions in puterbot/README.md
+2. Get puterbot up and running by following the instructions under [Setup and Run puterbot](#setup-and-run-puterbot) below.
 3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
 - `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from a previous recording, with each InputEvent having an associated Screenshot.
@@ -54,8 +54,6 @@ Your submission will be evaluated based on the following criteria:
 4. *Bonus*: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is encouraged. If you choose to do so, please include the full transcript.
 
 ## Getting Started
-See [Setup and Run puterbot](#setup-and-run-puterbot) below for initial setup and running directions.
-
 Here are some stubs and suggestions to help you get started with your implementation: 
 
 1. Set up your Python environment and install the required libraries (Segment Anything, HuggingFace Transformers, and PaddleOCR). 
