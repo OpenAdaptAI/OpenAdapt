@@ -25,13 +25,16 @@ You can assume that you have access to the following functions:
 3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
 - `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from a previous recording, with each InputEvent having an associated Screenshot.
-- This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and application behavior.
+- This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and/or application behavior.
+4. Write unit tests for your implementation.
 
-4. Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment.
+### Approach
 
-5. Write unit tests for your implementation.
+Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment.
 
-## Evaluation Criteria
+Instead of Segment Anything, you can also try converting screenshots to text via ASCII art, e.g. https://github.com/LeandroBarone/python-ascii_magic.
+
+### Evaluation Criteria
 
 Your submission will be evaluated based on the following criteria: 
 
@@ -43,7 +46,7 @@ Your submission will be evaluated based on the following criteria:
 
 4. **Testing** : Your tests should cover various edge cases and scenarios to ensure the correctness of your implementation.
 
-## Submission
+### Submission
 
 1. Commit your changes to your forked repository.
 
