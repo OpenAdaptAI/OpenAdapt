@@ -21,16 +21,18 @@ You can assume that you have access to the following functions:
 ## Contributing 
 
 1. Fork this repository and clone it to your local machine. 
-2. Get puterbot up and running by following the instructions in puterbot/README.md
+2. Get puterbot up and running by following the instructions under [Setup and Run puterbot](#setup-and-run-puterbot) below.
 3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
 - `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from a previous recording, with each InputEvent having an associated Screenshot.
+- This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and/or application behavior.
+4. Write unit tests for your implementation.
 
-This function should return a new `InputEvent` object that can be used to replay the recording, taking into account differences in screen resolution, window size, and application behavior.
+### Approach
 
-4. Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment.
+Integrate the [Segment Anything](https://github.com/facebookresearch/segment-anything)  library, [HuggingFace GPT-J](https://huggingface.co/transformers/model_doc/gptj.html)  (or a similar transformer model), and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)  to assist in processing the screenshots and improving the generation of new InputEvents. These tools will help you determine the properties of the next InputEvent by segmenting the objects in the screenshots, generating textual prompts for GPT-J, and extracting text information from the images, respectively. Follow the installation instructions provided in their READMEs to set up the libraries in your environment.
 
-5. Write unit tests for your implementation.
+Instead of Segment Anything, you can also try converting screenshots to text via ASCII art, e.g. https://github.com/LeandroBarone/python-ascii_magic.
 
 ### Evaluation Criteria
 
@@ -54,8 +56,7 @@ Your submission will be evaluated based on the following criteria:
 
 4. *Bonus*: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is encouraged. If you choose to do so, please include the full transcript.
 
-### Getting Started
-
+## Getting Started
 Here are some stubs and suggestions to help you get started with your implementation: 
 
 1. Set up your Python environment and install the required libraries (Segment Anything, HuggingFace Transformers, and PaddleOCR). 
@@ -98,25 +99,87 @@ def generate_input_event(new_screenshot, recording):
  
 5. In the `generate_input_event` function, you may want to follow these steps:
 
-a. Use the Segment Anything library to segment the objects in the new and previous screenshots.
+- a. Use the Segment Anything library to segment the objects in the new and previous screenshots.
 
-b. Use the PaddleOCR library to extract text information from the new and previous screenshots.
+- b. Use the PaddleOCR library to extract text information from the new and previous screenshots.
 
-c. Generate textual prompts based on the segmented objects and extracted text, and use the GPT-J model to predict the next InputEvent properties.
+- c. Generate textual prompts based on the segmented objects and extracted text, and use the GPT-J model to predict the next InputEvent properties.
 
-d. Create a new InputEvent object based on the predicted properties and return it. 
+- d. Create a new InputEvent object based on the predicted properties and return it. 
 
-e. *Bonus*: Use the HuggingFace transformers library to extract features from Screenshots and InputEvents and generate InputEvent replay sequences directly (end-to-end).
+- e. *Bonus*: Use the HuggingFace transformers library to extract features from Screenshots and InputEvents and generate InputEvent replay sequences directly (end-to-end).
 
 6. Write unit tests for your implementation in a separate file, `test_gui_process_automation.py`.
 
-### Wrapping Up
+## Wrapping Up
 
 Once you have implemented the `generate_input_event` function and written unit tests, commit your changes to your forked repository, create a pull request, and provide a brief summary of your approach, assumptions, and library integrations.
 
 We hope that these stubs and suggestions will help you get started with your implementation. Good luck!
 
-## Submitting an Issue
+# Setup and Run puterbot
+
+## Setup
+
+```
+git clone https://github.com/MLDSAI/puterbot.git
+cd puterbot
+python3.10 -m venv .venv
+source .venv/bin/activate
+pip install wheel
+pip install -r requirements.txt
+pip install -e .
+alembic upgrade head
+```
+
+### Run tests
+```
+pytest
+```
+
+## Running
+
+Record:
+```
+python puterbot/record.py
+```
+
+Visualize:
+```
+python puterbot/visualize.py
+```
+
+## Troubleshooting
+
+Apple Silicon:
+
+```
+$ python puterbot/record.py
+...
+This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
+```
+
+Solution:
+https://stackoverflow.com/a/69673312
+
+```
+Settings -> Security & Privacy
+Click on the Privacy tab
+Scroll and click on the Accessibility Row
+Click the +
+Navigate to /System/Applications/Utilities/ or wherever the Terminal.app is installed
+Click okay.
+```
+
+## Developing
+
+### Generate migration (after editing a model)
+
+```
+alembic revision --autogenerate -m "<msg>"
+```
+
+# Submitting an Issue
 
 Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
 following information:
