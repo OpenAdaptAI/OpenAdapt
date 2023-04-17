@@ -1,3 +1,7 @@
+"""
+Implements the base class for implementing replay strategies.
+"""
+
 from abc import ABC, abstractmethod
 
 from pynput import keyboard, mouse

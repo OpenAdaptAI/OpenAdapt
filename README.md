@@ -31,6 +31,7 @@ Wait until all three event writers have started:
 | INFO     | __mp_main__:write_events:230 - event_type='screen' starting
 | INFO     | __mp_main__:write_events:230 - event_type='input' starting
 | INFO     | __mp_main__:write_events:230 - event_type='window' starting
+```
 
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
@@ -45,6 +46,8 @@ python puterbot/visualize.py
 ```
 
 This will open your browser. It will look something like this:
+
+![visualize.py](./assets/visualize.png)
 
 ### Playback
 
