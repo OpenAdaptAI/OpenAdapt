@@ -13,7 +13,7 @@ transformers instead of RPA tools.
 
 The approach is similar to [adept.ai](https://adept.ai/), except that instead
 of requiring the user to prompt the model directly, we prompt it behind the
-scenes by watching the user's activities.
+scenes by observing the user's activities.
 
 ## Setup
 
