@@ -1,5 +1,5 @@
 """
-Implements a naive playback strategy wherein the InptuEvents are replayed
+Implements a naive playback strategy wherein the InputEvents are replayed
 directly, without considering any screenshots.
 """
 

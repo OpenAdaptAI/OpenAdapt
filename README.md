@@ -81,7 +81,7 @@ You can assume that you have access to the following functions:
 ### Instructions
 
 1. Fork this repository and clone it to your local machine. 
-2. Get puterbot up and running by following the instructions under [Setup and Run puterbot](#setup-and-run-puterbot).
+2. Get puterbot up and running by following the instructions under [Setup](#Setup).
 3. Implement a Python function `generate_input_event(new_screenshot, recording)`, where:
 - `new_screenshot`: A `Screenshot` object representing the new screenshot. 
 - `recording`: A `Recording` whose `.screenshots` property is a list of `InputEvent` objects from a previous recording, with each InputEvent having an associated Screenshot.
