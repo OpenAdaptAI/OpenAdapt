@@ -11,6 +11,7 @@ mss==6.1.0
 pandas==2.0.0
 pygetwindow==0.0.9
 pyinstaller
+pywin32==306
 git+https://github.com/abrichr/pynput.git
 pytest==7.1.3
 scipy==1.9.3
