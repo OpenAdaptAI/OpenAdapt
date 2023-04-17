@@ -36,7 +36,7 @@ Instead of Segment Anything, you can also try converting screenshots to text via
 
 Your submission will be evaluated based on the following criteria: 
 
-1. **Functionality** : Your implementation should correctly generate the new `InputEvent` objects based on the provided data and the Segment Anything, GPT-J, and/or PaddleOCR libraries. 
+1. **Functionality** : Your implementation should correctly generate the new `InputEvent` objects that can be replayed in order to accomplish the task in the original recording.
 
 2. **Code Quality** : Your code should be well-structured, clean, and easy to understand. 
 
@@ -50,7 +50,7 @@ Your submission will be evaluated based on the following criteria:
 
 2. Create a pull request to the original repository with your changes.
 
-3. In your pull request, include a brief summary of your approach, any assumptions you made, and how you integrated the SegmentAnything, GPT-J, and PaddleOCR libraries.
+3. In your pull request, include a brief summary of your approach, any assumptions you made, and how you integrated external libraries.
 
 4. *Bonus*: interacting with ChatGPT and/or other language transformer models in order to generate code and/or evaluate design decisions is encouraged. If you choose to do so, please include the full transcript.
 
