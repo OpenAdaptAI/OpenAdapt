@@ -3,8 +3,8 @@
 Welcome to PuterBot: GUI Process Automation with Transformers! This library
 implements AI-First Process Automation for GUI applications. It:
 
-- Records screenshots and associated user input,
-- Converts screenshots and user input into tokenized format,
+- Records screenshots and associated user input
+- Converts screenshots and user input into tokenized format
 - Feeds tokenized screenshots and user input into transformer models
 - Converts transformer output into replayable input events
 
@@ -78,11 +78,16 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 ### Problem Statement
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
-That is, given a new Screenshot, we want to generate the appropriate
-InputEvent(s) based on the previously recorded InputEvents in order to
+That is, given a new `Screenshot`, we want to generate the appropriate
+`InputEvent`(s) based on the previously recorded `InputEvent`s in order to
 accomplish the task specified in the `Recording.task_description`, while
 accounting for differences in screen resolution, window size, application
 behavior, etc.
+
+If it's not clear what `InputEvent` is appropriate for the given `Screenshot`,
+(e.g. if the GUI application is behaving in a way we haven't seen before),
+we can ask the user to take over temporarily to demonstrate the appropriate
+course of action.
 
 ### Dataset
 
@@ -92,7 +97,7 @@ The dataset consists of the following entities:
 2. `InputEvent`: Represents a user input event such as a mouse click or key
    press. Each `InputEvent` has an associated `Screenshot` taken immediately
    before the event occurred. `InputEvent`s are aggregated to remove
-   unnecessary events (see [visualize][#visualize].)
+   unnecessary events (see [visualize](#visualize).)
 3. `Screenshot`: Contains the PNG data of a screenshot taken during the
    recording.
 4. `WindowEvent`: Represents a window event such as a change in window title,
