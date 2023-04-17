@@ -22,7 +22,6 @@ from loguru import logger
 from pynput import keyboard, mouse
 import fire
 import matplotlib.pyplot as plt
-import mss
 import mss.tools
 import pygetwindow as pgw
 
@@ -38,8 +37,9 @@ from puterbot.utils import (
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
     get_monitor_dims,
-    set_start_time,
+    get_screenshot,
     get_timestamp,
+    set_start_time,
 )
 
 
@@ -359,10 +359,7 @@ def read_screen_events(
     set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
-        with mss.mss() as sct:
-            # monitor 0 is all in one
-            monitor = sct.monitors[0]
-            screenshot = sct.grab(monitor)
+        screenshot = get_screenshot()
         if screenshot is None:
             logger.warning("screenshot was None")
             continue

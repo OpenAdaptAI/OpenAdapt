@@ -20,6 +20,8 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
+    input_events = sa.orm.relationship("InputEvent", back_populates="recording")
+
 
 class InputEvent(Base):
     __tablename__ = "input_event"
@@ -45,7 +47,7 @@ class InputEvent(Base):
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("input_event.id"))
 
     children = sa.orm.relationship("InputEvent")
-    recording = sa.orm.relationship("Recording")
+    recording = sa.orm.relationship("Recording", back_populates="input_events")
     screenshot = sa.orm.relationship("Screenshot")
     window_event = sa.orm.relationship("WindowEvent")
 
