@@ -20,6 +20,8 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
+    input_events = sa.orm.relationship("InputEvent")
+
 
 class InputEvent(Base):
     __tablename__ = "input_event"

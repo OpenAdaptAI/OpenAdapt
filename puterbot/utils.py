@@ -7,6 +7,7 @@ import time
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import mss
+import mss.base
 import numpy as np
 
 from puterbot.common import MOUSE_EVENTS, KEY_EVENTS
@@ -342,3 +343,22 @@ def evenly_spaced(arr, N):
         return arr
     idxs = set(np.round(np.linspace(0, len(arr) - 1, N)).astype(int))
     return [val for idx, val in enumerate(arr) if idx in idxs]
+
+
+def get_screenshot() -> mss.base.ScreenShot:
+    with mss.mss() as sct:
+        # monitor 0 is all in one
+        monitor = sct.monitors[0]
+        screenshot = sct.grab(monitor)
+    return screenshot
+
+
+def get_strategy_class_by_name():
+    from puterbot.strategies import BaseReplayStrategy
+    strategy_classes = BaseReplayStrategy.__subclasses__()
+    class_by_name = {
+        cls.__name__: cls
+        for cls in strategy_classes
+    }
+    logger.debug(f"{class_by_name=}")
+    return class_by_name
