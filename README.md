@@ -1,16 +1,16 @@
 # PuterBot: GUI Process Automation with Transformers
 
-Welcome to PuterBot: GUI Process Automation with Transformers! We are working with a dataset of user input events, screenshots, and window events. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the task in the recording is accomplished, while accounting for differences in screen resolution, window size, application behavior, etc.
+Welcome to PuterBot: GUI Process Automation with Transformers! We are working with a dataset of `InputEvent`, `Screenshot`s, and `WindowEvent`s. Our task is to generate the appropriate InputEvent(s) based on the previously recorded InputEvents and associated Screenshots, such that the task in the recording is accomplished, while accounting for differences in screen resolution, window size, application behavior, etc.
 
 ## Problem Statement
 
-Given a new Screenshot, we want to generate the appropriate InputEvent(s) based on the previously recorded InputEvents in order to accomplish the task specified in the `Recording.task_description`. Each Screenshot is taken immediately before its associated InputEvent. InputEvents contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
+Given a new `Screenshot`, we want to generate the appropriate `InputEvent`(s) based on the previously recorded `InputEvent`s in order to accomplish the task specified in the `Recording.task_description`. Each `Screenshot `is taken immediately before its associated `InputEvent`. `InputEvent`s contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
 
 ## Dataset
 
 The dataset consists of the following entities: 
 1. `Recording`: Contains information about the screen dimensions, platform, and other metadata. 
-2. `InputEvent`: Represents a user input event such as a mouse click or key press. Each InputEvent has an associated Screenshot taken immediately before the event. 
+2. `InputEvent`: Represents a user input event such as a mouse click or key press. Each `InputEvent` has an associated `Screenshot` taken immediately before the event. 
 3. `Screenshot`: Contains the PNG data of a screenshot taken during the recording. 
 4. `WindowEvent`: Represents a window event such as a change in window title, position, or size.
 
@@ -29,8 +29,6 @@ You can assume that you have access to the following functions:
 4. Write unit tests for your implementation.
 
 See https://github.com/MLDSAI/puterbot/issues for ideas on where to start.
-
-Instead of Segment Anything, you can also try converting screenshots to text via ASCII art, e.g. https://github.com/LeandroBarone/python-ascii_magic.
 
 ### Evaluation Criteria
 
