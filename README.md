@@ -4,7 +4,7 @@ Welcome to PuterBot: GUI Process Automation with Transformers! We are working wi
 
 ## Problem Statement
 
-Given a new Screenshot, we want to generate the appropriate InputEvent(s) based on the previously recorded InputEvents, where each Screenshot is taken immediately before its associated InputEvent. We need to account for differences in screen resolution, window size, application behavior, etc. InputEvents contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
+Given a new Screenshot, we want to generate the appropriate InputEvent(s) based on the previously recorded InputEvents in order to accomplish the task specified in the `Recording.task_description`. Each Screenshot is taken immediately before its associated InputEvent. InputEvents contain raw mouse and keyboard data which have been aggregated to remove unnecessary events.
 
 ## Dataset
 
