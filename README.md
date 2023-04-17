@@ -1,7 +1,7 @@
-# PuterBot: GUI Process Automation with Transformers
+# PuterBot: AI-First Process Automation with Transformers
 
-Welcome to PuterBot: GUI Process Automation with Transformers! This library
-implements AI-First Process Automation for GUI applications. It:
+Welcome to PuterBot! This Python library implements AI-First Process Automation
+with the power of Transformers. It:
 
 - Records screenshots and associated user input
 - Converts screenshots and user input into tokenized format
