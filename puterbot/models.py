@@ -18,6 +18,7 @@ class Recording(Base):
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
     double_click_distance_pixels = sa.Column(sa.Numeric(asdecimal=False))
     platform = sa.Column(sa.String)
+    task_description = sa.Column(sa.String)
 
 
 class InputEvent(Base):
