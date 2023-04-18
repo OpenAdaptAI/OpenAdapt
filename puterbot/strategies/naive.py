@@ -35,6 +35,9 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         sleep=SLEEP,
     ):
         super().__init__(recording)
+        self.display_events = display_events
+        self.replay_events = replay_events
+        self.sleep = sleep
         self.prev_timestamp = None
         self.input_event_idx = -1
         self.processed_input_events = get_events(recording, process=True) 
@@ -54,11 +57,11 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         logger.info(
             f"{self.input_event_idx=} of {num_input_events=}: {input_event=}"
         )
-        if DISPLAY_EVENTS:
+        if self.display_events:
             image = display_event(input_event)
             image.show()
-        if REPLAY_EVENTS:
-            if SLEEP and self.prev_timestamp:
+        if self.replay_events:
+            if self.sleep and self.prev_timestamp:
                 sleep_time = input_event.timestamp - self.prev_timestamp
                 logger.debug(f"{sleep_time=}")
                 time.sleep(sleep_time)
