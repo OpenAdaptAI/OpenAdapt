@@ -1,3 +1,4 @@
+from functools import partial
 from pprint import pformat
 import itertools
 import pytest
@@ -28,8 +29,10 @@ from puterbot.events import (
 DEFAULT_DT = get_double_click_interval_seconds() / 2
 # set to 10 to improve output readability
 OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS = None
+NUM_TIMESTAMP_DIGITS = 6
 
 
+rows2dicts = partial(rows2dicts, num_digits=NUM_TIMESTAMP_DIGITS)
 timestamp = 0
 timestamp_raw = 0
 
