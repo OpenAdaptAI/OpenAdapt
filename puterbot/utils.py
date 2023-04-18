@@ -63,7 +63,7 @@ def rows2dicts(
     rows,
     drop_empty=True,
     drop_constant=True,
-    num_digits=6,
+    num_digits=None,
 ):
     if num_digits:
         round_timestamps(rows, num_digits)
