@@ -48,7 +48,25 @@ def row2dict(row, follow=True):
     return row_dict
 
 
-def rows2dicts(rows, drop_empty=True, drop_constant=True):
+def round_timestamps(events, num_digits):
+    for event in events:
+        if isinstance(event, dict):
+            continue
+        prev_timestamp = event.timestamp
+        event.timestamp = round(event.timestamp, num_digits)
+        logger.debug(f"{prev_timestamp=} {event.timestamp=}")
+        if hasattr(event, "children") and event.children:
+            round_timestamps(event.children, num_digits)
+
+
+def rows2dicts(
+    rows,
+    drop_empty=True,
+    drop_constant=True,
+    num_digits=6,
+):
+    if num_digits:
+        round_timestamps(rows, num_digits)
     row_dicts = [row2dict(row) for row in rows]
     if drop_empty:
         keep_keys = set()
