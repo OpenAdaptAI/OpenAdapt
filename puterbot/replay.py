@@ -1,18 +1,8 @@
-from pprint import pformat
-import importlib
-import time
-
 from loguru import logger
-from pynput import keyboard, mouse
 import fire
 
-from puterbot.crud import (
-    get_latest_recording,
-)
-from puterbot.utils import (
-    configure_logging,
-    get_strategy_class_by_name,
-)
+from puterbot.crud import get_latest_recording
+from puterbot.utils import configure_logging, get_strategy_class_by_name
 
 
 LOG_LEVEL = "INFO"
