@@ -3,7 +3,7 @@ Demonstration of LLMReplayStrategyMixin and OCRReplayStrategyMixin.
 
 Usage:
 
-    $ python puterbot/replay.py LLMOCRDemoReplayStrategy
+    $ python puterbot/replay.py DemoReplayStrategy
 """
 
 from loguru import logger
