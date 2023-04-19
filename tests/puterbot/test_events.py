@@ -23,7 +23,7 @@ from puterbot.events import (
 
 
 # default duration between consecutive events
-# this needs to be small enough such that dt_short + DEFUALT_DT < x,
+# this needs to be small enough such that dt_short + DEFAULT < x,
 # where x is the double click interval in seconds
 # (see test_merge_consecutive_mouse_click_events() for definition of dt_short)
 DEFAULT_DT = get_double_click_interval_seconds() / 2
