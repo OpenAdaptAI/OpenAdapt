@@ -1,4 +1,5 @@
 alembic==1.8.1
+ascii_magic==2.3.0
 bokeh==2.4.3
 clipboard==0.0.4
 deepdiff==6.2.2
