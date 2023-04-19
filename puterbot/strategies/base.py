@@ -12,7 +12,6 @@ import numpy as np
 
 from puterbot.models import InputEvent, Recording, Screenshot
 from puterbot.playback import play_input_event
-from puterbot.utils import take_screenshot
 
 
 MAX_FRAME_TIMES = 1000
@@ -42,8 +41,7 @@ class BaseReplayStrategy(ABC):
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
         while True:
-            sct_img = take_screenshot()
-            screenshot = Screenshot(sct_img=sct_img)
+            screenshot = Screenshot.take_screenshot()
             self.screenshots.append(screenshot)
             try:
                 input_event = self.get_next_input_event(screenshot)
@@ -64,7 +62,7 @@ class BaseReplayStrategy(ABC):
         dts = np.diff(self.frame_times)
         if len(dts) > 1:
             mean_dt = np.mean(dts)
-            fps = len(dts) / mean_dt
+            fps = 1 / mean_dt
             logger.info(f"{fps=:.2f}")
         if len(self.frame_times) > self.max_frame_times:
             self.frame_times.pop(0)

@@ -7,6 +7,7 @@ import numpy as np
 import sqlalchemy as sa
 
 from puterbot.db import Base
+from puterbot.utils import take_screenshot
 
 
 class Recording(Base):
@@ -177,6 +178,12 @@ class Screenshot(Base):
     @property
     def array(self):
         return np.array(self.image)
+
+    @classmethod
+    def take_screenshot(cls):
+        sct_img = take_screenshot()
+        screenshot = Screenshot(sct_img=sct_img)
+        return screenshot
 
 
 class WindowEvent(Base):
