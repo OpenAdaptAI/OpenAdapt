@@ -39,6 +39,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         self,
         screenshot: mss.base.ScreenShot
     ):
+        # TOOD: improve performance
         image = Image.frombytes(
             "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
         )
