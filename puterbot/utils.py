@@ -363,12 +363,12 @@ def evenly_spaced(arr, N):
     return [val for idx, val in enumerate(arr) if idx in idxs]
 
 
-def get_screenshot() -> mss.base.ScreenShot:
+def take_screenshot() -> mss.base.ScreenShot:
     with mss.mss() as sct:
         # monitor 0 is all in one
         monitor = sct.monitors[0]
-        screenshot = sct.grab(monitor)
-    return screenshot
+        sct_img = sct.grab(monitor)
+    return sct_img
 
 
 def get_strategy_class_by_name():
