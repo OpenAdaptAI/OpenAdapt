@@ -7,8 +7,6 @@ Usage:
 """
 
 
-from loguru import logger
-
 import mss.base
 
 from puterbot.events import get_events
@@ -36,7 +34,7 @@ class LLMOCRDemoReplayStrategy(
     ):
         text = self.get_text(screenshot)
 
-        # this doesn't make sense and is for demonstrative purposes only
+        # N.B. this doesn't make sense and is for demonstration purposes only
         completion = self.generate_completion(text, 100)
 
         return None

@@ -1,5 +1,10 @@
 """
-Implements a ReplayStrategy mixin for getting text from images via OCR
+Implements a ReplayStrategy mixin for getting text from images via OCR.
+
+Usage:
+
+    class MyReplayStrategy(OCRReplayStrategyMixin):
+        ...
 """
 
 import itertools
@@ -17,7 +22,7 @@ from puterbot.strategies.base import BaseReplayStrategy
 
 
 # TODO: use group into sections via layout analysis; see:
-# https://github.com/RapidAI/RapidOCR/blob/main/python/rapid_structure/docs/README_Layout.md
+# github.com/RapidAI/RapidOCR/blob/main/python/rapid_structure/docs/README_Layout.md
 
 
 class OCRReplayStrategyMixin(BaseReplayStrategy):
@@ -27,10 +32,13 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
     ):
         super().__init__(recording)
 
-        # https://github.com/RapidAI/RapidOCR/blob/main/python/README.md
+        # github.com/RapidAI/RapidOCR/blob/main/python/README.md
         self.ocr = RapidOCR()
 
-    def get_text(self, screenshot: mss.base.ScreenShot):
+    def get_text(
+        self,
+        screenshot: mss.base.ScreenShot
+    ):
         image = Image.frombytes(
             "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
         )
