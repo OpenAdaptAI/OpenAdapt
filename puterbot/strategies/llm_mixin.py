@@ -15,7 +15,7 @@ from puterbot.models import Recording
 from puterbot.strategies.base import BaseReplayStrategy
 
 
-MODEL_NAME = "gpt2-xl"  # gpt2 is smaller and faster
+MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
 MODEL_MAX_LENGTH = 1024
 
 
