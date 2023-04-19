@@ -7,10 +7,8 @@ Usage:
 """
 
 
-import mss.base
-
 from puterbot.events import get_events
-from puterbot.models import Recording
+from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy
 from puterbot.strategies.llm_mixin import LLMReplayStrategyMixin
 from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
@@ -30,7 +28,7 @@ class LLMOCRDemoReplayStrategy(
 
     def get_next_input_event(
         self,
-        screenshot: mss.base.ScreenShot,
+        screenshot: Screenshot,
     ):
         text = self.get_text(screenshot)
 
