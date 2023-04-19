@@ -34,7 +34,7 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         self.model = tf.AutoModelForCausalLM.from_pretrained(model_name)
         self.model_max_length = model_max_length
 
-    def generate_completion(
+    def get_completion(
         self,
         prompt: str,
         max_tokens: int,
@@ -45,11 +45,10 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
                 f"Truncating from {len(prompt)=} to {model_max_length=}"
             )
             prompt = prompt[:model_max_length]
-        logger.info(f"{prompt=} {max_tokens=}")
+        logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id
         attention_mask = input_tokens["attention_mask"]
-
         output_tokens = self.model.generate(
             input_ids=input_tokens["input_ids"],
             attention_mask=attention_mask,
@@ -57,12 +56,10 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
             pad_token_id=pad_token_id,
             num_return_sequences=1
         )
-
         N = input_tokens["input_ids"].shape[-1]
         completion = self.tokenizer.decode(
             output_tokens[:, N:][0],
             clean_up_tokenization_spaces=True,
         )
-        logger.info(f"{completion=}")
-
+        logger.debug(f"{completion=}")
         return completion

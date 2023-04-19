@@ -36,7 +36,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
         self.ocr = RapidOCR()
 
-    def get_text(
+    def get_ocr_text(
         self,
         screenshot: Screenshot
     ):
@@ -48,6 +48,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         logger.debug(f"{elapse=}")
         df_text = get_text_df(result)
         text = get_text_from_df(df_text)
+        logger.debug(f"{text=}")
         return text
 
 
@@ -79,7 +80,7 @@ def get_text_df(
 
 	confidences = [confidence for coords, text, confidence in result]
 	df["confidence"] = confidences
-	logger.info(f"df=\n{df}")
+	logger.debug(f"df=\n{df}")
 	return df
 
 
