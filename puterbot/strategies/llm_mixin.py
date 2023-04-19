@@ -16,7 +16,7 @@ from puterbot.strategies.base import BaseReplayStrategy
 
 
 MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
-MODEL_MAX_LENGTH = 1024
+MAX_INPUT_SIZE = 1024
 
 
 class LLMReplayStrategyMixin(BaseReplayStrategy):
@@ -25,26 +25,26 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
         model_name: str = MODEL_NAME,
-        model_max_length: str = MODEL_MAX_LENGTH,
+        max_input_size: str = MAX_INPUT_SIZE,
     ):
         super().__init__(recording)
 
         logger.info(f"{model_name=}")
         self.tokenizer = tf.AutoTokenizer.from_pretrained(model_name)
         self.model = tf.AutoModelForCausalLM.from_pretrained(model_name)
-        self.model_max_length = model_max_length
+        self.max_input_size = max_input_size
 
     def get_completion(
         self,
         prompt: str,
         max_tokens: int,
     ):
-        model_max_length = self.model_max_length
-        if model_max_length and len(prompt) > model_max_length:
+        max_input_size = self.max_input_size
+        if max_input_size and len(prompt) > max_input_size:
             logger.warning(
-                f"Truncating from {len(prompt)=} to {model_max_length=}"
+                f"Truncating from {len(prompt)=} to {max_input_size=}"
             )
-            prompt = prompt[:model_max_length]
+            prompt = prompt[max_input_size:]
         logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id

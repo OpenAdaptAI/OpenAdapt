@@ -128,6 +128,31 @@ class InputEvent(Base):
     def canonical_text(self):
         return self._text(canonical=True)
 
+    def __str__(self):
+        attr_names = [
+            "name",
+            "mouse_x",
+            "mouse_y",
+            "mouse_dx",
+            "mouse_dy",
+            "mouse_button_name",
+            "mouse_pressed",
+            "key",
+        ]
+        attrs = [
+            getattr(self, attr_name)
+            for attr_name in attr_names
+        ]
+        attrs = [
+            int(attr)
+            if isinstance(attr, float)
+            else attr
+            for attr in attrs
+        ]
+        attrs = [str(attr) for attr in attrs if attr]
+        rval = " ".join(attrs)
+        return rval
+
 
 class Screenshot(Base):
     __tablename__ = "screenshot"
