@@ -1,18 +1,8 @@
-from pprint import pformat
-import importlib
-import time
-
 from loguru import logger
-from pynput import keyboard, mouse
 import fire
 
-from puterbot.crud import (
-    get_latest_recording,
-)
-from puterbot.utils import (
-    configure_logging,
-    get_strategy_class_by_name,
-)
+from puterbot.crud import get_latest_recording
+from puterbot.utils import configure_logging, get_strategy_class_by_name
 
 
 LOG_LEVEL = "INFO"
@@ -30,9 +20,14 @@ def replay(
 
     strategy_class_by_name = get_strategy_class_by_name()
     if strategy_name not in strategy_class_by_name:
-        available_strategy_names = ", ".join(strategy_class_by_name.keys())
+        strategy_names = [
+            name
+            for name in strategy_class_by_name.keys()
+            if not name.lower().endswith("mixin")
+        ]
+        available_strategies = ", ".join(strategy_names)
         raise ValueError(
-            f"Invalid {strategy_name=}; {available_strategy_names=}"
+            f"Invalid {strategy_name=}; {available_strategies=}"
         )
 
     strategy_class = strategy_class_by_name[strategy_name]
