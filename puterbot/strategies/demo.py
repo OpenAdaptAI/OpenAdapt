@@ -1,5 +1,5 @@
 """
-Demonstration of LLMReplayStrategyMixin and OCRReplayStrategyMixin.
+Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
