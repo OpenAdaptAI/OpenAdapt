@@ -61,8 +61,9 @@ class BaseReplayStrategy(ABC):
         t = time.time()
         self.frame_times.append(t)
         dts = np.diff(self.frame_times)
-        mean_dt = np.mean(dts)
-        fps = len(dts) / mean_dt
-        logger.info(f"{fps=:.2f}")
+        if len(dts) > 1:
+            mean_dt = np.mean(dts)
+            fps = len(dts) / mean_dt
+            logger.info(f"{fps=:.2f}")
         if len(self.frame_times) > self.max_frame_times:
             self.frame_times.pop(0)
