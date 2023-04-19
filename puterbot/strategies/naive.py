@@ -9,13 +9,8 @@ import time
 from loguru import logger
 import mss.base
 
-from puterbot.events import (
-    get_events,
-)
-from puterbot.utils import (
-    display_event,
-    rows2dicts,
-)
+from puterbot.events import get_events
+from puterbot.utils import display_event, rows2dicts
 from puterbot.models import Recording
 from puterbot.strategies.base import BaseReplayStrategy
 
