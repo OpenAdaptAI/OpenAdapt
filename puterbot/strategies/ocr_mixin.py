@@ -16,11 +16,10 @@ from loguru import logger
 from PIL import Image
 from rapidocr_onnxruntime import RapidOCR
 from sklearn.cluster import DBSCAN
-import mss.base
 import numpy as np
 import pandas as pd
 
-from puterbot.models import Recording
+from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy
 
 
@@ -39,14 +38,10 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
     def get_text(
         self,
-        screenshot: mss.base.ScreenShot
+        screenshot: Screenshot
     ):
         # TOOD: improve performance
-        image = Image.frombytes(
-            "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
-        )
-        arr = np.array(image)
-        result, elapse = self.ocr(arr)
+        result, elapse = self.ocr(screenshot.array)
         #det_elapse, cls_elapse, rec_elapse = elapse
         #all_elapse = det_elapse + cls_elapse + rec_elapse
         logger.debug(f"{result=}")

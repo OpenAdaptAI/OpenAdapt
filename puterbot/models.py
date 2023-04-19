@@ -3,6 +3,7 @@ import io
 from loguru import logger
 from pynput import keyboard
 from PIL import Image, ImageChops
+import numpy as np
 import sqlalchemy as sa
 
 from puterbot.db import Base
@@ -136,6 +137,9 @@ class Screenshot(Base):
     png_data = sa.Column(sa.LargeBinary)
     # TODO: replace prev with prev_timestamp?
 
+    # TODO: convert to png_data on save
+    sct_img = None
+
     prev = None
     _image = None
     _diff = None
@@ -144,8 +148,17 @@ class Screenshot(Base):
     @property
     def image(self):
         if not self._image:
-            buffer = io.BytesIO(self.png_data)
-            self._image = Image.open(buffer)
+            if self.sct_img:
+                self._image = Image.frombytes(
+                    "RGB",
+                    self.sct_img.size,
+                    self.sct_img.bgra,
+                    "raw",
+                    "BGRX",
+                )
+            else:
+                buffer = io.BytesIO(self.png_data)
+                self._image = Image.open(buffer)
         return self._image
 
     @property
@@ -160,6 +173,10 @@ class Screenshot(Base):
         if not self._diff_mask:
             self._diff_mask = self._diff.convert("1")
         return self._diff_mask
+
+    @property
+    def array(self):
+        return np.array(self.image)
 
 
 class WindowEvent(Base):
