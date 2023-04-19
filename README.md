@@ -118,6 +118,9 @@ may base your implementation off of `naive.py`.
 
 See https://github.com/MLDSAI/puterbot/issues for ideas on where to start.
 
+See `strategies/llm_ocr_demo.py` for example usage of a Large Language Model
+and Optical Character Recognition.
+
 ### Evaluation Criteria
 
 Your submission will be evaluated based on the following criteria: 
