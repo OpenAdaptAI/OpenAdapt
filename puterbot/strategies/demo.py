@@ -32,7 +32,7 @@ class DemoReplayStrategy(
         recording: Recording,
     ):
         super().__init__(recording)
-        self.completion_history = []
+        self.result_history = []
 
     def get_next_input_event(
         self,
@@ -50,7 +50,7 @@ class DemoReplayStrategy(
         ]
         history_strs = [
             f"<{completion}>"
-            for completion in self.completion_history
+            for completion in self.result_history
         ]
         prompt = " ".join(event_strs + history_strs)
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
@@ -63,7 +63,7 @@ class DemoReplayStrategy(
         # only take the first <...>
         result = completion.split(">")[0].strip(" <>")
         logger.info(f"{result=}")
-        self.completion_history.append(result)
+        self.result_history.append(result)
 
         # TODO: parse result into InputEvent(s)
 
