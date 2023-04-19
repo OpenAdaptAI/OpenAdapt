@@ -1,5 +1,9 @@
 """
-Implements a ReplayStrategy mixin for generating LLM completions.
+Demonstration of LLMReplayStrategyMixin and OCRReplayStrategyMixin.
+
+Usage:
+
+    $ python puterbot/replay.py LLMOCRDemoReplayStrategy
 """
 
 
