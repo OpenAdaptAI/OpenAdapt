@@ -1,15 +1,17 @@
 # PuterBot: AI-First Process Automation with Transformers
 
 Welcome to PuterBot! This Python library implements AI-First Process Automation
-with the power of Transformers. It:
+with the power of Transformers by:
 
-- Records screenshots and associated user input
-- Converts screenshots and user input into tokenized format
-- Feeds tokenized screenshots and user input into transformer models
-- Converts transformer output into replayable input events
+- Recording screenshots and associated user input
+- Aggregating and visualizing user input and recordings for development
+- Converting screenshots and user input into tokenized format
+- Generating synthetic input via transformer model completions
+- Replaying synthetic input to complete tasks
 
-The goal is similar to that of Robotic Process Automation, except that we use
-transformers instead of RPA tools.
+The goal is similar to that of
+[Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
+except that we use transformers instead of conventional RPA tools.
 
 The approach is similar to [adept.ai](https://adept.ai/), except that instead
 of requiring the user to prompt the model directly, we prompt it behind the
