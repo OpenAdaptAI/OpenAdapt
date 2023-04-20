@@ -37,7 +37,7 @@ from puterbot.utils import (
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
     get_monitor_dims,
-    get_screenshot,
+    take_screenshot,
     get_timestamp,
     set_start_time,
 )
@@ -359,7 +359,7 @@ def read_screen_events(
     set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
-        screenshot = get_screenshot()
+        screenshot = take_screenshot()
         if screenshot is None:
             logger.warning("screenshot was None")
             continue
