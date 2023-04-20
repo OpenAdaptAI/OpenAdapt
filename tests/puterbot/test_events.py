@@ -1,3 +1,4 @@
+from functools import partial
 from pprint import pformat
 import itertools
 import pytest
@@ -22,14 +23,16 @@ from puterbot.events import (
 
 
 # default duration between consecutive events
-# this needs to be small enough such that dt_short + DEFUALT_DT < x,
+# this needs to be small enough such that dt_short + DEFAULT < x,
 # where x is the double click interval in seconds
 # (see test_merge_consecutive_mouse_click_events() for definition of dt_short)
 DEFAULT_DT = get_double_click_interval_seconds() / 2
 # set to 10 to improve output readability
 OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS = None
+NUM_TIMESTAMP_DIGITS = 6
 
 
+rows2dicts = partial(rows2dicts, num_digits=NUM_TIMESTAMP_DIGITS)
 timestamp = 0
 timestamp_raw = 0
 

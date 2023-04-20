@@ -1,4 +1,5 @@
 alembic==1.8.1
+ascii_magic==2.3.0
 bokeh==2.4.3
 clipboard==0.0.4
 deepdiff==6.2.2
@@ -11,8 +12,13 @@ mss==6.1.0
 pandas==2.0.0
 pygetwindow==0.0.9
 pyinstaller
+pywin32==306
 git+https://github.com/abrichr/pynput.git
 pytest==7.1.3
+rapidocr-onnxruntime==1.2.3
+scikit-learn==1.2.2
 scipy==1.9.3
 sqlalchemy==1.4.43
+torch==2.0.0
 tqdm==4.64.0
+transformers==4.28.1

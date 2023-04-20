@@ -3,7 +3,7 @@
 ```
 git clone https://github.com/MLDSAI/puterbot.git
 cd puterbot
-python3.10 -m venv .venv <-- using 3.11
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install wheel
 pip install -r requirements.txt

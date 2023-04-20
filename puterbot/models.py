@@ -3,9 +3,11 @@ import io
 from loguru import logger
 from pynput import keyboard
 from PIL import Image, ImageChops
+import numpy as np
 import sqlalchemy as sa
 
 from puterbot.db import Base
+from puterbot.utils import take_screenshot
 
 
 class Recording(Base):
@@ -18,6 +20,9 @@ class Recording(Base):
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
     double_click_distance_pixels = sa.Column(sa.Numeric(asdecimal=False))
     platform = sa.Column(sa.String)
+    task_description = sa.Column(sa.String)
+
+    input_events = sa.orm.relationship("InputEvent", back_populates="recording")
 
 
 class InputEvent(Base):
@@ -44,7 +49,7 @@ class InputEvent(Base):
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("input_event.id"))
 
     children = sa.orm.relationship("InputEvent")
-    recording = sa.orm.relationship("Recording")
+    recording = sa.orm.relationship("Recording", back_populates="input_events")
     screenshot = sa.orm.relationship("Screenshot")
     window_event = sa.orm.relationship("WindowEvent")
 
@@ -123,6 +128,31 @@ class InputEvent(Base):
     def canonical_text(self):
         return self._text(canonical=True)
 
+    def __str__(self):
+        attr_names = [
+            "name",
+            "mouse_x",
+            "mouse_y",
+            "mouse_dx",
+            "mouse_dy",
+            "mouse_button_name",
+            "mouse_pressed",
+            "key",
+        ]
+        attrs = [
+            getattr(self, attr_name)
+            for attr_name in attr_names
+        ]
+        attrs = [
+            int(attr)
+            if isinstance(attr, float)
+            else attr
+            for attr in attrs
+        ]
+        attrs = [str(attr) for attr in attrs if attr]
+        rval = " ".join(attrs)
+        return rval
+
 
 class Screenshot(Base):
     __tablename__ = "screenshot"
@@ -133,6 +163,9 @@ class Screenshot(Base):
     png_data = sa.Column(sa.LargeBinary)
     # TODO: replace prev with prev_timestamp?
 
+    # TODO: convert to png_data on save
+    sct_img = None
+
     prev = None
     _image = None
     _diff = None
@@ -141,8 +174,17 @@ class Screenshot(Base):
     @property
     def image(self):
         if not self._image:
-            buffer = io.BytesIO(self.png_data)
-            self._image = Image.open(buffer)
+            if self.sct_img:
+                self._image = Image.frombytes(
+                    "RGB",
+                    self.sct_img.size,
+                    self.sct_img.bgra,
+                    "raw",
+                    "BGRX",
+                )
+            else:
+                buffer = io.BytesIO(self.png_data)
+                self._image = Image.open(buffer)
         return self._image
 
     @property
@@ -157,6 +199,16 @@ class Screenshot(Base):
         if not self._diff_mask:
             self._diff_mask = self._diff.convert("1")
         return self._diff_mask
+
+    @property
+    def array(self):
+        return np.array(self.image)
+
+    @classmethod
+    def take_screenshot(cls):
+        sct_img = take_screenshot()
+        screenshot = Screenshot(sct_img=sct_img)
+        return screenshot
 
 
 class WindowEvent(Base):
