@@ -8,6 +8,7 @@ Usage:
 
 from loguru import logger
 import numpy as np
+import guardrails as gd
 
 from puterbot.events import get_events
 from puterbot.models import Recording, Screenshot
@@ -18,6 +19,9 @@ from puterbot.strategies.llm_mixin import (
 )
 from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
 from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+
+guard_rail_path = "rail_spec.rail"
+guard = gd.Guard.from_rail(guard_rail_path)
 
 
 class DemoReplayStrategy(
@@ -60,8 +64,25 @@ class DemoReplayStrategy(
         completion = self.get_completion(prompt, max_tokens)
         logger.info(f"{completion=}")
 
-        # only take the first <...>
-        result = completion.split(">")[0].strip(" <>")
+        # Wrap the get_completion() method with Guard object
+        validated_output = guard(
+            self.get_completion,
+            prompt_params={"prompt": prompt},
+            engine="text-davinci-003",
+            max_tokens=max_tokens,
+        )
+        logger.info(f"{validated_output=}")
+
+        try:
+            exec(validated_output["bank_run"])
+            print("Success! Valid Data")
+            result = validated_output["bank_run"]["explanation"]
+
+        except Exception as e:
+            # if there are exceptions use default result from get_completion
+            result = completion.split(">")[0].strip(" <>")
+            print("Failed!")
+
         logger.info(f"{result=}")
         self.result_history.append(result)
 

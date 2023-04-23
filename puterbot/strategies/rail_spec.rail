@@ -1,0 +1,28 @@
+<rail version="0.1">
+<output>
+    <object name="bank_run">
+        <string
+            name="explanation"
+            description="A paragraph about what a bank run is."
+            format="length: 200 280"
+            on-fail-length="reask"
+        />
+        <url
+            name="follow_up_url"
+            description="A web URL where I can read more about bank runs."
+            format="valid-url"
+            on-fail-valid-url="filter"
+        />
+    </object>
+</output>
+
+<prompt>
+{{prompt}}
+
+@xml_prefix_prompt
+
+{output_schema}
+
+@json_suffix_prompt_v2_wo_none
+</prompt>
+</rail>
