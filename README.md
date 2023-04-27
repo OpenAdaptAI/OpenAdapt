@@ -51,6 +51,11 @@ Wait until all three event writers have started:
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
 
+Note: keep your recording short (i.e. under a minute), as they are
+somewhat memory intensive, and there is currently an
+[open issue](https://github.com/MLDSAI/puterbot/issues/5) describing a
+possible memory leak.
+
 
 ### Visualize
 
@@ -117,6 +122,10 @@ You can assume that you have access to the following functions:
 3. Create a new file under `strategies` to contain your replay strategy. You
 may base your implementation off of `naive.py`.
 4. Write unit tests for your implementation.
+5. Submit a Pull Request (PR) to this repository. Note: submitting a PR before your
+implementation is complete (e.g. with high level documentation and/or implementation
+stubs) is encouraged, as it provides us with the opportunity to provide early
+feedback and iterate on the approach.
 
 See https://github.com/MLDSAI/puterbot/issues for ideas on where to start.
 
