@@ -22,6 +22,9 @@ import pandas as pd
 from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy
 
+import pytesseract
+from PIL import Image
+
 
 # TODO: group into sections via layout analysis; see:
 # github.com/RapidAI/RapidOCR/blob/main/python/rapid_structure/docs/README_Layout.md
@@ -49,6 +52,12 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         df_text = get_text_df(result)
         text = get_text_from_df(df_text)
         logger.debug(f"{text=}")
+        return text
+    
+class OCRReplayMixin:
+    def get_text_from_screenshot(self, screenshot):
+        # Convert the screenshot to text using OCR
+        text = pytesseract.image_to_string(screenshot)
         return text
 
 
