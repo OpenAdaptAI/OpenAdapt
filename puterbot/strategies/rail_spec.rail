@@ -1,28 +1,24 @@
 <rail version="0.1">
+
 <output>
-    <object name="bank_run">
-        <string
-            name="explanation"
-            description="A paragraph about what a bank run is."
-            format="length: 200 280"
-            on-fail-length="reask"
-        />
-        <url
-            name="follow_up_url"
-            description="A web URL where I can read more about bank runs."
-            format="valid-url"
-            on-fail-valid-url="filter"
-        />
-    </object>
+    <choice name="action" on-fail-choice="reask">
+        <case name="fight">
+            <string name="weapon" format="valid-choices: {['crossbow', 'machine gun']}" on-fail-valid-choices="reask" />
+        </case>
+        <case name="flight">
+            <object name="flight">
+                <string name="flight_direction" format="valid-choices: {['north','south','east','west']}" on-fail-valid-choices="exception" />
+                <integer name="distance" format="valid-choices: {[1,2,3,4]}" on-fail-valid-choices="exception" />
+            </object>
+        </case>
+    </choice>
 </output>
 
 <prompt>
-{{prompt}}
+You are a human in an enchanted forest. You come across opponents of different types, and you should fight smaller opponents and run away from bigger ones.
 
-@xml_prefix_prompt
+You run into a {{opp_type}}. What do you do?
 
-{output_schema}
+@complete_json_suffix_v2</prompt>
 
-@json_suffix_prompt_v2_wo_none
-</prompt>
 </rail>
