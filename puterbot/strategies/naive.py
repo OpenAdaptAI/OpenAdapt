@@ -1,8 +1,3 @@
-"""
-Implements a naive playback strategy wherein the InputEvents are replayed
-directly, without considering any screenshots.
-"""
-
 from pprint import pformat
 import time
 
@@ -13,6 +8,7 @@ from puterbot.events import get_events
 from puterbot.utils import display_event, rows2dicts
 from puterbot.models import Recording
 from puterbot.strategies.base import BaseReplayStrategy
+from puterbot.strategies.ocr_mixin import OCRReplayMixin
 
 
 DISPLAY_EVENTS = False
@@ -20,7 +16,7 @@ REPLAY_EVENTS = True
 SLEEP = True
 
 
-class NaiveReplayStrategy(BaseReplayStrategy):
+class NaiveReplayStrategy(OCRReplayMixin, BaseReplayStrategy):
 
     def __init__(
         self,
@@ -43,6 +39,9 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         self,
         screenshot: mss.base.ScreenShot,
     ):
+        # Get the text from the screenshot
+        text = self.get_text_from_screenshot(Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"))
+
         self.input_event_idx += 1
         num_input_events = len(self.processed_input_events)
         if self.input_event_idx >= num_input_events:
