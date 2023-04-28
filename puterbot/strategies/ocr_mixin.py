@@ -24,6 +24,7 @@ from puterbot.strategies.base import BaseReplayStrategy
 
 import pytesseract
 from PIL import Image
+#asa
 
 
 # TODO: group into sections via layout analysis; see:
