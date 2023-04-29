@@ -25,25 +25,32 @@ rail_str = """
 <rail version="0.1">
 
 <output>
-    <choice name="action" on-fail-choice="reask">
-        <case name="fight">
-            <string name="weapon" format="valid-choices: {['crossbow', 'machine gun']}" on-fail-valid-choices="reask" />
-        </case>
-        <case name="flight">
-            <object name="flight">
-                <string name="flight_direction" format="valid-choices: {['north','south','east','west']}" on-fail-valid-choices="exception" />
-                <integer name="distance" format="valid-choices: {[1,2,3,4]}" on-fail-valid-choices="exception" />
-            </object>
-        </case>
-    </choice>
+    <object name="">
+        <string name="name" format="valid-choices: {['move', 'click', 'scroll', 'doubleclick', 'singleclick', 'press', 'release', 'type']}" on-fail-valid-choices="reask" />
+        <integer name="x" description="The x coordinate of the InputEvent" />
+        <integer name="y" description="The y coordinate of the InputEvent" />
+        <integer name="dx" description="The change in x coordinate of the InputEvent" />
+        <integer name="dy" description="The change in y coordinate of the InputEvent" />
+        <string name="button_name" description="The mouse button name if it was Mouse InputEvent" />
+        <bool name="pressed" description="Was the mouse pressed?" />
+        <integer name="key" description="The key if it was a Key InputEvent" />
+    </object>
 </output>
 
+<instructions>
+You are a helpful assistant only capable of communicating with valid JSON, and no other text.
+
+@json_suffix_prompt_examples
+</instructions>
+
 <prompt>
-You are a human in an enchanted forest. You come across opponents of different types, and you should fight smaller opponents and run away from bigger ones.
+Extract information from this document and return a JSON that follows the correct schema.
 
-You run into a gang member. What do you do?
+@xml_prefix_prompt
 
-@complete_json_suffix_v2</prompt>
+{{prompt}}
+
+</prompt>
 
 </rail>
 """
