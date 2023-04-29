@@ -6,6 +6,8 @@ Usage:
     $ python puterbot/replay.py DemoReplayStrategy
 """
 
+from svg import get_text_from_svg
+
 from loguru import logger
 import numpy as np
 
