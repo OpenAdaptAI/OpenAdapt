@@ -17,7 +17,7 @@ The approach is similar to [adept.ai](https://adept.ai/), except that instead
 of requiring the user to prompt the model directly, we prompt it behind the
 scenes by observing the user's activities.
 
-## Setup
+## Install
 
 ```
 git clone https://github.com/MLDSAI/puterbot.git
@@ -31,14 +31,14 @@ alembic upgrade head
 pytest
 ```
 
-## Running
+## Run
 
 ### Record
 
 Create a new recording by running the following command:
 
 ```
-python puterbot/record.py "testing out puterbot"
+python -m puterbot.record "testing out puterbot"
 ```
 
 Wait until all three event writers have started:
@@ -62,7 +62,7 @@ possible memory leak.
 Visualize the latest recording you created by running the following command:
 
 ```
-python puterbot/visualize.py
+python -m puterbot.visualize
 ```
 
 This will open your browser. It will look something like this:
@@ -74,7 +74,7 @@ This will open your browser. It will look something like this:
 You can play back the recording using the following command:
 
 ```
-python puterbot/replay.py NaiveReplayStrategy
+python -m puterbot.replay NaiveReplayStrategy
 ```
 
 More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
