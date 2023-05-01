@@ -68,10 +68,10 @@ class DemoReplayStrategy(
             last_summarized_ocr = summarize(self.get_ocr_text(last_screenshot), word_count=1,
                                             split=False)
             # summarize the last screenshot
-            summarized_screenshot = set(last_summarized_ascii & last_summarized_ocr)
+            summarized_last_screenshot = set(last_summarized_ascii & last_summarized_ocr)
 
             # check whether the last screenshot and the current screenshot are the same
-            common_synonyms = list(summarized_screenshot & summarized_screenshot)
+            common_synonyms = list(summarized_screenshot & summarized_last_screenshot)
 
             # may want to change the number of required common synonyms
             if len(common_synonyms) > 0:
