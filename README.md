@@ -17,7 +17,7 @@ The approach is similar to [adept.ai](https://adept.ai/), except that instead
 of requiring the user to prompt the model directly, we prompt it behind the
 scenes by observing the user's activities.
 
-## Setup
+## Install
 
 ```
 git clone https://github.com/MLDSAI/puterbot.git
@@ -31,14 +31,14 @@ alembic upgrade head
 pytest
 ```
 
-## Running
+## Run
 
 ### Record
 
 Create a new recording by running the following command:
 
 ```
-python puterbot/record.py "testing out puterbot"
+python -m puterbot.record "testing out puterbot"
 ```
 
 Wait until all three event writers have started:
@@ -62,7 +62,7 @@ possible memory leak.
 Visualize the latest recording you created by running the following command:
 
 ```
-python puterbot/visualize.py
+python -m puterbot.visualize
 ```
 
 This will open your browser. It will look something like this:
@@ -74,7 +74,7 @@ This will open your browser. It will look something like this:
 You can play back the recording using the following command:
 
 ```
-python puterbot/replay.py NaiveReplayStrategy
+python -m puterbot.replay NaiveReplayStrategy
 ```
 
 More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
@@ -120,7 +120,7 @@ You can assume that you have access to the following functions:
 1. Fork this repository and clone it to your local machine. 
 2. Get puterbot up and running by following the instructions under [Setup](#Setup).
 3. Create a new file under `strategies` to contain your replay strategy. You
-may base your implementation off of `naive.py`.
+may base your implementation off of `naive.py` or `demo.py`
 4. Write unit tests for your implementation.
 5. Submit a Pull Request (PR) to this repository. Note: submitting a PR before your
 implementation is complete (e.g. with high level documentation and/or implementation
