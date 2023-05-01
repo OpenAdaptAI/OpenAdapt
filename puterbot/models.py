@@ -6,12 +6,13 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from puterbot.db import Base
-from puterbot.utils import take_screenshot
+from db import Base
+from utils import take_screenshot
 
 
 class Recording(Base):
     __tablename__ = "recording"
+    __table_args__ = {'extend_existing': True}
 
     id = sa.Column(sa.Integer, primary_key=True)
     timestamp = sa.Column(sa.Integer)
@@ -27,6 +28,7 @@ class Recording(Base):
 
 class InputEvent(Base):
     __tablename__ = "input_event"
+    __table_args__ = {'extend_existing': True}
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -156,6 +158,7 @@ class InputEvent(Base):
 
 class Screenshot(Base):
     __tablename__ = "screenshot"
+    __table_args__ = {'extend_existing': True}
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
@@ -213,6 +216,7 @@ class Screenshot(Base):
 
 class WindowEvent(Base):
     __tablename__ = "window_event"
+    __table_args__ = {'extend_existing': True}
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)

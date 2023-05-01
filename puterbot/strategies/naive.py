@@ -9,6 +9,8 @@ import time
 from loguru import logger
 import mss.base
 
+import sys
+sys.path.append('../puterbot')
 from puterbot.events import get_events
 from puterbot.utils import display_event, rows2dicts
 from puterbot.models import Recording
@@ -35,7 +37,7 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.input_event_idx = -1
-        self.processed_input_events = get_events(recording, process=True) 
+        self.processed_input_events = get_events(recording, process=True)
         event_dicts = rows2dicts(self.processed_input_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 

@@ -10,6 +10,8 @@ from pynput import keyboard, mouse
 import mss.base
 import numpy as np
 
+import sys
+sys.path.append('../puterbot')
 from puterbot.models import InputEvent, Recording, Screenshot
 from puterbot.playback import play_input_event
 
