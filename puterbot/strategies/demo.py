@@ -89,7 +89,7 @@ class DemoReplayStrategy(
             f"<{completion}>"
             for completion in self.result_history
         ]
-        prompt = " ".join(event_strs + history_strs + summarized_ocr)
+        prompt = " ".join(event_strs + history_strs + list(window_changed))
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
         prompt = prompt[N:]
         logger.info(f"{prompt=}")
