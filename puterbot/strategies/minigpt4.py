@@ -75,15 +75,17 @@ class GPTReplayStrategy(OCRReplayStrategyMixin):
         # get description of the screenshot using ocr_mixin
         text = self.get_ocr_text(screenshot)
 
-        # get prev InputEvents
+        # get prev InputEvents text
         previously_recorded_input_events = ""
         for event in self.processed_input_events[:self.input_event_idx]:
             if previously_recorded_input_events != "":
                 previously_recorded_input_events += ", "
             previously_recorded_input_events += event.text
 
-        # feed Recording.task_description, current screenshot, and past InputEvents to
+        # feed recording.task_description, current screenshot, and past InputEvents to
         # MiniGPT4 to generate the next InputEvent
+
+        # Model Initialization from MiniGPT4 demo.py
         args = parse_args()
         cfg = Config(args)
 
@@ -97,9 +99,32 @@ class GPTReplayStrategy(OCRReplayStrategyMixin):
             vis_processor_cfg)
         chat = Chat(model, vis_processor, device='cuda:{}'.format(args.gpu_id))
 
-        # return MiniGPT4 InputEvent
+        # upload screenshot
+        chat_state = CONV_VISION.copy()
+        img_list = []
+        chat.upload_img(screenshot, chat_state, img_list)
 
-        # might need to change this part
+        # ask question
+        user_message = "Please generate the next input event based on the following:\n\n" \
+                       "Task goal: {}\n\n" \
+                       "Previously recorded input events: {}\n\n" \
+                       "Screenshot description: {}\n\n" \
+                       "Please provide your input event below." \
+            .format(self.recording.task_description,
+                    previously_recorded_input_events, text)
+        chat.ask(user_message, chat_state)
+
+        # get answer as a string
+        llm_message = chat.answer(conv=chat_state,
+                                  img_list=img_list,
+                                  num_beams=1,
+                                  temperature=1,
+                                  max_new_tokens=300,
+                                  max_length=2000)[0]
+
+        # TODO: create InputEvent from llm_message and return it
+
+        # TODO: might need to change this part
         input_event = self.processed_input_events[self.input_event_idx]
         logger.info(
             f"{self.input_event_idx=} of {num_input_events=}: {input_event=}"
