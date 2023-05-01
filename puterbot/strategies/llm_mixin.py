@@ -40,13 +40,13 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         max_tokens: int,
     ):
         max_input_size = self.max_input_size
-        if max_input_size and len(prompt) > max_input_size:
+        if max_input_size and len(prompt) - 1 > max_input_size:
             logger.warning(
-                f"Truncating from {len(prompt)=} to {max_input_size=}"
+                f"Truncating from {len(prompt) - 1=} to {max_input_size=}"
             )
             prompt = prompt[max_input_size:]
         logger.debug(f"{prompt=} {max_tokens=}")
-        input_tokens = self.tokenizer(prompt, return_tensors="pt")
+        input_tokens = self.tokenizer(prompt[1:], return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id
         attention_mask = input_tokens["attention_mask"]
         output_tokens = self.model.generate(
