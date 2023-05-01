@@ -120,7 +120,7 @@ You can assume that you have access to the following functions:
 1. Fork this repository and clone it to your local machine. 
 2. Get puterbot up and running by following the instructions under [Setup](#Setup).
 3. Create a new file under `strategies` to contain your replay strategy. You
-may base your implementation off of `naive.py`.
+may base your implementation off of `naive.py` or `demo.py`
 4. Write unit tests for your implementation.
 5. Submit a Pull Request (PR) to this repository. Note: submitting a PR before your
 implementation is complete (e.g. with high level documentation and/or implementation
