@@ -1,8 +1,8 @@
 from loguru import logger
 import fire
 
-from crud import get_latest_recording
-from utils import configure_logging, get_strategy_class_by_name
+from puterbot.crud import get_latest_recording
+from puterbot.utils import configure_logging, get_strategy_class_by_name
 
 
 LOG_LEVEL = "INFO"

@@ -9,13 +9,13 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from crud import (
+from puterbot.crud import (
     get_latest_recording,
 )
-from events import (
+from puterbot.events import (
     get_events,
 )
-from utils import (
+from puterbot.utils import (
     configure_logging,
     display_event,
     evenly_spaced,

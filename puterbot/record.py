@@ -25,14 +25,14 @@ import matplotlib.pyplot as plt
 import mss.tools
 import pygetwindow as pgw
 
-from config import ROOT_DIRPATH
-from crud import (
+from puterbot.config import ROOT_DIRPATH
+from puterbot.crud import (
     insert_input_event,
     insert_screenshot,
     insert_recording,
     insert_window_event,
 )
-from utils import (
+from puterbot.utils import (
     configure_logging,
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
