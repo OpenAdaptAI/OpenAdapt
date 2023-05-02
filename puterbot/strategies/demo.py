@@ -5,7 +5,6 @@ Usage:
 
     $ python puterbot/replay.py DemoReplayStrategy
 """
-
 from loguru import logger
 import numpy as np
 
@@ -19,9 +18,15 @@ from puterbot.strategies.llm_mixin import (
 from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
 from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
 
-from gensim.summarization.summarizer import summarize
+from sumy.summarizers.lsa import LsaSummarizer
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.nlp.stemmers import Stemmer
+from sumy.utils import get_stop_words
 from nltk.corpus import wordnet
 import re
+from fuzzywuzzy import fuzz
+import statistics
 
 
 class DemoReplayStrategy(
@@ -45,36 +50,21 @@ class DemoReplayStrategy(
         ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 
-        cleaned_ascii = clean_ascii(ascii_text)
-
-        summarized_ascii = summarize(cleaned_ascii, word_count=1, split=False)
-        synonyms_ascii = set(wordnet.synsets(summarized_ascii))
-
         ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
-
-        # identify what the window is
-        summarized_ocr = summarize(ocr_text, word_count=1, split=False)
-        synonyms_ocr = set(wordnet.synsets(summarized_ocr))
-
-        # words that describe the screenshot display
-        summarized_screenshot = set(synonyms_ascii & synonyms_ocr)
 
         index = self.screenshots.index(screenshot)
         if index != 0:
             last_screenshot = self.screenshots[index - 1]
-            last_summarized_ascii = summarize(self.get_ascii_text(last_screenshot), word_count=1,
-                                              split=False)
-            last_summarized_ocr = summarize(self.get_ocr_text(last_screenshot), word_count=1,
-                                            split=False)
-            # summarize the last screenshot
-            summarized_last_screenshot = set(last_summarized_ascii & last_summarized_ocr)
 
             # check whether the last screenshot and the current screenshot are the same
-            common_synonyms = list(summarized_screenshot & summarized_last_screenshot)
+            ascii_similarity = compare_text(ascii_text, self.get_ascii_text(last_screenshot))
+            ocr_similarity = compare_text(ocr_text, self.get_ascii_text(last_screenshot))
 
-            # may want to change the number of required common synonyms
-            if len(common_synonyms) > 0:
+            similarity_list = [ascii_similarity, ocr_similarity]
+
+            # may want the required minimum  similarity
+            if statistics.fmean(similarity_list) > 50:
                 window_changed = "True"
             else:
                 window_changed = "False"
@@ -118,4 +108,24 @@ def clean_ascii(
     for word in no_symbols:
         if wordnet.synsets(word):
             ascii_words.append(word)
-    return ascii_words
+    return str(ascii_words)
+
+# takes 2 lists of strings and returns how similar they are as a float
+def compare_text(
+        text1,
+        text2
+):
+    stemmer = Stemmer("english")
+    summarizer = LsaSummarizer(stemmer)
+    summarizer.stop_words = get_stop_words("english")
+
+    print(text1)
+    parser1 = PlaintextParser.from_string(text1, Tokenizer("english"))
+    summarized1 = summarizer(parser1.document, 1)
+    print(summarized1)
+
+    parser2 = PlaintextParser.from_string(text2, Tokenizer("english"))
+    summarized2 = summarizer(parser2.document, 1)
+
+    # may want to change to something more complex
+    return fuzz.ratio(summarized1, summarized2)
