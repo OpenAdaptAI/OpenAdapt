@@ -3,6 +3,7 @@ import base64
 import os
 import sys
 import time
+import datetime
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
@@ -10,10 +11,30 @@ import mss
 import mss.base
 import numpy as np
 
+from puterbot.config import DT_FMT
 from puterbot.common import MOUSE_EVENTS, KEY_EVENTS
 
 
 EMPTY = (None, [], {}, "")
+
+
+def get_now_dt_str(dt_format=DT_FMT):
+    """
+    Get the current date and time as a formatted string.
+
+    Args:
+        dt_format (str): The format to use for the date and time string.
+
+    Returns:
+        str: The current date and time formatted as a string.
+    """
+    # Get the current date and time
+    now = datetime.datetime.now()
+
+    # Format the date and time according to the specified format
+    dt_str = now.strftime(dt_format)
+
+    return dt_str
 
 
 def configure_logging(logger, log_level):
