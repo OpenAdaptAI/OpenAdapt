@@ -17,6 +17,14 @@ DISPLAY_EVENTS = False
 REPLAY_EVENTS = True
 SLEEP = True
 
+CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
+CHECKPOINT_URL_BY_NAME = {
+    "default": f"{CHECKPOINT_URL_BASE}sam_vit_h_4b8939.pth",
+    "vit_l": f"{CHECKPOINT_URL_BASE}sam_vit_l_0b3195.pth",
+    "vit_b": f"{CHECKPOINT_URL_BASE}sam_vit_b_01ec64.pth",
+}
+MODEL_NAME = "default"
+CHECKPOINT_DIR_PATH = "./checkpoints"
 
 class SamReplayStrategy(OCRReplayStrategyMixin):
     def __init__(
@@ -25,6 +33,8 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
             display_events=DISPLAY_EVENTS,
             replay_events=REPLAY_EVENTS,
             sleep=SLEEP,
+            model_name=MODEL_NAME,
+            checkpoint_dir_path=CHECKPOINT_DIR_PATH,
     ):
         super().__init__(recording)
         self.processed_input_events = get_events(recording, process=True)
@@ -32,7 +42,7 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
         self.replay_events = replay_events
         self.sleep = sleep
         self.prev_timestamp = None
-        self.sam_model = sam_model_registry["default"](checkpoint="puterbot/checkpoint")
+        self.sam_model = self._initialize_model(model_name, checkpoint_dir_path)
         self.sam_predictor = SamPredictor(self.sam_model)
         self.tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-j-6B")
         self.model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
@@ -42,6 +52,16 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
         event_dicts = rows2dicts(self.processed_input_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
+    def _initialize_model(self, model_name, checkpoint_dir_path):
+        checkpoint_url = CHECKPOINT_URL_BY_NAME[model_name]
+        checkpoint_file_name = checkpoint_url.split("/")[-1]
+        checkpoint_file_path = Path(checkpoint_dir_path, checkpoint_file_name)
+        if not Path.exists(checkpoint_file_path):
+            Path(checkpoint_dir_path).mkdir(parents=True, exist_ok=True)
+            logger.info(
+                f"downloading {checkpoint_url=} to {checkpoint_file_path=}")
+            urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
+        return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
     # Define function to convert image to text
 
     # Define function to generate input events
