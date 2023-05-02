@@ -10,11 +10,10 @@ from loguru import logger
 from typing import List, Dict, Union
 from pynput import keyboard, mouse
 
-import pynput.keyboard
 import numpy as np
 import guardrails as gd
-import json
 import re
+import transformers
 
 from puterbot.events import get_events
 from puterbot.playback import play_input_event
@@ -27,7 +26,7 @@ from puterbot.strategies.llm_mixin import (
 from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
 from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
 
-rail_str = """
+RAIL_STR = """
 <rail version="0.1">
 
 <output>
@@ -56,8 +55,9 @@ Extract information from this document and return a JSON that follows the correc
 
 </rail>
 """
+MAX_TOKENS = 100
 
-guard = gd.Guard.from_rail_string(rail_str)
+guard = gd.Guard.from_rail_string(RAIL_STR)
 
 
 class DemoReplayStrategy(
@@ -85,9 +85,8 @@ class DemoReplayStrategy(
         Returns:
             str: The output of the LLM API
         """
-        max_tokens = 100
         # Call your LLM API here
-        completion = self.get_completion(prompt, max_tokens)
+        completion = self.get_completion(prompt, MAX_TOKENS)
         logger.info(f"{completion=}")
         return completion
    
@@ -187,11 +186,10 @@ class DemoReplayStrategy(
                  "Previously recorded input events: {}\n\n" \
                  "Using the previously recorded input events, generate a sequence of input events to complete the task as a list: " \
             .format(self.recording.task_description,
-                    event_strs, ocr_text)
+                    event_strs)
         logger.info(f"{self.prompt=}")
 
-        max_tokens = 100
-        completion = self.get_completion(self.prompt, max_tokens)
+        completion = self.get_completion(self.prompt, MAX_TOKENS)
         logger.info(f"{completion=}")
 
         parsed_events = self.parse_input_event(completion)
