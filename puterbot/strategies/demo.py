@@ -119,10 +119,8 @@ def compare_text(
     summarizer = LsaSummarizer(stemmer)
     summarizer.stop_words = get_stop_words("english")
 
-    print(text1)
     parser1 = PlaintextParser.from_string(text1, Tokenizer("english"))
     summarized1 = summarizer(parser1.document, 1)
-    print(summarized1)
 
     parser2 = PlaintextParser.from_string(text2, Tokenizer("english"))
     summarized2 = summarizer(parser2.document, 1)
