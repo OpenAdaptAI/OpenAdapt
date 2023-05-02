@@ -26,6 +26,7 @@ CHECKPOINT_URL_BY_NAME = {
 MODEL_NAME = "default"
 CHECKPOINT_DIR_PATH = "./checkpoints"
 
+
 class SamReplayStrategy(OCRReplayStrategyMixin):
     def __init__(
             self,
@@ -62,7 +63,6 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
                 f"downloading {checkpoint_url=} to {checkpoint_file_path=}")
             urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
-    # Define function to convert image to text
 
     # Define function to generate input events
     def get_next_input_event(self, screenshot: Screenshot):
@@ -87,7 +87,36 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
         for event in self.processed_input_events[:self.input_event_idx]:
             if previously_recorded_input_events != "":
                 previously_recorded_input_events += ", "
-            previously_recorded_input_events += event.text
+            if event.name is not None:
+                previously_recorded_input_events += f"Event name is ({event.name})"
+            if event.timestamp is not None:
+                previously_recorded_input_events += f"Timestamp: {event.timestamp}"
+            if event.recording_timestamp is not None:
+                previously_recorded_input_events += f"Recording timestamp: {event.recording_timestamp}"
+            if event.screenshot_timestamp is not None:
+                previously_recorded_input_events += f"Screenshot timestamp: {event.screenshot_timestamp}"
+            if event.window_event_timestamp is not None:
+                previously_recorded_input_events += f"Window event timestamp: {event.window_event_timestamp}"
+            if event.mouse_x is not None and event.mouse_y is not None:
+                previously_recorded_input_events += f"Mouse click at ({event.mouse_x}, {event.mouse_y})"
+            if event.mouse_dx is not None and event.mouse_dy is not None:
+                previously_recorded_input_events += f"Mouse movement: ({event.mouse_dx}, {event.mouse_dy})"
+            if event.mouse_button_name is not None:
+                previously_recorded_input_events += f"Mouse button name: {event.mouse_button_name}"
+            if event.mouse_pressed is not None:
+                previously_recorded_input_events += f"Mouse pressed: {event.mouse_pressed}"
+            if event.key_name is not None:
+                previously_recorded_input_events += f"Key name: {event.key_name}"
+            if event.key_char is not None:
+                previously_recorded_input_events += f"Key character: {event.key_char}"
+            if event.key_vk is not None:
+                previously_recorded_input_events += f"Key virtual code: {event.key_vk}"
+            if event.canonical_key_name is not None:
+                previously_recorded_input_events += f"Canonical key name: {event.canonical_key_name}"
+            if event.canonical_key_char is not None:
+                previously_recorded_input_events += f"Canonical key character: {event.canonical_key_char}"
+            if event.canonical_key_vk is not None:
+                previously_recorded_input_events += f"Canonical key virtual code: {event.canonical_key_vk}"
 
         prompt = "Please generate the next input event based on the following:\n\n" \
                  "Task goal: {}\n\n" \
