@@ -5,10 +5,12 @@ clipboard==0.0.4
 deepdiff==6.2.2
 dictalchemy3==1.0.0
 fire==0.4.0
+fuzzywuzzy==0.18.0
 ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
 mss==6.1.0
+nltk==3.8.1
 pandas==2.0.0
 pygetwindow==0.0.9
 pyinstaller
@@ -19,6 +21,7 @@ rapidocr-onnxruntime==1.2.3
 scikit-learn==1.2.2
 scipy==1.9.3
 sqlalchemy==1.4.43
+sumy==0.11.0
 torch==2.0.0
 tqdm==4.64.0
 transformers==4.28.1
