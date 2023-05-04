@@ -18,6 +18,7 @@ from puterbot.strategies.llm_mixin import (
 )
 from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
 from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from puterbot.strategies.summary_mixin import SummaryReplayStrategyMixin
 
 
 class DemoReplayStrategy(
@@ -44,6 +45,15 @@ class DemoReplayStrategy(
 
         ocr_text = self.get_ocr_text(screenshot)
         # logger.info(f"ocr_text=\n{ocr_text}")
+
+        # find previous screenshot
+        index = self.screenshots.index(screenshot)
+        if index != 0:
+            last_screenshot = self.screenshots[index - 1]
+            window_similarity = self.get_summary(ascii_text, self.get_ascii_text(last_screenshot),
+                                                 ocr_text, self.get_ocr_text(last_screenshot))
+        else:
+            window_similarity = 0
 
         event_strs = [
             f"<{event}>"

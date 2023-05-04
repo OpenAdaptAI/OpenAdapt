@@ -6,18 +6,9 @@ Usage:
 
     $ python puterbot/summary_mixin.py SummaryReplayStrategyMixin
 """
-from loguru import logger
-import numpy as np
-
-from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot
+from puterbot.models import Recording
 from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.llm_mixin import (
-    LLMReplayStrategyMixin,
-    MAX_INPUT_SIZE,
-)
-from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
-from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+
 
 from sumy.summarizers.lsa import LsaSummarizer
 from sumy.parsers.plaintext import PlaintextParser
