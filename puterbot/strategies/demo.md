@@ -1,0 +1,1 @@
+How can we use OCR and ASCII data to create InputEvents effectively?
