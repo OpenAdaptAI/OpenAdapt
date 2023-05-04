@@ -25,7 +25,7 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
         model_name: str = MODEL_NAME,
-        max_input_size: str = MAX_INPUT_SIZE,
+        max_input_size: int = MAX_INPUT_SIZE,
     ):
         super().__init__(recording)
 
