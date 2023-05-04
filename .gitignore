@@ -14,3 +14,4 @@ cache
 
 # db
 *.db
+alembic/versions/718428862dee_msg.py
