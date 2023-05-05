@@ -10,3 +10,4 @@ Assumptions:
 
  TODO:
  - Generate InputEvents from completion results as opposed to previous recordings.
+ - Gather OCR and ASCII data of WindowEvents as opposed to entire screen (get_active_window, issue #84).
