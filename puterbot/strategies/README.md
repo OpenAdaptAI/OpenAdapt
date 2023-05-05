@@ -7,3 +7,6 @@ How can we use OCR and ASCII data to create InputEvents effectively?
 Assumptions:
  - OCR and ASCII data can be used to determine when an input event has occurred (Inputs have visible impact on screen).
  - Screen is not changing due to background processes (e.g. a video is playing in the background).
+
+ TODO:
+ - Generate InputEvents from completion results as opposed to previous recordings.
