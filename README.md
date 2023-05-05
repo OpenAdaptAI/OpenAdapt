@@ -1,3 +1,5 @@
+[Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw)
+
 # PuterBot: AI-First Process Automation with Transformers
 
 Welcome to PuterBot! This Python library implements AI-First Process Automation
