@@ -57,12 +57,9 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
             num_return_sequences=1
         )
         N = input_tokens["input_ids"].shape[-1]
-        print("Output Tokens: ",output_tokens) #Test Print
         completion = self.tokenizer.decode(
-            #output_tokens[:, N:][0],
-            output_tokens[:][0],
+            output_tokens[:, N:][0],
             clean_up_tokenization_spaces=True,
         )
         logger.debug(f"{completion=}")
-        
         return completion
