@@ -1,15 +1,23 @@
 {
-    "name": "puterbot",
+    "name": "PuterBot DOM Listener",
     "version": "1.0",
-    "description": "Tokenizer for ScreenShots",
     "manifest_version": 3,
-    "permissions": [
-        "nativeMessaging"
-    ],
-     "": {
-        "default_popup": "popup.html"
-    },
     "icons": {
         "128": "./Icons/MLDSAI_logo.png"
-    }
+    },
+    "permissions": [
+        "activeTab",
+        "tabs",
+        "nativeMessaging"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "all_frames": true,
+            "js": ["content.js"]
+        }
+    ]
 }

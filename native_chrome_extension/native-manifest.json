@@ -1,0 +1,9 @@
+{
+    "name": "browser",
+    "description": "PuterBot DOM Listener",
+    "path": "./browser.py",
+    "type": "stdio",
+    "allowed_origins": [
+        "chrome-extension://aeedjbflenakjffcnhodfddbphbnpemf/"
+    ]
+}
