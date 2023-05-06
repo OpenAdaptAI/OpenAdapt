@@ -13,3 +13,6 @@ cache
 
 # db
 *.db
+
+# Packages in editable mode
+src
