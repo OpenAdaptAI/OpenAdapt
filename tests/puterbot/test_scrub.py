@@ -1,6 +1,16 @@
 import pytest
 from puterbot.scrub import scrub
 
+def test_empty_string():
+    text = ""
+    expected_output = ""
+    assert scrub(text) == expected_output
+
+def test_no_scrub_string():
+    text = "This string doesn't have anything to scrub."
+    expected_output = "This string doesn't have anything to scrub."
+    assert scrub(text) == expected_output
+
 def test_scrub_email():
     text = "test email is test@utoronto.ca "
     expected_output = "test email is ***@***.*** "
