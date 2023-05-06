@@ -19,7 +19,7 @@ fi
 
 # Clone the OpenAdapt repository
 git clone https://github.com/MLDSAI/puterbot.git
-cd puterbot
+cd puterbot || exit
 
 # Create and activate a Python virtual environment
 python3.10 -m venv .venv
