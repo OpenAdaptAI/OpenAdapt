@@ -84,6 +84,10 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 ## Contributing
 
+### Design
+
+![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
+
 ### Problem Statement
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
@@ -113,25 +117,25 @@ The dataset consists of the following entities:
    position, or size.
 
 You can assume that you have access to the following functions: 
+- `create_recording("doing taxes")`: Creates a recording.
 - `get_latest_recording()`: Gets the latest recording.
 - `get_events(recording)`: Returns a list of `InputEvent` objects for the given
   recording.
 
 ### Instructions
 
+[Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw). Then:
+
 1. Fork this repository and clone it to your local machine. 
 2. Get puterbot up and running by following the instructions under [Setup](#Setup).
-3. Create a new file under `strategies` to contain your replay strategy. You
-may base your implementation off of `naive.py` or `demo.py`
-4. Write unit tests for your implementation.
+3. Look through the list of open issues at https://github.com/MLDSAI/puterbot/issues
+and once you find one you would like to address, indicate your interest with a comment.
+4. Implement a solution to the issue you selected. Write unit tests for your
+implementation.
 5. Submit a Pull Request (PR) to this repository. Note: submitting a PR before your
 implementation is complete (e.g. with high level documentation and/or implementation
 stubs) is encouraged, as it provides us with the opportunity to provide early
 feedback and iterate on the approach.
-
-See https://github.com/MLDSAI/puterbot/issues for ideas on where to start.
-
-See `strategies/demo.py` for example usage of a Large Language Model.
 
 ### Evaluation Criteria
 
