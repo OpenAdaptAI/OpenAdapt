@@ -1,8 +1,8 @@
 [Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw)
 
-# PuterBot: AI-First Process Automation with Transformers
+# OpenAdapt: AI-First Process Automation with Transformers
 
-Welcome to PuterBot! This Python library implements AI-First Process Automation
+Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
 
 - Recording screenshots and associated user input
@@ -22,7 +22,7 @@ scenes by observing the user's activities.
 ## Install
 
 ```
-git clone https://github.com/MLDSAI/puterbot.git
+git clone https://github.com/MLDSAI/OpenAdapt.git
 cd puterbot
 python3.10 -m venv .venv
 source .venv/bin/activate
@@ -170,10 +170,7 @@ Your submission will be evaluated based on the following criteria:
 
 ## We're hiring!
 
-If you're interested in getting paid for your work, please address one or more
-of the issues labelled "Internship" (full-time hires will also be considered.)
-
-https://github.com/MLDSAI/puterbot/issues?q=is%3Aissue+is%3Aopen+label%3AInternship
+If you're interested in getting paid for your work, please mention it in your Pull Request.
 
 ## Troubleshooting
 
