@@ -1,0 +1,74 @@
+---
+openapi: 3.0.2
+info:
+  title: FastAPI
+  version: 0.1.0
+paths:
+  "/automate":
+    post:
+      summary: Integrate with puterbot.
+      operationId: automate_automate_post
+      description: Integrate with puterbot.
+      parameters:
+      - required: true
+        schema:
+          title: Data
+          type: string
+        name: data
+        in: query
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              $ref: '#/components/schemas/getOutputResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+components:
+  schemas:
+    HTTPValidationError:
+      title: HTTPValidationError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: array
+          items:
+            "$ref": "#/components/schemas/ValidationError"
+    ValidationError:
+      title: ValidationError
+      required:
+      - loc
+      - msg
+      - type
+      type: object
+      properties:
+        loc:
+          title: Location
+          type: array
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+    getOutputResponse:
+      type: object
+      properties:
+        data:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+        description: response model
