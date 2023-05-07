@@ -84,6 +84,10 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 ## Contributing
 
+### Design
+
+![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
+
 ### Problem Statement
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
@@ -113,6 +117,7 @@ The dataset consists of the following entities:
    position, or size.
 
 You can assume that you have access to the following functions: 
+- `create_recording("doing taxes")`: Creates a recording.
 - `get_latest_recording()`: Gets the latest recording.
 - `get_events(recording)`: Returns a list of `InputEvent` objects for the given
   recording.
