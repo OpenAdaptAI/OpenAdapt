@@ -26,8 +26,6 @@ def sendkeys(args):
     response = openai.Completion.create(**params)
 
     print("Sending keys: ", response["choices"][0]["text"])
-    # sleep for 3 seconds
-    # __import__("time").sleep(3)
     keyboard.type(response["choices"][0]["text"])
     return 200
 
@@ -37,4 +35,5 @@ def test():
         print("Success!")
 
 if __name__ == "__main__":
-    print(os.getenv("API_KEY"))
+    print("api key: ", os.getenv("API_KEY"))
+    test()
