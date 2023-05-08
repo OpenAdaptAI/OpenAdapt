@@ -35,6 +35,10 @@ alembic upgrade head
 pytest
 ```
 
+## Permissions
+
+See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
+
 ## Run
 
 ### Record
