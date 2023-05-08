@@ -15,9 +15,11 @@ The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
 except that we use transformers instead of conventional RPA tools.
 
-The approach is similar to [adept.ai](https://adept.ai/), except that instead
-of requiring the user to prompt the model directly, we prompt it behind the
-scenes by observing the user's activities.
+The approach is similar to [adept.ai](https://adept.ai/), with some key differences:
+1. Instead of requiring the user to prompt the model directly, we prompt it behind the
+scenes by observing the user's activities;
+2. We work with all types of desktop applications, not just web apps;
+3. We're open source!
 
 ## Install
 
