@@ -25,7 +25,9 @@ An alternative approach would be to scrub the sensitive information before stori
 
 ## Requirements and File Architecture
 ### New Imports
-`import re`
+```
+import re
+```
 
 
 
@@ -42,9 +44,11 @@ python -m puterbot.visualize
 ## Results
 For this proof-of-concept, OpenAdapt is capable of detecting the character "1" and phone numbers. Testing was done by applying the scrubbing feature.
 
-
+![Filter_off (1)](https://user-images.githubusercontent.com/97775581/236723220-482203be-3f0f-4c86-8aee-2ab0c3a8700d.gif)
 Figure 1. Scrubbing filter off. The phone number is still visible.
 
+
+![Filter_on (1)](https://user-images.githubusercontent.com/97775581/236723129-0b8641ee-534b-440e-89da-7db6a7ae2e76.gif)
 Figure 2. Scrubbing filter on. The phone number is no longer visible.
 
 
