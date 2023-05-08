@@ -260,30 +260,30 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(input_event):
-    recording = input_event.recording
-    image = input_event.screenshot.image
+def get_scale_ratios(action):
+    recording = action.recording
+    image = action.screenshot.image
     width_ratio = image.width / recording.monitor_width
     height_ratio = image.height / recording.monitor_height
     return width_ratio, height_ratio
 
 
 def display_event(
-    input_event,
+    action,
     marker_width_pct=.03,
     marker_height_pct=.03,
     marker_fill_transparency=.25,
     marker_outline_transparency=.5,
     diff=False,
 ):
-    recording = input_event.recording
-    window_event = input_event.window_event
-    screenshot = input_event.screenshot
+    recording = action.recording
+    window_event = action.window_event
+    screenshot = action.screenshot
     if diff and screenshot.diff:
         image = screenshot.diff.convert("RGBA")
     else:
         image = screenshot.image.convert("RGBA")
-    width_ratio, height_ratio = get_scale_ratios(input_event)
+    width_ratio, height_ratio = get_scale_ratios(action)
 
     # dim area outside window event
     x0 = window_event.left * width_ratio
@@ -307,24 +307,24 @@ def display_event(
             )
 
     # draw click marker
-    if input_event.name in MOUSE_EVENTS:
-        x = input_event.mouse_x * width_ratio
-        y = input_event.mouse_y * height_ratio
+    if action.name in MOUSE_EVENTS:
+        x = action.mouse_x * width_ratio
+        y = action.mouse_y * height_ratio
         image, ellipse_width, ellipse_height = draw_ellipse(x, y, image)
 
         # draw text
-        dx = input_event.mouse_dx or 0
-        dy = input_event.mouse_dy or 0
+        dx = action.mouse_dx or 0
+        dy = action.mouse_dy or 0
         d_text = f" {dx=} {dy=}" if dx or dy else ""
-        text = f"{input_event.name}{d_text}"
+        text = f"{action.name}{d_text}"
         image = draw_text(x, y + ellipse_height / 2, text, image)
-    elif input_event.name in KEY_EVENTS:
+    elif action.name in KEY_EVENTS:
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
-        text = input_event.text
+        text = action.text
         image = draw_text(x, y, text, image, outline=True)
     else:
-        raise Exception("unhandled {input_event.name=}")
+        raise Exception("unhandled {action.name=}")
 
     return image
 

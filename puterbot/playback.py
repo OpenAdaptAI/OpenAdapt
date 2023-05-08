@@ -1,4 +1,4 @@
-"""Utilities for playing back InputEvents"""
+"""Utilities for playing back Actions"""
 
 from loguru import logger
 from pynput import mouse
@@ -53,10 +53,10 @@ def play_key_event(event, keyboard_controller, canonical=True):
         raise Exception(f"unhandled {event.name=}")
 
 
-def play_input_event(event, mouse_controller, keyboard_controller):
+def play_action(event, mouse_controller, keyboard_controller):
     if event.children:
         for child in event.children:
-            play_input_event(child, mouse_controller, keyboard_controller)
+            play_action(child, mouse_controller, keyboard_controller)
     else:
         assert event.name in MOUSE_EVENTS + KEY_EVENTS, event
         if event.name in MOUSE_EVENTS:

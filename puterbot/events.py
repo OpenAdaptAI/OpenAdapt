@@ -7,11 +7,11 @@ import numpy as np
 
 from puterbot.common import KEY_EVENTS, MOUSE_EVENTS
 from puterbot.crud import (
-    get_input_events,
+    get_actions,
     get_window_events,
     get_screenshots,
 )
-from puterbot.models import InputEvent
+from puterbot.models import Action
 from puterbot.utils import (
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
@@ -25,42 +25,42 @@ MAX_PROCESS_ITERS = 1
 
 def get_events(recording, process=True, meta=None):
     start_time = time.time()
-    input_events = get_input_events(recording)
+    actions = get_actions(recording)
     window_events = get_window_events(recording)
     screenshots = get_screenshots(recording)
 
-    raw_input_event_dicts = rows2dicts(input_events)
-    logger.debug(f"raw_input_event_dicts=\n{pformat(raw_input_event_dicts)}")
+    raw_action_dicts = rows2dicts(actions)
+    logger.debug(f"raw_action_dicts=\n{pformat(raw_action_dicts)}")
 
-    num_input_events = len(input_events)
+    num_actions = len(actions)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
 
-    num_input_events_raw = num_input_events
+    num_actions_raw = num_actions
     num_window_events_raw = num_window_events
     num_screenshots_raw = num_screenshots
-    duration_raw = input_events[-1].timestamp - input_events[0].timestamp
+    duration_raw = actions[-1].timestamp - actions[0].timestamp
 
     num_process_iters = 0
     if process:
         while True:
             logger.info(
                 f"{num_process_iters=} "
-                f"{num_input_events=} "
+                f"{num_actions=} "
                 f"{num_window_events=} "
                 f"{num_screenshots=}"
             )
-            input_events, window_events, screenshots = process_events(
-                input_events, window_events, screenshots,
+            actions, window_events, screenshots = process_events(
+                actions, window_events, screenshots,
             )
             if (
-                len(input_events) == num_input_events and
+                len(actions) == num_actions and
                 len(window_events) == num_window_events and
                 len(screenshots) == num_screenshots
             ):
                 break
             num_process_iters += 1
-            num_input_events = len(input_events)
+            num_actions = len(actions)
             num_window_events = len(window_events)
             num_screenshots = len(screenshots)
             if num_process_iters == MAX_PROCESS_ITERS:
@@ -71,8 +71,8 @@ def get_events(recording, process=True, meta=None):
             lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"
         )
         meta["num_process_iters"] = num_process_iters
-        meta["num_input_events"] = format_num(
-            num_input_events, num_input_events_raw,
+        meta["num_actions"] = format_num(
+            num_actions, num_actions_raw,
         )
         meta["num_window_events"] = format_num(
             num_window_events, num_window_events_raw,
@@ -81,8 +81,8 @@ def get_events(recording, process=True, meta=None):
             num_screenshots, num_screenshots_raw,
         )
 
-        duration = input_events[-1].timestamp - input_events[0].timestamp
-        if len(input_events) > 1:
+        duration = actions[-1].timestamp - actions[0].timestamp
+        if len(actions) > 1:
             assert duration > 0, duration
         meta["duration"] = format_num(duration, duration_raw)
 
@@ -90,7 +90,7 @@ def get_events(recording, process=True, meta=None):
     duration = end_time - start_time
     logger.info(f"{duration=}")
 
-    return input_events  # , window_events, screenshots
+    return actions  # , window_events, screenshots
 
 
 def make_parent_event(child, extra=None):
@@ -108,7 +108,7 @@ def make_parent_event(child, extra=None):
     extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
-    return InputEvent(**event_dict)
+    return Action(**event_dict)
 
 
 def merge_consecutive_mouse_move_events(events, by_diff_distance=True):
@@ -232,7 +232,7 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=True):
         return merged_events
 
 
-    return merge_consecutive_input_events(
+    return merge_consecutive_actions(
         "mouse_move", events, is_target_event, get_merged_events,
     )
 
@@ -256,7 +256,7 @@ def merge_consecutive_mouse_scroll_events(events):
         return [merged_event]
 
 
-    return merge_consecutive_input_events(
+    return merge_consecutive_actions(
         "mouse_scroll", events, is_target_event, get_merged_events,
     )
 
@@ -381,7 +381,7 @@ def merge_consecutive_mouse_click_events(events):
         return merged
 
 
-    return merge_consecutive_input_events(
+    return merge_consecutive_actions(
         "mouse_click", events, is_target_event, get_merged_events,
     )
 
@@ -467,7 +467,7 @@ def merge_consecutive_keyboard_events(events, group_named_keys=True):
             merged_events.append(merged_event)
         return merged_events
 
-    return merge_consecutive_input_events(
+    return merge_consecutive_actions(
         "keyboard", events, is_target_event, get_merged_events,
     )
 
@@ -530,12 +530,12 @@ def remove_redundant_mouse_move_events(events):
         return merged_events
 
 
-    return merge_consecutive_input_events(
+    return merge_consecutive_actions(
         "redundant_mouse_move", events, is_target_event, get_merged_events,
     )
 
 
-def merge_consecutive_input_events(
+def merge_consecutive_actions(
     name, events, is_target_event, get_merged_events,
 ):
     """Merge consecutive input events into a single event"""
@@ -573,11 +573,11 @@ def merge_consecutive_input_events(
 
 
 def discard_unused_events(
-    referred_events, input_events, referred_timestamp_key,
+    referred_events, actions, referred_timestamp_key,
 ):
     referred_event_timestamps = set([
-        getattr(input_event, referred_timestamp_key)
-        for input_event in input_events
+        getattr(action, referred_timestamp_key)
+        for action in actions
     ])
     num_referred_events_before = len(referred_events)
     referred_events = [
@@ -593,13 +593,13 @@ def discard_unused_events(
     return referred_events
 
 
-def process_events(input_events, window_events, screenshots):
-    num_input_events = len(input_events)
+def process_events(actions, window_events, screenshots):
+    num_actions = len(actions)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
-    num_total = num_input_events + num_window_events + num_screenshots
+    num_total = num_actions + num_window_events + num_screenshots
     logger.info(
-        f"before {num_input_events=} {num_window_events=} {num_screenshots=} "
+        f"before {num_actions=} {num_window_events=} {num_screenshots=} "
         f"{num_total=}"
     )
     process_fns = [
@@ -610,9 +610,9 @@ def process_events(input_events, window_events, screenshots):
         merge_consecutive_mouse_click_events,
     ]
     for process_fn in process_fns:
-        input_events = process_fn(input_events)
+        actions = process_fn(actions)
         # TODO: keep events in which window_event_timestamp is updated
-        for prev_event, event in zip(input_events, input_events[1:]):
+        for prev_event, event in zip(actions, actions[1:]):
             try:
                 assert prev_event.timestamp <= event.timestamp, (
                     process_fn, prev_event, event,
@@ -621,26 +621,26 @@ def process_events(input_events, window_events, screenshots):
                 logger.exception(exc)
                 import ipdb; ipdb.set_trace()
         window_events = discard_unused_events(
-            window_events, input_events, "window_event_timestamp",
+            window_events, actions, "window_event_timestamp",
         )
         screenshots = discard_unused_events(
-            screenshots, input_events, "screenshot_timestamp",
+            screenshots, actions, "screenshot_timestamp",
         )
-    num_input_events_ = len(input_events)
+    num_actions_ = len(actions)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
-    num_total_ = num_input_events_ + num_window_events_ + num_screenshots_
-    pct_input_events = num_input_events_ / num_input_events
+    num_total_ = num_actions_ + num_window_events_ + num_screenshots_
+    pct_actions = num_actions_ / num_actions
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
     pct_total = num_total_ / num_total
     logger.info(
-        f"after {num_input_events_=} {num_window_events_=} {num_screenshots_=} "
+        f"after {num_actions_=} {num_window_events_=} {num_screenshots_=} "
         f"{num_total=}"
     )
     logger.info(
-        f"{pct_input_events=} {pct_window_events=} {pct_screenshots=} "
+        f"{pct_actions=} {pct_window_events=} {pct_screenshots=} "
         f"{pct_total=}"
 
     )
-    return input_events, window_events, screenshots
+    return actions, window_events, screenshots

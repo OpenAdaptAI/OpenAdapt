@@ -27,7 +27,7 @@ import pygetwindow as pgw
 
 from puterbot.config import ROOT_DIRPATH
 from puterbot.crud import (
-    insert_input_event,
+    insert_action,
     insert_screenshot,
     insert_recording,
     insert_window_event,
@@ -117,7 +117,7 @@ def process_events(
             process_event(
                 event,
                 input_write_q,
-                write_input_event,
+                write_action,
                 recording_timestamp,
                 perf_q,
             )
@@ -145,7 +145,7 @@ def process_events(
     logger.info("done")
 
 
-def write_input_event(
+def write_action(
     recording_timestamp: float,
     event: Event,
     perf_q: multiprocessing.Queue,
@@ -160,7 +160,7 @@ def write_input_event(
     """
 
     assert event.type == "input", event
-    insert_input_event(recording_timestamp, event.timestamp, event.data)
+    insert_action(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, get_timestamp()))
 
 
@@ -239,12 +239,12 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def trigger_input_event(
+def trigger_action(
     event_q: queue.Queue,
-    input_event_args: Dict[str, Any],
+    action_args: Dict[str, Any],
 ) -> None:
 
-    event_q.put(Event(get_timestamp(), "input", input_event_args))
+    event_q.put(Event(get_timestamp(), "input", action_args))
 
 
 def on_move(
@@ -256,7 +256,7 @@ def on_move(
 
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action(
             event_q,
             {
                 "name": "move",
@@ -276,7 +276,7 @@ def on_click(
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action(
             event_q,
             {
                 "name": "click",
@@ -298,7 +298,7 @@ def on_scroll(
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action(
             event_q,
             {
                 "name": "scroll",
@@ -331,7 +331,7 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_input_event(
+    trigger_action(
         event_q,
         {
             "name": event_name,
@@ -570,7 +570,7 @@ def record(
     task_description: str,
 ):
     """
-    Record Screenshots/InputEvents/WindowEvents.
+    Record Screenshots/Actions/WindowEvents.
 
     Args:
         task_description: a text description of the task that will be recorded
@@ -642,18 +642,18 @@ def record(
     )
     screen_event_writer.start()
 
-    input_event_writer = multiprocessing.Process(
+    action_writer = multiprocessing.Process(
         target=write_events,
         args=(
             "input",
-            write_input_event,
+            write_action,
             input_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
         ),
     )
-    input_event_writer.start()
+    action_writer.start()
 
     window_event_writer = multiprocessing.Process(
         target=write_events,
@@ -683,7 +683,7 @@ def record(
     window_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
-    input_event_writer.join()
+    action_writer.join()
     window_event_writer.join()
 
     plot_performance(recording_timestamp, perf_q)
