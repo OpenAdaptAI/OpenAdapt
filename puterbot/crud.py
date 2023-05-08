@@ -2,7 +2,7 @@ from loguru import logger
 import sqlalchemy as sa
 
 from puterbot.db import Session
-from puterbot.models import InputEvent, Screenshot, Recording, WindowEvent
+from puterbot.models import InputEvent, Screenshot, Recording, WindowEvent, PerformanceStat
 
 
 BATCH_SIZE = 1
@@ -68,6 +68,46 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+def insert_perf_stat(recording_timestamp, event_type, start_time, end_time, buffer=None):
+    """
+    Insert event performance stat into db
+    """
+
+    # Insert using Core API for improved performance (no rows are returned)
+    db_obj = {
+        column.name: None
+        for column in PerformanceStat.__table__.columns
+    }
+
+    db_obj["recording_timestamp"] = recording_timestamp
+    db_obj["event_type"] = event_type
+    db_obj["start_time"] = start_time
+    db_obj["end_time"] = end_time
+
+    if buffer is not None:
+        buffer.append(db_obj)
+
+    if buffer is None or len(buffer) >= BATCH_SIZE:
+        to_insert = buffer or [db_obj]
+        result = db.execute(sa.insert(PerformanceStat), to_insert)
+        db.commit()
+        if buffer:
+            buffer.clear()
+        # Note: this does not contain the inserted row(s)
+        return result
+
+def get_perf_stats(recording_timestamp):
+    """
+    return performance stats for a given recording
+    """
+
+    return (
+        db
+        .query(PerformanceStat)
+        .filter(PerformanceStat.recording_timestamp == recording_timestamp)
+        .order_by(PerformanceStat.start_time)
+        .all()
+    )
 
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)

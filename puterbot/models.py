@@ -222,3 +222,11 @@ class WindowEvent(Base):
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+
+class PerformanceStat(Base):
+    __tablename__ = "performance_stat"
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.Integer)
+    event_type = sa.Column(sa.String)
+    start_time = sa.Column(sa.Integer)
+    end_time = sa.Column(sa.Integer)

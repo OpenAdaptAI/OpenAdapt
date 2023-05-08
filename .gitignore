@@ -13,3 +13,9 @@ cache
 
 # db
 *.db
+
+# VSCode
+.VSCode
+
+# Generated performance charts
+performance

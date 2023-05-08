@@ -16,7 +16,6 @@ import signal
 import sys
 import threading
 import time
-import zlib
 
 from loguru import logger
 from pynput import keyboard, mouse
@@ -25,12 +24,13 @@ import matplotlib.pyplot as plt
 import mss.tools
 import pygetwindow as pgw
 
-from puterbot.config import ROOT_DIRPATH
 from puterbot.crud import (
     insert_input_event,
     insert_screenshot,
     insert_recording,
     insert_window_event,
+    insert_perf_stat,
+    get_perf_stats,
 )
 from puterbot.utils import (
     configure_logging,
@@ -40,6 +40,7 @@ from puterbot.utils import (
     take_screenshot,
     get_timestamp,
     set_start_time,
+    rows2dicts,
 )
 
 
@@ -51,7 +52,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
 }
 DIRNAME_PERFORMANCE_PLOTS = "performance"
-PLOT_PERFORMANCE = False
+PLOT_PERFORMANCE = True
 
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
@@ -431,10 +432,35 @@ def read_window_events(
         prev_geometry = geometry
 
 
-def plot_performance(
-    recording_timestamp: float,
+def performance_stats_writer (
     perf_q: multiprocessing.Queue,
-) -> None:
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+):
+    """
+    Write performance stats to the db.
+    Each entry includes the event type, start time and end time
+
+    Args:
+        perf_q: A queue for collecting performance data.
+        recording_timestamp: The timestamp of the recording.
+        terminate_event: An event to signal the termination of the process.
+    """
+
+    configure_logging(logger, LOG_LEVEL)
+    set_start_time(recording_timestamp)
+    logger.info("performance stats writer starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while not terminate_event.is_set() or not perf_q.empty():
+        try:
+            event_type, start_time, end_time = perf_q.get_nowait()
+        except queue.Empty:
+            continue
+
+        insert_perf_stat(recording_timestamp, event_type, start_time, end_time)
+    logger.info("performance stats writer done")
+
+def plot_performance(recording_timestamp: float) -> None:
     """
     Plot the performance of the event processing and writing.
 
@@ -448,18 +474,17 @@ def plot_performance(
     type_to_proc_times = defaultdict(list)
     type_to_count = Counter()
     type_to_timestamps = defaultdict(list)
-    while not perf_q.empty():
-        event_type, start_time, end_time = perf_q.get()
-        prev_start_time = type_to_prev_start_time.get(event_type, start_time)
-        start_time_delta = start_time - prev_start_time
-        type_to_start_time_deltas[event_type].append(start_time_delta)
-        type_to_prev_start_time[event_type] = start_time
-        type_to_proc_times[event_type].append(end_time - start_time)
-        type_to_count[event_type] += 1
-        type_to_timestamps[event_type].append(start_time)
 
-    if not PLOT_PERFORMANCE:
-        return
+    perf_stats = get_perf_stats(recording_timestamp)
+    perf_stat_dicts = rows2dicts(perf_stats)
+    for perf_stat in perf_stat_dicts:
+        prev_start_time = type_to_prev_start_time.get(perf_stat["event_type"], perf_stat["start_time"])
+        start_time_delta = perf_stat["start_time"] - prev_start_time
+        type_to_start_time_deltas[perf_stat["event_type"]].append(start_time_delta)
+        type_to_prev_start_time[perf_stat["event_type"]] = perf_stat["start_time"]
+        type_to_proc_times[perf_stat["event_type"]].append(perf_stat["end_time"] - perf_stat["start_time"])
+        type_to_count[perf_stat["event_type"]] += 1
+        type_to_timestamps[perf_stat["event_type"]].append(perf_stat["start_time"])
 
     y_data = {"proc_times": {}, "start_time_deltas": {}}
     for i, event_type in enumerate(type_to_count):
@@ -668,6 +693,17 @@ def record(
     )
     window_event_writer.start()
 
+    terminate_perf_event = multiprocessing.Event()
+    perf_stat_writer = multiprocessing.Process(
+        target=performance_stats_writer,
+        args=(
+            perf_q,
+            recording_timestamp,
+            terminate_perf_event,
+        ),
+    )
+    perf_stat_writer.start()
+
     # TODO: discard events until everything is ready
 
     try:
@@ -686,10 +722,12 @@ def record(
     input_event_writer.join()
     window_event_writer.join()
 
-    plot_performance(recording_timestamp, perf_q)
+    terminate_perf_event.set()
+
+    if PLOT_PERFORMANCE:
+        plot_performance(recording_timestamp)
 
     logger.info("done")
-
 
 if __name__ == "__main__":
     fire.Fire(record)
