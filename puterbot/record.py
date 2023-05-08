@@ -141,8 +141,9 @@ def process_events(
                 prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
-        prev_event = event    
+        prev_event = event
     logger.info("done")
+
 
 def write_input_event(
     recording_timestamp: float,
