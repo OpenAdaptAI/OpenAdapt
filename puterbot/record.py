@@ -52,7 +52,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
 }
 DIRNAME_PERFORMANCE_PLOTS = "performance"
-PLOT_PERFORMANCE = True
+PLOT_PERFORMANCE = False
 
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
