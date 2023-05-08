@@ -3,6 +3,7 @@ from threading import Timer
 import html
 import os
 import string
+import re
 
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
@@ -24,6 +25,12 @@ from puterbot.utils import (
     row2dict,
     rows2dicts,
 )
+
+
+# The number of input events to store in the scrubbing buffer.
+SCRUBBING_BUFFER_SIZE = 75
+# A List for storing input events to be used for scrubbing.
+Scrubbing_Buffer = []
 
 
 LOG_LEVEL = "INFO"
@@ -125,6 +132,54 @@ def dict2html(obj, max_children=5):
     return html_str
 
 
+def scrubb():
+    ''' Scrub the buffer to find any PII/PHI data.'''
+
+    # Check for phone numbers
+    if phone_number_filter():
+        return True
+
+    # Check for number 1
+    if number_one_filter():
+        return True
+
+    # TODO: Check for email addresses
+
+    return False
+
+def number_one_filter():
+    ''' Filter out the number 1 from the buffer'''
+
+    # If buffer is empty, return 0
+    if len(Scrubbing_Buffer) == 0:
+        return False
+
+    # If character in buffer is 1
+    for char in Scrubbing_Buffer:
+        if char == '1':
+            return True
+    return False
+
+def phone_number_filter():
+    ''' Filter out phone numbers from the buffer'''
+
+    # If buffer is less than 10 characters, return 0
+    if len(Scrubbing_Buffer) < 10:
+        return False
+
+    phone_number = ''
+
+    # Get the phone number regex
+    phone_number_regex = re.compile(r'(\d{3})-(\d{3})-(\d{4})') # TODO: make it more general
+
+    # Iterate through the buffer and check if characters match the regex
+    for char in Scrubbing_Buffer:
+        phone_number += char
+        if phone_number_regex.match(phone_number):
+            return True
+        
+    return False
+
 def main():
     configure_logging(logger, LOG_LEVEL)
 
@@ -155,6 +210,27 @@ def main():
         )
     ]
     logger.info(f"{len(input_events)=}")
+
+    for idx, input_event in enumerate(input_events):
+        # Remove hyphen and put each char in list
+        if input_event.text is not None:
+            text = input_event.text.split('-')
+            for char in text:
+                # Add to scrubbing buffer, and if full, roll off the oldest event.
+                Scrubbing_Buffer.append(char)
+                if len(Scrubbing_Buffer) > SCRUBBING_BUFFER_SIZE:
+                    Scrubbing_Buffer.pop(0)
+
+                logger.info(f"{input_events=}")
+
+                # Scrubb the buffer
+                if scrubb():
+                    # Clear the buffer
+                    Scrubbing_Buffer.clear()
+                    # Remove the event by index
+                    input_events.pop(idx)
+                    break
+
     for idx, input_event in enumerate(input_events):
         if idx == MAX_EVENTS:
             break
