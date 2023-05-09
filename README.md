@@ -180,25 +180,10 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 ## Troubleshooting
 
-Apple Silicon:
+MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-```
-$ python openadapt/record.py
-...
-This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
-```
+![MacOS System Alerts](./assets/macOS_permissions_alert.png)
 
-Solution:
-https://stackoverflow.com/a/69673312
-
-```
-Settings -> Security & Privacy
-Click on the Privacy tab
-Scroll and click on the Accessibility Row
-Click the +
-Navigate to /System/Applications/Utilities/ or wherever the Terminal.app is installed
-Click okay.
-```
 
 ## Developing
 
