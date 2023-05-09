@@ -25,7 +25,7 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
         model_name: str = MODEL_NAME,
-        max_input_size: str = MAX_INPUT_SIZE,
+        max_input_size: int = MAX_INPUT_SIZE,
     ):
         super().__init__(recording)
 
@@ -44,7 +44,7 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
             logger.warning(
                 f"Truncating from {len(prompt)=} to {max_input_size=}"
             )
-            prompt = prompt[max_input_size:]
+            prompt = prompt[:max_input_size]
         logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id
