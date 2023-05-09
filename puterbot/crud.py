@@ -11,7 +11,7 @@ db = Session()
 input_events = []
 screenshots = []
 window_events = []
-
+performance_stats = []
 
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
@@ -68,33 +68,18 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
-def insert_perf_stat(recording_timestamp, event_type, start_time, end_time, buffer=None):
+def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
     Insert event performance stat into db
     """
 
-    # Insert using Core API for improved performance (no rows are returned)
-    db_obj = {
-        column.name: None
-        for column in PerformanceStat.__table__.columns
+    event_perf_stat = {
+        "recording_timestamp": recording_timestamp,
+        "event_type": event_type,
+        "start_time": start_time,
+        "end_time": end_time,
     }
-
-    db_obj["recording_timestamp"] = recording_timestamp
-    db_obj["event_type"] = event_type
-    db_obj["start_time"] = start_time
-    db_obj["end_time"] = end_time
-
-    if buffer is not None:
-        buffer.append(db_obj)
-
-    if buffer is None or len(buffer) >= BATCH_SIZE:
-        to_insert = buffer or [db_obj]
-        result = db.execute(sa.insert(PerformanceStat), to_insert)
-        db.commit()
-        if buffer:
-            buffer.clear()
-        # Note: this does not contain the inserted row(s)
-        return result
+    _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 def get_perf_stats(recording_timestamp):
     """
