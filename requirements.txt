@@ -22,3 +22,7 @@ sqlalchemy==1.4.43
 torch==2.0.0
 tqdm==4.64.0
 transformers==4.28.1
+presidio_analyzer==2.2.32
+presidio_anonymizer==2.2.32
+presidio_image_redactor==0.0.46
+
