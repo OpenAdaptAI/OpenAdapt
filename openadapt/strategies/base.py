@@ -10,8 +10,8 @@ from pynput import keyboard, mouse
 import mss.base
 import numpy as np
 
-from puterbot.models import InputEvent, Recording, Screenshot
-from puterbot.playback import play_input_event
+from openadapt.models import InputEvent, Recording, Screenshot
+from openadapt.playback import play_input_event
 
 
 MAX_FRAME_TIMES = 1000

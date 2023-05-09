@@ -9,10 +9,10 @@ import time
 from loguru import logger
 import mss.base
 
-from puterbot.events import get_events
-from puterbot.utils import display_event, rows2dicts
-from puterbot.models import Recording
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.events import get_events
+from openadapt.utils import display_event, rows2dicts
+from openadapt.models import Recording
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 DISPLAY_EVENTS = False

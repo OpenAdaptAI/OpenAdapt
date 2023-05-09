@@ -10,8 +10,8 @@ Usage:
 from ascii_magic import AsciiArt
 from loguru import logger
 
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.models import Recording, Screenshot
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 COLUMNS = 120

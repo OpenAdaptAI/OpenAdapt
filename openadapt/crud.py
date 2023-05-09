@@ -1,8 +1,8 @@
 from loguru import logger
 import sqlalchemy as sa
 
-from puterbot.db import Session
-from puterbot.models import InputEvent, Screenshot, Recording, WindowEvent
+from openadapt.db import Session
+from openadapt.models import InputEvent, Screenshot, Recording, WindowEvent
 
 
 BATCH_SIZE = 1

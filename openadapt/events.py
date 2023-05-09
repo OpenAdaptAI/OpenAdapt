@@ -5,14 +5,14 @@ from pprint import pformat
 from scipy.spatial import distance
 import numpy as np
 
-from puterbot.common import KEY_EVENTS, MOUSE_EVENTS
-from puterbot.crud import (
+from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
+from openadapt.crud import (
     get_input_events,
     get_window_events,
     get_screenshots,
 )
-from puterbot.models import InputEvent
-from puterbot.utils import (
+from openadapt.models import InputEvent
+from openadapt.utils import (
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
     get_scale_ratios,

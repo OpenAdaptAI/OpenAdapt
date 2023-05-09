@@ -6,8 +6,8 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from puterbot.db import Base
-from puterbot.utils import take_screenshot
+from openadapt.db import Base
+from openadapt.utils import take_screenshot
 
 
 class Recording(Base):
