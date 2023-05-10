@@ -1,0 +1,3 @@
+[submodule "gisting"]
+	path = gisting
+	url = https://github.com/jayelm/gisting.git
