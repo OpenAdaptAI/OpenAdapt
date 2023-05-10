@@ -16,12 +16,17 @@ MODEL_NAME = "t5"
 
 class GistedLLMReplayStrategyMixin(BaseReplayStrategy):
     
-    def __init__(self, recording: Recording, model_name: str = MODEL_NAME, max_input_size: int = MAX_INPUT_SIZE):
+    def __init__(
+        self, recording: Recording, 
+        model_name: str = MODEL_NAME, 
+        max_input_size: int = MAX_INPUT_SIZE
+    ):
+
         super.__init__(Recording)
 
         logger.info(f"{model_name=}")
         self.max_input_size = max_input_size
-        
+
     def get_completion(self, prompt: str):
 
         max_input_size = self.max_input_size
