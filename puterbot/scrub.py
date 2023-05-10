@@ -41,11 +41,3 @@ def scrub(
     )
 
     return anonymized_results.text
-
-
-if __name__ == "__main__":
-    # MasterCard
-    print(scrub("John Smith's email is johnsmith@example.com and"
-     "his phone number is 555-123-4567."
-     "His credit card number is 4534-5678-9012-3456 and"
-     " his social security number is 923-45-6789. He was born on 01/01/1980."))
