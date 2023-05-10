@@ -132,8 +132,8 @@ def main():
     logger.debug(f"{recording=}")
 
     meta = {}
-    actions = get_events(recording, process=PROCESS_EVENTS, meta=meta)
-    event_dicts = rows2dicts(actions)
+    input_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    event_dicts = rows2dicts(input_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -154,13 +154,13 @@ def main():
             ),
         )
     ]
-    logger.info(f"{len(actions)=}")
-    for idx, action in enumerate(actions):
+    logger.info(f"{len(input_events)=}")
+    for idx, input_event in enumerate(input_events):
         if idx == MAX_EVENTS:
             break
-        image = display_event(action)
-        diff = display_event(action, diff=True)
-        mask = action.screenshot.diff_mask
+        image = display_event(input_event)
+        diff = display_event(input_event, diff=True)
+        mask = input_event.screenshot.diff_mask
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -194,7 +194,7 @@ def main():
                 Div(
                     text=f"""
                         <table>
-                            {dict2html(row2dict(action))}
+                            {dict2html(row2dict(input_event))}
                         </table>
                     """
                 ),

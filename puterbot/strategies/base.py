@@ -10,8 +10,8 @@ from pynput import keyboard, mouse
 import mss.base
 import numpy as np
 
-from puterbot.models import Action, Recording, Screenshot
-from puterbot.playback import play_action
+from puterbot.models import InputEvent, Recording, Screenshot
+from puterbot.playback import play_input_event
 
 
 MAX_FRAME_TIMES = 1000
@@ -26,15 +26,15 @@ class BaseReplayStrategy(ABC):
     ):
         self.recording = recording
         self.max_frame_times = max_frame_times
-        self.actions = []
+        self.input_events = []
         self.screenshots = []
         self.frame_times = []
 
     @abstractmethod
-    def get_next_action(
+    def get_next_input_event(
         self,
         screenshot: Screenshot,
-    ) -> Action:
+    ) -> InputEvent:
         pass
 
     def run(self):
@@ -44,14 +44,14 @@ class BaseReplayStrategy(ABC):
             screenshot = Screenshot.take_screenshot()
             self.screenshots.append(screenshot)
             try:
-                action = self.get_next_action(screenshot)
+                input_event = self.get_next_input_event(screenshot)
             except StopIteration:
                 break
             self.log_fps()
-            self.actions.append(action)
-            if action:
-                play_action(
-                    action,
+            self.input_events.append(input_event)
+            if input_event:
+                play_input_event(
+                    input_event,
                     mouse_controller,
                     keyboard_controller,
                 )

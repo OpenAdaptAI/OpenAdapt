@@ -1,4 +1,4 @@
-"""add Recording; Action; ScreenShot; WindowEvent
+"""add Recording; InputEvent; ScreenShot; WindowEvent
 
 Revision ID: b206c80f7640
 Revises: 

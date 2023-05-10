@@ -22,11 +22,11 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
-    actions = sa.orm.relationship("Action", back_populates="recording")
+    input_events = sa.orm.relationship("InputEvent", back_populates="recording")
 
 
-class Action(Base):
-    __tablename__ = "action"
+class InputEvent(Base):
+    __tablename__ = "input_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -46,10 +46,10 @@ class Action(Base):
     canonical_key_name = sa.Column(sa.String)
     canonical_key_char = sa.Column(sa.String)
     canonical_key_vk = sa.Column(sa.String)
-    parent_id = sa.Column(sa.Integer, sa.ForeignKey("action.id"))
+    parent_id = sa.Column(sa.Integer, sa.ForeignKey("input_event.id"))
 
-    children = sa.orm.relationship("Action")
-    recording = sa.orm.relationship("Recording", back_populates="actions")
+    children = sa.orm.relationship("InputEvent")
+    recording = sa.orm.relationship("Recording", back_populates="input_events")
     screenshot = sa.orm.relationship("Screenshot")
     window_event = sa.orm.relationship("WindowEvent")
 

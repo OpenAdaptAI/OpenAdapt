@@ -2,13 +2,13 @@ from loguru import logger
 import sqlalchemy as sa
 
 from puterbot.db import Session
-from puterbot.models import Action, Screenshot, Recording, WindowEvent
+from puterbot.models import InputEvent, Screenshot, Recording, WindowEvent
 
 
 BATCH_SIZE = 1
 
 db = Session()
-actions = []
+input_events = []
 screenshots = []
 window_events = []
 
@@ -42,13 +42,13 @@ def _insert(event_data, table, buffer=None):
         return result
 
 
-def insert_action(recording_timestamp, event_timestamp, event_data):
+def insert_input_event(recording_timestamp, event_timestamp, event_data):
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
         "recording_timestamp": recording_timestamp,
     }
-    _insert(event_data, Action, actions)
+    _insert(event_data, InputEvent, input_events)
 
 
 def insert_screenshot(recording_timestamp, event_timestamp, event_data):
@@ -97,8 +97,8 @@ def _get(table, recording_timestamp):
     )
 
 
-def get_actions(recording):
-    return _get(Action, recording.timestamp)
+def get_input_events(recording):
+    return _get(InputEvent, recording.timestamp)
 
 
 def get_screenshots(recording, precompute_diffs=True):

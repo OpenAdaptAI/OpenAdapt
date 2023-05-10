@@ -92,12 +92,12 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
-`Action`(s) based on the previously recorded `Action`s in order to
+`InputEvent`(s) based on the previously recorded `InputEvent`s in order to
 accomplish the task specified in the `Recording.task_description`, while
 accounting for differences in screen resolution, window size, application
 behavior, etc.
 
-If it's not clear what `Action` is appropriate for the given `Screenshot`,
+If it's not clear what `InputEvent` is appropriate for the given `Screenshot`,
 (e.g. if the GUI application is behaving in a way we haven't seen before),
 we can ask the user to take over temporarily to demonstrate the appropriate
 course of action.
@@ -107,9 +107,9 @@ course of action.
 The dataset consists of the following entities: 
 1. `Recording`: Contains information about the screen dimensions, platform, and
    other metadata.
-2. `Action`: Represents a user input event such as a mouse click or key
-   press. Each `Action` has an associated `Screenshot` taken immediately
-   before the event occurred. `Action`s are aggregated to remove
+2. `InputEvent`: Represents a user input event such as a mouse click or key
+   press. Each `InputEvent` has an associated `Screenshot` taken immediately
+   before the event occurred. `InputEvent`s are aggregated to remove
    unnecessary events (see [visualize](#visualize).)
 3. `Screenshot`: Contains the PNG data of a screenshot taken during the
    recording.
@@ -119,7 +119,7 @@ The dataset consists of the following entities:
 You can assume that you have access to the following functions: 
 - `create_recording("doing taxes")`: Creates a recording.
 - `get_latest_recording()`: Gets the latest recording.
-- `get_events(recording)`: Returns a list of `Action` objects for the given
+- `get_events(recording)`: Returns a list of `InputEvent` objects for the given
   recording.
 
 ### Instructions
@@ -142,7 +142,7 @@ feedback and iterate on the approach.
 Your submission will be evaluated based on the following criteria: 
 
 1. **Functionality** : Your implementation should correctly generate the new
-   `Action` objects that can be replayed in order to accomplish the task in
+   `InputEvent` objects that can be replayed in order to accomplish the task in
    the original recording.
 
 2. **Code Quality** : Your code should be well-structured, clean, and easy to
