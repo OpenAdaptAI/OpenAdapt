@@ -223,6 +223,7 @@ class WindowEvent(Base):
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
 
+
 class PerformanceStat(Base):
     __tablename__ = "performance_stat"
     id = sa.Column(sa.Integer, primary_key=True)
