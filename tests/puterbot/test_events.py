@@ -6,7 +6,7 @@ import pytest
 from deepdiff import DeepDiff
 from loguru import logger
 
-from puterbot.models import InputEvent, WindowEvent
+from puterbot.models import ActionEvent, WindowEvent
 from puterbot.utils import (
     get_double_click_interval_seconds,
     rows2dicts,
@@ -49,7 +49,7 @@ def _reset_timestamp():
     reset_timestamp()
 
 
-def make_input_event(
+def make_action_event(
     event_dict,
     dt=None,
     get_pre_children=None,
@@ -77,7 +77,7 @@ def make_input_event(
             f"name={event_dict.get('name')}"
         )
 
-    event = InputEvent(**event_dict)
+    event = ActionEvent(**event_dict)
 
     if get_pre_children:
         # correct off by one error
@@ -110,7 +110,7 @@ def get_children_with_timestamps(get_children):
 
 
 def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
-    return make_input_event(
+    return make_action_event(
         {
             "name": "move",
             "mouse_x": x,
@@ -130,7 +130,7 @@ def make_click_event(
     get_pre_children=None,
     get_post_children=None,
 ):
-    return make_input_event(
+    return make_action_event(
         {
             "name": "click",
             "mouse_button_name": button_name,
@@ -145,7 +145,7 @@ def make_click_event(
 
 
 def make_scroll_event(dy=0, dx=0):
-    return make_input_event({
+    return make_action_event({
         "name": "scroll",
         "mouse_dx": dx,
         "mouse_dy": dy,
@@ -162,7 +162,7 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 def make_processed_click_event(
     name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
-    return make_input_event(
+    return make_action_event(
         {
             "name": name,
             "mouse_button_name": button_name,
@@ -376,7 +376,7 @@ def test_remove_redundant_mouse_move_events():
 
 def make_press_event(char=None, name=None):
     assert (char or name) and not (char and name), (char, name)
-    return make_input_event({
+    return make_action_event({
         "name": "press",
         "key_char": char,
         "key_name": name,
@@ -385,7 +385,7 @@ def make_press_event(char=None, name=None):
 
 def make_release_event(char=None, name=None):
     assert (char or name) and not (char and name), (char, name)
-    return make_input_event({
+    return make_action_event({
         "name": "release",
         "key_char": char,
         "key_name": name,
@@ -393,7 +393,7 @@ def make_release_event(char=None, name=None):
 
 
 def make_type_event(get_children):
-    return make_input_event(
+    return make_action_event(
         {
             "name": "type",
         },
@@ -511,15 +511,15 @@ def test_discard_unused_events():
         make_window_event({"timestamp": 1}),
         make_window_event({"timestamp": 2}),
     ]
-    input_events = [
-        make_input_event({"window_event_timestamp": 0}),
-        make_input_event({"window_event_timestamp": 2}),
+    action_events = [
+        make_action_event({"window_event_timestamp": 0}),
+        make_action_event({"window_event_timestamp": 2}),
     ]
     expected_filtered_window_events = rows2dicts([
         make_window_event({"timestamp": 0}),
         make_window_event({"timestamp": 2}),
     ])
     actual_filtered_window_events = rows2dicts(discard_unused_events(
-        window_events, input_events, "window_event_timestamp",
+        window_events, action_events, "window_event_timestamp",
     ))
     assert expected_filtered_window_events == actual_filtered_window_events
