@@ -1,8 +1,8 @@
 [Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw)
 
-# PuterBot: AI-First Process Automation with Transformers
+# OpenAdapt: AI-First Process Automation with Transformers
 
-Welcome to PuterBot! This Python library implements AI-First Process Automation
+Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
 
 - Recording screenshots and associated user input
@@ -15,15 +15,17 @@ The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
 except that we use transformers instead of conventional RPA tools.
 
-The approach is similar to [adept.ai](https://adept.ai/), except that instead
-of requiring the user to prompt the model directly, we prompt it behind the
-scenes by observing the user's activities.
+The approach is similar to [adept.ai](https://adept.ai/), with some key differences:
+1. Instead of requiring the user to prompt the model directly, we prompt it behind the
+scenes by observing the user's activities;
+2. We work with all types of desktop applications, not just web apps;
+3. We're open source!
 
 ## Install
 
 ```
-git clone https://github.com/MLDSAI/puterbot.git
-cd puterbot
+git clone https://github.com/MLDSAI/OpenAdapt.git
+cd OpenAdapt
 python3.10 -m venv .venv
 source .venv/bin/activate
 pip install wheel
@@ -55,7 +57,7 @@ to generate some events, then stop the recording by pressing CTRL+C.
 
 Note: keep your recording short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
-[open issue](https://github.com/MLDSAI/puterbot/issues/5) describing a
+[open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
 possible memory leak.
 
 
@@ -127,8 +129,8 @@ You can assume that you have access to the following functions:
 [Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw). Then:
 
 1. Fork this repository and clone it to your local machine. 
-2. Get puterbot up and running by following the instructions under [Setup](#Setup).
-3. Look through the list of open issues at https://github.com/MLDSAI/puterbot/issues
+2. Get OpenAdapt up and running by following the instructions under [Setup](#Setup).
+3. Look through the list of open issues at https://github.com/MLDSAI/OpenAdapt/issues
 and once you find one you would like to address, indicate your interest with a comment.
 4. Implement a solution to the issue you selected. Write unit tests for your
 implementation.
@@ -170,10 +172,7 @@ Your submission will be evaluated based on the following criteria:
 
 ## We're hiring!
 
-If you're interested in getting paid for your work, please address one or more
-of the issues labelled "Internship" (full-time hires will also be considered.)
-
-https://github.com/MLDSAI/puterbot/issues?q=is%3Aissue+is%3Aopen+label%3AInternship
+If you're interested in getting paid for your work, please mention it in your Pull Request.
 
 ## Troubleshooting
 

@@ -197,7 +197,7 @@ class Screenshot(Base):
     @property
     def diff_mask(self):
         if not self._diff_mask:
-            self._diff_mask = self._diff.convert("1")
+            self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property
