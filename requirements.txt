@@ -25,4 +25,3 @@ transformers==4.28.1
 presidio_analyzer==2.2.32
 presidio_anonymizer==2.2.32
 presidio_image_redactor==0.0.46
-
