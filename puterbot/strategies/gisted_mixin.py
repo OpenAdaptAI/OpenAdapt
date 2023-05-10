@@ -11,7 +11,7 @@ from puterbot.strategies.base import BaseReplayStrategy
 
 from gisting.src import compress
 
-MAX_INPUT_SIZE = 1024
+MAX_INPUT_SIZE = 512
 # 
 MODEL_NAME = "t5"
 
@@ -24,7 +24,7 @@ class GistedLLMReplayStrategyMixin(BaseReplayStrategy):
         self.max_input_size = max_input_size
 
 
-    def get_completion(self, prompt: str, max_tokens: int):
+    def get_completion(self, prompt: str):
 
         max_input_size = self.max_input_size
         if max_input_size and len(prompt) > max_input_size:
@@ -36,10 +36,10 @@ class GistedLLMReplayStrategyMixin(BaseReplayStrategy):
                 f"Truncated {len(prompt)=}"
             )
         
-        logger.debug(f"{prompt=} {max_tokens=}")
+        logger.debug(f"{prompt=}")
 
         gisted_output = compress.compress(MODEL_NAME, prompt)
-        logger.debug(f"{output=}")
+        logger.debug(f"{gisted_output=}")
         return gisted_output
 
 
