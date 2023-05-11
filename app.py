@@ -33,6 +33,13 @@ class App(tk.Tk):
         self.logo_label = tk.Label(self, image=self.logo, compound="left")
         self.logo_label.place(x=75, y=0, width=128, height=128)
 
+        self.logo_label.bind(
+            "<Button-1>",
+            lambda e: on_logo_click(
+                simpledialog.askstring("Task", "Enter a task name: ")
+            ),
+        )
+
         # display log
         self.log = console.Console(self)
         self.log.place(x=300, y=0, width=300, height=400)
@@ -75,6 +82,25 @@ class App(tk.Tk):
         self.clear_cache_button.place(x=50, y=332, width=200, height=50)
 
 
+def on_logo_click(task):
+    if task is not None:
+        print("Task: {}".format(task), file=sys.stderr)
+        print("Executing...", file=sys.stderr)
+        replay.replay("NaiveReplayStrategy")
+        os.system(
+            "curl -X 'POST' \
+            'http://localhost:3333/?data=write%20{}' \
+            -H 'accept: application/json' \
+            -d ''".format(
+                task.replace(" ", "%20")
+            )
+        )
+        print("Execution complete.", file=sys.stderr)
+
+    else:
+        print("Execution cancelled.", file=sys.stderr)
+
+
 def on_record(name):
     if name is not None:
         # fails
@@ -86,7 +112,7 @@ def on_record(name):
             "Recording {}... Press CTRL/CMD + C in log window to cancel".format(name),
             file=sys.stderr,
         )
-        os.system("python3 -m openadapt.record {}".format(name))
+        os.system("python3 -m openadapt.record \"{}\"".format(name))
         print("Recording complete.", file=sys.stderr)
 
     else:
