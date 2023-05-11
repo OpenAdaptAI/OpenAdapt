@@ -46,15 +46,6 @@ class DemoReplayStrategy(
         ocr_text = self.get_ocr_text(screenshot)
         # logger.info(f"ocr_text=\n{ocr_text}")
 
-        # find previous screenshot
-        index = self.screenshots.index(screenshot)
-        if index != 0:
-            last_screenshot = self.screenshots[index - 1]
-            window_similarity = self.get_summary(ascii_text, self.get_ascii_text(last_screenshot),
-                                                 ocr_text, self.get_ocr_text(last_screenshot))
-        else:
-            window_similarity = 0
-
         event_strs = [
             f"<{event}>"
             for event in self.recording.input_events
