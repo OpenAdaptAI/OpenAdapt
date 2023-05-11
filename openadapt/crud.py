@@ -2,13 +2,13 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt.db import Session
-from openadapt.models import InputEvent, Screenshot, Recording, WindowEvent
+from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
 
 
 BATCH_SIZE = 1
 
 db = Session()
-input_events = []
+action_events = []
 screenshots = []
 window_events = []
 
@@ -42,13 +42,13 @@ def _insert(event_data, table, buffer=None):
         return result
 
 
-def insert_input_event(recording_timestamp, event_timestamp, event_data):
+def insert_action_event(recording_timestamp, event_timestamp, event_data):
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
         "recording_timestamp": recording_timestamp,
     }
-    _insert(event_data, InputEvent, input_events)
+    _insert(event_data, ActionEvent, action_events)
 
 
 def insert_screenshot(recording_timestamp, event_timestamp, event_data):
@@ -97,8 +97,8 @@ def _get(table, recording_timestamp):
     )
 
 
-def get_input_events(recording):
-    return _get(InputEvent, recording.timestamp)
+def get_action_events(recording):
+    return _get(ActionEvent, recording.timestamp)
 
 
 def get_screenshots(recording, precompute_diffs=True):
