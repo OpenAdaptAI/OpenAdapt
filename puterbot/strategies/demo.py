@@ -25,8 +25,8 @@ class DemoReplayStrategy(
     LLMReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
-    BaseReplayStrategy,
     SummaryReplayStrategyMixin,
+    BaseReplayStrategy,
 ):
     def __init__(
         self,
