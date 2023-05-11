@@ -22,28 +22,35 @@ import statistics
 
 
 class SummaryReplayStrategyMixin(BaseReplayStrategy):
+    """
+    The summary of text ReplayStrategyMixin.
+    """
 
     def __init__(
-            self,
-            recording: Recording,
+        self,
+        recording: Recording,
     ):
+        """
+        See base class.
+        """
         super().__init__(recording)
 
     def get_summary(
-            self,
-            ascii_curr: str,
-            ascii_prev: str,
-            ocr_curr: str,
-            ocr_prev: str
-    ):
-        """
-        Takes the ASCII and OCR text of the current and previous screenshot
-        and returns the similarity score between the given screenshot
-        and the screenshot before.
+        self, ascii_curr: str, ascii_prev: str, ocr_curr: str, ocr_prev: str
+    ) -> float:
+        """Returns how similar the contents of 2 screenshots are.
 
-        The similarity score is the mean of the following 2 scores:
-        1. how similar the summaries of the current and previous ASCII text are
-        2. how similar the summaries of the current and previous OCR text are
+        Args:
+            self: the SummaryReplayStrategyMixin
+            ascii_curr: the ascii text of the current screenshot
+            ascii_prev: the ascii text of the previous screenshot
+            ocr_curr: the ocr text of the current screenshot
+            ocr_prev: the ocr text of the previous screenshot
+
+        Returns:
+            A float which represents the mean of the following 2 similarity values:
+                1. how similar the summaries of the current and previous ASCII text are
+                2. how similar the summaries of the current and previous OCR text are
         """
         cleaned_ascii_curr = clean_ascii(ascii_curr)
         cleaned_ascii_prev = clean_ascii(ascii_prev)
@@ -58,24 +65,26 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
 
 
 def clean_ascii(
-        text,
-):
-    # replace the irrelevant symbols in the ascii with spaces
-    no_symbols = re.sub(r'[^\w\s]+', '', text)
+    text: str,
+) -> str:
+    """
+    Returns a string of the words in the inputted text.
+    """
+    # remove the irrelevant symbols in the ascii and returns a list of strings
+    no_symbols = re.sub(r"[^\w\s]+", "", text)
 
     ascii_words = []
 
     for word in no_symbols:
         if wordnet.synsets(word):
             ascii_words.append(word)
-    return str(ascii_words)
+    return "".join(ascii_words)
 
 
-# takes 2 lists of strings and returns how similar they are as a float
-def compare_text(
-        text1,
-        text2
-):
+def compare_text(text1: str, text2: str) -> float:
+    """
+    Returns a float value representing how similar the 2 strings are.
+    """
     stemmer = Stemmer("english")
     summarizer = LsaSummarizer(stemmer)
     summarizer.stop_words = get_stop_words("english")

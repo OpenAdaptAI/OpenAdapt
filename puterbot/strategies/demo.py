@@ -26,19 +26,18 @@ class DemoReplayStrategy(
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
     BaseReplayStrategy,
-    SummaryReplayStrategyMixin
+    SummaryReplayStrategyMixin,
 ):
-
     def __init__(
-            self,
-            recording: Recording,
+        self,
+        recording: Recording,
     ):
         super().__init__(recording)
         self.result_history = []
 
     def get_next_input_event(
-            self,
-            screenshot: Screenshot,
+        self,
+        screenshot: Screenshot,
     ):
         ascii_text = self.get_ascii_text(screenshot)
         # logger.info(f"ascii_text=\n{ascii_text}")
