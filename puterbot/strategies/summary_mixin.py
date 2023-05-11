@@ -36,7 +36,11 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         super().__init__(recording)
 
     def get_summary(
-        self, ascii_curr: str, ascii_prev: str, ocr_curr: str, ocr_prev: str
+        self,
+        ascii_curr: str,
+        ascii_prev: str,
+        ocr_curr: str,
+        ocr_prev: str,
     ) -> float:
         """Returns how similar the contents of 2 screenshots are.
 
@@ -81,7 +85,10 @@ def clean_ascii(
     return "".join(ascii_words)
 
 
-def compare_text(text1: str, text2: str) -> float:
+def compare_text(
+    text1: str,
+    text2: str,
+) -> float:
     """
     Returns a float value representing how similar the 2 strings are.
     """
