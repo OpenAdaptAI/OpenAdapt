@@ -38,7 +38,7 @@ class DemoReplayStrategy(
         self.result_history = []
         self.processed_input_events = get_events(recording, process=True)
 
-    def get_next_input_event(
+    def get_next_action_event(
         self,
         screenshot: Screenshot,
     ):
@@ -70,7 +70,7 @@ class DemoReplayStrategy(
 
         event_strs = [
             f"<{event}>"
-            for event in self.recording.input_events
+            for event in self.recording.action_events
         ]
         history_strs = [
             f"<{completion}>"
@@ -94,7 +94,7 @@ class DemoReplayStrategy(
         logger.info(f"{result=}")
         self.result_history.append(result)
 
-        # TODO: parse result into InputEvent(s)
+        # TODO: parse result into ActionEvent(s)
 
         # TODO: In the demo implementation, we would like to create the next InputEvent based on the completion
         #       as opposed to using the previous recording's Input Event. 
