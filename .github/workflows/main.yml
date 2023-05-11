@@ -22,7 +22,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run Python Black
-        run: python -m black .
+        run: black .
 
       - name: Run Python Tests
         run: pytest
