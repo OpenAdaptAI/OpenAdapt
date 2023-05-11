@@ -77,22 +77,22 @@ class DemoReplayStrategy(
             for completion in self.result_history
         ]
 
-        # prompt = " ".join(event_strs + history_strs)
-        # N = max(0, len(prompt) - MAX_INPUT_SIZE)
-        # prompt = prompt[N:]          #Ensure prompt is not too long
-        # logger.info(f"{prompt=}")
-        # max_tokens = 10
-        # #action_prompt = prompt.split(">")[self.input_event_idx] + ">"
-        # #print("Action Prompt: ",action_prompt) #Test Print
-        # completion = self.get_completion(prompt, max_tokens)
-        # #Try using action_prompt instead of prompt to generate completions
-        # #completion = self.get_completion(action_prompt, max_tokens)
-        # logger.info(f"{completion=}")
+        prompt = " ".join(event_strs + history_strs)
+        N = max(0, len(prompt) - MAX_INPUT_SIZE)
+        prompt = prompt[N:]          #Ensure prompt is not too long
+        logger.info(f"{prompt=}")
+        max_tokens = 10
+        #action_prompt = prompt.split(">")[self.input_event_idx] + ">"
+        #print("Action Prompt: ",action_prompt) #Test Print
+        completion = self.get_completion(prompt, max_tokens)
+        #Try using action_prompt instead of prompt to generate completions
+        #completion = self.get_completion(action_prompt, max_tokens)
+        logger.info(f"{completion=}")
 
-        # # only take the first <...>                            <1><2><3><4>   -->  [<1>,<2>,<3>,<4>] --> <1> --> 1
-        # result = completion.split(">")[0].strip(" <>")
-        # logger.info(f"{result=}")
-        # self.result_history.append(result)
+        # only take the first <...>                            <1><2><3><4>   -->  [<1>,<2>,<3>,<4>] --> <1> --> 1
+        result = completion.split(">")[0].strip(" <>")
+        logger.info(f"{result=}")
+        self.result_history.append(result)
 
         # TODO: parse result into InputEvent(s)
 
