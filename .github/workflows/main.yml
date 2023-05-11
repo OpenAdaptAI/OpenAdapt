@@ -21,8 +21,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Python Black
+        run: pip install black
+
       - name: Run Python Black
-        run: black .
+        run: python -m black .
 
       - name: Run Python Tests
         run: pytest
