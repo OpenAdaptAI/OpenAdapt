@@ -11,16 +11,18 @@ OCR_TEXT=$(pytesseract "$SCRUBBED_IMAGE_PATH")
 # Check if the OCR text contains the email
 if echo "$OCR_TEXT" | grep -q "john@deo.gmail.com"; then
     echo "Error: OCR text contains original email"
+    rm -rf "$SCRUBBED_IMAGE_PATH"
     exit 1
 fi
 
 # Check if the OCR text does not contain the scrubbed email
-if ! echo "$OCR_TEXT" | grep -q "my email is"; then
-    echo "Error: OCR text does not contain the string \"my email is\""
+if ! echo "$OCR_TEXT" | grep -q "Manage your Google Account"; then
+    echo "Error: OCR text does not contain the string \"Manage your Google Account\""
+    rm -rf "$SCRUBBED_IMAGE_PATH"
     exit 1
 fi
 
-rm -f "$SCRUBBED_IMAGE_PATH"
+rm -rf "$SCRUBBED_IMAGE_PATH"
 
 echo "Test Passed!"
 exit 0
