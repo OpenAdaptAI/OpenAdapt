@@ -48,9 +48,12 @@ class DemoReplayStrategy(
         ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
 
+        play_action = False
+
         if (self.input_event_idx == -1):
             print("Starting Demo Replay Strategy...")
             self.input_event_idx += 1
+            play_action = True
         elif (len(self.processed_input_events)-1 == self.input_event_idx):
             #Finished replaying all input events
             raise StopIteration()
@@ -58,10 +61,12 @@ class DemoReplayStrategy(
             if (ocr_text != self.previous_screenshot_OCR) or (ascii_text != self.previous_screenshot_ASCII):
                 #Screen has changed, so continue to next action
                 self.input_event_idx += 1
+                play_action = True
             else:
                 #Wait for the screen to change before continuing to next action
                 print("Waiting for screen to change...")
         
+        logger.info(f"input_event_idx={self.input_event_idx}")
 
         event_strs = [
             f"<{event}>"
@@ -72,22 +77,22 @@ class DemoReplayStrategy(
             for completion in self.result_history
         ]
 
-        prompt = " ".join(event_strs + history_strs)
-        N = max(0, len(prompt) - MAX_INPUT_SIZE)
-        prompt = prompt[N:]          #Ensure prompt is not too long
-        logger.info(f"{prompt=}")
-        max_tokens = 10
-        #action_prompt = prompt.split(">")[self.input_event_idx] + ">"
-        #print("Action Prompt: ",action_prompt) #Test Print
-        completion = self.get_completion(prompt, max_tokens)
-        #Try using action_prompt instead of prompt to generate completions
-        #completion = self.get_completion(action_prompt, max_tokens)
-        logger.info(f"{completion=}")
+        # prompt = " ".join(event_strs + history_strs)
+        # N = max(0, len(prompt) - MAX_INPUT_SIZE)
+        # prompt = prompt[N:]          #Ensure prompt is not too long
+        # logger.info(f"{prompt=}")
+        # max_tokens = 10
+        # #action_prompt = prompt.split(">")[self.input_event_idx] + ">"
+        # #print("Action Prompt: ",action_prompt) #Test Print
+        # completion = self.get_completion(prompt, max_tokens)
+        # #Try using action_prompt instead of prompt to generate completions
+        # #completion = self.get_completion(action_prompt, max_tokens)
+        # logger.info(f"{completion=}")
 
-        # only take the first <...>                            <1><2><3><4>   -->  [<1>,<2>,<3>,<4>] --> <1> --> 1
-        result = completion.split(">")[0].strip(" <>")
-        logger.info(f"{result=}")
-        self.result_history.append(result)
+        # # only take the first <...>                            <1><2><3><4>   -->  [<1>,<2>,<3>,<4>] --> <1> --> 1
+        # result = completion.split(">")[0].strip(" <>")
+        # logger.info(f"{result=}")
+        # self.result_history.append(result)
 
         # TODO: parse result into InputEvent(s)
 
@@ -95,7 +100,10 @@ class DemoReplayStrategy(
         #       as opposed to using the previous recording's Input Event. 
         self.previous_screenshot_OCR = ocr_text
         self.previous_screenshot_ASCII = ascii_text
-        return self.processed_input_events[self.input_event_idx]
+        if (play_action):
+            return self.processed_input_events[self.input_event_idx]
+        else:
+            return None
 
         # TODO: If there is a windowEvent, use the ASCII image of the window (smaller area allows for more ASCII collumns)
         #       focusing a windowEvent would prevent background changes from triggering a new input event
