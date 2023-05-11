@@ -22,3 +22,8 @@ sqlalchemy==1.4.43
 torch==2.0.0
 tqdm==4.64.0
 transformers==4.28.1
+requests==2.30.0
+fastapi==0.95.1
+uvicorn==0.22.0
+openapi==1.1.0
+python-dotenv==1.0.0
