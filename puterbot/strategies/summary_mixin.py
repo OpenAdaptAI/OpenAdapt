@@ -33,7 +33,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         """
         See base class.
         """
-        super().__init__(recording)
+        super(BaseReplayStrategy, self).__init__(recording)
 
     def get_summary(
         self,
@@ -75,22 +75,21 @@ def clean_ascii(
     Returns a string of the words in the inputted text.
     """
     # remove the irrelevant symbols in the ascii and returns a list of strings
-    no_symbols = re.sub(r"[^\w\s]+", "", text)
-
+    no_symbols = re.sub(r"[^\w\s]+", " ", text)
     ascii_words = []
 
-    for word in no_symbols:
-        if wordnet.synsets(word):
+    for word in no_symbols.split():
+        if wordnet.synsets(word):  # check if it's a word
             ascii_words.append(word)
-    return "".join(ascii_words)
+    return " ".join(ascii_words)
 
 
 def compare_text(
     text1: str,
     text2: str,
-) -> float:
+) -> int:
     """
-    Returns a float value representing how similar the 2 strings are.
+    Returns a int value between 0 and 100 (inclusive on both sides) representing how similar the 2 strings are.
     """
     stemmer = Stemmer("english")
     summarizer = LsaSummarizer(stemmer)
@@ -103,4 +102,4 @@ def compare_text(
     summarized2 = summarizer(parser2.document, 1)
 
     # may want to change to something more complex
-    return fuzz.ratio(summarized1, summarized2)
+    return fuzz.WRatio(summarized1, summarized2)
