@@ -8,8 +8,8 @@ from presidio_image_redactor import ImageRedactorEngine
 
 
 # PREREQUISITES:
-    # Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
-    # python -m spacy download en_core_web_lg (before running the scrub module)
+# Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
+# python -m spacy download en_core_web_lg (before running the scrub module)
 
 MAX_MASK_LEN = 1024
 
@@ -52,15 +52,15 @@ def scrub(text: str) -> str:
 
 def scrub_image(png_data: bytes) -> bytes:
     """Scrub the png_data of all PII/PHI
-    
+
     Scrub the png_data of all PII/PHI using Presidio Image Redactor
-    
+
     Args:
         png_data (bytes): PNG data to be scrubbed
-        
+
     Returns:
         bytes: Scrubbed PNG data
-    
+
     Raises:
         None
     """
@@ -71,11 +71,11 @@ def scrub_image(png_data: bytes) -> bytes:
     engine = ImageRedactorEngine()
 
     # Redact the image with red color
-    redacted_image = engine.redact(image, (255, 0, 0)) # type: ignore
+    redacted_image = engine.redact(image, (255, 0, 0))  # type: ignore
 
     # Save the redacted image to an in-memory buffer
     output_buffer = BytesIO()
-    redacted_image.save(output_buffer, format='PNG') # type: ignore
+    redacted_image.save(output_buffer, format="PNG")  # type: ignore
 
     # Get the redacted image data from the buffer
     redacted_png_data = output_buffer.getvalue()
