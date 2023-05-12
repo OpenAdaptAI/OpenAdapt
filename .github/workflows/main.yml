@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  lint-and-test:
+  run-tests:
     runs-on: windows-latest
 
     steps:
@@ -34,8 +34,8 @@ jobs:
           working-directory: ./  # Optional: Specify the working directory if needed
           options:  # Optional: Add any additional options or arguments for pytest
 
-  ruff-check:
-    needs: lint-and-test
+  run-linter:
+    needs: run-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
