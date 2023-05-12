@@ -33,8 +33,8 @@ jobs:
       - name: Run Python Black
         run: python -m black .
 
-      - name: Run Python Script
-        run: DISPLAY=":0" python3 filename.py
+      - name: Set Environment Variable
+        run: export DISPLAY=:0 
 
       - name: Run Python Tests
         run: pytest
