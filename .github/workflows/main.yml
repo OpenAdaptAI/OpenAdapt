@@ -33,11 +33,12 @@ jobs:
       - name: Run Python Black
         run: python -m black .
 
-      - name: Set Environment Variable
-        run: export DISPLAY=:0 
-
-      - name: Run Python Tests
-        run: python -m pytest
+      - name: Run headless test
+        uses: coactions/setup-xvfb@v1
+        with:
+          run: python -m pytest
+          working-directory: ./ # Optional: Specify the working directory if needed
+          options: # Optional: Add any additional options or arguments for pytest
 
       - name: Run Linting Check
         run: pylint --rcfile=.pylintrc .
