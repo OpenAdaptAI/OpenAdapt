@@ -11,6 +11,7 @@ from presidio_image_redactor import ImageRedactorEngine
 # Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
 # python -m spacy download en_core_web_lg (before running the scrub module)
 
+
 MAX_MASK_LEN = 1024
 
 
