@@ -7,7 +7,10 @@ on:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
@@ -23,7 +26,6 @@ jobs:
           pip install wheel
           pip install -r requirements.txt
 
-
       - name: Install Python Black
         run: pip install black
 
@@ -34,11 +36,18 @@ jobs:
         run: python -m black .
 
       - name: Run headless test
+        if: matrix.os == 'macos-latest'
+        run: python -m pytest
+        working-directory: ./  # Optional: Specify the working directory if needed
+        options:  # Optional: Add any additional options or arguments for pytest
+
+      - name: Run headless test
+        if: matrix.os == 'windows-latest'
         uses: coactions/setup-xvfb@v1
         with:
           run: python -m pytest
-          working-directory: ./ # Optional: Specify the working directory if needed
-          options: # Optional: Add any additional options or arguments for pytest
+          working-directory: ./  # Optional: Specify the working directory if needed
+          options:  # Optional: Add any additional options or arguments for pytest
 
       - name: Run Linting Check
         run: pylint --rcfile=.pylintrc .
