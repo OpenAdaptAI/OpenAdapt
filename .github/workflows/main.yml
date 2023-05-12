@@ -37,7 +37,7 @@ jobs:
         run: export DISPLAY=:0 
 
       - name: Run Python Tests
-        run: pytest
+        run: python -m pytest
 
       - name: Run Linting Check
         run: pylint --rcfile=.pylintrc .
