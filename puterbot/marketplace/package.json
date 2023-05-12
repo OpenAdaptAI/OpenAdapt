@@ -1,0 +1,19 @@
+{
+  "name": "marketplace",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.2.47",
+    "vue-router": "^4.1.6",
+    "vuetify": "^3.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.2.1",
+    "vite": "^4.3.4"
+  }
+}
