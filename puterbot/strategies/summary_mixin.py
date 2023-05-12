@@ -33,7 +33,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         """
         See base class.
         """
-        super(self).__init__(recording)
+        super().__init__(recording)
 
     def get_summary(
         self,
