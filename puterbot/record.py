@@ -27,7 +27,7 @@ import pygetwindow as pgw
 
 from puterbot.config import ROOT_DIRPATH
 from puterbot.crud import (
-    insert_input_event,
+    insert_action_event,
     insert_screenshot,
     insert_recording,
     insert_window_event,
@@ -43,11 +43,11 @@ from puterbot.utils import (
 )
 
 
-EVENT_TYPES = ("screen", "input", "window")
+EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
-    "input": True,
+    "action": True,
     "window": True,
 }
 DIRNAME_PERFORMANCE_PLOTS = "performance"
@@ -67,7 +67,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
-    input_write_q: multiprocessing.Queue,
+    action_write_q: multiprocessing.Queue,
     window_write_q: multiprocessing.Queue,
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
@@ -79,7 +79,7 @@ def process_events(
     Args:
         event_q: A queue with events to be processed.
         screen_write_q: A queue for writing screen events.
-        input_write_q: A queue for writing input events.
+        action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
@@ -105,9 +105,9 @@ def process_events(
             prev_screen_event = event
         elif event.type == "window":
             prev_window_event = event
-        elif event.type == "input":
+        elif event.type == "action":
             if prev_screen_event is None:
-                logger.warning("discarding input that came before screen")
+                logger.warning("discarding action that came before screen")
                 continue
             if prev_window_event is None:
                 logger.warning("discarding input that came before window")
@@ -116,8 +116,8 @@ def process_events(
             event.data["window_event_timestamp"] = prev_window_event.timestamp
             process_event(
                 event,
-                input_write_q,
-                write_input_event,
+                action_write_q,
+                write_action_event,
                 recording_timestamp,
                 perf_q,
             )
@@ -145,22 +145,22 @@ def process_events(
     logger.info("done")
 
 
-def write_input_event(
+def write_action_event(
     recording_timestamp: float,
     event: Event,
     perf_q: multiprocessing.Queue,
 ):
     """
-    Write an input event to the database and update the performance queue.
+    Write an action event to the database and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
-        event: An input event to be written.
+        event: An action event to be written.
         perf_q: A queue for collecting performance data.
     """
 
-    assert event.type == "input", event
-    insert_input_event(recording_timestamp, event.timestamp, event.data)
+    assert event.type == "action", event
+    insert_action_event(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, get_timestamp()))
 
 
@@ -239,12 +239,12 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def trigger_input_event(
+def trigger_action_event(
     event_q: queue.Queue,
-    input_event_args: Dict[str, Any],
+    action_event_args: Dict[str, Any],
 ) -> None:
 
-    event_q.put(Event(get_timestamp(), "input", input_event_args))
+    event_q.put(Event(get_timestamp(), "action", action_event_args))
 
 
 def on_move(
@@ -256,7 +256,7 @@ def on_move(
 
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action_event(
             event_q,
             {
                 "name": "move",
@@ -276,7 +276,7 @@ def on_click(
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action_event(
             event_q,
             {
                 "name": "click",
@@ -298,7 +298,7 @@ def on_scroll(
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
-        trigger_input_event(
+        trigger_action_event(
             event_q,
             {
                 "name": "scroll",
@@ -331,7 +331,7 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_input_event(
+    trigger_action_event(
         event_q,
         {
             "name": event_name,
@@ -570,7 +570,7 @@ def record(
     task_description: str,
 ):
     """
-    Record Screenshots/InputEvents/WindowEvents.
+    Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
         task_description: a text description of the task that will be recorded
@@ -585,7 +585,7 @@ def record(
 
     event_q = queue.Queue()
     screen_write_q = multiprocessing.Queue()
-    input_write_q = multiprocessing.Queue()
+    action_write_q = multiprocessing.Queue()
     window_write_q = multiprocessing.Queue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = multiprocessing.Queue()
@@ -620,7 +620,7 @@ def record(
         args=(
             event_q,
             screen_write_q,
-            input_write_q,
+            action_write_q,
             window_write_q,
             perf_q,
             recording_timestamp,
@@ -642,18 +642,18 @@ def record(
     )
     screen_event_writer.start()
 
-    input_event_writer = multiprocessing.Process(
+    action_event_writer = multiprocessing.Process(
         target=write_events,
         args=(
-            "input",
-            write_input_event,
-            input_write_q,
+            "action",
+            write_action_event,
+            action_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
         ),
     )
-    input_event_writer.start()
+    action_event_writer.start()
 
     window_event_writer = multiprocessing.Process(
         target=write_events,
@@ -683,7 +683,7 @@ def record(
     window_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
-    input_event_writer.join()
+    action_event_writer.join()
     window_event_writer.join()
 
     plot_performance(recording_timestamp, perf_q)

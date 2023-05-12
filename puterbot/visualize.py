@@ -25,7 +25,6 @@ from puterbot.utils import (
     rows2dicts,
 )
 
-
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 PROCESS_EVENTS = True
@@ -132,8 +131,8 @@ def main():
     logger.debug(f"{recording=}")
 
     meta = {}
-    input_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
-    event_dicts = rows2dicts(input_events)
+    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -154,13 +153,13 @@ def main():
             ),
         )
     ]
-    logger.info(f"{len(input_events)=}")
-    for idx, input_event in enumerate(input_events):
+    logger.info(f"{len(action_events)=}")
+    for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        image = display_event(input_event)
-        diff = display_event(input_event, diff=True)
-        mask = input_event.screenshot.diff_mask
+        image = display_event(action_event)
+        diff = display_event(action_event, diff=True)
+        mask = action_event.screenshot.diff_mask
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -194,7 +193,7 @@ def main():
                 Div(
                     text=f"""
                         <table>
-                            {dict2html(row2dict(input_event))}
+                            {dict2html(row2dict(action_event))}
                         </table>
                     """
                 ),
@@ -212,12 +211,10 @@ def main():
         )
     )
 
-
     def cleanup():
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
-
 
     Timer(1, cleanup).start()
 
