@@ -27,12 +27,16 @@ jobs:
       - name: Run Python Black
         run: python -m black .
 
-      - name: Run headless test
+      - name: Run headless tests
         uses: coactions/setup-xvfb@v1
         with:
           run: python -m pytest
           working-directory: ./  # Optional: Specify the working directory if needed
           options:  # Optional: Add any additional options or arguments for pytest
 
-      - name: Run Linting Check
-        run: pylint --rcfile=.pylintrc .
+  ruff-check:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1
