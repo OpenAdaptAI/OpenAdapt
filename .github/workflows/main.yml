@@ -25,12 +25,7 @@ jobs:
         run: |
           pip install wheel
           pip install -r requirements.txt
-
-      - name: Install Python Black
-        run: pip install black
-
-      - name: Install the module in development mode
-        run: pip install -e .
+          pip install -e .
 
       - name: Run Python Black
         run: python -m black .
@@ -38,8 +33,6 @@ jobs:
       - name: Run headless test
         if: matrix.os == 'macos-latest'
         run: python -m pytest
-        working-directory: ./  # Optional: Specify the working directory if needed
-        options:  # Optional: Add any additional options or arguments for pytest
 
       - name: Run headless test
         if: matrix.os == 'windows-latest'
