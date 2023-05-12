@@ -44,7 +44,11 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
             logger.warning(
                 f"Truncating from {len(prompt) - 1=} to {max_input_size=}"
             )
-            prompt = prompt[max_input_size:]
+            prompt = prompt[-max_input_size:]
+            logger.warning(
+                f"Truncated {len(prompt)=}"
+            )
+
         logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt[1:], return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id

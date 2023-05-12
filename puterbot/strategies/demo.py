@@ -35,7 +35,7 @@ class DemoReplayStrategy(
         super().__init__(recording)
         self.result_history = []
 
-    def get_next_input_event(
+    def get_next_action_event(
         self,
         screenshot: Screenshot,
     ):
@@ -47,7 +47,7 @@ class DemoReplayStrategy(
 
         event_strs = [
             f"<{event}>"
-            for event in self.recording.input_events
+            for event in self.recording.action_events
         ]
         history_strs = [
             f"<{completion}>"
@@ -66,6 +66,6 @@ class DemoReplayStrategy(
         logger.info(f"{result=}")
         self.result_history.append(result)
 
-        # TODO: parse result into InputEvent(s)
+        # TODO: parse result into ActionEvent(s)
 
         return None
