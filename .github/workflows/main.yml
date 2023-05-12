@@ -33,6 +33,9 @@ jobs:
       - name: Run Python Black
         run: python -m black .
 
+      - name: Run Python Script
+        run: DISPLAY=":0" python3 filename.py
+
       - name: Run Python Tests
         run: pytest
 
