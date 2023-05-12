@@ -2,6 +2,8 @@ import io
 from pprint import pformat
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry
+
+from models import ActionEvent
 from strategies.ocr_mixin import OCRReplayStrategyMixin
 from transformers import GPTJForCausalLM, GPT2Tokenizer
 from paddleocr import PaddleOCR
@@ -122,13 +124,38 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
                  "Task goal: {}\n\n" \
                  "Previously recorded input events: {}\n\n" \
                  "Screenshot description: {}\n\n" \
-                 "Please provide your input event below." \
-            .format(self.recording.task_description,
-                    previously_recorded_input_events, text)
+                 "Please provide the value of each attribute below with the same order as:\n\n" \
+                 "'mouse_x', 'mouse_y', 'mouse_dx', 'mouse_dy', 'mouse_button_name', 'mouse_pressed', " \
+                 "'key_name', 'key_char', 'key_vk', 'canonical_key_name', 'canonical_key_char', 'canonical_key_vk'".format(
+            self.recording.task_description,
+            previously_recorded_input_events,
+            text
+        )
+
         encoded_prompt = self.tokenizer.encode(prompt, return_tensors="pt")
         generated_tokens = self.model.generate(encoded_prompt, max_length=1000,do_sample=True)
         generated_text = self.tokenizer.decode(generated_tokens[0],
                                                skip_special_tokens=True)
+
+        # Assume generated_text contains the generated CSV-formatted information
+        attribute_values = generated_text.split(',')
+
+        # Create a new ActionEvent object
+        new_action_event = ActionEvent()
+
+        # Assign attribute values to the object
+        new_action_event.mouse_x = float(attribute_values[0].strip())
+        new_action_event.mouse_y = float(attribute_values[1].strip())
+        new_action_event.mouse_dx = float(attribute_values[2].strip())
+        new_action_event.mouse_dy = float(attribute_values[3].strip())
+        new_action_event.mouse_button_name = attribute_values[4].strip()
+        new_action_event.mouse_pressed = attribute_values[5].strip() == 'True'
+        new_action_event.key_name = attribute_values[6].strip()
+        new_action_event.key_char = attribute_values[7].strip()
+        new_action_event.key_vk = attribute_values[8].strip()
+        new_action_event.canonical_key_name = attribute_values[9].strip()
+        new_action_event.canonical_key_char = attribute_values[10].strip()
+        new_action_event.canonical_key_vk = attribute_values[11].strip()
 
         #convert generated_text to InputEvent object
         input_event = self.processed_input_events[self.input_event_idx]
