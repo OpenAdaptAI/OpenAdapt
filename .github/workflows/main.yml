@@ -7,10 +7,7 @@ on:
 
 jobs:
   lint-and-test:
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -31,11 +28,6 @@ jobs:
         run: python -m black .
 
       - name: Run headless test
-        if: matrix.os == 'macos-latest'
-        run: python -m pytest
-
-      - name: Run headless test
-        if: matrix.os == 'windows-latest'
         uses: coactions/setup-xvfb@v1
         with:
           run: python -m pytest
