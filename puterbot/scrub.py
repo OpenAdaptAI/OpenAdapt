@@ -6,13 +6,11 @@ from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import ImageRedactorEngine
 
+MAX_MASK_LEN = 1024
 
 # PREREQUISITES:
 # Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
-# python -m spacy download en_core_web_lg (before running the scrub module)
-
-
-MAX_MASK_LEN = 1024
+# python -m spacy download en_core_web_lg
 
 
 def scrub(text: str) -> str:

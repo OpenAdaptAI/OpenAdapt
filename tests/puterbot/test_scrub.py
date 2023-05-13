@@ -2,6 +2,7 @@
 from io import BytesIO
 from PIL import Image
 import pytesseract
+import os
 from puterbot.scrub import scrub, scrub_image
 
 
@@ -9,7 +10,7 @@ def test_scrub_image_data() -> None:
     """
     Test is to be sure that the scrubbed image data is different
     """
-    test_image_path = "test_image.png"  # An image with john@deo@gmail.com
+    test_image_path = "../../assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
@@ -29,10 +30,14 @@ def test_scrub_image_data() -> None:
 
     # Perform OCR on the scrubbed image
     ocr_text = pytesseract.image_to_string(scrubbed_image)
-    print(ocr_text)
 
     scrubbed_image.close()
     test_image.close()
+    os.remove(scrubbed_image_path)
+
+    assert "krish@openadapt.ai" not in ocr_text
+    assert "Manage your Google Account" in ocr_text
+    assert "Sign out" in ocr_text
 
 
 def test_empty_string() -> None:

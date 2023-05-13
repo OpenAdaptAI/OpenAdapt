@@ -16,3 +16,6 @@ cache
 
 # VSCode
 *.vscode
+
+# venv Folder
+venv/*
