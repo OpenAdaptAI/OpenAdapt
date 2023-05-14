@@ -315,8 +315,11 @@ for idx, input_event in enumerate(input_events):
         f'</div>')
 
 ui.run(title='Visualize')
-
-
+ 
+if os.path.exists(video_file):
+    # Remove the image files
+    for image_file in image_files:
+        os.remove(image_file)
 
 
 
