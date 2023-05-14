@@ -101,7 +101,7 @@ def get_action_events(recording):
     return _get(ActionEvent, recording.timestamp)
 
 
-def get_screenshots(recording, precompute_diffs=True):
+def get_screenshots(recording, precompute_diffs=False):
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):

@@ -23,7 +23,6 @@ from pynput import keyboard, mouse
 import fire
 import matplotlib.pyplot as plt
 import mss.tools
-import pygetwindow as pgw
 
 from puterbot.config import ROOT_DIRPATH
 from puterbot.crud import (
@@ -384,27 +383,43 @@ def read_window_events(
     configure_logging(logger, LOG_LEVEL)
     set_start_time(recording_timestamp)
     logger.info(f"starting")
-    prev_title = None
-    prev_geometry = None
+    prev_state = None
     while not terminate_event.is_set():
         # TODO: save window identifier (a window's title can change, or
         # multiple windows can have the same title)
         if sys.platform == "darwin":
             # pywinctl performance on mac is unusable, see:
             # https://github.com/Kalmat/PyWinCtl/issues/29
-            title = pgw.getActiveWindow()
-            geometry = pgw.getWindowGeometry(title)
-            if geometry is None:
-                logger.warning(f"{geometry=}")
-                continue
+            from puterbot import window
+            state = window.get_active_window_state()
+            meta = state["meta"]
+            title_parts = [
+                meta['kCGWindowOwnerName'],
+                meta['kCGWindowName'],
+            ]
+            title_parts = [part for part in title_parts if part]
+            title = " ".join(title_parts)
+            bounds = meta["kCGWindowBounds"]
+            left = bounds["X"]
+            top = bounds["Y"]
+            width = bounds["Width"]
+            height = bounds["Height"]
         else:
+            import pygetwindow as pgw
             window = pgw.getActiveWindow()
             if not window:
                 logger.warning(f"{window=}")
                 continue
             title = window.title
             geometry = window.box
-        if title != prev_title or geometry != prev_geometry:
+            # TODO: get window state; see:
+            # https://github.com/MLDSAI/OpenAdapt/issues/75#issuecomment-1536762953
+            state = {
+                "title": title,
+                "geometry": geometry,
+            }
+            left, top, width, height = geometry
+        if state != prev_state:
 
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
@@ -413,9 +428,8 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            logger.info(f"{title=} {prev_title=} {geometry=} {prev_geometry=}")
+            logger.info(f"{title=} {left=} {top=} {width=} {height=}")
 
-            left, top, width, height = geometry
             event_q.put(Event(
                 get_timestamp(),
                 "window",
@@ -425,10 +439,10 @@ def read_window_events(
                     "top": top,
                     "width": width,
                     "height": height,
+                    "state": state,
                 }
             ))
-        prev_title = title
-        prev_geometry = geometry
+        prev_state = state
 
 
 def plot_performance(

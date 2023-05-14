@@ -197,7 +197,8 @@ class Screenshot(Base):
     @property
     def diff_mask(self):
         if not self._diff_mask:
-            self._diff_mask = self.diff.convert("1")
+            if self.diff:
+                self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property
@@ -217,6 +218,7 @@ class WindowEvent(Base):
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
     timestamp = sa.Column(sa.Integer)
+    state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)
     top = sa.Column(sa.Integer)

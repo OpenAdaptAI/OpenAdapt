@@ -70,9 +70,15 @@ CSS = string.Template("""
 
 
 def recursive_len(lst, key):
-    _len = len(lst)
+    try:
+        _len = len(lst)
+    except TypeError:
+        return 0
     for obj in lst:
-        _len += recursive_len(obj[key], key)
+        try:
+            _len += recursive_len(obj.get(key), key)
+        except AttributeError:
+            continue
     return _len
 
 
@@ -189,6 +195,9 @@ def main():
                                 "
                             >
                         </div>
+                        <table>
+                            {dict2html(row2dict(action_event.window_event))}
+                        </table>
                     """,
                 ),
                 Div(

@@ -111,7 +111,9 @@ def make_parent_event(child, extra=None):
     return ActionEvent(**event_dict)
 
 
-def merge_consecutive_mouse_move_events(events, by_diff_distance=True):
+# Set by_diff_distance=True to compute distance from mouse to screenshot diff
+# (computationally expensive but more keeps useful events)
+def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
     """Merge consecutive mouse move events into a single move event"""
 
     _all_slowdowns = []
