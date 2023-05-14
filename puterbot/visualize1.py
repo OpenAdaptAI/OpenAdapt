@@ -16,6 +16,8 @@ import tempfile
 import google.auth
 import google_auth_oauthlib.flow
 import json
+import shutil
+
 
 
 from googleapiclient.errors import HttpError
@@ -192,6 +194,7 @@ def screenshot2array(screenshot):
     return array
 
 def create_video_from_images(images, output_dir=None):
+    global video_file
     if output_dir is None:
         # Set a default output directory
         output_dir = os.path.join(os.getcwd(), "videos")
@@ -231,7 +234,9 @@ def dict2html_table(d):
     html += '</table>'
     return html
 
-
+def remove_files(file_list):
+    for file in file_list:
+        os.remove(file)
 
 #getting the photos
 recording = get_latest_recording()
@@ -315,11 +320,9 @@ for idx, input_event in enumerate(input_events):
         f'</div>')
 
 ui.run(title='Visualize')
- 
-if os.path.exists(video_file):
-    # Remove the image files
-    for image_file in image_files:
-        os.remove(image_file)
+
+
+
 
 
 
