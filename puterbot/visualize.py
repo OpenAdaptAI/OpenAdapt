@@ -10,7 +10,7 @@ from bokeh.models.widgets import Div
 from loguru import logger
 
 from puterbot.crud import (
-    get_latest_recording,
+    get_latest_recording
 )
 from puterbot.events import (
     get_events,
@@ -25,7 +25,7 @@ from puterbot.utils import (
     rows2dicts,
 )
 
-
+#Global variables & Formatting:
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 PROCESS_EVENTS = True
@@ -68,21 +68,23 @@ CSS = string.Template("""
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
-
+#computes the total number of elements in a nested list of dictionaries based on a given key.
 def recursive_len(lst, key):
     _len = len(lst)
     for obj in lst:
         _len += recursive_len(obj[key], key)
     return _len
 
-
+# If the value is a list, it adds information about the length of the list and the total number of elements in the nested lists. 
+# If the value is not a list, it simply returns the key.
 def format_key(key, value):
     if isinstance(value, list):
         return f"{key} ({len(value)}; {recursive_len(value, key)})"
     else:
         return key
 
-
+#The function returns a new list that contains all the elements of some in the same order they appear in 'some', 
+# but with 'indicator' inserted wherever an element is missing from 'every'.
 def indicate_missing(some, every, indicator):
     rval = []
     some_idx = 0
@@ -99,7 +101,13 @@ def indicate_missing(some, every, indicator):
         every_idx += 1
     return rval
 
-
+# converts a Python dictionary to an HTML
+'''If obj is a list it converts each element of the list to an HTML string using recursion, 
+ and concatenates the resulting strings with line breaks
+    If obj is a dict the function iterates over each key-value pair in the dictionary and 
+creates a table row for each non-empty value
+    If neither function converts it to a string and escapes any HTML special characters.
+ '''
 def dict2html(obj, max_children=5):
     if isinstance(obj, list):
         children = [dict2html(value) for value in obj]
@@ -131,11 +139,12 @@ def main():
     recording = get_latest_recording()
     logger.debug(f"{recording=}")
 
-    meta = {}
+    meta = {} #a dictionary object that contains metadata about the recording (start and end times, the task description...)
     input_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(input_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
+    #TOP OF THE PAGE
     rows = [
         row(
             Div(
@@ -154,7 +163,9 @@ def main():
             ),
         )
     ]
+
     logger.info(f"{len(input_events)=}")
+    #every parent information depicted
     for idx, input_event in enumerate(input_events):
         if idx == MAX_EVENTS:
             break

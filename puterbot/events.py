@@ -28,6 +28,7 @@ def get_events(recording, process=True, meta=None):
     input_events = get_input_events(recording)
     window_events = get_window_events(recording)
     screenshots = get_screenshots(recording)
+    #print(f"\n\n\n\ndwagdwag{len(screenshots)}\n\n\n\n")
 
     raw_input_event_dicts = rows2dicts(input_events)
     logger.debug(f"raw_input_event_dicts=\n{pformat(raw_input_event_dicts)}")
@@ -89,6 +90,7 @@ def get_events(recording, process=True, meta=None):
     end_time = time.time()
     duration = end_time - start_time
     logger.info(f"{duration=}")
+    #print(f"\n\n\n\ndwagdwag{len(input_events)}\n\n\n\n")
 
     return input_events  # , window_events, screenshots
 
