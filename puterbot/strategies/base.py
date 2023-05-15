@@ -7,7 +7,6 @@ import time
 
 from loguru import logger
 from pynput import keyboard, mouse
-import mss.base
 import numpy as np
 
 from puterbot.models import ActionEvent, Recording, Screenshot

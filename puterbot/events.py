@@ -24,6 +24,9 @@ MAX_PROCESS_ITERS = 1
 
 
 def get_events(recording, process=True, meta=None):
+    def format_num(num, raw_num):
+        return f"{num} of {raw_num} ({(num / raw_num):.2%})"
+    
     start_time = time.time()
     action_events = get_action_events(recording)
     window_events = get_window_events(recording)
@@ -67,9 +70,6 @@ def get_events(recording, process=True, meta=None):
                 break
 
     if meta is not None:
-        format_num = (
-            lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"
-        )
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
             num_action_events, num_action_events_raw,
@@ -619,7 +619,8 @@ def process_events(action_events, window_events, screenshots):
                 )
             except AssertionError as exc:
                 logger.exception(exc)
-                import ipdb; ipdb.set_trace()
+                import ipdb
+                ipdb.set_trace()
         window_events = discard_unused_events(
             window_events, action_events, "window_event_timestamp",
         )
