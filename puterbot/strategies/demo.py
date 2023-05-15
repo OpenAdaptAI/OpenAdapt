@@ -1,9 +1,9 @@
 """
-Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
+Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python puterbot/replay.py DemoReplayStrategy
+    $ python -m puterbot.replay DemoReplayStrategy
 """
 
 from loguru import logger
@@ -12,16 +12,16 @@ import numpy as np
 from puterbot.events import get_events
 from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.llm_mixin import (
-    LLMReplayStrategyMixin,
+from puterbot.strategies.mixins.huggingface_mixin import (
+    HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
-from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
-from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from puterbot.strategies.mixins.ocr_mixin import OCRReplayStrategyMixin
+from puterbot.strategies.mixins.ascii_mixin import ASCIIReplayStrategyMixin
 
 
 class DemoReplayStrategy(
-    LLMReplayStrategyMixin,
+    HuggingFaceReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
     BaseReplayStrategy,
