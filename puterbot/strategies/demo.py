@@ -7,7 +7,6 @@ Usage:
 """
 
 from loguru import logger
-import numpy as np
 
 from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy

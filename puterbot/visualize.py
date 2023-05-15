@@ -4,8 +4,8 @@ import html
 import os
 import string
 
-from bokeh.io import output_file, show
-from bokeh.layouts import layout, row
+from bokeh.io import output_file
+from bokeh.layouts import row
 from bokeh.models.widgets import Div
 from loguru import logger
 
