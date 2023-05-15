@@ -1,0 +1,42 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  run-tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install wheel
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run Python Black
+        run: python -m black .
+
+      - name: Run headless tests
+        uses: coactions/setup-xvfb@v1
+        with:
+          run: python -m pytest
+          working-directory: ./  # Optional: Specify the working directory if needed
+          options:  # Optional: Add any additional options or arguments for pytest
+
+  run-linter:
+    needs: run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1

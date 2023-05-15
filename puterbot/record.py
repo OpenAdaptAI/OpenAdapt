@@ -16,7 +16,6 @@ import signal
 import sys
 import threading
 import time
-import zlib
 
 from loguru import logger
 from pynput import keyboard, mouse
@@ -25,7 +24,6 @@ import matplotlib.pyplot as plt
 import mss.tools
 import pygetwindow as pgw
 
-from puterbot.config import ROOT_DIRPATH
 from puterbot.crud import (
     insert_action_event,
     insert_screenshot,
@@ -88,7 +86,7 @@ def process_events(
 
     configure_logging(logger, LOG_LEVEL)
     set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("starting")
 
     prev_event = None
     prev_screen_event = None
@@ -357,7 +355,7 @@ def read_screen_events(
 
     configure_logging(logger, LOG_LEVEL)
     set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("starting")
     while not terminate_event.is_set():
         screenshot = take_screenshot()
         if screenshot is None:
@@ -383,7 +381,7 @@ def read_window_events(
 
     configure_logging(logger, LOG_LEVEL)
     set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("starting")
     prev_title = None
     prev_geometry = None
     while not terminate_event.is_set():
@@ -463,7 +461,6 @@ def plot_performance(
 
     y_data = {"proc_times": {}, "start_time_deltas": {}}
     for i, event_type in enumerate(type_to_count):
-        type_count = type_to_count[event_type]
         start_time_deltas = type_to_start_time_deltas[event_type]
         proc_times = type_to_proc_times[event_type]
         y_data["proc_times"][event_type] = proc_times
@@ -676,7 +673,7 @@ def record(
     except KeyboardInterrupt:
         terminate_event.set()
 
-    logger.info(f"joining...")
+    logger.info("joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()

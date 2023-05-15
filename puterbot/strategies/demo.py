@@ -7,9 +7,7 @@ Usage:
 """
 
 from loguru import logger
-import numpy as np
 
-from puterbot.events import get_events
 from puterbot.models import Recording, Screenshot
 from puterbot.strategies.base import BaseReplayStrategy
 from puterbot.strategies.llm_mixin import (
@@ -38,10 +36,10 @@ class DemoReplayStrategy(
         self,
         screenshot: Screenshot,
     ):
-        ascii_text = self.get_ascii_text(screenshot)
+        # ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 
-        ocr_text = self.get_ocr_text(screenshot)
+        # ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
 
         event_strs = [

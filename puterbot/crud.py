@@ -110,7 +110,7 @@ def get_screenshots(recording, precompute_diffs=True):
 
     # TODO: store diffs
     if precompute_diffs:
-        logger.info(f"precomputing diffs...")
+        logger.info("precomputing diffs...")
         [(screenshot.diff, screenshot.diff_mask) for screenshot in screenshots]
 
     return screenshots
