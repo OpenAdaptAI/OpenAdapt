@@ -3,21 +3,21 @@ Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python puterbot/replay.py DemoReplayStrategy
+    $ python openadapt/replay.py DemoReplayStrategy
 """
 
 from loguru import logger
 import numpy as np
 
-from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.llm_mixin import (
+from openadapt.events import get_events
+from openadapt.models import Recording, Screenshot
+from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.strategies.llm_mixin import (
     LLMReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
-from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
-from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
+from openadapt.strategies.ascii_mixin import ASCIIReplayStrategyMixin
 
 
 class DemoReplayStrategy(

@@ -2,7 +2,7 @@
 
 Usage:
 
-    $ python puterbot/record.py "<description of task to be recorded>"
+    $ python openadapt/record.py "<description of task to be recorded>"
 
 """
 
@@ -25,14 +25,14 @@ import matplotlib.pyplot as plt
 import mss.tools
 import pygetwindow as pgw
 
-from puterbot.config import ROOT_DIRPATH
-from puterbot.crud import (
+from openadapt.config import ROOT_DIRPATH
+from openadapt.crud import (
     insert_action_event,
     insert_screenshot,
     insert_recording,
     insert_window_event,
 )
-from puterbot.utils import (
+from openadapt.utils import (
     configure_logging,
     get_double_click_distance_pixels,
     get_double_click_interval_seconds,
@@ -408,7 +408,7 @@ def read_window_events(
 
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
-            #   File "...\puterbot\record.py", line 277, in read window events
+            #   File "...\openadapt\record.py", line 277, in read window events
             #   File "...\env\lib\site-packages\loguru\logger.py" line 1977, in info
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):

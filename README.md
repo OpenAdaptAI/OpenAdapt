@@ -42,7 +42,7 @@ pytest
 Create a new recording by running the following command:
 
 ```
-python -m puterbot.record "testing out puterbot"
+python -m openadapt.record "testing out openadapt"
 ```
 
 Wait until all three event writers have started:
@@ -66,7 +66,7 @@ possible memory leak.
 Visualize the latest recording you created by running the following command:
 
 ```
-python -m puterbot.visualize
+python -m openadapt.visualize
 ```
 
 This will open your browser. It will look something like this:
@@ -78,7 +78,7 @@ This will open your browser. It will look something like this:
 You can play back the recording using the following command:
 
 ```
-python -m puterbot.replay NaiveReplayStrategy
+python -m openadapt.replay NaiveReplayStrategy
 ```
 
 More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
@@ -179,7 +179,7 @@ If you're interested in getting paid for your work, please mention it in your Pu
 Apple Silicon:
 
 ```
-$ python puterbot/record.py
+$ python openadapt/record.py
 ...
 This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
 ```
@@ -206,7 +206,7 @@ alembic revision --autogenerate -m "<msg>"
 
 # Submitting an Issue
 
-Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
+Please submit any issues to https://github.com/MLDSAI/openadapt/issues with the
 following information:
 
 - Problem description (please include any relevant console output and/or screenshots)
