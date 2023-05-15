@@ -23,4 +23,3 @@ torch==2.0.0
 tqdm==4.64.0
 transformers==4.28.1
 black
-pylint
