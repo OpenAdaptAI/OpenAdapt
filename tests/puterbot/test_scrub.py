@@ -1,8 +1,8 @@
 """Module to test scrub.py"""
 from io import BytesIO
+import os
 from PIL import Image
 import pytesseract
-import os
 from puterbot.scrub import scrub, scrub_image
 
 
@@ -10,7 +10,7 @@ def test_scrub_image_data() -> None:
     """
     Test is to be sure that the scrubbed image data is different
     """
-    test_image_path = "../../assets/test_scrub_image.png"
+    test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
