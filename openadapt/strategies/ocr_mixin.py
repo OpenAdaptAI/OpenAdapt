@@ -19,8 +19,8 @@ from sklearn.cluster import DBSCAN
 import numpy as np
 import pandas as pd
 
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.models import Recording, Screenshot
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 # TODO: group into sections via layout analysis; see:

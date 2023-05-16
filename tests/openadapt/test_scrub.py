@@ -3,7 +3,7 @@ from io import BytesIO
 import os
 from PIL import Image
 import pytesseract
-from puterbot.scrub import scrub, scrub_image
+from openadapt.scrub import scrub, scrub_image
 
 
 def test_scrub_image_data() -> None:

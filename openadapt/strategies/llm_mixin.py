@@ -11,8 +11,8 @@ Usage:
 from loguru import logger
 import transformers as tf  # RIP TensorFlow
 
-from puterbot.models import Recording
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.models import Recording
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower

@@ -3,7 +3,7 @@
 from loguru import logger
 from pynput import mouse
 
-from puterbot.common import KEY_EVENTS, MOUSE_EVENTS
+from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
 def play_mouse_event(event, mouse_controller):
@@ -65,5 +65,4 @@ def play_action_event(event, mouse_controller, keyboard_controller):
             play_key_event(event, keyboard_controller)
         else:
             raise Exception(f"unhandled {event.name=}")
-
 

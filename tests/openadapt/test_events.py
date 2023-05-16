@@ -6,13 +6,13 @@ import pytest
 from deepdiff import DeepDiff
 from loguru import logger
 
-from puterbot.models import ActionEvent, WindowEvent
-from puterbot.utils import (
+from openadapt.models import ActionEvent, WindowEvent
+from openadapt.utils import (
     get_double_click_interval_seconds,
     rows2dicts,
     override_double_click_interval_seconds,
 )
-from puterbot.events import (
+from openadapt.events import (
     discard_unused_events,
     merge_consecutive_keyboard_events,
     merge_consecutive_mouse_click_events,
@@ -523,3 +523,4 @@ def test_discard_unused_events():
         window_events, action_events, "window_event_timestamp",
     ))
     assert expected_filtered_window_events == actual_filtered_window_events
+    
