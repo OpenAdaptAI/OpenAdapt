@@ -20,7 +20,10 @@ def replay(
     configure_logging(logger, LOG_LEVEL)
 
     if timestamp:
-        timestamp = parser.parse(timestamp)
+        try:
+            timestamp = parser.parse(timestamp)
+        except:
+            timestamp = eval(timestamp)
         logger.info(f"{timestamp=} {type(timestamp)=}")
         recording = crud.get_recording(timestamp)
     else:

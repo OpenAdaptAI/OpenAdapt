@@ -9,10 +9,7 @@ import time
 from loguru import logger
 import mss.base
 
-from puterbot.events import get_events
-from puterbot.utils import display_event, rows2dicts
-from puterbot.models import Recording
-from puterbot.strategies.base import BaseReplayStrategy
+from puterbot import events, utils, models, strategies
 
 
 DISPLAY_EVENTS = False
@@ -21,11 +18,11 @@ REPLAY_EVENTS = True
 SLEEP = True
 
 
-class NaiveReplayStrategy(BaseReplayStrategy):
+class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
 
     def __init__(
         self,
-        recording: Recording,
+        recording: models.Recording,
         display_events=DISPLAY_EVENTS,
         replay_events=REPLAY_EVENTS,
         sleep=SLEEP,
@@ -36,16 +33,17 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.action_event_idx = -1
-        self.processed_action_events = get_events(
+        self.processed_action_events = events.get_events(
             recording,
             process=PROCESS_EVENTS,
         )
-        event_dicts = rows2dicts(self.processed_action_events)
+        event_dicts = utils.rows2dicts(self.processed_action_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     def get_next_action_event(
         self,
-        screenshot: mss.base.ScreenShot,
+        screenshot: models.Screenshot,
+        window_event: models.WindowEvent,
     ):
         self.action_event_idx += 1
         num_action_events = len(self.processed_action_events)
@@ -57,7 +55,7 @@ class NaiveReplayStrategy(BaseReplayStrategy):
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )
         if self.display_events:
-            image = display_event(action_event)
+            image = utils.display_event(action_event)
             image.show()
         if self.replay_events:
             if self.sleep and self.prev_timestamp:

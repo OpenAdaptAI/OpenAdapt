@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import pathlib
 
@@ -31,6 +32,7 @@ ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME
 DB_URL = f"sqlite:///{DB_FPATH}"
 
-for key, val in locals().items():
-    if not key.startswith("_") and key.isupper():
-        logger.info(f"{key}={val}")
+if multiprocessing.current_process().name == "MainProcess":
+    for key, val in locals().items():
+        if not key.startswith("_") and key.isupper():
+            logger.info(f"{key}={val}")

@@ -10,7 +10,7 @@ from loguru import logger
 import numpy as np
 
 from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot
+from puterbot.models import Recording, Screenshot, WindowEvent
 from puterbot.strategies.base import BaseReplayStrategy
 from puterbot.strategies.mixins.huggingface import (
     HuggingFaceReplayStrategyMixin,
@@ -37,6 +37,7 @@ class DemoReplayStrategy(
     def get_next_action_event(
         self,
         screenshot: Screenshot,
+        window_event: WindowEvent,
     ):
         ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")

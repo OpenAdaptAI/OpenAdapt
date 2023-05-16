@@ -6,11 +6,10 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from puterbot.db import Base
-from puterbot.utils import take_screenshot
+from puterbot import db, utils, window
 
 
-class Recording(Base):
+class Recording(db.Base):
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -29,7 +28,7 @@ class Recording(Base):
     )
 
 
-class ActionEvent(Base):
+class ActionEvent(db.Base):
     __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -158,7 +157,7 @@ class ActionEvent(Base):
         return rval
 
 
-class Screenshot(Base):
+class Screenshot(db.Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -211,12 +210,12 @@ class Screenshot(Base):
 
     @classmethod
     def take_screenshot(cls):
-        sct_img = take_screenshot()
+        sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
 
-class WindowEvent(Base):
+class WindowEvent(db.Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -228,3 +227,7 @@ class WindowEvent(Base):
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+
+    @classmethod
+    def get_active_window_state(cls):
+        return window.get_active_window_state()
