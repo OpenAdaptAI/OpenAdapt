@@ -9,13 +9,13 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from puterbot.crud import (
+from openadapt.crud import (
     get_latest_recording,
 )
-from puterbot.events import (
+from openadapt.events import (
     get_events,
 )
-from puterbot.utils import (
+from openadapt.utils import (
     configure_logging,
     display_event,
     evenly_spaced,
@@ -24,6 +24,7 @@ from puterbot.utils import (
     row2dict,
     rows2dicts,
 )
+
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -211,13 +212,16 @@ def main():
         )
     )
 
+
     def cleanup():
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
+
 
     Timer(1, cleanup).start()
 
 
 if __name__ == "__main__":
     main()
+    
