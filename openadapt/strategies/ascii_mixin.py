@@ -42,4 +42,5 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
             width_ratio=width_ratio,
         )
         logger.debug(f"ascii_text=\n{ascii_text}")
+
         return ascii_text
