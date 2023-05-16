@@ -7,6 +7,7 @@ Usage:
 """
 
 from collections import Counter, defaultdict, namedtuple
+from datetime import datetime
 from functools import partial
 from typing import Any, Callable, Dict
 import multiprocessing
@@ -24,22 +25,7 @@ import fire
 import matplotlib.pyplot as plt
 import mss.tools
 
-from puterbot.config import ROOT_DIRPATH
-from puterbot.crud import (
-    insert_action_event,
-    insert_screenshot,
-    insert_recording,
-    insert_window_event,
-)
-from puterbot.utils import (
-    configure_logging,
-    get_double_click_distance_pixels,
-    get_double_click_interval_seconds,
-    get_monitor_dims,
-    take_screenshot,
-    get_timestamp,
-    set_start_time,
-)
+from puterbot import config, crud, utils, window
 
 
 EVENT_TYPES = ("screen", "action", "window")
@@ -85,15 +71,15 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_datetime(recording_timestamp)
     logger.info(f"starting")
 
     prev_event = None
     prev_screen_event = None
     prev_window_event = None
-    prev_saved_screen_timestamp = 0
-    prev_saved_window_timestamp = 0
+    prev_saved_screen_timestamp = datetime.now()
+    prev_saved_window_timestamp = datetime.now()
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
         logger.debug(f"{event=}")
@@ -159,8 +145,8 @@ def write_action_event(
     """
 
     assert event.type == "action", event
-    insert_action_event(recording_timestamp, event.timestamp, event.data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_action_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_screen_event(
@@ -181,8 +167,8 @@ def write_screen_event(
     screenshot = event.data
     png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
     event_data = {"png_data": png_data}
-    insert_screenshot(recording_timestamp, event.timestamp, event_data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_window_event(
@@ -200,8 +186,8 @@ def write_window_event(
     """
 
     assert event.type == "window", event
-    insert_window_event(recording_timestamp, event.timestamp, event.data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_events(
@@ -224,8 +210,8 @@ def write_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_datetime(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not write_q.empty():
@@ -243,7 +229,7 @@ def trigger_action_event(
     action_event_args: Dict[str, Any],
 ) -> None:
 
-    event_q.put(Event(get_timestamp(), "action", action_event_args))
+    event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
 def on_move(
@@ -354,15 +340,15 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_datetime(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
-        screenshot = take_screenshot()
+        screenshot = utils.take_screenshot()
         if screenshot is None:
             logger.warning("screenshot was None")
             continue
-        event_q.put(Event(get_timestamp(), "screen", screenshot))
+        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("done")
 
 
@@ -380,47 +366,21 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_datetime(recording_timestamp)
     logger.info(f"starting")
     prev_state = None
+    prev_title = None
     while not terminate_event.is_set():
-        # TODO: save window identifier (a window's title can change, or
-        # multiple windows can have the same title)
-        if sys.platform == "darwin":
-            # pywinctl performance on mac is unusable, see:
-            # https://github.com/Kalmat/PyWinCtl/issues/29
-            from puterbot import window
-            state = window.get_active_window_state()
-            meta = state["meta"]
-            title_parts = [
-                meta['kCGWindowOwnerName'],
-                meta['kCGWindowName'],
-            ]
-            title_parts = [part for part in title_parts if part]
-            title = " ".join(title_parts)
-            bounds = meta["kCGWindowBounds"]
-            left = bounds["X"]
-            top = bounds["Y"]
-            width = bounds["Width"]
-            height = bounds["Height"]
-        else:
-            import pygetwindow as pgw
-            window = pgw.getActiveWindow()
-            if not window:
-                logger.warning(f"{window=}")
-                continue
-            title = window.title
-            geometry = window.box
-            # TODO: get window state; see:
-            # https://github.com/MLDSAI/OpenAdapt/issues/75#issuecomment-1536762953
-            state = {
-                "title": title,
-                "geometry": geometry,
-            }
-            left, top, width, height = geometry
-        if state != prev_state:
-
+        state = window.get_active_window_state()
+        if not state:
+            continue
+        title = state["title"]
+        left = state["left"]
+        top = state["top"]
+        width = state["width"]
+        height = state["height"]
+        if title != prev_title:
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\puterbot\record.py", line 277, in read window events
@@ -429,9 +389,9 @@ def read_window_events(
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
             logger.info(f"{title=} {left=} {top=} {width=} {height=}")
-
+        if state != prev_state:
             event_q.put(Event(
-                get_timestamp(),
+                utils.get_timestamp(),
                 "window",
                 {
                     "title": title,
@@ -443,6 +403,7 @@ def read_window_events(
                 }
             ))
         prev_state = state
+        prev_title = title
 
 
 def plot_performance(
@@ -515,11 +476,12 @@ def create_recording(
         The newly created Recording object
     """
 
-    timestamp = set_start_time()
-    monitor_width, monitor_height = get_monitor_dims()
-    double_click_distance_pixels = get_double_click_distance_pixels()
-    double_click_interval_seconds = get_double_click_interval_seconds()
+    timestamp = utils.set_start_datetime()
+    monitor_width, monitor_height = utils.get_monitor_dims()
+    double_click_distance_pixels = utils.get_double_click_distance_pixels()
+    double_click_interval_seconds = utils.get_double_click_interval_seconds()
     recording_data = {
+        # TODO: rename
         "timestamp": timestamp,
         "monitor_width": monitor_width,
         "monitor_height": monitor_height,
@@ -528,7 +490,7 @@ def create_recording(
         "platform": sys.platform,
         "task_description": task_description,
     }
-    recording = insert_recording(recording_data)
+    recording = crud.insert_recording(recording_data)
     logger.info(f"{recording=}")
     return recording
 
@@ -554,7 +516,7 @@ def read_keyboard_events(
             handle_key(event_q, "release", key, canonical_key)
 
 
-    set_start_time(recording_timestamp)
+    utils.set_start_datetime(recording_timestamp)
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
         on_release=partial(on_release, event_q),
@@ -569,7 +531,7 @@ def read_mouse_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    set_start_time(recording_timestamp)
+    utils.set_start_datetime(recording_timestamp)
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
         on_click=partial(on_click, event_q),
@@ -590,7 +552,7 @@ def record(
         task_description: a text description of the task that will be recorded
     """
 
-    configure_logging(logger, LOG_LEVEL)
+    utils.configure_logging(logger, LOG_LEVEL)
 
     logger.info(f"{task_description=}")
 

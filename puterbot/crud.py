@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from loguru import logger
 import sqlalchemy as sa
 
@@ -83,6 +85,15 @@ def get_latest_recording():
         .query(Recording)
         .order_by(sa.desc(Recording.timestamp))
         .limit(1)
+        .first()
+    )
+
+
+def get_recording(timestamp):
+    return (
+        db
+        .query(Recording)
+        .filter(Recording.timestamp == timestamp)
         .first()
     )
 

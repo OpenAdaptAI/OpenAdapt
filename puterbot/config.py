@@ -1,12 +1,16 @@
+import os
+import pathlib
+
 from dotenv import load_dotenv
 from loguru import logger
-import pathlib
 
 
 _DEFAULTS = {
-    "OPENAI_API_KEY": None,
-    "DB_FNAME": "openadapt.db",
     "DB_ECHO": False,
+    "DB_FNAME": "openadapt.db",
+    "OPENAI_API_KEY": None,
+    "OPENAI_SYSTEM_MESSAGE": "TODO",
+    "OPENAI_MODEL_NAME": "gpt-4",
 }
 
 

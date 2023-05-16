@@ -1,49 +1,34 @@
 """
-Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
+LLM with window states.
 
 Usage:
 
-    $ python -m puterbot.replay DemoReplayStrategy
+    $ python -m puterbot.replay StatefulReplayStrategy
 """
 
 from loguru import logger
 import numpy as np
 
-from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.mixins.huggingface import (
-    HuggingFaceReplayStrategyMixin,
-    MAX_INPUT_SIZE,
+from puterbot import events, models, strategies
 )
-from puterbot.strategies.mixins.ocr import OCRReplayStrategyMixin
-from puterbot.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 
 
-class DemoReplayStrategy(
-    HuggingFaceReplayStrategyMixin,
-    OCRReplayStrategyMixin,
-    ASCIIReplayStrategyMixin,
-    BaseReplayStrategy,
+class StatefulReplayStrategy(
+    strategies.mixins.openai.OpenAIReplayStrategyMixin,
+    strategies.base.BaseReplayStrategy,
 ):
 
     def __init__(
         self,
-        recording: Recording,
+        recording: models.Recording,
     ):
         super().__init__(recording)
         self.result_history = []
 
     def get_next_action_event(
         self,
-        screenshot: Screenshot,
+        screenshot: models.Screenshot,
     ):
-        ascii_text = self.get_ascii_text(screenshot)
-        #logger.info(f"ascii_text=\n{ascii_text}")
-
-        ocr_text = self.get_ocr_text(screenshot)
-        #logger.info(f"ocr_text=\n{ocr_text}")
-
         event_strs = [
             f"<{event}>"
             for event in self.recording.action_events

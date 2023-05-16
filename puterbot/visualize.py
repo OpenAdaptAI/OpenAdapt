@@ -211,8 +211,8 @@ def main():
             ),
         ])
 
-    title = f"recording-{recording.timestamp}"
-    fname_out = f"recording-{recording.timestamp}.html"
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 

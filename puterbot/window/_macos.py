@@ -11,6 +11,58 @@ import ApplicationServices
 import Quartz
 
 
+def get_active_window_state():
+    # pywinctl performance on mac is unusable, see:
+    # https://github.com/Kalmat/PyWinCtl/issues/29
+    meta = get_active_window_meta()
+    data = get_window_data(meta)
+    title_parts = [
+        meta['kCGWindowOwnerName'],
+        meta['kCGWindowName'],
+    ]
+    title_parts = [part for part in title_parts if part]
+    title = " ".join(title_parts)
+    bounds = meta["kCGWindowBounds"]
+    left = bounds["X"]
+    top = bounds["Y"]
+    width = bounds["Width"]
+    height = bounds["Height"]
+    rval = {
+        "title": title,
+        "left": left,
+        "top": top,
+        "width": width,
+        "height": height,
+        "meta": meta,
+        "data": data,
+    }
+    rval = deepconvert_objc(rval)
+    return rval
+
+
+def get_active_window_meta():
+    windows = Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly,
+        Quartz.kCGNullWindowID,
+    )
+    active_windows_info = [win for win in windows if win['kCGWindowLayer'] == 0]
+    active_window_info = active_windows_info[0]
+    return active_window_info
+
+
+def get_window_data(window_meta):
+    pid = window_meta["kCGWindowOwnerPID"]
+    app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
+    error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
+        app_ref, 'AXFocusedWindow', None
+    )
+    if error_code:
+        logger.error("Error getting focused window")
+        return None
+    state = dump_state(window)
+    return state
+
+
 def dump_state(element, elements=None):
     elements = elements or set()
     if element in elements:
@@ -50,19 +102,6 @@ def dump_state(element, elements=None):
             return element
 
 
-def get_window_data(window_meta):
-    pid = window_meta["kCGWindowOwnerPID"]
-    app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
-    error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
-        app_ref, 'AXFocusedWindow', None
-    )
-    if error_code:
-        logger.error("Error getting focused window")
-        return None
-    state = dump_state(window)
-    return state
-
-
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
 def deepconvert_objc(object):
     """Convert all contents of an ObjC object to Python primitives."""
@@ -77,27 +116,6 @@ def deepconvert_objc(object):
             value[k] = deepconvert_objc(v)
     value = atomacos._converter.Converter().convert_value(value)
     return value
-
-
-def get_active_window_meta():
-    windows = Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly,
-        Quartz.kCGNullWindowID,
-    )
-    active_windows_info = [win for win in windows if win['kCGWindowLayer'] == 0]
-    active_window_info = active_windows_info[0]
-    return active_window_info
-
-
-def get_active_window_state():
-    active_window_meta = get_active_window_meta()
-    active_window_data = get_window_data(active_window_meta)
-    rval = {
-        "meta": active_window_meta,
-        "data": active_window_data,
-    }
-    rval = deepconvert_objc(rval)
-    return rval
 
 
 def main():

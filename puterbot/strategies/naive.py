@@ -16,6 +16,7 @@ from puterbot.strategies.base import BaseReplayStrategy
 
 
 DISPLAY_EVENTS = False
+PROCESS_EVENTS = True
 REPLAY_EVENTS = True
 SLEEP = True
 
@@ -35,7 +36,10 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.action_event_idx = -1
-        self.processed_action_events = get_events(recording, process=True) 
+        self.processed_action_events = get_events(
+            recording,
+            process=PROCESS_EVENTS,
+        )
         event_dicts = rows2dicts(self.processed_action_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
@@ -57,7 +61,10 @@ class NaiveReplayStrategy(BaseReplayStrategy):
             image.show()
         if self.replay_events:
             if self.sleep and self.prev_timestamp:
-                sleep_time = action_event.timestamp - self.prev_timestamp
+                # TODO: subtract processing time
+                sleep_time = (
+                    action_event.timestamp - self.prev_timestamp
+                ).total_seconds()
                 logger.debug(f"{sleep_time=}")
                 time.sleep(sleep_time)
             self.prev_timestamp = action_event.timestamp

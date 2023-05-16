@@ -1,3 +1,4 @@
+from datetime import timedelta
 import time
 
 from loguru import logger
@@ -83,7 +84,7 @@ def get_events(recording, process=True, meta=None):
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
         if len(action_events) > 1:
-            assert duration > 0, duration
+            assert duration > timedelta(), duration
         meta["duration"] = format_num(duration, duration_raw)
 
     end_time = time.time()
@@ -304,7 +305,7 @@ def merge_consecutive_mouse_click_events(events):
                     dx = abs(event.mouse_x - prev_pressed_event.mouse_x)
                     dy = abs(event.mouse_y - prev_pressed_event.mouse_y)
                     if (
-                        dt <= double_click_interval and
+                        dt <= timedelta(seconds=double_click_interval) and
                         dx <= double_click_distance and
                         dy <= double_click_distance
                     ):
@@ -479,7 +480,7 @@ def remove_redundant_mouse_move_events(events):
 
 
     def is_target_event(event, state):
-        return event.name in ("click", "move")
+        return event.name == "move"
 
 
     def is_same_pos(e0, e1):
@@ -543,7 +544,7 @@ def merge_consecutive_action_events(
     """Merge consecutive action events into a single event"""
 
     num_events_before = len(events)
-    state = {"dt": 0}
+    state = {"dt": timedelta()}
     rval = []
     to_merge = []
 
@@ -596,6 +597,11 @@ def discard_unused_events(
 
 
 def process_events(action_events, window_events, screenshots):
+    # for debugging
+    _action_events = action_events
+    _window_events = window_events
+    _screenshots = screenshots
+
     num_action_events = len(action_events)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)

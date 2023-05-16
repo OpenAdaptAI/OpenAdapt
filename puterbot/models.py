@@ -14,7 +14,7 @@ class Recording(Base):
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    timestamp = sa.Column(sa.Integer)
+    timestamp = sa.Column(sa.DateTime)
     monitor_width = sa.Column(sa.Integer)
     monitor_height = sa.Column(sa.Integer)
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
@@ -22,7 +22,11 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
-    action_events = sa.orm.relationship("ActionEvent", back_populates="recording")
+    action_events = sa.orm.relationship(
+        "ActionEvent",
+        back_populates="recording",
+        order_by="ActionEvent.timestamp",
+    )
 
 
 class ActionEvent(Base):
@@ -30,7 +34,7 @@ class ActionEvent(Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
-    timestamp = sa.Column(sa.Integer)
+    timestamp = sa.Column(sa.DateTime)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
@@ -69,7 +73,7 @@ class ActionEvent(Base):
 
     @property
     def key(self):
-        logger.debug(
+        logger.trace(
             f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
         )
         return self._key(
@@ -80,7 +84,7 @@ class ActionEvent(Base):
 
     @property
     def canonical_key(self):
-        logger.debug(
+        logger.trace(
             f"{self.name=} "
             f"{self.canonical_key_name=} "
             f"{self.canonical_key_char=} "
@@ -158,8 +162,8 @@ class Screenshot(Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
-    timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(sa.DateTime)
     png_data = sa.Column(sa.LargeBinary)
     # TODO: replace prev with prev_timestamp?
 
@@ -216,8 +220,8 @@ class WindowEvent(Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
-    timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(sa.DateTime)
     state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)
