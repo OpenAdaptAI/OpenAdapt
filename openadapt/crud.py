@@ -1,5 +1,6 @@
 from loguru import logger
 import sqlalchemy as sa
+from sqlalchemy import desc
 
 from openadapt.db import Session
 from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
@@ -118,3 +119,35 @@ def get_screenshots(recording, precompute_diffs=True):
 
 def get_window_events(recording):
     return _get(WindowEvent, recording.timestamp)
+
+
+def remove_latest_action_event_from_recording():
+
+    latest_recording = db.query(Recording).order_by(desc(Recording.timestamp)).first()
+    latest_action_event = (
+        db.query(ActionEvent)
+        .filter(ActionEvent.recording == latest_recording)
+        .order_by(desc(ActionEvent.timestamp))
+        .limit(2)
+        .all()
+    )
+
+    if latest_action_event:
+        action_event_1 = latest_action_event[0]
+        action_event_2 = latest_action_event[1]
+        logger.info(f"canonical character name 1: {action_event_1.canonical_key_char}")
+        logger.info(f"canonical key name 2: {action_event_2.canonical_key_name}")
+
+        if ((action_event_1.canonical_key_char == "c") and \
+            (action_event_2.canonical_key_name == "ctrl")):
+            #executes if ctrl+c or cmd+c was pressed as the latest action event
+            db.delete(action_event_1)
+            db.delete(action_event_2)
+            db.commit()
+            logger.info("Latest action event was removed from recording.")
+        else:
+            logger.info("Recording was not interrupted by Ctrl+C or Cmd+C.")
+    else:
+        logger.info("No action events found in latest recording.")
+
+    db.close()

@@ -31,6 +31,7 @@ from openadapt.crud import (
     insert_screenshot,
     insert_recording,
     insert_window_event,
+    remove_latest_action_event_from_recording
 )
 from openadapt.utils import (
     configure_logging,
@@ -689,6 +690,8 @@ def record(
     plot_performance(recording_timestamp, perf_q)
 
     logger.info("done")
+    remove_latest_action_event_from_recording()
+    logger.info("done cleaning up")
 
 
 if __name__ == "__main__":
