@@ -24,6 +24,7 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
+from openadapt.scrub import scrub_image
 
 
 LOG_LEVEL = "INFO"
@@ -158,9 +159,9 @@ def main():
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        image = display_event(action_event)
-        diff = display_event(action_event, diff=True)
-        mask = action_event.screenshot.diff_mask
+        image = scrub_image(display_event(action_event))
+        diff = scrub_image(display_event(action_event, diff=True))
+        mask = scrub_image(action_event.screenshot.diff_mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)

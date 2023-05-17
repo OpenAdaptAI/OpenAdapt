@@ -10,6 +10,7 @@ def test_scrub_image_data() -> None:
     """
     Test is to be sure that the scrubbed image data is different
     """
+    # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
@@ -18,12 +19,11 @@ def test_scrub_image_data() -> None:
     test_image = Image.open(BytesIO(test_image_data))
 
     # Scrub the image
-    scrubbed_image_data = scrub_image(test_image_data)
+    scrubbed_image = scrub_image(test_image)
 
     # Save the scrubbed image data to a file
     scrubbed_image_path = "scrubbed_image.png"
-    with open(scrubbed_image_path, "wb") as file:
-        file.write(scrubbed_image_data)
+    scrubbed_image.save(scrubbed_image_path)
 
     # Load the scrubbed image from file for manual verification
     scrubbed_image = Image.open(scrubbed_image_path)

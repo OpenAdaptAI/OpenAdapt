@@ -182,11 +182,7 @@ def write_screen_event(
     assert event.type == "screen", event
     screenshot = event.data
     png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
-
-    # Scrub the image data
-    scrubbed_png_data = scrub_image(png_data)
-
-    event_data = {"png_data": scrubbed_png_data}
+    event_data = {"png_data": png_data}
     insert_screenshot(recording_timestamp, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, get_timestamp()))
 

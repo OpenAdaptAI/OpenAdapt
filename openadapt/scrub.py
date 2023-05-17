@@ -49,7 +49,7 @@ def scrub(text: str) -> str:
     return anonymized_results.text
 
 
-def scrub_image(png_data: bytes) -> bytes:
+def scrub_image(image: Image) -> Image:
     """Scrub the png_data of all PII/PHI
 
     Scrub the png_data of all PII/PHI using Presidio Image Redactor
@@ -63,21 +63,11 @@ def scrub_image(png_data: bytes) -> bytes:
     Raises:
         None
     """
-    # Load image from the input png_data
-    image = Image.open(BytesIO(png_data))
-
     # Initialize the engine
     engine = ImageRedactorEngine()
 
     # Redact the image with red color
     redacted_image = engine.redact(image, (255, 0, 0))  # type: ignore
 
-    # Save the redacted image to an in-memory buffer
-    output_buffer = BytesIO()
-    redacted_image.save(output_buffer, format="PNG")  # type: ignore
-
-    # Get the redacted image data from the buffer
-    redacted_png_data = output_buffer.getvalue()
-
     # Return the redacted image data
-    return redacted_png_data
+    return redacted_image
