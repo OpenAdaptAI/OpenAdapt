@@ -1,5 +1,5 @@
 <template>
-  <v-app :style="{background: $vuetify.theme.themes.dark.background}">
+  <v-app>
     <Header />
     <v-content>
       <router-view></router-view>
@@ -12,7 +12,7 @@ import Header from '@/components/Header.vue'
 
 export default {
   name: 'App',
-  components : { Header },
+  components : {Header},
   data: () => ({
     //
   }),
