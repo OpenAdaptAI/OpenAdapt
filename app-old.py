@@ -109,10 +109,10 @@ def on_record(name):
         # works
         time.sleep(1)
         print(
-            "Recording {}... Press CTRL/CMD + C in log window to cancel".format(name),
+            "Recording {}... Press CTRL + C in log window to cancel".format(name),
             file=sys.stderr,
         )
-        os.system("python3 -m openadapt.record \"{}\"".format(name))
+        os.system('python3 -m openadapt.record "{}"'.format(name))
         print("Recording complete.", file=sys.stderr)
 
     else:
