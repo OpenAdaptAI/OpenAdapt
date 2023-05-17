@@ -9,12 +9,12 @@ from loguru import logger
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
-    "CACHE_VERBOSITY": 1,
+    "CACHE_VERBOSITY": 0,
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": None,
-    "OPENAI_SYSTEM_MESSAGE": "TODO",
     "OPENAI_MODEL_NAME": "gpt-4",
+    #"OPENAI_MODEL_NAME": "gpt-3.5-turbo",
 }
 
 

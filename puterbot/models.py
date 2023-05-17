@@ -70,11 +70,17 @@ class ActionEvent(db.Base):
     canonical_key_char = sa.Column(sa.String)
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
+    element_state = sa.Column(sa.JSON)
 
     children = sa.orm.relationship("ActionEvent")
+    # TODO: replacing the above line with the following two results in an error:
+    #     AttributeError: 'list' object has no attribute '_sa_instance_state'
+    #children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
+    #parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
+
     recording = sa.orm.relationship("Recording", back_populates="action_events")
-    screenshot = sa.orm.relationship("Screenshot")
-    window_event = sa.orm.relationship("WindowEvent")
+    screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
+    window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -115,7 +121,10 @@ class ActionEvent(db.Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, sep="-", name_prefix="<", name_suffix=">", canonical=False):
+    def _text(self, canonical=False):
+        sep = self._text_sep
+        name_prefix = self._text_name_prefix
+        name_suffix = self._text_name_suffix
         if canonical:
             key_attr = self.canonical_key
             key_name_attr = self.canonical_key_name
@@ -160,7 +169,8 @@ class ActionEvent(db.Base):
             "mouse_dy",
             "mouse_button_name",
             "mouse_pressed",
-            "key",
+            "text",
+            "element_state",
         ]
         attrs = [
             getattr(self, attr_name)
@@ -172,9 +182,62 @@ class ActionEvent(db.Base):
             else attr
             for attr in attrs
         ]
-        attrs = [str(attr) for attr in attrs if attr]
+        attrs = [
+            f"{attr_name}=`{attr}`"
+            for attr_name, attr in zip(attr_names, attrs)
+            if attr
+        ]
         rval = " ".join(attrs)
         return rval
+
+    _text_sep = "-"
+    _text_name_prefix = "<"
+    _text_name_suffix = ">"
+
+    @classmethod
+    def recreate_children(cls, data):
+        # XXX not useful since doesn't include press and release actions
+
+        # {'canonical_text': '<cmd>-<49>', 'name': 'type', 'text': '<cmd>-<space>'}
+
+
+        def get_key_names(text):
+            # TODO XXX: handle text == None
+            text_parts = text.split(cls._text_sep)
+            key_names = [
+                part.strip(cls._text_name_prefix).strip(cls._text_name_suffix)
+                for part in text_parts
+            ]
+            return key_names
+
+
+        key_names = get_key_names(data.pop("text", None))
+        canonical_key_names = get_key_names(data.pop("canonical_text", None))
+        children = []
+        for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+            child_data = dict(data)
+            # TODO: assign to key_char/key_vk?
+            child_data["key_name"] = key_name
+            child_data["canonical_key_name"] = canonical_key_name
+            child = ActionEvent(**child_data)
+            children.append(child)
+        data["children"] = children
+        parent = ActionEvent(**data)
+        return parent
+
+
+    @classmethod
+    def from_children(cls, children_dicts):
+        #[{'canonical_key_name': 'cmd', 'key_name': 'cmd', 'name': 'press'},
+        # {'canonical_key_vk': '49', 'key_name': 'space', 'name': 'press'},
+        # {'canonical_key_name': 'cmd', 'key_name': 'cmd', 'name': 'release'},
+        # {'canonical_key_vk': '49', 'key_name': 'space', 'name': 'release'}]
+
+        children = [
+            ActionEvent(**child_dict)
+            for child_dict in children_dicts
+        ]
+        return ActionEvent(children=children)
 
 
 class Screenshot(db.Base):
@@ -186,6 +249,7 @@ class Screenshot(db.Base):
     png_data = sa.Column(sa.LargeBinary)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
+    action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
 
     # TODO: convert to png_data on save
     sct_img = None
@@ -249,9 +313,11 @@ class WindowEvent(db.Base):
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_state(cls):
-        return window.get_active_window_state()
+    def get_active_window_event(cls):
+        return WindowEvent(**window.get_active_window_data())

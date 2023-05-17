@@ -1,7 +1,3 @@
-"""
-https://github.com/daveenguyen/atomacos/blob/master/atomacos/_macos.py
-"""
-
 from pprint import pprint
 
 from loguru import logger
@@ -22,6 +18,7 @@ def get_active_window_state():
     ]
     title_parts = [part for part in title_parts if part]
     title = " ".join(title_parts)
+    window_id = meta["kCGWindowNumber"]
     bounds = meta["kCGWindowBounds"]
     left = bounds["X"]
     top = bounds["Y"]
@@ -33,6 +30,7 @@ def get_active_window_state():
         "top": top,
         "width": width,
         "height": height,
+        "window_id": window_id,
         "meta": meta,
         "data": data,
     }
@@ -42,15 +40,20 @@ def get_active_window_state():
 
 def get_active_window_meta():
     windows = Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly,
+        (
+            Quartz.kCGWindowListExcludeDesktopElements |
+            Quartz.kCGWindowListOptionOnScreenOnly
+        ),
         Quartz.kCGNullWindowID,
     )
-    active_windows_info = [win for win in windows if win['kCGWindowLayer'] == 0]
+    active_windows_info = [
+        win for win in windows if win['kCGWindowLayer'] == 0
+    ]
     active_window_info = active_windows_info[0]
     return active_window_info
 
 
-def get_window_data(window_meta):
+def get_active_window(window_meta):
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
     error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
@@ -59,6 +62,11 @@ def get_window_data(window_meta):
     if error_code:
         logger.error("Error getting focused window")
         return None
+    return window
+
+
+def get_window_data(window_meta):
+    window = get_active_window(window_meta)
     state = dump_state(window)
     return state
 
@@ -84,16 +92,31 @@ def dump_state(element, elements=None):
                 state[k] = _state
         return state
     else:
-        error_code, attr_names = ApplicationServices.AXUIElementCopyAttributeNames(element, None)
+        error_code, attr_names = (
+            ApplicationServices.AXUIElementCopyAttributeNames(element, None)
+        )
         if attr_names:
             state = {}
             for attr_name in attr_names:
+
                 # don't traverse back up
+                # for WindowEvents:
                 if "parent" in attr_name.lower():
                     continue
-                error_code, attr_val = ApplicationServices.AXUIElementCopyAttributeValue(
-                    element, attr_name, None,
+                # for ActionEvents:
+                if attr_name in ("AXTopLevelUIElement", "AXWindow"):
+                    continue
+
+                error_code, attr_val = (
+                    ApplicationServices.AXUIElementCopyAttributeValue(
+                        element, attr_name, None,
+                    )
                 )
+
+                # for ActionEvents
+                if attr_name == "AXRole" and "application" in attr_val.lower():
+                    continue
+
                 _state = dump_state(attr_val, elements)
                 if _state:
                     state[attr_name] = _state
@@ -116,6 +139,16 @@ def deepconvert_objc(object):
             value[k] = deepconvert_objc(v)
     value = atomacos._converter.Converter().convert_value(value)
     return value
+
+
+def get_active_element_state(x, y):
+    window_meta = get_active_window_meta()
+    pid = window_meta["kCGWindowOwnerPID"]
+    app = atomacos._a11y.AXUIElement.from_pid(pid)
+    el = app.get_element_at_position(x, y)
+    state = dump_state(el.ref)
+    state = deepconvert_objc(state)
+    return state
 
 
 def main():

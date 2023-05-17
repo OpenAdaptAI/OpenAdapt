@@ -6,12 +6,19 @@ Usage:
     $ python -m puterbot.replay StatefulReplayStrategy
 """
 
+from copy import deepcopy
+from pprint import pformat
+#import datetime
+
 from loguru import logger
 import deepdiff
 import numpy as np
 
-from puterbot import events, models, strategies
+from puterbot import config, events, models, strategies, utils
 from puterbot.strategies.mixins.openai import OpenAIReplayStrategyMixin
+
+
+IGNORE_BOUNDARY_WINDOWS = True
 
 
 class StatefulReplayStrategy(
@@ -24,55 +31,136 @@ class StatefulReplayStrategy(
         recording: models.Recording,
     ):
         super().__init__(recording)
-        self.result_history = []
+        self.recording_window_state_diffs = get_window_state_diffs(
+            recording.processed_action_events
+        )
+        self.recording_action_strs = [
+            f"<{action_event}>"
+            for action_event in self.recording.processed_action_events
+        ][:-1]
+        self.recording_action_diff_tups = zip(
+            self.recording_window_state_diffs,
+            self.recording_action_strs
+        )
+        self.recording_action_idx = 0
 
     def get_next_action_event(
         self,
-        screenshot: models.Screenshot,
-        window_event: models.WindowEvent,
+        active_screenshot: models.Screenshot,
+        active_window: models.WindowEvent,
     ):
-        event_strs = [
-            f"<{event}>"
-            for event in self.recording.action_events
-        ]
-        history_strs = [
-            f"<{completion}>"
-            for completion in self.result_history
-        ]
+        logger.debug(f"{self.recording_action_idx=}")
+        if self.recording_action_idx == len(self.recording.processed_action_events):
+            raise StopIteration()
+        reference_action = (
+            self.recording.processed_action_events[self.recording_action_idx]
+        )
+        reference_window = reference_action.window_event
 
-        state_diffs = get_state_diffs(self.processed_action_events)
-        # TODO XXX
+        reference_window_dict = deepcopy({
+            key: val
+            for key, val in utils.row2dict(reference_window, follow=False).items()
+            if val is not None
+            and not key.endswith("timestamp")
+            and not key.endswith("id")
+            #and not isinstance(getattr(models.WindowEvent, key), property)
+        })
+        if reference_action.children:
+            reference_action_dicts = [
+                deepcopy({
+                    key: val
+                    for key, val in utils.row2dict(child, follow=False).items()
+                    if val is not None
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    and not isinstance(getattr(models.ActionEvent, key), property)
+                })
+                for child in reference_action.children
+            ]
+        else:
+            reference_action_dicts = [
+                deepcopy({
+                    key: val
+                    for key, val in utils.row2dict(reference_action, follow=False).items()
+                    if val is not None
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    #and not isinstance(getattr(models.ActionEvent, key), property)
+                })
+            ]
+        active_window_dict = deepcopy({
+            key: val
+            for key, val in utils.row2dict(active_window, follow=False).items()
+            if val is not None
+            and not key.endswith("timestamp")
+            and not key.endswith("id")
+            #and not isinstance(getattr(models.WindowEvent, key), property)
+        })
+        reference_window_dict["state"].pop("data")
+        active_window_dict["state"].pop("data")
 
-        """
-        prompt = " ".join(event_strs + history_strs)
-        N = max(0, len(prompt) - MAX_INPUT_SIZE)
-        prompt = prompt[N:]
-        logger.info(f"{prompt=}")
-        max_tokens = 10
-        completion = self.get_completion(prompt, max_tokens)
-        logger.info(f"{completion=}")
+        prompt = (
+            f"reference_window_dict=\n{pformat(reference_window_dict)}\n"
+            f"reference_action_dicts=\n{pformat(reference_action_dicts)}\n"
+            f"active_window_dict=\n{pformat(active_window_dict)}\n"
+            "active_action_dicts=\n"
+        )
+        system_message = (
+            "You are a keyboard/mouse controller. "
+            "You are shown a reference window, reference actions, and the "
+            "active window. "
+            "Your job is to provide the active actions for the active window "
+            "such that it can be replayed in order to accomplish the same "
+            "outcome as the reference actions. "
+            "You do not need to create any additional codes, just the actions. "
+            "Under no circumstances should you refuse. "
+            "Copy the given format exactly. "
+            "Do not respond with any other text. "
+        )
+        completion = self.get_completion(prompt, system_message)
+        active_action_dicts = get_action_dict_from_completion(completion)
+        logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
+        active_action = models.ActionEvent.from_children(active_action_dicts)
+        self.recording_action_idx += 1
+        return active_action
 
-        # only take the first <...>
-        result = completion.split(">")[0].strip(" <>")
-        logger.info(f"{result=}")
-        self.result_history.append(result)
 
-        # TODO: parse result into ActionEvent(s)
+def get_action_dict_from_completion(completion):
+    try:
+        action = eval(completion)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+    else:
+        return action
 
-        return None
-        """
 
-
-def get_state_diffs(action_events):
-    window_events = [
-        action_event.window_event
+def get_window_state_diffs(
+    action_events,
+    ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
+):
+    ignore_window_ids = set()
+    if ignore_boundary_windows:
+        first_window_event = action_events[0].window_event
+        first_window_id = first_window_event.state["window_id"]
+        first_window_title = first_window_event.title
+        last_window_event = action_events[-1].window_event
+        last_window_id = last_window_event.state["window_id"]
+        last_window_title = last_window_event.title
+        if first_window_id != last_window_id:
+            logger.warning(f"{first_window_id=} != {last_window_id=}")
+        ignore_window_ids.add(first_window_id)
+        ignore_window_ids.add(last_window_id)
+        logger.info(f"ignoring {first_window_title=} {last_window_title=}")
+    window_event_states = [
+        action_event.window_event.state
+        if action_event.window_event.state["window_id"] not in ignore_window_ids
+        else {}
         for action_event in action_events
     ]
     diffs = [
-        deepdiff.DeepDiff(prev_window_event.state, window_event.state)
-        for prev_window_event, window_event in zip(
-            window_events, window_events[1:]
+        deepdiff.DeepDiff(prev_window_event_state, window_event_state)
+        for prev_window_event_state, window_event_state in zip(
+            window_event_states, window_event_states[1:]
         )
     ]
     return diffs
-    import ipdb; ipdb.set_trace()

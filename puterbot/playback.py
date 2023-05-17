@@ -41,7 +41,10 @@ def play_mouse_event(event, mouse_controller):
 def play_key_event(event, keyboard_controller, canonical=True):
     assert event.name in KEY_EVENTS, event
 
-    key = event.canonical_key if canonical else event.key
+    key = (
+        event.canonical_key if canonical and event.canonical_key else
+        event.key
+    )
 
     if event.name == "press":
         keyboard_controller.press(key)

@@ -20,5 +20,11 @@ def get_active_window_state():
         # https://github.com/MLDSAI/OpenAdapt/issues/75#issuecomment-1536762953
         "meta": None,
         "data": None,
+        "window_id": None,
     }
     return state
+
+
+def get_element_at_position(x, y):
+    # TODO
+    return None

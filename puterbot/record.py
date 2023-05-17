@@ -82,7 +82,7 @@ def process_events(
     prev_saved_window_timestamp = datetime.now()
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
-        logger.debug(f"{event=}")
+        logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         if prev_event is not None:
             assert event.timestamp > prev_event.timestamp, (event, prev_event)
@@ -221,6 +221,7 @@ def write_events(
             continue
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
+        logger.debug(f"{event_type=} written")
     logger.info(f"{event_type=} done")
 
 
@@ -228,7 +229,11 @@ def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: Dict[str, Any],
 ) -> None:
-
+    x = action_event_args.get("mouse_x")
+    y = action_event_args.get("mouse_y")
+    if x is not None and y is not None:
+        element_state = window.get_active_element_state(x, y)
+        action_event_args["element_state"] = element_state
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
@@ -369,18 +374,15 @@ def read_window_events(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_datetime(recording_timestamp)
     logger.info(f"starting")
-    prev_state = None
-    prev_title = None
+    prev_window_data = {}
     while not terminate_event.is_set():
-        state = window.get_active_window_state()
-        if not state:
+        window_data = window.get_active_window_data()
+        if not window_data:
             continue
-        title = state["title"]
-        left = state["left"]
-        top = state["top"]
-        width = state["width"]
-        height = state["height"]
-        if title != prev_title:
+        if (
+            window_data["title"] != prev_window_data.get("title") or
+            window_data["window_id"] != prev_window_data.get("window_id")
+        ):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\puterbot\record.py", line 277, in read window events
@@ -388,22 +390,17 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            logger.info(f"{title=} {left=} {top=} {width=} {height=}")
-        if state != prev_state:
+            _window_data = dict(window_data)
+            _window_data.pop("state")
+            logger.info(f"{_window_data=}")
+        if window_data != prev_window_data:
+            logger.debug("queuing window event for writing")
             event_q.put(Event(
                 utils.get_timestamp(),
                 "window",
-                {
-                    "title": title,
-                    "left": left,
-                    "top": top,
-                    "width": width,
-                    "height": height,
-                    "state": state,
-                }
+                window_data,
             ))
-        prev_state = state
-        prev_title = title
+        prev_window_data = window_data
 
 
 def plot_performance(

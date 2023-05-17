@@ -7,10 +7,11 @@ Usage:
         ...
 """
 
-import openai
-import tiktoken
+from pprint import pformat
 
 from loguru import logger
+import openai
+import tiktoken
 
 from puterbot.strategies.base import BaseReplayStrategy
 from puterbot import cache, config, models
@@ -38,30 +39,33 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: models.Recording,
         model_name: str = config.OPENAI_MODEL_NAME,
-        system_message: str = config.OPENAI_SYSTEM_MESSAGE,
+        #system_message: str = config.OPENAI_SYSTEM_MESSAGE,
     ):
         super().__init__(recording)
 
         logger.info(f"{model_name=}")
         self.model_name = model_name
-        self.system_message = system_message
+        #self.system_message = system_message
 
     def get_completion(
         self,
         prompt: str,
-        max_tokens: int,
+        system_message: str,
+        #max_tokens: int,
     ):
         messages = [
             {
                 "role": "system",
-                "content": self.system_message,
+                "content": system_message,
             },
             {
                 "role": "user",
                 "content": prompt,
             }
         ]
-        completion = create_openai_completion(messages)
+        logger.debug(f"messages=\n{pformat(messages)}")
+        completion = create_openai_completion(self.model_name, messages)
+        logger.debug(f"completion=\n{pformat(completion)}")
         choices = completion["choices"]
         choice = choices[0]
         message = choice["message"]
