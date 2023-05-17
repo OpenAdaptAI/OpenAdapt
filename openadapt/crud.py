@@ -138,15 +138,15 @@ def remove_latest_action_event_from_recording():
         logger.info(f"canonical character name 1: {action_event_1.canonical_key_char}")
         logger.info(f"canonical key name 2: {action_event_2.canonical_key_name}")
 
-        if ((action_event_1.canonical_key_char == "c") and \
-            (action_event_2.canonical_key_name == "ctrl")):
-            #executes if ctrl+c or cmd+c was pressed as the latest action event
+        if ((action_event_1.canonical_key_char == "c") and (
+            action_event_2.canonical_key_name == "ctrl")):
+            #executes if ctrl+c was pressed as the latest action event
             db.delete(action_event_1)
             db.delete(action_event_2)
             db.commit()
             logger.info("Latest action event was removed from recording.")
         else:
-            logger.info("Recording was not interrupted by Ctrl+C or Cmd+C.")
+            logger.info("Recording was not interrupted by Ctrl+C.")
     else:
         logger.info("No action events found in latest recording.")
 
