@@ -25,6 +25,7 @@ class BaseReplayStrategy(ABC):
     ):
         self.recording = recording
         self.max_frame_times = max_frame_times
+        self.processed_action_events = recording.processed_action_events
         self.action_events = []
         self.screenshots = []
         self.window_states = []

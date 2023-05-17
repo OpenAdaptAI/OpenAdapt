@@ -7,11 +7,12 @@ Usage:
         ...
 """
 
+import openai
+import tiktoken
 
 from loguru import logger
-from puterbot.strategies.base import BaseReplayStrategy
-import openai import tiktoken
 
+from puterbot.strategies.base import BaseReplayStrategy
 from puterbot import cache, config, models
 
 

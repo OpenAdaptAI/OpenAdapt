@@ -7,14 +7,15 @@ Usage:
 """
 
 from loguru import logger
+import deepdiff
 import numpy as np
 
 from puterbot import events, models, strategies
-)
+from puterbot.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
 
 class StatefulReplayStrategy(
-    strategies.mixins.openai.OpenAIReplayStrategyMixin,
+    OpenAIReplayStrategyMixin,
     strategies.base.BaseReplayStrategy,
 ):
 
@@ -28,6 +29,7 @@ class StatefulReplayStrategy(
     def get_next_action_event(
         self,
         screenshot: models.Screenshot,
+        window_event: models.WindowEvent,
     ):
         event_strs = [
             f"<{event}>"
@@ -37,6 +39,11 @@ class StatefulReplayStrategy(
             f"<{completion}>"
             for completion in self.result_history
         ]
+
+        state_diffs = get_state_diffs(self.processed_action_events)
+        # TODO XXX
+
+        """
         prompt = " ".join(event_strs + history_strs)
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
         prompt = prompt[N:]
@@ -53,3 +60,19 @@ class StatefulReplayStrategy(
         # TODO: parse result into ActionEvent(s)
 
         return None
+        """
+
+
+def get_state_diffs(action_events):
+    window_events = [
+        action_event.window_event
+        for action_event in action_events
+    ]
+    diffs = [
+        deepdiff.DeepDiff(prev_window_event.state, window_event.state)
+        for prev_window_event, window_event in zip(
+            window_events, window_events[1:]
+        )
+    ]
+    return diffs
+    import ipdb; ipdb.set_trace()

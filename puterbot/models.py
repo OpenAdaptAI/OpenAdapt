@@ -26,6 +26,26 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="ActionEvent.timestamp",
     )
+    screenshots = sa.orm.relationship(
+        "Screenshot",
+        back_populates="recording",
+        order_by="Screenshot.timestamp",
+    )
+    window_events = sa.orm.relationship(
+        "WindowEvent",
+        back_populates="recording",
+        order_by="WindowEvent.timestamp",
+    )
+
+    _processed_action_events = None
+
+    @property
+    def processed_action_events(self):
+        from puterbot import events
+        if not self._processed_action_events:
+            self._processed_action_events = events.get_events(self)
+        return self._processed_action_events
+
 
 
 class ActionEvent(db.Base):
@@ -164,11 +184,13 @@ class Screenshot(db.Base):
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     timestamp = sa.Column(sa.DateTime)
     png_data = sa.Column(sa.LargeBinary)
-    # TODO: replace prev with prev_timestamp?
+
+    recording = sa.orm.relationship("Recording", back_populates="screenshots")
 
     # TODO: convert to png_data on save
     sct_img = None
 
+    # TODO: replace prev with prev_timestamp?
     prev = None
     _image = None
     _diff = None
@@ -227,6 +249,8 @@ class WindowEvent(db.Base):
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+
+    recording = sa.orm.relationship("Recording", back_populates="window_events")
 
     @classmethod
     def get_active_window_state(cls):

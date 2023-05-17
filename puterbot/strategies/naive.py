@@ -33,10 +33,6 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.action_event_idx = -1
-        self.processed_action_events = events.get_events(
-            recording,
-            process=PROCESS_EVENTS,
-        )
         event_dicts = utils.rows2dicts(self.processed_action_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 

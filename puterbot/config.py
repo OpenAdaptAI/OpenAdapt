@@ -7,6 +7,9 @@ from loguru import logger
 
 
 _DEFAULTS = {
+    "CACHE_DIR_PATH": ".cache",
+    "CACHE_ENABLED": True,
+    "CACHE_VERBOSITY": 1,
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": None,
