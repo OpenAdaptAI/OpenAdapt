@@ -1,4 +1,7 @@
 <template>
+  <h4 style="margin-left: 20px; margin-top: 10px; font-weight: normal">
+    or, click on a category to see automated workflows for that group of users
+  </h4>
     <v-container class="text-center">
       <v-row justify="center">
         <v-col cols="12" sm="6" md="4">

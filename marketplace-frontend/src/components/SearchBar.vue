@@ -2,6 +2,7 @@
     <v-card>
       <v-card-title>
         Marketplace
+        <h4>Browse our list of automated workflows</h4>
         <v-spacer></v-spacer>
         <v-text-field
           v-model="search"
