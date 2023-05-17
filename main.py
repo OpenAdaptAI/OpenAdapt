@@ -63,9 +63,9 @@ with ui.dialog() as dialog, ui.card():
         else:
             print("Recording cancelled.", file=sys.stderr)
 
-    ui.button("Enter", on_click=on_record)
-
-    ui.button("Cancel", on_click=cancel_recording)
+    with ui.row():
+        ui.button("Cancel", on_click=cancel_recording)
+        ui.button("Enter", on_click=on_record)
 
 
 # Add buttons and log text element in a row container | split ui for console
@@ -107,6 +107,7 @@ with ui.splitter() as splitter:
 
         logger = Console()
         logger.log.style("height: 200px;, width: 300px;")
+        # logger.log.style("height: 200px;, width: 300px; font-size: 10px;")
 
     splitter.disable()
 
