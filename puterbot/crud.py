@@ -86,6 +86,14 @@ def get_latest_recording():
         .first()
     )
 
+def get_recording_by_id(recording_id):
+    return (
+        db
+        .query(Recording)
+        .filter_by(id=recording_id)
+        .first()
+    )
+
 
 def _get(table, recording_timestamp):
     return (
