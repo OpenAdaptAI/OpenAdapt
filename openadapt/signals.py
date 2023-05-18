@@ -21,6 +21,7 @@ class Signals:
         Add a signal from a database.
         """
         # Get the signal from the database.
+        #TODO: implement database signal
         return
 
 
@@ -63,6 +64,7 @@ class Signals:
         Add a signal from a Python function.
         """
         # Get the signal from the function.
+        #TODO: implement function signal
         return
 
     def add_signal(self, signal_address):
