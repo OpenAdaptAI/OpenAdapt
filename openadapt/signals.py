@@ -35,7 +35,7 @@ class Signals:
                 content = file.read()
         except FileNotFoundError:
             logger.info(f"Error: File not found.")
-            return "Error: File not found."
+            return None
         except PermissionError:
             logger.info(f"Error: Permission denied.")
             return None
