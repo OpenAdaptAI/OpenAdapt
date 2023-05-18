@@ -9,8 +9,8 @@ from loguru import logger
 from pynput import keyboard, mouse
 import numpy as np
 
-from puterbot.models import ActionEvent, Recording, Screenshot
-from puterbot.playback import play_action_event
+from openadapt.models import ActionEvent, Recording, Screenshot
+from openadapt.playback import play_action_event
 
 
 MAX_FRAME_TIMES = 1000

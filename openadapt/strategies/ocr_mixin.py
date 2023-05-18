@@ -16,8 +16,8 @@ from rapidocr_onnxruntime import RapidOCR
 from sklearn.cluster import DBSCAN
 import pandas as pd
 
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.models import Recording, Screenshot
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 # TODO: group into sections via layout analysis; see:
