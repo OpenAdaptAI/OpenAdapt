@@ -4,7 +4,8 @@ import time
 import tkinter as tk
 from tkinter import simpledialog
 from PIL import Image, ImageTk
-from openadapt import record, visualize, replay, console
+from openadapt import record, visualize, replay
+from openadapt.deprecated import console
 
 
 class App(tk.Tk):

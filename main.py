@@ -1,8 +1,12 @@
 import sys
 import os
+import bz2
+import requests
+from shutil import copyfileobj
 from nicegui import app, ui
 from openadapt import visualize, replay
 
+SERVER = "<>"
 
 app.native.window_args["resizable"] = False
 app.native.start_args["debug"] = True
@@ -26,6 +30,8 @@ with ui.row().classes("w-full justify-right"):
     ui.icon("share").tooltip("Share").on(
         "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
     )
+    ui.icon("upload").tooltip("Export Data").on("click", lambda: on_export())
+    ui.icon("download").tooltip("Import Data").on("click", lambda: on_import())
 
 
 # Record button + popup
@@ -120,6 +126,39 @@ def clear_db():
     os.system("alembic upgrade head")
     logger.log.clear()
     print("Database cleared.", file=sys.stderr)
+
+
+def on_export():
+    ui.notify("Exporting data to server...")
+
+    # compress db with bz2
+    with open("openadapt.db", "rb") as f:
+        with bz2.BZ2File("openadapt.db.bz2", "wb", compresslevel=9) as f2:
+            copyfileobj(f, f2)
+
+    # upload to server with requests, and keep file name
+    files = {
+        "files": open("openadapt.db.bz2", "rb"),
+    }
+
+    requests.post(SERVER, files=files)
+
+    # delete compressed db
+    os.remove("openadapt.db.bz2")
+
+    ui.notify("Exported data to server.")
+
+
+def on_import():
+    # TODO create file picker to select file to import, then decompress
+
+    with open("openadapt.db", "wb") as f:
+        with bz2.BZ2File("openadapt.db.bz2", "rb") as f2:
+            copyfileobj(f2, f)
+
+    os.remove("openadapt.db.bz2")
+
+    ui.notify("Imported data from server.")
 
 
 ui.run(title="OpenAdapt Client", native=True, window_size=(400, 350), fullscreen=False)
