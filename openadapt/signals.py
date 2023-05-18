@@ -22,6 +22,13 @@ def add_url_signal(http_url):
     return
 
 
+def add_function_signal(function_name):
+    """
+    Add a signal from a Python function.
+    """
+    # Get the signal from the function.
+    return
+
 def add_signal(signal):
     if isinstance(signal, str):
         # If signal is a string, it could be a file path, a database URL,
