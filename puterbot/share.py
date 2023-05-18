@@ -2,64 +2,80 @@
 
 Usage:
 
-    python -m puterbot.share send --recording_id=1 --output_folder=output
-    python -m puterbot.share receive --output_folder=output
+    python -m puterbot.share send --recording_id=1 
+    python -m puterbot.share receive --wormhole_code=<wormhole_code>
 """
 
 import os
-import sys
 import fire
-import socket
-import datetime
-import wormhole
-import utils  # Import the utils module
-import config  # Import the config module
+import subprocess
+from puterbot.config import RECORDING_DIR_PATH
+from zipfile import ZipFile, ZIP_DEFLATED
+from puterbot.crud import get_recording_by_id, get_screenshots
+from puterbot.utils import configure_logging
+from loguru import logger
 
-def send_recording(recording_id, output_folder):
-    # Export the recording to a folder
-    export_recording_to_folder(recording_id, output_folder)
+LOG_LEVEL = "INFO"
+configure_logging(logger, LOG_LEVEL)
 
-    # Get the current hostname (of the sender)
-    hostname = socket.gethostname()
 
-    # Get the current date and time
-    dt_str = utils.get_now_dt_str()
+def export_recording_to_folder(recording_id):
+    recording = get_recording_by_id(recording_id)
+    screenshots = get_screenshots(recording)
 
-    # Format the recording file name
-    recording_file = os.path.join(output_folder, f'puterbot.{hostname}.{dt_str}.db')
+    if screenshots:
+        # Create the directory if it doesn't exist
+        os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
 
-    # Create a wormhole
-    with wormhole.create() as w:
-        # Send the recording file
-        w.send_file(recording_file)
+        # Create an in-memory zip file
+        zip_filename = f"recording_{recording_id}.zip" 
+        zip_path = os.path.join(RECORDING_DIR_PATH, zip_filename)
 
-        # Print the wormhole code
-        print("Wormhole code:", w.get_code())
+        with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
+            for screenshot in screenshots:
+                image_data = screenshot.image.tobytes()
+                image_filename = f"screenshot_{screenshot.id}.png"  # each screenshot
+                zip_file.writestr(image_filename, image_data)
 
-        # Wait for the transfer to complete
-        w.wait_for_transfer_to_finish()
+        logger.info(f"Created zip file of screenshots: {zip_path}")
 
-def receive_recording(output_folder):
-    # Get the wormhole code from the user
-    code = input("Enter the wormhole code: ")
+        return zip_path
 
-    # Create a wormhole
-    with wormhole.create() as w:
-        # Set the wormhole code
-        w.set_code(code)
 
-        # Receive the recording file
-        result = w.get_file()
+def send_file(file_path):
+    # Construct the command
+    command = ['wormhole', 'send', file_path]
 
-        # Save the received file to the output folder
-        # Use the filename provided by the sender
-        output_file = os.path.join(output_folder, result['filename'])
-        with open(output_file, 'wb') as f:
-            f.write(result['file_data'])
+    # Execute the command
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error occurred while running 'wormhole send': {e}")
 
-        # Wait for the transfer to complete
-        w.wait_for_transfer_to_finish()
+def send_recording(recording_id):
+    zip_file_path = export_recording_to_folder(recording_id)
+
+    if zip_file_path:
+        try:
+            send_file(zip_file_path)
+        except Exception as e:
+            logger.error(str(e))
+            # Handle the error as neede
+
+
+def receive_recording(wormhole_code):
+    # Construct the command
+    command = ['wormhole', 'receive', wormhole_code]
+
+    # Execute the command
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Error occurred while running 'wormhole receive {wormhole_code}': {e}")
 
 # Create a command-line interface using python-fire and utils.get_functions
 if __name__ == "__main__":
-    fire.Fire(utils.get_functions(sys.modules[__name__]))
+    fire.Fire({
+        'send': send_recording,
+        'receive': receive_recording,
+    })
