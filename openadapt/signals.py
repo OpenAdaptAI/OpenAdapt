@@ -16,7 +16,7 @@ class Signals:
 
 
 
-    def add_database_signal(self, db_url):
+    def __add_database_signal(self, db_url):
         """
         Add a signal from a database.
         """
@@ -24,7 +24,7 @@ class Signals:
         return
 
 
-    def add_file_signal(self, file_path):
+    def __add_file_signal(self, file_path):
         """
         Add a signal from a file.
         """
@@ -44,7 +44,7 @@ class Signals:
         return content
 
 
-    def add_url_signal(self, http_url):
+    def __add_url_signal(self, http_url):
         """
         Add a signal from an HTTP URL.
         """
@@ -58,7 +58,7 @@ class Signals:
         return signal_data
 
 
-    def add_function_signal(self, function_name):
+    def __add_function_signal(self, function_name):
         """
         Add a signal from a Python function.
         """
@@ -72,16 +72,16 @@ class Signals:
             # an HTTP URL, or a Python function name.
             if signal_address.startswith("pgsql://"):
                 # If the string starts with "pgsql://", treat it as a database URL.
-                signal_data = self.add_database_signal(signal_address)
+                signal_data = self.__add_database_signal(signal_address)
             elif signal_address.startswith("http://") or signal_address.startswith("https://"):
                 # If the string starts with "http://" or "https://", treat it as an HTTP URL.
-                signal_data = self.add_url_signal(signal_address)
+                signal_data = self.__add_url_signal(signal_address)
             elif signal_address.endswith(('.json', '.csv', '.txt')):
                 # If the string ends with a known file extension, treat it as a file path.
-                signal_data = self.add_file_signal(signal_address)
+                signal_data = self.__add_file_signal(signal_address)
             else:
                 # Otherwise, treat it as a Python function name.
-                signal_data = self.add_function_signal(signal_address)
+                signal_data = self.__add_function_signal(signal_address)
         else:
             # If signal is not a string, raise an error.
             raise ValueError("Signal must be a string.")
