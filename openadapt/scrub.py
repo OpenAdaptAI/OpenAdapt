@@ -1,5 +1,4 @@
 """Module to scrub text of all PII/PHI"""
-from io import BytesIO
 from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
