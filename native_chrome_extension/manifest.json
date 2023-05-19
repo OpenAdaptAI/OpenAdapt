@@ -1,5 +1,5 @@
 {
-    "name": "PuterBot DOM Listener",
+    "name": "OpenAdapt DOM Listener",
     "version": "1.0",
     "manifest_version": 3,
     "icons": {
@@ -13,11 +13,11 @@
     "background": {
         "service_worker": "background.js"
     },
-    "content_scripts": [
-        {
-            "matches": ["<all_urls>"],
-            "all_frames": true,
-            "js": ["content.js"]
-        }
-    ]
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [{
+        "matches": ["<all_urls>"],
+        "js": ["content.js"]
+    }]
 }

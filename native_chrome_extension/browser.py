@@ -1,23 +1,18 @@
-import json
+""" Module for the browser native messaging host. """
 import nativemessaging
 
-def main():
-    messages = []
 
+def main() -> None:
+    """
+    Main function for the browser native messaging host.
+    """
+    reply_num = 0
     while True:
-        # Receive a message from the Chrome Extension
         message = nativemessaging.get_message()
-        if not message:
-            break
+        print(message)
+        nativemessaging.send_message(nativemessaging.encode_message(str(reply_num)))
+        reply_num += 1
 
-        # Parse the message as JSON
-        message_data = json.loads(message)
-
-        # Store the message in a list
-        messages.append(message_data)
-
-    # Do something with the collected messages
-    print(messages)
 
 if __name__ == "__main__":
     main()
