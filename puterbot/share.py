@@ -9,7 +9,7 @@ Usage:
 import os
 import fire
 import subprocess
-from puterbot.config import RECORDING_DIR_PATH
+from puterbot.config import RECORDING_DIR_PATH, DB_FPATH
 from zipfile import ZipFile, ZIP_DEFLATED
 from puterbot.crud import get_recording_by_id, get_screenshots
 from puterbot.utils import configure_logging
@@ -20,24 +20,25 @@ configure_logging(logger, LOG_LEVEL)
 
 
 def export_recording_to_folder(recording_id):
+    # TODO: export recording db file instead of the entire db file
     recording = get_recording_by_id(recording_id)
-    screenshots = get_screenshots(recording)
 
-    if screenshots:
+    if recording:
         # Create the directory if it doesn't exist
         os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
 
-        # Create an in-memory zip file
-        zip_filename = f"recording_{recording_id}.zip" 
+        # Path to the source db file
+        db_filename = f"recording_{recording_id}.db"
+
+        # Path to the compressed file
+        zip_filename = f"recording_{recording_id}.zip"
         zip_path = os.path.join(RECORDING_DIR_PATH, zip_filename)
 
+        # Create an in-memory zip file and add the db file
         with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
-            for screenshot in screenshots:
-                image_data = screenshot.image.tobytes()
-                image_filename = f"screenshot_{screenshot.id}.png"  # each screenshot
-                zip_file.writestr(image_filename, image_data)
+            zip_file.write(DB_FPATH, arcname=db_filename)
 
-        logger.info(f"Created zip file of screenshots: {zip_path}")
+        logger.info(f"Created zip file of the recording: {zip_path}")
 
         return zip_path
 
