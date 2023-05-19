@@ -6,8 +6,8 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from puterbot.db import Base
-from puterbot.utils import take_screenshot
+from openadapt.db import Base
+from openadapt.utils import take_screenshot
 
 
 class Recording(Base):
@@ -22,11 +22,11 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
-    input_events = sa.orm.relationship("InputEvent", back_populates="recording")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="recording")
 
 
-class InputEvent(Base):
-    __tablename__ = "input_event"
+class ActionEvent(Base):
+    __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -46,10 +46,10 @@ class InputEvent(Base):
     canonical_key_name = sa.Column(sa.String)
     canonical_key_char = sa.Column(sa.String)
     canonical_key_vk = sa.Column(sa.String)
-    parent_id = sa.Column(sa.Integer, sa.ForeignKey("input_event.id"))
+    parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
 
-    children = sa.orm.relationship("InputEvent")
-    recording = sa.orm.relationship("Recording", back_populates="input_events")
+    children = sa.orm.relationship("ActionEvent")
+    recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot")
     window_event = sa.orm.relationship("WindowEvent")
 
@@ -197,7 +197,7 @@ class Screenshot(Base):
     @property
     def diff_mask(self):
         if not self._diff_mask:
-            self._diff_mask = self._diff.convert("1")
+            self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property

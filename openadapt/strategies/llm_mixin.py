@@ -11,8 +11,8 @@ Usage:
 from loguru import logger
 import transformers as tf  # RIP TensorFlow
 
-from puterbot.models import Recording
-from puterbot.strategies.base import BaseReplayStrategy
+from openadapt.models import Recording
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
@@ -44,7 +44,11 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
             logger.warning(
                 f"Truncating from {len(prompt)=} to {max_input_size=}"
             )
-            prompt = prompt[max_input_size:]
+            prompt = prompt[-max_input_size:]
+            logger.warning(
+                f"Truncated {len(prompt)=}"
+            )
+
         logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
         pad_token_id = self.tokenizer.eos_token_id

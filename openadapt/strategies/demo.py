@@ -3,28 +3,24 @@ Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python puterbot/replay.py DemoReplayStrategy
+    $ python openadapt/replay.py DemoReplayStrategy
 """
 
 from loguru import logger
-from typing import List, Dict, Union
 from pynput import keyboard, mouse
 
 import numpy as np
 import guardrails as gd
 import re
-import transformers
 
-from puterbot.events import get_events
-from puterbot.playback import play_input_event
-from puterbot.models import Recording, Screenshot, InputEvent
-from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.llm_mixin import (
+from openadapt.playback import play_action_event
+from openadapt.models import Recording, Screenshot, ActionEvent
+from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.strategies.llm_mixin import (
     LLMReplayStrategyMixin,
-    MAX_INPUT_SIZE,
 )
-from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
-from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
+from openadapt.strategies.ascii_mixin import ASCIIReplayStrategyMixin
 
 RAIL_STR = """
 <rail version="0.1">
@@ -90,7 +86,7 @@ class DemoReplayStrategy(
         logger.info(f"{completion=}")
         return completion
    
-    def parse_input_event(self, completion):
+    def parse_action_event(self, completion):
         # Define a list of allowed input event names
         allowed_names = ['move', 'click', 'scroll', 'doubleclick', 'singleclick', 'press', 'release', 'type']
         # Split the completion string by the first occurrence of the "[" character and remove unnecessary characters
@@ -160,21 +156,19 @@ class DemoReplayStrategy(
         # Return the list of input event dictionaries
         return res
 
-    
-    def get_next_input_event(
+    def get_next_action_event(
         self,
         screenshot: Screenshot,
     ):
-
-        ascii_text = self.get_ascii_text(screenshot)
+        # ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 
-        ocr_text = self.get_ocr_text(screenshot)
+        # ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
 
         event_strs = [
-            f"{event}, "
-            for event in self.recording.input_events
+            f"<{event}>"
+            for event in self.recording.action_events
         ]
         history_strs = [
             f"<{completion}>"
@@ -192,7 +186,7 @@ class DemoReplayStrategy(
         completion = self.get_completion(self.prompt, MAX_TOKENS)
         logger.info(f"{completion=}")
 
-        parsed_events = self.parse_input_event(completion)
+        parsed_events = self.parse_action_event(completion)
         logger.info(f"{parsed_events=}")
 
 
@@ -207,11 +201,11 @@ class DemoReplayStrategy(
 
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
-        # play all the parsed InputEvents
+        # play all the parsed ActionEvent(s)
         for event in parsed_events:
             try:
-                input_event = InputEvent(**event)
-                play_input_event(
+                input_event = ActionEvent(**event)
+                play_action_event(
                     input_event,
                     mouse_controller,
                     keyboard_controller)

@@ -7,11 +7,10 @@ import time
 
 from loguru import logger
 from pynput import keyboard, mouse
-import mss.base
 import numpy as np
 
-from puterbot.models import InputEvent, Recording, Screenshot
-from puterbot.playback import play_input_event
+from openadapt.models import ActionEvent, Recording, Screenshot
+from openadapt.playback import play_action_event
 
 
 MAX_FRAME_TIMES = 1000
@@ -26,15 +25,15 @@ class BaseReplayStrategy(ABC):
     ):
         self.recording = recording
         self.max_frame_times = max_frame_times
-        self.input_events = []
+        self.action_events = []
         self.screenshots = []
         self.frame_times = []
 
     @abstractmethod
-    def get_next_input_event(
+    def get_next_action_event(
         self,
         screenshot: Screenshot,
-    ) -> InputEvent:
+    ) -> ActionEvent:
         pass
 
     def run(self):
@@ -44,14 +43,14 @@ class BaseReplayStrategy(ABC):
             screenshot = Screenshot.take_screenshot()
             self.screenshots.append(screenshot)
             try:
-                input_event = self.get_next_input_event(screenshot)
+                action_event = self.get_next_action_event(screenshot)
             except StopIteration:
                 break
             self.log_fps()
-            self.input_events.append(input_event)
-            if input_event:
-                play_input_event(
-                    input_event,
+            self.action_events.append(action_event)
+            if action_event:
+                play_action_event(
+                    action_event,
                     mouse_controller,
                     keyboard_controller,
                 )
