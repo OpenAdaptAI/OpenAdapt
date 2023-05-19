@@ -182,4 +182,10 @@ with ui.dialog() as import_dialog, ui.card():
         delete = ui.checkbox("Delete file after import")
 
 
-ui.run(title="OpenAdapt Client", native=True, window_size=(400, 350), fullscreen=False)
+ui.run(
+    title="OpenAdapt Client",
+    native=True,
+    window_size=(400, 350),
+    fullscreen=False,
+    reload=False,
+)
