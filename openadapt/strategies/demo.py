@@ -87,14 +87,14 @@ class DemoReplayStrategy(
         return completion
    
     def parse_action_event(self, completion):
-        # Define a list of allowed input event names
+        # Define a list of allowed action event names
         allowed_names = ['move', 'click', 'scroll', 'doubleclick', 'singleclick', 'press', 'release', 'type']
         # Split the completion string by the first occurrence of the "[" character and remove unnecessary characters
         completion = completion.split('[')
         s = completion[1].replace(", ", "").replace(",", "").replace("'", "")
         # Extract the command string from the modified completion string
         command_string = [x.strip() for x in s.split("'") if x.strip()]
-        # Split the command string by the allowed input event names
+        # Split the command string by the allowed action event names
         commands = re.split('(move|click|scroll|doubleclick|singleclick|press|release|type)', command_string[0])
         # Remove empty items from the commands list
         commands = list(filter(None, commands))
@@ -102,7 +102,7 @@ class DemoReplayStrategy(
         result = []
         current = ''
 
-        # Iterate over the commands list and create input events based on the allowed input event names
+        # Iterate over the commands list and create action events based on the allowed action event names
         for item in commands:
             if item in allowed_names:
                 if current:
@@ -114,10 +114,10 @@ class DemoReplayStrategy(
         if current:
             result.append(current)
 
-        # Merge consecutive input events that belong to the same action
+        # Merge consecutive action events that belong to the same action
         merged_commands = [result[i] + result[i+1] for i in range(0, len(result), 2)]
 
-        # Iterate over the merged input events and create a list of input event dictionaries
+        # Iterate over the merged action events and create a list of action event dictionaries
         res = []
         for command in merged_commands:
             input_dict = {
@@ -130,7 +130,7 @@ class DemoReplayStrategy(
                 "mouse_pressed": False,
                 "canonical_key_char": ""
             }
-            # Split the input event string into a list of arguments
+            # Split the action event string into a list of arguments
             args = command.split()
             name = args[0]
             input_dict["name"] = name
@@ -153,7 +153,7 @@ class DemoReplayStrategy(
                 input_dict["canonical_key_char"] = (args[1])
             res.append(input_dict)
 
-        # Return the list of input event dictionaries
+        # Return the list of action event dictionaries
         return res
 
     def get_next_action_event(

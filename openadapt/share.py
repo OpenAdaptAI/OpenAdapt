@@ -2,17 +2,17 @@
 
 Usage:
 
-    python -m puterbot.share send --recording_id=1 
-    python -m puterbot.share receive --wormhole_code=<wormhole_code>
+    python -m openadapt.share send --recording_id=1 
+    python -m openadapt.share receive --wormhole_code=<wormhole_code>
 """
 
 import os
 import fire
 import subprocess
-from puterbot.config import RECORDING_DIR_PATH, DB_FPATH
+from openadapt.config import RECORDING_DIR_PATH, DB_FPATH
 from zipfile import ZipFile, ZIP_DEFLATED
-from puterbot.crud import get_recording_by_id, get_screenshots
-from puterbot.utils import configure_logging
+from openadapt.crud import get_recording_by_id
+from openadapt.utils import configure_logging
 from loguru import logger
 
 LOG_LEVEL = "INFO"
