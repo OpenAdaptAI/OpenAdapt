@@ -4,9 +4,9 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
+This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), and has [GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) which run on each pull request to ensure consistent behaviour and style.
 
-We (will) also have [GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) that run tests and [black](https://github.com/psf/black) on each pull request to ensure consistent behaviour and style.
+The GitHub Actions specifically run PyTest, [black](https://github.com/psf/black) and [Ruff](https://beta.ruff.rs/docs/).
 
 
 ## Submitting Changes
