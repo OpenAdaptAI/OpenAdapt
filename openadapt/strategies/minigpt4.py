@@ -11,6 +11,7 @@ from openadapt.events import get_events
 from openadapt.utils import display_event, rows2dicts
 from openadapt.models import ActionEvent, Recording, Screenshot
 from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
+from openadapt.strategies.base import BaseReplayStrategy
 
 from MiniGPT4.minigpt4.common.config import Config
 from MiniGPT4.minigpt4.common.dist_utils import get_rank
@@ -34,7 +35,7 @@ REPLAY_EVENTS = True
 SLEEP = True
 
 
-class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin):
+class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
     def __init__(
         self,
         recording: Recording,
