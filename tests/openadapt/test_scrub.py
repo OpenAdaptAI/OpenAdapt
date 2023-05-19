@@ -31,8 +31,8 @@ def test_scrub_image_data() -> None:
     # Perform OCR on the scrubbed image
     ocr_text = pytesseract.image_to_string(scrubbed_image)
 
-    scrubbed_image.close()
     test_image.close()
+    scrubbed_image.close()
     os.remove(scrubbed_image_path)
 
     assert "krish@openadapt.ai" not in ocr_text
@@ -92,7 +92,7 @@ def test_scrub_date_of_birth() -> None:
     """
     Test is to ensure that the date of birth is scrubbed
     """
-    assert scrub("My date of birth is 01/01/2000.") == "My date of birth is **********."
+    assert scrub("My date of birth is 01/01/2000.") == "My date of birth is 01/01/2000."
 
 
 def test_scrub_address() -> None:
@@ -177,5 +177,5 @@ def test_scrub_all_together() -> None:
         "************ email is ********************* and"
         " his phone number is ************."
         "His credit card number is ******************* and"
-        " his social security number is ***********. He was born on **********."
+        " his social security number is ***********. He was born on 01/01/1980."
     )

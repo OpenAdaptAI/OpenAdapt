@@ -5,12 +5,24 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import ImageRedactorEngine
+from openadapt.config import SCRUB_IGNORE_ENTITIES
 
 MAX_MASK_LEN = 1024
+analyzer = AnalyzerEngine()
+SCRUBBING_ENTITIES = [
+    entity
+    for entity in analyzer.get_supported_entities()
+    if entity not in SCRUB_IGNORE_ENTITIES
+]
+
 
 # PREREQUISITES:
 # Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
 # python -m spacy download en_core_web_lg
+
+# TODO:
+# After merging, Add ```python -m spacy download en_core_web_lg``` to the README.md
+# and other necessary files.
 
 
 def scrub(text: str) -> str:
@@ -27,9 +39,8 @@ def scrub(text: str) -> str:
     Raises:
         None
     """
-    analyzer = AnalyzerEngine()
     analyzer_results = analyzer.analyze(
-        text=text, entities=analyzer.get_supported_entities(), language="en"
+        text=text, entities=SCRUBBING_ENTITIES, language="en"
     )
     anonymizer = AnonymizerEngine()
 
@@ -42,7 +53,7 @@ def scrub(text: str) -> str:
 
     anonymized_results = anonymizer.anonymize(
         text=text,
-        analyzer_results=analyzer_results,  # type: ignore
+        analyzer_results=analyzer_results,
         operators=operators,
     )
 
@@ -67,7 +78,7 @@ def scrub_image(image: Image) -> Image:
     engine = ImageRedactorEngine()
 
     # Redact the image with red color
-    redacted_image = engine.redact(image, (255, 0, 0))  # type: ignore
+    redacted_image = engine.redact(image, fill=(255, 0, 0), entities=SCRUBBING_ENTITIES)
 
     # Return the redacted image data
     return redacted_image

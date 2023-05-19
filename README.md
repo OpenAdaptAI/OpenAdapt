@@ -31,6 +31,7 @@ source .venv/bin/activate
 pip install wheel
 pip install -r requirements.txt
 pip install -e .
+python -m spacy download en_core_web_lg
 alembic upgrade head
 pytest
 ```
