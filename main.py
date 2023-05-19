@@ -5,8 +5,9 @@ import requests
 from shutil import copyfileobj
 from nicegui import app, ui
 from openadapt import visualize, replay
+from openadapt.app.local_file_picker import local_file_picker
 
-SERVER = "<>"
+SERVER = "127.0.0.1:8000/upload"
 
 app.native.window_args["resizable"] = False
 app.native.start_args["debug"] = True
@@ -14,6 +15,7 @@ dark = ui.dark_mode()
 
 with ui.dialog() as settings, ui.card():
     ui.switch("Dark mode", on_change=lambda: dark.toggle())
+
     ui.button("Close", on_click=lambda: settings.close())
 
 # Add logo
@@ -31,7 +33,7 @@ with ui.row().classes("w-full justify-right"):
         "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
     )
     ui.icon("upload").tooltip("Export Data").on("click", lambda: on_export())
-    ui.icon("download").tooltip("Import Data").on("click", lambda: on_import())
+    ui.icon("download").tooltip("Import Data").on("click", lambda: import_dialog.open())
 
 
 # Record button + popup
@@ -129,6 +131,7 @@ def clear_db():
 
 
 def on_export():
+    # TODO: add ui card for configuration
     ui.notify("Exporting data to server...")
 
     # compress db with bz2
@@ -146,19 +149,37 @@ def on_export():
     # delete compressed db
     os.remove("openadapt.db.bz2")
 
-    ui.notify("Exported data to server.")
+    ui.notify("Exported data.")
 
 
-def on_import():
-    # TODO create file picker to select file to import, then decompress
+async def pick_file():
+    result = await local_file_picker(".")
+    ui.notify(f"Selected {result[0]}" if result else "No file selected.")
+    selected_file.text = result[0]
+    import_button.enabled = True if result else False
 
+
+def on_import(selected_file, delete=False):
     with open("openadapt.db", "wb") as f:
-        with bz2.BZ2File("openadapt.db.bz2", "rb") as f2:
+        with bz2.BZ2File(selected_file, "rb") as f2:
             copyfileobj(f2, f)
 
-    os.remove("openadapt.db.bz2")
+    if delete:
+        os.remove(selected_file)
 
     ui.notify("Imported data from server.")
+
+
+with ui.dialog() as import_dialog, ui.card():
+    with ui.column():
+        ui.button("Select File", on_click=pick_file).props("icon=folder")
+        selected_file = ui.label("")
+        selected_file.visible = False
+        import_button = ui.button(
+            "Import", on_click=lambda: on_import(selected_file.text, delete.value)
+        )
+        import_button.enabled = False
+        delete = ui.checkbox("Delete file after import")
 
 
 ui.run(title="OpenAdapt Client", native=True, window_size=(400, 350), fullscreen=False)
