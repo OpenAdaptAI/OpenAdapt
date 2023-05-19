@@ -3,10 +3,10 @@ from pprint import pformat
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry, SamAutomaticMaskGenerator
 
-from models import ActionEvent
-from strategies.ocr_mixin import OCRReplayStrategyMixin
+from openadapt.models import ActionEvent
+from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
+from openadapt.strategies.base import BaseReplayStrategy
 from transformers import GPTJForCausalLM, GPT2Tokenizer
-from paddleocr import PaddleOCR
 from pathlib import Path
 import time
 import urllib
@@ -32,7 +32,7 @@ MODEL_NAME = "default"
 CHECKPOINT_DIR_PATH = "./checkpoints"
 
 
-class SamReplayStrategy(OCRReplayStrategyMixin):
+class SamReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
     def __init__(
             self,
             recording: Recording,
@@ -77,7 +77,7 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
 
     # Define function to generate input events
-    def get_next_input_event(self, screenshot: Screenshot):
+    def get_next_action_event(self, screenshot: Screenshot):
         self.input_event_idx += 1
         num_input_events = len(self.processed_input_events)
         if self.input_event_idx >= num_input_events:
@@ -101,7 +101,7 @@ class SamReplayStrategy(OCRReplayStrategyMixin):
         Image.fromarray(masks).save(buffer, format="PNG")
         segmented_screenshot.png_data = buffer.getvalue()
         # Convert the segmented_screenshot to text with ocr_mixin
-        text = self.get_ocr_text(segmented_screenshot)
+        #text = get_ocr_text(segmented_screenshot)
         # get previously recorded input events
         previously_recorded_input_events = ""
         for event in self.processed_input_events[:self.input_event_idx]:
