@@ -61,7 +61,6 @@ class SamReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
         self.model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
         self.processed_input_events = get_events(recording, process=True)
         self.input_event_idx = -1
-        self.ocr = PaddleOCR()
         event_dicts = rows2dicts(self.processed_input_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
