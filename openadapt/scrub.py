@@ -77,7 +77,7 @@ def scrub_image(image: Image) -> Image:
     engine = ImageRedactorEngine()
 
     # Redact the image with red color
-    redacted_image = engine.redact(image, fill=(255, 0, 0), entities=SCRUBBING_ENTITIES)
+    redacted_image = engine.redact(image, fill=(255,), entities=SCRUBBING_ENTITIES)
 
     # Return the redacted image data
     return redacted_image
