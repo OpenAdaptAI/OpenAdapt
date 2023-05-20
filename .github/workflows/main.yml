@@ -24,13 +24,13 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run Python Black
-        run: python -m black .
       - name: Checkout repo
         uses: actions/checkout@v3
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
+      - name: Run Python Black
+        run: python -m black .
       - name: Commit changes
         uses: EndBug/add-and-commit@v9
         with:
