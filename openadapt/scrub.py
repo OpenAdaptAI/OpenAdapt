@@ -19,9 +19,6 @@ SCRUBBING_ENTITIES = [
 # Download the TesseractOCR: https://github.com/tesseract-ocr/tesseract#installing-tesseract
 # python -m spacy download en_core_web_lg
 
-# TODO:
-# After merging, Add ```python -m spacy download en_core_web_lg``` to the README.md
-# and other necessary files.
 
 
 def scrub(text: str) -> str:
