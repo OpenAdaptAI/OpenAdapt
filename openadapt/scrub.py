@@ -20,7 +20,6 @@ SCRUBBING_ENTITIES = [
 # python -m spacy download en_core_web_lg
 
 
-
 def scrub(text: str) -> str:
     """Scrubs the text of all PII/PHI
 
