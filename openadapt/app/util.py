@@ -27,19 +27,19 @@ def on_import(selected_file, delete=False, src="openadapt.db"):
 
 def on_export(dest):
     # TODO: add ui card for configuration
-    ui.notify("Exporting data to server...")
+    ui.notify("Exporting data...")
 
     # compress db with bz2
     with open("openadapt.db", "rb") as f:
         with bz2.BZ2File("openadapt.db.bz2", "wb", compresslevel=9) as f2:
             copyfileobj(f, f2)
 
-    # upload to server with requests, and keep file name
-    files = {
-        "files": open("openadapt.db.bz2", "rb"),
-    }
-
-    requests.post(dest, files=files)
+    # TODO: magic wormhole
+    # # upload to server with requests, and keep file name
+    # files = {
+    #     "files": open("openadapt.db.bz2", "rb"),
+    # }
+    # #requests.post(dest, files=files)
 
     # delete compressed db
     os.remove("openadapt.db.bz2")
