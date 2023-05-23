@@ -1,6 +1,5 @@
 # retrieved from https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
 
-
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -15,6 +14,7 @@ class local_file_picker(ui.dialog):
         upper_limit: Optional[str] = ...,
         multiple: bool = False,
         show_hidden_files: bool = False,
+        dark_mode: bool = False,
     ) -> None:
         """Local File Picker
 
@@ -80,6 +80,7 @@ class local_file_picker(ui.dialog):
                     "path": str(self.path.parent),
                 },
             )
+
         self.grid.update()
 
     async def handle_double_click(self, msg: Dict) -> None:
@@ -94,3 +95,14 @@ class local_file_picker(ui.dialog):
             f"getElement({self.grid.id}).gridOptions.api.getSelectedRows()"
         )
         self.submit([r["path"] for r in rows])
+
+
+async def pick_file():
+    result = await local_file_picker("~", multiple=True)
+    ui.notify(f"You chose {result}")
+
+
+if __name__ in {"__main__", "__mp_main__"}:
+    ui.button("Choose file", on_click=pick_file).props("icon=folder")
+
+    ui.run(native=True)

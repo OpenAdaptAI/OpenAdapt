@@ -3,9 +3,11 @@ import sys
 import time
 import tkinter as tk
 from tkinter import simpledialog
+
 from PIL import Image, ImageTk
-from openadapt import record, visualize, replay
-from openadapt.deprecated import console
+
+from openadapt import replay, visualize
+from openadapt.app.deprecated import console
 
 
 class App(tk.Tk):
