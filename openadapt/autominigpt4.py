@@ -6,6 +6,7 @@ Usage: python openadapt/autominigpt4.py
 
 import subprocess
 import os
+import sys
 
 
 # TODO: assume have Git
@@ -16,6 +17,26 @@ def clone_repository(repo_url, target_dir):
         print("Repository cloned successfully!")
     except subprocess.CalledProcessError as e:
         print("Failed to clone repository:", e)
+
+
+def shallow_clone_repository(repo_url, target_dir):
+    try:
+        subprocess.check_call(['git', 'clone', '--depth', '1', repo_url, target_dir])
+        print("Repository cloned successfully!")
+    except subprocess.CalledProcessError as e:
+        print("Failed to clone repository:", e)
+
+
+def check_and_clone(repo_url, target_dir, shallow):
+
+
+
+def is_valid_git_repository():
+    try:
+        subprocess.check_output(['git', 'rev-parse', '--is-inside-work-tree'])
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
 def download_lfs_files(repo_dir):
@@ -39,8 +60,20 @@ def delete_files(files_to_delete):
 if __name__ == "__main__":
     # clone MiniGPT-4
     minigpt4 = os.path.abspath('MiniGPT4')
-    clone_repository('https://github.com/Vision-CAIR/MiniGPT-4', minigpt4)
-    os.chdir(minigpt4)
+    # Check if the repository already exists
+    if os.path.exists(minigpt4):
+        os.chdir(minigpt4)
+        if not is_valid_git_repository():
+            print(f"Directory '{minigpt4}' exists but is not a valid Git repository. Please"
+                  f"check the files in this directory and choose whether to delete the directory."
+                  f"Only restart the installation process if you have deleted or renamed "
+                  f"this directory.")
+            sys.exit()
+        else:
+            print(f"Repository '{minigpt4}' already exists and is valid. Skipping cloning step.")
+    else:
+        clone_repository('https://github.com/Vision-CAIR/MiniGPT-4', minigpt4)
+        os.chdir(minigpt4)
 
     # install git lfs
     try:
