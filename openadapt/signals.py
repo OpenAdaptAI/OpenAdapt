@@ -1,4 +1,5 @@
 import requests
+import importlib
 
 from loguru import logger
 
@@ -63,9 +64,15 @@ class Signals:
         """
         Add a signal from a Python function.
         """
-        # Get the signal from the function.
-        #TODO: implement function signal
-        return
+        module_name, func_name = function_name.rsplit('.', 1)
+        module = importlib.import_module(module_name)
+        func = getattr(module, func_name)
+
+        # Call the function and get its result
+        result = func()
+
+        return result
+
 
     def add_signal(self, signal_address):
         signal_data = None
