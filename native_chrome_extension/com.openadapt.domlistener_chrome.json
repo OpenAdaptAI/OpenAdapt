@@ -1,9 +1,0 @@
-{
-    "name": "com.openadapt.domlistener",
-    "description": "OpenAdapt Native Messaging Host",
-    "path": "P:\\OpenAdapt AI - MLDS AI\\cloned_repo\\OpenAdapt\\native_chrome_extension\\com.openadapt.domlistener.bat",
-    "type": "stdio",
-    "allowed_origins": [
-        "chrome-extension://fipijfheidmdeingpecoiflbjefbnfjn/"
-    ]
-}

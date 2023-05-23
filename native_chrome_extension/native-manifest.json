@@ -1,9 +1,0 @@
-{
-    "name": "com.openadapt.domlistener",
-    "description": "OpenAdapt Native Messaging Host",
-    "path": "browser.py",
-    "type": "stdio",
-    "allowed_origins": [
-        "chrome-extension://fipijfheidmdeingpecoiflbjefbnfjn/"
-    ]
-}
