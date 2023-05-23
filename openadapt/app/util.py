@@ -3,7 +3,6 @@ import os
 import sys
 from shutil import copyfileobj
 
-import requests
 from nicegui import ui
 
 
