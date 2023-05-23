@@ -21,7 +21,6 @@ SLEEP = True
 
 
 class NaiveReplayStrategy(BaseReplayStrategy):
-
     def __init__(
         self,
         recording: Recording,
@@ -35,7 +34,7 @@ class NaiveReplayStrategy(BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.action_event_idx = -1
-        self.processed_action_events = get_events(recording, process=True) 
+        self.processed_action_events = get_events(recording, process=True)
         event_dicts = rows2dicts(self.processed_action_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 

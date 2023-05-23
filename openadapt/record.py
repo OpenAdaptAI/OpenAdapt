@@ -241,7 +241,6 @@ def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: Dict[str, Any],
 ) -> None:
-
     event_q.put(Event(get_timestamp(), "action", action_event_args))
 
 
@@ -251,7 +250,6 @@ def on_move(
     y: int,
     injected: bool,
 ) -> None:
-
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -260,7 +258,7 @@ def on_move(
                 "name": "move",
                 "mouse_x": x,
                 "mouse_y": y,
-            }
+            },
         )
 
 
@@ -282,7 +280,7 @@ def on_click(
                 "mouse_y": y,
                 "mouse_button_name": button.name,
                 "mouse_pressed": pressed,
-            }
+            },
         )
 
 
@@ -304,7 +302,7 @@ def on_scroll(
                 "mouse_y": y,
                 "mouse_dx": dx,
                 "mouse_dy": dy,
-            }
+            },
         )
 
 
@@ -320,8 +318,7 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None)
-        for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -329,14 +326,7 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(
-        event_q,
-        {
-            "name": event_name,
-            **attrs,
-            **canonical_attrs
-        }
-    )
+    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
 
 
 def read_screen_events(
@@ -367,8 +357,8 @@ def read_screen_events(
 
 def read_window_events(
     event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     """
     Read window events and add them to the event queue.
@@ -403,7 +393,6 @@ def read_window_events(
             title = window.title
             geometry = window.box
         if title != prev_title or geometry != prev_geometry:
-
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -414,17 +403,19 @@ def read_window_events(
             logger.info(f"{title=} {prev_title=} {geometry=} {prev_geometry=}")
 
             left, top, width, height = geometry
-            event_q.put(Event(
-                get_timestamp(),
-                "window",
-                {
-                    "title": title,
-                    "left": left,
-                    "top": top,
-                    "width": width,
-                    "height": height,
-                }
-            ))
+            event_q.put(
+                Event(
+                    get_timestamp(),
+                    "window",
+                    {
+                        "title": title,
+                        "left": left,
+                        "top": top,
+                        "width": width,
+                        "height": height,
+                    },
+                )
+            )
         prev_title = title
         prev_geometry = geometry
 
@@ -466,7 +457,7 @@ def plot_performance(
         y_data["proc_times"][event_type] = proc_times
         y_data["start_time_deltas"][event_type] = start_time_deltas
 
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20, 10))
     for i, data_type in enumerate(y_data):
         for event_type in y_data[data_type]:
             x = type_to_timestamps[event_type]
@@ -518,24 +509,20 @@ def create_recording(
 
 def read_keyboard_events(
     event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
-
-
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
-
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
-
 
     set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(

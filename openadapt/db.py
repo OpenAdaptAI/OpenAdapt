@@ -18,7 +18,6 @@ NAMING_CONVENTION = {
 
 
 class BaseModel(DictableModel):
-
     __abstract__ = True
 
     def __repr__(self):

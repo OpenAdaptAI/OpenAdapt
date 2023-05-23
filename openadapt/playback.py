@@ -65,5 +65,3 @@ def play_action_event(event, mouse_controller, keyboard_controller):
             play_key_event(event, keyboard_controller)
         else:
             raise Exception(f"unhandled {event.name=}")
-
-

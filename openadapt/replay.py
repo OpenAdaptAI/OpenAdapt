@@ -26,9 +26,7 @@ def replay(
             if not name.lower().endswith("mixin")
         ]
         available_strategies = ", ".join(strategy_names)
-        raise ValueError(
-            f"Invalid {strategy_name=}; {available_strategies=}"
-        )
+        raise ValueError(f"Invalid {strategy_name=}; {available_strategies=}")
 
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")

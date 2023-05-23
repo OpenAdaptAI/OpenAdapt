@@ -69,9 +69,7 @@ class ActionEvent(Base):
 
     @property
     def key(self):
-        logger.debug(
-            f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
-        )
+        logger.debug(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
             self.key_name,
             self.key_char,
@@ -114,7 +112,8 @@ class ActionEvent(Base):
         else:
             if key_name_attr:
                 text = f"{name_prefix}{key_attr}{name_suffix}".replace(
-                    "Key.", "",
+                    "Key.",
+                    "",
                 )
             else:
                 text = key_attr
@@ -139,16 +138,8 @@ class ActionEvent(Base):
             "mouse_pressed",
             "key",
         ]
-        attrs = [
-            getattr(self, attr_name)
-            for attr_name in attr_names
-        ]
-        attrs = [
-            int(attr)
-            if isinstance(attr, float)
-            else attr
-            for attr in attrs
-        ]
+        attrs = [getattr(self, attr_name) for attr_name in attr_names]
+        attrs = [int(attr) if isinstance(attr, float) else attr for attr in attrs]
         attrs = [str(attr) for attr in attrs if attr]
         rval = " ".join(attrs)
         return rval

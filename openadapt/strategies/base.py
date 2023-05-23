@@ -17,7 +17,6 @@ MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
-
     def __init__(
         self,
         recording: Recording,

@@ -16,10 +16,7 @@ window_events = []
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
 
-    db_obj = {
-        column.name: None
-        for column in table.__table__.columns
-    }
+    db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
         if key in event_data:
             val = event_data[key]
@@ -78,19 +75,12 @@ def insert_recording(recording_data):
 
 
 def get_latest_recording():
-    return (
-        db
-        .query(Recording)
-        .order_by(sa.desc(Recording.timestamp))
-        .limit(1)
-        .first()
-    )
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
 def _get(table, recording_timestamp):
     return (
-        db
-        .query(table)
+        db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
         .order_by(table.timestamp)
         .all()

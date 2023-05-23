@@ -145,11 +145,13 @@ def make_click_event(
 
 
 def make_scroll_event(dy=0, dx=0):
-    return make_action_event({
-        "name": "scroll",
-        "mouse_dx": dx,
-        "mouse_dy": dy,
-    })
+    return make_action_event(
+        {
+            "name": "scroll",
+            "mouse_dx": dx,
+            "mouse_dy": dy,
+        }
+    )
 
 
 def make_click_events(dt_released, dt_pressed=None, button_name="left"):
@@ -160,7 +162,12 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 
 
 def make_processed_click_event(
-    name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    name,
+    dt,
+    get_children,
+    mouse_x=0,
+    mouse_y=0,
+    button_name="left",
 ):
     return make_action_event(
         {
@@ -175,7 +182,11 @@ def make_processed_click_event(
 
 
 def make_singleclick_event(
-    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    dt,
+    get_children,
+    mouse_x=0,
+    mouse_y=0,
+    button_name="left",
 ):
     return make_processed_click_event(
         "singleclick",
@@ -188,7 +199,11 @@ def make_singleclick_event(
 
 
 def make_doubleclick_event(
-    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    dt,
+    get_children,
+    mouse_x=0,
+    mouse_y=0,
+    button_name="left",
 ):
     return make_processed_click_event(
         "doubleclick",
@@ -202,58 +217,52 @@ def make_doubleclick_event(
 
 def test_merge_consecutive_mouse_click_events():
     if OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS:
-        override_double_click_interval_seconds(
-            OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS
-        )
+        override_double_click_interval_seconds(OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS)
     double_click_interval_seconds = get_double_click_interval_seconds()
     dt_short = double_click_interval_seconds / 10
     dt_long = double_click_interval_seconds * 10
     raw_events = [
         *make_click_events(dt_long, button_name="right"),
-
         # doubleclick
         *make_click_events(dt_short),
         *make_click_events(dt_long),
-
         # doubleclick
         *make_click_events(dt_short),
         *make_click_events(dt_long),
-
         *make_click_events(dt_long, button_name="right"),
-
         # singleclick
         *make_click_events(dt_long),
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        *make_click_events(dt_long, button_name="right"),
-        make_doubleclick_event(
-            dt_long,
-            lambda: [
-                *make_click_events(dt_short),
-                *make_click_events(dt_long),
-            ],
-        ),
-        make_doubleclick_event(
-            dt_long,
-            lambda: [
-                *make_click_events(dt_short),
-                *make_click_events(dt_long),
-            ],
-        ),
-        *make_click_events(dt_long, button_name="right"),
-        make_singleclick_event(
-            dt_long,
-            lambda: [
-                *make_click_events(dt_long),
-            ]
-        ),
-    ])
-    logger.info(f"expected_events=\n{pformat(expected_events)}")
-    actual_events = rows2dicts(
-        merge_consecutive_mouse_click_events(raw_events)
+    expected_events = rows2dicts(
+        [
+            *make_click_events(dt_long, button_name="right"),
+            make_doubleclick_event(
+                dt_long,
+                lambda: [
+                    *make_click_events(dt_short),
+                    *make_click_events(dt_long),
+                ],
+            ),
+            make_doubleclick_event(
+                dt_long,
+                lambda: [
+                    *make_click_events(dt_short),
+                    *make_click_events(dt_long),
+                ],
+            ),
+            *make_click_events(dt_long, button_name="right"),
+            make_singleclick_event(
+                dt_long,
+                lambda: [
+                    *make_click_events(dt_long),
+                ],
+            ),
+        ]
     )
+    logger.info(f"expected_events=\n{pformat(expected_events)}")
+    actual_events = rows2dicts(merge_consecutive_mouse_click_events(raw_events))
     logger.info(f"actual_events=\n{pformat(actual_events)}")
     assert expected_events == actual_events
 
@@ -270,19 +279,27 @@ def test_merge_consecutive_mouse_move_events():
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        make_scroll_event(),
-        make_move_event(2, get_pre_children=lambda: [
-            make_move_event(0),
-            make_move_event(1),
-            make_move_event(2),
-        ]),
-        make_scroll_event(),
-        make_move_event(4, get_pre_children=lambda: [
-            make_move_event(3),
-            make_move_event(4),
-        ]),
-    ])
+    expected_events = rows2dicts(
+        [
+            make_scroll_event(),
+            make_move_event(
+                2,
+                get_pre_children=lambda: [
+                    make_move_event(0),
+                    make_move_event(1),
+                    make_move_event(2),
+                ],
+            ),
+            make_scroll_event(),
+            make_move_event(
+                4,
+                get_pre_children=lambda: [
+                    make_move_event(3),
+                    make_move_event(4),
+                ],
+            ),
+        ]
+    )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
     actual_events = rows2dicts(
         merge_consecutive_mouse_move_events(
@@ -307,65 +324,103 @@ def test_merge_consecutive_mouse_scroll_events():
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        make_move_event(),
-        make_scroll_event(dx=2),
-        make_move_event(),
-        make_scroll_event(dx=1, dy=1),
-    ])
-    logger.info(f"expected_events=\n{pformat(expected_events)}")
-    actual_events = rows2dicts(
-        merge_consecutive_mouse_scroll_events(raw_events)
+    expected_events = rows2dicts(
+        [
+            make_move_event(),
+            make_scroll_event(dx=2),
+            make_move_event(),
+            make_scroll_event(dx=1, dy=1),
+        ]
     )
+    logger.info(f"expected_events=\n{pformat(expected_events)}")
+    actual_events = rows2dicts(merge_consecutive_mouse_scroll_events(raw_events))
     logger.info(f"actual_events=\n{pformat(actual_events)}")
     assert expected_events == actual_events
 
 
 def test_remove_redundant_mouse_move_events():
     # certain failure modes only appear in longer event chains
-    raw_events = list(itertools.chain(*[
-        [
-            make_move_event(1),
-            make_click_event(True, 1),
-            make_move_event(1),
-            make_click_event(False, 1),
-            make_move_event(2),
-            make_click_event(True, 2),
-            make_move_event(3),
-            make_click_event(False, 3),
-            make_move_event(3),
-        ]
-        for _ in range(2)
-    ]))
+    raw_events = list(
+        itertools.chain(
+            *[
+                [
+                    make_move_event(1),
+                    make_click_event(True, 1),
+                    make_move_event(1),
+                    make_click_event(False, 1),
+                    make_move_event(2),
+                    make_click_event(True, 2),
+                    make_move_event(3),
+                    make_click_event(False, 3),
+                    make_move_event(3),
+                ]
+                for _ in range(2)
+            ]
+        )
+    )
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        make_click_event(True, 1, get_pre_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(False, 1, get_post_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(True, 2, get_post_children=lambda: [
-            make_move_event(2),
-        ]),
-        make_click_event(False, 3, get_post_children=lambda: [
-            make_move_event(3),
-        ]),
-        make_click_event(True, 1, get_post_children=lambda: [
-            make_move_event(3),
-            make_move_event(1),
-        ]),
-        make_click_event(False, 1, get_post_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(True, 2, get_post_children=lambda: [
-            make_move_event(2),
-        ]),
-        make_click_event(False, 3, get_post_children=lambda: [
-            make_move_event(3),
-        ]),
-    ])
+    expected_events = rows2dicts(
+        [
+            make_click_event(
+                True,
+                1,
+                get_pre_children=lambda: [
+                    make_move_event(1),
+                ],
+            ),
+            make_click_event(
+                False,
+                1,
+                get_post_children=lambda: [
+                    make_move_event(1),
+                ],
+            ),
+            make_click_event(
+                True,
+                2,
+                get_post_children=lambda: [
+                    make_move_event(2),
+                ],
+            ),
+            make_click_event(
+                False,
+                3,
+                get_post_children=lambda: [
+                    make_move_event(3),
+                ],
+            ),
+            make_click_event(
+                True,
+                1,
+                get_post_children=lambda: [
+                    make_move_event(3),
+                    make_move_event(1),
+                ],
+            ),
+            make_click_event(
+                False,
+                1,
+                get_post_children=lambda: [
+                    make_move_event(1),
+                ],
+            ),
+            make_click_event(
+                True,
+                2,
+                get_post_children=lambda: [
+                    make_move_event(2),
+                ],
+            ),
+            make_click_event(
+                False,
+                3,
+                get_post_children=lambda: [
+                    make_move_event(3),
+                ],
+            ),
+        ]
+    )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
     actual_events = rows2dicts(
         remove_redundant_mouse_move_events(raw_events),
@@ -376,20 +431,24 @@ def test_remove_redundant_mouse_move_events():
 
 def make_press_event(char=None, name=None):
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({
-        "name": "press",
-        "key_char": char,
-        "key_name": name,
-    })
+    return make_action_event(
+        {
+            "name": "press",
+            "key_char": char,
+            "key_name": name,
+        }
+    )
 
 
 def make_release_event(char=None, name=None):
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({
-        "name": "release",
-        "key_char": char,
-        "key_name": name,
-    })
+    return make_action_event(
+        {
+            "name": "release",
+            "key_char": char,
+            "key_name": name,
+        }
+    )
 
 
 def make_type_event(get_children):
@@ -424,30 +483,34 @@ def test_merge_consecutive_keyboard_events():
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        make_click_event(True),
-        make_type_event(lambda: [
-            *make_key_events("a"),
-            *make_key_events("b"),
-            *make_key_events("c"),
-            *make_key_events("d"),
-            *make_key_events("e"),
-        ]),
-        make_click_event(False),
-        make_type_event(lambda: [
-            make_press_event("f"),
-            make_press_event("g"),
-            make_release_event("f"),
-            make_press_event("h"),
-            make_release_event("g"),
-            make_release_event("h"),
-        ]),
-        make_scroll_event(1),
-    ])
-    logger.info(f"expected_events=\n{pformat(expected_events)}")
-    actual_events = rows2dicts(
-        merge_consecutive_keyboard_events(raw_events)
+    expected_events = rows2dicts(
+        [
+            make_click_event(True),
+            make_type_event(
+                lambda: [
+                    *make_key_events("a"),
+                    *make_key_events("b"),
+                    *make_key_events("c"),
+                    *make_key_events("d"),
+                    *make_key_events("e"),
+                ]
+            ),
+            make_click_event(False),
+            make_type_event(
+                lambda: [
+                    make_press_event("f"),
+                    make_press_event("g"),
+                    make_release_event("f"),
+                    make_press_event("h"),
+                    make_release_event("g"),
+                    make_release_event("h"),
+                ]
+            ),
+            make_scroll_event(1),
+        ]
     )
+    logger.info(f"expected_events=\n{pformat(expected_events)}")
+    actual_events = rows2dicts(merge_consecutive_keyboard_events(raw_events))
     logger.info(f"actual_events=\n{pformat(actual_events)}")
     diff = DeepDiff(expected_events, actual_events)
     assert not diff, pformat(diff)
@@ -471,27 +534,35 @@ def test_merge_consecutive_keyboard_events__grouped():
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
-    expected_events = rows2dicts([
-        make_click_event(True),
-        make_type_event(lambda: [
-            *make_key_events("a"),
-            *make_key_events("b"),
-        ]),
-        make_type_event(lambda: [
-            make_press_event(name="ctrl"),
-            *make_key_events("c"),
-            make_press_event(name="alt"),
-            *make_key_events("d"),
-            make_release_event(name="ctrl"),
-            *make_key_events("e"),
-            make_release_event(name="alt"),
-        ]),
-        make_type_event(lambda: [
-            *make_key_events("f"),
-            *make_key_events("g"),
-        ]),
-        make_click_event(False),
-    ])
+    expected_events = rows2dicts(
+        [
+            make_click_event(True),
+            make_type_event(
+                lambda: [
+                    *make_key_events("a"),
+                    *make_key_events("b"),
+                ]
+            ),
+            make_type_event(
+                lambda: [
+                    make_press_event(name="ctrl"),
+                    *make_key_events("c"),
+                    make_press_event(name="alt"),
+                    *make_key_events("d"),
+                    make_release_event(name="ctrl"),
+                    *make_key_events("e"),
+                    make_release_event(name="alt"),
+                ]
+            ),
+            make_type_event(
+                lambda: [
+                    *make_key_events("f"),
+                    *make_key_events("g"),
+                ]
+            ),
+            make_click_event(False),
+        ]
+    )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
     actual_events = rows2dicts(
         merge_consecutive_keyboard_events(raw_events, group_named_keys=True)
@@ -515,11 +586,17 @@ def test_discard_unused_events():
         make_action_event({"window_event_timestamp": 0}),
         make_action_event({"window_event_timestamp": 2}),
     ]
-    expected_filtered_window_events = rows2dicts([
-        make_window_event({"timestamp": 0}),
-        make_window_event({"timestamp": 2}),
-    ])
-    actual_filtered_window_events = rows2dicts(discard_unused_events(
-        window_events, action_events, "window_event_timestamp",
-    ))
+    expected_filtered_window_events = rows2dicts(
+        [
+            make_window_event({"timestamp": 0}),
+            make_window_event({"timestamp": 2}),
+        ]
+    )
+    actual_filtered_window_events = rows2dicts(
+        discard_unused_events(
+            window_events,
+            action_events,
+            "window_event_timestamp",
+        )
+    )
     assert expected_filtered_window_events == actual_filtered_window_events

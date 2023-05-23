@@ -27,9 +27,13 @@ def configure_logging(logger, log_level):
 def row2dict(row, follow=True):
     if isinstance(row, dict):
         return row
-    try_follow = [
-        "children",
-    ] if follow else []
+    try_follow = (
+        [
+            "children",
+        ]
+        if follow
+        else []
+    )
     to_follow = [key for key in try_follow if hasattr(row, key)]
 
     # follow children recursively
@@ -88,16 +92,15 @@ def rows2dicts(
         for row_dict in row_dicts:
             for key in list(row_dict.keys()):
                 value = row_dict[key]
-                if (
-                    len(key_to_values[key]) <= 1
-                    or drop_empty and value in EMPTY
-                ):
+                if len(key_to_values[key]) <= 1 or drop_empty and value in EMPTY:
                     del row_dict[key]
     for row_dict in row_dicts:
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
-                row_dict["children"], drop_empty, drop_constant,
+                row_dict["children"],
+                drop_empty,
+                drop_constant,
             )
     return row_dicts
 
@@ -111,10 +114,12 @@ def get_double_click_interval_seconds():
         return get_double_click_interval_seconds.override_value
     if sys.platform == "darwin":
         from AppKit import NSEvent
+
         return NSEvent.doubleClickInterval()
     elif sys.platform == "win32":
         # https://stackoverflow.com/a/31686041/95989
         from ctypes import windll
+
         return windll.user32.GetDoubleClickTime() / 1000
     else:
         raise Exception(f"Unsupported {sys.platform=}")
@@ -128,10 +133,12 @@ def get_double_click_distance_pixels():
         # TODO: do this more robustly; see:
         # https://forum.xojo.com/t/get-allowed-unit-distance-between-doubleclicks-on-macos/35014/7
         from AppKit import NSPressGestureRecognizer
+
         return NSPressGestureRecognizer.new().allowableMovement()
     elif sys.platform == "win32":
         import win32api
         import win32con
+
         x = win32api.GetSystemMetrics(win32con.SM_CXDOUBLECLK)
         y = win32api.GetSystemMetrics(win32con.SM_CYDOUBLECLK)
         if x != y:
@@ -150,11 +157,13 @@ def get_monitor_dims():
 
 
 def draw_ellipse(
-    x, y, image,
-    width_pct=.03,
-    height_pct=.03,
-    fill_transparency=.25,
-    outline_transparency=.5,
+    x,
+    y,
+    image,
+    width_pct=0.03,
+    height_pct=0.03,
+    fill_transparency=0.25,
+    outline_transparency=0.5,
     outline_width=2,
 ):
     overlay = Image.new("RGBA", image.size)
@@ -191,7 +200,10 @@ def get_font(original_font_name, font_size):
 
 
 def draw_text(
-    x, y, text, image,
+    x,
+    y,
+    text,
+    image,
     font_size_pct=0.01,
     font_name="Arial.ttf",
     fill=(255, 0, 0),
@@ -234,7 +246,11 @@ def draw_text(
 
 
 def draw_rectangle(
-    x0, y0, x1, y1, image,
+    x0,
+    y0,
+    x1,
+    y1,
+    image,
     bg_color=(0, 0, 0),
     fg_color=(255, 255, 255),
     outline_color=(255, 0, 0),
@@ -270,10 +286,10 @@ def get_scale_ratios(action_event):
 
 def display_event(
     action_event,
-    marker_width_pct=.03,
-    marker_height_pct=.03,
-    marker_fill_transparency=.25,
-    marker_outline_transparency=.5,
+    marker_width_pct=0.03,
+    marker_height_pct=0.03,
+    marker_fill_transparency=0.25,
+    marker_outline_transparency=0.5,
     diff=False,
 ):
     recording = action_event.recording
@@ -298,11 +314,15 @@ def display_event(
         if diff_bbox:
             x0, y0, x1, y1 = diff_bbox
             image = draw_rectangle(
-                x0, y0, x1, y1, image,
+                x0,
+                y0,
+                x1,
+                y1,
+                image,
                 outline_color=(255, 0, 0),
                 bg_transparency=0,
                 fg_transparency=0,
-                #outline_transparency=.75,
+                # outline_transparency=.75,
                 outline_width=20,
             )
 
@@ -373,10 +393,8 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 def get_strategy_class_by_name():
     from openadapt.strategies import BaseReplayStrategy
+
     strategy_classes = BaseReplayStrategy.__subclasses__()
-    class_by_name = {
-        cls.__name__: cls
-        for cls in strategy_classes
-    }
+    class_by_name = {cls.__name__: cls for cls in strategy_classes}
     logger.debug(f"{class_by_name=}")
     return class_by_name
