@@ -5,38 +5,39 @@ Usage:
     python -m openadapt.share send --recording_id=1 
     python -m openadapt.share receive --wormhole_code=<wormhole_code>
 """
-
-import os
-import fire
-import subprocess
-from openadapt.config import RECORDING_DIR_PATH, DB_FPATH
 from zipfile import ZipFile, ZIP_DEFLATED
-from openadapt.crud import get_recording_by_id
-from openadapt.utils import configure_logging
+import os
+import subprocess
+
 from loguru import logger
+import fire
+
+from openadapt import config, crud, utils
+
 
 LOG_LEVEL = "INFO"
-configure_logging(logger, LOG_LEVEL)
+utils.configure_logging(logger, LOG_LEVEL)
 
 
 def export_recording_to_folder(recording_id):
+    """YOUR DOCSTRING HERE"""
     # TODO: export recording db file instead of the entire db file
-    recording = get_recording_by_id(recording_id)
+    recording_db_path = crud.create_filtered_db(recording_id)
 
-    if recording:
+    if recording_db_path:
         # Create the directory if it doesn't exist
-        os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
+        os.makedirs(config.ZIPPED_RECORDING_FOLDER_PATH, exist_ok=True)
 
         # Path to the source db file
         db_filename = f"recording_{recording_id}.db"
 
         # Path to the compressed file
         zip_filename = f"recording_{recording_id}.zip"
-        zip_path = os.path.join(RECORDING_DIR_PATH, zip_filename)
+        zip_path = os.path.join(config.ZIPPED_RECORDING_FOLDER_PATH, zip_filename)
 
         # Create an in-memory zip file and add the db file
         with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
-            zip_file.write(DB_FPATH, arcname=db_filename)
+            zip_file.write(config.UNZIPPED_RECORDING_FOLDER_PATH, arcname=db_filename)
 
         logger.info(f"Created zip file of the recording: {zip_path}")
 
@@ -52,6 +53,7 @@ def send_file(file_path):
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error occurred while running 'wormhole send': {e}")
+
 
 def send_recording(recording_id):
     zip_file_path = export_recording_to_folder(recording_id)

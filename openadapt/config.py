@@ -1,7 +1,9 @@
 import pathlib
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-RECORDING_DIR_PATH = ROOT_DIRPATH / "openadapt" / "recordings"
+ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
+UNZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "unzipped"
+
 DB_FNAME = "openadapt.db"
 
 DB_FPATH = ROOT_DIRPATH / DB_FNAME

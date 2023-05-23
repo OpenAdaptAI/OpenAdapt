@@ -1,8 +1,11 @@
 from loguru import logger
+from sqlalchemy.orm import sessionmaker
 import sqlalchemy as sa
 
-from openadapt.db import Session
+
+from openadapt.db import Session, get_base
 from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
+from openadapt import config
 
 
 BATCH_SIZE = 1
@@ -93,6 +96,45 @@ def get_recording_by_id(recording_id):
         .filter_by(id=recording_id)
         .first()
     )
+
+def create_filtered_db(recording_id):
+    # Get the Recording object by ID
+    recording = get_recording_by_id(recording_id)
+
+    # Create a new database engine
+    new_db_file_path = config.UNZIPPED_RECORDING_FOLDER_PATH / f"recording_{recording_id}.db"
+    new_db_engine = sa.create_engine('sqlite:///{new_db_file_path}')
+
+     # Get the base model
+    Base = get_base(new_db_engine)
+
+    # Create all the tables in the new database
+    Base.metadata.create_all(new_db_engine)
+
+    # Assuming you have an existing session named 'db'
+    db.expunge(recording)
+
+    # Create a new session
+    Session = sessionmaker(bind=new_db_engine)
+    session = Session()
+
+    try:
+        # Add the filtered Recording object to the session
+        session.add(recording)
+        
+        # Commit the changes to the new database
+        session.commit()
+    except Exception as e:
+        # Handle any exceptions that may occur during the database operations
+        session.rollback()
+        raise e
+    finally:
+        # Close the session
+        session.close()
+
+    # Return the path to the newly created database file
+    return new_db_file_path
+
 
 
 def _get(table, recording_timestamp):
