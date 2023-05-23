@@ -13,3 +13,4 @@ cache
 
 # db
 *.db
+checkpoints/*
