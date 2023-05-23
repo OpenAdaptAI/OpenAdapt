@@ -33,5 +33,8 @@ pip install -e .
 # Run the database migration
 alembic upgrade head
 
+# Download the spaCy model for Scrubbing
+python3.10 -m spacy download en_core_web_lg
+
 # Run the test suite
 pytest
