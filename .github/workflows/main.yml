@@ -24,20 +24,9 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Run Python Black
-        run: python -m black .
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          author_name: ${{ github.actor }}
-          author_email: ${{ github.actor }}@users.noreply.github.com
-          message: "Format code with black"
-          add: "."
+      - name: Check formatting with Black
+        run: |
+          black --check .
 
       - name: Run headless tests
         uses: coactions/setup-xvfb@v1
