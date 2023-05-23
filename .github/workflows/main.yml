@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  run-tests:
+  run-ci:
     runs-on: windows-latest
 
     steps:
@@ -35,13 +35,6 @@ jobs:
           working-directory: ./  # Optional: Specify the working directory if needed
           options:  # Optional: Add any additional options or arguments for pytest
 
-  run-linter:
-    needs: run-tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
       - name: Run Python Linter
-        shell: pwsh
         run: |
           Get-ChildItem -Recurse -Filter '*.py' -Path 'openadapt', 'tests' | ForEach-Object { pylint $_.FullName }
