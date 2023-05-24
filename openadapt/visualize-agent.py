@@ -9,6 +9,8 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
+from openadapt.agents import transformer_agent
+
 from openadapt.crud import (
     get_latest_recording,
 )
@@ -25,6 +27,7 @@ from openadapt.utils import (
     rows2dicts,
 )
 
+agent = transformer_agent(model="gpt-4", api_key="<>")
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -159,6 +162,7 @@ def main():
         ),
     ]
     logger.info(f"{len(action_events)=}")
+    promptOnce = False
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
@@ -181,6 +185,11 @@ def main():
                                     aspect-ratio: {width}/{height};
                                 "
                             >
+                            <p> "{   "" if promptOnce else agent.chat(
+            "In the image, you are presented with a screenshot of a user's current active window. The user currently has Safari focused. What is the user currently observing within the application? Caption that, and analyze messages are present on the screen? Be as specific as possible. Then tell me everything you see on the screen, you may need to segment here.",
+            image=image.convert("RGB")
+        )}
+        </p>
                             <img
                                 src="{diff_utf8}"
                                 style="
@@ -206,7 +215,7 @@ def main():
                 ),
             ]
         )
-
+        promptOnce = True
     title = f"recording-{recording.timestamp}"
     fname_out = f"recording-{recording.timestamp}.html"
     logger.info(f"{fname_out=}")
