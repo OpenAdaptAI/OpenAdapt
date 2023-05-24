@@ -13,4 +13,5 @@ cache
 
 # db
 *.db
-checkpoints/*
+# pth
+*.pth

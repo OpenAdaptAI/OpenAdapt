@@ -61,7 +61,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     
     def get_autosegmented_screenshot(self, screenshot: Screenshot) -> Screenshot:
         masks = self.sam_mask_generator.generate(screenshot.array)
-        segmented_image = apply_masks(screenshot.image, masks)
+        segmented_image = apply_masks(masks)
         
         # Create a new Screenshot object with the segmented image
         segmented_screenshot = Screenshot()
@@ -69,15 +69,14 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         
         return segmented_screenshot
     
-def apply_masks(self, image, masks):
-    mask_img = np.zeros_like(image)
-    
-    for ann in masks:
+def apply_masks(self, anns):
+    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
+    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
+    for ann in sorted_anns:
         m = ann['segmentation']
-        color_mask = np.random.random(3)
-        mask_img[m] = color_mask
-    
-    segmented_image = Image.fromarray(mask_img)
+        color_mask = np.concatenate([np.random.random(3), [0.35]])
+        img[m] = color_mask
+    segmented_image = Image.fromarray(img)
     return segmented_image
 
 def pil_to_sct(self, image):
