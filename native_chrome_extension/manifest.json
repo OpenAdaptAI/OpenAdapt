@@ -1,0 +1,21 @@
+{
+    "manifest_version": 3,
+    "name": "Reading time",
+    "version": "1.0",
+    "description": "Add the reading time to Chrome Extension documentation articles",
+    "icons": {
+        "128": "Icons/MLDSAI_logo.png"
+    },
+    "content_scripts": [
+        {
+          "js": ["scripts/content.js"],
+          "matches": ["<all_urls>"]
+        }
+    ],
+    "permissions": [
+        "activeTab",
+        "tabs",
+        "nativeMessaging"
+    ]
+}
+
