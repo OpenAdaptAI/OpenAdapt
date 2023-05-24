@@ -3,9 +3,9 @@ function onReceived(response) {
 }
 
 // runtime.connectNative
-var port = browser.runtime.connectNative("application_name");
+var port = browser.runtime.connectNative("openadapt");
 port.onMessage.addListener(onReceived);
 port.postMessage("hello");
 
 // runtime.sendNativeMessage
-browser.runtime.sendNativeMessage("application_name", "hello").then(onReceived);
+browser.runtime.sendNativeMessage("openadapt", "hello").then(onReceived);

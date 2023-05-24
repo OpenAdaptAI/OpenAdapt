@@ -1,4 +1,4 @@
-// service-worker.js
+// background.js
 
 // Establish a connection with the native app
 var port = chrome.runtime.connectNative('openadapt');
