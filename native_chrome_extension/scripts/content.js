@@ -3,7 +3,7 @@ function onReceived(response) {
 }
 
 // runtime.connectNative
-var port = browser.runtime.connectNative("openadapt");
+var port = chrome.runtime.connectNative("openadapt");
 port.onMessage.addListener(onReceived);
 port.postMessage("hello");
 
