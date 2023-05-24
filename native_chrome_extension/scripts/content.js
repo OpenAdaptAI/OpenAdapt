@@ -8,4 +8,4 @@ port.onMessage.addListener(onReceived);
 port.postMessage("hello");
 
 // runtime.sendNativeMessage
-browser.runtime.sendNativeMessage("openadapt", "hello").then(onReceived);
+chrome.runtime.sendNativeMessage("openadapt", "hello").then(onReceived);
