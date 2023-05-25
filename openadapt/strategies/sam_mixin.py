@@ -10,6 +10,8 @@ Usage:
 """
 import io
 from pprint import pformat
+from mss import mss
+import mss.base
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry,SamAutomaticMaskGenerator
 import time
@@ -24,6 +26,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import cv2
+import json
+import requests
 
 from openadapt.strategies.base import BaseReplayStrategy
 
@@ -59,29 +63,24 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
     
-    def get_autosegmented_screenshot(self, screenshot: Screenshot) -> Screenshot:
-        masks = self.sam_mask_generator.generate(screenshot.array)
-        segmented_image = apply_masks(masks)
-        
-        # Create a new Screenshot object with the segmented image
-        segmented_screenshot = Screenshot()
-        segmented_screenshot.sct_img = pil_to_sct(segmented_image)
-        
-        return segmented_screenshot
     
-def apply_masks(self, anns):
-    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
-    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
-    for ann in sorted_anns:
-        m = ann['segmentation']
-        color_mask = np.concatenate([np.random.random(3), [0.35]])
-        img[m] = color_mask
-    segmented_image = Image.fromarray(img)
-    return segmented_image
+    def get_screenshot_bbox(self, screenshot: Screenshot) -> Screenshot:
+        #logger.info("before auto generate masks\n")
+        #out.append({"size": [h, w], "counts": counts})
+        #resize sct_img
+        image = screenshot.image
+        resize_ratio = 0.1
 
-def pil_to_sct(self, image):
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
+        new_size = [ int(dim * resize_ratio) for dim in image.size]
+        print(new_size)
+        image_resized = image.resize(new_size)
+        new_array = np.array(image_resized)
+        masks = self.sam_mask_generator.generate(new_array)
+        logger.info(f"{masks=}")
+        bbox_list = []
+        for mask in masks :
+            bbox_list.append(mask['bbox'])
+        return str(bbox_list)
     
-    return img_byte_arr.getvalue()
+
+    
