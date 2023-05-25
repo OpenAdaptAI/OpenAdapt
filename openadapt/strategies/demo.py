@@ -18,15 +18,16 @@ from openadapt.strategies.llm_mixin import (
 )
 from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
 from openadapt.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.svg_mixin import SVGReplayStrategyMixin
 
 
 class DemoReplayStrategy(
     LLMReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
+    SVGReplayStrategyMixin,
     BaseReplayStrategy,
 ):
-
     def __init__(
         self,
         recording: Recording,
@@ -39,19 +40,16 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
     ):
         ascii_text = self.get_ascii_text(screenshot)
-        #logger.info(f"ascii_text=\n{ascii_text}")
+        # logger.info(f"ascii_text=\n{ascii_text}")
 
         ocr_text = self.get_ocr_text(screenshot)
-        #logger.info(f"ocr_text=\n{ocr_text}")
+        # logger.info(f"ocr_text=\n{ocr_text}")
 
-        event_strs = [
-            f"<{event}>"
-            for event in self.recording.action_events
-        ]
-        history_strs = [
-            f"<{completion}>"
-            for completion in self.result_history
-        ]
+        svg_info = self.get_svg_info(screenshot)
+        print(svg_info)
+
+        event_strs = [f"<{event}>" for event in self.recording.action_events]
+        history_strs = [f"<{completion}>" for completion in self.result_history]
         prompt = " ".join(event_strs + history_strs)
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
         prompt = prompt[N:]

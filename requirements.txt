@@ -5,15 +5,19 @@ clipboard==0.0.4
 deepdiff==6.2.2
 dictalchemy3==1.0.0
 fire==0.4.0
+gpt4all
 ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
 mss==6.1.0
+numpy==1.24.3
 pandas==2.0.0
+pillow==9.5.0
 pygetwindow==0.0.9
 pyinstaller
 pywin32==306; sys_platform == 'win32'
 git+https://github.com/abrichr/pynput.git
+git+https://github.com/flupke/pypotrace.git
 pytest==7.1.3
 rapidocr-onnxruntime==1.2.3
 scikit-learn==1.2.2
