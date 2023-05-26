@@ -112,7 +112,7 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
 
 
     def is_target_event(event, state):
-        return event.name in ("click", "move")
+        return event.name == "move"
 
 
     def get_merged_events(
@@ -471,7 +471,7 @@ def remove_redundant_mouse_move_events(events):
 
 
     def is_target_event(event, state):
-        return event.name == "move"
+        return event.name in ("move", "click")
 
 
     def is_same_pos(e0, e1):
