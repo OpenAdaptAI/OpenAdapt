@@ -7,6 +7,7 @@ Usage:
 """
 
 from collections import Counter, defaultdict, namedtuple
+from datetime import datetime
 from functools import partial
 from typing import Any, Callable, Dict
 import multiprocessing
@@ -23,24 +24,8 @@ from pynput import keyboard, mouse
 import fire
 import matplotlib.pyplot as plt
 import mss.tools
-import pygetwindow as pgw
 
-from openadapt.config import ROOT_DIRPATH
-from openadapt.crud import (
-    insert_action_event,
-    insert_screenshot,
-    insert_recording,
-    insert_window_event,
-)
-from openadapt.utils import (
-    configure_logging,
-    get_double_click_distance_pixels,
-    get_double_click_interval_seconds,
-    get_monitor_dims,
-    take_screenshot,
-    get_timestamp,
-    set_start_time,
-)
+from openadapt import config, crud, utils, window
 
 
 EVENT_TYPES = ("screen", "action", "window")
@@ -86,8 +71,8 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
     prev_event = None
@@ -97,7 +82,7 @@ def process_events(
     prev_saved_window_timestamp = 0
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
-        logger.debug(f"{event=}")
+        logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         if prev_event is not None:
             assert event.timestamp > prev_event.timestamp, (event, prev_event)
@@ -160,8 +145,8 @@ def write_action_event(
     """
 
     assert event.type == "action", event
-    insert_action_event(recording_timestamp, event.timestamp, event.data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_action_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_screen_event(
@@ -182,8 +167,8 @@ def write_screen_event(
     screenshot = event.data
     png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
     event_data = {"png_data": png_data}
-    insert_screenshot(recording_timestamp, event.timestamp, event_data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_window_event(
@@ -201,8 +186,8 @@ def write_window_event(
     """
 
     assert event.type == "window", event
-    insert_window_event(recording_timestamp, event.timestamp, event.data)
-    perf_q.put((event.type, event.timestamp, get_timestamp()))
+    crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_events(
@@ -225,8 +210,8 @@ def write_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not write_q.empty():
@@ -236,6 +221,7 @@ def write_events(
             continue
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
+        logger.debug(f"{event_type=} written")
     logger.info(f"{event_type=} done")
 
 
@@ -243,7 +229,15 @@ def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: Dict[str, Any],
 ) -> None:
-    event_q.put(Event(get_timestamp(), "action", action_event_args))
+    x = action_event_args.get("mouse_x")
+    y = action_event_args.get("mouse_y")
+    if x is not None and y is not None:
+        if config.RECORD_READ_ACTIVE_ELEMENT_STATE:
+            element_state = window.get_active_element_state(x, y)
+        else:
+            element_state = {}
+        action_event_args["element_state"] = element_state
+    event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
 def on_move(
@@ -345,15 +339,15 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
-        screenshot = take_screenshot()
+        screenshot = utils.take_screenshot()
         if screenshot is None:
             logger.warning("screenshot was None")
             continue
-        event_q.put(Event(get_timestamp(), "screen", screenshot))
+        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("done")
 
 
@@ -371,30 +365,18 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    configure_logging(logger, LOG_LEVEL)
-    set_start_time(recording_timestamp)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
-    prev_title = None
-    prev_geometry = None
+    prev_window_data = {}
     while not terminate_event.is_set():
-        # TODO: save window identifier (a window's title can change, or
-        # multiple windows can have the same title)
-        if sys.platform == "darwin":
-            # pywinctl performance on mac is unusable, see:
-            # https://github.com/Kalmat/PyWinCtl/issues/29
-            title = pgw.getActiveWindow()
-            geometry = pgw.getWindowGeometry(title)
-            if geometry is None:
-                logger.warning(f"{geometry=}")
-                continue
-        else:
-            window = pgw.getActiveWindow()
-            if not window:
-                logger.warning(f"{window=}")
-                continue
-            title = window.title
-            geometry = window.box
-        if title != prev_title or geometry != prev_geometry:
+        window_data = window.get_active_window_data()
+        if not window_data:
+            continue
+        if (
+            window_data["title"] != prev_window_data.get("title") or
+            window_data["window_id"] != prev_window_data.get("window_id")
+        ):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -402,24 +384,17 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            logger.info(f"{title=} {prev_title=} {geometry=} {prev_geometry=}")
-
-            left, top, width, height = geometry
-            event_q.put(
-                Event(
-                    get_timestamp(),
-                    "window",
-                    {
-                        "title": title,
-                        "left": left,
-                        "top": top,
-                        "width": width,
-                        "height": height,
-                    },
-                )
-            )
-        prev_title = title
-        prev_geometry = geometry
+            _window_data = dict(window_data)
+            _window_data.pop("state")
+            logger.info(f"{_window_data=}")
+        if window_data != prev_window_data:
+            logger.debug("queuing window event for writing")
+            event_q.put(Event(
+                utils.get_timestamp(),
+                "window",
+                window_data,
+            ))
+        prev_window_data = window_data
 
 
 def plot_performance(
@@ -492,11 +467,12 @@ def create_recording(
         The newly created Recording object
     """
 
-    timestamp = set_start_time()
-    monitor_width, monitor_height = get_monitor_dims()
-    double_click_distance_pixels = get_double_click_distance_pixels()
-    double_click_interval_seconds = get_double_click_interval_seconds()
+    timestamp = utils.set_start_time()
+    monitor_width, monitor_height = utils.get_monitor_dims()
+    double_click_distance_pixels = utils.get_double_click_distance_pixels()
+    double_click_interval_seconds = utils.get_double_click_interval_seconds()
     recording_data = {
+        # TODO: rename
         "timestamp": timestamp,
         "monitor_width": monitor_width,
         "monitor_height": monitor_height,
@@ -505,7 +481,7 @@ def create_recording(
         "platform": sys.platform,
         "task_description": task_description,
     }
-    recording = insert_recording(recording_data)
+    recording = crud.insert_recording(recording_data)
     logger.info(f"{recording=}")
     return recording
 
@@ -527,7 +503,8 @@ def read_keyboard_events(
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
 
-    set_start_time(recording_timestamp)
+
+    utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
         on_release=partial(on_release, event_q),
@@ -542,7 +519,7 @@ def read_mouse_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    set_start_time(recording_timestamp)
+    utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
         on_click=partial(on_click, event_q),
@@ -563,7 +540,7 @@ def record(
         task_description: a text description of the task that will be recorded
     """
 
-    configure_logging(logger, LOG_LEVEL)
+    utils.configure_logging(logger, LOG_LEVEL)
 
     logger.info(f"{task_description=}")
 
@@ -675,7 +652,7 @@ def record(
 
     plot_performance(recording_timestamp, perf_q)
 
-    logger.info("done")
+    logger.info(f"saved {recording_timestamp=}")
 
 
 if __name__ == "__main__":

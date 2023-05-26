@@ -29,6 +29,7 @@ from openadapt import scrub
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
+MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
@@ -71,9 +72,15 @@ CSS = string.Template("""
 
 
 def recursive_len(lst, key):
-    _len = len(lst)
+    try:
+        _len = len(lst)
+    except TypeError:
+        return 0
     for obj in lst:
-        _len += recursive_len(obj[key], key)
+        try:
+            _len += recursive_len(obj.get(key), key)
+        except AttributeError:
+            continue
     return _len
 
 
@@ -101,9 +108,9 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=5):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
     if isinstance(obj, list):
-        children = [dict2html(value) for value in obj]
+        children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
             all_children = children
             children = evenly_spaced(children, max_children)
@@ -114,7 +121,7 @@ def dict2html(obj, max_children=5):
             f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
-                    <td>{dict2html(value)}</td>
+                    <td>{dict2html(value, max_children)}</td>
                 </tr>
             """
             for key, value in obj.items()
@@ -190,6 +197,9 @@ def main():
                                 "
                             >
                         </div>
+                        <table>
+                            {dict2html(row2dict(action_event.window_event), None)}
+                        </table>
                     """,
                 ),
                 Div(
@@ -202,8 +212,8 @@ def main():
             ),
         ])
 
-    title = f"recording-{recording.timestamp}"
-    fname_out = f"recording-{recording.timestamp}.html"
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
