@@ -75,7 +75,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![visualize.py](https://github-production-user-asset-6210df.s3.amazonaws.com/43456930/241332686-dd490362-064f-4b47-b65f-1ba31f71fa95.png)
 
 ### Playback
 
