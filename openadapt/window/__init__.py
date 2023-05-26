@@ -12,7 +12,7 @@ else:
     raise Exception(f"Unsupposed {sys.platform=}")
 
 
-def get_active_window_data(meta_only=False):
+def get_active_window_data():
     state = get_active_window_state()
     if not state:
         return None
@@ -34,11 +34,11 @@ def get_active_window_data(meta_only=False):
     return window_data
 
 
-def get_active_window_state(meta_only=False):
+def get_active_window_state():
     # TODO: save window identifier (a window's title can change, or
     # multiple windows can have the same title)
     try:
-        return impl.get_active_window_state(meta_only=False)
+        return impl.get_active_window_state()
     except Exception as exc:
         logger.warning(f"{exc=}")
         return None

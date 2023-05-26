@@ -7,14 +7,11 @@ import ApplicationServices
 import Quartz
 
 
-def get_active_window_state(meta_only=False):
+def get_active_window_state():
     # pywinctl performance on mac is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
-    if meta_only:
-        data = {}
-    else:
-        data = get_window_data(meta)
+    data = get_window_data(meta)
     title_parts = [
         meta['kCGWindowOwnerName'],
         meta['kCGWindowName'],
@@ -38,6 +35,11 @@ def get_active_window_state(meta_only=False):
         "data": data,
     }
     rval = deepconvert_objc(rval)
+    try:
+        pickle.dumps(rval)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        rval.pop("data")
     return rval
 
 
@@ -151,6 +153,11 @@ def get_active_element_state(x, y):
     el = app.get_element_at_position(x, y)
     state = dump_state(el.ref)
     state = deepconvert_objc(state)
+    try:
+        pickle.dumps(state)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        state = {}
     return state
 
 
