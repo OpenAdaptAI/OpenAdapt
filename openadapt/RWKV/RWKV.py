@@ -27,43 +27,16 @@ def run_RWKV():
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
     tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
 
-    #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-430M-20220808-8066', strategy='cpu fp32')  #light weight model
-    model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cpu fp32')  #heavy weight model
+    model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-430M-20220808-8066', strategy='cpu fp32')  #light weight model
+    #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cpu fp32')  #heavy weight model
 
     #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cuda fp16')  #heavy weight model
     #switch to 'cuda fp16' for better performance
 
-    out, state = model.forward([187, 510, 1563, 310, 247], None)   # use 20B_tokenizer.json
-    print(out.detach().cpu().numpy())                   # get logits
-    out, state = model.forward([187, 510], None)
-    out, state = model.forward([1563], state)           # RNN has state (use deepcopy if you want to clone it)
-    out, state = model.forward([310, 247], state)
-    print(out.detach().cpu().numpy())                   # same result as above
-
-    ############################################################
-    test_prompt = [187, 510, 1563, 310, 247]
-    predicted_token = np.argmax(test_prompt)
-    # Convert token back to word
-    predicted_word = tokenizer.decode([predicted_token])
-    print("input was: "+predicted_word)
-    ############################################################
-
-
-
-
-
-
-
-    # Select the token with the highest logit
-    predicted_token = np.argmax(out.detach().cpu().numpy())
-
-    # Convert token back to word
-    predicted_word = tokenizer.decode([predicted_token])
-    print(predicted_word)
-
+    print()
     prompt = "Continue the story: The sky is blue and the sun is"
+    print(prompt)
     prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
-    print(prompt_tokens)
     out, state = model.forward(prompt_tokens[0].tolist(), None)
     predicted_token = np.argmax(out.detach().cpu().numpy())
     predicted_word = tokenizer.decode(predicted_token)
