@@ -524,3 +524,4 @@ def test_discard_unused_events():
         window_events, action_events, "window_event_timestamp",
     ))
     assert expected_filtered_window_events == actual_filtered_window_events
+    
