@@ -398,11 +398,24 @@ def read_window_events(
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("queuing window event for writing")
-            event_q.put(Event(
-                utils.get_timestamp(),
-                "window",
-                window_data,
-            ))
+            try:
+                event_q.put(Event(
+                    utils.get_timestamp(),
+                    "window",
+                    window_data,
+                ))
+            except Exception as exc:
+                # TODO: refactor to be more DRY
+                logger.warning(f"{exc=}")
+                window_data = window.get_active_window_data(meta_only=True)
+                _window_data = dict(window_data)
+                _window_data.pop("state")
+                logger.debug("queuing window event for writing")
+                event_q.put(Event(
+                    utils.get_timestamp(),
+                    "window",
+                    window_data,
+                ))
         prev_window_data = window_data
 
 

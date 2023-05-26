@@ -7,11 +7,14 @@ import ApplicationServices
 import Quartz
 
 
-def get_active_window_state():
+def get_active_window_state(meta_only=False):
     # pywinctl performance on mac is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
-    data = get_window_data(meta)
+    if meta_only:
+        data = {}
+    else:
+        data = get_window_data(meta)
     title_parts = [
         meta['kCGWindowOwnerName'],
         meta['kCGWindowName'],
