@@ -27,6 +27,9 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
+import sounddevice
+import soundfile
+import whisper
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -544,12 +547,15 @@ def read_mouse_events(
 
 def record(
     task_description: str,
+    enable_audio: bool = False
 ):
     """
-    Record Screenshots/ActionEvents/WindowEvents.
+    Record Screenshots/ActionEvents/WindowEvents. Optionally record audio narration from the user
+    describing what tasks are being done.
 
     Args:
         task_description: a text description of the task that will be recorded
+        enable_audio: a flag to enable or disable audio recording (default: False)
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -646,11 +652,36 @@ def record(
 
     # TODO: discard events until everything is ready
 
+    audio_frames = []  # to store audio frames
+
+    if enable_audio:
+        def audio_callback(indata, frames, time, status):
+            # called whenever there is new audio frames
+            audio_frames.append(indata.copy())
+
+        # open InputStream and start recording while ActionEvents are recorded
+        audio_stream = sounddevice.InputStream(callback=audio_callback)
+        audio_stream.start()
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         terminate_event.set()
+
+    if enable_audio:
+        # stop the recording and close the InputStream
+        audio_stream.stop()
+        audio_stream.close()
+
+        if len(audio_frames) > 0:
+            # write to a WAV file
+            # TODO: change name
+            wav_filename = "audio.wav"
+            soundfile.write(wav_filename, audio_frames, samplerate=audio_stream.samplerate)
+
+            # Convert audio to text using OpenAI's Whisper
+
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
