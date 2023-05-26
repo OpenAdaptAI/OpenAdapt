@@ -9,7 +9,7 @@ import time
 from loguru import logger
 import mss.base
 
-from puterbot import config, events, utils, models, strategies
+from openadapt import config, events, utils, models, strategies
 
 
 DISPLAY_EVENTS = False

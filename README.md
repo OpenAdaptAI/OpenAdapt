@@ -42,7 +42,7 @@ pytest
 Create a new recording by running the following command:
 
 ```
-python -m puterbot.record "testing out puterbot"
+python -m openadapt.record "testing out openadapt"
 ```
 
 Wait until all three event writers have started:
@@ -55,10 +55,14 @@ Wait until all three event writers have started:
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
 
-Note: keep your recording short (i.e. under a minute), as they are
+Current limitations: 
+- recording should be short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
 [open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
-possible memory leak.
+possible memory leak
+- the only touchpad and trackpad gestures currently supported are 
+pointing the cursor and left or right clicking, as described in this
+[open issue](https://github.com/MLDSAI/OpenAdapt/issues/145)
 
 
 ### Visualize
@@ -66,7 +70,7 @@ possible memory leak.
 Visualize the latest recording you created by running the following command:
 
 ```
-python -m puterbot.visualize
+python -m openadapt.visualize
 ```
 
 This will open your browser. It will look something like this:
@@ -78,7 +82,7 @@ This will open your browser. It will look something like this:
 You can play back the recording using the following command:
 
 ```
-python -m puterbot.replay NaiveReplayStrategy
+python -m openadapt.replay NaiveReplayStrategy
 ```
 
 More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
@@ -179,7 +183,7 @@ If you're interested in getting paid for your work, please mention it in your Pu
 Apple Silicon:
 
 ```
-$ python puterbot/record.py
+$ python openadapt/record.py
 ...
 This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
 ```
@@ -206,7 +210,7 @@ alembic revision --autogenerate -m "<msg>"
 
 # Submitting an Issue
 
-Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
+Please submit any issues to https://github.com/MLDSAI/openadapt/issues with the
 following information:
 
 - Problem description (please include any relevant console output and/or screenshots)

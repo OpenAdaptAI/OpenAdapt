@@ -3,7 +3,7 @@ LLM with window states.
 
 Usage:
 
-    $ python -m puterbot.replay StatefulReplayStrategy
+    $ python -m openadapt.replay StatefulReplayStrategy
 """
 
 from copy import deepcopy
@@ -14,8 +14,8 @@ from loguru import logger
 import deepdiff
 import numpy as np
 
-from puterbot import config, events, models, strategies, utils
-from puterbot.strategies.mixins.openai import OpenAIReplayStrategyMixin
+from openadapt import config, events, models, strategies, utils
+from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
 
 IGNORE_BOUNDARY_WINDOWS = True

@@ -3,21 +3,21 @@ Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python -m puterbot.replay DemoReplayStrategy
+    $ python -m openadapt.replay DemoReplayStrategy
 """
 
 from loguru import logger
 import numpy as np
 
-from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot, WindowEvent
-from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.mixins.huggingface import (
+from openadapt.events import get_events
+from openadapt.models import Recording, Screenshot, WindowEvent
+from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.strategies.mixins.huggingface import (
     HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
-from puterbot.strategies.mixins.ocr import OCRReplayStrategyMixin
-from puterbot.strategies.mixins.ascii import ASCIIReplayStrategyMixin
+from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
+from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 
 
 class DemoReplayStrategy(

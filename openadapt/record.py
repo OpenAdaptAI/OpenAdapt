@@ -2,7 +2,7 @@
 
 Usage:
 
-    $ python puterbot/record.py "<description of task to be recorded>"
+    $ python openadapt/record.py "<description of task to be recorded>"
 
 """
 
@@ -25,7 +25,7 @@ import fire
 import matplotlib.pyplot as plt
 import mss.tools
 
-from puterbot import config, crud, utils, window
+from openadapt import config, crud, utils, window
 
 
 EVENT_TYPES = ("screen", "action", "window")
@@ -388,7 +388,7 @@ def read_window_events(
         ):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
-            #   File "...\puterbot\record.py", line 277, in read window events
+            #   File "...\openadapt\record.py", line 277, in read window events
             #   File "...\env\lib\site-packages\loguru\logger.py" line 1977, in info
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):

@@ -5,7 +5,7 @@ from pprint import pformat
 from scipy.spatial import distance
 import numpy as np
 
-from puterbot import common, config, crud, models, utils
+from openadapt import common, config, crud, models, utils
 
 
 MAX_PROCESS_ITERS = 1

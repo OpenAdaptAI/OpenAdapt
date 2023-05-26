@@ -11,7 +11,7 @@ from pynput import keyboard, mouse
 import mss.base
 import numpy as np
 
-from puterbot import models, playback, utils, window
+from openadapt import models, playback, utils, window
 
 
 MAX_FRAME_TIMES = 1000

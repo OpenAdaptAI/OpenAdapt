@@ -5,9 +5,7 @@ from typing import Union
 from loguru import logger
 import fire
 
-from puterbot import crud, utils
-from puterbot.crud import get_latest_recording
-from puterbot.utils import configure_logging, get_strategy_class_by_name
+from openadapt import crud, utils
 
 
 LOG_LEVEL = "INFO"
@@ -17,18 +15,18 @@ def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
 ):
-    configure_logging(logger, LOG_LEVEL)
+    utils.configure_logging(logger, LOG_LEVEL)
 
     if timestamp:
         recording = crud.get_recording(timestamp)
     else:
-        recording = get_latest_recording()
+        recording = crud.get_latest_recording()
     logger.debug(f"{recording=}")
     assert recording, "No recording found"
 
     logger.info(f"{strategy_name=}")
 
-    strategy_class_by_name = get_strategy_class_by_name()
+    strategy_class_by_name = utils.get_strategy_class_by_name()
     if strategy_name not in strategy_class_by_name:
         strategy_names = [
             name

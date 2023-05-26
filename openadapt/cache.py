@@ -5,7 +5,7 @@ from joblib import Memory
 from loguru import logger
 
 
-from puterbot import config
+from openadapt import config
 
 
 def default(val, default):

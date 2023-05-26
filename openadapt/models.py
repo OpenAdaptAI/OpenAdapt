@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from puterbot import db, utils, window
+from openadapt import db, utils, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -52,7 +52,7 @@ class Recording(db.Base):
 
     @property
     def processed_action_events(self):
-        from puterbot import events
+        from openadapt import events
         if not self._processed_action_events:
             self._processed_action_events = events.get_events(self)
         return self._processed_action_events

@@ -11,7 +11,7 @@ import mss
 import mss.base
 import numpy as np
 
-from puterbot.common import MOUSE_EVENTS, KEY_EVENTS
+from openadapt.common import MOUSE_EVENTS, KEY_EVENTS
 
 
 EMPTY = (None, [], {}, "")
@@ -374,7 +374,7 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 
 def get_strategy_class_by_name():
-    from puterbot.strategies import BaseReplayStrategy
+    from openadapt.strategies import BaseReplayStrategy
     strategy_classes = BaseReplayStrategy.__subclasses__()
     class_by_name = {
         cls.__name__: cls
