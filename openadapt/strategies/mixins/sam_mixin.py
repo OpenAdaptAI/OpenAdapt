@@ -64,18 +64,20 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
     
     
-    def get_screenshot_bbox(self, screenshot: Screenshot) -> Screenshot:
-        #logger.info("before auto generate masks\n")
-        #out.append({"size": [h, w], "counts": counts})
-        #resize sct_img
-        image = screenshot.image
-        resize_ratio = 0.1
+    def get_screenshot_bbox(self, screenshot: Screenshot) -> str:
+        """
+        Get the bounding boxes of objects in a screenshot image.
 
-        new_size = [ int(dim * resize_ratio) for dim in image.size]
-        print(new_size)
-        image_resized = image.resize(new_size)
-        new_array = np.array(image_resized)
-        masks = self.sam_mask_generator.generate(new_array)
+        Args:
+            screenshot (Screenshot): The screenshot object containing the image.
+
+        Returns:
+            str: A string representation of a list containing the bounding boxes of objects.
+
+        """
+        image_resized = resize_image(screenshot.image)
+        array_resized = np.array(image_resized)
+        masks = self.sam_mask_generator.generate(array_resized)
         logger.info(f"{masks=}")
         bbox_list = []
         for mask in masks :
@@ -83,4 +85,53 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         return str(bbox_list)
     
 
-    
+    def get_click_event_bbox(self, screenshot: Screenshot) -> str:
+        """
+        Get the bounding box of the clicked object in a screenshot image.
+
+        Args:
+            screenshot (Screenshot): The screenshot object containing the image.
+
+        Returns:
+            str: A string representation of a list containing the bounding box of the clicked object.
+            None: If the screenshot does not represent a click event with the mouse pressed.
+
+        """
+        if screenshot.action_event.name == "click" and screenshot.action_event.mouse_pressed == True :
+            image_resized = resize_image(screenshot.image)
+            array_resized = np.array(image_resized)
+            self.sam_predictor.set_image(array_resized)
+            input_point = np.array([[screenshot.action_event.mouse_x, screenshot.action_event.mouse_y]])
+            input_label = np.array([1])
+            masks, scores, logits = self.sam_predictor.predict(
+            point_coords=input_point,
+            point_labels=input_label,
+            multimask_output=True,
+            )
+            best_mask = masks[np.argmax(scores), :, :] # Get the best mask with highest score
+            # Find foreground pixel coordinates
+            rows, cols = np.where(best_mask)
+            # Calculate bounding box coordinates
+            x0 = np.min(cols)
+            y0 = np.min(rows)
+            w = np.max(cols) - x0
+            h = np.max(rows) - y0
+            return str([x0,y0,w,h])
+        else :
+            return None
+
+def resize_image(image : Image) -> Image:
+    """
+    Resize the given image.
+
+    Args:
+        image (PIL.Image.Image): The image to be resized.
+
+    Returns:
+        PIL.Image.Image: The resized image.
+
+    """
+    resize_ratio = 0.1
+    new_size = [ int(dim * resize_ratio) for dim in image.size]
+    image_resized = image.resize(new_size)
+    return image_resized
