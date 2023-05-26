@@ -1,0 +1,18 @@
+[project]
+name = "openadapt"
+version = "0.0.2"
+authors = [
+  { name="MLDSAI Inc.", email="richard.abrich@mldsai.com" },
+]
+description = "AI-First Process Automation with Transformers"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/MLDSAI/OpenAdapt"
+"Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
