@@ -9,11 +9,22 @@ import sqlalchemy as sa
 from puterbot import db, utils, window
 
 
+# https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
+class ForceFloat(sa.TypeDecorator):
+    impl = sa.Numeric(10, 2, asdecimal=False)
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = float(value)
+        return value
+
+
 class Recording(db.Base):
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    timestamp = sa.Column(sa.DateTime)
+    timestamp = sa.Column(ForceFloat)
     monitor_width = sa.Column(sa.Integer)
     monitor_height = sa.Column(sa.Integer)
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
@@ -53,7 +64,7 @@ class ActionEvent(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
-    timestamp = sa.Column(sa.DateTime)
+    timestamp = sa.Column(ForceFloat)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
@@ -208,7 +219,7 @@ class Screenshot(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    timestamp = sa.Column(sa.DateTime)
+    timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
@@ -269,7 +280,7 @@ class WindowEvent(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    timestamp = sa.Column(sa.DateTime)
+    timestamp = sa.Column(ForceFloat)
     state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)

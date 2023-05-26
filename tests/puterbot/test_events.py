@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from functools import partial
 from pprint import pformat
 import itertools
@@ -32,7 +31,7 @@ DEFAULT_DT = get_double_click_interval_seconds() / 2
 OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS = None
 
 
-_start_time = datetime.now()
+_start_time = 0
 timestamp = _start_time
 timestamp_raw = _start_time
 
@@ -59,8 +58,7 @@ def make_action_event(
     children = get_children_with_timestamps(get_pre_children)
     event_dict["children"] = children
 
-    dt_seconds = dt if dt is not None else DEFAULT_DT
-    dt = timedelta(seconds=dt_seconds)
+    dt = dt if dt is not None else DEFAULT_DT
     if "timestamp" not in event_dict:
         global timestamp
         global timestamp_raw

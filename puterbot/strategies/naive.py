@@ -59,9 +59,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         if self.replay_events:
             if self.sleep and self.prev_timestamp:
                 # TODO: subtract processing time
-                sleep_time = (
-                    action_event.timestamp - self.prev_timestamp
-                ).total_seconds()
+                sleep_time = action_event.timestamp - self.prev_timestamp
                 logger.debug(f"{sleep_time=}")
                 time.sleep(sleep_time)
             self.prev_timestamp = action_event.timestamp

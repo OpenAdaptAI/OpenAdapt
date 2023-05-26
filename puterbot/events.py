@@ -1,4 +1,3 @@
-from datetime import timedelta
 import time
 
 from loguru import logger
@@ -76,7 +75,7 @@ def get_events(
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
         if len(action_events) > 1:
-            assert duration > timedelta(), duration
+            assert duration > 0, duration
         meta["duration"] = format_num(duration, duration_raw)
 
     end_time = time.time()
@@ -297,7 +296,7 @@ def merge_consecutive_mouse_click_events(events):
                     dx = abs(event.mouse_x - prev_pressed_event.mouse_x)
                     dy = abs(event.mouse_y - prev_pressed_event.mouse_y)
                     if (
-                        dt.seconds <= double_click_interval and
+                        dt <= double_click_interval and
                         dx <= double_click_distance and
                         dy <= double_click_distance
                     ):
@@ -536,7 +535,7 @@ def merge_consecutive_action_events(
     """Merge consecutive action events into a single event"""
 
     num_events_before = len(events)
-    state = {"dt": timedelta()}
+    state = {"dt": 0}
     rval = []
     to_merge = []
 

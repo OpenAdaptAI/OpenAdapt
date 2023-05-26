@@ -49,11 +49,25 @@ def row2dict(row, follow=True):
     return row_dict
 
 
+def round_timestamps(events, num_digits):
+    for event in events:
+        if isinstance(event, dict):
+            continue
+        prev_timestamp = event.timestamp
+        event.timestamp = round(event.timestamp, num_digits)
+        logger.debug(f"{prev_timestamp=} {event.timestamp=}")
+        if hasattr(event, "children") and event.children:
+            round_timestamps(event.children, num_digits)
+
+
 def rows2dicts(
     rows,
     drop_empty=True,
     drop_constant=True,
+    num_digits=None,
 ):
+    if num_digits:
+        round_timestamps(rows, num_digits)
     row_dicts = [row2dict(row) for row in rows]
     if drop_empty:
         keep_keys = set()
@@ -327,24 +341,20 @@ def image2utf8(image):
     return image_utf8
 
 
-_start_datetime = None
+_start_time = None
 _start_perf_counter = None
 
 
-def set_start_datetime(value=None):
-    global _start_datetime
-    global _start_perf_counter
-    _start_datetime = value or datetime.now()
-    _start_perf_counter = time.perf_counter()
-    logger.debug(f"{_start_datetime=}")
-    return _start_datetime
+def set_start_time(value=None):
+    global _start_time
+    _start_time = value or time.time()
+    logger.debug(f"{_start_time=}")
+    return _start_time
 
 
 def get_timestamp(is_global=False):
-    global _start_datetime
-    global _start_perf_counter
-    dt = time.perf_counter() - _start_perf_counter
-    return _start_datetime + timedelta(seconds=dt)
+    global _start_time
+    return _start_time + time.perf_counter()
 
 
 # https://stackoverflow.com/a/50685454
