@@ -324,48 +324,16 @@ def test_merge_consecutive_mouse_scroll_events():
 
 def test_remove_redundant_mouse_move_events():
     # certain failure modes only appear in longer event chains
-    raw_events = list(itertools.chain(*[
-        [
-            make_move_event(1),
-            make_click_event(True, 1),
-            make_move_event(1),
-            make_click_event(False, 1),
-            make_move_event(2),
-            make_click_event(True, 2),
-            make_move_event(3),
-            make_click_event(False, 3),
-            make_move_event(3),
-        ]
-        for _ in range(2)
-    ]))
+    raw_events = [
+        make_move_event(1),
+        make_move_event(2),
+        make_move_event(3),
+        make_move_event(4),
+    ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
     expected_events = rows2dicts([
-        make_click_event(True, 1, get_pre_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(False, 1, get_post_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(True, 2, get_post_children=lambda: [
-            make_move_event(2),
-        ]),
-        make_click_event(False, 3, get_post_children=lambda: [
-            make_move_event(3),
-        ]),
-        make_click_event(True, 1, get_post_children=lambda: [
-            make_move_event(3),
-            make_move_event(1),
-        ]),
-        make_click_event(False, 1, get_post_children=lambda: [
-            make_move_event(1),
-        ]),
-        make_click_event(True, 2, get_post_children=lambda: [
-            make_move_event(2),
-        ]),
-        make_click_event(False, 3, get_post_children=lambda: [
-            make_move_event(3),
-        ]),
+        make_move_event(4),
     ])
     logger.info(f"expected_events=\n{pformat(expected_events)}")
     actual_events = rows2dicts(

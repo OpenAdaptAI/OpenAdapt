@@ -105,7 +105,7 @@ def make_parent_event(child, extra=None):
 
 
 # Set by_diff_distance=True to compute distance from mouse to screenshot diff
-# (computationally expensive but more keeps useful events)
+# (computationally expensive but keeps more useful events)
 def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
     """Merge consecutive mouse move events into a single move event"""
 
@@ -297,7 +297,7 @@ def merge_consecutive_mouse_click_events(events):
                     dx = abs(event.mouse_x - prev_pressed_event.mouse_x)
                     dy = abs(event.mouse_y - prev_pressed_event.mouse_y)
                     if (
-                        dt <= timedelta(seconds=double_click_interval) and
+                        dt.seconds <= double_click_interval and
                         dx <= double_click_distance and
                         dy <= double_click_distance
                     ):

@@ -13,9 +13,9 @@ from puterbot import config, events, utils, models, strategies
 
 
 DISPLAY_EVENTS = False
-PROCESS_EVENTS = True
+PROCESS_EVENTS = False
 REPLAY_EVENTS = True
-SLEEP = True
+SLEEP = False
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):

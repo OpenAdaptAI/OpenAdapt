@@ -195,44 +195,7 @@ class ActionEvent(db.Base):
     _text_name_suffix = ">"
 
     @classmethod
-    def recreate_children(cls, data):
-        # XXX not useful since doesn't include press and release actions
-
-        # {'canonical_text': '<cmd>-<49>', 'name': 'type', 'text': '<cmd>-<space>'}
-
-
-        def get_key_names(text):
-            # TODO XXX: handle text == None
-            text_parts = text.split(cls._text_sep)
-            key_names = [
-                part.strip(cls._text_name_prefix).strip(cls._text_name_suffix)
-                for part in text_parts
-            ]
-            return key_names
-
-
-        key_names = get_key_names(data.pop("text", None))
-        canonical_key_names = get_key_names(data.pop("canonical_text", None))
-        children = []
-        for key_name, canonical_key_name in zip(key_names, canonical_key_names):
-            child_data = dict(data)
-            # TODO: assign to key_char/key_vk?
-            child_data["key_name"] = key_name
-            child_data["canonical_key_name"] = canonical_key_name
-            child = ActionEvent(**child_data)
-            children.append(child)
-        data["children"] = children
-        parent = ActionEvent(**data)
-        return parent
-
-
-    @classmethod
     def from_children(cls, children_dicts):
-        #[{'canonical_key_name': 'cmd', 'key_name': 'cmd', 'name': 'press'},
-        # {'canonical_key_vk': '49', 'key_name': 'space', 'name': 'press'},
-        # {'canonical_key_name': 'cmd', 'key_name': 'cmd', 'name': 'release'},
-        # {'canonical_key_vk': '49', 'key_name': 'space', 'name': 'release'}]
-
         children = [
             ActionEvent(**child_dict)
             for child_dict in children_dicts
