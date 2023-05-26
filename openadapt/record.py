@@ -237,7 +237,12 @@ def trigger_action_event(
         else:
             element_state = {}
         action_event_args["element_state"] = element_state
-    event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
+    try:
+        event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        action_event_args.pop(element_state)
+        event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
 def on_move(
