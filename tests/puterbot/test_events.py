@@ -29,8 +29,10 @@ from puterbot.events import (
 DEFAULT_DT = get_double_click_interval_seconds() / 2
 # set to 10 to improve output readability
 OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS = None
+NUM_TIMESTAMP_DIGITS = 6
 
 
+rows2dicts = partial(rows2dicts, num_digits=NUM_TIMESTAMP_DIGITS)
 _start_time = 0
 timestamp = _start_time
 timestamp_raw = _start_time
@@ -62,7 +64,7 @@ def make_action_event(
     if "timestamp" not in event_dict:
         global timestamp
         global timestamp_raw
-        event_dict["timestamp"] = timestamp
+        event_dict["timestamp"] = float(timestamp)
         prev_timestamp = timestamp
         prev_timestamp_raw = timestamp_raw
         timestamp += dt
@@ -321,16 +323,48 @@ def test_merge_consecutive_mouse_scroll_events():
 
 
 def test_remove_redundant_mouse_move_events():
-    # certain failure modes only appear in longer event chains
-    raw_events = [
-        make_move_event(1),
-        make_move_event(2),
-        make_move_event(3),
-        make_move_event(4),
-    ]
+    raw_events = list(itertools.chain(*[
+        [
+            make_move_event(1),
+            make_click_event(True, 1),
+            make_move_event(1),
+            make_click_event(False, 1),
+            make_move_event(2),
+            make_click_event(True, 2),
+            make_move_event(3),
+            make_click_event(False, 3),
+            make_move_event(3),
+        ]
+        for _ in range(2)
+    ]))
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
     expected_events = rows2dicts([
+        make_click_event(True, 1, get_pre_children=lambda: [
+            make_move_event(1),
+        ]),
+        make_click_event(False, 1, get_post_children=lambda: [
+            make_move_event(1),
+        ]),
+        make_click_event(True, 2, get_post_children=lambda: [
+            make_move_event(2),
+        ]),
+        make_click_event(False, 3, get_post_children=lambda: [
+            make_move_event(3),
+        ]),
+        make_click_event(True, 1, get_post_children=lambda: [
+            make_move_event(3),
+            make_move_event(1),
+        ]),
+        make_click_event(False, 1, get_post_children=lambda: [
+            make_move_event(1),
+        ]),
+        make_click_event(True, 2, get_post_children=lambda: [
+            make_move_event(2),
+        ]),
+        make_click_event(False, 3, get_post_children=lambda: [
+            make_move_event(3),
+        ]),
         make_move_event(4),
     ])
     logger.info(f"expected_events=\n{pformat(expected_events)}")

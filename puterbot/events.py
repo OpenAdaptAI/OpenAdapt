@@ -112,7 +112,7 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
 
 
     def is_target_event(event, state):
-        return event.name == "move"
+        return event.name in ("click", "move")
 
 
     def get_merged_events(
