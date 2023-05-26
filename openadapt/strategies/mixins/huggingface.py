@@ -1,5 +1,5 @@
 """
-Implements a ReplayStrategy mixin for generating LLM completions.
+Implements a ReplayStrategy mixin for generating completions with HuggingFace.
 
 Usage:
 
@@ -19,7 +19,7 @@ MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
 MAX_INPUT_SIZE = 1024
 
 
-class LLMReplayStrategyMixin(BaseReplayStrategy):
+class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
         self,
