@@ -8,13 +8,10 @@ Usage:
     class MyReplayStrategy(SAMReplayStrategyMixin):
         ...
 """
-import io
 from pprint import pformat
 from mss import mss
-import mss.base
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry,SamAutomaticMaskGenerator
-import time
 from PIL import Image
 from loguru import logger
 from openadapt.events import get_events
@@ -23,11 +20,7 @@ from openadapt.models import Recording, Screenshot
 from pathlib import Path
 import urllib
 import numpy as np
-import torch
 import matplotlib.pyplot as plt
-import cv2
-import json
-import requests
 
 from openadapt.strategies.base import BaseReplayStrategy
 
