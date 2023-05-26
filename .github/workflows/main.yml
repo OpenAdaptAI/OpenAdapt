@@ -37,7 +37,3 @@ jobs:
 
       - name: flake8 Lint
         uses: py-actions/flake8@v2
-        with:
-          ignore: "E203"
-          max-line-length: "88"
-          plugins: "flake8-bugbear==22.1.11 flake8-black"
