@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from io import BytesIO
 import base64
 import os
@@ -343,6 +344,7 @@ def image2utf8(image):
 
 
 _start_time = None
+_start_perf_counter = None
 
 
 def set_start_time(value=None):
@@ -403,3 +405,10 @@ def get_functions(name):
         if inspect.isfunction(obj) and not name.startswith("_"):
             functions[name] = obj
     return functions
+
+
+def strip_element_state(action_event):
+    action_event.element_state = None
+    for child in action_event.children:
+        strip_element_state(child)
+    return action_event
