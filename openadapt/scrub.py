@@ -2,8 +2,9 @@
 
 Usage:
 
-    $ python -m openadapt.scrub
-
+    $ python openadapt/scrub.py scrub_text str_arg
+    $ python openadapt/scrub.py scrub_image Image_arg
+    
 """
 
 from PIL import Image
@@ -11,8 +12,9 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import ImageRedactorEngine
+import fire
 
-from openadapt import config
+from openadapt import config, utils
 
 analyzer = AnalyzerEngine()
 
@@ -91,3 +93,7 @@ def scrub_image(
 
     # Return the redacted image data
     return redacted_image
+
+
+if __name__ == "__main__":
+    fire.Fire(utils.get_functions(__name__))

@@ -3,6 +3,7 @@ import base64
 import os
 import sys
 import time
+import inspect
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
@@ -381,3 +382,24 @@ def get_strategy_class_by_name():
     }
     logger.debug(f"{class_by_name=}")
     return class_by_name
+
+def get_functions(name):
+    """
+    Get a dictionary of function names to functions for all non-private functions
+
+    Usage:
+
+        if __name__ == "__main__":
+            fire.Fire(utils.get_functions(__name__))
+
+    Args:
+        name: string containing name of module in sys.modules
+
+    Returns:
+        A dictionary of function names to functions.
+    """
+    functions = {}
+    for name, obj in inspect.getmembers(sys.modules[name]):
+        if inspect.isfunction(obj) and not name.startswith("_"):
+            functions[name] = obj
+    return functions

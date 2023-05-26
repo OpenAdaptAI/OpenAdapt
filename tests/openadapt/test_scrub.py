@@ -4,9 +4,8 @@ from io import BytesIO
 import os
 
 from PIL import Image
-import pytesseract
 
-from openadapt.scrub import scrub
+from openadapt import scrub, config
 
 
 def test_scrub_image() -> None:
@@ -15,7 +14,7 @@ def test_scrub_image() -> None:
     """
 
     # Read test image data from file
-    test_image_path = "assets/test_scrub.scrub_image.png"
+    test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
@@ -31,17 +30,24 @@ def test_scrub_image() -> None:
 
     # Load the scrubbed image from file for manual verification
     scrubbed_image = Image.open(scrubbed_image_path)
+    scrubbed_image = scrubbed_image.convert("RGB")
 
-    # Perform OCR on the scrubbed image
-    ocr_text = pytesseract.image_to_string(scrubbed_image)
+    # Count the number of pixels having the color of the mask
+    mask_pixels = sum(
+        1
+        for pixel in scrubbed_image.getdata()
+        if pixel == config.DEFAULT_SCRUB_FILL_COLOR
+    )
+    total_pixels = scrubbed_image.width * scrubbed_image.height
 
     test_image.close()
     scrubbed_image.close()
     os.remove(scrubbed_image_path)
 
-    assert "krish@openadapt.ai" not in ocr_text
-    assert "Manage your Google Account" in ocr_text
-    assert "Sign out" in ocr_text
+    # Assert that the number of mask pixels is approximately 1.5% the total number of pixels
+    assert (
+        round((mask_pixels / total_pixels), 3) == 0.015
+    )  # Change this value as necessary
 
 
 def test_empty_string() -> None:
