@@ -14,3 +14,4 @@ KEY_EVENTS = (
     # processed
     "type",
 )
+ALL_EVENTS = tuple(list(MOUSE_EVENTS) + list(KEY_EVENTS))
