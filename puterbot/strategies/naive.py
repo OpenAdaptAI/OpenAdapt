@@ -9,7 +9,7 @@ import time
 from loguru import logger
 import mss.base
 
-from puterbot import events, utils, models, strategies
+from puterbot import config, events, utils, models, strategies
 
 
 DISPLAY_EVENTS = False
@@ -41,12 +41,15 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         screenshot: models.Screenshot,
         window_event: models.WindowEvent,
     ):
+        action_events = self.processed_action_events if PROCESS_EVENTS else self.recording.action_events
         self.action_event_idx += 1
-        num_action_events = len(self.processed_action_events)
+        num_action_events = len(action_events)
         if self.action_event_idx >= num_action_events:
             # TODO: refactor
             raise StopIteration()
-        action_event = self.processed_action_events[self.action_event_idx]
+        action_event = action_events[self.action_event_idx]
+        if config.REPLAY_STRIP_ELEMENT_STATE:
+            action_event = utils.strip_element_state(action_event)
         logger.info(
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )

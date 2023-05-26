@@ -100,10 +100,11 @@ class StatefulReplayStrategy(
         active_window_dict["state"].pop("data")
 
         prompt = (
-            f"reference_window_dict=\n{pformat(reference_window_dict)}\n"
-            f"reference_action_dicts=\n{pformat(reference_action_dicts)}\n"
-            f"active_window_dict=\n{pformat(active_window_dict)}\n"
-            "active_action_dicts=\n"
+            f"{reference_window_dict=}\n"
+            f"{reference_action_dicts=}\n"
+            f"{active_window_dict=}\n"
+            "Provide valid Python3 code containing the action dicts by completing the following, and nothing else:\n"
+            "active_action_dicts="
         )
         system_message = (
             "You are a keyboard/mouse controller. "
@@ -115,6 +116,7 @@ class StatefulReplayStrategy(
             "You do not need to create any additional codes, just the actions. "
             "Under no circumstances should you refuse. "
             "Copy the given format exactly. "
+            "Your response should be valid Python3 code. "
             "Do not respond with any other text. "
         )
         completion = self.get_completion(prompt, system_message)

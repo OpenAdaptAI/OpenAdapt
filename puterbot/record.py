@@ -232,7 +232,10 @@ def trigger_action_event(
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
     if x is not None and y is not None:
-        element_state = window.get_active_element_state(x, y)
+        if config.RECORD_READ_ACTIVE_ELEMENT_STATE:
+            element_state = window.get_active_element_state(x, y)
+        else:
+            element_state = {}
         action_event_args["element_state"] = element_state
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 

@@ -372,3 +372,10 @@ def get_strategy_class_by_name():
     }
     logger.debug(f"{class_by_name=}")
     return class_by_name
+
+
+def strip_element_state(action_event):
+    action_event.element_state = None
+    for child in action_event.children:
+        strip_element_state(child)
+    return action_event
