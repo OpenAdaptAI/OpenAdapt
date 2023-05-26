@@ -129,7 +129,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
         ])
         html_str = f"<table>{rows_html}</table>"
     else:
-        html_str = html.escape(scrub_text(str(obj)))
+        html_str = html.escape(scrub.scrub_text(str(obj)))
     return html_str
 
 
@@ -166,9 +166,9 @@ def main():
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        image = scrub_image(display_event(action_event))
-        diff = scrub_image(display_event(action_event, diff=True))
-        mask = scrub_image(action_event.screenshot.diff_mask)
+        image = scrub.scrub_image(display_event(action_event))
+        diff = scrub.scrub_image(display_event(action_event, diff=True))
+        mask = scrub.scrub_image(action_event.screenshot.diff_mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)

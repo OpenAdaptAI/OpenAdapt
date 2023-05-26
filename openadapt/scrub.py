@@ -16,7 +16,9 @@ import fire
 
 from openadapt import config, utils
 
+
 analyzer = AnalyzerEngine()
+
 
 MAX_MASK_LEN = 1024
 SCRUBBING_ENTITIES = [
@@ -27,8 +29,7 @@ SCRUBBING_ENTITIES = [
 
 
 def scrub_text(text: str) -> str:
-    """Scrubs the text of all PII/PHI.
-
+    """
     Scrub the text of all PII/PHI using Presidio Analyzer and Anonymizer
 
     Args:
@@ -36,9 +37,6 @@ def scrub_text(text: str) -> str:
 
     Returns:
         str: Scrubbed text
-
-    Raises:
-        None
     """
 
     analyzer_results = analyzer.analyze(
@@ -69,8 +67,7 @@ def scrub_text(text: str) -> str:
 def scrub_image(
     image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
 ) -> Image:
-    """Scrub the image of all PII/PHI.
-
+    """
     Scrub the image of all PII/PHI using Presidio Image Redactor
 
     Args:
@@ -78,9 +75,6 @@ def scrub_image(
 
     Returns:
         PIL.Image: The scrubbed image with PII and PHI removed.
-
-    Raises:
-        None
     """
 
     # Initialize the engine

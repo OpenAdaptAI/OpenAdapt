@@ -10,7 +10,7 @@ from openadapt import scrub, config
 
 def test_scrub_image() -> None:
     """
-    Test is to be sure that the scrubbed image data is different
+    Test that the scrubbed image data is different
     """
 
     # Read test image data from file

@@ -4,7 +4,6 @@ import base64
 import os
 import sys
 import time
-import inspect
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
@@ -24,7 +23,6 @@ def configure_logging(logger, log_level):
     logger.remove()
     logger.add(sys.stderr, level=log_level)
     logger.debug(f"{log_level=}")
-    
 
 
 def row2dict(row, follow=True):
@@ -385,6 +383,14 @@ def get_strategy_class_by_name():
     logger.debug(f"{class_by_name=}")
     return class_by_name
 
+
+def strip_element_state(action_event):
+    action_event.element_state = None
+    for child in action_event.children:
+        strip_element_state(child)
+    return action_event
+
+
 def get_functions(name):
     """
     Get a dictionary of function names to functions for all non-private functions
@@ -405,10 +411,3 @@ def get_functions(name):
         if inspect.isfunction(obj) and not name.startswith("_"):
             functions[name] = obj
     return functions
-
-
-def strip_element_state(action_event):
-    action_event.element_state = None
-    for child in action_event.children:
-        strip_element_state(child)
-    return action_event

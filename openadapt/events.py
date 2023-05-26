@@ -642,5 +642,4 @@ def process_events(action_events, window_events, screenshots):
         f"{pct_total=}"
 
     )
-
     return action_events, window_events, screenshots

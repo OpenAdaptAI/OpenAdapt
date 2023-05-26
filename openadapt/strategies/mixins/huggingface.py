@@ -66,5 +66,4 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
             clean_up_tokenization_spaces=True,
         )
         logger.debug(f"{completion=}")
-
         return completion
