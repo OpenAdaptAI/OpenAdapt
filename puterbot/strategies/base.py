@@ -26,7 +26,6 @@ class BaseReplayStrategy(ABC):
     ):
         self.recording = recording
         self.max_frame_times = max_frame_times
-        self.processed_action_events = recording.processed_action_events
         self.action_events = []
         self.screenshots = []
         self.window_events = []
@@ -53,9 +52,14 @@ class BaseReplayStrategy(ABC):
                 )
             except StopIteration:
                 break
+            if self.action_events:
+                prev_action_event = self.action_events[-1]
+                assert prev_action_event.timestamp <= action_event.timestamp, (
+                    prev_action_event, action_event
+                )
             self.log_fps()
-            self.action_events.append(action_event)
             if action_event:
+                self.action_events.append(action_event)
                 action_event_dict = utils.rows2dicts(
                     [action_event],
                     drop_constant=False,
@@ -64,11 +68,15 @@ class BaseReplayStrategy(ABC):
                     f"action_event=\n"
                     f"{pformat(action_event_dict)}"
                 )
-                playback.play_action_event(
-                    action_event,
-                    mouse_controller,
-                    keyboard_controller,
-                )
+                try:
+                    playback.play_action_event(
+                        action_event,
+                        mouse_controller,
+                        keyboard_controller,
+                    )
+                except Exception as exc:
+                    logger.exception(exc)
+                    import ipdb; ipdb.set_trace()
 
     def log_fps(self):
         t = time.time()

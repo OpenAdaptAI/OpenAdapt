@@ -57,7 +57,8 @@ def play_key_event(event, keyboard_controller, canonical=True):
 
 
 def play_action_event(event, mouse_controller, keyboard_controller):
-    if event.children:
+    # currently we use children to replay type events
+    if event.children and event.name in KEY_EVENTS:
         for child in event.children:
             play_action_event(child, mouse_controller, keyboard_controller)
     else:

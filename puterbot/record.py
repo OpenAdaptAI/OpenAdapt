@@ -664,7 +664,7 @@ def record(
 
     plot_performance(recording_timestamp, perf_q)
 
-    logger.info("done")
+    logger.info(f"saved {recording_timestamp=}")
 
 
 if __name__ == "__main__":

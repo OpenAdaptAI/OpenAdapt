@@ -17,6 +17,7 @@ _DEFAULTS = {
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
+    # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
 }
 
