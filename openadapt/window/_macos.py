@@ -1,4 +1,5 @@
 from pprint import pprint
+import pickle
 
 from loguru import logger
 import atomacos
@@ -162,7 +163,6 @@ def get_active_element_state(x, y):
 
 
 def main():
-    import pickle
     import time
     time.sleep(1)
 
