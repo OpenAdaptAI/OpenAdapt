@@ -2,14 +2,15 @@ from transformers import OpenAiAgent
 
 
 class transformer_agent(OpenAiAgent):
-    screenshots = []
 
     """
     This is an OpenAdapt decorator for HuggingFace's OpenAiAgent class.
     """
 
+    screenshots = []
+
     def __init__(
-        self,   
+        self,
         model,
         api_key,
         chat_prompt_template=None,

@@ -10,9 +10,11 @@ from bokeh.models.widgets import Div
 from loguru import logger
 
 from openadapt.agents import transformer_agent
+from dotenv import load_dotenv
 
 from openadapt.crud import (
     get_latest_recording,
+    get_window_events,
 )
 from openadapt.events import (
     get_events,
@@ -27,7 +29,8 @@ from openadapt.utils import (
     rows2dicts,
 )
 
-agent = transformer_agent(model="gpt-4", api_key="<>")
+load_dotenv()
+agent = transformer_agent(model="gpt-3.5-turbo", api_key=os.getenv("OPENAI_API_KEY"))
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -172,6 +175,7 @@ def main():
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
+        curr_action = get_window_events(recording)
         width, height = image.size
         rows.append(
             [
@@ -185,10 +189,11 @@ def main():
                                     aspect-ratio: {width}/{height};
                                 "
                             >
-                            <p> "{   "" if promptOnce else agent.chat(
-            "In the image, you are presented with a screenshot of a user's current active window. The user currently has Safari focused. What is the user currently observing within the application? Caption that, and analyze messages are present on the screen? Be as specific as possible. Then tell me everything you see on the screen, you may need to segment here.",
+                            <p>  { '' if promptOnce else agent.chat(
+            f"In the image, you are presented with a screenshot of a user's current active window. The user's window event is: {curr_action[idx].title}. What is the user doing, and what text do they see? DO NOT SEGMENT",
             image=image.convert("RGB")
         )}
+        {curr_action[idx].title}
         </p>
                             <img
                                 src="{diff_utf8}"
@@ -215,7 +220,7 @@ def main():
                 ),
             ]
         )
-        promptOnce = True
+        # promptOnce = True
     title = f"recording-{recording.timestamp}"
     fname_out = f"recording-{recording.timestamp}.html"
     logger.info(f"{fname_out=}")
