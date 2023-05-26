@@ -1,17 +1,21 @@
 """Module to test scrub.py"""
+
 from io import BytesIO
 import os
+
 from PIL import Image
 import pytesseract
-from openadapt.scrub import scrub, scrub_image
+
+from openadapt.scrub import scrub
 
 
-def test_scrub_image_data() -> None:
+def test_scrub_image() -> None:
     """
     Test is to be sure that the scrubbed image data is different
     """
+
     # Read test image data from file
-    test_image_path = "assets/test_scrub_image.png"
+    test_image_path = "assets/test_scrub.scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
@@ -19,7 +23,7 @@ def test_scrub_image_data() -> None:
     test_image = Image.open(BytesIO(test_image_data))
 
     # Scrub the image
-    scrubbed_image = scrub_image(test_image)
+    scrubbed_image = scrub.scrub_image(test_image)
 
     # Save the scrubbed image data to a file
     scrubbed_image_path = "scrubbed_image.png"
@@ -42,138 +46,159 @@ def test_scrub_image_data() -> None:
 
 def test_empty_string() -> None:
     """
-    Test is to ensure that an empty string is returned
+    Test that an empty string is returned
     if an empty string is passed to the scrub function.
     """
+
     text = ""
     expected_output = ""
-    assert scrub(text) == expected_output
+    assert scrub.scrub_text(text) == expected_output
 
 
 def test_no_scrub_string() -> None:
     """
-    Test is to ensure that the same string is returned
+    Test that the same string is returned
     """
+
     text = "This string doesn't have anything to scrub."
     expected_output = "This string doesn't have anything to scrub."
-    assert scrub(text) == expected_output
+    assert scrub.scrub_text(text) == expected_output
 
 
 def test_scrub_email() -> None:
     """
-    Test is to ensure that the email address is scrubbed
+    Test that the email address is scrubbed
     """
+
     # Test scrubbing of email address
     assert (
-        scrub("My email is john.doe@example.com.")
+        scrub.scrub_text("My email is john.doe@example.com.")
         == "My email is ********************."
     )
 
 
 def test_scrub_phone_number() -> None:
     """
-    Test is to ensure that the phone number is scrubbed
+    Test that the phone number is scrubbed
     """
+
     assert (
-        scrub("My phone number is 123-456-7890.") == "My phone number is ************."
+        scrub.scrub_text("My phone number is 123-456-7890.")
+        == "My phone number is ************."
     )
 
 
 def test_scrub_credit_card() -> None:
     """
-    Test is to ensure that the credit card number is scrubbed
+    Test that the credit card number is scrubbed
     """
+
     assert (
-        scrub("My credit card number is 4234-5678-9012-3456 and ")
+        scrub.scrub_text("My credit card number is 4234-5678-9012-3456 and ")
     ) == "My credit card number is ******************* and "
 
 
 def test_scrub_date_of_birth() -> None:
     """
-    Test is to ensure that the date of birth is scrubbed
+    Test that the date of birth is scrubbed
     """
-    assert scrub("My date of birth is 01/01/2000.") == "My date of birth is 01/01/2000."
+
+    assert (
+        scrub.scrub_text("My date of birth is 01/01/2000.")
+        == "My date of birth is 01/01/2000."
+    )
 
 
 def test_scrub_address() -> None:
     """
-    Test is to ensure that the address is scrubbed
+    Test that the address is scrubbed
     """
+
     assert (
-        scrub("My address is 123 Main St, Toronto, On, CAN.")
+        scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
         == "My address is 123 Main St, *******, On, CAN."
     )
 
 
 def test_scrub_ssn() -> None:
     """
-    Test is to ensure that the social security number is scrubbed
+    Test that the social security number is scrubbed
     """
+
     # Test scrubbing of social security number
     assert (
-        scrub("My social security number is 923-45-6789")
+        scrub.scrub_text("My social security number is 923-45-6789")
         == "My social security number is ***********"
     )
 
 
 def test_scrub_dl() -> None:
     """
-    Test is to ensure that the driver's license number is scrubbed
+    Test that the driver's license number is scrubbed
     """
+
     assert (
-        scrub("My driver's license number is A123-456-789-012")
+        scrub.scrub_text("My driver's license number is A123-456-789-012")
         == "My driver's license number is ****-456-789-012"
     )
 
 
 def test_scrub_passport() -> None:
     """
-    Test is to ensure that the passport number is scrubbed
+    Test that the passport number is scrubbed
     """
-    assert scrub("My passport number is A1234567.") == "My passport number is ********."
+
+    assert (
+        scrub.scrub_text("My passport number is A1234567.")
+        == "My passport number is ********."
+    )
 
 
 def test_scrub_national_id() -> None:
     """
-    Test is to ensure that the national ID number is scrubbed
+    Test that the national ID number is scrubbed
     """
+
     assert (
-        scrub("My national ID number is 1234567890123.")
+        scrub.scrub_text("My national ID number is 1234567890123.")
         == "My national ID number is *************."
     )
 
 
 def test_scrub_routing_number():
     """
-    Test is to ensure that the bank routing number is scrubbed
+    Test that the bank routing number is scrubbed
     """
+
     assert (
-        scrub("My bank routing number is 123456789.")
+        scrub.scrub_text("My bank routing number is 123456789.")
         == "My bank routing number is *********."
     )
 
 
 def test_scrub_bank_account() -> None:
     """
-    Test is to ensure that the bank account number is scrubbed
+    Test that the bank account number is scrubbed
     """
+
     assert (
-        scrub("My bank account number is 635526789012.")
+        scrub.scrub_text("My bank account number is 635526789012.")
         == "My bank account number is ************."
     )
 
 
 def test_scrub_all_together() -> None:
     """
-    Test is to ensure that all PII/PHI types are scrubbed
+    Test that all PII/PHI types are scrubbed
     """
+
     text_with_pii_phi = (
         "John Smith's email is johnsmith@example.com and"
         " his phone number is 555-123-4567."
         "His credit card number is 4831-5538-2996-5651 and"
         " his social security number is 923-45-6789. He was born on 01/01/1980."
     )
-    assert scrub(text_with_pii_phi) == (
+    assert scrub.scrub_text(text_with_pii_phi) == (
         "************ email is ********************* and"
         " his phone number is ************."
         "His credit card number is ******************* and"

@@ -24,7 +24,7 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
-from openadapt.scrub import scrub_image
+from openadapt import scrub
 
 
 LOG_LEVEL = "INFO"
@@ -122,7 +122,7 @@ def dict2html(obj, max_children=5):
         ])
         html_str = f"<table>{rows_html}</table>"
     else:
-        html_str = html.escape(str(obj))
+        html_str = html.escape(scrub_text(str(obj)))
     return html_str
 
 

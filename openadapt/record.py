@@ -26,7 +26,6 @@ import mss.tools
 import pygetwindow as pgw
 
 from openadapt.config import ROOT_DIRPATH
-from openadapt.scrub import scrub_image, scrub
 from openadapt.crud import (
     insert_action_event,
     insert_screenshot,
