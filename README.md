@@ -75,7 +75,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -91,8 +91,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 ## Contributing
 
 ### Design
-
-![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
 
 ### Problem Statement
 
