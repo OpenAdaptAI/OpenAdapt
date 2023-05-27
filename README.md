@@ -59,10 +59,14 @@ Wait until all three event writers have started:
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
 
-Note: keep your recording short (i.e. under a minute), as they are
+Current limitations: 
+- recording should be short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
 [open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
-possible memory leak.
+possible memory leak
+- the only touchpad and trackpad gestures currently supported are 
+pointing the cursor and left or right clicking, as described in this
+[open issue](https://github.com/MLDSAI/OpenAdapt/issues/145)
 
 
 ### Visualize
@@ -75,7 +79,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -91,8 +95,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 ## Contributing
 
 ### Design
-
-![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
 
 ### Problem Statement
 
