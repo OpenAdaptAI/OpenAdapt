@@ -1,27 +1,27 @@
 """
-Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
+Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python puterbot/replay.py DemoReplayStrategy
+    $ python -m openadapt.replay DemoReplayStrategy
 """
 
 from loguru import logger
 import numpy as np
 
-from puterbot.events import get_events
-from puterbot.models import Recording, Screenshot
-from puterbot.strategies.base import BaseReplayStrategy
-from puterbot.strategies.llm_mixin import (
-    LLMReplayStrategyMixin,
+from openadapt.events import get_events
+from openadapt.models import Recording, Screenshot, WindowEvent
+from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.strategies.mixins.huggingface import (
+    HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
-from puterbot.strategies.ocr_mixin import OCRReplayStrategyMixin
-from puterbot.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
+from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 
 
 class DemoReplayStrategy(
-    LLMReplayStrategyMixin,
+    HuggingFaceReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
     BaseReplayStrategy,
@@ -34,9 +34,10 @@ class DemoReplayStrategy(
         super().__init__(recording)
         self.result_history = []
 
-    def get_next_input_event(
+    def get_next_action_event(
         self,
         screenshot: Screenshot,
+        window_event: WindowEvent,
     ):
         ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
@@ -46,7 +47,7 @@ class DemoReplayStrategy(
 
         event_strs = [
             f"<{event}>"
-            for event in self.recording.input_events
+            for event in self.recording.action_events
         ]
         history_strs = [
             f"<{completion}>"
@@ -65,6 +66,6 @@ class DemoReplayStrategy(
         logger.info(f"{result=}")
         self.result_history.append(result)
 
-        # TODO: parse result into InputEvent(s)
+        # TODO: parse result into ActionEvent(s)
 
         return None

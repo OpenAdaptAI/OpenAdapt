@@ -1,9 +1,9 @@
-"""Utilities for playing back InputEvents"""
+"""Utilities for playing back ActionEvents"""
 
 from loguru import logger
 from pynput import mouse
 
-from puterbot.common import KEY_EVENTS, MOUSE_EVENTS
+from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
 def play_mouse_event(event, mouse_controller):
@@ -41,7 +41,10 @@ def play_mouse_event(event, mouse_controller):
 def play_key_event(event, keyboard_controller, canonical=True):
     assert event.name in KEY_EVENTS, event
 
-    key = event.canonical_key if canonical else event.key
+    key = (
+        event.canonical_key if canonical and event.canonical_key else
+        event.key
+    )
 
     if event.name == "press":
         keyboard_controller.press(key)
@@ -53,10 +56,11 @@ def play_key_event(event, keyboard_controller, canonical=True):
         raise Exception(f"unhandled {event.name=}")
 
 
-def play_input_event(event, mouse_controller, keyboard_controller):
-    if event.children:
+def play_action_event(event, mouse_controller, keyboard_controller):
+    # currently we use children to replay type events
+    if event.children and event.name in KEY_EVENTS:
         for child in event.children:
-            play_input_event(child, mouse_controller, keyboard_controller)
+            play_action_event(child, mouse_controller, keyboard_controller)
     else:
         assert event.name in MOUSE_EVENTS + KEY_EVENTS, event
         if event.name in MOUSE_EVENTS:
@@ -65,5 +69,3 @@ def play_input_event(event, mouse_controller, keyboard_controller):
             play_key_event(event, keyboard_controller)
         else:
             raise Exception(f"unhandled {event.name=}")
-
-

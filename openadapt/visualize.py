@@ -9,13 +9,13 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from puterbot.crud import (
+from openadapt.crud import (
     get_latest_recording,
 )
-from puterbot.events import (
+from openadapt.events import (
     get_events,
 )
-from puterbot.utils import (
+from openadapt.utils import (
     configure_logging,
     display_event,
     evenly_spaced,
@@ -28,6 +28,7 @@ from puterbot.utils import (
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
+MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
@@ -70,9 +71,15 @@ CSS = string.Template("""
 
 
 def recursive_len(lst, key):
-    _len = len(lst)
+    try:
+        _len = len(lst)
+    except TypeError:
+        return 0
     for obj in lst:
-        _len += recursive_len(obj[key], key)
+        try:
+            _len += recursive_len(obj.get(key), key)
+        except AttributeError:
+            continue
     return _len
 
 
@@ -100,9 +107,9 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=5):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
     if isinstance(obj, list):
-        children = [dict2html(value) for value in obj]
+        children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
             all_children = children
             children = evenly_spaced(children, max_children)
@@ -113,7 +120,7 @@ def dict2html(obj, max_children=5):
             f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
-                    <td>{dict2html(value)}</td>
+                    <td>{dict2html(value, max_children)}</td>
                 </tr>
             """
             for key, value in obj.items()
@@ -132,8 +139,8 @@ def main():
     logger.debug(f"{recording=}")
 
     meta = {}
-    input_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
-    event_dicts = rows2dicts(input_events)
+    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -154,13 +161,13 @@ def main():
             ),
         )
     ]
-    logger.info(f"{len(input_events)=}")
-    for idx, input_event in enumerate(input_events):
+    logger.info(f"{len(action_events)=}")
+    for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        image = display_event(input_event)
-        diff = display_event(input_event, diff=True)
-        mask = input_event.screenshot.diff_mask
+        image = display_event(action_event)
+        diff = display_event(action_event, diff=True)
+        mask = action_event.screenshot.diff_mask
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -189,20 +196,23 @@ def main():
                                 "
                             >
                         </div>
+                        <table>
+                            {dict2html(row2dict(action_event.window_event), None)}
+                        </table>
                     """,
                 ),
                 Div(
                     text=f"""
                         <table>
-                            {dict2html(row2dict(input_event))}
+                            {dict2html(row2dict(action_event))}
                         </table>
                     """
                 ),
             ),
         ])
 
-    title = f"recording-{recording.timestamp}"
-    fname_out = f"recording-{recording.timestamp}.html"
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from io import BytesIO
 from collections import Counter, defaultdict
 import base64
@@ -14,8 +15,7 @@ import mss
 import mss.base
 import numpy as np
 
-from puterbot import crud
-from puterbot.common import MOUSE_EVENTS, KEY_EVENTS
+from openadapt import common
 
 
 # TODO: move to config.py
@@ -268,30 +268,30 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(input_event):
-    recording = input_event.recording
-    image = input_event.screenshot.image
+def get_scale_ratios(action_event):
+    recording = action_event.recording
+    image = action_event.screenshot.image
     width_ratio = image.width / recording.monitor_width
     height_ratio = image.height / recording.monitor_height
     return width_ratio, height_ratio
 
 
 def display_event(
-    input_event,
+    action_event,
     marker_width_pct=.03,
     marker_height_pct=.03,
     marker_fill_transparency=.25,
     marker_outline_transparency=.5,
     diff=False,
 ):
-    recording = input_event.recording
-    window_event = input_event.window_event
-    screenshot = input_event.screenshot
+    recording = action_event.recording
+    window_event = action_event.window_event
+    screenshot = action_event.screenshot
     if diff and screenshot.diff:
         image = screenshot.diff.convert("RGBA")
     else:
         image = screenshot.image.convert("RGBA")
-    width_ratio, height_ratio = get_scale_ratios(input_event)
+    width_ratio, height_ratio = get_scale_ratios(action_event)
 
     # dim area outside window event
     x0 = window_event.left * width_ratio
@@ -315,24 +315,24 @@ def display_event(
             )
 
     # draw click marker
-    if input_event.name in MOUSE_EVENTS:
-        x = input_event.mouse_x * width_ratio
-        y = input_event.mouse_y * height_ratio
+    if action_event.name in common.MOUSE_EVENTS:
+        x = action_event.mouse_x * width_ratio
+        y = action_event.mouse_y * height_ratio
         image, ellipse_width, ellipse_height = draw_ellipse(x, y, image)
 
         # draw text
-        dx = input_event.mouse_dx or 0
-        dy = input_event.mouse_dy or 0
+        dx = action_event.mouse_dx or 0
+        dy = action_event.mouse_dy or 0
         d_text = f" {dx=} {dy=}" if dx or dy else ""
-        text = f"{input_event.name}{d_text}"
+        text = f"{action_event.name}{d_text}"
         image = draw_text(x, y + ellipse_height / 2, text, image)
-    elif input_event.name in KEY_EVENTS:
+    elif action_event.name in common.KEY_EVENTS:
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
-        text = input_event.text
+        text = action_event.text
         image = draw_text(x, y, text, image, outline=True)
     else:
-        raise Exception("unhandled {input_event.name=}")
+        raise Exception("unhandled {action_event.name=}")
 
     return image
 
@@ -349,6 +349,7 @@ def image2utf8(image):
 
 
 _start_time = None
+_start_perf_counter = None
 
 
 def set_start_time(value=None):
@@ -380,7 +381,7 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 
 def get_strategy_class_by_name():
-    from puterbot.strategies import BaseReplayStrategy
+    from openadapt.strategies import BaseReplayStrategy
     strategy_classes = BaseReplayStrategy.__subclasses__()
     class_by_name = {
         cls.__name__: cls
@@ -406,6 +407,8 @@ def plot_performance(recording_timestamp: float = None) -> None:
     type_to_timestamps = defaultdict(list)
 
     if not recording_timestamp:
+        # avoid circular import
+        from openadapt import crud
         recording_timestamp = crud.get_latest_recording().timestamp
     perf_stats = crud.get_perf_stats(recording_timestamp)
     perf_stat_dicts = rows2dicts(perf_stats)
@@ -452,6 +455,13 @@ def plot_performance(recording_timestamp: float = None) -> None:
     logger.info(f"{fpath=}")
     plt.savefig(fpath)
     os.system(f"open {fpath}")
+
+
+def strip_element_state(action_event):
+    action_event.element_state = None
+    for child in action_event.children:
+        strip_element_state(child)
+    return action_event
 
 
 def get_functions(name):
