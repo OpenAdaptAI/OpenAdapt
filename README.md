@@ -7,7 +7,7 @@ with the power of Transformers by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
-- Converting screenshots and user input into tokenized format
+- Converting screenshots and user input into tok/enized format
 - Generating synthetic input via transformer model completions
 - Replaying synthetic input to complete tasks
 
@@ -188,14 +188,12 @@ MacOS: if you encounter system alert messages or find issues when making and rep
 
 In summary (from https://stackoverflow.com/a/69673312):
 
-```
-Settings -> Security & Privacy
-Click on the Privacy tab
-Scroll and click on the Accessibility Row
-Click +
-Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
-Click okay.
-
+1. Settings -> Security & Privacy
+2. Click on the Privacy tab
+3. Scroll and click on the Accessibility Row
+4. Click +
+5. Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
+6. Click okay.
 
 ## Developing
 
