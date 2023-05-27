@@ -4,6 +4,7 @@ Implements a ReplayStrategy mixin for generating completions with HuggingFace.
 Usage:
 
     class MyReplayStrategy(LLMReplayStrategyMixin):
+        """ """
         ...
 """
 
@@ -20,6 +21,7 @@ MAX_INPUT_SIZE = 1024
 
 
 class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
+    """ """
 
     def __init__(
         self,
@@ -39,6 +41,12 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         prompt: str,
         max_tokens: int,
     ):
+        """
+
+        :param prompt: str: 
+        :param max_tokens: int: 
+
+        """
         max_input_size = self.max_input_size
         if max_input_size and len(prompt) > max_input_size:
             logger.warning(

@@ -4,6 +4,7 @@ Implements a ReplayStrategy mixin for generating LLM completions.
 Usage:
 
     class MyReplayStrategy(OpenAIReplayStrategyMixin):
+        """ """
         ...
 """
 
@@ -34,6 +35,7 @@ encoding = tiktoken.get_encoding("cl100k_base")
 
 
 class OpenAIReplayStrategyMixin(BaseReplayStrategy):
+    """ """
 
     def __init__(
         self,
@@ -53,6 +55,13 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         system_message: str,
         #max_tokens: int,
     ):
+        """
+
+        :param prompt: str: 
+        :param system_message: str: 
+        :param #max_tokens: int: 
+
+        """
         messages = [
             {
                 "role": "system",
@@ -88,6 +97,22 @@ def create_openai_completion(
     # logit_bias=None,
     # user=None,
 ):
+    """
+
+    :param model: 
+    :param messages: 
+    :param # temperatere:  (Default value = 1)
+    :param # top_p:  (Default value = 1)
+    :param # n:  (Default value = 1)
+    :param # stream:  (Default value = False)
+    :param # stop:  (Default value = None)
+    :param # max_tokens:  (Default value = inf)
+    :param # presence_penalty:  (Default value = 0)
+    :param # frequency_penalty:  (Default value = 0)
+    :param # logit_bias:  (Default value = None)
+    :param # user:  (Default value = None)
+
+    """
     return openai.ChatCompletion.create(
         model=model,
         messages=messages,
@@ -110,6 +135,13 @@ def get_completion(
     prompt,
     model="gpt-4",
 ):
+    """
+
+    :param messages: 
+    :param prompt: 
+    :param model:  (Default value = "gpt-4")
+
+    """
 
     logger.info(f"{prompt=}")
 
@@ -126,7 +158,11 @@ def get_completion(
     def _get_completion(
         prompt: str,
     ) -> str:
-        """TODO"""
+        """TODO
+
+        :param prompt: str: 
+
+        """
 
         try:
             completion = create_openai_completion(model, messages)
@@ -165,7 +201,12 @@ def get_completion(
 # XXX TODO not currently in use
 # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
-    """Returns the number of tokens used by a list of messages."""
+    """Returns the number of tokens used by a list of messages.
+
+    :param messages: 
+    :param model:  (Default value = "gpt-3.5-turbo-0301")
+
+    """
     try:
         encoding = tiktoken.encoding_for_model(model)
     except KeyError:

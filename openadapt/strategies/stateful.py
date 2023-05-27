@@ -25,6 +25,7 @@ class StatefulReplayStrategy(
     OpenAIReplayStrategyMixin,
     strategies.base.BaseReplayStrategy,
 ):
+    """ """
 
     def __init__(
         self,
@@ -49,6 +50,12 @@ class StatefulReplayStrategy(
         active_screenshot: models.Screenshot,
         active_window: models.WindowEvent,
     ):
+        """
+
+        :param active_screenshot: models.Screenshot: 
+        :param active_window: models.WindowEvent: 
+
+        """
         logger.debug(f"{self.recording_action_idx=}")
         if self.recording_action_idx == len(self.recording.processed_action_events):
             raise StopIteration()
@@ -128,6 +135,11 @@ class StatefulReplayStrategy(
 
 
 def get_action_dict_from_completion(completion):
+    """
+
+    :param completion: 
+
+    """
     try:
         action = eval(completion)
     except Exception as exc:
@@ -140,6 +152,12 @@ def get_window_state_diffs(
     action_events,
     ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
 ):
+    """
+
+    :param action_events: 
+    :param ignore_boundary_windows:  (Default value = IGNORE_BOUNDARY_WINDOWS)
+
+    """
     ignore_window_ids = set()
     if ignore_boundary_windows:
         first_window_event = action_events[0].window_event

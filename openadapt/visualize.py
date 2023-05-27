@@ -71,6 +71,12 @@ CSS = string.Template("""
 
 
 def recursive_len(lst, key):
+    """
+
+    :param lst: 
+    :param key: 
+
+    """
     try:
         _len = len(lst)
     except TypeError:
@@ -84,6 +90,12 @@ def recursive_len(lst, key):
 
 
 def format_key(key, value):
+    """
+
+    :param key: 
+    :param value: 
+
+    """
     if isinstance(value, list):
         return f"{key} ({len(value)}; {recursive_len(value, key)})"
     else:
@@ -91,6 +103,13 @@ def format_key(key, value):
 
 
 def indicate_missing(some, every, indicator):
+    """
+
+    :param some: 
+    :param every: 
+    :param indicator: 
+
+    """
     rval = []
     some_idx = 0
     every_idx = 0
@@ -108,6 +127,12 @@ def indicate_missing(some, every, indicator):
 
 
 def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
+    """
+
+    :param obj: 
+    :param max_children:  (Default value = MAX_TABLE_CHILDREN)
+
+    """
     if isinstance(obj, list):
         children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
@@ -133,6 +158,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
 
 
 def main():
+    """ """
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
@@ -224,6 +250,7 @@ def main():
 
 
     def cleanup():
+        """ """
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")

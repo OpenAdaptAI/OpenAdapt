@@ -26,6 +26,7 @@ class DemoReplayStrategy(
     ASCIIReplayStrategyMixin,
     BaseReplayStrategy,
 ):
+    """ """
 
     def __init__(
         self,
@@ -39,6 +40,12 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
         window_event: WindowEvent,
     ):
+        """
+
+        :param screenshot: Screenshot: 
+        :param window_event: WindowEvent: 
+
+        """
         ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 

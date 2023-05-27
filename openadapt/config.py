@@ -23,6 +23,11 @@ _DEFAULTS = {
 
 
 def getenv_fallback(var_name):
+    """
+
+    :param var_name: 
+
+    """
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")

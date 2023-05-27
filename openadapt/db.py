@@ -18,6 +18,7 @@ NAMING_CONVENTION = {
 
 
 class BaseModel(DictableModel):
+    """ """
 
     __abstract__ = True
 
@@ -31,6 +32,7 @@ class BaseModel(DictableModel):
 
 
 def get_engine():
+    """ """
     engine = sa.create_engine(
         DB_URL,
         echo=DB_ECHO,
@@ -39,6 +41,11 @@ def get_engine():
 
 
 def get_base(engine):
+    """
+
+    :param engine: 
+
+    """
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(
         cls=BaseModel,

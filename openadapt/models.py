@@ -11,16 +11,24 @@ from openadapt import db, utils, window
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
 class ForceFloat(sa.TypeDecorator):
+    """ """
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
     def process_result_value(self, value, dialect):
+        """
+
+        :param value: 
+        :param dialect: 
+
+        """
         if value is not None:
             value = float(value)
         return value
 
 
 class Recording(db.Base):
+    """ """
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -52,6 +60,7 @@ class Recording(db.Base):
 
     @property
     def processed_action_events(self):
+        """ """
         from openadapt import events
         if not self._processed_action_events:
             self._processed_action_events = events.get_events(self)
@@ -60,6 +69,7 @@ class Recording(db.Base):
 
 
 class ActionEvent(db.Base):
+    """ """
     __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -96,6 +106,13 @@ class ActionEvent(db.Base):
     # TODO: playback_timestamp / original_timestamp
 
     def _key(self, key_name, key_char, key_vk):
+        """
+
+        :param key_name: 
+        :param key_char: 
+        :param key_vk: 
+
+        """
         if key_name:
             key = keyboard.Key[key_name]
         elif key_char:
@@ -109,6 +126,7 @@ class ActionEvent(db.Base):
 
     @property
     def key(self):
+        """ """
         logger.trace(
             f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
         )
@@ -120,6 +138,7 @@ class ActionEvent(db.Base):
 
     @property
     def canonical_key(self):
+        """ """
         logger.trace(
             f"{self.name=} "
             f"{self.canonical_key_name=} "
@@ -133,6 +152,11 @@ class ActionEvent(db.Base):
         )
 
     def _text(self, canonical=False):
+        """
+
+        :param canonical:  (Default value = False)
+
+        """
         sep = self._text_sep
         name_prefix = self._text_name_prefix
         name_suffix = self._text_name_suffix
@@ -165,10 +189,12 @@ class ActionEvent(db.Base):
 
     @property
     def text(self):
+        """ """
         return self._text()
 
     @property
     def canonical_text(self):
+        """ """
         return self._text(canonical=True)
 
     def __str__(self):
@@ -207,6 +233,11 @@ class ActionEvent(db.Base):
 
     @classmethod
     def from_children(cls, children_dicts):
+        """
+
+        :param children_dicts: 
+
+        """
         children = [
             ActionEvent(**child_dict)
             for child_dict in children_dicts
@@ -215,6 +246,7 @@ class ActionEvent(db.Base):
 
 
 class Screenshot(db.Base):
+    """ """
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -236,6 +268,7 @@ class Screenshot(db.Base):
 
     @property
     def image(self):
+        """ """
         if not self._image:
             if self.sct_img:
                 self._image = Image.frombytes(
@@ -252,6 +285,7 @@ class Screenshot(db.Base):
 
     @property
     def diff(self):
+        """ """
         if not self._diff:
             assert self.prev, "Attempted to compute diff before setting prev"
             self._diff = ImageChops.difference(self.image, self.prev.image)
@@ -259,6 +293,7 @@ class Screenshot(db.Base):
 
     @property
     def diff_mask(self):
+        """ """
         if not self._diff_mask:
             if self.diff:
                 self._diff_mask = self.diff.convert("1")
@@ -266,16 +301,19 @@ class Screenshot(db.Base):
 
     @property
     def array(self):
+        """ """
         return np.array(self.image)
 
     @classmethod
     def take_screenshot(cls):
+        """ """
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
 
 class WindowEvent(db.Base):
+    """ """
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -294,4 +332,5 @@ class WindowEvent(db.Base):
 
     @classmethod
     def get_active_window_event(cls):
+        """ """
         return WindowEvent(**window.get_active_window_data())

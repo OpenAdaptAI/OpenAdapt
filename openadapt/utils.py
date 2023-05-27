@@ -18,6 +18,12 @@ EMPTY = (None, [], {}, "")
 
 
 def configure_logging(logger, log_level):
+    """
+
+    :param logger: 
+    :param log_level: 
+
+    """
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
@@ -26,6 +32,12 @@ def configure_logging(logger, log_level):
 
 
 def row2dict(row, follow=True):
+    """
+
+    :param row: 
+    :param follow:  (Default value = True)
+
+    """
     if isinstance(row, dict):
         return row
     try_follow = [
@@ -50,6 +62,12 @@ def row2dict(row, follow=True):
 
 
 def round_timestamps(events, num_digits):
+    """
+
+    :param events: 
+    :param num_digits: 
+
+    """
     for event in events:
         if isinstance(event, dict):
             continue
@@ -66,6 +84,14 @@ def rows2dicts(
     drop_constant=True,
     num_digits=None,
 ):
+    """
+
+    :param rows: 
+    :param drop_empty:  (Default value = True)
+    :param drop_constant:  (Default value = True)
+    :param num_digits:  (Default value = None)
+
+    """
     if num_digits:
         round_timestamps(rows, num_digits)
     row_dicts = [row2dict(row) for row in rows]
@@ -104,10 +130,16 @@ def rows2dicts(
 
 
 def override_double_click_interval_seconds(override_value):
+    """
+
+    :param override_value: 
+
+    """
     get_double_click_interval_seconds.override_value = override_value
 
 
 def get_double_click_interval_seconds():
+    """ """
     if hasattr(get_double_click_interval_seconds, "override_value"):
         return get_double_click_interval_seconds.override_value
     if sys.platform == "darwin":
@@ -122,6 +154,7 @@ def get_double_click_interval_seconds():
 
 
 def get_double_click_distance_pixels():
+    """ """
     if sys.platform == "darwin":
         # From https://developer.apple.com/documentation/appkit/nspressgesturerecognizer/1527495-allowablemovement:
         #     The default value of this property is the same as the
@@ -143,6 +176,7 @@ def get_double_click_distance_pixels():
 
 
 def get_monitor_dims():
+    """ """
     sct = mss.mss()
     monitor = sct.monitors[0]
     monitor_width = monitor["width"]
@@ -158,6 +192,18 @@ def draw_ellipse(
     outline_transparency=.5,
     outline_width=2,
 ):
+    """
+
+    :param x: 
+    :param y: 
+    :param image: 
+    :param width_pct:  (Default value = .03)
+    :param height_pct:  (Default value = .03)
+    :param fill_transparency:  (Default value = .25)
+    :param outline_transparency:  (Default value = .5)
+    :param outline_width:  (Default value = 2)
+
+    """
     overlay = Image.new("RGBA", image.size)
     draw = ImageDraw.Draw(overlay)
     max_dim = max(image.size)
@@ -178,6 +224,12 @@ def draw_ellipse(
 
 
 def get_font(original_font_name, font_size):
+    """
+
+    :param original_font_name: 
+    :param font_size: 
+
+    """
     font_names = [
         original_font_name,
         original_font_name.lower(),
@@ -201,6 +253,25 @@ def draw_text(
     outline=False,
     outline_padding=10,
 ):
+    """
+
+    :param x: 
+    :param y: 
+    :param text: 
+    :param image: 
+    :param font_size_pct:  (Default value = 0.01)
+    :param font_name:  (Default value = "Arial.ttf")
+    :param fill:  (Default value = (255)
+    :param 0: 
+    :param 0): 
+    :param stroke_fill:  (Default value = (255)
+    :param 255: 
+    :param 255): 
+    :param stroke_width:  (Default value = 3)
+    :param outline:  (Default value = False)
+    :param outline_padding:  (Default value = 10)
+
+    """
     overlay = Image.new("RGBA", image.size)
     draw = ImageDraw.Draw(overlay)
     max_dim = max(image.size)
@@ -245,6 +316,27 @@ def draw_rectangle(
     outline_width=2,
     invert=False,
 ):
+    """
+
+    :param x0: 
+    :param y0: 
+    :param x1: 
+    :param y1: 
+    :param image: 
+    :param bg_color:  (Default value = (0)
+    :param 0: 
+    :param 0): 
+    :param fg_color:  (Default value = (255)
+    :param 255: 
+    :param 255): 
+    :param outline_color:  (Default value = (255)
+    :param bg_transparency:  (Default value = 0.25)
+    :param fg_transparency:  (Default value = 0)
+    :param outline_transparency:  (Default value = 0.5)
+    :param outline_width:  (Default value = 2)
+    :param invert:  (Default value = False)
+
+    """
     if invert:
         bg_color, fg_color = fg_color, bg_color
         bg_transparency, fg_transparency = fg_transparency, bg_transparency
@@ -262,6 +354,11 @@ def draw_rectangle(
 
 
 def get_scale_ratios(action_event):
+    """
+
+    :param action_event: 
+
+    """
     recording = action_event.recording
     image = action_event.screenshot.image
     width_ratio = image.width / recording.monitor_width
@@ -277,6 +374,16 @@ def display_event(
     marker_outline_transparency=.5,
     diff=False,
 ):
+    """
+
+    :param action_event: 
+    :param marker_width_pct:  (Default value = .03)
+    :param marker_height_pct:  (Default value = .03)
+    :param marker_fill_transparency:  (Default value = .25)
+    :param marker_outline_transparency:  (Default value = .5)
+    :param diff:  (Default value = False)
+
+    """
     recording = action_event.recording
     window_event = action_event.window_event
     screenshot = action_event.screenshot
@@ -331,6 +438,11 @@ def display_event(
 
 
 def image2utf8(image):
+    """
+
+    :param image: 
+
+    """
     image = image.convert("RGB")
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
@@ -346,6 +458,11 @@ _start_perf_counter = None
 
 
 def set_start_time(value=None):
+    """
+
+    :param value:  (Default value = None)
+
+    """
     global _start_time
     _start_time = value or time.time()
     logger.debug(f"{_start_time=}")
@@ -353,12 +470,23 @@ def set_start_time(value=None):
 
 
 def get_timestamp(is_global=False):
+    """
+
+    :param is_global:  (Default value = False)
+
+    """
     global _start_time
     return _start_time + time.perf_counter()
 
 
 # https://stackoverflow.com/a/50685454
 def evenly_spaced(arr, N):
+    """
+
+    :param arr: 
+    :param N: 
+
+    """
     if N >= len(arr):
         return arr
     idxs = set(np.round(np.linspace(0, len(arr) - 1, N)).astype(int))
@@ -366,6 +494,7 @@ def evenly_spaced(arr, N):
 
 
 def take_screenshot() -> mss.base.ScreenShot:
+    """ """
     with mss.mss() as sct:
         # monitor 0 is all in one
         monitor = sct.monitors[0]
@@ -374,6 +503,7 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 
 def get_strategy_class_by_name():
+    """ """
     from openadapt.strategies import BaseReplayStrategy
     strategy_classes = BaseReplayStrategy.__subclasses__()
     class_by_name = {
@@ -385,6 +515,11 @@ def get_strategy_class_by_name():
 
 
 def strip_element_state(action_event):
+    """
+
+    :param action_event: 
+
+    """
     action_event.element_state = None
     for child in action_event.children:
         strip_element_state(child)

@@ -19,6 +19,7 @@ SLEEP = False
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
+    """ """
 
     def __init__(
         self,
@@ -43,6 +44,12 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         screenshot: models.Screenshot,
         window_event: models.WindowEvent,
     ):
+        """
+
+        :param screenshot: models.Screenshot: 
+        :param window_event: models.WindowEvent: 
+
+        """
         if self.process_events:
             action_events = self.recording.processed_action_events
         else:

@@ -13,6 +13,7 @@ else:
 
 
 def get_active_window_data():
+    """ """
     state = get_active_window_state()
     if not state:
         return None
@@ -35,6 +36,7 @@ def get_active_window_data():
 
 
 def get_active_window_state():
+    """ """
     # TODO: save window identifier (a window's title can change, or
     # multiple windows can have the same title)
     try:
@@ -45,6 +47,12 @@ def get_active_window_state():
 
 
 def get_active_element_state(x, y):
+    """
+
+    :param x: 
+    :param y: 
+
+    """
     try:
         return impl.get_active_element_state(x, y)
     except Exception as exc:

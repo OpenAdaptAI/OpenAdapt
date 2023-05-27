@@ -14,7 +14,13 @@ window_events = []
 
 
 def _insert(event_data, table, buffer=None):
-    """Insert using Core API for improved performance (no rows are returned)"""
+    """Insert using Core API for improved performance (no rows are returned)
+
+    :param event_data: 
+    :param table: 
+    :param buffer:  (Default value = None)
+
+    """
 
     db_obj = {
         column.name: None
@@ -43,6 +49,13 @@ def _insert(event_data, table, buffer=None):
 
 
 def insert_action_event(recording_timestamp, event_timestamp, event_data):
+    """
+
+    :param recording_timestamp: 
+    :param event_timestamp: 
+    :param event_data: 
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -52,6 +65,13 @@ def insert_action_event(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_screenshot(recording_timestamp, event_timestamp, event_data):
+    """
+
+    :param recording_timestamp: 
+    :param event_timestamp: 
+    :param event_data: 
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -61,6 +81,13 @@ def insert_screenshot(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_window_event(recording_timestamp, event_timestamp, event_data):
+    """
+
+    :param recording_timestamp: 
+    :param event_timestamp: 
+    :param event_data: 
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -70,6 +97,11 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_recording(recording_data):
+    """
+
+    :param recording_data: 
+
+    """
     db_obj = Recording(**recording_data)
     db.add(db_obj)
     db.commit()
@@ -78,6 +110,7 @@ def insert_recording(recording_data):
 
 
 def get_latest_recording():
+    """ """
     return (
         db
         .query(Recording)
@@ -88,6 +121,11 @@ def get_latest_recording():
 
 
 def get_recording(timestamp):
+    """
+
+    :param timestamp: 
+
+    """
     return (
         db
         .query(Recording)
@@ -97,6 +135,12 @@ def get_recording(timestamp):
 
 
 def _get(table, recording_timestamp):
+    """
+
+    :param table: 
+    :param recording_timestamp: 
+
+    """
     return (
         db
         .query(table)
@@ -107,10 +151,21 @@ def _get(table, recording_timestamp):
 
 
 def get_action_events(recording):
+    """
+
+    :param recording: 
+
+    """
     return _get(ActionEvent, recording.timestamp)
 
 
 def get_screenshots(recording, precompute_diffs=False):
+    """
+
+    :param recording: 
+    :param precompute_diffs:  (Default value = False)
+
+    """
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
@@ -126,4 +181,9 @@ def get_screenshots(recording, precompute_diffs=False):
 
 
 def get_window_events(recording):
+    """
+
+    :param recording: 
+
+    """
     return _get(WindowEvent, recording.timestamp)

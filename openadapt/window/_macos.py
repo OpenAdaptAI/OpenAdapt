@@ -9,6 +9,7 @@ import Quartz
 
 
 def get_active_window_state():
+    """ """
     # pywinctl performance on mac is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
@@ -45,6 +46,7 @@ def get_active_window_state():
 
 
 def get_active_window_meta():
+    """ """
     windows = Quartz.CGWindowListCopyWindowInfo(
         (
             Quartz.kCGWindowListExcludeDesktopElements |
@@ -60,6 +62,11 @@ def get_active_window_meta():
 
 
 def get_active_window(window_meta):
+    """
+
+    :param window_meta: 
+
+    """
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
     error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
@@ -72,12 +79,23 @@ def get_active_window(window_meta):
 
 
 def get_window_data(window_meta):
+    """
+
+    :param window_meta: 
+
+    """
     window = get_active_window(window_meta)
     state = dump_state(window)
     return state
 
 
 def dump_state(element, elements=None):
+    """
+
+    :param element: 
+    :param elements:  (Default value = None)
+
+    """
     elements = elements or set()
     if element in elements:
         return
@@ -133,7 +151,11 @@ def dump_state(element, elements=None):
 
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
 def deepconvert_objc(object):
-    """Convert all contents of an ObjC object to Python primitives."""
+    """Convert all contents of an ObjC object to Python primitives.
+
+    :param object: 
+
+    """
     value = object
     if isinstance(object, AppKit.NSNumber):
         value = int(object)
@@ -148,6 +170,12 @@ def deepconvert_objc(object):
 
 
 def get_active_element_state(x, y):
+    """
+
+    :param x: 
+    :param y: 
+
+    """
     window_meta = get_active_window_meta()
     pid = window_meta["kCGWindowOwnerPID"]
     app = atomacos._a11y.AXUIElement.from_pid(pid)
@@ -163,6 +191,7 @@ def get_active_element_state(x, y):
 
 
 def main():
+    """ """
     import time
     time.sleep(1)
 

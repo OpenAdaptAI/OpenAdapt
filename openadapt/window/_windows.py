@@ -3,6 +3,7 @@ import pygetwindow as pgw
 
 
 def get_active_window_state():
+    """ """
     window = pgw.getActiveWindow()
     if not window:
         logger.warning(f"{window=}")
@@ -26,5 +27,11 @@ def get_active_window_state():
 
 
 def get_element_at_position(x, y):
+    """
+
+    :param x: 
+    :param y: 
+
+    """
     # TODO
     return None

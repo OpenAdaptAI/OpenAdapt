@@ -15,6 +15,13 @@ def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
 ):
+    """
+
+    :param strategy_name: str: 
+    :param timestamp: Union[str: 
+    :param None]:  (Default value = None)
+
+    """
     utils.configure_logging(logger, LOG_LEVEL)
 
     if timestamp:

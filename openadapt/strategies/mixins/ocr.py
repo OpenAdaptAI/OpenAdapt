@@ -6,6 +6,7 @@ Uses RapidOCR: github.com/RapidAI/RapidOCR/blob/main/python/README.md
 Usage:
 
     class MyReplayStrategy(OCRReplayStrategyMixin):
+        """ """
         ...
 """
 
@@ -28,6 +29,7 @@ from openadapt.strategies.base import BaseReplayStrategy
 
 
 class OCRReplayStrategyMixin(BaseReplayStrategy):
+    """ """
     def __init__(
         self,
         recording: Recording,
@@ -40,6 +42,11 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         self,
         screenshot: Screenshot
     ):
+        """
+
+        :param screenshot: Screenshot: 
+
+        """
         # TOOD: improve performance
         result, elapse = self.ocr(screenshot.array)
         #det_elapse, cls_elapse, rec_elapse = elapse
@@ -55,20 +62,20 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 def get_text_df(
     result: List[List[Union[List[float], str, float]]],
 ):
-	"""
-	Convert RapidOCR result to DataFrame.
+    """Convert RapidOCR result to DataFrame.
 
-	Args:
-		result: list of [coordinates, text, confidence]
-			coordinates:
-				[tl_x, tl_y],
-				[tr_x, tr_y],
-				[br_x, br_y],
-				[bl_x, bl_y]
+    :param result: list of [coordinates, text, confidence]
+    		coordinates:
+    			[tl_x, tl_y],
+    			[tr_x, tr_y],
+    			[br_x, br_y],
+    			[bl_x, bl_y]
+    :param result: List[List[Union[List[float]: 
+    :param str: 
+    :param float]]]: 
+    :returns: pd.DataFrame
 
-	Returns:
-		pd.DataFrame
-	"""
+    """
 
 	coords = [coords for coords, text, confidence in result]
 	columns = ["tl", "tr", "bl", "br"]
@@ -89,11 +96,10 @@ def get_text_from_df(
 ):
     """Converts a DataFrame produced by get_text_df into a string.
 
-    Params:
-        df: DataFrame produced by get_text_df
+    :param df: DataFrame produced by get_text_df
+    :param df: pd.DataFrame: 
+    :returns: str
 
-    Returns:
-        str
     """
 
     df["text"] = df["text"].apply(preprocess_text)
@@ -107,6 +113,14 @@ def get_text_from_df(
 
 
 def unnest(df, explode, axis, suffixes=None):
+    """
+
+    :param df: 
+    :param explode: 
+    :param axis: 
+    :param suffixes:  (Default value = None)
+
+    """
     # https://stackoverflow.com/a/53218939
     if axis == 1:
         df1 = pd.concat([df[x].explode() for x in explode], axis=1)
@@ -130,20 +144,40 @@ def unnest(df, explode, axis, suffixes=None):
 
 
 def preprocess_text(text):
+    """
+
+    :param text: 
+
+    """
     return text.strip()
 
 
 def get_centroid(row):
+    """
+
+    :param row: 
+
+    """
     x = (row["tl_x"] + row["tr_x"] + row["bl_x"] + row["br_x"]) / 4
     y = (row["tl_y"] + row["tr_y"] + row["bl_y"] + row["br_y"]) / 4
     return x, y
 
 
 def get_height(row):
+    """
+
+    :param row: 
+
+    """
     return abs(row["tl_y"] - row["bl_y"])
 
 
 def sort_rows(df):
+    """
+
+    :param df: 
+
+    """
     df["centroid"] = df.apply(get_centroid, axis=1)
     df["x"] = df["centroid"].apply(lambda coord: coord[0])
     df["y"] = df["centroid"].apply(lambda coord: coord[1])
@@ -152,6 +186,12 @@ def sort_rows(df):
 
 
 def cluster_lines(df, eps):
+    """
+
+    :param df: 
+    :param eps: 
+
+    """
     coords = df[["x", "y"]].to_numpy()
     cluster_model = DBSCAN(eps=eps, min_samples=1)
     df["line_cluster"] = cluster_model.fit_predict(coords)
@@ -159,6 +199,11 @@ def cluster_lines(df, eps):
 
 
 def cluster_words(df):
+    """
+
+    :param df: 
+
+    """
     line_dfs = []
     for line_cluster in df["line_cluster"].unique():
         line_df = df[df["line_cluster"] == line_cluster].copy()
@@ -176,6 +221,11 @@ def cluster_words(df):
 
 
 def concat_text(df):
+    """
+
+    :param df: 
+
+    """
     df.sort_values(by=["line_cluster", "word_cluster"], inplace=True)
     lines = df.groupby("line_cluster")["text"].apply(lambda x: " ".join(x))
     return "\n".join(lines)

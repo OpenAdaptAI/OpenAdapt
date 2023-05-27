@@ -18,6 +18,7 @@ MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
+    """ """
 
     def __init__(
         self,
@@ -36,9 +37,15 @@ class BaseReplayStrategy(ABC):
         self,
         screenshot: models.Screenshot,
     ) -> models.ActionEvent:
+        """
+
+        :param screenshot: models.Screenshot: 
+
+        """
         pass
 
     def run(self):
+        """ """
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
         while True:
@@ -79,6 +86,7 @@ class BaseReplayStrategy(ABC):
                     import ipdb; ipdb.set_trace()
 
     def log_fps(self):
+        """ """
         t = time.time()
         self.frame_times.append(t)
         dts = np.diff(self.frame_times)
