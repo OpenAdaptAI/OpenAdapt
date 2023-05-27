@@ -299,6 +299,7 @@ class WindowEvent(db.Base):
 
 class PerformanceStat(db.Base):
     __tablename__ = "performance_stat"
+
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
     event_type = sa.Column(sa.String)
