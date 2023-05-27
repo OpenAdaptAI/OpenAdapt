@@ -6,7 +6,7 @@ Usage:
 
 """
 
-from collections import Counter, defaultdict, namedtuple
+from collections import namedtuple
 from functools import partial
 from typing import Any, Callable, Dict
 import multiprocessing
@@ -20,7 +20,6 @@ import time
 from loguru import logger
 from pynput import keyboard, mouse
 import fire
-import matplotlib.pyplot as plt
 import mss.tools
 import pygetwindow as pgw
 
@@ -30,7 +29,6 @@ from puterbot.crud import (
     insert_recording,
     insert_window_event,
     insert_perf_stat,
-    get_perf_stats,
 )
 from puterbot.utils import (
     configure_logging,
@@ -40,8 +38,8 @@ from puterbot.utils import (
     take_screenshot,
     get_timestamp,
     set_start_time,
-    rows2dicts,
 )
+from puterbot import utils
 
 
 EVENT_TYPES = ("screen", "input", "window")
@@ -51,7 +49,6 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "input": True,
     "window": True,
 }
-DIRNAME_PERFORMANCE_PLOTS = "performance"
 PLOT_PERFORMANCE = False
 
 
@@ -460,57 +457,6 @@ def performance_stats_writer (
         insert_perf_stat(recording_timestamp, event_type, start_time, end_time)
     logger.info("performance stats writer done")
 
-def plot_performance(recording_timestamp: float) -> None:
-    """
-    Plot the performance of the event processing and writing.
-
-    Args:
-        recording_timestamp: The timestamp of the recording.
-        perf_q: A queue with performance data.
-    """
-
-    type_to_prev_start_time = defaultdict(list)
-    type_to_start_time_deltas = defaultdict(list)
-    type_to_proc_times = defaultdict(list)
-    type_to_count = Counter()
-    type_to_timestamps = defaultdict(list)
-
-    perf_stats = get_perf_stats(recording_timestamp)
-    perf_stat_dicts = rows2dicts(perf_stats)
-    for perf_stat in perf_stat_dicts:
-        prev_start_time = type_to_prev_start_time.get(perf_stat["event_type"], perf_stat["start_time"])
-        start_time_delta = perf_stat["start_time"] - prev_start_time
-        type_to_start_time_deltas[perf_stat["event_type"]].append(start_time_delta)
-        type_to_prev_start_time[perf_stat["event_type"]] = perf_stat["start_time"]
-        type_to_proc_times[perf_stat["event_type"]].append(perf_stat["end_time"] - perf_stat["start_time"])
-        type_to_count[perf_stat["event_type"]] += 1
-        type_to_timestamps[perf_stat["event_type"]].append(perf_stat["start_time"])
-
-    y_data = {"proc_times": {}, "start_time_deltas": {}}
-    for i, event_type in enumerate(type_to_count):
-        type_count = type_to_count[event_type]
-        start_time_deltas = type_to_start_time_deltas[event_type]
-        proc_times = type_to_proc_times[event_type]
-        y_data["proc_times"][event_type] = proc_times
-        y_data["start_time_deltas"][event_type] = start_time_deltas
-
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
-    for i, data_type in enumerate(y_data):
-        for event_type in y_data[data_type]:
-            x = type_to_timestamps[event_type]
-            y = y_data[data_type][event_type]
-            axes[i].scatter(x, y, label=event_type)
-        axes[i].set_title(data_type)
-        axes[i].legend()
-    # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", f"{recording_timestamp}"]
-    fname = "-".join(fname_parts) + ".png"
-    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
-    logger.info(f"{fpath=}")
-    plt.savefig(fpath)
-    os.system(f"open {fpath}")
-
 
 def create_recording(
     task_description: str,
@@ -725,7 +671,7 @@ def record(
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
-        plot_performance(recording_timestamp)
+        utils.plot_performance(recording_timestamp)
 
     logger.info("done")
 
