@@ -427,7 +427,7 @@ def performance_stats_writer (
         except queue.Empty:
             continue
 
-        utils.insert_perf_stat(
+        crud.insert_perf_stat(
             recording_timestamp, event_type, start_time, end_time,
         )
     logger.info("performance stats writer done")
