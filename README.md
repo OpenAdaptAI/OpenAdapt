@@ -186,6 +186,16 @@ MacOS: if you encounter system alert messages or find issues when making and rep
 
 ![MacOS System Alerts](./assets/macOS_permissions_alert.png)
 
+In summary (from https://stackoverflow.com/a/69673312):
+
+```
+Settings -> Security & Privacy
+Click on the Privacy tab
+Scroll and click on the Accessibility Row
+Click +
+Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
+Click okay.
+
 
 ## Developing
 

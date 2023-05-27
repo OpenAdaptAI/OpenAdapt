@@ -14,5 +14,5 @@ cache
 # db
 *.db
 
-# Packages in editable mode
+# Generated when adding editable dependencies in requirements.txt (-e)
 src
