@@ -49,7 +49,7 @@ def get_active_window_state():
 def get_active_element_state(x, y):
     """
 
-    :param x: 
+    :param x: param y:
     :param y: 
 
     """

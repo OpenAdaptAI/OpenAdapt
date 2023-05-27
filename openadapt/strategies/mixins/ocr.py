@@ -44,6 +44,8 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
     ):
         """
 
+        :param screenshot: Screenshot:
+        :param screenshot: Screenshot:
         :param screenshot: Screenshot: 
 
         """
@@ -70,8 +72,11 @@ def get_text_df(
     			[tr_x, tr_y],
     			[br_x, br_y],
     			[bl_x, bl_y]
+    :param result: List[List[Union[List[float]:
+    :param str: param float]]]:
+    :param result: List[List[Union[List[float]:
+    :param float: returns: pd.DataFrame
     :param result: List[List[Union[List[float]: 
-    :param str: 
     :param float]]]: 
     :returns: pd.DataFrame
 
@@ -97,6 +102,8 @@ def get_text_from_df(
     """Converts a DataFrame produced by get_text_df into a string.
 
     :param df: DataFrame produced by get_text_df
+    :param df: pd.DataFrame:
+    :param df: pd.DataFrame:
     :param df: pd.DataFrame: 
     :returns: str
 
@@ -115,9 +122,9 @@ def get_text_from_df(
 def unnest(df, explode, axis, suffixes=None):
     """
 
-    :param df: 
-    :param explode: 
-    :param axis: 
+    :param df: param explode:
+    :param axis: param suffixes:  (Default value = None)
+    :param explode: param suffixes:  (Default value = None)
     :param suffixes:  (Default value = None)
 
     """
@@ -188,7 +195,7 @@ def sort_rows(df):
 def cluster_lines(df, eps):
     """
 
-    :param df: 
+    :param df: param eps:
     :param eps: 
 
     """

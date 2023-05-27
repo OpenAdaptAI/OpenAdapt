@@ -39,6 +39,7 @@ class BaseReplayStrategy(ABC):
     ) -> models.ActionEvent:
         """
 
+        :param screenshot: models.Screenshot:
         :param screenshot: models.Screenshot: 
 
         """

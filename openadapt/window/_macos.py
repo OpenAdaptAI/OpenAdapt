@@ -92,7 +92,7 @@ def get_window_data(window_meta):
 def dump_state(element, elements=None):
     """
 
-    :param element: 
+    :param element: param elements:  (Default value = None)
     :param elements:  (Default value = None)
 
     """
@@ -172,7 +172,7 @@ def deepconvert_objc(object):
 def get_active_element_state(x, y):
     """
 
-    :param x: 
+    :param x: param y:
     :param y: 
 
     """

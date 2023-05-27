@@ -57,6 +57,10 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
     ):
         """
 
+        :param prompt: str:
+        :param system_message: str:
+        :param prompt: str:
+        :param system_message: str:
         :param prompt: str: 
         :param system_message: str: 
         :param #max_tokens: int: 
@@ -99,8 +103,8 @@ def create_openai_completion(
 ):
     """
 
-    :param model: 
-    :param messages: 
+    :param model: param messages:
+    :param messages: param # temperatere:  (Default value = 1)
     :param # temperatere:  (Default value = 1)
     :param # top_p:  (Default value = 1)
     :param # n:  (Default value = 1)
@@ -137,9 +141,9 @@ def get_completion(
 ):
     """
 
-    :param messages: 
+    :param messages: param prompt:
+    :param model: Default value = "gpt-4")
     :param prompt: 
-    :param model:  (Default value = "gpt-4")
 
     """
 
@@ -160,6 +164,8 @@ def get_completion(
     ) -> str:
         """TODO
 
+        :param prompt: str:
+        :param prompt: str:
         :param prompt: str: 
 
         """
@@ -203,8 +209,8 @@ def get_completion(
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     """Returns the number of tokens used by a list of messages.
 
-    :param messages: 
-    :param model:  (Default value = "gpt-3.5-turbo-0301")
+    :param messages: param model:  (Default value = "gpt-3.5-turbo-0301")
+    :param model: Default value = "gpt-3.5-turbo-0301")
 
     """
     try:

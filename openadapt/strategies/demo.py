@@ -42,6 +42,8 @@ class DemoReplayStrategy(
     ):
         """
 
+        :param screenshot: Screenshot:
+        :param window_event: WindowEvent:
         :param screenshot: Screenshot: 
         :param window_event: WindowEvent: 
 

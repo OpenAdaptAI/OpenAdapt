@@ -52,6 +52,8 @@ class StatefulReplayStrategy(
     ):
         """
 
+        :param active_screenshot: models.Screenshot:
+        :param active_window: models.WindowEvent:
         :param active_screenshot: models.Screenshot: 
         :param active_window: models.WindowEvent: 
 
@@ -154,7 +156,7 @@ def get_window_state_diffs(
 ):
     """
 
-    :param action_events: 
+    :param action_events: param ignore_boundary_windows:  (Default value = IGNORE_BOUNDARY_WINDOWS)
     :param ignore_boundary_windows:  (Default value = IGNORE_BOUNDARY_WINDOWS)
 
     """

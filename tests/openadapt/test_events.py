@@ -39,6 +39,7 @@ timestamp_raw = _start_time
 
 
 def reset_timestamp():
+    """ """
     global timestamp
     global timestamp_raw
     timestamp = _start_time
@@ -47,6 +48,7 @@ def reset_timestamp():
 
 @pytest.fixture(autouse=True)
 def _reset_timestamp():
+    """ """
     reset_timestamp()
 
 
@@ -56,6 +58,14 @@ def make_action_event(
     get_pre_children=None,
     get_post_children=None,
 ):
+    """
+
+    :param event_dict: 
+    :param dt:  (Default value = None)
+    :param get_pre_children:  (Default value = None)
+    :param get_post_children:  (Default value = None)
+
+    """
     assert "chidren" not in event_dict, event_dict["children"]
     children = get_children_with_timestamps(get_pre_children)
     event_dict["children"] = children
@@ -91,6 +101,11 @@ def make_action_event(
 
 
 def get_children_with_timestamps(get_children):
+    """
+
+    :param get_children: 
+
+    """
     if not get_children:
         return []
 
@@ -111,6 +126,14 @@ def get_children_with_timestamps(get_children):
 
 
 def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
+    """
+
+    :param x:  (Default value = 0)
+    :param y:  (Default value = 0)
+    :param get_pre_children:  (Default value = None)
+    :param get_post_children:  (Default value = None)
+
+    """
     return make_action_event(
         {
             "name": "move",
@@ -131,6 +154,17 @@ def make_click_event(
     get_pre_children=None,
     get_post_children=None,
 ):
+    """
+
+    :param pressed: 
+    :param mouse_x:  (Default value = 0)
+    :param mouse_y:  (Default value = 0)
+    :param dt:  (Default value = None)
+    :param button_name:  (Default value = "left")
+    :param get_pre_children:  (Default value = None)
+    :param get_post_children:  (Default value = None)
+
+    """
     return make_action_event(
         {
             "name": "click",
@@ -146,6 +180,12 @@ def make_click_event(
 
 
 def make_scroll_event(dy=0, dx=0):
+    """
+
+    :param dy:  (Default value = 0)
+    :param dx:  (Default value = 0)
+
+    """
     return make_action_event({
         "name": "scroll",
         "mouse_dx": dx,
@@ -154,6 +194,13 @@ def make_scroll_event(dy=0, dx=0):
 
 
 def make_click_events(dt_released, dt_pressed=None, button_name="left"):
+    """
+
+    :param dt_released: 
+    :param dt_pressed:  (Default value = None)
+    :param button_name:  (Default value = "left")
+
+    """
     return (
         make_click_event(True, dt=dt_pressed, button_name=button_name),
         make_click_event(False, dt=dt_released, button_name=button_name),
@@ -163,6 +210,16 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 def make_processed_click_event(
     name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+
+    :param name: 
+    :param dt: 
+    :param get_children: 
+    :param mouse_x:  (Default value = 0)
+    :param mouse_y:  (Default value = 0)
+    :param button_name:  (Default value = "left")
+
+    """
     return make_action_event(
         {
             "name": name,
@@ -178,6 +235,15 @@ def make_processed_click_event(
 def make_singleclick_event(
     dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+
+    :param dt: 
+    :param get_children: 
+    :param mouse_x:  (Default value = 0)
+    :param mouse_y:  (Default value = 0)
+    :param button_name:  (Default value = "left")
+
+    """
     return make_processed_click_event(
         "singleclick",
         dt,
@@ -191,6 +257,15 @@ def make_singleclick_event(
 def make_doubleclick_event(
     dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+
+    :param dt: 
+    :param get_children: 
+    :param mouse_x:  (Default value = 0)
+    :param mouse_y:  (Default value = 0)
+    :param button_name:  (Default value = "left")
+
+    """
     return make_processed_click_event(
         "doubleclick",
         dt,
@@ -202,6 +277,7 @@ def make_doubleclick_event(
 
 
 def test_merge_consecutive_mouse_click_events():
+    """ """
     if OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS:
         override_double_click_interval_seconds(
             OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS
@@ -260,6 +336,7 @@ def test_merge_consecutive_mouse_click_events():
 
 
 def test_merge_consecutive_mouse_move_events():
+    """ """
     raw_events = [
         make_scroll_event(),
         make_move_event(0),
@@ -297,6 +374,7 @@ def test_merge_consecutive_mouse_move_events():
 
 
 def test_merge_consecutive_mouse_scroll_events():
+    """ """
     raw_events = [
         make_move_event(),
         make_scroll_event(dx=2),
@@ -323,6 +401,7 @@ def test_merge_consecutive_mouse_scroll_events():
 
 
 def test_remove_redundant_mouse_move_events():
+    """ """
     # certain failure modes only appear in longer event chains
     raw_events = list(itertools.chain(*[
         [
@@ -376,6 +455,12 @@ def test_remove_redundant_mouse_move_events():
 
 
 def make_press_event(char=None, name=None):
+    """
+
+    :param char:  (Default value = None)
+    :param name:  (Default value = None)
+
+    """
     assert (char or name) and not (char and name), (char, name)
     return make_action_event({
         "name": "press",
@@ -385,6 +470,12 @@ def make_press_event(char=None, name=None):
 
 
 def make_release_event(char=None, name=None):
+    """
+
+    :param char:  (Default value = None)
+    :param name:  (Default value = None)
+
+    """
     assert (char or name) and not (char and name), (char, name)
     return make_action_event({
         "name": "release",
@@ -394,6 +485,11 @@ def make_release_event(char=None, name=None):
 
 
 def make_type_event(get_children):
+    """
+
+    :param get_children: 
+
+    """
     return make_action_event(
         {
             "name": "type",
@@ -403,10 +499,16 @@ def make_type_event(get_children):
 
 
 def make_key_events(char):
+    """
+
+    :param char: 
+
+    """
     return make_press_event(char), make_release_event(char)
 
 
 def test_merge_consecutive_keyboard_events():
+    """ """
     raw_events = [
         make_click_event(True),
         *make_key_events("a"),
@@ -455,6 +557,7 @@ def test_merge_consecutive_keyboard_events():
 
 
 def test_merge_consecutive_keyboard_events__grouped():
+    """ """
     raw_events = [
         make_click_event(True),
         *make_key_events("a"),
@@ -503,10 +606,16 @@ def test_merge_consecutive_keyboard_events__grouped():
 
 
 def make_window_event(event_dict):
+    """
+
+    :param event_dict: 
+
+    """
     return WindowEvent(**event_dict)
 
 
 def test_discard_unused_events():
+    """ """
     window_events = [
         make_window_event({"timestamp": 0}),
         make_window_event({"timestamp": 1}),

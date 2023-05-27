@@ -46,6 +46,8 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
     ):
         """
 
+        :param screenshot: models.Screenshot:
+        :param window_event: models.WindowEvent:
         :param screenshot: models.Screenshot: 
         :param window_event: models.WindowEvent: 
 

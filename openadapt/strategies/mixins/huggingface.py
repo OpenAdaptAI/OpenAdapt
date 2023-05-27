@@ -43,6 +43,10 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
     ):
         """
 
+        :param prompt: str:
+        :param max_tokens: int:
+        :param prompt: str:
+        :param max_tokens: int:
         :param prompt: str: 
         :param max_tokens: int: 
 

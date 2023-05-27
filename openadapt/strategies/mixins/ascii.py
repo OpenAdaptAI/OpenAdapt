@@ -39,6 +39,14 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
     ):
         """
 
+        :param screenshot: Screenshot:
+        :param monochrome: bool:  (Default value = MONOCHROME)
+        :param columns: int:  (Default value = COLUMNS)
+        :param width_ratio: float:  (Default value = WIDTH_RATIO)
+        :param screenshot: Screenshot:
+        :param monochrome: bool:  (Default value = MONOCHROME)
+        :param columns: int:  (Default value = COLUMNS)
+        :param width_ratio: float:  (Default value = WIDTH_RATIO)
         :param screenshot: Screenshot: 
         :param monochrome: bool:  (Default value = MONOCHROME)
         :param columns: int:  (Default value = COLUMNS)
