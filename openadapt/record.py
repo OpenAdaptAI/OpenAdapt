@@ -682,6 +682,8 @@ def record(
 
             # Convert audio to text using OpenAI's Whisper
 
+            model = whisper.load_model("base")
+            result = model.transcribe("audio.wav")
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
