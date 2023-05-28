@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import db, utils, window
+from openadapt import db, utils, window, scrub
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -161,7 +161,9 @@ class ActionEvent(db.Base):
                 )
             else:
                 text = key_attr
-        return text
+
+        scrubbed_text = scrub.scrub_text(text, is_hyphenated=True)
+        return scrubbed_text
 
     @property
     def text(self):

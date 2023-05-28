@@ -25,7 +25,7 @@ import fire
 import matplotlib.pyplot as plt
 import mss.tools
 
-from openadapt import config, crud, utils, window
+from openadapt import config, crud, utils, window, scrub
 
 
 EVENT_TYPES = ("screen", "action", "window")
@@ -356,7 +356,9 @@ def read_screen_events(
         if screenshot is None:
             logger.warning("screenshot was None")
             continue
-        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
+    # Scrubbing a ScreenShot
+        scrubbed_screenshot = scrub.scrub_screenshot(screenshot)
+        event_q.put(Event(utils.get_timestamp(), "screen", scrubbed_screenshot))
     logger.info("done")
 
 
@@ -551,12 +553,14 @@ def record(
     Args:
         task_description: a text description of the task that will be recorded
     """
+    
+    scrubbed_task_description = scrub.scrub_text(task_description)
 
     utils.configure_logging(logger, LOG_LEVEL)
 
-    logger.info(f"{task_description=}")
+    logger.info(f"{scrubbed_task_description=}")
 
-    recording = create_recording(task_description)
+    recording = create_recording(scrubbed_task_description)
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()

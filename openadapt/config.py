@@ -4,6 +4,9 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_anonymizer import AnonymizerEngine
 
 
 _DEFAULTS = {
@@ -12,7 +15,7 @@ _DEFAULTS = {
     "CACHE_VERBOSITY": 0,
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
-    "OPENAI_API_KEY": None,
+    "OPENAI_API_KEY": "123",
     #"OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
@@ -44,7 +47,19 @@ if multiprocessing.current_process().name == "MainProcess":
         if not key.startswith("_") and key.isupper():
             logger.info(f"{key}={val}")
 
-DEFAULT_SCRUB_FILL_COLOR = (255,0,0)
+# SCRUBBING CONFIGURATIONS
+
+SCRUB_CONFIG = {
+    "nlp_engine_name": "spacy",
+    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+}
+SCRUB_PROVIDER = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG)
+NLP_ENGINE = SCRUB_PROVIDER.create_engine()
+ANALYZER = AnalyzerEngine(
+    nlp_engine=NLP_ENGINE,
+    supported_languages=["en"]
+)
+ANONYMIZER = AnonymizerEngine()
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
@@ -56,7 +71,7 @@ SCRUB_IGNORE_ENTITIES = [
     # 'PHONE_NUMBER',
     # 'US_ITIN',
     # 'AU_ABN',
-    "DATE_TIME",
+    'DATE_TIME',
     # 'NRP',
     # 'SG_NRIC_FIN',
     # 'AU_ACN',
@@ -70,3 +85,15 @@ SCRUB_IGNORE_ENTITIES = [
     # 'US_SSN',
     # 'MEDICAL_LICENSE'
 ]
+SCRUBBING_ENTITIES = [
+    entity
+    for entity in ANALYZER.get_supported_entities()
+    if entity not in SCRUB_IGNORE_ENTITIES
+]
+SCRUB_KEYS_HTML = [
+    'text',
+    'canonical_text',
+    'title',
+    'state'
+]
+DEFAULT_SCRUB_FILL_COLOR = (255,)

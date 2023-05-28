@@ -2,6 +2,8 @@ import sys
 
 from loguru import logger
 
+from openadapt import scrub
+
 
 if sys.platform == "darwin":
     from . import _macos as impl
@@ -31,7 +33,8 @@ def get_active_window_data():
         "window_id": window_id,
         "state": state,
     }
-    return window_data
+    scrubbed_window_data = scrub.scrub_dict(window_data)
+    return scrubbed_window_data
 
 
 def get_active_window_state():

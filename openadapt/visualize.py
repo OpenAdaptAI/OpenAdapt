@@ -129,7 +129,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
         ])
         html_str = f"<table>{rows_html}</table>"
     else:
-        html_str = html.escape(scrub.scrub_text(str(obj)))
+        html_str = html.escape((str(obj)))
     return html_str
 
 
@@ -142,6 +142,7 @@ def main():
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
+    # scrubbed_event_dicts = scrub.scrub_list_dicts(input_list=event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -152,6 +153,7 @@ def main():
         ),
         row(
             Div(
+                # text=f"{dict2html(scrub.scrub_dict(row2dict(recording)))}",
                 text=f"{dict2html(row2dict(recording))}",
             ),
         ),
@@ -166,9 +168,12 @@ def main():
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        image = scrub.scrub_image(display_event(action_event))
-        diff = scrub.scrub_image(display_event(action_event, diff=True))
-        mask = scrub.scrub_image(action_event.screenshot.diff_mask)
+        image = display_event(action_event)
+        # image = scrub.scrub_image(display_event(action_event))
+        diff = display_event(action_event, diff=True)
+        # diff = scrub.scrub_image(display_event(action_event, diff=True))
+        mask = action_event.screenshot.diff_mask
+        # mask = scrub.scrub_image(action_event.screenshot.diff_mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -205,7 +210,7 @@ def main():
                 Div(
                     text=f"""
                         <table>
-                            {dict2html(row2dict(action_event))}
+                            {dict2html((row2dict(action_event)))}
                         </table>
                     """
                 ),
@@ -230,7 +235,7 @@ def main():
         logger.info(f"{removed=}")
 
 
-    Timer(1, cleanup).start()
+    # Timer(1, cleanup).start()
 
 
 if __name__ == "__main__":
