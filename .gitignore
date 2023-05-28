@@ -19,3 +19,6 @@ cache
 
 # venv Folder
 venv/*
+
+# HTML
+*.html
