@@ -166,6 +166,7 @@ def write_screen_event(
     assert event.type == "screen", event
     screenshot = event.data
     png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+    # event_data = {"png_data": scrub.scrub_png_data(png_data)}
     event_data = {"png_data": png_data}
     crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -357,8 +358,8 @@ def read_screen_events(
             logger.warning("screenshot was None")
             continue
     # Scrubbing a ScreenShot
-        scrubbed_screenshot = scrub.scrub_screenshot(screenshot)
-        event_q.put(Event(utils.get_timestamp(), "screen", scrubbed_screenshot))
+        # scrubbed_screenshot = scrub.scrub_screenshot(screenshot)
+        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("done")
 
 

@@ -7,6 +7,7 @@ from loguru import logger
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
+from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
 
 
 _DEFAULTS = {
@@ -60,6 +61,7 @@ ANALYZER = AnalyzerEngine(
     supported_languages=["en"]
 )
 ANONYMIZER = AnonymizerEngine()
+IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER))
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
@@ -96,4 +98,4 @@ SCRUB_KEYS_HTML = [
     'title',
     'state'
 ]
-DEFAULT_SCRUB_FILL_COLOR = (255,)
+DEFAULT_SCRUB_FILL_COLOR = (255,0,0)

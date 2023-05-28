@@ -7,10 +7,10 @@ Usage:
     
 """
 
-from PIL import Image
+from io import BytesIO
 from mss import base
+from PIL import Image
 from presidio_anonymizer.entities import OperatorConfig
-from presidio_image_redactor import ImageRedactorEngine
 import fire
 
 from openadapt import config, utils
@@ -30,7 +30,7 @@ def scrub_text(text: str,  is_hyphenated: bool = False) -> str:
     if text is None:
         return None
 
-    if  is_hyphenated:
+    if is_hyphenated:
         text = ''.join(text.split('-'))
 
     analyzer_results = config.ANALYZER.analyze(
@@ -73,11 +73,8 @@ def scrub_image(image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR) -> Ima
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
 
-    # Initialize the engine
-    engine = ImageRedactorEngine()
-
     # Redact the image
-    redacted_image = engine.redact(
+    redacted_image = config.IMAGE_REDACTOR.redact(
         image, fill=fill_color, entities=config.SCRUBBING_ENTITIES
     )
 
@@ -120,6 +117,39 @@ def scrub_screenshot(
 
     # Return the redacted screenshot
     return redacted_screenshot
+
+
+def scrub_png_data(png_data: bytes, fill_color=config.DEFAULT_SCRUB_FILL_COLOR) -> bytes:
+    """
+    
+    Scrub the png_data of all PII/PHI using Presidio Image Redactor
+    
+    Args:
+        png_data (bytes): PNG data to be scrubbed
+        
+    Returns:
+        bytes: Scrubbed PNG data
+    
+    Raises:
+        None
+    """
+    # Load image from the input png_data
+    image = Image.open(BytesIO(png_data))
+
+    # Redact the image with red color
+    redacted_image = config.IMAGE_REDACTOR.redact(
+        image, fill=fill_color, entities=config.SCRUBBING_ENTITIES
+    )
+
+    # Save the redacted image to an in-memory buffer
+    output_buffer = BytesIO()
+    redacted_image.save(output_buffer, format='PNG') # type: ignore
+
+    # Get the redacted image data from the buffer
+    redacted_png_data = output_buffer.getvalue()
+
+    # Return the redacted image data
+    return redacted_png_data
 
 
 def scrub_dict(input_dict: dict, list_keys: list = None) -> dict:

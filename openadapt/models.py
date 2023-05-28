@@ -61,6 +61,9 @@ class Recording(db.Base):
 
 class ActionEvent(db.Base):
     __tablename__ = "action_event"
+    _text_sep = "-"
+    _text_name_prefix = "<"
+    _text_name_suffix = ">"
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -203,9 +206,6 @@ class ActionEvent(db.Base):
         rval = " ".join(attrs)
         return rval
 
-    _text_sep = "-"
-    _text_name_prefix = "<"
-    _text_name_suffix = ">"
 
     @classmethod
     def from_children(cls, children_dicts):
