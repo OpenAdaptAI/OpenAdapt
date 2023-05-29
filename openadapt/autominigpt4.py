@@ -93,7 +93,7 @@ def check_ram_info():
 
 if __name__ == "__main__":
     # clone MiniGPT-4
-    minigpt4 = os.path.abspath('MiniGPT4')
+    minigpt4 = os.path.abspath('MiniGPTFour')
     # Check if the repository already exists
     check_and_clone('https://github.com/Vision-CAIR/MiniGPT-4', minigpt4, False)
 
