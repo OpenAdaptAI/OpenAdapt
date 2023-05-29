@@ -40,7 +40,6 @@ def good_filter(data):
     return not any(data["message"].endswith(msg) for msg in messages_to_ignore)
 
 
-
 def row2dict(row, follow=True):
     if isinstance(row, dict):
         return row
