@@ -76,11 +76,11 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             bbox_list.append(mask["bbox"])
             show_mask(mask["segmentation"], plt.gca())
             show_box(mask["bbox"], plt.gca())
-        #for testing purposes
-        #plt.figure(figsize=(10,10))
-        #plt.imshow(array_resized)
-        #plt.axis('on')
-        #plt.show()
+        # for testing purposes
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(array_resized)
+        # plt.axis('on')
+        # plt.show()
         return str(bbox_list)
 
     def get_click_event_bbox(self, screenshot: Screenshot) -> str:
@@ -121,15 +121,15 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 y0 = np.min(rows)
                 w = np.max(cols)
                 h = np.max(rows)
-                input_box = [x0,y0,w,h]
-                plt.figure(figsize=(10,10))
+                input_box = [x0, y0, w, h]
+                plt.figure(figsize=(10, 10))
                 plt.imshow(array_resized)
                 show_mask(best_mask, plt.gca())
                 show_box(input_box, plt.gca())
                 show_points(input_point, input_label, plt.gca())
-                plt.axis('on')
+                plt.axis("on")
                 plt.show()
-                return [x0,y0,w-x0,h-y0]
+                return [x0, y0, w - x0, h - y0]
         return []
 
 
@@ -149,23 +149,43 @@ def resize_image(image: Image) -> Image:
     image_resized = image.resize(new_size)
     return image_resized
 
+
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
     else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
+        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
-    
+
+
 def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels==1]
-    neg_points = coords[labels==0]
-    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)   
-    
+    pos_points = coords[labels == 1]
+    neg_points = coords[labels == 0]
+    ax.scatter(
+        pos_points[:, 0],
+        pos_points[:, 1],
+        color="green",
+        marker="*",
+        s=marker_size,
+        edgecolor="white",
+        linewidth=1.25,
+    )
+    ax.scatter(
+        neg_points[:, 0],
+        neg_points[:, 1],
+        color="red",
+        marker="*",
+        s=marker_size,
+        edgecolor="white",
+        linewidth=1.25,
+    )
+
 
 def show_box(box, ax):
     x0, y0 = box[0], box[1]
     w, h = box[2], box[3]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))
+    ax.add_patch(
+        plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2)
+    )
