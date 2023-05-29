@@ -2,6 +2,7 @@ import requests
 import importlib
 import os
 import mimetypes
+import sys #for debugging
 
 from loguru import logger
 
@@ -226,4 +227,11 @@ if __name__ == "__main__":
     signals = Signals()
     signals.add_signal("tests/openadapt/test_signal_data.txt", "test data file")
     signals.add_signal("https://en.wikipedia.org/wiki/HTTP#Request_methods", "wikipedia request methods page")
-    print(signals.return_signals())
+    sys.path.append("tests/openadapt")
+    signals.add_signal("sample_package.sample_module.sample_function", "test function")
+
+
+    signal_info = signals.return_signals()
+    for signal in signal_info:
+        print(signal)
+

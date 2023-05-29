@@ -19,8 +19,10 @@ def test_add_url_signal():
 def test_add_function_signal():
     signals = Signals()
     signals.add_signal("sample_package.sample_module.sample_function")
+    signal = signals.return_signals()[0]
     signal_data = signals.return_signal_data(1)
     assert signal_data == "Sample function success"
+    assert signal["description"] == "Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    "
 
 
 def test_non_existent_file():
