@@ -13,10 +13,10 @@ from openadapt.models import ActionEvent, Recording, Screenshot
 from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
 from openadapt.strategies.base import BaseReplayStrategy
 
-from MiniGPT4.minigpt4.common.config import Config
-from MiniGPT4.minigpt4.common.dist_utils import get_rank
-from MiniGPT4.minigpt4.common.registry import registry
-from MiniGPT4.minigpt4.conversation.conversation import Chat, CONV_VISION
+from MiniGPTFour.minigpt4.common.config import Config
+from MiniGPTFour.minigpt4.common.dist_utils import get_rank
+from MiniGPTFour.minigpt4.common.registry import registry
+from MiniGPTFour.minigpt4.conversation.conversation import Chat, CONV_VISION
 
 from pprint import pformat
 import time
@@ -30,9 +30,15 @@ import random
 import torch
 import torch.backends.cudnn as cudnn
 
+import modal
+
 DISPLAY_EVENTS = False
 REPLAY_EVENTS = True
 SLEEP = True
+
+stub = modal.Stub("demo_modal", image=modal.Image.from_dockerhub(
+    "bewithmeallmylife/mini-gpt4-runtime-cuda-10.2:1.0.0")
+                  .conda_update_from_environment("environment.yml"))
 
 
 class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
@@ -52,6 +58,9 @@ class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
         self.processed_action_events = get_events(recording, process=True)
         event_dicts = rows2dicts(self.processed_action_events)
         logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+
+        # Model Initialization from MiniGPT4 demo.py
+        self.chat = model_initialization.call()
 
     def get_next_action_event(
         self,
@@ -77,27 +86,14 @@ class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
         # feed recording.task_description, current screenshot, and past ActionEvents to
         # MiniGPT4 to generate the next ActionEvent
 
-        # Model Initialization from MiniGPT4 demo.py
-        args = parse_args()
-        cfg = Config(args)
-
-        model_config = cfg.model_cfg
-        model_config.device_8bit = args.gpu_id
-        model_cls = registry.get_model_class(model_config.arch)
-        model = model_cls.from_config(model_config).to("cuda:{}".format(args.gpu_id))
-
-        vis_processor_cfg = cfg.datasets_cfg.cc_sbu_align.vis_processor.train
-        vis_processor = registry.get_processor_class(
-            vis_processor_cfg.name
-        ).from_config(vis_processor_cfg)
-        chat = Chat(model, vis_processor, device="cuda:{}".format(args.gpu_id))
 
         # upload screenshot
         chat_state = CONV_VISION.copy()
         img_list = []
-        chat.upload_img(screenshot, chat_state, img_list)
+        self.chat.upload_img(screenshot, chat_state, img_list)
 
         # ask question
+        # TODO: prompt engineering
         user_message = (
             "Please generate the next action event based on the following:\n\n"
             "Task goal: {}\n\n"
@@ -107,10 +103,10 @@ class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
                 self.recording.task_description, previously_recorded_action_events, text
             )
         )
-        chat.ask(user_message, chat_state)
+        self.chat.ask(user_message, chat_state)
 
         # get answer as a string
-        llm_message = chat.answer(
+        llm_message = self.chat.answer(
             conv=chat_state,
             img_list=img_list,
             num_beams=1,
@@ -119,12 +115,12 @@ class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
             max_length=2000,
         )[0]
 
-        print(llm_message)
         # TODO: remove
+        print(llm_message)
 
         # TODO: create ActionEvent from llm_message and return it
 
-        # TODO: might need to change this part
+        # TODO: change this part
         action_event = self.processed_action_events[self.action_event_idx]
         logger.info(f"{self.action_event_idx=} of {num_action_events=}: {action_event=}")
 
@@ -144,23 +140,44 @@ class MiniGPT4ReplayStrategy(OCRReplayStrategyMixin, BaseReplayStrategy):
             return None
 
 
+@stub.function(gpu="A10G")
+def model_initialization():
+    print('Initializing Chat')
+    # parse_args will use default values
+    args = parse_args.call()
+    cfg = Config(args)
+
+    model_config = cfg.model_cfg
+    model_config.device_8bit = args.gpu_id
+    model_cls = registry.get_model_class(model_config.arch)
+    model = model_cls.from_config(model_config).to('cuda:{}'.format(args.gpu_id))
+
+    vis_processor_cfg = cfg.datasets_cfg.cc_sbu_align.vis_processor.train
+    vis_processor = registry.get_processor_class(vis_processor_cfg.name).from_config(
+        vis_processor_cfg)
+    chat = Chat(model, vis_processor, device='cuda:{}'.format(args.gpu_id))
+    print('Initialization Finished')
+    return chat
+
+
+@stub.function(gpu="A10G")
 def parse_args():
     parser = argparse.ArgumentParser(description="Demo")
-    parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
-    parser.add_argument(
-        "--gpu-id", type=int, default=0, help="specify the gpu to load the model."
-    )
+    parser.add_argument("--cfg-path", default="eval_configs/minigpt4_eval.yaml",
+                        help="path to configuration file.")
+    parser.add_argument("--gpu-id", type=int, default=0, help="specify the gpu to load the model.")
     parser.add_argument(
         "--options",
         nargs="+",
         help="override some settings in the used config, the key-value pair "
-        "in xxx=yyy format will be merged into config file (deprecate), "
-        "change to --cfg-options instead.",
+             "in xxx=yyy format will be merged into config file (deprecate), "
+             "change to --cfg-options instead.",
     )
     args = parser.parse_args()
     return args
 
 
+@stub.function(gpu="A10G")
 def setup_seeds(config):
     seed = config.run_cfg.seed + get_rank()
 
