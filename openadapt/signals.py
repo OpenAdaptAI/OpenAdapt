@@ -31,7 +31,7 @@ class Signals:
 
     def __setup_database_signal(self, db_url):
         """
-        Read a signal from a database.
+        Read a description of a signal from a database.
         """
         # Get the signal from the database.
         #TODO: implement database signal
@@ -40,7 +40,7 @@ class Signals:
 
     def __setup_file_signal(self, file_path):
         """
-        Read a signal from a file.
+        Read a description of a signal from a file.
         """
         # Get the signal from the file.
         if not os.path.isfile(file_path):
@@ -66,7 +66,7 @@ class Signals:
 
     def __setup_url_signal(self, http_url):
         """
-        Read a signal from an HTTP URL.
+        Read a description of a signal from an HTTP URL.
         """
         # Get the signal from the URL.
         response = requests.get(http_url, allow_redirects=True)
@@ -84,17 +84,19 @@ class Signals:
 
     def __setup_function_signal(self, function_name):
         """
-        Read a signal from a Python function.
+        Return a description of a Python function signal.
         """
         module_name, func_name = function_name.rsplit('.', 1)
         module = importlib.import_module(module_name)
         func = getattr(module, func_name)
 
-        # Call the function and get its result
-        result = func()
+        # Get the function's docstring, or 'No description provided' if it doesn't have one
+        docstring = func.__doc__ if func.__doc__ else 'No description provided'
 
-        return result
+        # Get the function's name and module
+        description = f"Function: {func.__name__}, Module: {module.__name__}, Description: {docstring}"
 
+        return description
 
 
     def __access_database_signal(self, db_url):
@@ -171,17 +173,30 @@ class Signals:
                 # If the string ends with a known file extension, treat it as a file path.
                 signal_description = self.__setup_file_signal(signal_address)
                 signal_type = "file"
-            else:
+            elif signal_address.count(".") >= 1:
                 # Otherwise, treat it as a Python function name.
                 signal_description = self.__setup_function_signal(signal_address)
                 signal_type = "function"
+            else:
+                raise ValueError("Invalid signal address.")
         else:
             # If signal is not a string, raise an error.
             raise ValueError("Signal must be a string.")
+            
         
         signal_number = len(self.signals) + 1
         signal = {"number": signal_number, "title": signal_title, "type": signal_type, "address": signal_address, "description": signal_description}
         self.signals.append(signal)
+
+
+    def remove_signal(self, signal_number):
+        """
+        Remove a signal from the list.
+        """
+        self.signals.pop(signal_number - 1)
+        for i in range(signal_number - 1, len(self.signals)):
+            # Decrement the signal numbers of all signals after the removed signal.
+            self.signals[i]["number"] -= 1
 
 
     def return_signal_data(self, signal_number):
