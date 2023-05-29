@@ -8,6 +8,7 @@ Usage:
 
 from loguru import logger
 import numpy as np
+from openadapt.crud import get_screenshots
 
 from openadapt.events import get_events
 from openadapt.models import Recording, Screenshot, WindowEvent
@@ -18,12 +19,14 @@ from openadapt.strategies.mixins.huggingface import (
 )
 from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
+from openadapt.strategies.mixins.sam import SAMReplayStrategyMixin
 
 
 class DemoReplayStrategy(
     HuggingFaceReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
+    SAMReplayStrategyMixin,
     BaseReplayStrategy,
 ):
 
@@ -33,18 +36,25 @@ class DemoReplayStrategy(
     ):
         super().__init__(recording)
         self.result_history = []
+        self.screenshots = get_screenshots(recording)
+        self.screenshot_idx = 0
 
     def get_next_action_event(
         self,
         screenshot: Screenshot,
         window_event: WindowEvent,
     ):
-        ascii_text = self.get_ascii_text(screenshot)
+        #ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 
-        ocr_text = self.get_ocr_text(screenshot)
+        #ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
 
+        screenshot_bbox = self.get_screenshot_bbox(screenshot)
+        logger.info(f"screenshot_bbox=\n{screenshot_bbox}")
+
+        screenshot_click_event_bbox = self.get_click_event_bbox(self.screenshots[self.screenshot_idx])
+        logger.info(f"self.screenshots[self.screenshot_idx].action_event=\n{self.screenshots[self.screenshot_idx].action_event}")
         event_strs = [
             f"<{event}>"
             for event in self.recording.action_events
@@ -56,16 +66,16 @@ class DemoReplayStrategy(
         prompt = " ".join(event_strs + history_strs)
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
         prompt = prompt[N:]
-        logger.info(f"{prompt=}")
+        #logger.info(f"{prompt=}")
         max_tokens = 10
         completion = self.get_completion(prompt, max_tokens)
-        logger.info(f"{completion=}")
+        #logger.info(f"{completion=}")
 
         # only take the first <...>
         result = completion.split(">")[0].strip(" <>")
-        logger.info(f"{result=}")
+        #logger.info(f"{result=}")
         self.result_history.append(result)
 
         # TODO: parse result into ActionEvent(s)
-
+        self.screenshot_idx += 1
         return None
