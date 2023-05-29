@@ -634,10 +634,12 @@ def record(
     sequence_detected = False  # Flag to indicate if the sequence is detected
 
     def on_press(key):
+        canonical_key = listener.canonical(key)[0]
         nonlocal current_index, sequence_detected
+        sequence_canonical = listener.canonical(keyboard.KeyCode.from_char(sequence[current_index]))
 
         # Check if the pressed key matches the current key in the sequence
-        if key == keyboard.KeyCode.from_char(sequence[current_index]):
+        if canonical_key == sequence_canonical:
             current_index += 1
         else:
             # Reset the index if the pressed key doesn't match the current key in the sequence
