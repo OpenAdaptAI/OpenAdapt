@@ -183,6 +183,7 @@ def write_window_event(
     """
 
     assert event.type == "window", event
+    # scrubbed_window_data = scrub.scrub_dict(event.data)
     crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 

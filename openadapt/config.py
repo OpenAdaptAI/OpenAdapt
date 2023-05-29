@@ -48,16 +48,17 @@ if multiprocessing.current_process().name == "MainProcess":
         if not key.startswith("_") and key.isupper():
             logger.info(f"{key}={val}")
 
+
 # SCRUBBING CONFIGURATIONS
 
-SCRUB_CONFIG = {
-    "nlp_engine_name": "spacy",
-    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
-}
-SCRUB_PROVIDER = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG)
-NLP_ENGINE = SCRUB_PROVIDER.create_engine()
+# SCRUB_CONFIG = {
+#     "nlp_engine_name": "spacy",
+#     "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
+# }
+# SCRUB_PROVIDER = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG)
+# NLP_ENGINE = SCRUB_PROVIDER.create_engine()
 ANALYZER = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE,
+    # nlp_engine=NLP_ENGINE,
     supported_languages=["en"]
 )
 ANONYMIZER = AnonymizerEngine()

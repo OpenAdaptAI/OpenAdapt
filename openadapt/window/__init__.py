@@ -15,7 +15,7 @@ else:
 
 
 def get_active_window_data():
-    state = get_active_window_state()
+    state = get_active_window_state() # TODO: Scrub here is a better idea ? call scrub_dict
     if not state:
         return None
     title = state["title"]
@@ -33,8 +33,8 @@ def get_active_window_data():
         "window_id": window_id,
         "state": state,
     }
-    scrubbed_window_data = scrub.scrub_dict(window_data)
-    return scrubbed_window_data
+    # TODO: Scrub here is a better idea ? call scrub_dict
+    return window_data
 
 
 def get_active_window_state():
