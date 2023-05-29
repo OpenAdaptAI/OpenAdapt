@@ -31,7 +31,12 @@ def configure_logging(logger, log_level):
 
 
 def good_filter(data):
-    return not data["message"].endswith("Cannot pickle Objective-C objects')")
+    messages_to_ignore = [
+        "Cannot pickle Objective-C objects')",
+    ]
+
+    return not any(data["message"].endswith(msg) for msg in messages_to_ignore)
+
 
 
 def row2dict(row, follow=True):
