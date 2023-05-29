@@ -76,11 +76,6 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             bbox_list.append(mask["bbox"])
             show_mask(mask["segmentation"], plt.gca())
             show_box(mask["bbox"], plt.gca())
-        # for testing purposes
-        # plt.figure(figsize=(10,10))
-        # plt.imshow(array_resized)
-        # plt.axis('on')
-        # plt.show()
         return str(bbox_list)
 
     def get_click_event_bbox(self, screenshot: Screenshot) -> str:
