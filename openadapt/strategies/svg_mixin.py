@@ -1,6 +1,8 @@
 """
-Implements a ReplayStrategy mixin for getting information from images
-using the Pypotrace and GPT4All libraries.
+Implements a ReplayStrategy mixin using the SVG image format and GPT4All.
+
+NOTE: additional libraries on the system are needed,
+        see https://github.com/flupke/pypotrace#installation
 
 Usage:
 
@@ -11,34 +13,45 @@ from openadapt.pypotrace import potrace
 from PIL import Image
 from gpt4all import GPT4All
 import numpy as np
-from loguru import logger
 
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
-PROMPT = "return the location of the buttons in the following svg string in a tuple without any english"
+PROMPT = "This a screenshot of a computer's window screen. Return the centre of the button from the following svg code, " \
+         "with the centre represented as one list of 2 numbers and only return that list inside a larger list. " \
+         "I want to parse the text, so the entire answer " \
+         "needs to be one list with one sublist with exactly 2 numbers."
 
 
 class SVGReplayStrategyMixin(BaseReplayStrategy):
+    """ReplayStrategy mixin that uses Potrace and GPT4All to detect information.
+
+    Attributes:
+        recording: the recording to be played back
+        model: the GPT4All model used
+
+    """
     def __init__(self, recording: Recording):
         super().__init__(recording)
         self.GPT4All_model = GPT4All("ggml-gpt4all-j-v1.3-groovy.bin")
 
     def get_svg_info(self, screenshot: Screenshot) -> str:
-        # convert png to pbm (etc.)
+        """
+        Returns the location of the buttons.
+        """
+        # convert png to pbm
         png_img = screenshot.image
         pbm_img = png_img.convert("1")
 
-        # convert pbm to svg (potrace)
+        # convert pbm to svg
         image_array = np.array(pbm_img)
         bitmap = potrace.Bitmap(image_array)
         path = bitmap.trace()
         svg_string = str(path)
-        print("this is the svg string" + svg_string)
 
-        # give svg to GPT4ALL (for example) and ask it to return the location of the buttons (as a tuple ?! tbd)
+        # give svg to GPT4ALL and ask it to return the location of the buttons
         messages = [{"role": "user", "content": PROMPT + svg_string}]
-        response = self.GPT4All_model.chat_completion(
+        response_dict = self.GPT4All_model.chat_completion(
             messages, default_prompt_header=False, verbose=False
         )
-        return response
+        return response_dict["choices"][0]["message"]["content"]
