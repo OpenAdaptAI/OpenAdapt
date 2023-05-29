@@ -4,30 +4,30 @@ from openadapt.signals import Signals
 def test_add_file_signal():
     signals = Signals()
     signals.add_signal("tests/openadapt/test_signal_data.txt")
-    signal_data = signals.return_signals()
-    assert signal_data[0]["data"] == "test_data_success"
+    signal_data = signals.return_signal_data(1)
+    assert signal_data == "test_data_success"
 
 
 def test_add_url_signal():
     signals = Signals()
     signals.add_signal("https://platform.openai.com/")
-    signal_data = signals.return_signals()
+    signal_data = signals.return_signal_data(1)
     #TODO: change to a more specific url to see if gathered data is correct and usable
-    assert signal_data[0]["data"] != None
+    assert signal_data != None
 
 
 def test_add_function_signal():
     signals = Signals()
     signals.add_signal("sample_package.sample_module.sample_function")
-    signal_data = signals.return_signals()
-    assert signal_data[0]["data"] == "Sample function success"
+    signal_data = signals.return_signal_data(1)
+    assert signal_data == "Sample function success"
 
 
 def test_non_existent_file():
     signals = Signals()
     signals.add_signal("tests/openadapt/test_signal_data_non_existent.txt")
-    signal_data = signals.return_signals()
-    assert signal_data[0]["data"] == None
+    signal_data = signals.return_signal_data(1)
+    assert signal_data == None
 
 def test_access_private_members():
     signals = Signals()

@@ -200,7 +200,7 @@ class Signals:
         else:
             return None
 
-#Temporary test code
+#Demonstration test code
 if __name__ == "__main__":
     r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
     length = r.headers.get('Content-Length') 
