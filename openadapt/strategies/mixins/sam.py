@@ -33,7 +33,7 @@ CHECKPOINT_URL_BY_NAME = {
 }
 MODEL_NAME = "default"
 CHECKPOINT_DIR_PATH = "./checkpoints"
-
+RESIZE_RATIO = 0.1
 
 class SAMReplayStrategyMixin(BaseReplayStrategy):
     def __init__(
@@ -98,8 +98,8 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 array_resized = np.array(image_resized)
 
                 # Resize mouse coordinates
-                resized_mouse_x = int(action_event.mouse_x * 0.1)
-                resized_mouse_y = int(action_event.mouse_y * 0.1)
+                resized_mouse_x = int(action_event.mouse_x * RESIZE_RATIO)
+                resized_mouse_y = int(action_event.mouse_y * RESIZE_RATIO)
                 self.sam_predictor.set_image(array_resized)
                 input_point = np.array([[resized_mouse_x, resized_mouse_y]])
                 input_label = np.array([1])
@@ -139,8 +139,7 @@ def resize_image(image: Image) -> Image:
         PIL.Image.Image: The resized image.
 
     """
-    resize_ratio = 0.1
-    new_size = [int(dim * resize_ratio) for dim in image.size]
+    new_size = [int(dim * RESIZE_RATIO) for dim in image.size]
     image_resized = image.resize(new_size)
     return image_resized
 
