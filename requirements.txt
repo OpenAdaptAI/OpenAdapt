@@ -1,6 +1,6 @@
 alembic==1.8.1
 ascii_magic==2.3.0
-git+https://github.com/abrichr/atomacos.git; sys_platform == 'darwin'
+-e git+https://github.com/abrichr/atomacos.git; sys_platform == 'darwin'
 bokeh==2.4.3
 clipboard==0.0.4
 deepdiff[optimize]==6.3.0
@@ -14,9 +14,11 @@ openai==0.27.5
 pandas==2.0.0
 pygetwindow==0.0.9; sys_platform == 'win32'
 pyinstaller
+setuptools-lint
+sphinx
 python-dotenv==1.0.0
 pywin32==306; sys_platform == 'win32'
-git+https://github.com/abrichr/pynput.git
+-e git+https://github.com/abrichr/pynput.git#egg=pynput
 pytest==7.1.3
 rapidocr-onnxruntime==1.2.3
 scikit-learn==1.2.2
