@@ -628,11 +628,42 @@ def record(
 
     # TODO: discard events until everything is ready
 
+    # Variables for sequence detection
+    sequence = ['o', 'a', '.', 's', 't', 'o', 'p']
+    current_index = 0
+    sequence_detected = False  # Flag to indicate if the sequence is detected
+
+    def on_press(key):
+        nonlocal current_index, sequence_detected
+
+        # Check if the pressed key matches the current key in the sequence
+        if key == keyboard.KeyCode.from_char(sequence[current_index]):
+            current_index += 1
+        else:
+            # Reset the index if the pressed key doesn't match the current key in the sequence
+            current_index = 0
+
+        # Check if the entire sequence has been entered correctly
+        if current_index == len(sequence):
+            # TODO: perhaps use logging to say we are stopping
+            print("Sequence entered correctly!")
+            sequence_detected = True  # Set the flag to indicate sequence detection
+
     try:
-        while True:
+        # Start the key listener for the "oa.stop" sequence
+        listener = keyboard.Listener(on_press=on_press)
+        listener.start()
+
+        while not sequence_detected:
             time.sleep(1)
+
+        terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
+    finally:
+        # cleanup for listener
+        listener.stop()
+        listener.join()
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
