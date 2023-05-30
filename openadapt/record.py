@@ -628,31 +628,41 @@ def record(
 
     # TODO: discard events until everything is ready
 
-    # Variables for sequence detection
-    sequence = ['o', 'a', '.', 's', 't', 'o', 'p']
-    current_index = 0
-    sequence_detected = False  # Flag to indicate if the sequence is detected
+    # create list of indices for sequence detection
+    stop_sequence_indices = []
+    for _ in config.STOP_SEQUENCES:
+        # one index for each stop sequence in config.STOP_SEQUENCES
+        stop_sequence_indices.append(0)
+
+    sequence_detected = False  # Flag to indicate if a sequence is detected
 
     def on_press(key):
         canonical_key = listener.canonical(key)[0]
-        nonlocal current_index, sequence_detected
-        sequence_canonical = listener.canonical(keyboard.KeyCode.from_char(sequence[current_index]))
+        nonlocal stop_sequence_indices, sequence_detected
 
-        # Check if the pressed key matches the current key in the sequence
-        if canonical_key == sequence_canonical:
-            current_index += 1
-        else:
-            # Reset the index if the pressed key doesn't match the current key in the sequence
-            current_index = 0
+        for i in range(0, len(config.STOP_SEQUENCES)):
+            # check each stop sequence
+            stop_sequence = config.STOP_SEQUENCES[i]
+            # stop_sequence_indices[i] is the index that corresponds to this stop sequence
+            # get the canonical KeyCode representation of the current letter in this stop sequence
+            canonical_sequence = listener.canonical(keyboard.KeyCode.from_char(
+                stop_sequence[stop_sequence_indices[i]]))
 
-        # Check if the entire sequence has been entered correctly
-        if current_index == len(sequence):
-            # TODO: perhaps use logging to say we are stopping
-            print("Sequence entered correctly!")
-            sequence_detected = True  # Set the flag to indicate sequence detection
+            # Check if the pressed key matches the current key in this sequence
+            if canonical_key == canonical_sequence:
+                # increment this index
+                stop_sequence_indices[i] += 1
+            else:
+                # Reset the index if the pressed key doesn't match the current key in the sequence
+                stop_sequence_indices[i] = 0
+
+            # Check if the entire sequence has been entered correctly
+            if stop_sequence_indices[i] == len(stop_sequence):
+                logger.info("Stop sequence entered! Stopping recording now.")
+                sequence_detected = True  # Set the flag to indicate sequence detection
 
     try:
-        # Start the key listener for the "oa.stop" sequence
+        # Start the key listener for all the stop sequences in config.STOP_SEQUENCES
         listener = keyboard.Listener(on_press=on_press)
         listener.start()
 
