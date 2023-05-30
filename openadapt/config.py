@@ -4,10 +4,6 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
 
 
 _DEFAULTS = {
