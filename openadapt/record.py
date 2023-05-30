@@ -382,13 +382,6 @@ def read_window_events(
             window_data["title"] != prev_window_data.get("title") or
             window_data["window_id"] != prev_window_data.get("window_id")
         ):
-            # TODO: fix exception sometimes triggered by the next line on win32:
-            #   File "\Python39\lib\threading.py" line 917, in run
-            #   File "...\openadapt\record.py", line 277, in read window events
-            #   File "...\env\lib\site-packages\loguru\logger.py" line 1977, in info
-            #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
-            #       for handler in core.handlers.values):
-            #   RuntimeError: dictionary changed size during iteration
             _window_data = dict(window_data)
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
@@ -399,7 +392,7 @@ def read_window_events(
                 "window",
                 window_data,
             ))
-        prev_window_data = window_data
+        prev_window_data = dict(window_data)
 
 
 def performance_stats_writer (

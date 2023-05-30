@@ -4,6 +4,10 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_anonymizer import AnonymizerEngine
+from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
 
 
 _DEFAULTS = {
@@ -38,6 +42,7 @@ for key in _DEFAULTS:
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME
 DB_URL = f"sqlite:///{DB_FPATH}"
+DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in locals().items():
