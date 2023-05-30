@@ -16,6 +16,7 @@ cache
 
 # VSCode
 .VSCode
+.vsCode
 
 # Generated performance charts
 performance

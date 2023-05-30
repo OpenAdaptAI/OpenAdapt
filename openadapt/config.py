@@ -4,6 +4,10 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_anonymizer import AnonymizerEngine
+from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
 
 
 _DEFAULTS = {
@@ -43,3 +47,56 @@ if multiprocessing.current_process().name == "MainProcess":
     for key, val in locals().items():
         if not key.startswith("_") and key.isupper():
             logger.info(f"{key}={val}")
+
+
+# SCRUBBING CONFIGURATIONS
+
+SCRUB_CONFIG = {
+    "nlp_engine_name": "spacy",
+    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+}
+SCRUB_PROVIDER = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG)
+NLP_ENGINE = SCRUB_PROVIDER.create_engine()
+ANALYZER = AnalyzerEngine(
+    nlp_engine=NLP_ENGINE,
+    supported_languages=["en"]
+)
+ANONYMIZER = AnonymizerEngine()
+IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER))
+SCRUB_IGNORE_ENTITIES = [
+    # 'US_PASSPORT',
+    # 'US_DRIVER_LICENSE',
+    # 'CRYPTO',
+    # 'UK_NHS',
+    # 'PERSON',
+    # 'CREDIT_CARD',
+    # 'US_BANK_NUMBER',
+    # 'PHONE_NUMBER',
+    # 'US_ITIN',
+    # 'AU_ABN',
+    'DATE_TIME',
+    # 'NRP',
+    # 'SG_NRIC_FIN',
+    # 'AU_ACN',
+    # 'IP_ADDRESS',
+    # 'EMAIL_ADDRESS',
+    'URL',
+    # 'IBAN_CODE',
+    # 'AU_TFN',
+    # 'LOCATION',
+    # 'AU_MEDICARE',
+    # 'US_SSN',
+    # 'MEDICAL_LICENSE'
+]
+SCRUBBING_ENTITIES = [
+    entity
+    for entity in ANALYZER.get_supported_entities()
+    if entity not in SCRUB_IGNORE_ENTITIES
+]
+SCRUB_KEYS_HTML = [
+    'text',
+    'canonical_text',
+    'title',
+    'state'
+]
+DEFAULT_SCRUB_FILL_COLOR = (255,0,0)
