@@ -22,7 +22,7 @@ utils.configure_logging(logger, LOG_LEVEL)
 def export_recording_to_folder(recording_id):
     """YOUR DOCSTRING HERE"""
     # TODO: export recording db file instead of the entire db file
-    recording_db_path = crud.create_filtered_db(recording_id)
+    recording_db_path = crud.export_recording(recording_id)
 
     if recording_db_path:
         # Create the directory if it doesn't exist

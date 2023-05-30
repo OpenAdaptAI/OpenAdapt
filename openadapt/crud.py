@@ -1,9 +1,12 @@
+from datetime import datetime
 from loguru import logger
 from sqlalchemy.orm import sessionmaker
+import os
+import time
 import sqlalchemy as sa
 
 
-from openadapt.db import Session, get_base
+from openadapt.db import Session, get_base, get_engine, engine
 from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
 from openadapt import config
 
@@ -135,6 +138,63 @@ def create_filtered_db(recording_id):
     # Return the path to the newly created database file
     return new_db_file_path
 
+# Export to SQL
+def export_sql(recording_id):
+    # Export data for recordings e.g. via SELECT or similar
+    sql = "SELECT * FROM recording WHERE id = {}".format(recording_id)
+    return sql
+
+def create_db(recording_id):
+    fname_parts = [
+        config.DB_FNAME,
+        str(recording_id),
+        datetime.now().strftime(config.DT_FMT),
+    ]
+    db_fname = "-".join(fname_parts)
+
+    # append to .env before running alembic
+    # backup first
+    t = time.time()
+    # USE WINDOWS
+    os.system("cp {config.ENV_FILE_PATH} {config.ENV_FILE_PATH}-{t}")
+    with open(config.ENV_FILE_PATH, "a") as f:
+        f.seek(0, os.SEEK_END)
+        f.write(f"\nDB_FNAME={config.DB_FNAME}")
+    os.system("alembic upgrade head")
+
+    # update current running configuration
+    config.set_db_fname(db_fname)
+    db.engine = get_engine()
+
+    # Retrieve the file path of the new database
+    db_file_path = config.DB_FPATH.resolve()
+
+    return t, db_file_path
+
+# Restore database
+def restore_db(timestamp):
+    # TODO: Implement the restoration logic
+    backup_file = "{}-{}".format(config.ENV_FILE_PATH, timestamp)
+    os.system("cp {} {}".format(backup_file, config.ENV_FILE_PATH))
+
+    # Undo other configuration changes if needed
+    config.set_db_fname("openadapt.db")  # Reset the DB_FNAME to its initial state or set it to the appropriate value
+    db.engine = get_engine()  # Revert the database engine to its previous state
+
+
+def run_sql(sql):
+    with engine.connect() as con:
+        result = con.execute(sql)
+        for row in result:
+            logger.info(f"{row=}")
+
+def export_recording(recording_id):
+    sql = export_sql(recording_id)
+    t, db_file_path = create_db(recording_id)
+    run_sql(sql)
+    restore_db(t)
+    # TODO: undo configuration changes made in create_db
+    return db_file_path
 
 
 def _get(table, recording_timestamp):
