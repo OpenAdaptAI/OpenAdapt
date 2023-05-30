@@ -6,8 +6,7 @@ Usage:
 
 """
 
-from collections import Counter, defaultdict, namedtuple
-from datetime import datetime
+from collections import namedtuple
 from functools import partial
 from typing import Any, Callable, Dict
 import multiprocessing
@@ -17,12 +16,10 @@ import signal
 import sys
 import threading
 import time
-import zlib
 
 from loguru import logger
 from pynput import keyboard, mouse
 import fire
-import matplotlib.pyplot as plt
 import mss.tools
 
 from openadapt import config, crud, utils, window
@@ -35,7 +32,6 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
 }
-DIRNAME_PERFORMANCE_PLOTS = "performance"
 PLOT_PERFORMANCE = False
 
 
@@ -406,60 +402,35 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def plot_performance(
-    recording_timestamp: float,
+def performance_stats_writer (
     perf_q: multiprocessing.Queue,
-) -> None:
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+):
     """
-    Plot the performance of the event processing and writing.
+    Write performance stats to the db.
+    Each entry includes the event type, start time and end time
 
     Args:
+        perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
-        perf_q: A queue with performance data.
+        terminate_event: An event to signal the termination of the process.
     """
 
-    type_to_prev_start_time = defaultdict(list)
-    type_to_start_time_deltas = defaultdict(list)
-    type_to_proc_times = defaultdict(list)
-    type_to_count = Counter()
-    type_to_timestamps = defaultdict(list)
-    while not perf_q.empty():
-        event_type, start_time, end_time = perf_q.get()
-        prev_start_time = type_to_prev_start_time.get(event_type, start_time)
-        start_time_delta = start_time - prev_start_time
-        type_to_start_time_deltas[event_type].append(start_time_delta)
-        type_to_prev_start_time[event_type] = start_time
-        type_to_proc_times[event_type].append(end_time - start_time)
-        type_to_count[event_type] += 1
-        type_to_timestamps[event_type].append(start_time)
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info("performance stats writer starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    while not terminate_event.is_set() or not perf_q.empty():
+        try:
+            event_type, start_time, end_time = perf_q.get_nowait()
+        except queue.Empty:
+            continue
 
-    if not PLOT_PERFORMANCE:
-        return
-
-    y_data = {"proc_times": {}, "start_time_deltas": {}}
-    for i, event_type in enumerate(type_to_count):
-        type_count = type_to_count[event_type]
-        start_time_deltas = type_to_start_time_deltas[event_type]
-        proc_times = type_to_proc_times[event_type]
-        y_data["proc_times"][event_type] = proc_times
-        y_data["start_time_deltas"][event_type] = start_time_deltas
-
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
-    for i, data_type in enumerate(y_data):
-        for event_type in y_data[data_type]:
-            x = type_to_timestamps[event_type]
-            y = y_data[data_type][event_type]
-            axes[i].scatter(x, y, label=event_type)
-        axes[i].set_title(data_type)
-        axes[i].legend()
-    # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", f"{recording_timestamp}"]
-    fname = "-".join(fname_parts) + ".png"
-    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
-    logger.info(f"{fpath=}")
-    plt.savefig(fpath)
-    os.system(f"open {fpath}")
+        crud.insert_perf_stat(
+            recording_timestamp, event_type, start_time, end_time,
+        )
+    logger.info("performance stats writer done")
 
 
 def create_recording(
@@ -644,6 +615,17 @@ def record(
     )
     window_event_writer.start()
 
+    terminate_perf_event = multiprocessing.Event()
+    perf_stat_writer = multiprocessing.Process(
+        target=performance_stats_writer,
+        args=(
+            perf_q,
+            recording_timestamp,
+            terminate_perf_event,
+        ),
+    )
+    perf_stat_writer.start()
+
     # TODO: discard events until everything is ready
 
     try:
@@ -662,10 +644,12 @@ def record(
     action_event_writer.join()
     window_event_writer.join()
 
-    plot_performance(recording_timestamp, perf_q)
+    terminate_perf_event.set()
+
+    if PLOT_PERFORMANCE:
+        utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
-
 
 if __name__ == "__main__":
     fire.Fire(record)

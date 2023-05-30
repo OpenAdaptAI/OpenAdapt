@@ -7,7 +7,7 @@ with the power of Transformers by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
-- Converting screenshots and user input into tokenized format
+- Converting screenshots and user input into tok/enized format
 - Generating synthetic input via transformer model completions
 - Replaying synthetic input to complete tasks
 
@@ -34,6 +34,10 @@ pip install -e .
 alembic upgrade head
 pytest
 ```
+
+## Permissions
+
+See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
 ## Run
 
@@ -75,7 +79,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -91,8 +95,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 ## Contributing
 
 ### Design
-
-![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
 
 ### Problem Statement
 
@@ -180,25 +182,18 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 ## Troubleshooting
 
-Apple Silicon:
+MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-```
-$ python openadapt/record.py
-...
-This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
-```
+![MacOS System Alerts](./assets/macOS_permissions_alert.png)
 
-Solution:
-https://stackoverflow.com/a/69673312
+In summary (from https://stackoverflow.com/a/69673312):
 
-```
-Settings -> Security & Privacy
-Click on the Privacy tab
-Scroll and click on the Accessibility Row
-Click the +
-Navigate to /System/Applications/Utilities/ or wherever the Terminal.app is installed
-Click okay.
-```
+1. Settings -> Security & Privacy
+2. Click on the Privacy tab
+3. Scroll and click on the Accessibility Row
+4. Click +
+5. Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
+6. Click okay.
 
 ## Developing
 
