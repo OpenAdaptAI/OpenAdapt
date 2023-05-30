@@ -20,7 +20,7 @@ def get_layout(image: str):
         model = LayoutLMv2ForTokenClassification.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
         output = model(**encode)
-        ## what do we do with the output vector now?
+        ## interpret output.. but how
 
 
 if __name__ == "__main__":
