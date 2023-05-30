@@ -3,6 +3,7 @@ from transformers import LayoutLMv2ImageProcessor, LayoutLMv2TokenizerFast, Layo
 import pytesseract
 import numpy as np
 
+# will convert to ReplayStrategy after get_layout is completed. Want to run it for now.
 def get_layout(image: str):
 
         feature_extractor = LayoutLMv2ImageProcessor()  # apply_ocr is set to True by default
