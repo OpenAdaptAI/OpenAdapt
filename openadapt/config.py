@@ -5,9 +5,8 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
+from presidio_image_redactor import ImageRedactorEngine
 
 
 _DEFAULTS = {
@@ -51,18 +50,25 @@ if multiprocessing.current_process().name == "MainProcess":
 
 # SCRUBBING CONFIGURATIONS
 
-SCRUB_CONFIG = {
-    "nlp_engine_name": "spacy",
-    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
-}
-SCRUB_PROVIDER = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG)
-NLP_ENGINE = SCRUB_PROVIDER.create_engine()
-ANALYZER = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE,
-    supported_languages=["en"]
-)
+# SCRUB_CONFIG_TRF = {
+#     "nlp_engine_name": "spacy",
+#     "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+# }
+# SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_TRF)
+# NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+# SCRUB_CONFIG_LG = {
+#     "nlp_engine_name": "spacy",
+#     "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
+# }
+# SCRUB_PROVIDER_LG = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_LG)
+# NLP_ENGINE_LG = SCRUB_PROVIDER_LG.create_engine()
+# ANALYZER = AnalyzerEngine(
+#     nlp_engine=NLP_ENGINE_TRF,
+#     supported_languages=["en"]
+# )
+ANALYZER = AnalyzerEngine()
 ANONYMIZER = AnonymizerEngine()
-IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER))
+IMAGE_REDACTOR = ImageRedactorEngine()
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
