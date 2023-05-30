@@ -21,6 +21,9 @@ _DEFAULTS = {
     "REPLAY_STRIP_ELEMENT_STATE": True,
 }
 
+# sequences that when typed, will stop the recording of ActionEvents in record.py
+STOP_SEQUENCES = [['o', 'a', '.', 's', 't', 'o', 'p']]
+
 
 def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
