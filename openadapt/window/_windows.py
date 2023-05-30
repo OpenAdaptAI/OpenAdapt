@@ -3,12 +3,9 @@ import pygetwindow as pgw
 
 
 def get_active_window_state():
-    window = pgw.getActiveWindow()
-    if not window:
-        logger.warning(f"{window=}")
-        return None
-    title = window.title
-    geometry = window.box
+    meta = get_active_window_meta()
+    title = meta.title
+    geometry = meta.box
     left, top, width, height = geometry
     state = {
         "title": title,
@@ -24,6 +21,12 @@ def get_active_window_state():
     }
     return state
 
+def get_active_window_meta() :
+    window = pgw.getActiveWindow()
+    if not window:
+        logger.warning(f"{window=}")
+        return None
+    return window
 
 def get_element_at_position(x, y):
     # TODO
