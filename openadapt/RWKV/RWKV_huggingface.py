@@ -36,10 +36,12 @@ def run_RWKV():
     model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-pile-14b", filename=f"{title}.pth")
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
     """
-    
+
     title = "RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192"
     model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
+
+    
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
     tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
     
