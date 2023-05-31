@@ -25,7 +25,6 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
 
     Attributes:
         recording: the recording to be played back
-        model: the GPT4All model used
 
     """
     def __init__(self, recording: Recording):
@@ -63,6 +62,5 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
                                    end_x, end_y)
                     svg.append(segment_path)
                 curr_x, curr_y = end_x, end_y
-            # for child_curve in curve.children: # Needed ??
 
         return svg.as_svg()
