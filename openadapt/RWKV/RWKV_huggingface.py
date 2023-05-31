@@ -22,7 +22,7 @@ os.environ["RWKV_CUDA_ON"] = '0'
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
 #@stub.function(image=torch_image, mounts=[modal.Mount.from_local_file("./openadapt/20B_tokenizer.json", remote_path="/root/rwkv_model")])#,modal.Mount.from_local_file("D:\\models\RWKV-4-Pile-430M-20220808-8066.pth", remote_path="/root/rwkv_model")])
-@stub.function(gpu="any", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("D:\models", remote_path="/root/rwkv_model")])#,modal.Mount.from_local_file("D:\\models\RWKV-4-Pile-430M-20220808-8066.pth", remote_path="/root/rwkv_model")])
+@stub.function(gpu="a100", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("D:\models", remote_path="/root/rwkv_model")])#,modal.Mount.from_local_file("D:\\models\RWKV-4-Pile-430M-20220808-8066.pth", remote_path="/root/rwkv_model")])
 def run_RWKV():
 
     """
@@ -47,7 +47,7 @@ def run_RWKV():
     #switch to 'cuda fp16' for better performance
 
     print()
-    prompt = "Continue the story: The sky is blue and the sun is"
+    prompt = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request. Instruction: You are a professor teaching a calculus course and you must answer a student's question. Input: Professor, I'm having trouble understanding the concept of a l'hopitals rule, can you explain it to me? Response: "
     print(prompt)
     prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
     out, state = model.forward(prompt_tokens[0].tolist(), None)
