@@ -270,26 +270,24 @@ class Screenshot(db.Base):
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
     
-    def crop_active_window(self, window_event=None):
-        #crops the screenshot's image to the bounds of the window_event
-        if window_event:
-            box = (
-                window_event.left,
-                window_event.top,
-                window_event.left + window_event.width,
-                window_event.top + window_event.height
-            )
-        elif self.action_event.window_event:
-            accessed_window_event = self.action_event.window_event
-            box = (
-                accessed_window_event.left,
-                accessed_window_event.top,
-                accessed_window_event.left + accessed_window_event.width,
-                accessed_window_event.top + accessed_window_event.height
-            )
+    def crop_active_window(self, action_event=None):
+        if action_event:
+            action_event_to_use = action_event
+        elif self.action_event:
+            action_event_to_use = self.action_event
         else:
-            logger.info("No window_event found or given for screenshot")  
+            logger.info("No action event to use for cropping, image will not be cropped")
             return
+
+        window_event = action_event_to_use.window_event
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+        
+        box = (x0, y0, x1, y1)
         self._image = self._image.crop(box)
 
 
