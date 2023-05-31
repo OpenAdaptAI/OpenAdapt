@@ -13,6 +13,16 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
+    "DATE_FMT": "%Y%m%d",
+    "GITHUB_ACCESS_TOKEN": None,
+    "GITHUB_REPO_PATHS": [
+        "OpenAdaptAI/web",
+        "OpenAdaptAI/install",
+        "OpenAdaptAI/AudioNarration",
+        "OpenAdaptAI/marketplace",
+        "MLDSAI/OpenAdapt",
+    ],
+    "OPENAI_API_KEY": "your api key here",
     #"OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
