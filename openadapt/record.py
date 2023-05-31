@@ -30,6 +30,7 @@ from openadapt import config, crud, utils, window
 import sounddevice
 import soundfile
 import whisper
+import numpy as np
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -676,10 +677,11 @@ def record(
         audio_stream.close()
 
         if len(audio_frames) > 0:
+            concatenated_audio = np.concatenate(audio_frames, axis=0)
             # write to a WAV file
             # TODO: change name
             wav_filename = "audio.wav"
-            soundfile.write(wav_filename, audio_frames, samplerate=int(audio_stream.samplerate))
+            soundfile.write(wav_filename, concatenated_audio, samplerate=int(audio_stream.samplerate))
 
             # Convert audio to text using OpenAI's Whisper
 
