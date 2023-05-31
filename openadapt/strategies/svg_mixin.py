@@ -1,5 +1,5 @@
 """
-Implements a ReplayStrategy mixin using the SVG image format and GPT4All.
+Implements a ReplayStrategy mixin using Pypotrace to convert an image to SVG text.
 
 NOTE: additional libraries on the system are needed,
         see https://github.com/flupke/pypotrace#installation
@@ -10,21 +10,18 @@ Usage:
         ...
 """
 from openadapt.pypotrace import potrace
-from PIL import Image
-from gpt4all import GPT4All
+import PIL
 import numpy as np
+import sys
+sys.path.append('./.venv/lib/python3.10/site-packages')
+import drawsvg as draw
 
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
-PROMPT = "This a screenshot of a computer's window screen. Return the centre of the button from the following svg code, " \
-         "with the centre represented as one list of 2 numbers and only return that list inside a larger list. " \
-         "I want to parse the text, so the entire answer " \
-         "needs to be one list with one sublist with exactly 2 numbers."
-
 
 class SVGReplayStrategyMixin(BaseReplayStrategy):
-    """ReplayStrategy mixin that uses Potrace and GPT4All to detect information.
+    """ReplayStrategy mixin that uses Pypotrace to convert an image to SVG text.
 
     Attributes:
         recording: the recording to be played back
@@ -33,25 +30,39 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
     """
     def __init__(self, recording: Recording):
         super().__init__(recording)
-        self.GPT4All_model = GPT4All("ggml-gpt4all-j-v1.3-groovy.bin")
 
-    def get_svg_info(self, screenshot: Screenshot) -> str:
-        """
-        Returns the location of the buttons.
-        """
-        # convert png to pbm
+    def get_svg_text(self, screenshot: Screenshot) -> str:
         png_img = screenshot.image
+
+        # convert png to pbm
         pbm_img = png_img.convert("1")
 
-        # convert pbm to svg
+        # trace pbm
         image_array = np.array(pbm_img)
         bitmap = potrace.Bitmap(image_array)
         path = bitmap.trace()
-        svg_string = str(path)
 
-        # give svg to GPT4ALL and ask it to return the location of the buttons
-        messages = [{"role": "user", "content": PROMPT + svg_string}]
-        response_dict = self.GPT4All_model.chat_completion(
-            messages, default_prompt_header=False, verbose=False
-        )
-        return response_dict["choices"][0]["message"]["content"]
+        # convert trace into svg text
+        img_width, img_height = png_img.size
+        svg = draw.Drawing(img_width, img_height, origin=(0, 0))
+        svg.set_pixel_scale()
+        for curve in path.curves:
+            curr_x, curr_y = curve.start_point
+            for segment in curve.segments:
+                end_x, end_y = segment.end_point
+                if segment.is_corner:
+                    middle_x, middle_y = segment.c
+                    lines_in_the_segment = draw.Lines(curr_x, curr_y, middle_x, middle_y,
+                                                      end_x, end_y, fill="none", stroke="black")
+                    svg.append(lines_in_the_segment)
+                else:
+                    start_control_x, start_control_y = segment.c1
+                    end_control_x, end_control_y = segment.c2
+                    segment_path = draw.Path(stroke="black", fill="none")
+                    segment_path.C(start_control_x, start_control_y, end_control_x, end_control_y,
+                                   end_x, end_y)
+                    svg.append(segment_path)
+                curr_x, curr_y = end_x, end_y
+            # for child_curve in curve.children: # Needed ??
+
+        return svg.as_svg()

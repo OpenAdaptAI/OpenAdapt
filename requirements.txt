@@ -4,6 +4,7 @@ bokeh==2.4.3
 clipboard==0.0.4
 deepdiff==6.2.2
 dictalchemy3==1.0.0
+drawsvg==2.1.1
 fire==0.4.0
 gpt4all
 ipdb==0.13.11

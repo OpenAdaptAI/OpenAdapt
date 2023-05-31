@@ -45,8 +45,8 @@ class DemoReplayStrategy(
         ocr_text = self.get_ocr_text(screenshot)
         # logger.info(f"ocr_text=\n{ocr_text}")
 
-        svg_info = self.get_svg_info(screenshot)
-        print(svg_info)
+        svg_text = self.get_svg_text(screenshot)
+        # logger.info(f"svg_text=\n{svg_text}")
 
         event_strs = [f"<{event}>" for event in self.recording.action_events]
         history_strs = [f"<{completion}>" for completion in self.result_history]
