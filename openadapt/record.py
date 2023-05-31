@@ -678,15 +678,26 @@ def record(
 
         if len(audio_frames) > 0:
             concatenated_audio = np.concatenate(audio_frames, axis=0)
-            # write to a WAV file
-            # TODO: change name
-            wav_filename = "audio.wav"
-            soundfile.write(wav_filename, concatenated_audio, samplerate=int(audio_stream.samplerate))
 
             # Convert audio to text using OpenAI's Whisper
 
             model = whisper.load_model("base")
-            result_text = model.transcribe("audio.wav")
+            result_info = model.transcribe(concatenated_audio, word_timestamps=True)
+            logger.info(f"The narrated text is: {result_info['text']}")
+            # word timestamps found at result_info['words']
+
+            # convert to bytes
+            audio_data_bytes = concatenated_audio.tobytes()
+            # Save audio frames to the database
+            # TODO: change name
+            audio_file = crud.insert_audio_file(audio_data_bytes, "audio.flac")
+
+            # Create AudioInfo entry
+            audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
+                                                int(audio_stream.samplerate), audio_file)
+
+            # soundfile.write("audio.flac", concatenated_audio,
+            #                 samplerate=int(audio_stream.samplerate))
 
     logger.info(f"joining...")
     keyboard_event_reader.join()

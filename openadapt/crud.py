@@ -2,7 +2,7 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt.db import Session
-from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
+from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent, AudioFile,AudioInfo
 
 
 BATCH_SIZE = 1
@@ -67,6 +67,26 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
         "recording_timestamp": recording_timestamp,
     }
     _insert(event_data, WindowEvent, window_events)
+
+
+def insert_audio_file(data, filename):
+    audio_data = AudioFile(data=data.tobytes(), filename=filename)
+    db.add(audio_data)
+    db.commit()
+    return audio_data
+
+
+def insert_audio_info(transcribed_text, recording_timestamp, sample_rate, audio_file):
+    """Create an AudioInfo entry in the database."""
+    audio_info = AudioInfo(
+        transcribed_text=transcribed_text,
+        recording_timestamp=recording_timestamp,
+        sample_rate=sample_rate,
+        file=audio_file
+    )
+    db.add(audio_info)
+    db.commit()
+    return audio_info
 
 
 def insert_recording(recording_data):

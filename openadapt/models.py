@@ -48,6 +48,8 @@ class Recording(db.Base):
         order_by="WindowEvent.timestamp",
     )
 
+    audio_info = sa.orm.relationship("AudioInfo", back_populates="recording")
+
     _processed_action_events = None
 
     @property
@@ -295,3 +297,27 @@ class WindowEvent(db.Base):
     @classmethod
     def get_active_window_event(cls):
         return WindowEvent(**window.get_active_window_data())
+
+
+class AudioInfo(db.Base):
+    __tablename__ = "audio_info"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    transcribed_text = sa.column(sa.String)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    file_id = sa.Column(sa.ForeignKey("audio_file.id"))
+    sample_rate = sa.Column(sa.Integer)
+
+    recording = sa.orm.relationship("Recording", back_populates="audio_info")
+    file = sa.orm.relationship("AudioFile", back_populates="audio_info")
+
+
+
+class AudioFile(db.Base):
+    __tablename__ = "audio_file"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    filename = sa.Column(sa.String)
+    data = sa.Column(sa.LargeBinary)
+
+    audio_info = sa.orm.relationship("AudioInfo", back_populates="file")
