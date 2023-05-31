@@ -321,3 +321,15 @@ class AudioFile(db.Base):
     data = sa.Column(sa.LargeBinary)
 
     audio_info = sa.orm.relationship("AudioInfo", back_populates="file")
+
+
+class PerformanceStat(db.Base):
+    __tablename__ = "performance_stat"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.Integer)
+    event_type = sa.Column(sa.String)
+    start_time = sa.Column(sa.Integer)
+    end_time = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
+
