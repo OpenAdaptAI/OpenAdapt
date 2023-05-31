@@ -661,6 +661,7 @@ def record(
 
         # open InputStream and start recording while ActionEvents are recorded
         audio_stream = sounddevice.InputStream(callback=audio_callback)
+        logger.info("Audio recording started.")
         audio_stream.start()
 
     try:
@@ -678,12 +679,12 @@ def record(
             # write to a WAV file
             # TODO: change name
             wav_filename = "audio.wav"
-            soundfile.write(wav_filename, audio_frames, samplerate=audio_stream.samplerate)
+            soundfile.write(wav_filename, audio_frames, samplerate=int(audio_stream.samplerate))
 
             # Convert audio to text using OpenAI's Whisper
 
             model = whisper.load_model("base")
-            result = model.transcribe("audio.wav")
+            result_text = model.transcribe("audio.wav")
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
