@@ -6,10 +6,10 @@ from openadapt.models import Screenshot
 
 def crop_test():
     recording = get_latest_recording()
-    window_event = get_window_events(recording)[0]
+    action_event = recording.action_events[0]
     screenshot = Screenshot.take_screenshot()
     screenshot.image.show()
-    screenshot.crop_active_window(window_event)
+    screenshot.crop_active_window(action_event)
     screenshot.image.show()
 
 
