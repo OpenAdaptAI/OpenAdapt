@@ -1,11 +1,13 @@
 import subprocess
 
+from openadapt.app.main import run_app
+
 result = subprocess.run(["git", "status"], capture_output=True, text=True)
 
 if "branch is up to date" not in result.stdout:
     subprocess.run(["git", "stash"])
-    subprocess.run(["echo", "changes", "stashed"])
+    print("Changes stashed")
     subprocess.run(["git", "pull"])
-    subprocess.run(["echo", "updated", "OpenAdapt"])
+    print("Updated the OpenAdapt App")
 
-subprocess.run(["python3", "-m", "app.main"], capture_output=True, text=True)
+run_app() # start gui
