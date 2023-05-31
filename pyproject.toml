@@ -16,3 +16,19 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/MLDSAI/OpenAdapt"
 "Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
+
+[tool.semantic_release]
+version_variable = [
+    "openadapt/__init__.py:__version__"
+]
+version_toml = [
+    "pyproject.toml:tool.poetry.version"
+]
+version_pattern = [
+    "README.md:rev: v{version}",
+]
+major_on_zero = false
+branch = "main"
+upload_to_PyPI = true
+upload_to_release = true
+build_command = "pip install poetry && poetry build"
