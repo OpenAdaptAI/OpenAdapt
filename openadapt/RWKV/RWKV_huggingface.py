@@ -41,7 +41,7 @@ def run_RWKV():
     model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
 
-    
+
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
     tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
     
@@ -54,7 +54,23 @@ def run_RWKV():
     #switch to 'cuda fp16' for better performance
 
     print()
-    prompt = "Here is a list of signals, each detailed in a JSON format. Please provide only the number of the signal that would return data that is most beneficial for a website developer. [{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'},{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'},{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}]. Signal Number: "
+    task_description = (
+        "filling forms and submitting data on web pages"
+    )
+    prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+
+# Instruction: 
+you are given a list of signals, each detailed in a JSON format.Please provide only the signal number that would return data that is most beneficial for {task_description}. 
+
+# Input: 
+[{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'}
+,{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}
+,{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}]
+         
+# Response: 
+"""
+    
+
     print(prompt)
     prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
     out, state = model.forward(prompt_tokens[0].tolist(), None)
