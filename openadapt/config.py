@@ -13,7 +13,7 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
-    #"OPENAI_MODEL_NAME": "gpt-4",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
@@ -36,6 +36,7 @@ for key in _DEFAULTS:
     locals()[key] = val
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
+DB_FNAME = getenv_fallback("DB_FNAME")
 DB_FPATH = ROOT_DIRPATH / DB_FNAME
 DB_URL = f"sqlite:///{DB_FPATH}"
 
