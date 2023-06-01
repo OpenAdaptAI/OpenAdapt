@@ -9,13 +9,7 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from openadapt.agents import transformer_agent
-from dotenv import load_dotenv
-
-from openadapt.crud import (
-    get_latest_recording,
-    get_window_events,
-)
+from openadapt.crud import get_latest_recording, get_window_events
 from openadapt.events import (
     get_events,
 )
@@ -29,11 +23,13 @@ from openadapt.utils import (
     rows2dicts,
 )
 
-load_dotenv()
+from openadapt.agents import transformer_agent
+
 agent = transformer_agent(model="gpt-3.5-turbo", api_key=os.getenv("OPENAI_API_KEY"))
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
+MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template(
@@ -78,9 +74,15 @@ CSS = string.Template(
 
 
 def recursive_len(lst, key):
-    _len = len(lst)
+    try:
+        _len = len(lst)
+    except TypeError:
+        return 0
     for obj in lst:
-        _len += recursive_len(obj[key], key)
+        try:
+            _len += recursive_len(obj.get(key), key)
+        except AttributeError:
+            continue
     return _len
 
 
@@ -108,9 +110,9 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=5):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
     if isinstance(obj, list):
-        children = [dict2html(value) for value in obj]
+        children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
             all_children = children
             children = evenly_spaced(children, max_children)
@@ -122,7 +124,7 @@ def dict2html(obj, max_children=5):
                 f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
-                    <td>{dict2html(value)}</td>
+                    <td>{dict2html(value, max_children)}</td>
                 </tr>
             """
                 for key, value in obj.items()
@@ -165,7 +167,6 @@ def main():
         ),
     ]
     logger.info(f"{len(action_events)=}")
-    promptOnce = False
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
@@ -175,8 +176,18 @@ def main():
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
-        curr_action = get_window_events(recording)
+
         width, height = image.size
+
+        im = action_event.screenshot
+        im.crop_active_window(action_event)
+
+        im._image.save(f"recording-{recording.id}-{idx}.png")
+        diff.save(f"recording-{recording.id}-{idx}-diff.png")
+        # agent.chat(
+        #     f"In the image, you are presented with a screenshot of a user's current active window. The user's window event is: {action_event.window_event.title}. What is the user doing, and what text do they see? DO NOT SEGMENT",
+        #     image=im.image.convert("RGB"),
+        # )
         rows.append(
             [
                 row(
@@ -189,12 +200,6 @@ def main():
                                     aspect-ratio: {width}/{height};
                                 "
                             >
-                            <p>  { '' if promptOnce else agent.chat(
-            f"In the image, you are presented with a screenshot of a user's current active window. The user's window event is: {curr_action[idx].title}. What is the user doing, and what text do they see? DO NOT SEGMENT",
-            image=image.convert("RGB")
-        )}
-        {curr_action[idx].title}
-        </p>
                             <img
                                 src="{diff_utf8}"
                                 style="
@@ -208,6 +213,9 @@ def main():
                                 "
                             >
                         </div>
+                        <table>
+                            {dict2html(row2dict(action_event.window_event), None)}
+                        </table>
                     """,
                     ),
                     Div(
@@ -220,9 +228,9 @@ def main():
                 ),
             ]
         )
-        # promptOnce = True
-    title = f"recording-{recording.timestamp}"
-    fname_out = f"recording-{recording.timestamp}.html"
+
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
