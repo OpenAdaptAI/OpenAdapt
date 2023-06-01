@@ -18,12 +18,14 @@ from openadapt.strategies.llm_mixin import (
 )
 from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
 from openadapt.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.gpt4all_mixin import GPT4ALLReplayStrategyMixin
 
 
 class DemoReplayStrategy(
     LLMReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
+    GPT4ALLReplayStrategyMixin,
     BaseReplayStrategy,
 ):
 
