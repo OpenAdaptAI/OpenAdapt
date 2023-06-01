@@ -20,7 +20,6 @@ MONOCHROME = True
 
 
 class ASCIIReplayStrategyMixin(BaseReplayStrategy):
-
     def __init__(
         self,
         recording: Recording,
@@ -33,7 +32,6 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         monochrome: bool = MONOCHROME,
         columns: int = COLUMNS,
         width_ratio: float = WIDTH_RATIO,
-
     ):
         ascii_art = AsciiArt.from_pillow_image(screenshot.image)
         ascii_text = ascii_art.to_ascii(

@@ -21,6 +21,7 @@ if config.config_file_name is not None:
 from openadapt.config import DB_URL
 from openadapt.models import *
 from openadapt.db import Base
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -46,7 +47,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    #url = config.get_main_option("sqlalchemy.url")
+    # url = config.get_main_option("sqlalchemy.url")
     url = get_url()
     context.configure(
         url=url,

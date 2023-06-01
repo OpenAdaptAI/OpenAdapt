@@ -20,7 +20,6 @@ MAX_INPUT_SIZE = 1024
 
 
 class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
-
     def __init__(
         self,
         recording: Recording,
@@ -41,13 +40,9 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
     ):
         max_input_size = self.max_input_size
         if max_input_size and len(prompt) > max_input_size:
-            logger.warning(
-                f"Truncating from {len(prompt)=} to {max_input_size=}"
-            )
+            logger.warning(f"Truncating from {len(prompt)=} to {max_input_size=}")
             prompt = prompt[-max_input_size:]
-            logger.warning(
-                f"Truncated {len(prompt)=}"
-            )
+            logger.warning(f"Truncated {len(prompt)=}")
 
         logger.debug(f"{prompt=} {max_tokens=}")
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
@@ -58,7 +53,7 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
             attention_mask=attention_mask,
             max_length=input_tokens["input_ids"].shape[-1] + max_tokens,
             pad_token_id=pad_token_id,
-            num_return_sequences=1
+            num_return_sequences=1,
         )
         N = input_tokens["input_ids"].shape[-1]
         completion = self.tokenizer.decode(

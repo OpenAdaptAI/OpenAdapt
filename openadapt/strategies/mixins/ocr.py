@@ -36,14 +36,11 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
         self.ocr = RapidOCR()
 
-    def get_ocr_text(
-        self,
-        screenshot: Screenshot
-    ):
+    def get_ocr_text(self, screenshot: Screenshot):
         # TOOD: improve performance
         result, elapse = self.ocr(screenshot.array)
-        #det_elapse, cls_elapse, rec_elapse = elapse
-        #all_elapse = det_elapse + cls_elapse + rec_elapse
+        # det_elapse, cls_elapse, rec_elapse = elapse
+        # all_elapse = det_elapse + cls_elapse + rec_elapse
         logger.debug(f"{result=}")
         logger.debug(f"{elapse=}")
         df_text = get_text_df(result)
@@ -55,33 +52,33 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 def get_text_df(
     result: List[List[Union[List[float], str, float]]],
 ):
-	"""
-	Convert RapidOCR result to DataFrame.
+    """
+    Convert RapidOCR result to DataFrame.
 
-	Args:
-		result: list of [coordinates, text, confidence]
-			coordinates:
-				[tl_x, tl_y],
-				[tr_x, tr_y],
-				[br_x, br_y],
-				[bl_x, bl_y]
+    Args:
+            result: list of [coordinates, text, confidence]
+                    coordinates:
+                            [tl_x, tl_y],
+                            [tr_x, tr_y],
+                            [br_x, br_y],
+                            [bl_x, bl_y]
 
-	Returns:
-		pd.DataFrame
-	"""
+    Returns:
+            pd.DataFrame
+    """
 
-	coords = [coords for coords, text, confidence in result]
-	columns = ["tl", "tr", "bl", "br"]
-	df = pd.DataFrame(coords, columns=columns)
-	df = unnest(df, df.columns, 0, suffixes=["_x", "_y"])
+    coords = [coords for coords, text, confidence in result]
+    columns = ["tl", "tr", "bl", "br"]
+    df = pd.DataFrame(coords, columns=columns)
+    df = unnest(df, df.columns, 0, suffixes=["_x", "_y"])
 
-	texts = [text for coords, text, confidence in result]
-	df["text"] = texts
+    texts = [text for coords, text, confidence in result]
+    df["text"] = texts
 
-	confidences = [confidence for coords, text, confidence in result]
-	df["confidence"] = confidences
-	logger.debug(f"df=\n{df}")
-	return df
+    confidences = [confidence for coords, text, confidence in result]
+    df["confidence"] = confidences
+    logger.debug(f"df=\n{df}")
+    return df
 
 
 def get_text_from_df(
