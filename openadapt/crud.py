@@ -21,7 +21,16 @@ performance_stats = []
 
 
 def _insert(event_data, table, buffer=None):
-    """Insert using Core API for improved performance (no rows are returned)"""
+    """Insert using Core API for improved performance (no rows are returned)
+
+    Args:
+      event_data: 
+      table: 
+      buffer:  (Default value = None)
+
+    Returns:
+
+    """
 
     db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
@@ -47,6 +56,16 @@ def _insert(event_data, table, buffer=None):
 
 
 def insert_action_event(recording_timestamp, event_timestamp, event_data):
+    """
+
+    Args:
+      recording_timestamp: 
+      event_timestamp: 
+      event_data: 
+
+    Returns:
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -56,6 +75,16 @@ def insert_action_event(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_screenshot(recording_timestamp, event_timestamp, event_data):
+    """
+
+    Args:
+      recording_timestamp: 
+      event_timestamp: 
+      event_data: 
+
+    Returns:
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -65,6 +94,16 @@ def insert_screenshot(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_window_event(recording_timestamp, event_timestamp, event_data):
+    """
+
+    Args:
+      recording_timestamp: 
+      event_timestamp: 
+      event_data: 
+
+    Returns:
+
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -74,8 +113,16 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
 
 
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
-    """
-    Insert event performance stat into db
+    """Insert event performance stat into db
+
+    Args:
+      recording_timestamp: 
+      event_type: 
+      start_time: 
+      end_time: 
+
+    Returns:
+
     """
 
     event_perf_stat = {
@@ -89,7 +136,13 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
 
 def get_perf_stats(recording_timestamp):
     """
-    return performance stats for a given recording
+
+    Args:
+      recording_timestamp: 
+
+    Returns:
+      
+
     """
 
     return (
@@ -101,6 +154,14 @@ def get_perf_stats(recording_timestamp):
 
 
 def insert_recording(recording_data):
+    """
+
+    Args:
+      recording_data: 
+
+    Returns:
+
+    """
     db_obj = Recording(**recording_data)
     db.add(db_obj)
     db.commit()
@@ -109,14 +170,32 @@ def insert_recording(recording_data):
 
 
 def get_latest_recording():
+    """ """
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
 def get_recording(timestamp):
+    """
+
+    Args:
+      timestamp: 
+
+    Returns:
+
+    """
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
 def _get(table, recording_timestamp):
+    """
+
+    Args:
+      table: 
+      recording_timestamp: 
+
+    Returns:
+
+    """
     return (
         db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
@@ -126,10 +205,27 @@ def _get(table, recording_timestamp):
 
 
 def get_action_events(recording):
+    """
+
+    Args:
+      recording: 
+
+    Returns:
+
+    """
     return _get(ActionEvent, recording.timestamp)
 
 
 def get_screenshots(recording, precompute_diffs=False):
+    """
+
+    Args:
+      recording: 
+      precompute_diffs:  (Default value = False)
+
+    Returns:
+
+    """
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
@@ -145,4 +241,12 @@ def get_screenshots(recording, precompute_diffs=False):
 
 
 def get_window_events(recording):
+    """
+
+    Args:
+      recording: 
+
+    Returns:
+
+    """
     return _get(WindowEvent, recording.timestamp)

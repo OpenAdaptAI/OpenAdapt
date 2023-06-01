@@ -26,6 +26,7 @@ class DemoReplayStrategy(
     ASCIIReplayStrategyMixin,
     BaseReplayStrategy,
 ):
+    """ """
     def __init__(
         self,
         recording: Recording,
@@ -38,6 +39,15 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
         window_event: WindowEvent,
     ):
+        """
+
+        Args:
+          screenshot: Screenshot: 
+          window_event: WindowEvent: 
+
+        Returns:
+
+        """
         ascii_text = self.get_ascii_text(screenshot)
         # logger.info(f"ascii_text=\n{ascii_text}")
 

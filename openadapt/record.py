@@ -39,6 +39,18 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
+    """
+
+    Args:
+      event: 
+      write_q: 
+      write_fn: 
+      recording_timestamp: 
+      perf_q: 
+
+    Returns:
+
+    """
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
         write_q.put(event)
     else:
@@ -54,17 +66,26 @@ def process_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
-    """
-    Process events from event queue and write them to respective write queues.
+    """Process events from event queue and write them to respective write queues.
 
     Args:
-        event_q: A queue with events to be processed.
-        screen_write_q: A queue for writing screen events.
-        action_write_q: A queue for writing action events.
-        window_write_q: A queue for writing window events.
-        perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
-        terminate_event: An event to signal the termination of the process.
+      event_q: A queue with events to be processed.
+      screen_write_q: A queue for writing screen events.
+      action_write_q: A queue for writing action events.
+      window_write_q: A queue for writing window events.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      terminate_event: An event to signal the termination of the process.
+      event_q: queue.Queue: 
+      screen_write_q: multiprocessing.Queue: 
+      action_write_q: multiprocessing.Queue: 
+      window_write_q: multiprocessing.Queue: 
+      perf_q: multiprocessing.Queue: 
+      recording_timestamp: float: 
+      terminate_event: multiprocessing.Event: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -131,13 +152,18 @@ def write_action_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ):
-    """
-    Write an action event to the database and update the performance queue.
+    """Write an action event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
-        event: An action event to be written.
-        perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      event: An action event to be written.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: float: 
+      event: Event: 
+      perf_q: multiprocessing.Queue: 
+
+    Returns:
+
     """
 
     assert event.type == "action", event
@@ -150,13 +176,18 @@ def write_screen_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ):
-    """
-    Write a screen event to the database and update the performance queue.
+    """Write a screen event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
-        event: A screen event to be written.
-        perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      event: A screen event to be written.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: float: 
+      event: Event: 
+      perf_q: multiprocessing.Queue: 
+
+    Returns:
+
     """
 
     assert event.type == "screen", event
@@ -172,13 +203,18 @@ def write_window_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ):
-    """
-    Write a window event to the database and update the performance queue.
+    """Write a window event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
-        event: A window event to be written.
-        perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      event: A window event to be written.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: float: 
+      event: Event: 
+      perf_q: multiprocessing.Queue: 
+
+    Returns:
+
     """
 
     assert event.type == "window", event
@@ -194,16 +230,24 @@ def write_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
-    """
-    Write events of a specific type to the db using the provided write function.
+    """Write events of a specific type to the db using the provided write function.
 
     Args:
-        event_type: The type of events to be written.
-        write_fn: A function to write events to the database.
-        write_q: A queue with events to be written.
-        perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
-        terminate_event: An event to signal the termination of the process.
+      event_type: The type of events to be written.
+      write_fn: A function to write events to the database.
+      write_q: A queue with events to be written.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      terminate_event: An event to signal the termination of the process.
+      event_type: str: 
+      write_fn: Callable: 
+      write_q: multiprocessing.Queue: 
+      perf_q: multiprocessing.Queue: 
+      recording_timestamp: float: 
+      terminate_event: multiprocessing.Event: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -225,6 +269,16 @@ def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: Dict[str, Any],
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      action_event_args: Dict[str: 
+      Any]: 
+
+    Returns:
+
+    """
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
     if x is not None and y is not None:
@@ -242,6 +296,17 @@ def on_move(
     y: int,
     injected: bool,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      x: int: 
+      y: int: 
+      injected: bool: 
+
+    Returns:
+
+    """
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -262,6 +327,19 @@ def on_click(
     pressed: bool,
     injected: bool,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      x: int: 
+      y: int: 
+      button: mouse.Button: 
+      pressed: bool: 
+      injected: bool: 
+
+    Returns:
+
+    """
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -284,6 +362,19 @@ def on_scroll(
     dy: int,
     injected: bool,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      x: int: 
+      y: int: 
+      dx: int: 
+      dy: int: 
+      injected: bool: 
+
+    Returns:
+
+    """
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -304,6 +395,17 @@ def handle_key(
     key: keyboard.KeyCode,
     canonical_key: keyboard.KeyCode,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      event_name: str: 
+      key: keyboard.KeyCode: 
+      canonical_key: keyboard.KeyCode: 
+
+    Returns:
+
+    """
     attr_names = [
         "name",
         "char",
@@ -326,13 +428,18 @@ def read_screen_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    """
-    Read screen events and add them to the event queue.
+    """Read screen events and add them to the event queue.
 
     Args:
-        event_q: A queue for adding screen events.
-        terminate_event: An event to signal the termination of the process.
-        recording_timestamp: The timestamp of the recording.
+      event_q: A queue for adding screen events.
+      terminate_event: An event to signal the termination of the process.
+      recording_timestamp: The timestamp of the recording.
+      event_q: queue.Queue: 
+      terminate_event: multiprocessing.Event: 
+      recording_timestamp: float: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -352,13 +459,18 @@ def read_window_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    """
-    Read window events and add them to the event queue.
+    """Read window events and add them to the event queue.
 
     Args:
-        event_q: A queue for adding window events.
-        terminate_event: An event to signal the termination of the process.
-        recording_timestamp: The timestamp of the recording.
+      event_q: A queue for adding window events.
+      terminate_event: An event to signal the termination of the process.
+      recording_timestamp: The timestamp of the recording.
+      event_q: queue.Queue: 
+      terminate_event: multiprocessing.Event: 
+      recording_timestamp: float: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -399,14 +511,19 @@ def performance_stats_writer(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
-    """
-    Write performance stats to the db.
+    """Write performance stats to the db.
     Each entry includes the event type, start time and end time
 
     Args:
-        perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
-        terminate_event: An event to signal the termination of the process.
+      perf_q: A queue for collecting performance data.
+      recording_timestamp: The timestamp of the recording.
+      terminate_event: An event to signal the termination of the process.
+      perf_q: multiprocessing.Queue: 
+      recording_timestamp: float: 
+      terminate_event: multiprocessing.Event: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
@@ -431,15 +548,16 @@ def performance_stats_writer(
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
-    """
-    Create a new recording entry in the database.
+    """Create a new recording entry in the database.
 
     Args:
-        task_description: a text description of the task being implemented
-            in the recording
+      task_description: a text description of the task being implemented
+    in the recording
+      task_description: str: 
 
     Returns:
-        The newly created Recording object
+      : The newly created Recording object
+
     """
 
     timestamp = utils.set_start_time()
@@ -466,13 +584,43 @@ def read_keyboard_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      terminate_event: multiprocessing.Event: 
+      recording_timestamp: float: 
+
+    Returns:
+
+    """
     def on_press(event_q, key, injected):
+        """
+
+        Args:
+          event_q: 
+          key: 
+          injected: 
+
+        Returns:
+
+        """
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
     def on_release(event_q, key, injected):
+        """
+
+        Args:
+          event_q: 
+          key: 
+          injected: 
+
+        Returns:
+
+        """
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
@@ -493,6 +641,16 @@ def read_mouse_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    """
+
+    Args:
+      event_q: queue.Queue: 
+      terminate_event: multiprocessing.Event: 
+      recording_timestamp: float: 
+
+    Returns:
+
+    """
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
@@ -507,11 +665,14 @@ def read_mouse_events(
 def record(
     task_description: str,
 ):
-    """
-    Record Screenshots/ActionEvents/WindowEvents.
+    """Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
-        task_description: a text description of the task that will be recorded
+      task_description: a text description of the task that will be recorded
+      task_description: str: 
+
+    Returns:
+
     """
 
     utils.configure_logging(logger, LOG_LEVEL)

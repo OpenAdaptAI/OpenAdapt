@@ -17,8 +17,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """ """
     op.rename_table("input_event", "action_event")
 
 
 def downgrade() -> None:
+    """ """
     op.rename_table("action_event", "input_event")

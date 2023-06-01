@@ -9,19 +9,55 @@ from openadapt import config
 
 
 def default(val, default):
+    """
+
+    Args:
+      val: 
+      default: 
+
+    Returns:
+
+    """
     return val if val is not None else default
 
 
 def cache(dir_path=None, enabled=None, verbosity=None, **cache_kwargs):
-    """TODO"""
+    """TODO
+
+    Args:
+      dir_path:  (Default value = None)
+      enabled:  (Default value = None)
+      verbosity:  (Default value = None)
+      **cache_kwargs: 
+
+    Returns:
+
+    """
 
     cache_dir_path = default(dir_path, config.CACHE_DIR_PATH)
     cache_enabled = default(enabled, config.CACHE_ENABLED)
     cache_verbosity = default(verbosity, config.CACHE_VERBOSITY)
 
     def decorator(fn):
+        """
+
+        Args:
+          fn: 
+
+        Returns:
+
+        """
         @wraps(fn)
         def wrapper(*args, **kwargs):
+            """
+
+            Args:
+              *args: 
+              **kwargs: 
+
+            Returns:
+
+            """
             logger.debug(f"{cache_enabled=}")
             if cache_enabled:
                 memory = Memory(cache_dir_path, verbose=cache_verbosity)

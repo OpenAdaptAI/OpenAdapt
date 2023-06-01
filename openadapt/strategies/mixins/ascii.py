@@ -4,6 +4,7 @@ Implements a ReplayStrategy mixin for converting images to ASCII.
 Usage:
 
     class MyReplayStrategy(ASCIIReplayStrategyMixin):
+        """ """
         ...
 """
 
@@ -20,6 +21,7 @@ MONOCHROME = True
 
 
 class ASCIIReplayStrategyMixin(BaseReplayStrategy):
+    """ """
     def __init__(
         self,
         recording: Recording,
@@ -33,6 +35,17 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         columns: int = COLUMNS,
         width_ratio: float = WIDTH_RATIO,
     ):
+        """
+
+        Args:
+          screenshot: Screenshot: 
+          monochrome: bool:  (Default value = MONOCHROME)
+          columns: int:  (Default value = COLUMNS)
+          width_ratio: float:  (Default value = WIDTH_RATIO)
+
+        Returns:
+
+        """
         ascii_art = AsciiArt.from_pillow_image(screenshot.image)
         ascii_text = ascii_art.to_ascii(
             monochrome=monochrome,

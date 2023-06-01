@@ -16,6 +16,16 @@ def get_events(
     process=True,
     meta=None,
 ):
+    """
+
+    Args:
+      recording: 
+      process:  (Default value = True)
+      meta:  (Default value = None)
+
+    Returns:
+
+    """
     start_time = time.time()
     action_events = crud.get_action_events(recording)
     window_events = crud.get_window_events(recording)
@@ -89,6 +99,15 @@ def get_events(
 
 
 def make_parent_event(child, extra=None):
+    """
+
+    Args:
+      child: 
+      extra:  (Default value = None)
+
+    Returns:
+
+    """
     # TODO: record which process_fn created the parent event
     event_dict = {
         # TODO: set parent event to child timestamp?
@@ -109,11 +128,28 @@ def make_parent_event(child, extra=None):
 # Set by_diff_distance=True to compute distance from mouse to screenshot diff
 # (computationally expensive but keeps more useful events)
 def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
-    """Merge consecutive mouse move events into a single move event"""
+    """Merge consecutive mouse move events into a single move event
+
+    Args:
+      events: 
+      by_diff_distance:  (Default value = False)
+
+    Returns:
+
+    """
 
     _all_slowdowns = []
 
     def is_target_event(event, state):
+        """
+
+        Args:
+          event: 
+          state: 
+
+        Returns:
+
+        """
         return event.name == "move"
 
     def get_merged_events(
@@ -128,6 +164,19 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
         # TODO: compute, e.g. as a function of diff and/or cursor velocity?
         min_idx_delta=5,  # 100
     ):
+        """
+
+        Args:
+          to_merge: 
+          state: 
+          distance_threshold:  (Default value = 1)
+          # Minimum number of consecutive events (in which the distance between# the cursor and the nearest non-zero diff pixel is greater than# distance_threshold) in order to result in a separate parent event.# Larger values merge more events under a single parent.# TODO: verify logic is correct (test)# TODO: compute: 
+          e.g. as a function of diff and/or cursor velocity?min_idx_delta:  (Default value = 5)
+          # 100: 
+
+        Returns:
+
+        """
         N = len(to_merge)
         # (inclusive, exclusive)
         group_idx_tups = [(0, N)]
@@ -235,12 +284,37 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
 
 
 def merge_consecutive_mouse_scroll_events(events):
-    """Merge consecutive mouse scroll events into a single scroll event"""
+    """Merge consecutive mouse scroll events into a single scroll event
+
+    Args:
+      events: 
+
+    Returns:
+
+    """
 
     def is_target_event(event, state):
+        """
+
+        Args:
+          event: 
+          state: 
+
+        Returns:
+
+        """
         return event.name == "scroll"
 
     def get_merged_events(to_merge, state):
+        """
+
+        Args:
+          to_merge: 
+          state: 
+
+        Returns:
+
+        """
         state["dt"] += to_merge[-1].timestamp - to_merge[0].timestamp
         mouse_dx = sum(event.mouse_dx for event in to_merge)
         mouse_dy = sum(event.mouse_dy for event in to_merge)
@@ -259,9 +333,26 @@ def merge_consecutive_mouse_scroll_events(events):
 
 
 def merge_consecutive_mouse_click_events(events):
-    """Merge consecutive mouse click events into a single doubleclick event"""
+    """Merge consecutive mouse click events into a single doubleclick event
+
+    Args:
+      events: 
+
+    Returns:
+
+    """
 
     def get_recording_attr(event, attr_name, fallback):
+        """
+
+        Args:
+          event: 
+          attr_name: 
+          fallback: 
+
+        Returns:
+
+        """
         attr = getattr(event.recording, attr_name) if event.recording else None
         if attr is None:
             fallback_value = fallback()
@@ -270,10 +361,27 @@ def merge_consecutive_mouse_click_events(events):
         return attr
 
     def is_target_event(event, state):
+        """
+
+        Args:
+          event: 
+          state: 
+
+        Returns:
+
+        """
         # TODO: parametrize button name
         return event.name == "click" and event.mouse_button_name == "left"
 
     def get_timestamp_mappings(to_merge):
+        """
+
+        Args:
+          to_merge: 
+
+        Returns:
+
+        """
         double_click_distance = get_recording_attr(
             to_merge[0],
             "double_click_distance_pixels",
@@ -310,6 +418,15 @@ def merge_consecutive_mouse_click_events(events):
         return press_to_press_t, press_to_release_t
 
     def get_merged_events(to_merge, state):
+        """
+
+        Args:
+          to_merge: 
+          state: 
+
+        Returns:
+
+        """
         press_to_press_t, press_to_release_t = get_timestamp_mappings(to_merge)
         t_to_event = {event.timestamp: event for event in to_merge}
         merged = []
@@ -375,14 +492,39 @@ def merge_consecutive_mouse_click_events(events):
 
 
 def merge_consecutive_keyboard_events(events, group_named_keys=True):
-    """Merge consecutive keyboard char press events into a single press event"""
+    """Merge consecutive keyboard char press events into a single press event
+
+    Args:
+      events: 
+      group_named_keys:  (Default value = True)
+
+    Returns:
+
+    """
 
     def is_target_event(event, state):
+        """
+
+        Args:
+          event: 
+          state: 
+
+        Returns:
+
+        """
         is_target_event = bool(event.key)
         logger.debug(f"{is_target_event=} {event=}")
         return is_target_event
 
     def get_group_idx_tups(to_merge):
+        """
+
+        Args:
+          to_merge: 
+
+        Returns:
+
+        """
         pressed_keys = set()
         was_pressed = False
         start_idx = 0
@@ -421,6 +563,15 @@ def merge_consecutive_keyboard_events(events, group_named_keys=True):
         return group_idx_tups
 
     def get_merged_events(to_merge, state):
+        """
+
+        Args:
+          to_merge: 
+          state: 
+
+        Returns:
+
+        """
         if group_named_keys:
             group_idx_tups = get_group_idx_tups(to_merge)
         else:
@@ -457,12 +608,37 @@ def merge_consecutive_keyboard_events(events, group_named_keys=True):
 
 
 def remove_redundant_mouse_move_events(events):
-    """Remove mouse move events that don't change the mouse position"""
+    """Remove mouse move events that don't change the mouse position
+
+    Args:
+      events: 
+
+    Returns:
+
+    """
 
     def is_target_event(event, state):
+        """
+
+        Args:
+          event: 
+          state: 
+
+        Returns:
+
+        """
         return event.name in ("move", "click")
 
     def is_same_pos(e0, e1):
+        """
+
+        Args:
+          e0: 
+          e1: 
+
+        Returns:
+
+        """
         if not all([e0, e1]):
             return False
         for attr in ("mouse_x", "mouse_y"):
@@ -473,11 +649,30 @@ def remove_redundant_mouse_move_events(events):
         return True
 
     def should_discard(event, prev_event, next_event):
+        """
+
+        Args:
+          event: 
+          prev_event: 
+          next_event: 
+
+        Returns:
+
+        """
         return event.name == "move" and (
             is_same_pos(prev_event, event) or is_same_pos(event, next_event)
         )
 
     def get_merged_events(to_merge, state):
+        """
+
+        Args:
+          to_merge: 
+          state: 
+
+        Returns:
+
+        """
         to_merge = [None, *to_merge, None]
         merged_events = []
         dts = []
@@ -524,7 +719,17 @@ def merge_consecutive_action_events(
     is_target_event,
     get_merged_events,
 ):
-    """Merge consecutive action events into a single event"""
+    """Merge consecutive action events into a single event
+
+    Args:
+      name: 
+      events: 
+      is_target_event: 
+      get_merged_events: 
+
+    Returns:
+
+    """
 
     num_events_before = len(events)
     state = {"dt": 0}
@@ -532,6 +737,14 @@ def merge_consecutive_action_events(
     to_merge = []
 
     def include_merged_events(to_merge):
+        """
+
+        Args:
+          to_merge: 
+
+        Returns:
+
+        """
         merged_events = get_merged_events(to_merge, state)
         rval.extend(merged_events)
         to_merge.clear()
@@ -561,6 +774,16 @@ def discard_unused_events(
     action_events,
     referred_timestamp_key,
 ):
+    """
+
+    Args:
+      referred_events: 
+      action_events: 
+      referred_timestamp_key: 
+
+    Returns:
+
+    """
     referred_event_timestamps = set(
         [
             getattr(action_event, referred_timestamp_key)
@@ -580,6 +803,16 @@ def discard_unused_events(
 
 
 def process_events(action_events, window_events, screenshots):
+    """
+
+    Args:
+      action_events: 
+      window_events: 
+      screenshots: 
+
+    Returns:
+
+    """
     # for debugging
     _action_events = action_events
     _window_events = window_events

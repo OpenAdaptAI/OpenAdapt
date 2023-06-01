@@ -7,6 +7,15 @@ from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
 def play_mouse_event(event, mouse_controller):
+    """
+
+    Args:
+      event: 
+      mouse_controller: 
+
+    Returns:
+
+    """
     name = event.name
     assert name in MOUSE_EVENTS, event
     x = event.mouse_x
@@ -39,6 +48,16 @@ def play_mouse_event(event, mouse_controller):
 
 
 def play_key_event(event, keyboard_controller, canonical=True):
+    """
+
+    Args:
+      event: 
+      keyboard_controller: 
+      canonical:  (Default value = True)
+
+    Returns:
+
+    """
     assert event.name in KEY_EVENTS, event
 
     key = event.canonical_key if canonical and event.canonical_key else event.key
@@ -54,6 +73,16 @@ def play_key_event(event, keyboard_controller, canonical=True):
 
 
 def play_action_event(event, mouse_controller, keyboard_controller):
+    """
+
+    Args:
+      event: 
+      mouse_controller: 
+      keyboard_controller: 
+
+    Returns:
+
+    """
     # currently we use children to replay type events
     if event.children and event.name in KEY_EVENTS:
         for child in event.children:
