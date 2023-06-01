@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import db, utils, window
+from openadapt import config, db, utils, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -61,6 +61,9 @@ class Recording(db.Base):
 
 class ActionEvent(db.Base):
     __tablename__ = "action_event"
+    _text_sep = config.TEXT_SEP
+    _text_name_prefix = config.TEXT_NAME_PREFIX
+    _text_name_suffix = config.TEXT_NAME_SUFFIX
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -200,10 +203,6 @@ class ActionEvent(db.Base):
         ]
         rval = " ".join(attrs)
         return rval
-
-    _text_sep = "-"
-    _text_name_prefix = "<"
-    _text_name_suffix = ">"
 
     @classmethod
     def from_children(cls, children_dicts):

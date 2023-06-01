@@ -31,12 +31,12 @@ def scrub_text(text: str, is_hyphenated: bool = False) -> str:
         return None
 
     if is_hyphenated and not (
-        text.startswith("<") or text.endswith(">")
+        text.startswith(config.TEXT_NAME_PREFIX) or text.endswith(config.TEXT_NAME_SUFFIX)
     ):
-        text = "".join(text.split("-"))
+        text = "".join(text.split(config.TEXT_SEP))
 
     analyzer_results = config.ANALYZER_TRF.analyze(
-        text=text, entities=config.SCRUBBING_ENTITIES, language="en"
+        text=text, entities=config.SCRUBBING_ENTITIES, language=config.SCRUB_LANGUAGE
     )
 
     operators = {}
@@ -44,7 +44,7 @@ def scrub_text(text: str, is_hyphenated: bool = False) -> str:
         operators[entity.entity_type] = OperatorConfig(
             "mask",
             {
-                "masking_char": "*",
+                "masking_char": config.SCRUB_CHAR,
                 "chars_to_mask": entity.end - entity.start,
                 "from_end": True,
             },
@@ -57,9 +57,9 @@ def scrub_text(text: str, is_hyphenated: bool = False) -> str:
     )
 
     if is_hyphenated and not (
-        text.startswith("<") or text.endswith(">")
+        text.startswith(config.TEXT_NAME_PREFIX) or text.endswith(config.TEXT_NAME_SUFFIX)
     ):
-        anonymized_results.text = "-".join(anonymized_results.text)
+        anonymized_results.text = config.TEXT_SEP.join(anonymized_results.text)
 
     return anonymized_results.text
 

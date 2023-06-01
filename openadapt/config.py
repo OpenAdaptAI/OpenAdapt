@@ -63,8 +63,18 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
+# ACTION EVENT CONFIGURATIONS
+TEXT_SEP = "-"
+TEXT_NAME_PREFIX = "<"
+TEXT_NAME_SUFFIX = ">"
+
+
+
+
 # SCRUBBING CONFIGURATIONS
 
+SCRUB_CHAR = "*"
+SCRUB_LANGUAGE = "en"
 SCRUB_CONFIG_TRF = {
     "nlp_engine_name": "spacy",
     "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
