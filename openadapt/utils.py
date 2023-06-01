@@ -15,11 +15,8 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common
+from openadapt import common, config
 
-
-# TODO: move to config.py
-DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 EMPTY = (None, [], {}, "")
 
@@ -450,8 +447,8 @@ def plot_performance(recording_timestamp: float = None) -> None:
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     fname_parts = ["performance", f"{recording_timestamp}"]
     fname = "-".join(fname_parts) + ".png"
-    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
+    os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+    fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
     logger.info(f"{fpath=}")
     plt.savefig(fpath)
     os.system(f"open {fpath}")

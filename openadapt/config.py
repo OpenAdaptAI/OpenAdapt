@@ -56,6 +56,7 @@ for key in _DEFAULTS:
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME
 DB_URL = f"sqlite:///{DB_FPATH}"
+DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in locals().items():
