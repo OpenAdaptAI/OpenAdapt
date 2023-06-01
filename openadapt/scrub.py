@@ -71,6 +71,20 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
     return anonymized_results.text
 
 
+def scrub_text_all(text: str) -> str:
+    """
+    Scrub the text by replacing all characters with config.SCRUB_CHAR
+
+    Args:
+        text (str): Text to be scrubbed
+
+    Returns:
+        str: Scrubbed text
+    """
+
+    return config.SCRUB_CHAR * len(text)
+
+
 def scrub_image(
     image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
 ) -> Image:
@@ -109,6 +123,7 @@ def _should_scrub_text(
     Returns:
         bool: True if the key and value should be scrubbed, False otherwise
     """
+
     return (
         isinstance(value, str)
         and isinstance(key, str)
@@ -116,7 +131,24 @@ def _should_scrub_text(
     )
 
 
-def _scrub_text_item(value: str, key: Any) -> str:
+def _is_scrubbed(old_text: str, new_text: str) -> bool:
+    """
+    Check if the text has been scrubbed
+
+    Args:
+        old_text (str): The original text
+        new_text (str): The scrubbed text
+
+    Returns:
+        bool: True if the text has been scrubbed, False otherwise
+    """
+
+    return old_text != new_text
+
+
+def _scrub_text_item(
+    value: str, key: Any, force_scrub_children: bool = False
+) -> str:
     """
     Scrubs the value of a dict item.
 
@@ -127,8 +159,11 @@ def _scrub_text_item(value: str, key: Any) -> str:
     Returns:
         str: The scrubbed value
     """
+
     if key in ("text", "canonical_text"):
         return scrub_text(value, is_separated=True)
+    if force_scrub_children:
+        return scrub_text_all(value)
     return scrub_text(value)
 
 
@@ -146,6 +181,7 @@ def _should_scrub_list_item(
     Returns:
         bool: True if the key and value should be scrubbed, False otherwise
     """
+
     return (
         isinstance(item, (str, dict))
         and isinstance(key, str)
@@ -154,7 +190,10 @@ def _should_scrub_list_item(
 
 
 def _scrub_list_item(
-    item: Union[str, Dict], key: str, list_keys: List[str]
+    item: Union[str, Dict],
+    key: str,
+    list_keys: List[str],
+    force_scrub_children: bool = False,
 ) -> Union[Dict, str]:
     """
     Scrubs the value of a dict item.
@@ -167,13 +206,19 @@ def _scrub_list_item(
     Returns:
         dict/str: The scrubbed dict/value respectively
     """
+
     if isinstance(item, dict):
-        return scrub_dict(item, list_keys)
+        return scrub_dict(
+            item, list_keys, force_scrub_children=force_scrub_children
+        )
     return _scrub_text_item(item, key)
 
 
 def scrub_dict(
-    input_dict: dict, list_keys: list = None, scrub_all: bool = False
+    input_dict: dict,
+    list_keys: list = None,
+    scrub_all: bool = False,
+    force_scrub_children: bool = False,
 ) -> dict:
     """
     Scrub the dict of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
@@ -191,15 +236,25 @@ def scrub_dict(
     scrubbed_dict = {}
     for key, value in input_dict.items():
         if _should_scrub_text(key, value, list_keys, scrub_all):
-            scrubbed_dict[key] = _scrub_text_item(value, key)
+            scrubbed_text = _scrub_text_item(
+                value, key, force_scrub_children
+            )
+            if key in ("text", "canonical_text") and _is_scrubbed(
+                value, scrubbed_text
+            ):
+                force_scrub_children = True
+            scrubbed_dict[key] = scrubbed_text
         elif isinstance(value, list):
             scrubbed_list = [
-                _scrub_list_item(item, key, list_keys)
+                _scrub_list_item(
+                    item, key, list_keys, force_scrub_children
+                )
                 if _should_scrub_list_item(item, key, list_keys)
                 else item
                 for item in value
             ]
             scrubbed_dict[key] = scrubbed_list
+            force_scrub_children = False
         elif isinstance(value, dict):
             if isinstance(key, str) and key == "state":
                 scrubbed_dict[key] = scrub_dict(

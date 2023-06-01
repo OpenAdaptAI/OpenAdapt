@@ -120,5 +120,9 @@ SCRUB_KEYS_HTML = [
     "title",
     "state",
     "task_description",
+    "key_char",
+    "canonical_key_char",
+    "key_vk",
+    "children",
 ]
 DEFAULT_SCRUB_FILL_COLOR = (255,)
