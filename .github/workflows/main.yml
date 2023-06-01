@@ -1,0 +1,42 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  run-ci:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install wheel
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Check formatting with Black
+        run: |
+          black --check .
+
+      - name: Run headless tests
+        uses: coactions/setup-xvfb@v1
+        with:
+          run: python -m pytest
+          working-directory: ./  # Optional: Specify the working directory if needed
+          options:  # Optional: Add any additional options or arguments for pytest
+
+      - name: flake8 Lint
+        uses: py-actions/flake8@v2
+        with:
+          plugins: "flake8-docstrings"
+          extra-args: "--docstring-convention=google"
