@@ -1,10 +1,11 @@
+import os
+import time
+import shutil
+
 from datetime import datetime
 from loguru import logger
 from sqlalchemy.orm import sessionmaker
-import os
-import time
 import sqlalchemy as sa
-
 
 from openadapt.db import Session, get_base, get_engine, engine
 from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
@@ -156,15 +157,17 @@ def create_db(recording_id):
     # backup first
     t = time.time()
     # USE WINDOWS
-    os.system("cp {config.ENV_FILE_PATH} {config.ENV_FILE_PATH}-{t}")
-    with open(config.ENV_FILE_PATH, "a") as f:
-        f.seek(0, os.SEEK_END)
-        f.write(f"\nDB_FNAME={config.DB_FNAME}")
-    os.system("alembic upgrade head")
-
+    shutil.copyfile(config.ENV_FILE_PATH, f"{config.ENV_FILE_PATH}-{t}")
     # update current running configuration
+    import ipdb; ipdb.set_trace()
     config.set_db_fname(db_fname)
+    with open(config.ENV_FILE_PATH, "a") as f:
+        # f.seek(0, os.SEEK_END)
+        f.write(f"\nDB_FNAME={config.DB_FNAME}")
+
+    os.system("alembic upgrade head")
     db.engine = get_engine()
+
 
     # Retrieve the file path of the new database
     db_file_path = config.DB_FPATH.resolve()
