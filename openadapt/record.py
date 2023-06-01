@@ -28,6 +28,7 @@ import sounddevice
 import soundfile
 import whisper
 import numpy as np
+import io
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -657,17 +658,28 @@ def record(
         # convert concatenated_audio to format expected by whisper
         converted_audio = concatenated_audio.flatten().astype(np.float32)
 
-        # convert to bytes to save to database
-        audio_data_bytes = converted_audio.tobytes()
-
-        # convert back to np array with np.frombuffer(audio_data_bytes, np.float32)
-
         # Convert audio to text using OpenAI's Whisper
         logger.info("Transcribing audio...")
         model = whisper.load_model("base")
         result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
         logger.info(f"The narrated text is: {result_info['text']}")
         # word timestamps found at result_info['words']
+
+        # compress and convert to bytes to save to database
+        logger.info("Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes))
+        # Create an in-memory file-like object
+        file_obj = io.BytesIO()
+        # Use the in-memory file to write the audio data using lossless compression
+        soundfile.write(file_obj, converted_audio, int(audio_stream.samplerate), format='FLAC')
+        # Get the compressed audio data as bytes
+        compressed_audio_bytes = file_obj.getvalue()
+
+        logger.info("Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes)))
+
+        file_obj.close()
+
+        # To decompress the audio and restore it to its original form:
+        # restored_audio, restored_samplerate = sf.read(io.BytesIO(compressed_audio_bytes))
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -687,7 +699,7 @@ def record(
     if enable_audio:
         # Save audio frames to the database
         # TODO: change name
-        audio_file = crud.insert_audio_file(audio_data_bytes)
+        audio_file = crud.insert_audio_file(compressed_audio_bytes)
 
         # Create AudioInfo entry
         audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
