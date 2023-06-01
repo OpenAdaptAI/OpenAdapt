@@ -38,7 +38,6 @@ PROC_WRITE_BY_EVENT_TYPE = {
 }
 PLOT_PERFORMANCE = False
 
-
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 
@@ -50,13 +49,13 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 
 
 def process_events(
-    event_q: queue.Queue,
-    screen_write_q: multiprocessing.Queue,
-    action_write_q: multiprocessing.Queue,
-    window_write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+        event_q: queue.Queue,
+        screen_write_q: multiprocessing.Queue,
+        action_write_q: multiprocessing.Queue,
+        window_write_q: multiprocessing.Queue,
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Process events from event queue and write them to respective write queues.
@@ -131,9 +130,9 @@ def process_events(
 
 
 def write_action_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -150,9 +149,9 @@ def write_action_event(
 
 
 def write_screen_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -172,9 +171,9 @@ def write_screen_event(
 
 
 def write_window_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -191,12 +190,12 @@ def write_window_event(
 
 
 def write_events(
-    event_type: str,
-    write_fn: Callable,
-    write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+        event_type: str,
+        write_fn: Callable,
+        write_q: multiprocessing.Queue,
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -226,8 +225,8 @@ def write_events(
 
 
 def trigger_action_event(
-    event_q: queue.Queue,
-    action_event_args: Dict[str, Any],
+        event_q: queue.Queue,
+        action_event_args: Dict[str, Any],
 ) -> None:
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
@@ -241,12 +240,11 @@ def trigger_action_event(
 
 
 def on_move(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        injected: bool,
 ) -> None:
-
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -260,12 +258,12 @@ def on_move(
 
 
 def on_click(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    button: mouse.Button,
-    pressed: bool,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        button: mouse.Button,
+        pressed: bool,
+        injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
@@ -282,12 +280,12 @@ def on_click(
 
 
 def on_scroll(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    dx: int,
-    dy: int,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        dx: int,
+        dy: int,
+        injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
@@ -304,10 +302,10 @@ def on_scroll(
 
 
 def handle_key(
-    event_q: queue.Queue,
-    event_name: str,
-    key: keyboard.KeyCode,
-    canonical_key: keyboard.KeyCode,
+        event_q: queue.Queue,
+        event_name: str,
+        key: keyboard.KeyCode,
+        canonical_key: keyboard.KeyCode,
 ) -> None:
     attr_names = [
         "name",
@@ -335,9 +333,9 @@ def handle_key(
 
 
 def read_screen_events(
-    event_q: queue.Queue,
-    terminate_event: multiprocessing.Event,
-    recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     """
     Read screen events and add them to the event queue.
@@ -361,9 +359,9 @@ def read_screen_events(
 
 
 def read_window_events(
-    event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     """
     Read window events and add them to the event queue.
@@ -383,8 +381,8 @@ def read_window_events(
         if not window_data:
             continue
         if (
-            window_data["title"] != prev_window_data.get("title") or
-            window_data["window_id"] != prev_window_data.get("window_id")
+                window_data["title"] != prev_window_data.get("title") or
+                window_data["window_id"] != prev_window_data.get("window_id")
         ):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
@@ -406,10 +404,10 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def performance_stats_writer (
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+def performance_stats_writer(
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Write performance stats to the db.
@@ -438,7 +436,7 @@ def performance_stats_writer (
 
 
 def create_recording(
-    task_description: str,
+        task_description: str,
 ) -> Dict[str, Any]:
     """
     Create a new recording entry in the database.
@@ -471,25 +469,21 @@ def create_recording(
 
 
 def read_keyboard_events(
-    event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
-
-
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
-
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
-
 
     utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
@@ -502,9 +496,9 @@ def read_keyboard_events(
 
 
 def read_mouse_events(
-    event_q: queue.Queue,
-    terminate_event: multiprocessing.Event,
-    recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
@@ -518,8 +512,8 @@ def read_mouse_events(
 
 
 def record(
-    task_description: str,
-    enable_audio: bool = False
+        task_description: str,
+        enable_audio: bool = False
 ):
     """
     Record Screenshots/ActionEvents/WindowEvents. Optionally record audio narration from the user
@@ -643,7 +637,7 @@ def record(
             audio_frames.append(indata.copy())
 
         # open InputStream and start recording while ActionEvents are recorded
-        audio_stream = sounddevice.InputStream(callback=audio_callback)
+        audio_stream = sounddevice.InputStream(callback=audio_callback, samplerate=16000, channels=1)
         logger.info("Audio recording started.")
         audio_stream.start()
 
@@ -658,28 +652,22 @@ def record(
         audio_stream.stop()
         audio_stream.close()
 
-        if len(audio_frames) > 0:
-            concatenated_audio = np.concatenate(audio_frames, axis=0)
+        # Concatenate into one Numpy array
+        concatenated_audio = np.concatenate(audio_frames, axis=0)
+        # convert concatenated_audio to format expected by whisper
+        converted_audio = concatenated_audio.flatten().astype(np.float32)
 
-            # Convert audio to text using OpenAI's Whisper
+        # convert to bytes to save to database
+        audio_data_bytes = converted_audio.tobytes()
 
-            model = whisper.load_model("base")
-            result_info = model.transcribe(concatenated_audio, word_timestamps=True)
-            logger.info(f"The narrated text is: {result_info['text']}")
-            # word timestamps found at result_info['words']
+        # convert back to np array with np.frombuffer(audio_data_bytes, np.float32)
 
-            # convert to bytes
-            audio_data_bytes = concatenated_audio.tobytes()
-            # Save audio frames to the database
-            # TODO: change name
-            audio_file = crud.insert_audio_file(audio_data_bytes, "audio.flac")
-
-            # Create AudioInfo entry
-            audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
-                                                int(audio_stream.samplerate), audio_file)
-
-            # soundfile.write("audio.flac", concatenated_audio,
-            #                 samplerate=int(audio_stream.samplerate))
+        # Convert audio to text using OpenAI's Whisper
+        logger.info("Transcribing audio...")
+        model = whisper.load_model("base")
+        result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+        logger.info(f"The narrated text is: {result_info['text']}")
+        # word timestamps found at result_info['words']
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -696,7 +684,17 @@ def record(
     if PLOT_PERFORMANCE:
         utils.plot_performance(recording_timestamp)
 
+    if enable_audio:
+        # Save audio frames to the database
+        # TODO: change name
+        audio_file = crud.insert_audio_file(audio_data_bytes)
+
+        # Create AudioInfo entry
+        audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
+                                            int(audio_stream.samplerate), audio_file)
+
     logger.info(f"saved {recording_timestamp=}")
+
 
 if __name__ == "__main__":
     fire.Fire(record)
