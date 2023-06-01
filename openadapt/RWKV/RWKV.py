@@ -17,7 +17,7 @@ os.environ["RWKV_CUDA_ON"] = '0'
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
 @stub.function(gpu="a100", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("./openadapt/tokenizer", remote_path="/root/rwkv_model")])
-def run_RWKV():
+def run_RWKV(task_description=None, input=None):
 
     #use gpu=a100 for Raven-14B, vs. use gpu=any for other weights
     """
@@ -38,8 +38,25 @@ def run_RWKV():
 
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
     tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
+    pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
     
-    
+    temperature = 0.9
+    top_p = 0.9
+    countPenalty = 0.1
+    token_count = 200
+    ctx_limit = 1536
+
+    args = PIPELINE_ARGS(temperature= float(temperature), 
+                        top_p= float(top_p),
+                        alpha_frequency= countPenalty,
+                        token_ban= [],
+                        token_stop= [0])
+
+    all_tokens = []
+    out_last = 0
+    out_str = ""
+    occurence = {}
+    state = None
 
     
     #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cpu fp32')  #heavy weight model
@@ -60,23 +77,49 @@ you are given a list of signals, each detailed in a JSON format.Please provide o
 [{{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'}}
 ,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
 ,{{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}}]
-         
-# Response: 
+
+# Signal Number: 
 """
     
-
     print(prompt)
-    prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
-    out, state = model.forward(prompt_tokens[0].tolist(), None)
-    predicted_token = np.argmax(out.detach().cpu().numpy())
-    predicted_word = tokenizer.decode(predicted_token)
-    print(predicted_word)
+    for i in range(token_count):
+        out, state = model.forward(pipeline.encode(prompt)[-ctx_limit:] if i == 0 else [token], state)
 
-    for i in range(100):
-        out, state = model.forward([predicted_token], state)
-        predicted_token = np.argmax(out.detach().cpu().numpy())
-        predicted_word = tokenizer.decode(predicted_token)
-        print(predicted_word)
+        for n in occurence:
+            out[n] -= (args.alpha_presence + occurence[n] * args.alpha_frequency)
+
+        token = pipeline.sample_logits(out, temperature=args.temperature, top_p=args.top_p)
+
+        if token in args.token_stop:
+            break
+        all_tokens += [token]
+        if token not in occurence:
+            occurence[token] = 1
+        else:
+            occurence[token] += 1
+
+        tmp = pipeline.decode(all_tokens[out_last:])
+        if '\ufffd' not in tmp:
+            out_str += tmp
+            #yield out_str.strip()
+            #print(out_str.strip())
+            out_last = i + 1
+
+
+    print(out_str.strip())
+
+    # print(prompt)
+    # prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
+    # out, state = model.forward(prompt_tokens[0].tolist(), None)
+    # predicted_token = np.argmax(out.detach().cpu().numpy())
+    # predicted_word = tokenizer.decode(predicted_token)
+    # print(predicted_word)
+
+    # for i in range(100):
+    #     out, state = model.forward([predicted_token], state)
+    #     predicted_token = np.argmax(out.detach().cpu().numpy())
+    #     predicted_word = tokenizer.decode(predicted_token)
+    #     print(predicted_word)
 
     #while predicted token is not stop token, 
     # then out,state = model.forward(prompt_tokens  , state)
