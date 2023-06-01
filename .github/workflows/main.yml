@@ -26,7 +26,7 @@ jobs:
 
       - name: Check formatting with Black
         run: |
-          black --check .
+          black --check --exclude "alembic/versions" .
 
       - name: Run headless tests
         uses: coactions/setup-xvfb@v1
@@ -39,4 +39,4 @@ jobs:
         uses: py-actions/flake8@v2
         with:
           plugins: "flake8-docstrings"
-          extra-args: "--docstring-convention=google"
+          extra-args: "--docstring-convention=google --exclude=alembic/versions"
