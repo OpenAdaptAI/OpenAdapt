@@ -41,7 +41,11 @@ for key in _DEFAULTS:
     val = getenv_fallback(key)
     locals()[key] = val
 
-ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
+if multiprocessing.current_process().name == "MainProcess":
+    for key, val in locals().items():
+        if not key.startswith("_") and key.isupper():
+            logger.info(f"{key}={val}")
+
 DB_FPATH = ROOT_DIRPATH / DB_FNAME
 DB_URL = f"sqlite:///{DB_FPATH}"
 DB_ECHO = False
@@ -51,31 +55,24 @@ DT_FMT = "%Y-%m-%d_%H-%M-%S"
 
 ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
 logger.info(f"{ENV_FILE_PATH=}")
-import ipdb; ipdb.set_trace()
 load_dotenv(ENV_FILE_PATH)
 
 def set_db_fname(db_fname):
     global DB_FNAME
     DB_FNAME = db_fname
-    set_db_fpath()
+    set_db_fpath(DB_FNAME)
     logger.info(f"{DB_FNAME=}")
 
 
-def set_db_fpath():
+def set_db_fpath(db_fname):
     global DB_FPATH
-    DB_FPATH = ROOT_DIRPATH / DB_FNAME
-    set_db_url()
+    DB_FPATH = ROOT_DIRPATH / db_fname
     logger.info(f"{DB_FPATH=}")
 
 
-def set_db_url():
+def set_db_url(db_fpath):
     global DB_URL
-    DB_URL = f"sqlite:///{DB_FPATH}"
+    DB_URL = f"sqlite:///{db_fpath}"
     logger.info(f"{DB_URL=}")
 
 set_db_fname(DB_FNAME)
-
-if multiprocessing.current_process().name == "MainProcess":
-    for key, val in locals().items():
-        if not key.startswith("_") and key.isupper():
-            logger.info(f"{key}={val}")

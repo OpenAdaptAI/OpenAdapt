@@ -177,12 +177,13 @@ def export_sql(recording_id):
     return sql
 
 def create_db(recording_id):
-    fname_parts = [
-        config.DB_FNAME,
-        str(recording_id),
-        datetime.now().strftime(config.DT_FMT),
-    ]
-    db_fname = "-".join(fname_parts)
+    # fname_parts = [
+    #     config.DB_FNAME,
+    #     str(recording_id),
+    #     datetime.now().strftime(config.DT_FMT),
+    # ]
+    # db_fname = "-".join(fname_parts)
+    db_fname = f"recording_{recording_id}.db"
 
     # append to .env before running alembic
     # backup first
@@ -190,8 +191,8 @@ def create_db(recording_id):
     # USE WINDOWS
     shutil.copyfile(config.ENV_FILE_PATH, f"{config.ENV_FILE_PATH}-{t}")
     # update current running configuration
-    import ipdb; ipdb.set_trace()
     config.set_db_fname(db_fname)
+
     with open(config.ENV_FILE_PATH, "a") as f:
         # f.seek(0, os.SEEK_END)
         f.write(f"\nDB_FNAME={config.DB_FNAME}")
@@ -202,6 +203,7 @@ def create_db(recording_id):
 
     # Retrieve the file path of the new database
     db_file_path = config.DB_FPATH.resolve()
+    import ipdb; ipdb.set_trace()
 
     return t, db_file_path
 
@@ -209,7 +211,7 @@ def create_db(recording_id):
 def restore_db(timestamp):
     # TODO: Implement the restoration logic
     backup_file = "{}-{}".format(config.ENV_FILE_PATH, timestamp)
-    os.system("cp {} {}".format(backup_file, config.ENV_FILE_PATH))
+    shutil.copyfile(backup_file, config.ENV_FILE_PATH)
 
     # Undo other configuration changes if needed
     config.set_db_fname("openadapt.db")  # Reset the DB_FNAME to its initial state or set it to the appropriate value
@@ -219,7 +221,9 @@ def restore_db(timestamp):
 def run_sql(sql):
     with engine.connect() as con:
         result = con.execute(sql)
-        for row in result:
+        print(result)
+        for row in result.fetchall():
+            print(row)
             logger.info(f"{row=}")
 
 def export_recording(recording_id):

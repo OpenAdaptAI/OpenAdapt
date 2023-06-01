@@ -37,7 +37,7 @@ def export_recording_to_folder(recording_id):
 
         # Create an in-memory zip file and add the db file
         with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
-            zip_file.write(config.UNZIPPED_RECORDING_FOLDER_PATH, arcname=db_filename)
+            zip_file.write(config.ROOT_DIRPATH, arcname=db_filename)
 
         logger.info(f"Created zip file of the recording: {zip_path}")
 
