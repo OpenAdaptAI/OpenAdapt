@@ -4,10 +4,17 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), and has [GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) which run on each pull request to ensure consistent behaviour and style.
+This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
 
-The GitHub Actions specifically run PyTest, [black](https://github.com/psf/black) and [Ruff](https://beta.ruff.rs/docs/).
 
+## Issue Template
+
+## Testing
+[GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behaviour and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
+
+You can run these tests on your own computer by downloading the depencencies in requirements.txt and then running pytest in the root directory. 
+
+## Pull Request Template
 
 ## Submitting Changes
 
