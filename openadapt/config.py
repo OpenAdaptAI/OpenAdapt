@@ -1,3 +1,14 @@
+"""Script containing configurations for the openadapt application.
+
+Usage:
+
+    from openadapt import config
+    ...
+    config.<setting>
+    ...
+
+"""
+
 import multiprocessing
 import os
 import pathlib
@@ -7,7 +18,10 @@ from loguru import logger
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
+from presidio_image_redactor import (
+    ImageRedactorEngine,
+    ImageAnalyzerEngine,
+)
 
 
 _DEFAULTS = {
@@ -17,7 +31,7 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
-    #"OPENAI_MODEL_NAME": "gpt-4",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
@@ -58,8 +72,7 @@ SCRUB_CONFIG_TRF = {
 SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_TRF)
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
 ANALYZER_TRF = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE_TRF,
-    supported_languages=["en"]
+    nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
 )
 ANONYMIZER = AnonymizerEngine()
 IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
@@ -74,13 +87,13 @@ SCRUB_IGNORE_ENTITIES = [
     # 'PHONE_NUMBER',
     # 'US_ITIN',
     # 'AU_ABN',
-    'DATE_TIME',
+    "DATE_TIME",
     # 'NRP',
     # 'SG_NRIC_FIN',
     # 'AU_ACN',
     # 'IP_ADDRESS',
     # 'EMAIL_ADDRESS',
-    'URL',
+    "URL",
     # 'IBAN_CODE',
     # 'AU_TFN',
     # 'LOCATION',
@@ -94,9 +107,9 @@ SCRUBBING_ENTITIES = [
     if entity not in SCRUB_IGNORE_ENTITIES
 ]
 SCRUB_KEYS_HTML = [
-    'text',
-    'canonical_text',
-    'title',
-    'state',
+    "text",
+    "canonical_text",
+    "title",
+    "state",
 ]
 DEFAULT_SCRUB_FILL_COLOR = (255,)

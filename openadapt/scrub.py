@@ -1,5 +1,4 @@
-"""
-Module to scrub text of all PII/PHI.
+"""Script to scrub text of all PII/PHI.
 
 Usage:
 
@@ -17,7 +16,10 @@ import fire
 from openadapt import config, utils
 
 
-def scrub_text(text: str, is_hyphenated: bool = False) -> str:
+def scrub_text(
+    text: str,
+    is_hyphenated: bool = False
+) -> str:
     """
     Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer
 
@@ -59,7 +61,8 @@ def scrub_text(text: str, is_hyphenated: bool = False) -> str:
 
 
 def scrub_image(
-    image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
+    image: Image,
+    fill_color=config.DEFAULT_SCRUB_FILL_COLOR
 ) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor
@@ -95,11 +98,7 @@ def _scrub_text_item(value, key):
 
 
 def _should_scrub_list_item(item, key, list_keys):
-    return (
-        isinstance(item, (str, dict))
-        and isinstance(key, str)
-        and key in list_keys
-    )
+    return isinstance(item, (str, dict)) and isinstance(key, str) and key in list_keys
 
 
 def _scrub_list_item(item, key, list_keys):
@@ -138,9 +137,7 @@ def scrub_dict(
             scrubbed_dict[key] = scrubbed_list
         elif isinstance(value, dict):
             if isinstance(key, str) and key == "state":
-                scrubbed_dict[key] = scrub_dict(
-                    value, list_keys, scrub_all=True
-                )
+                scrubbed_dict[key] = scrub_dict(value, list_keys, scrub_all=True)
             else:
                 scrubbed_dict[key] = scrub_dict(value, list_keys)
         else:
@@ -150,7 +147,8 @@ def scrub_dict(
 
 
 def scrub_list_dicts(
-    input_list: list[dict], list_keys: list = None
+    input_list: list[dict],
+    list_keys: list = None
 ) -> list[dict]:
     """
     Scrub the list of dicts of all PII/PHI
