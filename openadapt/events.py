@@ -5,34 +5,23 @@ from pprint import pformat
 from scipy.spatial import distance
 import numpy as np
 
-from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
-from openadapt.crud import (
-    get_action_events,
-    get_window_events,
-    get_screenshots,
-)
-from openadapt.models import ActionEvent
-from openadapt.utils import (
-    get_double_click_distance_pixels,
-    get_double_click_interval_seconds,
-    get_scale_ratios,
-    rows2dicts,
-)
+from openadapt import common, config, crud, models, utils
 
 
 MAX_PROCESS_ITERS = 1
 
 
-def get_events(recording, process=True, meta=None):
-    def format_num(num, raw_num):
-        return f"{num} of {raw_num} ({(num / raw_num):.2%})"
-    
+def get_events(
+    recording,
+    process=True,
+    meta=None,
+):
     start_time = time.time()
-    action_events = get_action_events(recording)
-    window_events = get_window_events(recording)
-    screenshots = get_screenshots(recording)
+    action_events = crud.get_action_events(recording)
+    window_events = crud.get_window_events(recording)
+    screenshots = crud.get_screenshots(recording)
 
-    raw_action_event_dicts = rows2dicts(action_events)
+    raw_action_event_dicts = utils.rows2dicts(action_events)
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 
     num_action_events = len(action_events)
@@ -108,10 +97,12 @@ def make_parent_event(child, extra=None):
     extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
-    return ActionEvent(**event_dict)
+    return models.ActionEvent(**event_dict)
 
 
-def merge_consecutive_mouse_move_events(events, by_diff_distance=True):
+# Set by_diff_distance=True to compute distance from mouse to screenshot diff
+# (computationally expensive but keeps more useful events)
+def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
     """Merge consecutive mouse move events into a single move event"""
 
     _all_slowdowns = []
@@ -138,7 +129,7 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=True):
         # (inclusive, exclusive)
         group_idx_tups = [(0, N)]
         if by_diff_distance:
-            width_ratio, height_ratio = get_scale_ratios(to_merge[0])
+            width_ratio, height_ratio = utils.get_scale_ratios(to_merge[0])
             close_idxs = []
             # TODO: improve performance, e.g. vectorization, resizing
             _all_dts = []
@@ -283,13 +274,13 @@ def merge_consecutive_mouse_click_events(events):
         double_click_distance = get_recording_attr(
             to_merge[0],
             "double_click_distance_pixels",
-            get_double_click_distance_pixels,
+            utils.get_double_click_distance_pixels,
         )
         logger.info(f"{double_click_distance=}")
         double_click_interval = get_recording_attr(
             to_merge[0],
             "double_click_interval_seconds",
-            get_double_click_interval_seconds,
+            utils.get_double_click_interval_seconds,
         )
         logger.info(f"{double_click_interval=}")
         press_to_press_t = {}
@@ -477,7 +468,7 @@ def remove_redundant_mouse_move_events(events):
 
 
     def is_target_event(event, state):
-        return event.name in ("click", "move")
+        return event.name in ("move", "click")
 
 
     def is_same_pos(e0, e1):
@@ -553,7 +544,7 @@ def merge_consecutive_action_events(
 
 
     for event in events:
-        assert event.name in MOUSE_EVENTS + KEY_EVENTS, event
+        assert event.name in common.ALL_EVENTS, event
         if is_target_event(event, state):
             to_merge.append(event)
         else:
@@ -594,6 +585,11 @@ def discard_unused_events(
 
 
 def process_events(action_events, window_events, screenshots):
+    # for debugging
+    _action_events = action_events
+    _window_events = window_events
+    _screenshots = screenshots
+
     num_action_events = len(action_events)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
