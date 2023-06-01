@@ -11,18 +11,12 @@ from transformers import PreTrainedTokenizerFast
 #integrate modal to load bigger RWKV model
 stub = modal.Stub("RWKV-test")
 
-#check if cuda is available
-# print(torch.zeros(1).cuda())
-# print(torch.cuda.is_available())
-
-
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0'
 
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
-#@stub.function(image=torch_image, mounts=[modal.Mount.from_local_file("./openadapt/20B_tokenizer.json", remote_path="/root/rwkv_model")])#,modal.Mount.from_local_file("D:\\models\RWKV-4-Pile-430M-20220808-8066.pth", remote_path="/root/rwkv_model")])
-@stub.function(gpu="a100", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("D:\models", remote_path="/root/rwkv_model")])#,modal.Mount.from_local_file("D:\\models\RWKV-4-Pile-430M-20220808-8066.pth", remote_path="/root/rwkv_model")])
+@stub.function(gpu="a100", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("./openadapt/tokenizer", remote_path="/root/rwkv_model")])
 def run_RWKV():
 
     #use gpu=a100 for Raven-14B, vs. use gpu=any for other weights
