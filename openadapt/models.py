@@ -60,7 +60,6 @@ class Recording(db.Base):
         return self._processed_action_events
 
 
-
 class ActionEvent(db.Base):
     __tablename__ = "action_event"
 
@@ -88,8 +87,8 @@ class ActionEvent(db.Base):
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
     #     AttributeError: 'list' object has no attribute '_sa_instance_state'
-    #children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
-    #parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
+    # children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
+    # parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
 
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
@@ -312,7 +311,6 @@ class AudioInfo(db.Base):
     file = sa.orm.relationship("AudioFile", back_populates="audio_info")
 
 
-
 class AudioFile(db.Base):
     __tablename__ = "audio_file"
 
@@ -331,4 +329,3 @@ class PerformanceStat(db.Base):
     start_time = sa.Column(sa.Integer)
     end_time = sa.Column(sa.Integer)
     window_id = sa.Column(sa.String)
-

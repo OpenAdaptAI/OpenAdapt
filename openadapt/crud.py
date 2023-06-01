@@ -181,3 +181,12 @@ def get_screenshots(recording, precompute_diffs=False):
 
 def get_window_events(recording):
     return _get(WindowEvent, recording.timestamp)
+
+
+def get_audio_info(recording):
+    return (
+        db
+            .query(AudioInfo)
+            .filter(AudioInfo.recording_timestamp == recording.timestamp)
+            .first()
+    )

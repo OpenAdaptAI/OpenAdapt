@@ -11,6 +11,7 @@ from loguru import logger
 
 from openadapt.crud import (
     get_latest_recording,
+    get_audio_info
 )
 from openadapt.events import (
     get_events,
@@ -138,6 +139,8 @@ def main():
     recording = get_latest_recording()
     logger.debug(f"{recording=}")
 
+    audio_info = get_audio_info(recording)
+
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
@@ -159,7 +162,12 @@ def main():
                 text=f"{dict2html(meta)}",
                 width_policy="max",
             ),
-        )
+        ),
+        row(
+            Div(
+                text=f"{dict2html(row2dict(audio_info))}",
+            ),
+        ),
     ]
     logger.info(f"{len(action_events)=}")
     for idx, action_event in enumerate(action_events):
