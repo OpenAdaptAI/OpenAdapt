@@ -3,6 +3,7 @@ import pywinauto
 from pywinauto import Desktop
 import time
 from pprint import pprint
+global active_window
 def get_active_window_state():
     active_window = get_active_window()
     meta = get_active_window_meta(active_window)
@@ -28,9 +29,8 @@ def get_active_window_meta(active_window) :
     logger.info(f"{active_window.get_properties()}=")
     return active_window.get_properties()
 
-def get_element_at_position(x, y):
-    # TODO
-    return None
+def get_active_element_state(x, y):
+    return active_window.from_points(x,y)
 
 def get_active_window():
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
@@ -68,7 +68,6 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state)
-    import ipdb; ipdb.set_trace()
 
 
 if __name__ == "__main__":
