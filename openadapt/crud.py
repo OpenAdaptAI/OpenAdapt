@@ -103,8 +103,8 @@ def get_perf_stats(recording_timestamp):
         .all()
     )
 
-def insert_audio_file(data, filename):
-    audio_data = AudioFile(data=data.tobytes(), filename=filename)
+def insert_audio_file(data):
+    audio_data = AudioFile(data=data)
     db.add(audio_data)
     db.commit()
     return audio_data

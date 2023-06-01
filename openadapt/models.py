@@ -303,7 +303,7 @@ class AudioInfo(db.Base):
     __tablename__ = "audio_info"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    transcribed_text = sa.column(sa.String)
+    transcribed_text = sa.Column(sa.String)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     file_id = sa.Column(sa.ForeignKey("audio_file.id"))
     sample_rate = sa.Column(sa.Integer)
@@ -317,7 +317,6 @@ class AudioFile(db.Base):
     __tablename__ = "audio_file"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    filename = sa.Column(sa.String)
     data = sa.Column(sa.LargeBinary)
 
     audio_info = sa.orm.relationship("AudioInfo", back_populates="file")
