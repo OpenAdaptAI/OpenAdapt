@@ -25,10 +25,11 @@ def upgrade() -> None:
     )
     op.create_table('audio_info',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('transcribed_text', sa.String, nullable=True),
+    sa.Column('transcribed_text', sa.String(), nullable=True),
     sa.Column('recording_timestamp', sa.Integer(), nullable=True),
     sa.Column('file_id', sa.Integer(), nullable=True),
     sa.Column('sample_rate', sa.Integer(), nullable=True),
+    sa.Column('words_with_timestamps', sa.Text(), nullable=True),
     sa.ForeignKeyConstraint(['file_id'], ['audio_file.id'], name=op.f('fk_audio_info_file_id_audio_file')),
     sa.ForeignKeyConstraint(['recording_timestamp'], ['recording.timestamp'], name=op.f('fk_audio_info_recording_timestamp_recording')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_audio_info'))

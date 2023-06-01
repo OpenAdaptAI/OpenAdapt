@@ -306,6 +306,7 @@ class AudioInfo(db.Base):
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     file_id = sa.Column(sa.ForeignKey("audio_file.id"))
     sample_rate = sa.Column(sa.Integer)
+    words_with_timestamps = sa.Column(sa.Text)
 
     recording = sa.orm.relationship("Recording", back_populates="audio_info")
     file = sa.orm.relationship("AudioFile", back_populates="audio_info")

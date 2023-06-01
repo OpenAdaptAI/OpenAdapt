@@ -663,7 +663,7 @@ def record(
         model = whisper.load_model("base")
         result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
         logger.info(f"The narrated text is: {result_info['text']}")
-        # word timestamps found at result_info['words']
+        word_list = result_info['segments'][0]['words']
 
         # compress and convert to bytes to save to database
         logger.info("Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes))
@@ -703,7 +703,7 @@ def record(
 
         # Create AudioInfo entry
         audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
-                                            int(audio_stream.samplerate), audio_file)
+                                            int(audio_stream.samplerate), audio_file, word_list)
 
     logger.info(f"saved {recording_timestamp=}")
 

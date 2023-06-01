@@ -1,5 +1,6 @@
 from loguru import logger
 import sqlalchemy as sa
+import json
 
 from openadapt.db import Session
 
@@ -110,13 +111,14 @@ def insert_audio_file(data):
     return audio_data
 
 
-def insert_audio_info(transcribed_text, recording_timestamp, sample_rate, audio_file):
+def insert_audio_info(transcribed_text, recording_timestamp, sample_rate, audio_file, word_list):
     """Create an AudioInfo entry in the database."""
     audio_info = AudioInfo(
         transcribed_text=transcribed_text,
         recording_timestamp=recording_timestamp,
         sample_rate=sample_rate,
-        file=audio_file
+        file=audio_file,
+        words_with_timestamps=json.dumps(word_list)
     )
     db.add(audio_info)
     db.commit()
