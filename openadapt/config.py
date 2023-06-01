@@ -111,5 +111,6 @@ SCRUB_KEYS_HTML = [
     "canonical_text",
     "title",
     "state",
+    "task_description",
 ]
 DEFAULT_SCRUB_FILL_COLOR = (255,)
