@@ -99,4 +99,4 @@ SCRUB_KEYS_HTML = [
     'title',
     'state',
 ]
-DEFAULT_SCRUB_FILL_COLOR = 255
+DEFAULT_SCRUB_FILL_COLOR = (255, 0, 0)

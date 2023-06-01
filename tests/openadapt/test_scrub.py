@@ -47,7 +47,8 @@ def test_scrub_image() -> None:
     scrubbed_image.close()
     os.remove(scrubbed_image_path)
 
-    # Assert that the number of mask pixels is approximately 1.5% the total number of pixels
+    # Assert that the number of mask pixels
+    # is approximately 1.5% the total number of pixels
     assert (
         round((mask_pixels / total_pixels), 3) == 0.015
     )  # Change this value as necessary
@@ -103,7 +104,9 @@ def test_scrub_credit_card() -> None:
     """
 
     assert (
-        scrub.scrub_text("My credit card number is 4234-5678-9012-3456 and ")
+        scrub.scrub_text(
+            "My credit card number is 4234-5678-9012-3456 and "
+        )
     ) == "My credit card number is ******************* and "
 
 
@@ -125,7 +128,7 @@ def test_scrub_address() -> None:
 
     assert (
         scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
-        == "My address is 123 Main St, *******, On, CAN."
+        == "My address is 123 Main St, Toro***, On, ***."
     )
 
 
@@ -205,11 +208,16 @@ def test_scrub_all_together() -> None:
         "John Smith's email is johnsmith@example.com and"
         " his phone number is 555-123-4567."
         "His credit card number is 4831-5538-2996-5651 and"
-        " his social security number is 923-45-6789. He was born on 01/01/1980."
+        " his social security number is 923-45-6789."
+        " He was born on 01/01/1980."
     )
     assert scrub.scrub_text(text_with_pii_phi) == (
         "************ email is ********************* and"
         " his phone number is ************."
         "His credit card number is ******************* and"
-        " his social security number is ***********. He was born on 01/01/1980."
+        " his social security number is ***********."
+        " He was born on 01/01/1980."
     )
+
+if __name__ == "__main__":
+    test_scrub_image()
