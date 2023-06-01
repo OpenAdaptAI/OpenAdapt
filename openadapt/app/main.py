@@ -66,7 +66,6 @@ def run_app():
         with splitter.after:
             logger = Console()
             logger.log.style("height: 200px;, width: 300px;")
-            # logger.log.style("height: 200px;, width: 300px; font-size: 10px;")
 
         splitter.disable()
 
