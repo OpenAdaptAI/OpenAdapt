@@ -209,7 +209,9 @@ def _scrub_list_item(
 
     if isinstance(item, dict):
         return scrub_dict(
-            item, list_keys, force_scrub_children=force_scrub_children
+            item,
+            list_keys,
+            force_scrub_children=force_scrub_children
         )
     return _scrub_text_item(item, key)
 
