@@ -25,7 +25,6 @@ EMPTY = (None, [], {}, "")
 
 
 def configure_logging(logger, log_level):
-    return
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()

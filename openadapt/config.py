@@ -5,8 +5,9 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageRedactorEngine
+from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
 
 
 _DEFAULTS = {
@@ -50,25 +51,18 @@ if multiprocessing.current_process().name == "MainProcess":
 
 # SCRUBBING CONFIGURATIONS
 
-# SCRUB_CONFIG_TRF = {
-#     "nlp_engine_name": "spacy",
-#     "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
-# }
-# SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_TRF)
-# NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-# SCRUB_CONFIG_LG = {
-#     "nlp_engine_name": "spacy",
-#     "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
-# }
-# SCRUB_PROVIDER_LG = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_LG)
-# NLP_ENGINE_LG = SCRUB_PROVIDER_LG.create_engine()
-# ANALYZER = AnalyzerEngine(
-#     nlp_engine=NLP_ENGINE_TRF,
-#     supported_languages=["en"]
-# )
-ANALYZER = AnalyzerEngine()
+SCRUB_CONFIG_TRF = {
+    "nlp_engine_name": "spacy",
+    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+}
+SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_TRF)
+NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+ANALYZER_TRF = AnalyzerEngine(
+    nlp_engine=NLP_ENGINE_TRF,
+    supported_languages=["en"]
+)
 ANONYMIZER = AnonymizerEngine()
-IMAGE_REDACTOR = ImageRedactorEngine()
+IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
@@ -96,13 +90,13 @@ SCRUB_IGNORE_ENTITIES = [
 ]
 SCRUBBING_ENTITIES = [
     entity
-    for entity in ANALYZER.get_supported_entities()
+    for entity in ANALYZER_TRF.get_supported_entities()
     if entity not in SCRUB_IGNORE_ENTITIES
 ]
 SCRUB_KEYS_HTML = [
     'text',
     'canonical_text',
     'title',
-    'state'
+    'state',
 ]
-DEFAULT_SCRUB_FILL_COLOR = (255,0,0)
+DEFAULT_SCRUB_FILL_COLOR = 255

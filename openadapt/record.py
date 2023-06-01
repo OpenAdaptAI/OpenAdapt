@@ -392,7 +392,7 @@ def read_window_events(
                 "window",
                 window_data,
             ))
-        prev_window_data = dict(window_data)
+        prev_window_data = window_data
 
 
 def performance_stats_writer (

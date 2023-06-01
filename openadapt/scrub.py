@@ -1,14 +1,15 @@
-"""Module to scrub text of all PII/PHI.
+"""
+Module to scrub text of all PII/PHI.
 
 Usage:
 
     $ python openadapt/scrub.py scrub_text str_arg
-    $ python openadapt/scrub.py scrub_image Image_arg
-    
+    $ python openadapt/scrub.py scrub_image PIL.Image_arg
+    $ python openadapt/scrub.py scrub_dict dict_arg
+    $ python openadapt/scrub.py scrub_list_dicts list_of_dicts_arg
+
 """
 
-from io import BytesIO
-from mss import base
 from PIL import Image
 from presidio_anonymizer.entities import OperatorConfig
 import fire
@@ -16,9 +17,9 @@ import fire
 from openadapt import config, utils
 
 
-def scrub_text(text: str,  is_hyphenated: bool = False) -> str:
+def scrub_text(text: str, is_hyphenated: bool = False) -> str:
     """
-    Scrub the text of all PII/PHI using Presidio Analyzer and Anonymizer
+    Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer
 
     Args:
         text (str): Text to be scrubbed
@@ -31,9 +32,9 @@ def scrub_text(text: str,  is_hyphenated: bool = False) -> str:
         return None
 
     if is_hyphenated:
-        text = ''.join(text.split('-'))
+        text = "".join(text.split("-"))
 
-    analyzer_results = config.ANALYZER.analyze(
+    analyzer_results = config.ANALYZER_TRF.analyze(
         text=text, entities=config.SCRUBBING_ENTITIES, language="en"
     )
 
@@ -48,11 +49,6 @@ def scrub_text(text: str,  is_hyphenated: bool = False) -> str:
             },
         )
 
-        # TODO: remove this print statement after testing
-        print(
-            f"Recognized entity: {entity.entity_type} - start: {entity.start} end: {entity.end}"
-        )
-
     anonymized_results = config.ANONYMIZER.anonymize(
         text=text,
         analyzer_results=analyzer_results,
@@ -62,7 +58,9 @@ def scrub_text(text: str,  is_hyphenated: bool = False) -> str:
     return anonymized_results.text
 
 
-def scrub_image(image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR) -> Image:
+def scrub_image(
+    image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
+) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor
 
@@ -82,79 +80,39 @@ def scrub_image(image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR) -> Ima
     return redacted_image
 
 
-def scrub_screenshot(
-    screenshot: base.ScreenShot, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
-) -> base.ScreenShot:
-    """
-    Scrub the screenshot of all PII/PHI using Presidio Image Redactor
-
-    Args:
-        screenshot (mss.base.ScreenShot): An mss.base.ScreenShot object to be scrubbed
-
-    Returns:
-        mss.base.ScreenShot: The scrubbed screenshot with PII and PHI removed.
-    """
-
-    # Convert the MSS screenshot object to a PIL Image
-    image = Image.frombytes("RGBA", screenshot.size, screenshot.bgra, "raw", "BGRA")
-
-    # Use the scrub_image function to scrub the image
-    redacted_image = scrub_image(image, fill_color)
-
-    # Convert the redacted PIL Image back into an mss.base.ScreenShot object
-    raw_data = bytearray(redacted_image.tobytes("raw", "RGB"))
-
-    # Prepare monitor information from the original screenshot
-    monitor_info = {
-        "left": screenshot.left,
-        "top": screenshot.top,
-        "width": screenshot.width,
-        "height": screenshot.height
-    }
-
-    # Construct a new screenshot with the redacted image data
-    redacted_screenshot = base.ScreenShot(raw_data, monitor_info)
-
-    # Return the redacted screenshot
-    return redacted_screenshot
-
-
-def scrub_png_data(png_data: bytes, fill_color=config.DEFAULT_SCRUB_FILL_COLOR) -> bytes:
-    """
-    
-    Scrub the png_data of all PII/PHI using Presidio Image Redactor
-    
-    Args:
-        png_data (bytes): PNG data to be scrubbed
-        
-    Returns:
-        bytes: Scrubbed PNG data
-    
-    Raises:
-        None
-    """
-    # Load image from the input png_data
-    image = Image.open(BytesIO(png_data))
-
-    # Redact the image with red color
-    redacted_image = config.IMAGE_REDACTOR.redact(
-        image, fill=fill_color, entities=config.SCRUBBING_ENTITIES
+def _should_scrub_text(key, value, list_keys, scrub_all=False):
+    return (
+        isinstance(value, str)
+        and isinstance(key, str)
+        and (key in list_keys or scrub_all)
     )
 
-    # Save the redacted image to an in-memory buffer
-    output_buffer = BytesIO()
-    redacted_image.save(output_buffer, format='PNG') # type: ignore
 
-    # Get the redacted image data from the buffer
-    redacted_png_data = output_buffer.getvalue()
-
-    # Return the redacted image data
-    return redacted_png_data
+def _scrub_text_item(value, key):
+    if key in ("text", "canonical_text"):
+        return scrub_text(value, is_hyphenated=True)
+    return scrub_text(value)
 
 
-def scrub_dict(input_dict: dict, list_keys: list = None) -> dict:
+def _should_scrub_list_item(item, key, list_keys):
+    return (
+        isinstance(item, (str, dict))
+        and isinstance(key, str)
+        and key in list_keys
+    )
+
+
+def _scrub_list_item(item, key, list_keys):
+    if isinstance(item, dict):
+        return scrub_dict(item, list_keys)
+    return _scrub_text_item(item, key)
+
+
+def scrub_dict(
+    input_dict: dict, list_keys: list = None, scrub_all: bool = False
+) -> dict:
     """
-    Scrub the dict of all PII/PHI using Presidio Analyzer and Anonymizer.
+    Scrub the dict of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_dict (dict): A dict to be scrubbed
@@ -168,29 +126,35 @@ def scrub_dict(input_dict: dict, list_keys: list = None) -> dict:
 
     scrubbed_dict = {}
     for key, value in input_dict.items():
-        if isinstance(value, str) and key in list_keys:
-            scrubbed_dict[key] = scrub_text(value)
+        if _should_scrub_text(key, value, list_keys, scrub_all):
+            scrubbed_dict[key] = _scrub_text_item(value, key)
         elif isinstance(value, list):
-            scrubbed_list = []
-            for item in value:
-                if isinstance(item, str) and key in list_keys:
-                    scrubbed_list.append(scrub_text(item))
-                elif isinstance(item, dict):
-                    scrubbed_list.append(scrub_dict(item, list_keys))
-                else:
-                    scrubbed_list.append(item)
+            scrubbed_list = [
+                _scrub_list_item(item, key, list_keys)
+                if _should_scrub_list_item(item, key, list_keys)
+                else item
+                for item in value
+            ]
             scrubbed_dict[key] = scrubbed_list
         elif isinstance(value, dict):
-            scrubbed_dict[key] = scrub_dict(value, list_keys)
+            if isinstance(key, str) and key == "state":
+                scrubbed_dict[key] = scrub_dict(
+                    value, list_keys, scrub_all=True
+                )
+            else:
+                scrubbed_dict[key] = scrub_dict(value, list_keys)
         else:
             scrubbed_dict[key] = value
 
     return scrubbed_dict
 
 
-def scrub_list_dicts(input_list: list[dict], list_keys: list = None) -> list[dict]:
+def scrub_list_dicts(
+    input_list: list[dict], list_keys: list = None
+) -> list[dict]:
     """
-    Scrub the list of dicts of all PII/PHI using Presidio Analyzer and Anonymizer.
+    Scrub the list of dicts of all PII/PHI
+    using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_list (list[dict]): A list of dicts to be scrubbed
