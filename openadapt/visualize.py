@@ -31,6 +31,7 @@ LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
+SCRUB_LOGGING = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
     table {
@@ -134,14 +135,18 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
 
 
 def main():
-    configure_logging(logger, LOG_LEVEL)
+    configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
 
     recording = get_latest_recording()
+    if SCRUB_LOGGING:
+        recording.task_description = scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
-    event_dicts = scrub.scrub_list_dicts(rows2dicts(action_events))
+    event_dicts = rows2dicts(action_events)
+    if SCRUB_LOGGING:
+        event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -167,11 +172,12 @@ def main():
         if idx == MAX_EVENTS:
             break
         image = display_event(action_event)
-        image = scrub.scrub_image(image)
         diff = display_event(action_event, diff=True)
-        diff = scrub.scrub_image(diff)
         mask = action_event.screenshot.diff_mask
-        mask = scrub.scrub_image(mask)
+        if SCRUB_LOGGING:
+            image = scrub.scrub_image(image)
+            diff = scrub.scrub_image(diff)
+            mask = scrub.scrub_image(mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)

@@ -15,18 +15,20 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common, config
+from openadapt import common, config, scrub
 
 
 EMPTY = (None, [], {}, "")
 
 
-def configure_logging(logger, log_level):
+def configure_logging(logger, log_level, scrub_logging):
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
+    scrub_logging = os.getenv("SCRUB_LOGGING") or scrub_logging
     logger.remove()
     logger.add(sys.stderr, level=log_level)
     logger.debug(f"{log_level=}")
+    logger.debug(f"{scrub_logging=}")
 
 
 def row2dict(row, follow=True):
@@ -327,6 +329,7 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
+        text = scrub.scrub_text(text, is_separated=True)
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
