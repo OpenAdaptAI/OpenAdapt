@@ -1,8 +1,7 @@
-from io import BytesIO
+from io import BytesIO, StringIO
 from PIL import Image, ImageChops
 import cairosvg as cairo
-# NOTE: cairosvg may require additional dependencies
-# as outlined in https://cairosvg.org/documentation/
+import numpy as np
 
 from openadapt.strategies.demo import DemoReplayStrategy
 from openadapt.models import Recording, Screenshot
@@ -10,12 +9,16 @@ from openadapt.models import Recording, Screenshot
 RECORDING = Recording()
 REPLAY = DemoReplayStrategy(RECORDING)
 
-# TODO
-# def test_no_button():
-#     no_button_screenshot = Image.open("assets/no_button.png")
-#     expected = ""
-#     actual = REPLAY.get_svg_info(no_button_screenshot)
-#     assert actual == expected
+
+def mse(image1, image2):
+    """Calculate the Mean Squared Error (MSE) between two images
+    """
+    array1 = np.array(image1)
+    array2 = np.array(image2)
+
+    err = np.sum((array1.astype('float') - array2.astype('float')) ** 2)
+    err /= float(array1.shape[0] * array1.shape[1])
+    return err
 
 
 def test_one_button():
@@ -24,23 +27,20 @@ def test_one_button():
     one_button_screenshot._image = one_button_image
 
     actual_svg_text = REPLAY.get_svg_text(one_button_screenshot)
+    with open('assets/actual_svg.svg', 'w') as f:
+        # Write the text to the file
+        f.write(actual_svg_text)
 
-    expected = one_button_image.convert("L")
+    expected = one_button_image.convert("1")
 
-    actual_svg_file = BytesIO(actual_svg_text)
+    actual_svg_file = StringIO(actual_svg_text)
+    
     actual_png_file = BytesIO()
     cairo.svg2png(file_obj=actual_svg_file, write_to=actual_png_file)
-    actual = Image.open(actual_png_file)
+    actual_img = Image.open(actual_png_file)
+    actual = actual_img.convert("1")
 
-    difference = ImageChops.difference(expected, actual)
+    difference = mse(expected, actual)
     print(difference)
-    assert difference < 0.2
+    assert difference < 0.5
 
-
-# TODO
-# def test_multiple_buttons():
-#     multiple_button_screenshot = Image.open("assets/visualize.png")
-#     # expected =   # TODO
-#     actual = SVGMIXIN.get_svg_info(multiple_button_screenshot)
-#     print(actual)
-#     # assert actual == expected

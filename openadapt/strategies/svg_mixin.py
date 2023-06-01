@@ -10,10 +10,7 @@ Usage:
         ...
 """
 from openadapt.pypotrace import potrace
-import PIL
 import numpy as np
-import sys
-sys.path.append('./.venv/lib/python3.10/site-packages')
 import drawsvg as draw
 
 from openadapt.models import Recording, Screenshot
