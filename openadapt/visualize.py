@@ -174,10 +174,9 @@ def main():
         image = display_event(action_event)
         diff = display_event(action_event, diff=True)
         mask = action_event.screenshot.diff_mask
-        if SCRUB_LOGGING:
-            image = scrub.scrub_image(image)
-            diff = scrub.scrub_image(diff)
-            mask = scrub.scrub_image(mask)
+        image = scrub.scrub_image(image)
+        diff = scrub.scrub_image(diff)
+        mask = scrub.scrub_image(mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
