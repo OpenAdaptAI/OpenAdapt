@@ -28,16 +28,15 @@ def configure_logging(logger, log_level):
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
-    logger.add(sys.stderr, level=log_level, filter=good_filter)
+    logger.add(sys.stderr, level=log_level, filter=filter_log_messages)
     logger.debug(f"{log_level=}")
 
 
-def good_filter(data):
+def filter_log_messages(data):
     messages_to_ignore = [
-        "Cannot pickle Objective-C objects')",
+        "Cannot pickle Objective-C objects",
     ]
-
-    return not any(data["message"].endswith(msg) for msg in messages_to_ignore)
+    return not any(msg in data["message"] for msg in messages_to_ignore)
 
 
 def row2dict(row, follow=True):
