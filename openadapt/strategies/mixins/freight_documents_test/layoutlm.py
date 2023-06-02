@@ -16,17 +16,22 @@ def get_layout(image: str):
         processor = LayoutLMv2Processor.from_pretrained(
                 "microsoft/layoutlmv2-base-uncased")
 
-        encoding = processor(image,truncation=True,return_tensors="pt")
+        encoding = processor(image,truncation=True,return_offsets_mapping=True,return_tensors="pt")
         # we have to truncate the data otherwise classification doesnt worm
-
+        offsets = encoding.pop('offset_mapping')
         token_classifier = LayoutLMv2ForTokenClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
         # iffy on the model tbh
 
         ocr_output = processor.tokenizer.decode(encoding['input_ids'][0])
         print(ocr_output)
 
-        bounding_boxes_normalized = encoding['bbox'][0]
-        print(bounding_boxes_normalized)
+        bounding_boxes_normalized = encoding.bbox.squeeze().tolist()
+        width, height = image.size
+
+        # offset map, subword
+        subword = np.array(offsets.squeeze().tolist())[:,0] != 0
+        true_boxes = [unnormalize_box(box, width, height) for idx, box in enumerate(bounding_boxes_normalized) if not subword[idx]]
+        print(true_boxes)
         
 
         classification_output = token_classifier(**encoding)
@@ -34,9 +39,7 @@ def get_layout(image: str):
         prediction_indices = classification_output.logits.argmax(-1).squeeze().tolist()
         print(prediction_indices)
 
- 
-
-
+        
 def unnormalize_box(bbox, width, height):
      return [
          width * (bbox[0] / 1000),
