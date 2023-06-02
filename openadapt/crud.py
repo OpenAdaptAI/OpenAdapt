@@ -9,7 +9,7 @@ from openadapt.models import (
     WindowEvent,
     PerformanceStat,
 )
-
+from openadapt.config import STOP_SEQUENCES
 
 BATCH_SIZE = 1
 
@@ -138,7 +138,55 @@ def _get(table, recording_timestamp):
 
 
 def get_action_events(recording):
-    return _get(ActionEvent, recording.timestamp)
+    action_events = _get(ActionEvent, recording.timestamp)
+    # filter out any stop sequences listed in config.STOP_SEQUENCES and Ctrl + C
+    filter_stop_sequences(action_events)
+    return action_events
+
+
+def filter_stop_sequences(action_events):
+    # check for ctrl c first
+    if len(action_events) >= 2:
+        if action_events[-1].canonical_key_char == 'c' and action_events[-2].canonical_key_name == 'ctrl':
+            # remove ctrl c
+            # ctrl c must be held down at same time, so no release event
+            action_events.pop()
+            action_events.pop()
+            return
+
+    # create list of indices for sequence detection
+    stop_sequence_indices = []
+    for sequence in STOP_SEQUENCES:
+        # one index for each stop sequence in config.STOP_SEQUENCES
+        # start from the back of the sequence
+        stop_sequence_indices.append(len(sequence) - 1)
+
+    sequence_to_remove = -1
+    num_to_remove = 0
+
+    for i in range(0, len(STOP_SEQUENCES)):
+        # iterate backwards through list of action events
+        for j in range(len(action_events) - 1, -1, -1):
+            if action_events[j].canonical_key_char == STOP_SEQUENCES[i][stop_sequence_indices[i]] \
+                    and action_events[j].name == 'press':
+                stop_sequence_indices[i] -= 1
+                num_to_remove += 1
+            elif action_events[j].name == 'release':
+                num_to_remove += 1
+            else:
+                # not part of the sequence
+                continue
+
+        if stop_sequence_indices[i] == -1:
+            sequence_to_remove = i
+            break
+
+    if sequence_to_remove != -1:
+        # remove that sequence
+        # # action event that carries the full text
+        # num_to_remove += 1
+        for _ in range(0, num_to_remove):
+            action_events.pop()
 
 
 def get_screenshots(recording, precompute_diffs=False):
