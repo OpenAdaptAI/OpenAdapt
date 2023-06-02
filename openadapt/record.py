@@ -24,7 +24,6 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
-
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -34,8 +33,9 @@ PROC_WRITE_BY_EVENT_TYPE = {
 }
 PLOT_PERFORMANCE = False
 
-
 Event = namedtuple("Event", ("timestamp", "type", "data"))
+
+global sequence_detected  # Flag to indicate if a stop sequence is detected
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -46,13 +46,13 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 
 
 def process_events(
-    event_q: queue.Queue,
-    screen_write_q: multiprocessing.Queue,
-    action_write_q: multiprocessing.Queue,
-    window_write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+        event_q: queue.Queue,
+        screen_write_q: multiprocessing.Queue,
+        action_write_q: multiprocessing.Queue,
+        window_write_q: multiprocessing.Queue,
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Process events from event queue and write them to respective write queues.
@@ -127,9 +127,9 @@ def process_events(
 
 
 def write_action_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -146,9 +146,9 @@ def write_action_event(
 
 
 def write_screen_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -168,9 +168,9 @@ def write_screen_event(
 
 
 def write_window_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        event: Event,
+        perf_q: multiprocessing.Queue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -187,12 +187,12 @@ def write_window_event(
 
 
 def write_events(
-    event_type: str,
-    write_fn: Callable,
-    write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+        event_type: str,
+        write_fn: Callable,
+        write_q: multiprocessing.Queue,
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -222,8 +222,8 @@ def write_events(
 
 
 def trigger_action_event(
-    event_q: queue.Queue,
-    action_event_args: Dict[str, Any],
+        event_q: queue.Queue,
+        action_event_args: Dict[str, Any],
 ) -> None:
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
@@ -237,12 +237,11 @@ def trigger_action_event(
 
 
 def on_move(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        injected: bool,
 ) -> None:
-
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -256,12 +255,12 @@ def on_move(
 
 
 def on_click(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    button: mouse.Button,
-    pressed: bool,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        button: mouse.Button,
+        pressed: bool,
+        injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
@@ -278,12 +277,12 @@ def on_click(
 
 
 def on_scroll(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    dx: int,
-    dy: int,
-    injected: bool,
+        event_q: queue.Queue,
+        x: int,
+        y: int,
+        dx: int,
+        dy: int,
+        injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
@@ -300,10 +299,10 @@ def on_scroll(
 
 
 def handle_key(
-    event_q: queue.Queue,
-    event_name: str,
-    key: keyboard.KeyCode,
-    canonical_key: keyboard.KeyCode,
+        event_q: queue.Queue,
+        event_name: str,
+        key: keyboard.KeyCode,
+        canonical_key: keyboard.KeyCode,
 ) -> None:
     attr_names = [
         "name",
@@ -331,9 +330,9 @@ def handle_key(
 
 
 def read_screen_events(
-    event_q: queue.Queue,
-    terminate_event: multiprocessing.Event,
-    recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     """
     Read screen events and add them to the event queue.
@@ -357,9 +356,9 @@ def read_screen_events(
 
 
 def read_window_events(
-    event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     """
     Read window events and add them to the event queue.
@@ -379,8 +378,8 @@ def read_window_events(
         if not window_data:
             continue
         if (
-            window_data["title"] != prev_window_data.get("title") or
-            window_data["window_id"] != prev_window_data.get("window_id")
+                window_data["title"] != prev_window_data.get("title") or
+                window_data["window_id"] != prev_window_data.get("window_id")
         ):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
@@ -402,10 +401,10 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def performance_stats_writer (
-    perf_q: multiprocessing.Queue,
-    recording_timestamp: float,
-    terminate_event: multiprocessing.Event,
+def performance_stats_writer(
+        perf_q: multiprocessing.Queue,
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
 ):
     """
     Write performance stats to the db.
@@ -434,7 +433,7 @@ def performance_stats_writer (
 
 
 def create_recording(
-    task_description: str,
+        task_description: str,
 ) -> Dict[str, Any]:
     """
     Create a new recording entry in the database.
@@ -467,11 +466,15 @@ def create_recording(
 
 
 def read_keyboard_events(
-    event_q: queue.Queue,
-	terminate_event: multiprocessing.Event,
-	recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
-
+    # create list of indices for sequence detection
+    stop_sequence_indices = []
+    for _ in config.STOP_SEQUENCES:
+        # one index for each stop sequence in config.STOP_SEQUENCES
+        stop_sequence_indices.append(0)
 
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -479,13 +482,36 @@ def read_keyboard_events(
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
+        # stop sequence code
+        nonlocal stop_sequence_indices
+        global sequence_detected
+
+        for i in range(0, len(config.STOP_SEQUENCES)):
+            # check each stop sequence
+            stop_sequence = config.STOP_SEQUENCES[i]
+            # stop_sequence_indices[i] is the index that corresponds to this stop sequence
+            # get the canonical KeyCode representation of the current letter in this stop sequence
+            canonical_sequence = keyboard_listener.canonical(keyboard.KeyCode.from_char(
+                stop_sequence[stop_sequence_indices[i]]))
+
+            # Check if the pressed key matches the current key in this sequence
+            if canonical_key == canonical_sequence:
+                # increment this index
+                stop_sequence_indices[i] += 1
+            else:
+                # Reset the index if the pressed key doesn't match the current key in the sequence
+                stop_sequence_indices[i] = 0
+
+            # Check if the entire sequence has been entered correctly
+            if stop_sequence_indices[i] == len(stop_sequence):
+                logger.info("Stop sequence entered! Stopping recording now.")
+                sequence_detected = True  # Set the flag to indicate sequence detection
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
-
 
     utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
@@ -498,9 +524,9 @@ def read_keyboard_events(
 
 
 def read_mouse_events(
-    event_q: queue.Queue,
-    terminate_event: multiprocessing.Event,
-    recording_timestamp: float,
+        event_q: queue.Queue,
+        terminate_event: multiprocessing.Event,
+        recording_timestamp: float,
 ) -> None:
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
@@ -514,7 +540,7 @@ def read_mouse_events(
 
 
 def record(
-    task_description: str,
+        task_description: str,
 ):
     """
     Record Screenshots/ActionEvents/WindowEvents.
@@ -628,54 +654,16 @@ def record(
 
     # TODO: discard events until everything is ready
 
-    # create list of indices for sequence detection
-    stop_sequence_indices = []
-    for _ in config.STOP_SEQUENCES:
-        # one index for each stop sequence in config.STOP_SEQUENCES
-        stop_sequence_indices.append(0)
-
-    sequence_detected = False  # Flag to indicate if a sequence is detected
-
-    def on_press(key):
-        canonical_key = listener.canonical(key)[0]
-        nonlocal stop_sequence_indices, sequence_detected
-
-        for i in range(0, len(config.STOP_SEQUENCES)):
-            # check each stop sequence
-            stop_sequence = config.STOP_SEQUENCES[i]
-            # stop_sequence_indices[i] is the index that corresponds to this stop sequence
-            # get the canonical KeyCode representation of the current letter in this stop sequence
-            canonical_sequence = listener.canonical(keyboard.KeyCode.from_char(
-                stop_sequence[stop_sequence_indices[i]]))
-
-            # Check if the pressed key matches the current key in this sequence
-            if canonical_key == canonical_sequence:
-                # increment this index
-                stop_sequence_indices[i] += 1
-            else:
-                # Reset the index if the pressed key doesn't match the current key in the sequence
-                stop_sequence_indices[i] = 0
-
-            # Check if the entire sequence has been entered correctly
-            if stop_sequence_indices[i] == len(stop_sequence):
-                logger.info("Stop sequence entered! Stopping recording now.")
-                sequence_detected = True  # Set the flag to indicate sequence detection
+    global sequence_detected
+    sequence_detected = False
 
     try:
-        # Start the key listener for all the stop sequences in config.STOP_SEQUENCES
-        listener = keyboard.Listener(on_press=on_press)
-        listener.start()
-
         while not sequence_detected:
             time.sleep(1)
 
         terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
-    finally:
-        # cleanup for listener
-        listener.stop()
-        listener.join()
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -693,6 +681,7 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
+
 
 if __name__ == "__main__":
     fire.Fire(record)
