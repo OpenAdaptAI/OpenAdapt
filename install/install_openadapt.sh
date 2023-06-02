@@ -12,10 +12,10 @@ RunAndCheck() {
         exit 1
     fi
 }
-[ -d "puterbot" ] && mv puterbot puterbot-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/MLDSAI/puterbot.git" "clone git repo"
+[ -d "openadapt" ] && mv openadapt openadapt-$(date +%Y-%m-%d_%H-%M-%S)
+RunAndCheck "git clone https://github.com/MLDSAI/openadapt.git" "clone git repo"
 
-cd puterbot
+cd openadapt
 
 RunAndCheck "python3.10 -m venv .venv" "create python virtual environment"
 source .venv/bin/activate
