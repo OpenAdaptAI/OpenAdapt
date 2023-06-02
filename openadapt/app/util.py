@@ -1,16 +1,13 @@
 import bz2
 import os
-import sys
 from shutil import copyfileobj
-
 from nicegui import ui
+from openadapt.scripts.reset_db import reset_db
 
 
 def clear_db():
-    if os.path.exists("openadapt.db"):
-        os.remove("openadapt.db")
-    os.system("alembic upgrade head")
-    print("Database cleared.", file=sys.stderr)
+    reset_db()
+    ui.notify("Cleared database.")
 
 
 def on_import(selected_file, delete=False, src="openadapt.db"):

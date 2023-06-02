@@ -1,9 +1,5 @@
-import os
-import sys
-from multiprocessing import Process
-
 from nicegui import ui
-
+from subprocess import Popen
 from openadapt.app.objects.local_file_picker import local_file_picker
 
 
@@ -37,49 +33,47 @@ def select_import(f):
     import_dialog.open()
 
 
-def recording_prompt(logger, options):
-    with ui.dialog() as dialog, ui.card():
-        ui.label("Enter a name for the recording: ")
-        ui.input(
-            label="Name",
-            placeholder="test",
-            autocomplete=options,
-            on_change=lambda e: result.set_text(e),
-        )
-        result = ui.label()
-
-        def cancel_recording():
-            dialog.close()
-            print("Recording cancelled.", file=sys.stderr)
-
-        def on_stop(proc):
-            dialog.close()
-            proc.terminate()
-
-        def create_proc_record(desc):
-            os.system(f'python3 -m openadapt.record "{desc}"')
-            # record.record(desc)
-
-        async def on_record():
-            if result.text:
-                name = result.text.__getattribute__("value")
-                # fails
-                # record.record(name)
-                # works
-                print(
-                    f"Recording {name}... Press CTRL + C in log window to cancel",
-                    file=sys.stderr,
-                )
-                logger.reset()
-                Process(target=create_proc_record(desc=name)).start()
-
-            else:
-                print("Recording cancelled.", file=sys.stderr)
-
-        with ui.row():
-            ui.button(
-                "Close", on_click=cancel_recording if not result.text else dialog.close
+def recording_prompt(options, record_button):
+    proc = None
+    if proc is None:
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Enter a name for the recording: ")
+            ui.input(
+                label="Name",
+                placeholder="test",
+                autocomplete=options,
+                on_change=lambda e: result.set_text(e),
             )
-            ui.button("Enter", on_click=on_record)
+            result = ui.label()
 
-        dialog.open()
+            with ui.row():
+                ui.button("Close", on_click=dialog.close)
+                ui.button("Enter", on_click=lambda: on_record())
+
+            dialog.open()
+
+        def terminate(proc):
+            record_button._props["name"] = "radio_button_checked"
+            record_button.on("click", lambda: recording_prompt(options, record_button))
+            ui.notify("Stopped recording")
+            proc = None
+
+        def begin():
+            name = result.text.__getattribute__("value")
+
+            ui.notify(
+                f"Recording {name}... Press CTRL + C in terminal window to cancel",
+            )
+            proc = Popen(
+                "python3 -m openadapt.record " + name,
+                shell=True,
+            )
+            record_button._props["name"] = "stop"
+            record_button.on("click", lambda: terminate(proc))
+            record_button.update()
+
+            return proc
+
+        def on_record():
+            dialog.close()
+            proc = begin()
