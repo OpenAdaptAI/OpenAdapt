@@ -464,7 +464,7 @@ def strip_element_state(action_event):
     return action_event
 
 
-def get_functions(name):
+def get_functions(name) -> dict:
     """
     Get a dictionary of function names to functions for all non-private functions
 
@@ -474,10 +474,10 @@ def get_functions(name):
             fire.Fire(utils.get_functions(__name__))
 
     Args:
-        TODO
+        name: The name of the module to get functions from.
 
     Returns:
-        A dictionary of function names to functions.
+        dict: A dictionary of function names to functions.
     """
 
     functions = {}
