@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import modal
+import requests
 from huggingface_hub import hf_hub_download
 
 from rwkv.model import RWKV
@@ -16,7 +17,7 @@ os.environ["RWKV_CUDA_ON"] = '0'
 
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
-@stub.function(gpu="a100", timeout=18000, image=torch_image, mounts=[modal.Mount.from_local_dir("./openadapt/tokenizer", remote_path="/root/rwkv_model")])
+@stub.function(gpu="a100", timeout=18000, image=torch_image)#, mounts=[modal.Mount.from_local_dir("./openadapt/tokenizer", remote_path="/root/rwkv_model")])
 def run_RWKV(task_description=None, input=None):
 
     #use gpu=a100 for Raven-14B, vs. use gpu=any for other weights
@@ -36,8 +37,19 @@ def run_RWKV(task_description=None, input=None):
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
 
 
+    tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
+    response = requests.get(tokenizer_url)
+    if response.status_code == 200:
+        tokenizer_path = "/root/rwkv_model/20B_tokenizer.json"
+        os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
+        with open(tokenizer_path, 'wb') as f:
+            f.write(response.content)
+        tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path)
+    else:
+        print(f"Failed to download tokenizer. Status code: {response.status_code}")
+        return
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
-    tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
+    #tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
     pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
     
     temperature = 0.9
@@ -78,7 +90,7 @@ you are given a list of signals, each detailed in a JSON format.Please provide o
 ,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
 ,{{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}}]
 
-# Signal Number: 
+# Signal Number:
 """
     
     print(prompt)
