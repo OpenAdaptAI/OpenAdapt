@@ -3,7 +3,7 @@ import pywinauto
 from pywinauto import Desktop
 import time
 from pprint import pprint
-global active_window
+
 def get_active_window_state():
     active_window = get_active_window()
     meta = get_active_window_meta(active_window)
@@ -30,7 +30,10 @@ def get_active_window_meta(active_window) :
     return active_window.get_properties()
 
 def get_active_element_state(x, y):
-    return active_window.from_points(x,y)
+    active_window = get_active_window()
+    active_element = active_window.from_point(x,y)
+    properties = active_element.get_properties()
+    return properties
 
 def get_active_window():
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
@@ -48,12 +51,7 @@ def get_window_data(active_window):
 def get_descendants_info(window):
     result = []
     for child in window.descendants():
-        properties = child.get_properties()
-        info = {
-            'friendly classname': properties.get('friendly classname'),
-            'texts': properties.get('texts'),
-            'rectangle': properties.get('rectangle')
-        }
+        info = child.get_properties()
         descendants = get_descendants_info(child)  # Recursively get descendants of the current child
         if descendants:
             info['descendants'] = descendants
@@ -61,13 +59,13 @@ def get_descendants_info(window):
     return result
 
 def main():
-    import pickle
-    import time
-    time.sleep(1)
+    # import pickle
+    # import time
+    # time.sleep(1)
 
-    state = get_active_window_state()
-    pprint(state)
-    pickle.dumps(state)
+    # state = get_active_window_state()
+    # pprint(state)
+    # pickle.dumps(state)
 
 
 if __name__ == "__main__":
