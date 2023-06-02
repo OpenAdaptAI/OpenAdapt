@@ -12,10 +12,10 @@ RunAndCheck() {
         exit 1
     fi
 }
-[ -d "openadapt" ] && mv openadapt openadapt-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/MLDSAI/openadapt.git" "clone git repo"
+[ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
+RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
-cd openadapt
+cd OpenAdapt
 
 RunAndCheck "python3.10 -m venv .venv" "create python virtual environment"
 source .venv/bin/activate
