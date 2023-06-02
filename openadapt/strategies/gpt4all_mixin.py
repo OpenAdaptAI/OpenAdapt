@@ -15,6 +15,7 @@ from openadapt.strategies.base import BaseReplayStrategy
 MODEL_NAME = "ggml-gpt4all-j-v1.3-groovy.bin"
 ROLE = "user"
 
+
 class GPT4ALLReplayStrategyMixin(BaseReplayStrategy):
     """ReplayStrategy mixin that uses GPT4All.
 
