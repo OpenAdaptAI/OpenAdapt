@@ -14,7 +14,6 @@ from openadapt.models import (
     AudioInfo
 )
 
-
 BATCH_SIZE = 1
 
 db = Session()
@@ -22,6 +21,7 @@ action_events = []
 screenshots = []
 window_events = []
 performance_stats = []
+
 
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
@@ -78,6 +78,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
     Insert event performance stat into db
@@ -91,6 +92,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     }
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
+
 def get_perf_stats(recording_timestamp):
     """
     return performance stats for a given recording
@@ -98,11 +100,12 @@ def get_perf_stats(recording_timestamp):
 
     return (
         db
-        .query(PerformanceStat)
-        .filter(PerformanceStat.recording_timestamp == recording_timestamp)
-        .order_by(PerformanceStat.start_time)
-        .all()
+            .query(PerformanceStat)
+            .filter(PerformanceStat.recording_timestamp == recording_timestamp)
+            .order_by(PerformanceStat.start_time)
+            .all()
     )
+
 
 def insert_audio_file(data):
     audio_data = AudioFile(data=data)
@@ -111,7 +114,13 @@ def insert_audio_file(data):
     return audio_data
 
 
-def insert_audio_info(transcribed_text, recording_timestamp, sample_rate, audio_file, word_list):
+def insert_audio_info(
+        transcribed_text,
+        recording_timestamp,
+        sample_rate,
+        audio_file,
+        word_list
+):
     """Create an AudioInfo entry in the database."""
     audio_info = AudioInfo(
         transcribed_text=transcribed_text,
@@ -136,29 +145,29 @@ def insert_recording(recording_data):
 def get_latest_recording():
     return (
         db
-        .query(Recording)
-        .order_by(sa.desc(Recording.timestamp))
-        .limit(1)
-        .first()
+            .query(Recording)
+            .order_by(sa.desc(Recording.timestamp))
+            .limit(1)
+            .first()
     )
 
 
 def get_recording(timestamp):
     return (
         db
-        .query(Recording)
-        .filter(Recording.timestamp == timestamp)
-        .first()
+            .query(Recording)
+            .filter(Recording.timestamp == timestamp)
+            .first()
     )
 
 
 def _get(table, recording_timestamp):
     return (
         db
-        .query(table)
-        .filter(table.recording_timestamp == recording_timestamp)
-        .order_by(table.timestamp)
-        .all()
+            .query(table)
+            .filter(table.recording_timestamp == recording_timestamp)
+            .order_by(table.timestamp)
+            .all()
     )
 
 

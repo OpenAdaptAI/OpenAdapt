@@ -638,7 +638,8 @@ def record(
             audio_frames.append(indata.copy())
 
         # open InputStream and start recording while ActionEvents are recorded
-        audio_stream = sounddevice.InputStream(callback=audio_callback, samplerate=16000, channels=1)
+        audio_stream = sounddevice.InputStream(
+            callback=audio_callback, samplerate=16000, channels=1)
         logger.info("Audio recording started.")
         audio_stream.start()
 
@@ -661,25 +662,36 @@ def record(
         # Convert audio to text using OpenAI's Whisper
         logger.info("Transcribing audio...")
         model = whisper.load_model("base")
-        result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+        result_info = model.transcribe(
+            converted_audio, word_timestamps=True, fp16=False)
         logger.info(f"The narrated text is: {result_info['text']}")
-        word_list = result_info['segments'][0]['words']
+        # empty word_list if the user didn't say anything
+        word_list = []
+        if len(result_info['segments']) > 0:
+            # segments could be empty
+            if 'words' in result_info['segments'][0]:
+                # there won't be a 'words' list if the user didn't say anything
+                word_list = result_info['segments'][0]['words']
 
         # compress and convert to bytes to save to database
-        logger.info("Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes))
+        logger.info("Size of uncompressed audio data: {} bytes"
+                    .format(converted_audio.nbytes))
         # Create an in-memory file-like object
         file_obj = io.BytesIO()
-        # Use the in-memory file to write the audio data using lossless compression
-        soundfile.write(file_obj, converted_audio, int(audio_stream.samplerate), format='FLAC')
+        # Write the audio data using lossless compression
+        soundfile.write(file_obj, converted_audio,
+                        int(audio_stream.samplerate), format='FLAC')
         # Get the compressed audio data as bytes
         compressed_audio_bytes = file_obj.getvalue()
 
-        logger.info("Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes)))
+        logger.info("Size of compressed audio data: {} bytes"
+                    .format(len(compressed_audio_bytes)))
 
         file_obj.close()
 
         # To decompress the audio and restore it to its original form:
-        # restored_audio, restored_samplerate = sf.read(io.BytesIO(compressed_audio_bytes))
+        # restored_audio, restored_samplerate = sf.read(
+        # io.BytesIO(compressed_audio_bytes))
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -698,12 +710,13 @@ def record(
 
     if enable_audio:
         # Save audio frames to the database
-        # TODO: change name
         audio_file = crud.insert_audio_file(compressed_audio_bytes)
 
         # Create AudioInfo entry
-        audio_info = crud.insert_audio_info(result_info['text'], recording_timestamp,
-                                            int(audio_stream.samplerate), audio_file, word_list)
+        audio_info = crud.insert_audio_info(result_info['text'],
+                                            recording_timestamp,
+                                            int(audio_stream.samplerate),
+                                            audio_file, word_list)
 
     logger.info(f"saved {recording_timestamp=}")
 
