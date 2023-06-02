@@ -9,33 +9,30 @@ import ipdb
 def get_layout(image: str):
 
         from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification
+        import tensorflow as tf
+
+        image = Image.open("rate_confirmation.png").convert("RGB")
+
         processor = LayoutLMv2Processor.from_pretrained(
                 "microsoft/layoutlmv2-base-uncased")
 
-        image = Image.open("rate_confirmation.png").convert("RGB")
-        encoding = processor(image, truncation=True, return_offsets_mapping=True, return_tensors="pt") 
-        # performs OCR to get the bounding boxes of words and the actual words
-        # bounding boxes are normalized
-        offset_map = encoding.pop('offset-mapping')
+        encoding = processor(image,truncation=True,return_tensors="pt")
+        # we have to truncate the data otherwise classification doesnt worm
 
-        # we have encoded keys now 
+        token_classifier = LayoutLMv2ForTokenClassification.from_pretrained('microsoft/layoutlmv2-base-uncased')
+        # iffy on the model tbh
 
+        ocr_output = processor.tokenizer.decode(encoding['input_ids'][0])
+        print(ocr_output)
 
-        model = LayoutLMv2ForTokenClassification.from_pretrained(
-                 "microsoft/layoutlmv2-base-uncased")      
+        bounding_boxes_normalized = encoding['bbox'][0]
+        print(bounding_boxes_normalized)
         
-        # forward pass ?
-        output = model(**encoding)
 
-        # predictions and token boxes 
-        predictions = output.logits.argmax(-1).squeeze().tolist()
-        print(predictions)
+        classification_output = token_classifier(**encoding)
 
-        token_boxes = encoding.bbox.squeeze().tolist()
-        print(token_boxes)
-
-        # have both predictions and token boxes, but i want the labels
-        # to be generated themselves..
+        prediction_indices = classification_output.logits.argmax(-1).squeeze().tolist()
+        print(prediction_indices)
 
  
 
