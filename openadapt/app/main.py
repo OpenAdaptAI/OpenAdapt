@@ -18,6 +18,7 @@ def run_app():
     app.native.start_args["debug"] = False
 
     dark = ui.dark_mode()
+    logger = None
 
     # Add logo
     # right align icon
@@ -33,7 +34,7 @@ def run_app():
             )
             ui.image(img.decode("utf-8"))
         ui.icon("settings").tooltip("Settings").on("click", lambda: settings(dark))
-        ui.icon("delete").on("click", lambda: clear_db()).tooltip(
+        ui.icon("delete").on("click", lambda: clear_db(log=logger)).tooltip(
             "Clear all recorded data"
         )
         ui.icon("upload").tooltip("Export Data").on("click", lambda: on_export(SERVER))

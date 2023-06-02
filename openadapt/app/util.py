@@ -1,13 +1,20 @@
 import bz2
 import os
+import sys
 from shutil import copyfileobj
 from nicegui import ui
 from openadapt.scripts.reset_db import reset_db
 
 
-def clear_db():
+def clear_db(log=None):
+    if log:
+        log.log.clear()
+        o = sys.stdout
+        sys.stdout = sys.stderr
+
     reset_db()
     ui.notify("Cleared database.")
+    sys.stdout = o
 
 
 def on_import(selected_file, delete=False, src="openadapt.db"):

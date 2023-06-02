@@ -1,7 +1,10 @@
+import signal
 from nicegui import ui
 from subprocess import Popen
 from openadapt.app.objects.local_file_picker import local_file_picker
 from openadapt.app.util import set_dark, sync_switch
+
+PROC = None
 
 
 def settings(dark_mode):
@@ -35,8 +38,7 @@ def select_import(f):
 
 
 def recording_prompt(options, record_button):
-    proc = None
-    if proc is None:
+    if PROC is None:
         with ui.dialog() as dialog, ui.card():
             ui.label("Enter a name for the recording: ")
             ui.input(
@@ -53,28 +55,34 @@ def recording_prompt(options, record_button):
 
             dialog.open()
 
-        def terminate(proc):
-            record_button._props["name"] = "radio_button_checked"
-            record_button.on("click", lambda: recording_prompt(options, record_button))
-            ui.notify("Stopped recording")
-            proc = None
+    def terminate():
+        global PROC
+        PROC.send_signal(signal.SIGINT)
 
-        def begin():
-            name = result.text.__getattribute__("value")
+        # wait for process to terminate
+        PROC.wait()
+        ui.notify("Stopped recording")
+        record_button._props["name"] = "radio_button_checked"
+        record_button.on("click", lambda: recording_prompt(options, record_button))
 
-            ui.notify(
-                f"Recording {name}... Press CTRL + C in terminal window to cancel",
-            )
-            proc = Popen(
-                "python3 -m openadapt.record " + name,
-                shell=True,
-            )
-            record_button._props["name"] = "stop"
-            record_button.on("click", lambda: terminate(proc))
-            record_button.update()
+        PROC = None
 
-            return proc
+    def begin():
+        name = result.text.__getattribute__("value")
 
-        def on_record():
-            dialog.close()
-            proc = begin()
+        ui.notify(
+            f"Recording {name}... Press CTRL + C in terminal window to cancel",
+        )
+        PROC = Popen(
+            "python3 -m openadapt.record " + name,
+            shell=True,
+        )
+        record_button._props["name"] = "stop"
+        record_button.on("click", lambda: terminate())
+        record_button.update()
+        return PROC
+
+    def on_record():
+        global PROC
+        dialog.close()
+        PROC = begin()
