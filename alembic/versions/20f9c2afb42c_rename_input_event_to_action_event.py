@@ -10,17 +10,15 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "20f9c2afb42c"
-down_revision = "5139d7df38f6"
+revision = '20f9c2afb42c'
+down_revision = '5139d7df38f6'
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    """ """
-    op.rename_table("input_event", "action_event")
+    op.rename_table('input_event', 'action_event')
 
 
 def downgrade() -> None:
-    """ """
-    op.rename_table("action_event", "input_event")
+    op.rename_table('action_event', 'input_event')
