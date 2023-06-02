@@ -1,0 +1,61 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug""]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: describe-bug
+    attributes:
+      label: Describe the bug
+      description: What behaviour was expected and what actually happened?
+      placeholder: 
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: To Reproduce
+      description: What steps would we take to reproduce the behavior
+      placeholder: 1. Go to '...'
+                  2. Click on '....'
+                  3. Scroll down to '....'
+      value: 
+    validations:
+      required: true
+   - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+   - type: input
+     id: image-upload
+     attributes:
+       label: Upload Screenshot [Optional]
+       description: Please upload an image that helps illustrate the issue.
+       type: file
+  validations:
+    required: false
+  - type: dropdown
+    id: OS
+    attributes:
+      label: What Operating System did you use?
+      multiple: true
+      options:
+        - macOS
+        - Apple iOS
+        - Microsoft Windows
+        - Google Android
+        - Linux
+        - Other
+  - type: textarea
+    id: other
+    attributes:
+      label: Additional Context
+      description: 
+
+        
