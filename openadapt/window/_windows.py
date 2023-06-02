@@ -59,13 +59,13 @@ def get_descendants_info(window):
     return result
 
 def main():
-    # import pickle
-    # import time
-    # time.sleep(1)
+    import pickle
+    import time
+    time.sleep(1)
 
-    # state = get_active_window_state()
-    # pprint(state)
-    # pickle.dumps(state)
+    state = get_active_window_state()
+    pprint(state)
+    pickle.dumps(state)
 
 
 if __name__ == "__main__":
