@@ -19,6 +19,7 @@ screenshots = []
 window_events = []
 performance_stats = []
 
+
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
 
@@ -74,6 +75,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
     Insert event performance stat into db
@@ -87,6 +89,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     }
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
+
 def get_perf_stats(recording_timestamp):
     """
     return performance stats for a given recording
@@ -99,6 +102,7 @@ def get_perf_stats(recording_timestamp):
         .order_by(PerformanceStat.start_time)
         .all()
     )
+
 
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)
@@ -139,7 +143,7 @@ def _get(table, recording_timestamp):
 
 def get_action_events(recording):
     action_events = _get(ActionEvent, recording.timestamp)
-    # filter out any stop sequences listed in config.STOP_SEQUENCES and Ctrl + C
+    # filter out stop sequences listed in config.STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
 
@@ -147,7 +151,8 @@ def get_action_events(recording):
 def filter_stop_sequences(action_events):
     # check for ctrl c first
     if len(action_events) >= 2:
-        if action_events[-1].canonical_key_char == 'c' and action_events[-2].canonical_key_name == 'ctrl':
+        if action_events[-1].canonical_key_char == 'c' and \
+                action_events[-2].canonical_key_name == 'ctrl':
             # remove ctrl c
             # ctrl c must be held down at same time, so no release event
             action_events.pop()
@@ -161,30 +166,37 @@ def filter_stop_sequences(action_events):
         # start from the back of the sequence
         stop_sequence_indices.append(len(sequence) - 1)
 
+    # index of sequence to remove, -1 if none found
     sequence_to_remove = -1
+    # number of events to remove
     num_to_remove = 0
 
     for i in range(0, len(STOP_SEQUENCES)):
         # iterate backwards through list of action events
         for j in range(len(action_events) - 1, -1, -1):
-            if action_events[j].canonical_key_char == STOP_SEQUENCES[i][stop_sequence_indices[i]] \
+            # never go past 1st action event, so if a sequence is longer than
+            # len(action_events), it can't have been in the recording
+            if action_events[j].canonical_key_char == \
+                    STOP_SEQUENCES[i][stop_sequence_indices[i]] \
                     and action_events[j].name == 'press':
+                # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
             elif action_events[j].name == 'release':
+                # can consider any release event as part of the sequence
                 num_to_remove += 1
             else:
-                # not part of the sequence
+                # not part of the sequence, so exit inner loop
                 continue
 
         if stop_sequence_indices[i] == -1:
+            # completed whole sequence, so set sequence_to_remove to
+            # current sequence and exit outer loop
             sequence_to_remove = i
             break
 
     if sequence_to_remove != -1:
         # remove that sequence
-        # # action event that carries the full text
-        # num_to_remove += 1
         for _ in range(0, num_to_remove):
             action_events.pop()
 

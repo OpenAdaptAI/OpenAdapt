@@ -13,7 +13,7 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
-    #"OPENAI_MODEL_NAME": "gpt-4",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
@@ -22,7 +22,7 @@ _DEFAULTS = {
 }
 
 # sequences that when typed, will stop the recording of ActionEvents in record.py
-STOP_SEQUENCES = [['o', 'a', '.', 's', 't', 'o', 'p']]
+STOP_SEQUENCES = [["o", "a", ".", "s", "t", "o", "p"]]
 
 
 def getenv_fallback(var_name):

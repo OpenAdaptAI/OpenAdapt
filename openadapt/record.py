@@ -489,23 +489,24 @@ def read_keyboard_events(
         for i in range(0, len(config.STOP_SEQUENCES)):
             # check each stop sequence
             stop_sequence = config.STOP_SEQUENCES[i]
-            # stop_sequence_indices[i] is the index that corresponds to this stop sequence
-            # get the canonical KeyCode representation of the current letter in this stop sequence
-            canonical_sequence = keyboard_listener.canonical(keyboard.KeyCode.from_char(
-                stop_sequence[stop_sequence_indices[i]]))
+            # stop_sequence_indices[i] is the index for this stop sequence
+            # get canonical KeyCode of current letter in this sequence
+            canonical_sequence = keyboard_listener.canonical(
+                keyboard.KeyCode.from_char(
+                    stop_sequence[stop_sequence_indices[i]]))
 
             # Check if the pressed key matches the current key in this sequence
             if canonical_key == canonical_sequence:
                 # increment this index
                 stop_sequence_indices[i] += 1
             else:
-                # Reset the index if the pressed key doesn't match the current key in the sequence
+                # Reset index since pressed key doesn't match sequence key
                 stop_sequence_indices[i] = 0
 
             # Check if the entire sequence has been entered correctly
             if stop_sequence_indices[i] == len(stop_sequence):
                 logger.info("Stop sequence entered! Stopping recording now.")
-                sequence_detected = True  # Set the flag to indicate sequence detection
+                sequence_detected = True  # Set global flag to end recording
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
