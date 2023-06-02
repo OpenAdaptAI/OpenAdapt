@@ -1,12 +1,13 @@
 from nicegui import ui
 from subprocess import Popen
 from openadapt.app.objects.local_file_picker import local_file_picker
+from openadapt.app.util import set_dark, sync_switch
 
 
 def settings(dark_mode):
     with ui.dialog() as settings, ui.card():
-        ui.switch("Dark mode", on_change=lambda: dark_mode.toggle())
-
+        s = ui.switch("Dark mode", on_change=lambda: set_dark(dark_mode, s.value))
+        sync_switch(s, dark_mode)
         ui.button("Close", on_click=lambda: settings.close())
 
     settings.open()

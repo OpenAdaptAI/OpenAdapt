@@ -41,3 +41,11 @@ def on_export(dest):
     os.remove("openadapt.db.bz2")
 
     ui.notify("Exported data.")
+
+
+def sync_switch(switch, prop):
+    switch.value = prop.value
+
+
+def set_dark(dark_mode, value):
+    dark_mode.value = value
