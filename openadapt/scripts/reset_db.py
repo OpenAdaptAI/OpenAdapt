@@ -1,6 +1,6 @@
 import os
 from subprocess import run, PIPE
-from openadapt.config import getenv_fallback
+from openadapt import config
 
 
 def reset_db():
@@ -8,9 +8,8 @@ def reset_db():
     The function clears the database by removing the database file and running a
     database migration using Alembic.
     """
-    db = getenv_fallback("DB_FNAME")
-    if os.path.exists(db):
-        os.remove(db)
+    if os.path.exists(config.DB_FPATH):
+        os.remove(config.DB_FPATH)
 
     # Prevents duplicate logging of config values by piping stderr and filtering the output.
     result = run(["alembic", "upgrade", "head"], stderr=PIPE, text=True)
