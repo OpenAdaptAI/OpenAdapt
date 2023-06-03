@@ -1,4 +1,4 @@
-from PIL import Image
+import PIL
 
 import pytesseract
 import numpy as np
@@ -11,7 +11,7 @@ def get_layout(image: str):
         from transformers import LayoutLMv2Processor, LayoutLMv2ForTokenClassification
         import tensorflow as tf
 
-        image = Image.open("rate_confirmation.png").convert("RGB")
+        image = PIL.Image.open("load_manifest.png").convert("RGB")
 
         processor = LayoutLMv2Processor.from_pretrained(
                 "microsoft/layoutlmv2-base-uncased")
@@ -23,23 +23,27 @@ def get_layout(image: str):
         # iffy on the model tbh
 
         ocr_output = processor.tokenizer.decode(encoding['input_ids'][0])
-        print(ocr_output)
+        #print(ocr_output)
 
         bounding_boxes_normalized = encoding.bbox.squeeze().tolist()
         width, height = image.size
 
         # offset map, subword
         subword = np.array(offsets.squeeze().tolist())[:,0] != 0
-        true_boxes = [unnormalize_box(box, width, height) for idx, box in enumerate(bounding_boxes_normalized) if not subword[idx]]
-        print(true_boxes)
+        bboxes = [unnormalize_box(box, width, height) for idx, box in enumerate(bounding_boxes_normalized) if not subword[idx]]
+        #print(bboxes)
         
 
         classification_output = token_classifier(**encoding)
 
         prediction_indices = classification_output.logits.argmax(-1).squeeze().tolist()
-        print(prediction_indices)
+        #print(prediction_indices)
 
-        
+        test_img = PIL.ImageDraw.Draw(image)
+        for box in bboxes:
+                test_img.rectangle(box, outline="red")
+        test_img._image.show()
+
 def unnormalize_box(bbox, width, height):
      return [
          width * (bbox[0] / 1000),
