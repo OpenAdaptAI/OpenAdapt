@@ -13,12 +13,13 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
-    #"OPENAI_MODEL_NAME": "gpt-4",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
+    "IGNORE_WARNINGS": True,
 }
 
 

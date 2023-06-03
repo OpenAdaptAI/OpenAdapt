@@ -15,7 +15,7 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common
+from openadapt import common, config
 
 
 # TODO: move to config.py
@@ -28,7 +28,11 @@ def configure_logging(logger, log_level):
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
-    logger.add(sys.stderr, level=log_level, filter=filter_log_messages)
+    logger.add(
+        sys.stderr,
+        level=log_level,
+        filter=filter_log_messages if config.IGNORE_WARNINGS else None,
+    )
     logger.debug(f"{log_level=}")
 
 
