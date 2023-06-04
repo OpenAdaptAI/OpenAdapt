@@ -26,7 +26,7 @@ jobs:
 
       - name: Check formatting with Black
         run: |
-          black --check --exclude "alembic/versions" --exclude "src" .
+          black --check --exclude "(src|alembic)/" .
 
       - name: Run headless tests
         uses: coactions/setup-xvfb@v1
