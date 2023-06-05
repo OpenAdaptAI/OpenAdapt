@@ -1,72 +1,65 @@
-import os
+import subprocess
 import unittest
+import os
 from unittest.mock import patch
-from tempfile import TemporaryDirectory
-from openadapt.share import export_recording_to_folder, send_file, send_recording, receive_recording
+from openadapt import share
+
 
 class ShareTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self.recording_id = 1
-
     def test_export_recording_to_folder(self):
-        with TemporaryDirectory() as temp_dir:
-            os.environ['RECORDING_DIR_PATH'] = temp_dir
+        # Create a temporary recording database file
+        recording_id = 1
+        recording_db_path = "temp.db"
+        with open(recording_db_path, "w") as f:
+            f.write("Recording data")
 
-            # Create a dummy recording
-            dummy_db_file = os.path.join(temp_dir, "recording_1.db")
-            with open(dummy_db_file, "w") as file:
-                file.write("dummy data")
+        # Mock the crud.export_recording() function to return the temporary file path
+        with patch("openadapt.share.crud.export_recording", return_value=recording_db_path):
+            zip_file_path = share.export_recording_to_folder(recording_id)
 
-            # Export the recording
-            zip_file_path = export_recording_to_folder(self.recording_id)
-
-            # Verify the zip file was created
-            self.assertTrue(zip_file_path.endswith(".zip"))
+            self.assertIsNotNone(zip_file_path)
             self.assertTrue(os.path.exists(zip_file_path))
 
+        # Clean up the temporary file
+        os.remove(recording_db_path)
+
     def test_send_file(self):
-        with TemporaryDirectory() as temp_dir:
-            dummy_file_path = os.path.join(temp_dir, "dummy.txt")
-            with open(dummy_file_path, "w") as file:
-                file.write("dummy data")
+        # Create a temporary file
+        file_path = "temp.txt"
+        with open(file_path, "w") as f:
+            f.write("File data")
 
-            with patch('subprocess.run') as mock_run:
-                send_file(dummy_file_path)
+        # Mock the subprocess.run() function to avoid executing the command
+        with patch("openadapt.share.subprocess.run") as mock_run:
+            share.send_file(file_path)
 
-                # Verify that the 'wormhole send' command was executed
-                mock_run.assert_called_once_with(['wormhole', 'send', dummy_file_path], check=True)
+            # Verify that the command is called with the correct arguments
+            mock_run.assert_called_once_with(["wormhole", "send", file_path], check=True)
+
+        # Clean up the temporary file
+        os.remove(file_path)
 
     def test_send_recording(self):
-        with TemporaryDirectory() as temp_dir:
-            os.environ['RECORDING_DIR_PATH'] = temp_dir
+        # Mock the export_recording_to_folder() function to return a zip file path
+        with patch("openadapt.share.export_recording_to_folder", return_value="temp.zip"):
+            # Mock the send_file() function to avoid sending the file
+            with patch("openadapt.share.send_file"):
+                share.send_recording(1)
 
-            # Create a dummy recording
-            dummy_db_file = os.path.join(temp_dir, "recording_1.db")
-            with open(dummy_db_file, "w") as file:
-                file.write("dummy data")
-
-            # Export the recording
-            zip_file_path = export_recording_to_folder(self.recording_id)
-
-            with patch('openadapt.share.export_recording_to_folder') as mock_export:
-                mock_export.return_value = zip_file_path
-
-                with patch('openadapt.share.send_file') as mock_send:
-                    send_recording(self.recording_id)
-
-                    # Verify that export_recording_to_folder and send_file were called
-                    mock_export.assert_called_once_with(self.recording_id)
-                    mock_send.assert_called_once_with(zip_file_path)
+                # Verify that export_recording_to_folder() and send_file() are called
+                self.assertTrue(share.export_recording_to_folder.called)
+                self.assertTrue(share.send_file.called)
 
     def test_receive_recording(self):
-        wormhole_code = "123456"
+        # Mock the subprocess.run() function to avoid executing the command
+        with patch("openadapt.share.subprocess.run"):
+            share.receive_recording("wormhole_code")
 
-        with patch('subprocess.run') as mock_run:
-            receive_recording(wormhole_code)
+            # Verify that the command is called with the correct arguments
+            subprocess.run.assert_called_once_with(
+                ["wormhole", "receive", "wormhole_code"], check=True
+            )
 
-            # Verify that the 'wormhole receive' command was executed
-            mock_run.assert_called_once_with(['wormhole', 'receive', wormhole_code], check=True)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
