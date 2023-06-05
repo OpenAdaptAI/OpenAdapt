@@ -4,7 +4,7 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
+This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
 
 
 ## Creating Issue
@@ -15,7 +15,11 @@ In order to effectively communicate any bugs or request new features, please sel
 
 You can run these tests on your own computer by downloading the depencencies in requirements.txt and then running pytest in the root directory. 
 
-## Pull Request Template
+## Pull Request Format
+
+To speed up the review process, please use the provided pull request template and create a draft pull request to get initial feedback. 
+
+The pull request template includes areas to explain the changes, and a checklist with boxes for code style, testing, and documenttation.
 
 ## Submitting Changes
 
