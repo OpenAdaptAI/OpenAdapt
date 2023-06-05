@@ -1,9 +1,10 @@
 from openadapt.RWKV.RWKV import run_RWKV
 import modal
+import os
 
 
 
 if __name__ == '__main__':
-    stub = modal.Stub("test-stub")
-    with stub.run():
-        run_RWKV.call()
+    Func = modal.Function.lookup("test-stub", "run_RWKV")
+    a = Func.call()
+    print(a)

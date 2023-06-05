@@ -118,7 +118,7 @@ you are given a list of signals, each detailed in a JSON format.Please provide o
             out_last = i + 1
 
 
-    print(out_str.strip())
+    return(out_str.strip())
 
     # print(prompt)
     # prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
