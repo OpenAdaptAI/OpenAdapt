@@ -26,3 +26,4 @@ tiktoken==0.4.0
 torch==2.0.0
 tqdm==4.64.0
 transformers==4.28.1
+segment-anything @ git+https://github.com/facebookresearch/segment-anything@master
