@@ -1,7 +1,6 @@
-"""Copy a recording from one computer to another
+"""Copy a recording from one computer to another.
 
 Usage:
-
     python -m openadapt.share send --recording_id=1 
     python -m openadapt.share receive --wormhole_code=<wormhole_code>
 """
@@ -20,7 +19,14 @@ utils.configure_logging(logger, LOG_LEVEL)
 
 
 def export_recording_to_folder(recording_id):
-    """YOUR DOCSTRING HERE"""
+    """Export a recording to a zip file.
+
+    Args:
+        recording_id (int): The ID of the recording to export.
+
+    Returns:
+        str: The path of the created zip file.
+    """
     # TODO: export recording db file instead of the entire db file
     recording_db_path = crud.export_recording(recording_id)
 
@@ -45,6 +51,11 @@ def export_recording_to_folder(recording_id):
 
 
 def send_file(file_path):
+    """Send a file using the 'wormhole' command-line tool.
+
+    Args:
+        file_path (str): The path of the file to send.
+    """
     # Construct the command
     command = ["wormhole", "send", file_path]
 
@@ -56,6 +67,11 @@ def send_file(file_path):
 
 
 def send_recording(recording_id):
+    """Export a recording to a zip file and send it to another computer.
+
+    Args:
+        recording_id (int): The ID of the recording to send.
+    """
     zip_file_path = export_recording_to_folder(recording_id)
 
     if zip_file_path:
@@ -63,10 +79,15 @@ def send_recording(recording_id):
             send_file(zip_file_path)
         except Exception as e:
             logger.error(str(e))
-            # Handle the error as neede
+            # Handle the error as needed
 
 
 def receive_recording(wormhole_code):
+    """Receive a recording zip file from another computer using a wormhole code.
+
+    Args:
+        wormhole_code (str): The wormhole code to receive the recording.
+    """
     # Construct the command
     command = ["wormhole", "receive", wormhole_code]
 

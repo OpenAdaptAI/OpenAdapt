@@ -15,6 +15,14 @@ load_dotenv(dotenv_file)
 
 
 def read_env_file(file_path):
+    """Read the contents of an environment file.
+
+    Args:
+        file_path (str): The path to the environment file.
+
+    Returns:
+        dict: A dictionary containing the environment variables and their values.
+    """
     env_vars = {}
     with open(file_path, "r") as f:
         for line in f:
@@ -25,15 +33,18 @@ def read_env_file(file_path):
     return env_vars
 
 
-# Usage example
 env_file_path = ".env"
 env_vars = read_env_file(env_file_path)
 
-# Access specific environment variables
 DB_FNAME = env_vars.get("DB_FNAME")
 
 
 def set_db_url(db_fname):
+    """Set the database URL based on the given database file name.
+
+    Args:
+        db_fname (str): The database file name.
+    """
     global DB_FNAME, DB_FPATH, DB_URL
     DB_FNAME = db_fname
     DB_FPATH = ROOT_DIRPATH / DB_FNAME
@@ -48,19 +59,24 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": DB_FNAME,
     "OPENAI_API_KEY": "<set your api key in .env>",
-    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
-    # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
-    # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
 }
-import ipdb
-
-ipdb.set_trace()
 
 
 def getenv_fallback(var_name):
+    """Get the value of an environment variable with fallback to default.
+
+    Args:
+        var_name (str): The name of the environment variable.
+
+    Returns:
+        str: The value of the environment variable or the default value if not found.
+
+    Raises:
+        ValueError: If the environment variable is not defined.
+    """
     if var_name == "DB_FNAME":
         rval = _DEFAULTS.get(var_name)
     else:

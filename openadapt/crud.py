@@ -123,19 +123,24 @@ def get_recording_by_id(recording_id):
     return db.query(Recording).filter_by(id=recording_id).first()
 
 
-# Export to SQL
 def export_sql(recording_id):
+    """Export the recording data as SQL statements.
+
+    Args:
+        recording_id (int): The ID of the recording.
+
+    Returns:
+        str: The SQL statements to insert the recording into the output file.
+    """
     engine = sa.create_engine(config.DB_URL)
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    # Query the recording based on the ID
     recording = get_recording_by_id(recording_id)
 
     if recording:
-        # Generate SQL statements to insert the recording into the output file
         sql = f"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')"
-        print(f"Recording with ID {recording_id} exported successfully.")
+        logger(f"Recording with ID {recording_id} exported successfully.")
     else:
         print(f"No recording found with ID {recording_id}.")
 
@@ -143,29 +148,25 @@ def export_sql(recording_id):
 
 
 def create_db(recording_id, sql):
+    """Create a new database and import the recording data.
+
+    Args:
+        recording_id (int): The ID of the recording.
+        sql (str): The SQL statements to import the recording.
+
+    Returns:
+        tuple: A tuple containing the timestamp and the file path of the new database.
+    """
     db.close()
-    # fname_parts = [
-    #     config.DB_FNAME,
-    #     str(recording_id),
-    #     datetime.now().strftime(config.DT_FMT),
-    # ]
-    # db_fname = "-".join(fname_parts)
     db_fname = f"recording_{recording_id}.db"
 
-    # append to .env before running alembic
-    # backup first
     t = time.time()
-    # USE WINDOWS
     shutil.copyfile(config.ENV_FILE_PATH, f"{config.ENV_FILE_PATH}-{t}")
-    # update current running configuration
     config.set_db_url(db_fname)
+
     with open(config.ENV_FILE_PATH, "r") as f:
         lines = f.readlines()
-
-    # Replace the second line with the new value
     lines[1] = f"DB_FNAME={db_fname}\n"
-
-    # Write the modified contents back to the .env file
     with open(config.ENV_FILE_PATH, "w") as f:
         f.writelines(lines)
 
@@ -175,38 +176,39 @@ def create_db(recording_id, sql):
     os.system("alembic upgrade head")
     db.engine = engine
 
-    # Execute the SQL statements to import the recording
     with engine.begin() as connection:
         connection.execute(sql)
 
-    print("Recording imported successfully.")
-
-    # Retrieve the file path of the new database
     db_file_path = config.DB_FPATH.resolve()
 
     return t, db_file_path
 
 
-# Restore database
 def restore_db(timestamp):
-    # TODO: Implement the restoration logic
-    backup_file = "{}-{}".format(config.ENV_FILE_PATH, timestamp)
-    shutil.copyfile(backup_file, config.ENV_FILE_PATH)
+    """Restore the database to a previous state.
 
-    # Undo other configuration changes if needed
-    config.set_db_url(
-        "openadapt.db"
-    )  # Reset the DB_FNAME to its initial state or set it to the appropriate value
-    db.engine = get_engine()  # Revert the database engine to its previous state
+    Args:
+        timestamp (float): The timestamp associated with the backup file.
+    """
+    backup_file = f"{config.ENV_FILE_PATH}-{timestamp}"
+    shutil.copyfile(backup_file, config.ENV_FILE_PATH)
+    config.set_db_url("openadapt.db")
+    db.engine = get_engine()
 
 
 def export_recording(recording_id):
+    """Export a recording by creating a new database, importing the recording, and then restoring the previous state.
+
+    Args:
+        recording_id (int): The ID of the recording to export.
+
+    Returns:
+        str: The file path of the new database.
+    """
     sql = export_sql(recording_id)
     t, db_file_path = create_db(recording_id, sql)
     restore_db(t)
-    # TODO: undo configuration changes made in create_db
     return db_file_path
-
 
 def get_recording(timestamp):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
