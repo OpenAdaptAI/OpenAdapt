@@ -151,7 +151,7 @@ def export_sql(recording_id):
     
 
     return sql
-def create_db(recording_id):
+def create_db(recording_id, sql):
     db.close()
     # fname_parts = [
     #     config.DB_FNAME,
@@ -168,12 +168,11 @@ def create_db(recording_id):
     shutil.copyfile(config.ENV_FILE_PATH, f"{config.ENV_FILE_PATH}-{t}")
     # update current running configuration
     config.set_db_url(db_fname)
-
     with open(config.ENV_FILE_PATH, "r") as f:
         lines = f.readlines()
 
     # Replace the second line with the new value
-    lines[1] = f"DB_FNAME='{db_fname}'\n"
+    lines[1] = f"DB_FNAME={db_fname}\n"
 
     # Write the modified contents back to the .env file
     with open(config.ENV_FILE_PATH, "w") as f:
@@ -183,7 +182,13 @@ def create_db(recording_id):
     Session = sessionmaker(bind=engine)
     session = Session()
     os.system("alembic upgrade head")
-    db.engine = get_engine()
+    db.engine = engine
+
+    # Execute the SQL statements to import the recording
+    with engine.begin() as connection:
+        connection.execute(sql)
+
+    print("Recording imported successfully.")
 
     # Retrieve the file path of the new database
     db_file_path = config.DB_FPATH.resolve()
@@ -197,13 +202,13 @@ def restore_db(timestamp):
     shutil.copyfile(backup_file, config.ENV_FILE_PATH)
 
     # Undo other configuration changes if needed
-    config.set_db_fname("openadapt.db")  # Reset the DB_FNAME to its initial state or set it to the appropriate value
+    config.set_db_url("openadapt.db")  # Reset the DB_FNAME to its initial state or set it to the appropriate value
     db.engine = get_engine()  # Revert the database engine to its previous state
 
 
 def export_recording(recording_id):
     sql = export_sql(recording_id)
-    t, db_file_path = create_db(recording_id)
+    t, db_file_path = create_db(recording_id, sql)
     restore_db(t)
     # TODO: undo configuration changes made in create_db
     return db_file_path

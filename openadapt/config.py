@@ -1,4 +1,4 @@
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from loguru import logger
 import multiprocessing
 import os
@@ -7,12 +7,28 @@ import pathlib
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
 UNZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "unzipped"
-DB_FNAME = "openadapt.db"
 
 ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
 logger.info(f"{ENV_FILE_PATH=}")
-v = load_dotenv(ENV_FILE_PATH)
-import ipdb; ipdb.set_trace()
+dotenv_file = find_dotenv()
+load_dotenv(dotenv_file)
+
+def read_env_file(file_path):
+    env_vars = {}
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                env_vars[key] = value.strip('"')
+    return env_vars
+
+# Usage example
+env_file_path = ".env"
+env_vars = read_env_file(env_file_path)
+
+# Access specific environment variables
+DB_FNAME = env_vars.get("DB_FNAME")
 
 def set_db_url(db_fname):
     global DB_FNAME, DB_FPATH, DB_URL
@@ -35,9 +51,13 @@ _DEFAULTS = {
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
 }
+import ipdb; ipdb.set_trace()
 
 def getenv_fallback(var_name):
-    rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
+    if var_name == "DB_FNAME":
+        rval = _DEFAULTS.get(var_name)
+    else:
+        rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
