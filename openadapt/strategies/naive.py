@@ -52,7 +52,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         if self.action_event_idx >= num_action_events:
             # TODO: refactor
             raise StopIteration()
-        action_event = action_events[self.action_event_idx]        
+        action_event = action_events[self.action_event_idx]
         if config.REPLAY_STRIP_ELEMENT_STATE:
             action_event = utils.strip_element_state(action_event)
         logger.info(

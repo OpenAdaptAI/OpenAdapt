@@ -183,7 +183,7 @@ def show_mask(mask, ax, random_color=False):
     ax.imshow(mask_image)
 
 
-def show_points(coords, labels, ax, marker_size=375):
+def show_points(coords, labels, ax, marker_size=120):
     pos_points = coords[labels == 1]
     neg_points = coords[labels == 0]
     ax.scatter(
