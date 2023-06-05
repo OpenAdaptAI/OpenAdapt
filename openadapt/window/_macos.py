@@ -56,7 +56,6 @@ def get_active_window_meta():
         win for win in windows if win['kCGWindowLayer'] == 0
     ]
     active_window_info = active_windows_info[0]
-    print(active_window_info)
     return active_window_info
 
 
