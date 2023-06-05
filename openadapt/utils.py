@@ -1,18 +1,25 @@
 from datetime import datetime, timedelta
 from io import BytesIO
+from collections import Counter, defaultdict
 import base64
+import fire
+import inspect
 import os
 import sys
 import time
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
 
-from openadapt.common import MOUSE_EVENTS, KEY_EVENTS
+from openadapt import common
 
+
+# TODO: move to config.py
+DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 EMPTY = (None, [], {}, "")
 
@@ -308,7 +315,7 @@ def display_event(
             )
 
     # draw click marker
-    if action_event.name in MOUSE_EVENTS:
+    if action_event.name in common.MOUSE_EVENTS:
         x = action_event.mouse_x * width_ratio
         y = action_event.mouse_y * height_ratio
         image, ellipse_width, ellipse_height = draw_ellipse(x, y, image)
@@ -319,7 +326,7 @@ def display_event(
         d_text = f" {dx=} {dy=}" if dx or dy else ""
         text = f"{action_event.name}{d_text}"
         image = draw_text(x, y + ellipse_height / 2, text, image)
-    elif action_event.name in KEY_EVENTS:
+    elif action_event.name in common.KEY_EVENTS:
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
@@ -384,8 +391,101 @@ def get_strategy_class_by_name():
     return class_by_name
 
 
+def plot_performance(recording_timestamp: float = None) -> None:
+    """
+    Plot the performance of the event processing and writing.
+
+    Args:
+        recording_timestamp: The timestamp of the recording (defaults to latest)
+        perf_q: A queue with performance data.
+    """
+
+    type_to_prev_start_time = defaultdict(list)
+    type_to_start_time_deltas = defaultdict(list)
+    type_to_proc_times = defaultdict(list)
+    type_to_count = Counter()
+    type_to_timestamps = defaultdict(list)
+
+    if not recording_timestamp:
+        # avoid circular import
+        from openadapt import crud
+        recording_timestamp = crud.get_latest_recording().timestamp
+    perf_stats = crud.get_perf_stats(recording_timestamp)
+    perf_stat_dicts = rows2dicts(perf_stats)
+    for perf_stat in perf_stat_dicts:
+        prev_start_time = type_to_prev_start_time.get(
+            perf_stat["event_type"], perf_stat["start_time"]
+        )
+        start_time_delta = perf_stat["start_time"] - prev_start_time
+        type_to_start_time_deltas[perf_stat["event_type"]].append(
+            start_time_delta
+        )
+        type_to_prev_start_time[perf_stat["event_type"]] = (
+            perf_stat["start_time"]
+        )
+        type_to_proc_times[perf_stat["event_type"]].append(
+            perf_stat["end_time"] - perf_stat["start_time"]
+        )
+        type_to_count[perf_stat["event_type"]] += 1
+        type_to_timestamps[perf_stat["event_type"]].append(
+            perf_stat["start_time"]
+        )
+
+    y_data = {"proc_times": {}, "start_time_deltas": {}}
+    for i, event_type in enumerate(type_to_count):
+        type_count = type_to_count[event_type]
+        start_time_deltas = type_to_start_time_deltas[event_type]
+        proc_times = type_to_proc_times[event_type]
+        y_data["proc_times"][event_type] = proc_times
+        y_data["start_time_deltas"][event_type] = start_time_deltas
+
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
+    for i, data_type in enumerate(y_data):
+        for event_type in y_data[data_type]:
+            x = type_to_timestamps[event_type]
+            y = y_data[data_type][event_type]
+            axes[i].scatter(x, y, label=event_type)
+        axes[i].set_title(data_type)
+        axes[i].legend()
+    # TODO: add PROC_WRITE_BY_EVENT_TYPE
+    fname_parts = ["performance", f"{recording_timestamp}"]
+    fname = "-".join(fname_parts) + ".png"
+    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
+    logger.info(f"{fpath=}")
+    plt.savefig(fpath)
+    os.system(f"open {fpath}")
+
+
 def strip_element_state(action_event):
     action_event.element_state = None
     for child in action_event.children:
         strip_element_state(child)
     return action_event
+
+
+def get_functions(name):
+    """
+    Get a dictionary of function names to functions for all non-private functions
+
+    Usage:
+
+        if __name__ == "__main__":
+            fire.Fire(utils.get_functions(__name__))
+
+    Args:
+        TODO
+
+    Returns:
+        A dictionary of function names to functions.
+    """
+
+    functions = {}
+    for name, obj in inspect.getmembers(sys.modules[name]):
+        if inspect.isfunction(obj) and not name.startswith("_"):
+            functions[name] = obj
+    return functions
+
+
+if __name__ == "__main__":
+    fire.Fire(get_functions(__name__))

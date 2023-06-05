@@ -21,7 +21,11 @@ cache
 performance
 
 # Generated when adding editable dependencies in requirements.txt (-e)
+<<<<<<< HEAD
 src
 
 # Generated when downloading SAM checkpoint
 *.pth
+=======
+src
+>>>>>>> 2bbe036845cff2bf5668a3bdd00aec7fc90dbc18
