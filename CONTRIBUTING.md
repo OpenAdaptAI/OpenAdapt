@@ -7,7 +7,8 @@ We would love to implement your contributions to this project! We simply ask tha
 This project follows the guidelines in the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
 
 
-## Issue Template
+## Creating Issue
+In order to effectively communicate any bugs or request new features, please select the appropriate form. If none of the options suit your needs, you can click on "Open a blank issue" located at the bottom.
 
 ## Testing
 [GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behaviour and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
