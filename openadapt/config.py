@@ -13,6 +13,7 @@ logger.info(f"{ENV_FILE_PATH=}")
 dotenv_file = find_dotenv()
 load_dotenv(dotenv_file)
 
+
 def read_env_file(file_path):
     env_vars = {}
     with open(file_path, "r") as f:
@@ -23,12 +24,14 @@ def read_env_file(file_path):
                 env_vars[key] = value.strip('"')
     return env_vars
 
+
 # Usage example
 env_file_path = ".env"
 env_vars = read_env_file(env_file_path)
 
 # Access specific environment variables
 DB_FNAME = env_vars.get("DB_FNAME")
+
 
 def set_db_url(db_fname):
     global DB_FNAME, DB_FPATH, DB_URL
@@ -37,6 +40,7 @@ def set_db_url(db_fname):
     DB_URL = f"sqlite:///{DB_FPATH}"
     logger.info(f"{DB_URL=}")
 
+
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
@@ -44,14 +48,17 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": DB_FNAME,
     "OPENAI_API_KEY": "<set your api key in .env>",
-    #"OPENAI_MODEL_NAME": "gpt-4",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
 }
-import ipdb; ipdb.set_trace()
+import ipdb
+
+ipdb.set_trace()
+
 
 def getenv_fallback(var_name):
     if var_name == "DB_FNAME":
@@ -77,4 +84,3 @@ DB_URL = f"sqlite:///{DB_FPATH}"
 DB_ECHO = False
 
 DT_FMT = "%Y-%m-%d_%H-%M-%S"
-

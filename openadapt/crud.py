@@ -26,13 +26,11 @@ screenshots = []
 window_events = []
 performance_stats = []
 
+
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
 
-    db_obj = {
-        column.name: None
-        for column in table.__table__.columns
-    }
+    db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
         if key in event_data:
             val = event_data[key]
@@ -81,6 +79,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
     Insert event performance stat into db
@@ -94,18 +93,19 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     }
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
+
 def get_perf_stats(recording_timestamp):
     """
     return performance stats for a given recording
     """
 
     return (
-        db
-        .query(PerformanceStat)
+        db.query(PerformanceStat)
         .filter(PerformanceStat.recording_timestamp == recording_timestamp)
         .order_by(PerformanceStat.start_time)
         .all()
     )
+
 
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)
@@ -116,21 +116,11 @@ def insert_recording(recording_data):
 
 
 def get_latest_recording():
-    return (
-        db
-        .query(Recording)
-        .order_by(sa.desc(Recording.timestamp))
-        .limit(1)
-        .first()
-    )
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
+
 
 def get_recording_by_id(recording_id):
-    return (
-        db
-        .query(Recording)
-        .filter_by(id=recording_id)
-        .first()
-    )
+    return db.query(Recording).filter_by(id=recording_id).first()
 
 
 # Export to SQL
@@ -148,9 +138,10 @@ def export_sql(recording_id):
         print(f"Recording with ID {recording_id} exported successfully.")
     else:
         print(f"No recording found with ID {recording_id}.")
-    
 
     return sql
+
+
 def create_db(recording_id, sql):
     db.close()
     # fname_parts = [
@@ -195,6 +186,7 @@ def create_db(recording_id, sql):
 
     return t, db_file_path
 
+
 # Restore database
 def restore_db(timestamp):
     # TODO: Implement the restoration logic
@@ -202,7 +194,9 @@ def restore_db(timestamp):
     shutil.copyfile(backup_file, config.ENV_FILE_PATH)
 
     # Undo other configuration changes if needed
-    config.set_db_url("openadapt.db")  # Reset the DB_FNAME to its initial state or set it to the appropriate value
+    config.set_db_url(
+        "openadapt.db"
+    )  # Reset the DB_FNAME to its initial state or set it to the appropriate value
     db.engine = get_engine()  # Revert the database engine to its previous state
 
 
@@ -215,18 +209,12 @@ def export_recording(recording_id):
 
 
 def get_recording(timestamp):
-    return (
-        db
-        .query(Recording)
-        .filter(Recording.timestamp == timestamp)
-        .first()
-    )
+    return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
 def _get(table, recording_timestamp):
     return (
-        db
-        .query(table)
+        db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
         .order_by(table.timestamp)
         .all()

@@ -44,10 +44,9 @@ def export_recording_to_folder(recording_id):
         return zip_path
 
 
-
 def send_file(file_path):
     # Construct the command
-    command = ['wormhole', 'send', file_path]
+    command = ["wormhole", "send", file_path]
 
     # Execute the command
     try:
@@ -69,17 +68,22 @@ def send_recording(recording_id):
 
 def receive_recording(wormhole_code):
     # Construct the command
-    command = ['wormhole', 'receive', wormhole_code]
+    command = ["wormhole", "receive", wormhole_code]
 
     # Execute the command
     try:
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
-        logger.warning(f"Error occurred while running 'wormhole receive {wormhole_code}': {e}")
+        logger.warning(
+            f"Error occurred while running 'wormhole receive {wormhole_code}': {e}"
+        )
+
 
 # Create a command-line interface using python-fire and utils.get_functions
 if __name__ == "__main__":
-    fire.Fire({
-        'send': send_recording,
-        'receive': receive_recording,
-    })
+    fire.Fire(
+        {
+            "send": send_recording,
+            "receive": receive_recording,
+        }
+    )
