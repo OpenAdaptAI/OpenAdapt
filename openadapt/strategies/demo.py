@@ -44,10 +44,10 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
         window_event: WindowEvent,
     ):
-        #ascii_text = self.get_ascii_text(screenshot)
+        ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
 
-        #ocr_text = self.get_ocr_text(screenshot)
+        ocr_text = self.get_ocr_text(screenshot)
         #logger.info(f"ocr_text=\n{ocr_text}")
 
         screenshot_bbox = self.get_screenshot_bbox(screenshot)

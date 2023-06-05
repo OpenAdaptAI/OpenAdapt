@@ -73,8 +73,6 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         array_resized = np.array(image_resized)
         masks = self.sam_mask_generator.generate(array_resized)
         bbox_list = []
-        plt.figure(figsize=(10, 10))
-        plt.imshow(array_resized)
         for mask in masks:
             bbox_list.append(mask["bbox"])
         if SHOW_PLOTS :
@@ -122,8 +120,10 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 # Calculate bounding box coordinates
                 x0 = np.min(cols)
                 y0 = np.min(rows)
-                w = np.max(cols)
-                h = np.max(rows)
+                x1 = np.max(cols)
+                y1 = np.max(rows)
+                w = x1-x0
+                h = y1-y0
                 input_box = [x0, y0, w, h]
                 if SHOW_PLOTS :
                     plt.figure(figsize=(10, 10))
@@ -133,7 +133,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                     show_points(input_point, input_label, plt.gca())
                     plt.axis("on")
                     plt.show()
-                return [x0, y0, w - x0, h - y0]
+                return input_box
         return []
 
 
