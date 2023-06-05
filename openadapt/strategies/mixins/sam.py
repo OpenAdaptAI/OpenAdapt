@@ -110,12 +110,26 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 # Resize mouse coordinates
                 resized_mouse_x = int(action_event.mouse_x * RESIZE_RATIO)
                 resized_mouse_y = int(action_event.mouse_y * RESIZE_RATIO)
+                # Add additional points around the clicked point
+                additional_points = [
+                    [resized_mouse_x - 1, resized_mouse_y - 1],  # Top-left
+                    [resized_mouse_x - 1, resized_mouse_y],  # Left
+                    [resized_mouse_x - 1, resized_mouse_y + 1],  # Bottom-left
+                    [resized_mouse_x, resized_mouse_y - 1],  # Top
+                    [resized_mouse_x, resized_mouse_y],  # Center (clicked point)
+                    [resized_mouse_x, resized_mouse_y + 1],  # Bottom
+                    [resized_mouse_x + 1, resized_mouse_y - 1],  # Top-right
+                    [resized_mouse_x + 1, resized_mouse_y],  # Right
+                    [resized_mouse_x + 1, resized_mouse_y + 1],  # Bottom-right
+                ]
+                input_point = np.array(additional_points)
                 self.sam_predictor.set_image(array_resized)
-                input_point = np.array([[resized_mouse_x, resized_mouse_y]])
-                input_label = np.array([1])
-                masks, scores, logits = self.sam_predictor.predict(
+                input_labels = np.ones(
+                    input_point.shape[0]
+                )  # Set labels for additional points
+                masks, scores, _ = self.sam_predictor.predict(
                     point_coords=input_point,
-                    point_labels=input_label,
+                    point_labels=input_labels,
                     multimask_output=True,
                 )
                 best_mask_index = np.argmax(scores)
@@ -134,7 +148,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                     plt.imshow(array_resized)
                     show_mask(best_mask, plt.gca())
                     show_box(input_box, plt.gca())
-                    show_points(input_point, input_label, plt.gca())
+                    # for point in additional_points :
+                    #     show_points(np.array([point]),input_labels,plt.gca())
+                    show_points(input_point, input_labels, plt.gca())
                     plt.axis("on")
                     plt.show()
                 return input_box
