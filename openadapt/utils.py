@@ -15,13 +15,29 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common
+from openadapt import common, config
 
 
 # TODO: move to config.py
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 EMPTY = (None, [], {}, "")
+
+def get_now_dt_str(dt_format=config.DT_FMT):
+    """
+    Get the current date and time as a formatted string.
+    Args:
+        dt_format (str): The format to use for the date and time string.
+    Returns:
+        str: The current date and time formatted as a string.
+    """
+    # Get the current date and time
+    now = datetime.datetime.now()
+
+    # Format the date and time according to the specified format
+    dt_str = now.strftime(dt_format)
+
+    return dt_str
 
 
 def configure_logging(logger, log_level):
