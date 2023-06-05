@@ -61,7 +61,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
 
     def get_screenshot_bbox(self, screenshot: Screenshot, show_plots=SHOW_PLOTS) -> str:
         """
-        Get the bounding boxes of objects in a screenshot image in XYWH format.
+        Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
 
         Args:
             screenshot (Screenshot): The screenshot object containing the image.
@@ -89,7 +89,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         self, screenshot: Screenshot, show_plots=SHOW_PLOTS
     ) -> str:
         """
-        Get the bounding box of the clicked object in a screenshot image in XYWH format.
+        Get the bounding box of the clicked object in a resized image with RESIZE_RATIO in XYWH format.
 
         Args:
             screenshot (Screenshot): The screenshot object containing the image.
@@ -100,10 +100,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             None: If the screenshot does not represent a click event with the mouse pressed.
 
         """
-        logger.info(f"{len(screenshot.action_event)=}")
         for action_event in screenshot.action_event:
             if action_event.name in "click" and action_event.mouse_pressed == True:
-                logger.info(f"{action_event=}")
+                logger.info(f"click_action_event=\n{action_event}")
                 image_resized = resize_image(screenshot.image)
                 array_resized = np.array(image_resized)
 
