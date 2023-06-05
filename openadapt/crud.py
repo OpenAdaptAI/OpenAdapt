@@ -132,51 +132,27 @@ def get_recording_by_id(recording_id):
         .first()
     )
 
-def create_filtered_db(recording_id):
-    # Get the Recording object by ID
-    recording = get_recording_by_id(recording_id)
-
-    # Create a new database engine
-    new_db_file_path = config.UNZIPPED_RECORDING_FOLDER_PATH / f"recording_{recording_id}.db"
-    new_db_engine = sa.create_engine('sqlite:///{new_db_file_path}')
-
-     # Get the base model
-    Base = get_base(new_db_engine)
-
-    # Create all the tables in the new database
-    Base.metadata.create_all(new_db_engine)
-
-    # Assuming you have an existing session named 'db'
-    db.expunge(recording)
-
-    # Create a new session
-    Session = sessionmaker(bind=new_db_engine)
-    session = Session()
-
-    try:
-        # Add the filtered Recording object to the session
-        session.add(recording)
-        
-        # Commit the changes to the new database
-        session.commit()
-    except Exception as e:
-        # Handle any exceptions that may occur during the database operations
-        session.rollback()
-        raise e
-    finally:
-        # Close the session
-        session.close()
-
-    # Return the path to the newly created database file
-    return new_db_file_path
 
 # Export to SQL
 def export_sql(recording_id):
-    # Export data for recordings e.g. via SELECT or similar
-    sql = "SELECT * FROM recording WHERE id = {}".format(recording_id)
-    return sql
+    engine = sa.create_engine(config.DB_URL)
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
+    # Query the recording based on the ID
+    recording = get_recording_by_id(recording_id)
+
+    if recording:
+        # Generate SQL statements to insert the recording into the output file
+        sql = f"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')"
+        print(f"Recording with ID {recording_id} exported successfully.")
+    else:
+        print(f"No recording found with ID {recording_id}.")
+    
+
+    return sql
 def create_db(recording_id):
+    db.close()
     # fname_parts = [
     #     config.DB_FNAME,
     #     str(recording_id),
@@ -191,19 +167,26 @@ def create_db(recording_id):
     # USE WINDOWS
     shutil.copyfile(config.ENV_FILE_PATH, f"{config.ENV_FILE_PATH}-{t}")
     # update current running configuration
-    config.set_db_fname(db_fname)
+    config.set_db_url(db_fname)
 
-    with open(config.ENV_FILE_PATH, "a") as f:
-        # f.seek(0, os.SEEK_END)
-        f.write(f"\nDB_FNAME={config.DB_FNAME}")
+    with open(config.ENV_FILE_PATH, "r") as f:
+        lines = f.readlines()
 
+    # Replace the second line with the new value
+    lines[1] = f"DB_FNAME='{db_fname}'\n"
+
+    # Write the modified contents back to the .env file
+    with open(config.ENV_FILE_PATH, "w") as f:
+        f.writelines(lines)
+
+    engine = sa.create_engine(config.DB_URL)
+    Session = sessionmaker(bind=engine)
+    session = Session()
     os.system("alembic upgrade head")
     db.engine = get_engine()
 
-
     # Retrieve the file path of the new database
     db_file_path = config.DB_FPATH.resolve()
-    import ipdb; ipdb.set_trace()
 
     return t, db_file_path
 
@@ -218,18 +201,9 @@ def restore_db(timestamp):
     db.engine = get_engine()  # Revert the database engine to its previous state
 
 
-def run_sql(sql):
-    with engine.connect() as con:
-        result = con.execute(sql)
-        print(result)
-        for row in result.fetchall():
-            print(row)
-            logger.info(f"{row=}")
-
 def export_recording(recording_id):
     sql = export_sql(recording_id)
     t, db_file_path = create_db(recording_id)
-    run_sql(sql)
     restore_db(t)
     # TODO: undo configuration changes made in create_db
     return db_file_path
