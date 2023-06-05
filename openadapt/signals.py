@@ -51,9 +51,12 @@ class Signals:
         try:
             # Get the file's size and type.
             size = os.path.getsize(file_path)
-            type, _= mimetypes.guess_type(file_path)
-            description = f"Size: {size if size else 'File size not provided'}, Type: {type if type else 'File type not provided'}"
+            type, _ = mimetypes.guess_type(file_path)
 
+            description = (
+                f"Size: {size if size else 'File size not provided'}, "
+                f"Type: {type if type else 'File type not provided'}"
+            )
         except PermissionError:
             logger.info(f"Error: Permission denied.")
             return None
@@ -79,7 +82,11 @@ class Signals:
             # Get the signal's length and type.
             length = response.headers.get('Content-Length')
             type = response.headers.get('Content-Type')
-            description = f"Length: {length if length else 'Content-Length not provided'}, Type: {type if type else 'Content-Type not provided'}"
+
+            description = (
+                f"Length: {length if length else 'Content-Length not provided'}, "
+                f"Type: {type if type else 'Content-Type not provided'}"
+            )
         return description
 
 
@@ -95,7 +102,11 @@ class Signals:
         docstring = func.__doc__ if func.__doc__ else 'No description provided'
 
         # Get the function's name and module
-        description = f"Function: {func.__name__}, Module: {module.__name__}, Description: {docstring}"
+        description = (
+            f"Function: {func.__name__}, "
+            f"Module: {module.__name__}, "
+            f"Description: {docstring}"
+        )
 
         return description
 
@@ -186,7 +197,14 @@ class Signals:
             
         
         signal_number = len(self.signals) + 1
-        signal = {"number": signal_number, "title": signal_title, "type": signal_type, "address": signal_address, "description": signal_description}
+
+        signal = {
+            "number": signal_number, 
+            "title": signal_title, 
+            "type": signal_type, 
+            "address": signal_address, 
+            "description": signal_description
+        }
         self.signals.append(signal)
 
 
