@@ -5,6 +5,6 @@ import os
 
 
 if __name__ == '__main__':
-    Func = modal.Function.lookup("test-stub", "run_RWKV")
+    Func = modal.Function.lookup("openadapt-rwkv", "run_RWKV")
     a = Func.call()
     print(a)

@@ -10,7 +10,7 @@ from rwkv.utils import PIPELINE, PIPELINE_ARGS
 from transformers import PreTrainedTokenizerFast
 
 #integrate modal to load bigger RWKV model
-stub = modal.Stub("test-stub")
+stub = modal.Stub("openadapt-rwkv")
 
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0'
