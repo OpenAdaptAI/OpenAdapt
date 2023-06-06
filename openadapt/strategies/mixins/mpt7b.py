@@ -32,18 +32,26 @@ class MPT_7BReplayStrategy(BaseReplayStrategy):
 
         self.max_input_size = max_input_size
 
-    def get_completions(self, prompt: str, max_tokens: int):
+    def get_completions(self, prompt: str):
         max_input_size = self.max_input_size, 2048
         if max_input_size > 2048:
             max_input_size = 2048
 
         prompt = prompt[-max_input_size:]
         input_tokens = self.tokenizer(prompt, return_tensors="pt")
-        attention_mask = input_tokens["attention_mask"]
+        input_ids = input_tokens['input_ids']
+        attention_mask = input_ids['attention_mask']
+        # tokenizer only has these two keys in output dict.
 
-        output_tokens = self.model.forward(
-            input_ids=input_tokens["input_ids"],
-            attention_mask=attention_mask,
-        )
-        completion = self.tokenizer.decode(output_tokens)
+        output = self.model.forward(input_ids=input_ids,
+        attention_mask=attention_mask)
+
+        # should I forward or just pass it in ? Can't test
+        # w/o modal credz.
+
+        loss = output.loss
+        logits = output.logits
+
+        completion = ""
         return completion
+
