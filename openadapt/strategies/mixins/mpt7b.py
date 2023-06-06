@@ -18,7 +18,8 @@ class MPT_7BReplayStrategy(BaseReplayStrategy):
 
     def __init__(
         self,
-        max_input_size: int
+        max_input_size: int,
+        recording: Recording
     ):
         super.__init__(recording)
 
