@@ -35,6 +35,6 @@ def sendMessage(encodedMessage):
     sys.stdout.buffer.flush()
 
 while True:
+    reply_num = 0
     receivedMessage = getMessage()
-    if receivedMessage == "ping":
-        sendMessage(encodeMessage("pong"))
+    sendMessage(encodeMessage(str(receivedMessage)))
