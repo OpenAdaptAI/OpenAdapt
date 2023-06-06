@@ -20,7 +20,7 @@ class MPT_7BReplayStrategy(BaseReplayStrategy):
         self,
         max_input_size: int
     ):
-        #super.__init__(recording)
+        super.__init__(recording)
 
         self.model = transformers.AutoModelForCausalLM.from_pretrained(
             'mosaicml/mpt-7b',
