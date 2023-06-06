@@ -35,6 +35,11 @@ def get_active_window_state() -> dict:
         "data": data,
         "window_id": meta["control_id"],
     }
+    try:
+        pickle.dumps(state)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        state.pop("data")
     return state
 
 
@@ -80,6 +85,7 @@ def get_active_window() -> Desktop:
         Desktop: The active window object.
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
+    logger.info(f"{app=}")
     window = app.active()
     logger.info(f"{window=}")
     return window
