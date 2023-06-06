@@ -295,3 +295,14 @@ class WindowEvent(db.Base):
     @classmethod
     def get_active_window_event(cls):
         return WindowEvent(**window.get_active_window_data())
+
+
+class PerformanceStat(db.Base):
+    __tablename__ = "performance_stat"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.Integer)
+    event_type = sa.Column(sa.String)
+    start_time = sa.Column(sa.Integer)
+    end_time = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
