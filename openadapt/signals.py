@@ -3,6 +3,7 @@ import importlib
 import os
 import mimetypes
 import sys #for debugging
+import sqlite3
 
 from loguru import logger
 
@@ -36,7 +37,28 @@ class Signals:
         """
         # Get the signal from the database.
         #TODO: implement database signal
-        return
+
+        conn = sqlite3.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM sqlite_master WHERE type='table';")
+
+        rows = cur.fetchall()
+        conn.close()
+
+        result = {}
+
+        for row in rows:
+            result[row[0]] = row[1]
+
+        # Prepare the result
+        table_info = []
+
+        for row in rows:
+            # The first element is the table name, the second element is the SQL schema
+            table_info.append(f"Table: {row[0]}, Schema: {row[1]}")
+        
+        description = "\n".join(table_info)
+        return description
 
 
     def __setup_file_signal(self, file_path):
