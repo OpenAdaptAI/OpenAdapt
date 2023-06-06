@@ -39,8 +39,3 @@ class MPT_7BReplayStrategy(BaseReplayStrategy):
         prompt = prompt[-max_input_size:]
         # sift mpt-7b methods to output the completion
         # INCOMPLETE
-
-
-
-
-        
