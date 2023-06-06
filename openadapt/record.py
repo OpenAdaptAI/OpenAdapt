@@ -53,23 +53,20 @@ def kwargs_to_str(**kwargs):
 
 
 def logging(func):
-    func.__indent__ = 0
-
     @functools.wraps(func)
     def wrapper_logging(*args, **kwargs):
-        func_indent = " " * func.__indent__
-        func.__indent__ += 2
-
         func_name = func.__qualname__
         func_args = args_to_str(*args)
         func_kwargs = kwargs_to_str(**kwargs)
 
-        logger.info(f"{func_indent} -> Enter: {func_name}({func_args}",
-                    extra={'func_kwargs': func_kwargs})
+        if func_kwargs != "":
+            logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+        else:
+            logger.info(f" -> Enter: {func_name}({func_args})")
 
         result = func(*args, **kwargs)
 
-        logger.info(f"{func_indent} <- Leave: {func_name}({result})")
+        logger.info(f" <- Leave: {func_name}({result})")
         return result
 
     return wrapper_logging
