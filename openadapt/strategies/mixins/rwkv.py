@@ -8,17 +8,11 @@ use_modal = True
 
 class RWKVReplayStrategyMixin:
 
-    def __init__(
-        self,
-        recording: Recording,
-    ):
-        super().__init__(recording)
-
-    def get_response(self,task_description, input):
+    def get_response(self,instruction, task_description, input):
         if use_modal:
             function_call = modal.Function.lookup("openadapt-rwkv", "run_RWKV")
             response = function_call.call(task_description=task_description, input=input)
             logger.debug(f"response=\n{response}")
         else:
-            response = run_RWKV(task_description=task_description, input=input)
+            response = run_RWKV(instruction, task_description, input)
         return response

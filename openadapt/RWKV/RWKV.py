@@ -17,8 +17,8 @@ os.environ["RWKV_CUDA_ON"] = '0'
 
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
-@stub.function(gpu="a100", timeout=18000, image=torch_image)#, mounts=[modal.Mount.from_local_dir("./openadapt/tokenizer", remote_path="/root/rwkv_model")])
-def run_RWKV(task_description=None, input=None):
+@stub.function(gpu="a100", timeout=18000, image=torch_image)
+def run_RWKV(instruction=None, task_description=None, input=None):
 
     #use gpu=a100 for Raven-14B, vs. use gpu=any for other weights
     """
@@ -40,7 +40,7 @@ def run_RWKV(task_description=None, input=None):
     tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
     response = requests.get(tokenizer_url)
     if response.status_code == 200:
-        tokenizer_path = "/root/rwkv_model/20B_tokenizer.json"
+        tokenizer_path = "/root/rwkv_model/20B_tokenizer.json" #Switch to desired path if running locally
         os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
         with open(tokenizer_path, 'wb') as f:
             f.write(response.content)
@@ -77,20 +77,29 @@ def run_RWKV(task_description=None, input=None):
     #switch to 'cuda fp16' for better performance
 
     print()
-    task_description = (
-        "filling forms and submitting data on web pages"
-    )
+    if not task_description:
+        task_description = (
+            "filling forms and submitting data on web pages"
+        )
+        
+    if not input:
+        input = f"""[{{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'}}
+,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
+,{{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}}]
+"""
+
+    if not instruction:  
+        instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "
+
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 # Instruction: 
-you are given a list of signals, each detailed in a JSON format.Please provide only the signal number that would return data that is most beneficial for {task_description}. 
+{instruction} {task_description}. 
 
 # Input: 
-[{{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'}}
-,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
-,{{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}}]
+{input}
 
-# Signal Number:
+# Response:
 """
     
     print(prompt)
@@ -105,6 +114,7 @@ you are given a list of signals, each detailed in a JSON format.Please provide o
         if token in args.token_stop:
             break
         all_tokens += [token]
+        
         if token not in occurence:
             occurence[token] = 1
         else:
@@ -113,30 +123,10 @@ you are given a list of signals, each detailed in a JSON format.Please provide o
         tmp = pipeline.decode(all_tokens[out_last:])
         if '\ufffd' not in tmp:
             out_str += tmp
-            #yield out_str.strip()
-            #print(out_str.strip())
             out_last = i + 1
 
 
     return(out_str.strip())
-
-    # print(prompt)
-    # prompt_tokens = tokenizer.encode(prompt, return_tensors="pt")
-    # out, state = model.forward(prompt_tokens[0].tolist(), None)
-    # predicted_token = np.argmax(out.detach().cpu().numpy())
-    # predicted_word = tokenizer.decode(predicted_token)
-    # print(predicted_word)
-
-    # for i in range(100):
-    #     out, state = model.forward([predicted_token], state)
-    #     predicted_token = np.argmax(out.detach().cpu().numpy())
-    #     predicted_word = tokenizer.decode(predicted_token)
-    #     print(predicted_word)
-
-    #while predicted token is not stop token, 
-    # then out,state = model.forward(prompt_tokens  , state)
-    # predicted_token = np.argmax(out.detach().cpu().numpy())
-    # prompt_tokens.append(predicted_token)
 
 @stub.local_entrypoint()
 def main():
