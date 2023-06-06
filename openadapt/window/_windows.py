@@ -51,7 +51,7 @@ def get_active_window_meta(active_window) -> dict:
     if not active_window:
         logger.warning(f"{active_window=}")
         return None
-    logger.info(f"{active_window.get_properties()}=")
+    logger.info(f"{active_window.get_properties()=}")
     return active_window.get_properties()
 
 
