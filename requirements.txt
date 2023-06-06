@@ -23,7 +23,7 @@ sphinx
 python-dotenv==1.0.0
 pywin32==306; sys_platform == 'win32'
 -e git+https://github.com/abrichr/pynput.git#egg=pynput
-git+https://github.com/flupke/pypotrace.git
+-e git+https://github.com/flupke/pypotrace.git
 pytest==7.1.3
 rapidocr-onnxruntime==1.2.3
 scikit-learn==1.2.2

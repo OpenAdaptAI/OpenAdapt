@@ -161,6 +161,23 @@ if (!$vcredistExists) {
     }
 }
 
+# download Pypotrace's dependency Agg
+$url1 = "https://sourceforge.net/code-snapshots/svn/a/ag/agg/svn/agg-svn-r138.zip"
+$dest1 = "C:\src\agg-2.5"
+Invoke-WebRequest -Uri $url1 -OutFile $dest1
+
+RunAndCheck "./configure; make"
+
+# check bit count to decide which windows potrace package to download
+$osArchitecture = (Get-WmiObject win32_operatingsystem).osarchitecture
+$dest2 = "C:\src\potrace"
+if ($osArchitecture -eq "64-bit") {
+    $url2 = "http://www.onlinepublisher.net/potrace/files/Potrace-1.11-64-bit-setup.msi"
+} else {
+    $url2 = "http://www.onlinepublisher.net/potrace/files/Potrace-1.11-32-bit-setup.msi"
+}
+Invoke-WebRequest -Uri $url2 -OutFile $dest2
+
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
 Set-Location .\OpenAdapt
