@@ -1,5 +1,5 @@
 import openai
-openai.api_key = "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"
+openai.api_key = "INSERT_API_KEY_HERE"
 
 
 completion = openai.ChatCompletion.create(
@@ -44,5 +44,4 @@ for i in range(len(tasks_str)):
 
 
 if __name__ == "__main__":
-    for level in tasks_by_level:
-        print(level, tasks_by_level[level])
+        print(tasks_by_level)
