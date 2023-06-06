@@ -18,7 +18,7 @@ os.environ["RWKV_CUDA_ON"] = '0'
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
 @stub.function(gpu="a100", timeout=18000, image=torch_image)
-def run_RWKV(instruction=None, task_description=None, input=None):
+def run_RWKV(instruction=None, task_description=None, input=None, parameters=None):
 
     #use gpu=a100 for Raven-14B, vs. use gpu=any for other weights
     """
@@ -52,15 +52,22 @@ def run_RWKV(instruction=None, task_description=None, input=None):
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
     pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
     
-    temperature = 0.9
-    top_p = 0.9
-    countPenalty = 0.1
-    token_count = 200
-    ctx_limit = 1536
+    if not parameters:
+        temperature = 0.9
+        top_p = 0.9
+        count_penalty = 0.1
+        token_count = 200
+        ctx_limit = 1536
+    else:
+        temperature = parameters["temperature"]
+        top_p = parameters["top_p"]
+        count_penalty = parameters["count_penalty"]
+        token_count = parameters["token_count"]
+        ctx_limit = parameters["ctx_limit"]
 
     args = PIPELINE_ARGS(temperature= float(temperature), 
                         top_p= float(top_p),
-                        alpha_frequency= countPenalty,
+                        alpha_frequency= count_penalty,
                         token_ban= [],
                         token_stop= [0])
 
