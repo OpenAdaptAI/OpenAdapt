@@ -24,6 +24,8 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
+import functools
+
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -38,6 +40,41 @@ PLOT_PERFORMANCE = False
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 
+def args_to_str(*args):
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs):
+    ret = ""
+    for k, v in kwargs.items():
+        ret += f"{k}={v},"
+
+    return ret[:-1]
+
+
+def logging(func):
+    func.__indent__ = 0
+
+    @functools.wraps(func)
+    def wrapper_logging(*args, **kwargs):
+        func_indent = " " * func.__indent__
+        func.__indent__ += 2
+
+        func_name = func.__qualname__
+        func_args = args_to_str(*args)
+        func_kwargs = kwargs_to_str(**kwargs)
+
+        logger.info(f"{func_indent} -> Enter: {func_name}({func_args}",
+                    extra={'func_kwargs': func_kwargs})
+
+        result = func(*args, **kwargs)
+
+        logger.info(f"{func_indent} <- Leave: {func_name}({result})")
+        return result
+
+    return wrapper_logging
+
+
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
         write_q.put(event)
@@ -45,6 +82,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
         write_fn(recording_timestamp, event, perf_q)
 
 
+@logging
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
@@ -186,6 +224,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
+@logging
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -356,6 +395,7 @@ def read_screen_events(
     logger.info("done")
 
 
+@logging
 def read_window_events(
     event_q: queue.Queue,
 	terminate_event: multiprocessing.Event,
@@ -402,6 +442,7 @@ def read_window_events(
         prev_window_data = window_data
 
 
+@logging
 def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
@@ -433,6 +474,7 @@ def performance_stats_writer (
     logger.info("performance stats writer done")
 
 
+@logging
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
@@ -513,6 +555,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+@logging
 def record(
     task_description: str,
 ):
@@ -650,6 +693,7 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
+
 
 if __name__ == "__main__":
     fire.Fire(record)
