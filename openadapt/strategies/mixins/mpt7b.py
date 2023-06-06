@@ -37,5 +37,12 @@ class MPT_7BReplayStrategy(BaseReplayStrategy):
             max_input_size = 2048
 
         prompt = prompt[-max_input_size:]
-        # sift mpt-7b methods to output the completion
-        # INCOMPLETE
+        input_tokens = self.tokenizer(prompt, return_tensors="pt")
+        attention_mask = input_tokens["attention_mask"]
+
+        output_tokens = self.model.forward(
+            input_ids=input_tokens["input_ids"],
+            attention_mask=attention_mask,
+        )
+        completion = self.tokenizer.decode(output_tokens)
+        return completion
