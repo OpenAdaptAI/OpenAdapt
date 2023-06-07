@@ -2,7 +2,13 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt.db import Session
-from openadapt.models import ActionEvent, Screenshot, Recording, WindowEvent
+from openadapt.models import (
+    ActionEvent,
+    Screenshot,
+    Recording,
+    WindowEvent,
+    PerformanceStat,
+)
 
 
 BATCH_SIZE = 1
@@ -11,7 +17,7 @@ db = Session()
 action_events = []
 screenshots = []
 window_events = []
-
+performance_stats = []
 
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
@@ -68,6 +74,31 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
+    """
+    Insert event performance stat into db
+    """
+
+    event_perf_stat = {
+        "recording_timestamp": recording_timestamp,
+        "event_type": event_type,
+        "start_time": start_time,
+        "end_time": end_time,
+    }
+    _insert(event_perf_stat, PerformanceStat, performance_stats)
+
+def get_perf_stats(recording_timestamp):
+    """
+    return performance stats for a given recording
+    """
+
+    return (
+        db
+        .query(PerformanceStat)
+        .filter(PerformanceStat.recording_timestamp == recording_timestamp)
+        .order_by(PerformanceStat.start_time)
+        .all()
+    )
 
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)
