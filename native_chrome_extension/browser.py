@@ -8,6 +8,7 @@ import sys
 import json
 import struct
 
+
 # Read a message from stdin and decode it.
 def getMessage():
     rawLength = sys.stdin.buffer.read(4)
@@ -16,6 +17,7 @@ def getMessage():
     messageLength = struct.unpack('@I', rawLength)[0]
     message = sys.stdin.buffer.read(messageLength).decode('utf-8')
     return json.loads(message)
+
 
 # Encode a message for transmission,
 # given its content.
@@ -28,13 +30,17 @@ def encodeMessage(messageContent):
     encodedLength = struct.pack('@I', len(encodedContent))
     return {'length': encodedLength, 'content': encodedContent}
 
+
 # Send an encoded message to stdout
 def sendMessage(encodedMessage):
     sys.stdout.buffer.write(encodedMessage['length'])
     sys.stdout.buffer.write(encodedMessage['content'])
     sys.stdout.buffer.flush()
 
+
+reply_num = 0
 while True:
-    reply_num = 0
     receivedMessage = getMessage()
-    sendMessage(encodeMessage(str(receivedMessage)))
+    reply_num += 1
+    sendMessage(encodeMessage(str(reply_num)))
+    sendMessage(encodeMessage(receivedMessage))
