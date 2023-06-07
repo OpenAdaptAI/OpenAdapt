@@ -11,12 +11,17 @@
       "default_icon": "icons/MLDSAI_logo.png"
     },
     "background": {
-      "service_worker": "./background.js"
+      "service_worker": "background.js"
     },
     "permissions": [
+      "activeTab",
+      "tabs",
       "nativeMessaging",
-      "scripting",
-      "activeTab"
-    ]
+      "scripting"
+    ],
+    "content_scripts": [{
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }]
   }
   

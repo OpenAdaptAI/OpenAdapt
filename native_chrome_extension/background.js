@@ -1,6 +1,4 @@
-/*
-On startup, connect to the "ping_pong" app.
-*/
+
 let port = chrome.runtime.connectNative("openadapt");
 
 // Receive messages from the native messaging host
@@ -10,14 +8,6 @@ port.onMessage.addListener(onReceived);
 function onReceived(response) {
     console.log(response);
 }
-
-// /*
-// Listen for messages from the app.
-// */
-// port.onMessage.addListener((response) => {
-//   console.log("Received: " + response);
-//   // port.postMessage(message);
-// });
 
 // Listen for messages from the content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -38,13 +28,3 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 
-// DOM mutation observer
-let observer = new MutationObserver(mutations => {
-  for (let mutation of mutations) {
-      // Send the mutation to the background script
-      port.postMessage(mutation);
-  }
-});
-
-// Start observing DOM mutations
-observer.observe(document, { childList: true, subtree: true });
