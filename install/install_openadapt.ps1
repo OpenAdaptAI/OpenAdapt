@@ -166,7 +166,7 @@ $url1 = "https://sourceforge.net/code-snapshots/svn/a/ag/agg/svn/agg-svn-r138.zi
 $dest1 = "C:\src\agg-2.5"
 Invoke-WebRequest -Uri $url1 -OutFile $dest1
 
-RunAndCheck "./configure; make"
+RunAndCheck "./configure; make" "make Agg"
 
 # check bit count to decide which windows potrace package to download
 $osArchitecture = (Get-WmiObject win32_operatingsystem).osarchitecture
