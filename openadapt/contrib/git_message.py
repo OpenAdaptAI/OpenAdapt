@@ -1,3 +1,14 @@
+"""
+Script for generating Git commit messages using LLMs.
+
+Usage:
+
+    $ python -m openadapt.contrib.git_message [path/to/repo]  # default to current directory
+"""
+
+import fire
+import docker
+
 system_message = """
 You are a git commit message generator.
 You are shown the (possibly truncated) output of git commands like `git status` and `git diff -p`.
@@ -32,33 +43,40 @@ Do not reply in any other format. All of my prompts will be formatted as:
 ``
 """
 command = "git status"
-# pip install docker
-client = docker.from_env()
-container = client.containers.run("ubuntu", detach=True)
-fragments = []
-commit_message = None
-while True:
-    assert command.startswith("git"), command
-    # MUST be run inside Docker to avoid shell injection
-    command_result = container.exec_run(command)
 
-    # this should generate a prompt in the format described in the system_message,
-    # and (if necessary) truncate it and append the number of characters truncated:
-    # "-----num_chars_removed={num_chars_removed}-----"
-    # (such that the result fits into the context window)
-    prompt = truncate_and_append_num_chars_removed(fragments, command, command_result)
+def generate_git_commit_message(repo_path="."):
 
-    completion = get_completion(system_message, prompt)  # do not track message history
-    completion_parts = completion.split(" ")
-    completion_type = completion_parts[0]
-    completion_content = completion_parts[1:]
-    if completion_type == "COMMAND":
-        command = completion_content
-    elif completion_type == "FRAGMENT":
-        fragment = completion_content
-        fragments.append(fragment)
-    elif completion_type == "MESSAGE":
-        commit_message = completion_content
-        break
-    
-print(commit_message)
+    # pip install docker
+    client = docker.from_env()
+    container = client.containers.run("ubuntu", detach=True)
+    fragments = []
+    commit_message = None
+    while True:
+        assert command.startswith("git"), command
+        # MUST be run inside Docker to avoid shell injection
+        command_result = container.exec_run(command)
+
+        # this should generate a prompt in the format described in the system_message,
+        # and (if necessary) truncate it and append the number of characters truncated:
+        # "-----num_chars_removed={num_chars_removed}-----"
+        # (such that the result fits into the context window)
+        prompt = truncate_and_append_num_chars_removed(fragments, command, command_result)
+
+        completion = get_completion(system_message, prompt)  # do not track message history
+        completion_parts = completion.split(" ")
+        completion_type = completion_parts[0]
+        completion_content = completion_parts[1:]
+        if completion_type == "COMMAND":
+            command = completion_content
+        elif completion_type == "FRAGMENT":
+            fragment = completion_content
+            fragments.append(fragment)
+        elif completion_type == "MESSAGE":
+            commit_message = completion_content
+            break
+    print(commit_message)
+
+
+
+if __name__ == "__main__":
+    fire.Fire(generate_git_commit_message)
