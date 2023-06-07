@@ -22,9 +22,17 @@ def get_active_window_state() -> dict:
                 - "data": None (to be filled with window data).
                 - "window_id": ID of the active window.
     """
-    active_window = get_active_window()
+    # catch specific exceptions, when except happens do log.warning
+    try:
+        active_window = get_active_window()
+    except RuntimeError as e:
+        logger.warning(e)
+        return {}
+    logger.info(f"{active_window=}")
     meta = get_active_window_meta(active_window)
+    logger.info(f"{meta=}")
     data = get_descendants_info(active_window)
+    logger.info(f"{data=}")
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,
@@ -56,7 +64,6 @@ def get_active_window_meta(active_window) -> dict:
     if not active_window:
         logger.warning(f"{active_window=}")
         return None
-    logger.info(f"{active_window.get_properties()=}")
     return active_window.get_properties()
 
 
@@ -101,15 +108,15 @@ def get_descendants_info(window):
     Returns:
         list: A list containing the properties of the descendants.
     """
-    result = []
+
+    result = window.get_properties()
+    result["children"] = []
     for child in window.descendants():
-        info = child.get_properties()
-        if info not in result:
-            result.append(info)
-        descendants = get_descendants_info(child)
-        for descendant in descendants:
-            if descendant not in result:
-                result.append(descendant)
+        if child in result["children"]:
+            import ipdb
+
+            ipdb.set_trace()
+        result["children"].append(child.get_properties())
     return result
 
 
