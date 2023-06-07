@@ -195,7 +195,7 @@ class Signals:
         signal_type = None
         if isinstance(signal_address, str):
             # If signal is a string, it could be a file path, a database URL, an HTTP URL, or a Python function name.
-            if signal_address.startswith("pgsql://"):
+            if signal_address.startswith("pgsql://") or signal_address.endswith(".db"):
                 # If the string starts with "pgsql://", treat it as a database URL.
                 signal_description = self.__setup_database_signal(signal_address)
                 signal_type = "database"
@@ -245,7 +245,9 @@ class Signals:
         Return the data of a signal.
         """
         signal = self.signals[signal_number - 1]
-        if signal["type"] == "database":
+        if len(signal) == 0:
+            return None
+        elif signal["type"] == "database":
             return(self.__access_database_signal(signal["address"]))
         elif signal["type"] == "web_url":
             return(self.__access_url_signal(signal["address"]))

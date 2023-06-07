@@ -1,4 +1,16 @@
+import sqlite3
+import tempfile
+import os
+
 from openadapt.signals import Signals
+
+
+def test_setup_database_signal():
+    signals = Signals()
+    signals.add_signal("tests/openadapt/test_database.db")
+
+    signal_description = signals.return_signals()[0]["description"]
+    assert "Table: table, Schema: test_table" in signal_description
 
 
 def test_add_file_signal():
