@@ -33,15 +33,16 @@ NUM_TIMESTAMP_DIGITS = 6
 
 
 rows2dicts = partial(rows2dicts, num_digits=NUM_TIMESTAMP_DIGITS)
-timestamp = 0
-timestamp_raw = 0
+_start_time = 0
+timestamp = _start_time
+timestamp_raw = _start_time
 
 
 def reset_timestamp():
     global timestamp
     global timestamp_raw
-    timestamp = 0
-    timestamp_raw = 0
+    timestamp = _start_time
+    timestamp_raw = _start_time
 
 
 @pytest.fixture(autouse=True)
@@ -69,11 +70,11 @@ def make_action_event(
         timestamp += dt
         timestamp_raw += dt
         logger.debug(
-            f"{dt=:.2f} "
-            f"{prev_timestamp=:.2f} "
-            f"{prev_timestamp_raw=:.2f} "
-            f"{timestamp=:.2f} "
-            f"{timestamp_raw=:.2f} "
+            f"{dt=} "
+            f"{prev_timestamp=} "
+            f"{prev_timestamp_raw=} "
+            f"{timestamp=} "
+            f"{timestamp_raw=} "
             f"name={event_dict.get('name')}"
         )
 
