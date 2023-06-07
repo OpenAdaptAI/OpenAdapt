@@ -1,18 +1,20 @@
-chrome.runtime.sendMessage("Hello from content.js!");
+// Function to extract relevant information from the document
+function extractDocumentInfo() {
+  const documentInfo = {
+    title: document.title,
+    url: window.location.href,
+    html: document.documentElement.outerHTML
+  };
+  return documentInfo;
+}
 
-
-// Function to send the document to the background script
-function sendDocument(doc) {
-  chrome.runtime.sendMessage({ type: 'document', document: doc });
+// Send the document info to the background script
+function sendDocumentInfo() {
+    const documentInfo = extractDocumentInfo();
+    chrome.runtime.sendMessage({ type: 'document', documentInfo });
 }
 
 
-// Listen for DOM changes and send the document to the background script
-document.addEventListener('DOMContentLoaded', () => {
+sendDocumentInfo();  // Send the initial document info
 
-    // Send the initial document
-    sendDocument(document);
-  
-    // Listen for DOM changes
-    document.addEventListener('DOMSubtreeModified', () => sendDocument(document));
-});
+document.addEventListener('DOMSubtreeModified', sendDocumentInfo);  // Listen for DOM changes and send the updated document info
