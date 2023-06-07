@@ -1,4 +1,5 @@
 from pprint import pprint
+import pickle
 
 from loguru import logger
 import atomacos
@@ -35,6 +36,11 @@ def get_active_window_state():
         "data": data,
     }
     rval = deepconvert_objc(rval)
+    try:
+        pickle.dumps(rval)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        rval.pop("data")
     return rval
 
 
@@ -148,11 +154,15 @@ def get_active_element_state(x, y):
     el = app.get_element_at_position(x, y)
     state = dump_state(el.ref)
     state = deepconvert_objc(state)
+    try:
+        pickle.dumps(state)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        state = {}
     return state
 
 
 def main():
-    import pickle
     import time
     time.sleep(1)
 
