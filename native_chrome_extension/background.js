@@ -10,13 +10,17 @@ function onReceived(response) {
 }
 
 
+port = chrome.runtime.connectNative(hostName);
+port.onMessage.addListener(onReceived);
+console.log('Connected to native messaging host: ' + hostName);
+
+
 /*
- * Forward messages from content scripts to the native app
+* Forward messages from content scripts to the native app
 */
 function messageListener(message, sender, sendResponse) {
   port.postMessage(message);
 }
 
-port = chrome.runtime.connectNative(hostName);
-port.onMessage.addListener(onReceived);
+
 chrome.runtime.onMessage.addListener(messageListener);

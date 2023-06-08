@@ -1,6 +1,9 @@
-""" Module for communicating with the browser extension. """
-
 #!/usr/bin/env -S python3 -u
+
+""" 
+    Module for communicating with the browser extension. 
+"""
+
 # Note that running python with the `-u` flag is required on Windows,
 # in order to ensure that stdin and stdout are opened in binary, rather
 # than text, mode.
@@ -67,7 +70,8 @@ def send_message(encoded_message):
     sys.stdout.buffer.write(encoded_message["length"])
     sys.stdout.buffer.write(encoded_message["content"])
     sys.stdout.buffer.flush()
-
+    # TODO: Named Pipe
+    
 
 DOM_UPDATE_COUNTER = 0
 while True:
