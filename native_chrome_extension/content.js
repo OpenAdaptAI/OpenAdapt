@@ -1,4 +1,6 @@
-// Function to extract relevant information from the document
+/*
+ * Function to extract relevant information from the document
+*/
 function extractDocumentInfo() {
   const documentInfo = {
     title: document.title,
@@ -8,13 +10,15 @@ function extractDocumentInfo() {
   return documentInfo;
 }
 
-// Send the document info to the background script
+
+/*
+ * Send the document info to the background script
+*/
 function sendDocumentInfo() {
     const documentInfo = extractDocumentInfo();
     chrome.runtime.sendMessage({ type: 'document', documentInfo });
 }
 
 
-sendDocumentInfo();  // Send the initial document info
-
-document.addEventListener('DOMSubtreeModified', sendDocumentInfo);  // Listen for DOM changes and send the updated document info
+sendDocumentInfo();
+document.addEventListener('DOMSubtreeModified', sendDocumentInfo);
