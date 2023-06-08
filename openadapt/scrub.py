@@ -11,10 +11,34 @@ Usage:
 
 from typing import List, Dict, Union, Any
 from PIL import Image
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
+from presidio_image_redactor import (
+    ImageRedactorEngine,
+    ImageAnalyzerEngine,
+)
 import fire
 
 from openadapt import config, utils
+
+
+SCRUB_PROVIDER_TRF = NlpEngineProvider(
+    nlp_configuration=config.SCRUB_CONFIG_TRF
+)
+NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+ANALYZER_TRF = AnalyzerEngine(
+    nlp_engine=NLP_ENGINE_TRF,
+    supported_languages=["en"]
+)
+ANONYMIZER = AnonymizerEngine()
+IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
+SCRUBBING_ENTITIES = [
+    entity
+    for entity in ANALYZER_TRF.get_supported_entities()
+    if entity not in config.SCRUB_IGNORE_ENTITIES
+]
 
 
 def scrub_text(text: str, is_separated: bool = False) -> str:
@@ -28,18 +52,21 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         str: Scrubbed text
     """
 
+    if config.SCRUB_ENABLED is False:
+        return text
+
     if text is None:
         return None
 
     if is_separated and not (
-        text.startswith(config.TEXT_NAME_PREFIX)
-        or text.endswith(config.TEXT_NAME_SUFFIX)
+        text.startswith(config.ACTION_TEXT_NAME_PREFIX)
+        or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
     ):
-        text = "".join(text.split(config.TEXT_SEP))
+        text = "".join(text.split(config.ACTION_TEXT_SEP))
 
-    analyzer_results = config.ANALYZER_TRF.analyze(
+    analyzer_results = ANALYZER_TRF.analyze(
         text=text,
-        entities=config.SCRUBBING_ENTITIES,
+        entities=SCRUBBING_ENTITIES,
         language=config.SCRUB_LANGUAGE,
     )
 
@@ -54,17 +81,17 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
             },
         )
 
-    anonymized_results = config.ANONYMIZER.anonymize(
+    anonymized_results = ANONYMIZER.anonymize(
         text=text,
         analyzer_results=analyzer_results,
         operators=operators,
     )
 
     if is_separated and not (
-        text.startswith(config.TEXT_NAME_PREFIX)
-        or text.endswith(config.TEXT_NAME_SUFFIX)
+        text.startswith(config.ACTION_TEXT_NAME_PREFIX)
+        or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
     ):
-        anonymized_results.text = config.TEXT_SEP.join(
+        anonymized_results.text =config.ACTION_TEXT_SEP.join(
             anonymized_results.text
         )
 
@@ -82,6 +109,9 @@ def scrub_text_all(text: str) -> str:
         str: Scrubbed text
     """
 
+    if config.SCRUB_ENABLED is False:
+        return text
+
     return config.SCRUB_CHAR * len(text)
 
 
@@ -98,12 +128,13 @@ def scrub_image(
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
 
-    # Redact the image
-    redacted_image = config.IMAGE_REDACTOR.redact(
-        image, fill=fill_color, entities=config.SCRUBBING_ENTITIES
+    if config.SCRUB_ENABLED is False:
+        return image
+
+    redacted_image = IMAGE_REDACTOR.redact(
+        image, fill=fill_color, entities=SCRUBBING_ENTITIES
     )
 
-    # Return the redacted image data
     return redacted_image
 
 
@@ -160,6 +191,9 @@ def _scrub_text_item(
         str: The scrubbed value
     """
 
+    if config.SCRUB_ENABLED is False:
+        return value
+
     if key in ("text", "canonical_text"):
         return scrub_text(value, is_separated=True)
     if force_scrub_children:
@@ -194,7 +228,7 @@ def _scrub_list_item(
     key: str,
     list_keys: List[str],
     force_scrub_children: bool = False,
-) -> Union[Dict, str]:
+) -> Union[str, Dict]:
     """
     Scrubs the value of a dict item.
 
@@ -206,6 +240,9 @@ def _scrub_list_item(
     Returns:
         dict/str: The scrubbed dict/value respectively
     """
+
+    if config.SCRUB_ENABLED is False:
+        return item
 
     if isinstance(item, dict):
         return scrub_dict(
@@ -231,6 +268,9 @@ def scrub_dict(
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
     """
+
+    if config.SCRUB_ENABLED is False:
+        return input_dict
 
     if list_keys is None:
         list_keys = config.SCRUB_KEYS_HTML
@@ -283,6 +323,9 @@ def scrub_list_dicts(
     Returns:
         list[dict]: The scrubbed list of dicts with PII and PHI removed.
     """
+
+    if config.SCRUB_ENABLED is False:
+        return input_list
 
     scrubbed_list_dicts = []
     for input_dict in input_list:

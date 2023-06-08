@@ -15,13 +15,6 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import (
-    ImageRedactorEngine,
-    ImageAnalyzerEngine,
-)
 
 
 _DEFAULTS = {
@@ -37,6 +30,10 @@ _DEFAULTS = {
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
+    # ACTION EVENT CONFIGURATIONS
+    "ACTION_TEXT_SEP": "-",
+    "ACTION_TEXT_NAME_PREFIX": "<",
+    "ACTION_TEXT_NAME_SUFFIX": ">"
 }
 
 
@@ -64,26 +61,20 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
-# ACTION EVENT CONFIGURATIONS
-TEXT_SEP = "-"
-TEXT_NAME_PREFIX = "<"
-TEXT_NAME_SUFFIX = ">"
-
-
 # SCRUBBING CONFIGURATIONS
+SCRUB_ENABLED = True
 SCRUB_CHAR = "*"
 SCRUB_LANGUAGE = "en"
 SCRUB_CONFIG_TRF = {
     "nlp_engine_name": "spacy",
-    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+    "models": [
+        {
+        "lang_code": "en", 
+        "model_name": "en_core_web_trf"
+        }
+    ],
 }
-SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=SCRUB_CONFIG_TRF)
-NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-ANALYZER_TRF = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
-)
-ANONYMIZER = AnonymizerEngine()
-IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
+DEFAULT_SCRUB_FILL_COLOR = (255,)
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
@@ -109,11 +100,6 @@ SCRUB_IGNORE_ENTITIES = [
     # 'US_SSN',
     # 'MEDICAL_LICENSE'
 ]
-SCRUBBING_ENTITIES = [
-    entity
-    for entity in ANALYZER_TRF.get_supported_entities()
-    if entity not in SCRUB_IGNORE_ENTITIES
-]
 SCRUB_KEYS_HTML = [
     "text",
     "canonical_text",
@@ -125,4 +111,3 @@ SCRUB_KEYS_HTML = [
     "key_vk",
     "children",
 ]
-DEFAULT_SCRUB_FILL_COLOR = (255,)

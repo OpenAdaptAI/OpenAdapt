@@ -31,7 +31,6 @@ LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
-SCRUB_LOGGING = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
     table {
@@ -135,18 +134,17 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
 
 
 def main():
-    configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
-    if SCRUB_LOGGING:
-        recording.task_description = scrub.scrub_text(recording.task_description)
+    recording.task_description = scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
-    if SCRUB_LOGGING:
-        event_dicts = scrub.scrub_list_dicts(event_dicts)
+
+    event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [

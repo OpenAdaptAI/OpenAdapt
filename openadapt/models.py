@@ -61,9 +61,6 @@ class Recording(db.Base):
 
 class ActionEvent(db.Base):
     __tablename__ = "action_event"
-    _text_sep = config.TEXT_SEP
-    _text_name_prefix = config.TEXT_NAME_PREFIX
-    _text_name_suffix = config.TEXT_NAME_SUFFIX
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
@@ -136,9 +133,9 @@ class ActionEvent(db.Base):
         )
 
     def _text(self, canonical=False):
-        sep = self._text_sep
-        name_prefix = self._text_name_prefix
-        name_suffix = self._text_name_suffix
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if canonical:
             key_attr = self.canonical_key
             key_name_attr = self.canonical_key_name

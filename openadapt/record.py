@@ -27,7 +27,6 @@ from openadapt import config, crud, scrub, utils, window
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
-SCRUB_LOGGING = True
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
     "action": True,
@@ -68,7 +67,7 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
@@ -207,7 +206,7 @@ def write_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -345,7 +344,7 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
@@ -371,7 +370,7 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     prev_window_data = {}
@@ -383,7 +382,14 @@ def read_window_events(
             window_data["title"] != prev_window_data.get("title") or
             window_data["window_id"] != prev_window_data.get("window_id")
         ):
-            _window_data = dict(window_data)
+            # TODO: fix exception sometimes triggered by the next line on win32:
+            #   File "\Python39\lib\threading.py" line 917, in run
+            #   File "...\openadapt\record.py", line 277, in read window events
+            #   File "...\env\lib\site-packages\loguru\logger.py" line 1977, in info
+            #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
+            #       for handler in core.handlers.values):
+            #   RuntimeError: dictionary changed size during iteration
+            _window_data = window_data
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
@@ -411,7 +417,7 @@ def performance_stats_writer (
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
+    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -517,12 +523,8 @@ def record(
         task_description: a text description of the task that will be recorded
     """
 
-    utils.configure_logging(logger, LOG_LEVEL, SCRUB_LOGGING)
-
-    if SCRUB_LOGGING:
-        logger.info(f"{scrub.scrub_text(task_description)=}")
-    else:
-        logger.info(f"{task_description=}")
+    utils.configure_logging(logger, LOG_LEVEL)
+    logger.info(f"{scrub.scrub_text(task_description)=}")
 
     recording = create_recording(task_description)
     recording_timestamp = recording.timestamp

@@ -21,14 +21,13 @@ from openadapt import common, config, scrub
 EMPTY = (None, [], {}, "")
 
 
-def configure_logging(logger, log_level, scrub_logging):
+def configure_logging(logger, log_level):
+    # TODO: redact log messages (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
-    scrub_logging = os.getenv("SCRUB_LOGGING") or scrub_logging
     logger.remove()
     logger.add(sys.stderr, level=log_level)
     logger.debug(f"{log_level=}")
-    logger.debug(f"{scrub_logging=}")
 
 
 def row2dict(row, follow=True):
