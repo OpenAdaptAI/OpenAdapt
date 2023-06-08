@@ -9,8 +9,12 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
+import pandas as pd
+from cydets.algorithm import detect_cycles
+
 from openadapt.crud import (
     get_latest_recording,
+    get_window_events
 )
 
 from openadapt.events import (
@@ -28,16 +32,41 @@ from openadapt.utils import (
 )
 
 from openadapt.visualize import (
-    CSS,
     IMG_WIDTH_PCT,
     MAX_TABLE_CHILDREN,
     MAX_EVENTS,
     dict2html
 )
 
+CSS = string.Template("""
+    table {
+        outline: 1px solid black;
+    }
+    table th {
+        vertical-align: top;
+    }
+    .screenshot img {
+        display: none;
+        width: ${IMG_WIDTH_PCT}vw;
+    }
+    .screenshot img:nth-child(1) {
+        display: block;
+    }
+
+    .screenshot:hover img:nth-child(1) {
+        display: block;
+    }
+    .screenshot:active img:nth-child(1) {
+        display: block;
+    }
+""").substitute(
+    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
+)
+
 MAX_GAP_SECONDS = 15
 PROCESS_EVENTS = False
 LOG_LEVEL = "INFO"
+MAX_PIXEL_DIFF = 100
 
 
 def find_gaps(action_events):
@@ -68,26 +97,83 @@ def find_key_presses(action_events):
     return num_key_presses
 
 
+def is_within_margin(event1, event2, margin):
+    return abs(event1.mouse_x - event2.mouse_x) <= margin and \
+           abs(event1.mouse_y - event2.mouse_y) <= margin
+
+
+def find_tasks_brute_force(action_events):
+    repetitions = {}
+    # find candidates that repeat within some error
+    # store list of indices of repetitions
+    for i in range(0, len(action_events)):
+        is_repeated = False
+        for stored_event in repetitions:
+            if stored_event.name == "click" and action_events[i].name == "click":
+                if is_within_margin(action_events[i], stored_event, MAX_PIXEL_DIFF):
+                    repetitions[stored_event].append(i)
+                    is_repeated = True
+            elif stored_event.name == "press" and action_events[i].name == "press":
+                if stored_event.key() == action_events[i].key():
+                    repetitions[stored_event].append(i)
+                    is_repeated = True
+        if not is_repeated:
+            repetitions[action_events[i]] = [i]
+
+    candidates = [event for event, indices in repetitions.items() if len(indices) >= 2]
+
+
+def find_tasks_cycles(action_events):
+    data = []
+    for action_event in action_events:
+        # convert to real number
+        if action_event.name == "press":
+            if action_event.key_vk:
+                data.append(int(action_event.key_vk))
+            else:
+                data.append(-1)
+        elif action_event.name == "click":
+            data.append(action_event.mouse_x)
+            data.append(action_event.mouse_y)
+
+    series = pd.Series(data)
+
+    cycles = detect_cycles(series)
+
+    print(data)
+
+    print(cycles)
+
+
+def filter_mouse_movement(action_events):
+    filtered_action_events = []
+    for action_event in action_events:
+        if action_event.name != "move":
+            filtered_action_events.append(action_event)
+
+
 def calculate_productivity():
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
     logger.debug(f"{recording=}")
 
-    meta = {}
-    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(recording, process=PROCESS_EVENTS)
     event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+    window_events = get_window_events(recording)
 
     # overall info first
     gaps, time_in_gaps = find_gaps(action_events)
     num_clicks = find_clicks(action_events)
     num_key_presses = find_key_presses(action_events)
+    duration = action_events[-1].timestamp - action_events[0].timestamp
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
                  "Total number of mouse clicks": num_clicks,
-                 "Total number of key presses": num_key_presses
-                 }
+                 "Total number of key presses": num_key_presses,
+                 "Number of window/tab changes": len(window_events),
+                 "Recording length": duration}
 
     rows = [
         row(
@@ -98,12 +184,6 @@ def calculate_productivity():
         row(
             Div(
                 text=f"{dict2html(row2dict(recording))}",
-            ),
-        ),
-        row(
-            Div(
-                text=f"{dict2html(meta)}",
-                width_policy="max",
             ),
         ),
         row(
@@ -123,21 +203,18 @@ def calculate_productivity():
         if action_event.window_event_timestamp != last_timestamp:
             last_timestamp = action_event.window_event_timestamp
             image = display_event(action_event)
-            # diff = display_event(action_event, diff=True)
-            # mask = action_event.screenshot.diff_mask
             image_utf8 = image2utf8(image)
-            # diff_utf8 = image2utf8(diff)
-            # mask_utf8 = image2utf8(mask)
             width, height = image.size
 
-            # TODO: get productivity info for all action events since last
             gaps, time_in_gaps = find_gaps(curr_action_events)
             num_clicks = find_clicks(curr_action_events)
             num_key_presses = find_key_presses(curr_action_events)
+            window_duration = curr_action_events[-1].timestamp - curr_action_events[0].timestamp
             window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                            "Total time spent during pauses": time_in_gaps,
                            "Total number of mouse clicks": num_clicks,
-                           "Total number of key presses": num_key_presses
+                           "Total number of key presses": num_key_presses,
+                           "Time spent on this window/tab": window_duration
                            }
 
             rows.append([
