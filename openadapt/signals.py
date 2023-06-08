@@ -133,13 +133,23 @@ class Signals:
         return description
 
 
-    def __access_database_signal(self, db_url):
+    def __access_database_signal(self, db_url, query):
         """
         Read signal data from a database.
         """
         # Get the signal from the database.
-        #TODO: implement database signal
-        return
+        try:
+            conn = sqlite3.connect(db_url)
+            cur = conn.cursor()
+            cur.execute(query)
+            data = cur.fetchall()
+        except sqlite3.OperationalError:
+            logger.info(f"Error: Database query failed.")
+            return None
+        finally:
+            if conn:
+                conn.close()
+        return data
 
 
     def __access_file_signal(self, file_path):
@@ -240,7 +250,7 @@ class Signals:
             self.signals[i]["number"] -= 1
 
 
-    def return_signal_data(self, signal_number):
+    def return_signal_data(self, signal_number, query=None):
         """
         Return the data of a signal.
         """
@@ -248,7 +258,7 @@ class Signals:
         if len(signal) == 0:
             return None
         elif signal["type"] == "database":
-            return(self.__access_database_signal(signal["address"]))
+            return(self.__access_database_signal(signal["address"], query))
         elif signal["type"] == "web_url":
             return(self.__access_url_signal(signal["address"]))
         elif signal["type"] == "file":

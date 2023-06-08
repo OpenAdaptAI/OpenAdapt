@@ -13,6 +13,18 @@ def test_setup_database_signal():
     assert "Table: table, Schema: test_table" in signal_description
 
 
+def test_access_database_signal():
+    signals = Signals()
+    signals.add_signal('tests/openadapt/test_database.db')  # assuming you've a SQLite database file named 'test.db' in your working directory
+
+    # Assuming you have a table named 'test_table' in your database
+    query = 'SELECT * FROM test_table'  
+
+    signal_data = signals.return_signal_data(1, query)
+    assert signal_data == [(1, 'Test data')]
+    # Add more specific asserts based on what data you expect to retrieve from the database
+
+
 def test_add_file_signal():
     signals = Signals()
     signals.add_signal("tests/openadapt/test_signal_data.txt")
