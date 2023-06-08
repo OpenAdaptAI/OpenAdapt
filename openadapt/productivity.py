@@ -115,10 +115,11 @@ def calculate_productivity():
 
     # window by window
     last_timestamp = -1
+    curr_action_events = []
     for idx, action_event in enumerate(action_events):
         if idx == MAX_EVENTS:
             break
-        # TODO: keep list of action events
+        curr_action_events.append(action_event)
         if action_event.window_event_timestamp != last_timestamp:
             last_timestamp = action_event.window_event_timestamp
             image = display_event(action_event)
@@ -130,6 +131,14 @@ def calculate_productivity():
             width, height = image.size
 
             # TODO: get productivity info for all action events since last
+            gaps, time_in_gaps = find_gaps(curr_action_events)
+            num_clicks = find_clicks(curr_action_events)
+            num_key_presses = find_key_presses(curr_action_events)
+            window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+                           "Total time spent during pauses": time_in_gaps,
+                           "Total number of mouse clicks": num_clicks,
+                           "Total number of key presses": num_key_presses
+                           }
 
             rows.append([
                 row(
@@ -151,12 +160,14 @@ def calculate_productivity():
                     Div(
                         text=f"""
                             <table>
-                                {dict2html(row2dict(action_event))}
+                                {dict2html(window_info)}
                             </table>
                         """
                     ),
                 ),
             ])
+            # flush curr_action_events
+            curr_action_events = []
     # TODO: change the one at the bottom
 
     # display data
