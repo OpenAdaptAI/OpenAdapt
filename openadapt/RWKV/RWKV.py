@@ -90,9 +90,9 @@ def run_RWKV(instruction=None, task_description=None, input=None, parameters=Non
         )
         
     if not input:
-        input = f"""[{{'number': 1, 'title': 'test data file', 'type': 'file', 'address': 'tests/openadapt/test_signal_data.txt', 'description': 'Size: 17, Type: text/plain'}}
+        input = f"""[{{'number': 1, 'title': 'restaurant menu', 'type': 'file', 'address': 'tests/openadapt/restaurant_menu_data.txt', 'description': 'Size: 17, Type: text/plain'}}
 ,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
-,{{'number': 3, 'title': 'test function', 'type': 'function', 'address': 'sample_package.sample_module.sample_function', 'description': 'Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    '}}]
+,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Description: \n    This function is used to compute the square root of a given number.\n    '}}]
 """
 
     if not instruction:  
