@@ -30,7 +30,17 @@ InstallSVGDependencies() {
         pip install weasyprint
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         RunAndCheck "brew install libagg pkg-config potrace" "install Pypotrace's dependencies"
-        RunAndCheck "brew install cairo libffi" "install Cairo's dependencies"
+        RunAndCheck "brew install libffi" "install libffi"
+        
+        # need to install cairo
+        cpu=$(sysctl machdep.cpu.brand_string)
+
+        # Check if the computer has an intel chip
+        if [[ $cpu == *"Intel"* ]]; then
+            RunAndCheck "brew install cairo" "install cairo for Apple Intel chip"
+        else
+            RunAndCheck "arch -arm64 brew install cairo" "install cairo for Apple Silicon"
+        fi
     else
         echo "Unsupported Operating System : $OSTYPE"
         exit 1
@@ -38,7 +48,7 @@ InstallSVGDependencies() {
 }
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
+RunAndCheck "git clone https://github.com/dianzrong/OpenAdapt.git" "clone git repo"
 
 cd OpenAdapt
 
