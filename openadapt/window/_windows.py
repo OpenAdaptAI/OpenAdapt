@@ -28,18 +28,16 @@ def get_active_window_state() -> dict:
     except RuntimeError as e:
         logger.warning(e)
         return {}
-    logger.info(f"{active_window=}")
     meta = get_active_window_meta(active_window)
-    logger.info(f"{meta=}")
+    rectangle_str = str(meta["rectangle"])
     data = get_descendants_info(active_window)
-    logger.info(f"{data=}")
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,
         "top": meta["rectangle"].top,
         "width": meta["rectangle"].width(),
         "height": meta["rectangle"].height(),
-        "meta": meta,
+        "meta": {**meta, "rectangle": rectangle_str},
         "data": data,
         "window_id": meta["control_id"],
     }
@@ -64,7 +62,8 @@ def get_active_window_meta(active_window) -> dict:
     if not active_window:
         logger.warning(f"{active_window=}")
         return None
-    return active_window.get_properties()
+    result = active_window.get_properties()
+    return result
 
 
 def get_active_element_state(x: int, y: int):
@@ -81,6 +80,7 @@ def get_active_element_state(x: int, y: int):
     active_window = get_active_window()
     active_element = active_window.from_point(x, y)
     properties = active_element.get_properties()
+    properties["rectangle"] = str(properties["rectangle"])
     return properties
 
 
@@ -92,9 +92,7 @@ def get_active_window() -> Desktop:
         Desktop: The active window object.
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
-    logger.info(f"{app=}")
     window = app.active()
-    logger.info(f"{window=}")
     return window
 
 
@@ -110,13 +108,12 @@ def get_descendants_info(window):
     """
 
     result = window.get_properties()
+    result["rectangle"] = str(result["rectangle"])
     result["children"] = []
     for child in window.descendants():
-        if child in result["children"]:
-            import ipdb
-
-            ipdb.set_trace()
-        result["children"].append(child.get_properties())
+        child_properties = child.get_properties()
+        child_properties["rectangle"] = str(child_properties["rectangle"])
+        result["children"].append(child_properties)
     return result
 
 
