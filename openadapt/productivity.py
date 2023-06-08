@@ -112,9 +112,52 @@ def calculate_productivity():
             )
         )
     ]
-    # other productivity metrics
 
     # window by window
+    last_timestamp = -1
+    for idx, action_event in enumerate(action_events):
+        if idx == MAX_EVENTS:
+            break
+        # TODO: keep list of action events
+        if action_event.window_event_timestamp != last_timestamp:
+            last_timestamp = action_event.window_event_timestamp
+            image = display_event(action_event)
+            # diff = display_event(action_event, diff=True)
+            # mask = action_event.screenshot.diff_mask
+            image_utf8 = image2utf8(image)
+            # diff_utf8 = image2utf8(diff)
+            # mask_utf8 = image2utf8(mask)
+            width, height = image.size
+
+            # TODO: get productivity info for all action events since last
+
+            rows.append([
+                row(
+                    Div(
+                        text=f"""
+                            <div class="screenshot">
+                                <img
+                                    src="{image_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                            </div>
+                            <table>
+                                {dict2html(row2dict(action_event.window_event), None)}
+                            </table>
+                        """,
+                    ),
+                    Div(
+                        text=f"""
+                            <table>
+                                {dict2html(row2dict(action_event))}
+                            </table>
+                        """
+                    ),
+                ),
+            ])
+    # TODO: change the one at the bottom
 
     # display data
     title = f"Productivity metrics for recording-{recording.id}"
