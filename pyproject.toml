@@ -1,8 +1,16 @@
 [project]
 name = "openadapt"
-version = "0.0.2"
+version = "0.0.0"
 authors = [
-  { name="MLDSAI Inc.", email="richard.abrich@mldsai.com" },
+  { name = "Richard Abrich", email = "richard.abrich@mldsai.com" },
+  { name = "Krish Patel", email = "krish@openadapt.ai" },
+  { name = "Mustafa Abdulrahman", email = "mustafa@openadapt.ai" },
+  { name = "Aaron Shah", email = "aaron@openadapt.ai" },
+  { name = "Angela Zhuo", email = "angela@openadapt.ai" },
+  { name = "Avid Eslami", email = "avid@openadapt.ai" },
+  { name = "Dian Rong", email = "dian@openadapt.ai" },
+  { name = "Jesica Susanto", email = "jesica@openadapt.ai" },
+  { name = "Owais Zahid", email = "owais@openadapt.ai" }
 ]
 description = "AI-First Process Automation with Transformers"
 readme = "README.md"
@@ -22,13 +30,14 @@ version_variable = [
     "openadapt/__init__.py:__version__"
 ]
 version_toml = [
-    "pyproject.toml:tool.poetry.version"
-]
-version_pattern = [
-    "README.md:rev: v{version}",
+    "pyproject.toml:project.version"
 ]
 major_on_zero = false
 branch = "main"
-upload_to_PyPI = true
+commit_subject = "chore(release): v{version}"
+commit_version_number = true
+upload_to_PyPI = false
 upload_to_release = true
-build_command = "pip install poetry && poetry build"
+upload_to_repository = false
+repository_url = "https://upload.pypi.org/legacy/"
+build_command = "python3 -m pip install --upgrade build && python3 -m build"

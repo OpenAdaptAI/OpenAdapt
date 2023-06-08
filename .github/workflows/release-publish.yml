@@ -1,0 +1,45 @@
+name: Semantic Release and PyPi Publish
+on:
+  push:
+    branches:
+      - main
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Python Semantic Release
+        id: semantic_release
+        uses: relekang/python-semantic-release@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repository_username: __token__
+          repository_password: ${{ secrets.PYPI_TOKEN }}
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    if: steps.semantic_release.outputs.stdout != 'No release will be made.'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.x
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Build package
+        run: python -m build
+      - name: Publish distribution 📦 to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/

@@ -1,7 +1,6 @@
 [Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw)
 
 # OpenAdapt: AI-First Process Automation with Transformers
-v{version}
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
@@ -81,7 +80,6 @@ python -m openadapt.visualize
 This will open your browser. It will look something like this:
 
 ![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
-
 
 ### Playback
 
