@@ -14,23 +14,15 @@ RunAndCheck() {
 }
 
 # Install the required dependencies for the SVG Mixin
-# Specifically for the Pypotrace and Cairo Python libraries
+# Specifically for Vtracer and Cairo
 InstallSVGDependencies() {
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        . /etc/os-release
-        if [ "$ID" == "ubuntu"* ]; then
-            RunAndCheck "sudo apt-get install build-essential python-dev libagg-dev libpotrace-dev pkg-config" "install Pypotrace's dependencies"
-        elif [ "$ID" == "centos"* ]; then
-            RunAndCheck "sudo yum -y groupinstall 'Development Tools' " "install Development Tools"
-            RunAndCheck "sudo yum -y install agg-devel potrace-devel python-devel" "install Pypotrace's dependencies"
-        else   
-            echo "Unsupported Linux Distribution : $ID"
-            exit 1
-        fi
-        pip install weasyprint
+        RunAndCheck "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" "install rust"
+        RunAndCheck "source $HOME/.cargo/env" "sourced the environment"
+        RunAndCheck "cargo install vtracer" "download vtracer"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
-        RunAndCheck "brew install libagg pkg-config potrace" "install Pypotrace's dependencies"
-        RunAndCheck "brew install libffi" "install libffi"
+        RunAndCheck "brew install rust" "install rust"
+        RunAndCheck "cargo install vtracer" "install vtracer"
         
         # need to install cairo
         cpu=$(sysctl machdep.cpu.brand_string)
