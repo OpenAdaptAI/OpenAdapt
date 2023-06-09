@@ -161,22 +161,10 @@ if (!$vcredistExists) {
     }
 }
 
-# download Pypotrace's dependency Agg
-$url1 = "http://pkgs.fedoraproject.org/repo/pkgs/agg/agg-2.5.tar.gz/0229a488bc47be10a2fee6cf0b2febd6/agg-2.5.tar.gz"
-$dest1 = "agg-2.5"
-Invoke-WebRequest -Uri $url1 -OutFile $dest1
-
-RunAndCheck "./agg-2.5/configure; make" "make Agg"
-
-# check bit count to decide which windows potrace package to download
-$osArchitecture = (Get-WmiObject win32_operatingsystem).osarchitecture
-$dest2 = "potrace"
-if ($osArchitecture -eq "64-bit") {
-    $url2 = "http://www.onlinepublisher.net/potrace/files/Potrace-1.11-64-bit-setup.msi"
-} else {
-    $url2 = "http://www.onlinepublisher.net/potrace/files/Potrace-1.11-32-bit-setup.msi"
-}
-Invoke-WebRequest -Uri $url2 -OutFile $dest2
+# download Vtracer
+RunAndCheck "curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh" "install rust"
+RunAndCheck '$env:Path = \"$env:USERPROFILE\\.cargo\\bin\" ' "set the path for rust"
+RunAndCheck "cargo install vtracer" "insta;; vtracer"
 
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
