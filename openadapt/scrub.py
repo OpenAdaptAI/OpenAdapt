@@ -29,8 +29,7 @@ SCRUB_PROVIDER_TRF = NlpEngineProvider(
 )
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
 ANALYZER_TRF = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE_TRF,
-    supported_languages=["en"]
+    nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
 )
 ANONYMIZER = AnonymizerEngine()
 IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
@@ -91,7 +90,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         text.startswith(config.ACTION_TEXT_NAME_PREFIX)
         or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
     ):
-        anonymized_results.text =config.ACTION_TEXT_SEP.join(
+        anonymized_results.text = config.ACTION_TEXT_SEP.join(
             anonymized_results.text
         )
 
@@ -246,9 +245,7 @@ def _scrub_list_item(
 
     if isinstance(item, dict):
         return scrub_dict(
-            item,
-            list_keys,
-            force_scrub_children=force_scrub_children
+            item, list_keys, force_scrub_children=force_scrub_children
         )
     return _scrub_text_item(item, key)
 
