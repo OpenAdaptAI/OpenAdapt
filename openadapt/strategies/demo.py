@@ -16,8 +16,8 @@ from openadapt.strategies.mixins.huggingface import (
     HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
-from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
-from openadapt.strategies.ascii_mixin import ASCIIReplayStrategyMixin
+from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
+from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 from openadapt.strategies.mixins.svg_mixin import SVGReplayStrategyMixin
 
 
