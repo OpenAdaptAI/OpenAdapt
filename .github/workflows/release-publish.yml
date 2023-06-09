@@ -22,7 +22,6 @@ jobs:
   publish:
     needs: release
     runs-on: ubuntu-latest
-    if: steps.semantic_release.outputs.stdout != 'No release will be made.'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2

@@ -59,7 +59,7 @@ The subject should be a succinct description of the change. Please follow these 
 
 The body should provide the motivation for the change and contrast it with the previous behavior. Use the imperative, present tense (e.g., "change" not "changed" or "changes").
 
-The body or footer can begin with **BREAKING CHANGE:** followed by a short description to create a major release. For example, a major release would increment the version number from `0.1.0` to `1.0.0`.
+The body or footer can begin with **BREAKING CHANGE:** followed by a short description to create a major release. For example, a major release would increment the version number from `0.1.0` to `1.1.0`.
 
 ## Version Bump
 
