@@ -162,11 +162,11 @@ if (!$vcredistExists) {
 }
 
 # download Pypotrace's dependency Agg
-$url1 = "https://sourceforge.net/code-snapshots/svn/a/ag/agg/svn/agg-svn-r138.zip"
+$url1 = "http://pkgs.fedoraproject.org/repo/pkgs/agg/agg-2.5.tar.gz/0229a488bc47be10a2fee6cf0b2febd6/agg-2.5.tar.gz"
 $dest1 = "agg-2.5"
 Invoke-WebRequest -Uri $url1 -OutFile $dest1
 
-RunAndCheck "./configure; make" "make Agg"
+RunAndCheck "./agg-2.5/configure; make" "make Agg"
 
 # check bit count to decide which windows potrace package to download
 $osArchitecture = (Get-WmiObject win32_operatingsystem).osarchitecture
