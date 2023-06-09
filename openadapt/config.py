@@ -26,6 +26,7 @@ _DEFAULTS = {
         "count_penalty": 0.1, 
         "token_count": 200, 
         "ctx_limit": 1536},
+    "RWKV_MODEL": 0
 }
 
 
