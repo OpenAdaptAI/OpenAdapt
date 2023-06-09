@@ -162,9 +162,12 @@ if (!$vcredistExists) {
 }
 
 # download Vtracer
-RunAndCheck "curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh" "install rust"
-RunAndCheck '$env:Path = \"$env:USERPROFILE\\.cargo\\bin\" ' "set the path for rust"
-RunAndCheck "cargo install vtracer" "insta;; vtracer"
+$exePath = "$env:TEMP\rustup-init.exe"
+RunAndCheck "(New-Object Net.WebClient).DownloadFile('https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe', $exePath)" "downloading the rust file"
+RunAndCheck "cmd /c start /wait $exePath -y" "installing rust executable"
+RunAndCheck "Remove-Item $exePath" "removing rust executable"
+RunAndCheck "$env:Path = "$env:USERPROFILE\.cargo\bin" "rust install 
+
 
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
