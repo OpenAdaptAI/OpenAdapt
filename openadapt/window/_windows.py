@@ -29,7 +29,7 @@ def get_active_window_state() -> dict:
         logger.warning(e)
         return {}
     meta = get_active_window_meta(active_window)
-    rectangle_str = str(meta["rectangle"])
+    rectangle_dict = serialize_rect(meta["rectangle"])
     data = get_descendants_info(active_window)
     state = {
         "title": meta["texts"][0],
@@ -37,7 +37,7 @@ def get_active_window_state() -> dict:
         "top": meta["rectangle"].top,
         "width": meta["rectangle"].width(),
         "height": meta["rectangle"].height(),
-        "meta": {**meta, "rectangle": rectangle_str},
+        "meta": {**meta, "rectangle": rectangle_dict},
         "data": data,
         "window_id": meta["control_id"],
     }
@@ -80,7 +80,7 @@ def get_active_element_state(x: int, y: int):
     active_window = get_active_window()
     active_element = active_window.from_point(x, y)
     properties = active_element.get_properties()
-    properties["rectangle"] = str(properties["rectangle"])
+    properties["rectangle"] = serialize_rect(properties["rectangle"])
     return properties
 
 
@@ -108,13 +108,23 @@ def get_descendants_info(window):
     """
 
     result = window.get_properties()
-    result["rectangle"] = str(result["rectangle"])
+    result["rectangle"] = serialize_rect(result["rectangle"])
     result["children"] = []
     for child in window.descendants():
         child_properties = child.get_properties()
-        child_properties["rectangle"] = str(child_properties["rectangle"])
+        child_properties["rectangle"] = serialize_rect(child_properties["rectangle"])
         result["children"].append(child_properties)
     return result
+
+
+def serialize_rect(rect):
+    serialized = {
+        "left": rect.left,
+        "top": rect.top,
+        "right": rect.right,
+        "bottom": rect.bottom,
+    }
+    return serialized
 
 
 def main():
