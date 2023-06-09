@@ -31,12 +31,20 @@ def run_RWKV(instruction=None, task_description=None, input=None, parameters=Non
     model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-pile-14b", filename=f"{title}.pth")
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
     """
-
+    """
     title = "RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192"
     model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
     model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
-
-
+    """
+    """
+    title = "RWKV-4-Pile-14B-20230313-ctx8192-test1050"
+    model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-pile-14b", filename=f"{title}.pth")
+    model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
+    """
+    title = "RWKV-4-World-1.5B-v1-20230607-ctx4096"
+    model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-world", filename=f"{title}.pth")
+    model = RWKV(model=model_path, strategy='cuda fp32')  #heavy weight model
+    
     tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
     response = requests.get(tokenizer_url)
     if response.status_code == 200:
@@ -50,8 +58,9 @@ def run_RWKV(instruction=None, task_description=None, input=None, parameters=Non
         return
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
     #tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
-    pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
-    
+    #pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
+    pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
+
     if not parameters:
         temperature = 0.9
         top_p = 0.9
@@ -92,8 +101,7 @@ def run_RWKV(instruction=None, task_description=None, input=None, parameters=Non
     if not input:
         input = f"""[{{'number': 1, 'title': 'restaurant menu', 'type': 'file', 'address': 'tests/openadapt/restaurant_menu_data.txt', 'description': 'Size: 17, Type: text/plain'}}
 ,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
-,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Summary: function is used to compute the square root of a given number.'}}]
-"""
+,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Summary: function is used to compute the square root of a given number.'}}]"""
 
     if not instruction:  
         instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "

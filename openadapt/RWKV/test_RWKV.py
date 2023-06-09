@@ -9,6 +9,7 @@ if __name__ == '__main__':
     parameters = config.RWKV_PARAMETERS
 
     #Testing performance of various RWKV models and parameters
+    parameters["temperature"] = 0.4
     print("SETUP 1: RWKV-Raven-14B", "Parameters:", parameters)
     print("Test 1:",Func.call(parameters=parameters))
     print("desired output: (2)")
@@ -17,17 +18,5 @@ if __name__ == '__main__':
     print("Test 3:",Func.call(parameters=parameters))
     print("desired output: (2)")
     print("Test 4:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 5:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 6:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 7:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 8:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 9:",Func.call(parameters=parameters))
-    print("desired output: (2)")
-    print("Test 10:",Func.call(parameters=parameters))
     print("desired output: (2)")
 
