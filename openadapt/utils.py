@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+from logging import StreamHandler
 
 from openadapt import common
 
@@ -28,7 +29,12 @@ def configure_logging(logger, log_level):
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
-    logger.add(sys.stderr, level=log_level)
+    logger_format = ("<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                     "<level>{level: <8}</level> | "
+                     "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
+                     "- <level>{message}</level>")
+    logger.add(StreamHandler(sys.stderr), colorize=True, level=log_level, enqueue=True,
+               format=logger_format)
     logger.debug(f"{log_level=}")
 
 

@@ -39,6 +39,8 @@ PLOT_PERFORMANCE = False
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
+utils.configure_logging(logger, LOG_LEVEL)
+
 
 def args_to_str(*args):
     return ", ".join(map(str, args))
@@ -52,24 +54,27 @@ def kwargs_to_str(**kwargs):
     return ret[:-1]
 
 
-def logging(func):
-    @functools.wraps(func)
-    def wrapper_logging(*args, **kwargs):
-        func_name = func.__qualname__
-        func_args = args_to_str(*args)
-        func_kwargs = kwargs_to_str(**kwargs)
+def logging(logger):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper_logging(*args, **kwargs):
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
 
-        if func_kwargs != "":
-            logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
-        else:
-            logger.info(f" -> Enter: {func_name}({func_args})")
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
 
-        result = func(*args, **kwargs)
+            result = func(*args, **kwargs)
 
-        logger.info(f" <- Leave: {func_name}({result})")
-        return result
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
 
-    return wrapper_logging
+        return wrapper_logging
+
+    return decorator
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -79,7 +84,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
         write_fn(recording_timestamp, event, perf_q)
 
 
-@logging
+@logging(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
@@ -221,7 +226,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
-@logging
+@logging(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -392,7 +397,7 @@ def read_screen_events(
     logger.info("done")
 
 
-@logging
+@logging(logger)
 def read_window_events(
     event_q: queue.Queue,
 	terminate_event: multiprocessing.Event,
@@ -439,7 +444,7 @@ def read_window_events(
         prev_window_data = window_data
 
 
-@logging
+@logging(logger)
 def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
@@ -471,7 +476,7 @@ def performance_stats_writer (
     logger.info("performance stats writer done")
 
 
-@logging
+@logging(logger)
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
@@ -552,7 +557,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
-@logging
+@logging(logger)
 def record(
     task_description: str,
 ):
