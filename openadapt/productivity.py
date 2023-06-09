@@ -66,7 +66,9 @@ CSS = string.Template("""
 MAX_GAP_SECONDS = 15
 PROCESS_EVENTS = False
 LOG_LEVEL = "INFO"
-MAX_PIXEL_DIFF = 100
+MAX_PIXEL_DIFF = 50
+# define task to be at least 4 actions
+MIN_TASK_LENGTH = 4
 
 
 def find_gaps(action_events):
@@ -102,28 +104,80 @@ def is_within_margin(event1, event2, margin):
            abs(event1.mouse_y - event2.mouse_y) <= margin
 
 
+def compare_events(event1, event2):
+    if event1.name == "click" and event2.name == "click":
+        if is_within_margin(event1, event2, MAX_PIXEL_DIFF):
+            return True
+    elif event1.name == "press" and event2.name == "press":
+        if event1.key == event2.key:
+            return True
+    return False
+
+
 def find_tasks_brute_force(action_events):
+    configure_logging(logger, LOG_LEVEL)
+    logger.info("{} ActionEvents".format(len(action_events)))
     repetitions = {}
-    # find candidates that repeat within some error
+    # find candidates for start of a sequence that repeat within some error
     # store list of indices of repetitions
+    logger.info("Finding candidates...")
     for i in range(0, len(action_events)):
         is_repeated = False
         for stored_event in repetitions:
-            if stored_event.name == "click" and action_events[i].name == "click":
-                if is_within_margin(action_events[i], stored_event, MAX_PIXEL_DIFF):
-                    repetitions[stored_event].append(i)
-                    is_repeated = True
-            elif stored_event.name == "press" and action_events[i].name == "press":
-                if stored_event.key() == action_events[i].key():
-                    repetitions[stored_event].append(i)
-                    is_repeated = True
+            if compare_events(stored_event, action_events[i]):
+                repetitions[stored_event].append(i)
+                is_repeated = True
         if not is_repeated:
             repetitions[action_events[i]] = [i]
 
     candidates = [event for event, indices in repetitions.items() if len(indices) >= 2]
 
+    logger.info("Found {} candidates".format(len(candidates)))
+
+    tasks = []
+
+    # compare candidate sequences
+    # TODO: alternatively try hashing method again
+    # TODO: optimize!!! O(n^4)
+    logger.info("Finding sequences")
+    for candidate in candidates:
+        indices = repetitions[candidate]
+        for i in range(0, len(indices)):
+            # compare indices[i] with each next index
+            # want to find largest parts that repeat
+            index1 = indices[i]
+            skip_to_next_j = False
+            # TODO: if any found tasks are subtasks, only include the larger tasks
+            # don't have to compare unless they're farther than MIN_TASK_LENGTH
+            for j in range(i + 1, len(indices)):
+                index2 = indices[j]
+                if index2 < index1 + MIN_TASK_LENGTH:
+                    continue
+                possible_task = []
+                if len(action_events) - index1 < MIN_TASK_LENGTH or \
+                        len(action_events) - index2 < MIN_TASK_LENGTH:
+                    break
+                while index1 < len(action_events) and index2 < len(action_events):
+                    if compare_events(action_events[index1], action_events[index2]):
+                        possible_task.append(action_events[index1])
+                    else:
+                        skip_to_next_j = True
+                        break
+                if skip_to_next_j:
+                    continue
+                if len(possible_task) > MIN_TASK_LENGTH:
+                    tasks.append(possible_task)
+                    logger.info("Found potential task")
+
+    return len(tasks)
+
+
+def brents_algo(action_events):
+    return
+
 
 def find_tasks_cycles(action_events):
+    # TODO: outdated, remove imports
     data = []
     for action_event in action_events:
         # convert to real number
@@ -144,12 +198,15 @@ def find_tasks_cycles(action_events):
 
     print(cycles)
 
+    return len(cycles)
+
 
 def filter_mouse_movement(action_events):
     filtered_action_events = []
     for action_event in action_events:
         if action_event.name != "move":
             filtered_action_events.append(action_event)
+    return filtered_action_events
 
 
 def calculate_productivity():
@@ -162,18 +219,22 @@ def calculate_productivity():
     event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
     window_events = get_window_events(recording)
+    filtered_action_events = filter_mouse_movement(action_events)
 
     # overall info first
     gaps, time_in_gaps = find_gaps(action_events)
     num_clicks = find_clicks(action_events)
     num_key_presses = find_key_presses(action_events)
     duration = action_events[-1].timestamp - action_events[0].timestamp
+    tasks = find_tasks_cycles(filtered_action_events)
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
                  "Total number of mouse clicks": num_clicks,
                  "Total number of key presses": num_key_presses,
-                 "Number of window/tab changes": len(window_events),
-                 "Recording length": duration}
+                 "Number of windows/tabs used": len(window_events),
+                 "Recording length": duration,
+                 f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": tasks
+                 }
 
     rows = [
         row(
@@ -214,7 +275,7 @@ def calculate_productivity():
                            "Total time spent during pauses": time_in_gaps,
                            "Total number of mouse clicks": num_clicks,
                            "Total number of key presses": num_key_presses,
-                           "Time spent on this window/tab": window_duration
+                           "Time spent on this window/tab": window_duration,
                            }
 
             rows.append([
