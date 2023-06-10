@@ -15,32 +15,19 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common, config
+from openadapt import common, config, scrub
 
-
-# TODO: move to config.py
-DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 EMPTY = (None, [], {}, "")
 
 
 def configure_logging(logger, log_level):
+    # TODO: redact log messages (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
-    logger.add(
-        sys.stderr,
-        level=log_level,
-        filter=filter_log_messages if config.IGNORE_WARNINGS else None,
-    )
+    logger.add(sys.stderr, level=log_level)
     logger.debug(f"{log_level=}")
-
-
-def filter_log_messages(data):
-    messages_to_ignore = [
-        "Cannot pickle Objective-C objects",
-    ]
-    return not any(msg in data["message"] for msg in messages_to_ignore)
 
 
 def row2dict(row, follow=True):
@@ -341,6 +328,7 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
+        text = scrub.scrub_text(text, is_separated=True)
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
@@ -461,8 +449,8 @@ def plot_performance(recording_timestamp: float = None) -> None:
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     fname_parts = ["performance", f"{recording_timestamp}"]
     fname = "-".join(fname_parts) + ".png"
-    os.makedirs(DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS, fname)
+    os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+    fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
     logger.info(f"{fpath=}")
     plt.savefig(fpath)
     os.system(f"open {fpath}")
@@ -475,7 +463,7 @@ def strip_element_state(action_event):
     return action_event
 
 
-def get_functions(name):
+def get_functions(name) -> dict:
     """
     Get a dictionary of function names to functions for all non-private functions
 
@@ -485,10 +473,10 @@ def get_functions(name):
             fire.Fire(utils.get_functions(__name__))
 
     Args:
-        TODO
+        name: The name of the module to get functions from.
 
     Returns:
-        A dictionary of function names to functions.
+        dict: A dictionary of function names to functions.
     """
 
     functions = {}
