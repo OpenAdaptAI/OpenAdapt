@@ -6,7 +6,7 @@ from typing import Dict, Optional
 from nicegui import ui
 
 
-class local_file_picker(ui.dialog):
+class LocalFilePicker(ui.dialog):
     def __init__(
         self,
         directory: str,
@@ -98,7 +98,7 @@ class local_file_picker(ui.dialog):
 
 
 async def pick_file():
-    result = await local_file_picker("~", multiple=True)
+    result = await LocalFilePicker("~", multiple=True)
     ui.notify(f"You chose {result}")
 
 

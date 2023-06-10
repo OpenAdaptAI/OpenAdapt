@@ -33,7 +33,8 @@ _DEFAULTS = {
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
-    "ACTION_TEXT_NAME_SUFFIX": ">"
+    "ACTION_TEXT_NAME_SUFFIX": ">",
+    "IGNORE_WARNINGS": False,
 }
 
 
@@ -67,12 +68,7 @@ SCRUB_CHAR = "*"
 SCRUB_LANGUAGE = "en"
 SCRUB_CONFIG_TRF = {
     "nlp_engine_name": "spacy",
-    "models": [
-        {
-        "lang_code": "en", 
-        "model_name": "en_core_web_trf"
-        }
-    ],
+    "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
 }
 DEFAULT_SCRUB_FILL_COLOR = (255,)
 SCRUB_IGNORE_ENTITIES = [

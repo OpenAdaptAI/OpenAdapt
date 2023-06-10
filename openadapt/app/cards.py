@@ -1,7 +1,7 @@
 import signal
 from nicegui import ui
 from subprocess import Popen
-from openadapt.app.objects.local_file_picker import local_file_picker
+from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import set_dark, sync_switch
 
 PROC = None
@@ -18,7 +18,7 @@ def settings(dark_mode):
 
 def select_import(f):
     async def pick_file():
-        result = await local_file_picker(".")
+        result = await LocalFilePicker(".")
         ui.notify(f"Selected {result[0]}" if result else "No file selected.")
         selected_file.text = result[0] if result else ""
         import_button.enabled = True if result else False
