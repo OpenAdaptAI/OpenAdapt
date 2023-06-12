@@ -30,6 +30,10 @@ _DEFAULTS = {
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
+<<<<<<< HEAD
+=======
+    "IGNORE_WARNINGS": False,
+>>>>>>> 9975a09 (false by default)
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
