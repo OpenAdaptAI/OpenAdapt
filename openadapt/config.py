@@ -70,7 +70,7 @@ SCRUB_CONFIG_TRF = {
     "nlp_engine_name": "spacy",
     "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
 }
-DEFAULT_SCRUB_FILL_COLOR = (255,)
+DEFAULT_SCRUB_FILL_COLOR = (255,0,0)
 SCRUB_IGNORE_ENTITIES = [
     # 'US_PASSPORT',
     # 'US_DRIVER_LICENSE',
