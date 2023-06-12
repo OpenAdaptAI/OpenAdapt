@@ -162,7 +162,7 @@ if (!$vcredistExists) {
 }
 
 # download Vtracer
-RunAndCheck "Invoke-WebRequest -useb [6](https://sh.rustup.rs) | Invoke-Expression - Command { $input | sh -s -- -y }"
+RunAndCheck "Invoke-WebRequest -useb (https://sh.rustup.rs) | Invoke-Expression - Command { $input | sh -s -- -y }"
 RunAndCheck "cargo install vtracer" "install vtracer" 
 
 
