@@ -21,7 +21,7 @@ InstallSVGDependencies() {
         RunAndCheck "source $HOME/.cargo/env" "sourced the environment"
         RunAndCheck "cargo install vtracer" "download vtracer"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
-        RunAndCheck "brew install rust" "install rust"
+        RunAndCheck "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.55.0" "install rust"
         RunAndCheck "cargo install vtracer" "install vtracer"
         
         # need to install cairo
