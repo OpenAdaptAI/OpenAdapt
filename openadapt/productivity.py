@@ -173,7 +173,35 @@ def find_tasks_brute_force(action_events):
 
 
 def brents_algo(action_events):
-    return
+    tortoise = action_events[0]
+    hare = action_events[1]
+    tortoise_index = 0
+    hare_index = 0
+    power = 1
+    lam = 1
+
+    while not compare_events(tortoise, hare):
+        if lam == power:
+            tortoise = hare
+            power *= 2
+            lam = 0
+        hare = action_events[hare]
+        lam += 1
+
+    mu = 0
+    tortoise = action_events[0]
+    while not compare_events(tortoise, hare):
+        tortoise = action_events[tortoise]
+        hare = action_events[hare]
+        mu += 1
+
+    length = 1
+    hare = action_events[tortoise]
+    while tortoise != hare:
+        hare = action_events[hare]
+        length += 1
+
+    return tortoise, length
 
 
 def find_tasks_cycles(action_events):
