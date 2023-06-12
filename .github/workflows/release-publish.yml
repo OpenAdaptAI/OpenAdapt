@@ -19,6 +19,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           repository_username: __token__
           repository_password: ${{ secrets.PYPI_TOKEN }}
+          git_committer_name: "OpenAdapt Bot"
+          git_committer_email: "bot@openadapt.ai"
   publish:
     needs: release
     runs-on: ubuntu-latest
