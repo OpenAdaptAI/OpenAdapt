@@ -16,18 +16,12 @@ RunAndCheck() {
 # Install the required dependencies for the SVG Mixin
 # Specifically for Vtracer and Cairo
 InstallSVGDependencies() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        RunAndCheck "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" "install rust"
-        RunAndCheck "source $HOME/.cargo/env" "sourced the environment"
-        RunAndCheck "cargo install vtracer" "download vtracer"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
         RunAndCheck "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.55.0" "install rust"
         RunAndCheck "cargo install vtracer" "install vtracer"
         
-        # need to install cairo
+        # Check the type of chip
         cpu=$(sysctl machdep.cpu.brand_string)
-
-        # Check if the computer has an intel chip
         if [[ $cpu == *"Intel"* ]]; then
             RunAndCheck "brew install cairo" "install cairo for Apple Intel chip"
         else
