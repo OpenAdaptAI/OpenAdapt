@@ -164,13 +164,15 @@ if (!$vcredistExists) {
 # download Vtracer
 $exePath = "$env:TEMP\rustup-init.exe"
 
-RunAndCheck "(New-Object Net.WebClient).DownloadFile('https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe', $exePath)" "download Rust executable"
+RunAndCheck "(New-Object Net.WebClient).DownloadFile('https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe', '$exePath')" "download Rust executable"
 
-RunAndCheck "cmd /c start /wait $exePath -y" "run Rust executable"
-RunAndCheck "Remove-Item $exePath" "remove executable"
+RunAndCheck "cmd /c start /wait '$exePath' -y" "run Rust executable"
+RunAndCheck "Remove-Item '$exePath'" "remove executable"
 $env:Path = "$env:USERPROFILE\.cargo\bin"
-
 RunAndCheck "cargo install vtracer" "install vtracer" 
+
+#Refresh Path Environment Variable
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
 
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
