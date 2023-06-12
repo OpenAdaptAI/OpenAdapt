@@ -9,7 +9,7 @@ from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 from transformers import PreTrainedTokenizerFast
 
-#integrate modal to load bigger RWKV model
+#use modal to load larger RWKV models
 stub = modal.Stub("openadapt-rwkv")
 
 os.environ["RWKV_JIT_ON"] = '1'
@@ -19,8 +19,8 @@ torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "t
 
 @stub.function(gpu="a100", timeout=18000, image=torch_image)
 def run_RWKV(model=0, instruction=None, task_description=None, input=None, parameters=None):
-
     #use gpu=a100 for Raven-14B and Pile-14B, vs. use gpu=any for other weights
+    #switch 'cuda fp16' to 'cpu fp32' if running on cpu is preferred
     if (model == 0):
         title = "RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
@@ -38,10 +38,12 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-world", filename=f"{title}.pth")
         model = RWKV(model=model_path, strategy='cuda fp32')  #heavy weight model
         
+
     tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
     response = requests.get(tokenizer_url)
     if response.status_code == 200:
-        tokenizer_path = "/root/rwkv_model/20B_tokenizer.json" #Switch to desired path if running locally
+        # Specify a path to save the tokenizer to if running in a local environment
+        tokenizer_path = "/root/rwkv_model/20B_tokenizer.json"
         os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
         with open(tokenizer_path, 'wb') as f:
             f.write(response.content)
@@ -49,8 +51,7 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
     else:
         print(f"Failed to download tokenizer. Status code: {response.status_code}")
         return
-    #tokenizer = PreTrainedTokenizerFast(tokenizer_file="./openadapt/strategies/20B_tokenizer.json")
-    #tokenizer = PreTrainedTokenizerFast(tokenizer_file="/root/rwkv_model/20B_tokenizer.json")
+    
     if (model == 3):
         pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
     else:
@@ -58,21 +59,24 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
 
 
     if not parameters:
-        temperature = 0.9
+        temperature = 1.0
         top_p = 0.9
-        count_penalty = 0.1
+        count_penalty = 0.4
+        presence_penalty = 0.4
         token_count = 200
         ctx_limit = 1536
     else:
         temperature = parameters["temperature"]
         top_p = parameters["top_p"]
         count_penalty = parameters["count_penalty"]
+        presence_penalty = parameters["presence_penalty"]
         token_count = parameters["token_count"]
         ctx_limit = parameters["ctx_limit"]
 
     args = PIPELINE_ARGS(temperature= float(temperature), 
                         top_p= float(top_p),
                         alpha_frequency= count_penalty,
+                        alpha_presence = presence_penalty,
                         token_ban= [],
                         token_stop= [0])
 
@@ -87,20 +91,6 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
 
     #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cuda fp16')  #heavy weight model
     #switch to 'cuda fp16' for better performance
-
-    print()
-    if not task_description:
-        task_description = (
-            "filling forms and submitting data on web pages"
-        )
-        
-    if not input:
-        input = f"""[{{'number': 1, 'title': 'restaurant menu', 'type': 'file', 'address': 'tests/openadapt/restaurant_menu_data.txt', 'description': 'Size: 17, Type: text/plain'}}
-,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
-,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Summary: function is used to compute the square root of a given number.'}}]"""
-
-    if not instruction:  
-        instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "
 
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
@@ -136,7 +126,7 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
             out_str += tmp
             out_last = i + 1
 
-
+    print(out_str.strip())
     return(out_str.strip())
 
 @stub.local_entrypoint()

@@ -21,9 +21,10 @@ _DEFAULTS = {
     "REPLAY_STRIP_ELEMENT_STATE": True,
     "USE_MODAL": True,
     "RWKV_PARAMETERS": {
-        "temperature": 0.9, 
+        "temperature": 1.0, 
         "top_p": 1.0, 
-        "count_penalty": 0.1, 
+        "count_penalty": 0.4, 
+        "presence_penalty": 0.4,
         "token_count": 200, 
         "ctx_limit": 1536},
     "RWKV_MODEL": 0
