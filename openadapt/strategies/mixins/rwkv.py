@@ -1,6 +1,7 @@
 from loguru import logger
 import modal
 
+from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.recording import Recording
 from openadapt.RWKV.RWKV import run_RWKV
 from openadapt import config
@@ -15,7 +16,7 @@ MODEL = config.RWKV_MODEL
 # model 2: RWKV-4-Pile-14B
 # model 3: RWKV-4-World-1.5B
 
-class RWKVReplayStrategyMixin:
+class RWKVReplayStrategyMixin(BaseReplayStrategy):
 
     def get_response(self,model=MODEL, instruction=None, task_description=None, input=None, parameters=None):
         if parameters is None:
