@@ -162,11 +162,7 @@ if (!$vcredistExists) {
 }
 
 # download Vtracer
-$exePath = "$env:TEMP\rustup-init.exe"
-RunAndCheck "(New-Object Net.WebClient).DownloadFile('https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe', $exePath)" "downloading the rust file"
-RunAndCheck "cmd /c start /wait $exePath -y" "installing rust executable"
-RunAndCheck "Remove-Item $exePath" "removing rust executable"
-RunAndCheck "$env:Path = '$env:USERPROFILE\.cargo\bin'" "updated session path"
+RunAndCheck "Invoke-WebRequest -useb [6](https://sh.rustup.rs) | Invoke-Expression"
 RunAndCheck "cargo install vtracer" "install vtracer" 
 
 
