@@ -50,7 +50,7 @@ body:
         - Linux
         - Other
     validations:
-      required: true
+      required: false
   - type: textarea
     id: other
     attributes:
