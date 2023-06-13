@@ -16,11 +16,10 @@ The goal is similar to that of
 except that we use transformers instead of conventional RPA tools.
 
 The approach is similar to [Adept.ai](https://adept.ai/), with some key differences:
-1. **We are foundation-model agnostic.**
-1. Instead of requiring the user to prompt the model directly, we prompt it behind the
-scenes by observing the user's activities;
-2. In addition to web apps, we work with all types of desktop applications (including virtualized, e.g. Citrix)
-3. We're open source!
+1. OpenAdapt is model agnostic;
+1. OpenAdapt models are auto-prompted (prompts are generated automatically), not user-prompted;
+2. OpenAdapt work with all types of desktop applications (including virtualized, e.g. Citrix), including web apps;
+3. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
 ## Install
 
