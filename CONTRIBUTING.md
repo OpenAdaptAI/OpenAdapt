@@ -30,4 +30,4 @@ The pull request template includes areas to explain the changes, and a checklist
      - Note: may need to click "compare across forks"
 5. Update pull request using feedback
      - this step may not be necessary, or may need to be repeated
-6. Celebrate contributioning to OpenAdapt!
+6. Celebrate contributing to OpenAdapt!
