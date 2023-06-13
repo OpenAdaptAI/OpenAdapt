@@ -7,7 +7,7 @@ with the power of Transformers by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
-- Converting screenshots and user input into tokenized format
+- Converting screenshots and user input into tok/enized format
 - Generating synthetic input via transformer model completions
 - Replaying synthetic input to complete tasks
 
@@ -31,9 +31,14 @@ source .venv/bin/activate
 pip install wheel
 pip install -r requirements.txt
 pip install -e .
+python -m spacy download en_core_web_trf
 alembic upgrade head
 pytest
 ```
+
+## Permissions
+
+See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
 ## Run
 
@@ -42,7 +47,7 @@ pytest
 Create a new recording by running the following command:
 
 ```
-python -m puterbot.record "testing out puterbot"
+python -m openadapt.record "testing out openadapt"
 ```
 
 Wait until all three event writers have started:
@@ -55,10 +60,14 @@ Wait until all three event writers have started:
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
 
-Note: keep your recording short (i.e. under a minute), as they are
+Current limitations: 
+- recording should be short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
 [open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
-possible memory leak.
+possible memory leak
+- the only touchpad and trackpad gestures currently supported are 
+pointing the cursor and left or right clicking, as described in this
+[open issue](https://github.com/MLDSAI/OpenAdapt/issues/145)
 
 
 ### Visualize
@@ -66,19 +75,19 @@ possible memory leak.
 Visualize the latest recording you created by running the following command:
 
 ```
-python -m puterbot.visualize
+python -m openadapt.visualize
 ```
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
 You can play back the recording using the following command:
 
 ```
-python -m puterbot.replay NaiveReplayStrategy
+python -m openadapt.replay NaiveReplayStrategy
 ```
 
 More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
@@ -87,8 +96,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 ## Contributing
 
 ### Design
-
-![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
 
 ### Problem Statement
 
@@ -176,25 +183,18 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 ## Troubleshooting
 
-Apple Silicon:
+MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-```
-$ python puterbot/record.py
-...
-This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
-```
+![MacOS System Alerts](./assets/macOS_permissions_alert.png)
 
-Solution:
-https://stackoverflow.com/a/69673312
+In summary (from https://stackoverflow.com/a/69673312):
 
-```
-Settings -> Security & Privacy
-Click on the Privacy tab
-Scroll and click on the Accessibility Row
-Click the +
-Navigate to /System/Applications/Utilities/ or wherever the Terminal.app is installed
-Click okay.
-```
+1. Settings -> Security & Privacy
+2. Click on the Privacy tab
+3. Scroll and click on the Accessibility Row
+4. Click +
+5. Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
+6. Click okay.
 
 ## Developing
 
@@ -206,7 +206,7 @@ alembic revision --autogenerate -m "<msg>"
 
 # Submitting an Issue
 
-Please submit any issues to https://github.com/MLDSAI/puterbot/issues with the
+Please submit any issues to https://github.com/MLDSAI/openadapt/issues with the
 following information:
 
 - Problem description (please include any relevant console output and/or screenshots)

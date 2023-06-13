@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Install puterbot as a package that can be imported.
+"""Install openadapt as a package that can be imported.
 
 Typical usage example:
 
@@ -10,12 +10,12 @@ Typical usage example:
 from setuptools import setup, find_packages
 
 
-MODULE_NAME = "puterbot"
+MODULE_NAME = "openadapt"
 MODULE_VERSION = "0.1.0"
 MODULE_DESCRIPTION = "GUI Process Automation with Transformers"
 MODULE_AUTHOR_NAME = "Richard Abrich"
 MODULE_AUTHOR_EMAIL = "richard.abrich@mldsai.com"
-MODULE_REPO_URL = "https://github.com/MLDSAI/puterbot"
+MODULE_REPO_URL = "https://github.com/MLDSAI/openadapt"
 MODULE_README_FNAME = "README.md"
 MODULE_LICENSE_FNAME = "LICENSE"
 
