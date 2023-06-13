@@ -120,10 +120,10 @@ def get_element_properties(element):
     children = element.children()
 
     if children:
-        properties['children'] = [get_element_properties(child) for child in children]
+        properties["children"] = [get_element_properties(child) for child in children]
 
     # Serialize the "rectangle" key
-    properties['rectangle'] = serialize_rect(properties['rectangle'])
+    properties["rectangle"] = serialize_rect(properties["rectangle"])
 
     return properties
 
@@ -138,8 +138,6 @@ def serialize_rect(rect):
     return serialized
 
 
-
-    
 def main():
     import time
 
