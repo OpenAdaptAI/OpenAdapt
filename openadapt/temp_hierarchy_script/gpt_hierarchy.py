@@ -1,6 +1,7 @@
 import openai
 import os
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from openadapt import config
+openai.api_key = config.OPENAI_API_KEY
 
 completion = openai.ChatCompletion.create(
     model="gpt-3.5-turbo",
