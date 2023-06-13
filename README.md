@@ -15,10 +15,10 @@ The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
 except that we use transformers instead of conventional RPA tools.
 
-The approach is similar to [Adept.ai](https://adept.ai/), with some key differences:
+The idea is similar to [Adept.ai](https://adept.ai/), with some key differences:
 1. OpenAdapt is model agnostic;
-1. OpenAdapt models are auto-prompted (prompts are generated automatically), not user-prompted;
-2. OpenAdapt work with all types of desktop applications (including virtualized, e.g. Citrix), including web apps;
+1. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted);
+2. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
 3. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
 ## Install
