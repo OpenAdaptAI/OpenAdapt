@@ -29,6 +29,6 @@ pip install -r requirements.txt
 #   [notice] To update, run: pip install --upgrade pip
 pip install -e .
 
-RunAndCheck "alembic upgrade head"
-RunAndCheck "python3.10 -m spacy download en_core_web_trf"
-RunAndCheck "pytest"
+RunAndCheck "alembic upgrade head" "update database"
+RunAndCheck "python3.10 -m spacy download en_core_web_trf" "download spacy model"
+RunAndCheck "pytest" "run tests"
