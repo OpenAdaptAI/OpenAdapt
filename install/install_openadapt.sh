@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# TODO: Add Tesseract OCR installation
+# TODO: Add Tesseract OCR installation: https://tesseract-ocr.github.io/tessdoc/Installation.html
 
 # Run a command and ensure it did not fail
 RunAndCheck() {

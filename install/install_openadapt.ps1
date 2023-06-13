@@ -14,7 +14,7 @@ $VCRedistInstaller = "vc_redist.x64.exe"
 $VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 
-# TODO: Add Tesseract OCR installation
+# TODO: Add Tesseract OCR installation: https://tesseract-ocr.github.io/tessdoc/Installation.html
 
 # Return true if a command/exe is available
 function CheckCMDExists() {
