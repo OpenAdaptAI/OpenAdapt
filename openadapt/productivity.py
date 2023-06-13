@@ -173,38 +173,100 @@ def find_tasks_brute_force(action_events):
 
 
 def brents_algo(action_events):
-    tortoise = action_events[0]
-    hare = action_events[1]
     tortoise_index = 0
-    hare_index = 0
+    hare_index = 1
     power = 1
-    lam = 1
-
-    while not compare_events(tortoise, hare):
-        if lam == power:
-            tortoise = hare
-            power *= 2
-            lam = 0
-        hare = action_events[hare]
-        lam += 1
-
-    mu = 0
-    tortoise = action_events[0]
-    while not compare_events(tortoise, hare):
-        tortoise = action_events[tortoise]
-        hare = action_events[hare]
-        mu += 1
-
     length = 1
-    hare = action_events[tortoise]
-    while tortoise != hare:
-        hare = action_events[hare]
+
+    # Phase 1: Finding a cycle
+    while hare_index < len(action_events) and \
+            not compare_events(action_events[tortoise_index], action_events[hare_index]):
+        if length == power:
+            tortoise_index = hare_index
+            power *= 2
+            length = 0
+        hare_index += 1
         length += 1
 
-    return tortoise, length
+    if hare_index >= len(action_events):
+        # No repeating subsequence found
+        return None, 0
+
+    # cycle detected
+    # length = length of cycle
+    # hare = tortoise
+    tortoise_index = 0
+    hare_index = length
+    # Now move both pointers
+    # at same speed so that
+    # they meet at the
+    # beginning of loop.
+    while not compare_events(action_events[tortoise_index], action_events[hare_index]):
+        tortoise_index += 1
+        hare_index += 1
+
+    # tortoise = hare = beginning of cycle
+
+    return tortoise_index, length
 
 
-def find_tasks_cycles(action_events):
+def brents_count_repetitions(action_events, start, length):
+    if start is None:
+        return 0
+
+    task = []
+    for i in range(0, length):
+        task.append(action_events[start + i])
+
+    num_repetitions = 0
+    task_index = 0
+    for j in range(0, len(action_events)):
+        if compare_events(action_events[j], task[task_index]):
+            task_index += 1
+        else:
+            task_index = 0
+        if task_index == len(task):
+            num_repetitions += 1
+            task_index = 0
+
+    return num_repetitions
+
+
+def brents_numbers(sequence):
+    # just for testing purposes :)
+    if len(sequence) == 0:
+        return False
+
+    first_p = 0
+    second_p = 1
+    power = 1
+    length = 1
+
+    while second_p < len(sequence) and sequence[second_p] != sequence[first_p]:
+        if length == power:
+            power *= 2
+            length = 0
+            first_p = second_p
+
+        second_p += 1
+        length += 1
+
+    if second_p == len(sequence):
+        print("No cycle")
+        return None
+
+    first_p = 0
+    second_p = length
+
+    while sequence[second_p] != sequence[first_p]:
+        second_p += 1
+        first_p += 1
+
+    print("cycle found")
+    return first_p, length
+
+
+def find_tasks_cydets(action_events):
     # TODO: outdated, remove imports
     data = []
     for action_event in action_events:
@@ -229,10 +291,16 @@ def find_tasks_cycles(action_events):
     return len(cycles)
 
 
-def filter_mouse_movement(action_events):
+def filter_move_release(action_events):
     filtered_action_events = []
     for action_event in action_events:
-        if action_event.name != "move":
+        if action_event.name == "move":
+            pass
+        elif action_event.name == "release":
+            pass
+        elif action_event.name == "click" and not action_event.mouse_pressed:
+            pass
+        else:
             filtered_action_events.append(action_event)
     return filtered_action_events
 
@@ -247,14 +315,17 @@ def calculate_productivity():
     event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
     window_events = get_window_events(recording)
-    filtered_action_events = filter_mouse_movement(action_events)
+    filtered_action_events = filter_move_release(action_events)
 
     # overall info first
     gaps, time_in_gaps = find_gaps(action_events)
     num_clicks = find_clicks(action_events)
     num_key_presses = find_key_presses(action_events)
     duration = action_events[-1].timestamp - action_events[0].timestamp
-    tasks = find_tasks_cycles(filtered_action_events)
+
+    start, length = brents_algo(filtered_action_events)
+    tasks = brents_count_repetitions(filtered_action_events, start, length)
+
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
                  "Total number of mouse clicks": num_clicks,
@@ -357,4 +428,8 @@ def calculate_productivity():
 
 
 if __name__ == "__main__":
+    # sequence = [1, 2, 3, 4]
+    # start, length = brents_numbers(sequence)
+    # for i in range(0, length):
+    #     print(sequence[start + i])
     calculate_productivity()
