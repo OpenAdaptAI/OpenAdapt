@@ -1,3 +1,5 @@
+import collections
+import sys
 from loguru import logger
 import pywinauto
 from pywinauto import Desktop
@@ -30,7 +32,7 @@ def get_active_window_state() -> dict:
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = serialize_rect(meta["rectangle"])
-    data = get_descendants_info(active_window)
+    data = get_element_properties(active_window)
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,
@@ -84,7 +86,7 @@ def get_active_element_state(x: int, y: int):
     return properties
 
 
-def get_active_window() -> Desktop:
+def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
     """
     Get the active window object.
 
@@ -96,25 +98,34 @@ def get_active_window() -> Desktop:
     return window
 
 
-def get_descendants_info(window):
+def get_element_properties(element):
     """
-    Get the properties of the descendants of the given window.
+    Recursively retrieves the properties of each element and its children.
 
     Args:
-        window: The window object.
+        element: An instance of a custom element class that has the `.get_properties()` and `.children()` methods.
 
     Returns:
-        list: A list containing the properties of the descendants.
+        A nested dictionary containing the properties of each element and its children.
+        The dictionary includes a "children" key for each element, which holds the properties of its children.
+
+    Example:
+        element = Element()
+        properties = get_element_properties(element)
+        print(properties)
+        # Output: {'prop1': 'value1', 'prop2': 'value2', 'children': [{'prop1': 'child_value1', 'prop2': 'child_value2', 'children': []}]}
     """
 
-    result = window.get_properties()
-    result["rectangle"] = serialize_rect(result["rectangle"])
-    result["children"] = []
-    for child in window.descendants():
-        child_properties = child.get_properties()
-        child_properties["rectangle"] = serialize_rect(child_properties["rectangle"])
-        result["children"].append(child_properties)
-    return result
+    properties = element.get_properties()
+    children = element.children()
+
+    if children:
+        properties['children'] = [get_element_properties(child) for child in children]
+
+    # Serialize the "rectangle" key
+    properties['rectangle'] = serialize_rect(properties['rectangle'])
+
+    return properties
 
 
 def serialize_rect(rect):
@@ -127,6 +138,8 @@ def serialize_rect(rect):
     return serialized
 
 
+
+    
 def main():
     import time
 
