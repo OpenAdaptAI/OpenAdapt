@@ -4,6 +4,7 @@ import os
 import mimetypes
 import sys #for debugging
 import sqlite3
+import pandas as pd
 
 from loguru import logger
 
@@ -79,13 +80,20 @@ class Signals:
                 f"Size: {size if size else 'File size not provided'}, "
                 f"Type: {type if type else 'File type not provided'}"
             )
+
+            if (file_path.endswith(('.xls','.xlsx'))):
+                data_frame = pd.read_excel(file_path)
+                data_frame_description = data_frame.describe().to_string()
+                description += f", Data_Frame_Description: {data_frame_description}"
+
         except PermissionError:
             logger.info(f"Error: Permission denied.")
             return None
         except IOError:
             logger.info(f"Error: I/O error.")
             return None
-        
+        except pd.errors.ParserError:
+            logger.info(f"Error: Pandas could not parse the excel file, possible formatting issue.")
         return description
         
 
@@ -158,6 +166,9 @@ class Signals:
         """
         # Get the signal from the file.
         try:
+            if file_path.endswith(('.xls','.xlsx')):
+                data_frame = pd.read_excel(file_path)
+                content = data_frame.to_string()
             with open(file_path, 'r') as file:
                 content = file.read()
         except FileNotFoundError:
@@ -213,7 +224,7 @@ class Signals:
                 # If the string starts with "http://" or "https://", treat it as an HTTP URL.
                 signal_description = self.__setup_url_signal(signal_address)
                 signal_type = "web_url"
-            elif signal_address.endswith(('.json', '.csv', '.txt')):
+            elif signal_address.endswith(('.json', '.csv', '.txt', '.xlsx', '.xls')):
                 # If the string ends with a known file extension, treat it as a file path.
                 signal_description = self.__setup_file_signal(signal_address)
                 signal_type = "file"
