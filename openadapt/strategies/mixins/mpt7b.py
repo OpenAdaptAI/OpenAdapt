@@ -59,8 +59,3 @@ def ex():
     print("Hello")
     test = MPT_7BReplayStrategy()
     test.get_completions.call("Melbourne is a ", 2048)
-    
-
-
-
-
