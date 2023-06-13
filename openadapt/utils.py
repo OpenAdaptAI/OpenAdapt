@@ -15,7 +15,7 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common, config, scrub
+from openadapt import common, config
 
 
 EMPTY = (None, [], {}, "")
@@ -44,9 +44,13 @@ def filter_log_messages(data):
 def row2dict(row, follow=True):
     if isinstance(row, dict):
         return row
-    try_follow = [
-        "children",
-    ] if follow else []
+    try_follow = (
+        [
+            "children",
+        ]
+        if follow
+        else []
+    )
     to_follow = [key for key in try_follow if hasattr(row, key)]
 
     # follow children recursively
@@ -105,16 +109,15 @@ def rows2dicts(
         for row_dict in row_dicts:
             for key in list(row_dict.keys()):
                 value = row_dict[key]
-                if (
-                    len(key_to_values[key]) <= 1
-                    or drop_empty and value in EMPTY
-                ):
+                if len(key_to_values[key]) <= 1 or drop_empty and value in EMPTY:
                     del row_dict[key]
     for row_dict in row_dicts:
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
-                row_dict["children"], drop_empty, drop_constant,
+                row_dict["children"],
+                drop_empty,
+                drop_constant,
             )
     return row_dicts
 
@@ -128,10 +131,12 @@ def get_double_click_interval_seconds():
         return get_double_click_interval_seconds.override_value
     if sys.platform == "darwin":
         from AppKit import NSEvent
+
         return NSEvent.doubleClickInterval()
     elif sys.platform == "win32":
         # https://stackoverflow.com/a/31686041/95989
         from ctypes import windll
+
         return windll.user32.GetDoubleClickTime() / 1000
     else:
         raise Exception(f"Unsupported {sys.platform=}")
@@ -145,10 +150,12 @@ def get_double_click_distance_pixels():
         # TODO: do this more robustly; see:
         # https://forum.xojo.com/t/get-allowed-unit-distance-between-doubleclicks-on-macos/35014/7
         from AppKit import NSPressGestureRecognizer
+
         return NSPressGestureRecognizer.new().allowableMovement()
     elif sys.platform == "win32":
         import win32api
         import win32con
+
         x = win32api.GetSystemMetrics(win32con.SM_CXDOUBLECLK)
         y = win32api.GetSystemMetrics(win32con.SM_CYDOUBLECLK)
         if x != y:
@@ -167,11 +174,13 @@ def get_monitor_dims():
 
 
 def draw_ellipse(
-    x, y, image,
-    width_pct=.03,
-    height_pct=.03,
-    fill_transparency=.25,
-    outline_transparency=.5,
+    x,
+    y,
+    image,
+    width_pct=0.03,
+    height_pct=0.03,
+    fill_transparency=0.25,
+    outline_transparency=0.5,
     outline_width=2,
 ):
     overlay = Image.new("RGBA", image.size)
@@ -208,7 +217,10 @@ def get_font(original_font_name, font_size):
 
 
 def draw_text(
-    x, y, text, image,
+    x,
+    y,
+    text,
+    image,
     font_size_pct=0.01,
     font_name="Arial.ttf",
     fill=(255, 0, 0),
@@ -251,7 +263,11 @@ def draw_text(
 
 
 def draw_rectangle(
-    x0, y0, x1, y1, image,
+    x0,
+    y0,
+    x1,
+    y1,
+    image,
     bg_color=(0, 0, 0),
     fg_color=(255, 255, 255),
     outline_color=(255, 0, 0),
@@ -287,10 +303,10 @@ def get_scale_ratios(action_event):
 
 def display_event(
     action_event,
-    marker_width_pct=.03,
-    marker_height_pct=.03,
-    marker_fill_transparency=.25,
-    marker_outline_transparency=.5,
+    marker_width_pct=0.03,
+    marker_height_pct=0.03,
+    marker_fill_transparency=0.25,
+    marker_outline_transparency=0.5,
     diff=False,
 ):
     recording = action_event.recording
@@ -315,11 +331,15 @@ def display_event(
         if diff_bbox:
             x0, y0, x1, y1 = diff_bbox
             image = draw_rectangle(
-                x0, y0, x1, y1, image,
+                x0,
+                y0,
+                x1,
+                y1,
+                image,
                 outline_color=(255, 0, 0),
                 bg_transparency=0,
                 fg_transparency=0,
-                #outline_transparency=.75,
+                # outline_transparency=.75,
                 outline_width=20,
             )
 
@@ -339,7 +359,8 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
-        text = scrub.scrub_text(text, is_separated=True)
+        if config.SCRUB_ENABLED:
+            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
@@ -392,11 +413,9 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 def get_strategy_class_by_name():
     from openadapt.strategies import BaseReplayStrategy
+
     strategy_classes = BaseReplayStrategy.__subclasses__()
-    class_by_name = {
-        cls.__name__: cls
-        for cls in strategy_classes
-    }
+    class_by_name = {cls.__name__: cls for cls in strategy_classes}
     logger.debug(f"{class_by_name=}")
     return class_by_name
 
@@ -419,6 +438,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
     if not recording_timestamp:
         # avoid circular import
         from openadapt import crud
+
         recording_timestamp = crud.get_latest_recording().timestamp
     perf_stats = crud.get_perf_stats(recording_timestamp)
     perf_stat_dicts = rows2dicts(perf_stats)
@@ -427,19 +447,13 @@ def plot_performance(recording_timestamp: float = None) -> None:
             perf_stat["event_type"], perf_stat["start_time"]
         )
         start_time_delta = perf_stat["start_time"] - prev_start_time
-        type_to_start_time_deltas[perf_stat["event_type"]].append(
-            start_time_delta
-        )
-        type_to_prev_start_time[perf_stat["event_type"]] = (
-            perf_stat["start_time"]
-        )
+        type_to_start_time_deltas[perf_stat["event_type"]].append(start_time_delta)
+        type_to_prev_start_time[perf_stat["event_type"]] = perf_stat["start_time"]
         type_to_proc_times[perf_stat["event_type"]].append(
             perf_stat["end_time"] - perf_stat["start_time"]
         )
         type_to_count[perf_stat["event_type"]] += 1
-        type_to_timestamps[perf_stat["event_type"]].append(
-            perf_stat["start_time"]
-        )
+        type_to_timestamps[perf_stat["event_type"]].append(perf_stat["start_time"])
 
     y_data = {"proc_times": {}, "start_time_deltas": {}}
     for i, event_type in enumerate(type_to_count):
@@ -449,7 +463,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
         y_data["proc_times"][event_type] = proc_times
         y_data["start_time_deltas"][event_type] = start_time_deltas
 
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20,10))
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20, 10))
     for i, data_type in enumerate(y_data):
         for event_type in y_data[data_type]:
             x = type_to_timestamps[event_type]
