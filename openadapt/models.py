@@ -6,15 +6,25 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt.db import Base
-from openadapt.utils import take_screenshot
+from openadapt import config, db, utils, window
 
 
-class Recording(Base):
+# https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
+class ForceFloat(sa.TypeDecorator):
+    impl = sa.Numeric(10, 2, asdecimal=False)
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = float(value)
+        return value
+
+
+class Recording(db.Base):
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    timestamp = sa.Column(sa.Integer)
+    timestamp = sa.Column(ForceFloat)
     monitor_width = sa.Column(sa.Integer)
     monitor_height = sa.Column(sa.Integer)
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
@@ -22,15 +32,39 @@ class Recording(Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
 
-    action_events = sa.orm.relationship("ActionEvent", back_populates="recording")
+    action_events = sa.orm.relationship(
+        "ActionEvent",
+        back_populates="recording",
+        order_by="ActionEvent.timestamp",
+    )
+    screenshots = sa.orm.relationship(
+        "Screenshot",
+        back_populates="recording",
+        order_by="Screenshot.timestamp",
+    )
+    window_events = sa.orm.relationship(
+        "WindowEvent",
+        back_populates="recording",
+        order_by="WindowEvent.timestamp",
+    )
+
+    _processed_action_events = None
+
+    @property
+    def processed_action_events(self):
+        from openadapt import events
+        if not self._processed_action_events:
+            self._processed_action_events = events.get_events(self)
+        return self._processed_action_events
 
 
-class ActionEvent(Base):
+
+class ActionEvent(db.Base):
     __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
-    timestamp = sa.Column(sa.Integer)
+    timestamp = sa.Column(ForceFloat)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
@@ -47,11 +81,17 @@ class ActionEvent(Base):
     canonical_key_char = sa.Column(sa.String)
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
+    element_state = sa.Column(sa.JSON)
 
     children = sa.orm.relationship("ActionEvent")
+    # TODO: replacing the above line with the following two results in an error:
+    #     AttributeError: 'list' object has no attribute '_sa_instance_state'
+    #children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
+    #parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
+
     recording = sa.orm.relationship("Recording", back_populates="action_events")
-    screenshot = sa.orm.relationship("Screenshot")
-    window_event = sa.orm.relationship("WindowEvent")
+    screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
+    window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -69,7 +109,7 @@ class ActionEvent(Base):
 
     @property
     def key(self):
-        logger.debug(
+        logger.trace(
             f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
         )
         return self._key(
@@ -80,7 +120,7 @@ class ActionEvent(Base):
 
     @property
     def canonical_key(self):
-        logger.debug(
+        logger.trace(
             f"{self.name=} "
             f"{self.canonical_key_name=} "
             f"{self.canonical_key_char=} "
@@ -92,7 +132,10 @@ class ActionEvent(Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, sep="-", name_prefix="<", name_suffix=">", canonical=False):
+    def _text(self, canonical=False):
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if canonical:
             key_attr = self.canonical_key
             key_name_attr = self.canonical_key_name
@@ -137,7 +180,8 @@ class ActionEvent(Base):
             "mouse_dy",
             "mouse_button_name",
             "mouse_pressed",
-            "key",
+            "text",
+            "element_state",
         ]
         attrs = [
             getattr(self, attr_name)
@@ -149,23 +193,38 @@ class ActionEvent(Base):
             else attr
             for attr in attrs
         ]
-        attrs = [str(attr) for attr in attrs if attr]
+        attrs = [
+            f"{attr_name}=`{attr}`"
+            for attr_name, attr in zip(attr_names, attrs)
+            if attr
+        ]
         rval = " ".join(attrs)
         return rval
 
+    @classmethod
+    def from_children(cls, children_dicts):
+        children = [
+            ActionEvent(**child_dict)
+            for child_dict in children_dicts
+        ]
+        return ActionEvent(children=children)
 
-class Screenshot(Base):
+
+class Screenshot(db.Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
-    timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
-    # TODO: replace prev with prev_timestamp?
+
+    recording = sa.orm.relationship("Recording", back_populates="screenshots")
+    action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
 
     # TODO: convert to png_data on save
     sct_img = None
 
+    # TODO: replace prev with prev_timestamp?
     prev = None
     _image = None
     _diff = None
@@ -197,7 +256,8 @@ class Screenshot(Base):
     @property
     def diff_mask(self):
         if not self._diff_mask:
-            self._diff_mask = self.diff.convert("1")
+            if self.diff:
+                self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property
@@ -206,19 +266,51 @@ class Screenshot(Base):
 
     @classmethod
     def take_screenshot(cls):
-        sct_img = take_screenshot()
+        sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
+    
+    def crop_active_window(self, action_event):
+        window_event = action_event.window_event
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+
+        box = (x0, y0, x1, y1)
+        self._image = self._image.crop(box)
 
 
-class WindowEvent(Base):
+class WindowEvent(db.Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
-    timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
+    state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="window_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+
+    @classmethod
+    def get_active_window_event(cls):
+        return WindowEvent(**window.get_active_window_data())
+
+
+class PerformanceStat(db.Base):
+    __tablename__ = "performance_stat"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.Integer)
+    event_type = sa.Column(sa.String)
+    start_time = sa.Column(sa.Integer)
+    end_time = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)

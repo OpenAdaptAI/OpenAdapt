@@ -24,10 +24,12 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
+from openadapt import scrub
 
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
+MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
@@ -70,9 +72,15 @@ CSS = string.Template("""
 
 
 def recursive_len(lst, key):
-    _len = len(lst)
+    try:
+        _len = len(lst)
+    except TypeError:
+        return 0
     for obj in lst:
-        _len += recursive_len(obj[key], key)
+        try:
+            _len += recursive_len(obj.get(key), key)
+        except AttributeError:
+            continue
     return _len
 
 
@@ -100,9 +108,9 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=5):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
     if isinstance(obj, list):
-        children = [dict2html(value) for value in obj]
+        children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
             all_children = children
             children = evenly_spaced(children, max_children)
@@ -113,7 +121,7 @@ def dict2html(obj, max_children=5):
             f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
-                    <td>{dict2html(value)}</td>
+                    <td>{dict2html(value, max_children)}</td>
                 </tr>
             """
             for key, value in obj.items()
@@ -129,11 +137,14 @@ def main():
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
+    recording.task_description = scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
+
+    event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -144,7 +155,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(row2dict(recording))}",
+                text=f"{dict2html(scrub.scrub_dict(row2dict(recording)))}",
             ),
         ),
         row(
@@ -161,6 +172,9 @@ def main():
         image = display_event(action_event)
         diff = display_event(action_event, diff=True)
         mask = action_event.screenshot.diff_mask
+        image = scrub.scrub_image(image)
+        diff = scrub.scrub_image(diff)
+        mask = scrub.scrub_image(mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -189,20 +203,23 @@ def main():
                                 "
                             >
                         </div>
+                        <table>
+                            {dict2html(scrub.scrub_dict(row2dict(action_event.window_event)), None)}
+                        </table>
                     """,
                 ),
                 Div(
                     text=f"""
                         <table>
-                            {dict2html(row2dict(action_event))}
+                            {dict2html(scrub.scrub_dict(row2dict(action_event)))}
                         </table>
                     """
                 ),
             ),
         ])
 
-    title = f"recording-{recording.timestamp}"
-    fname_out = f"recording-{recording.timestamp}.html"
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 

@@ -1,19 +1,19 @@
 """
-Demonstration of LLM, OCR, and ASCII ReplayStrategyMixins.
+Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
-    $ python openadapt/replay.py DemoReplayStrategy
+    $ python -m openadapt.replay DemoReplayStrategy
 """
 
 from loguru import logger
 import numpy as np
 
 from openadapt.events import get_events
-from openadapt.models import Recording, Screenshot
+from openadapt.models import Recording, Screenshot, WindowEvent
 from openadapt.strategies.base import BaseReplayStrategy
-from openadapt.strategies.llm_mixin import (
-    LLMReplayStrategyMixin,
+from openadapt.strategies.mixins.huggingface import (
+    HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
 from openadapt.strategies.ocr_mixin import OCRReplayStrategyMixin
@@ -22,7 +22,7 @@ from openadapt.strategies.gpt4all_mixin import GPT4ALLReplayStrategyMixin
 
 
 class DemoReplayStrategy(
-    LLMReplayStrategyMixin,
+    HuggingFaceReplayStrategyMixin,
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
     GPT4ALLReplayStrategyMixin,
@@ -39,6 +39,7 @@ class DemoReplayStrategy(
     def get_next_action_event(
         self,
         screenshot: Screenshot,
+        window_event: WindowEvent,
     ):
         ascii_text = self.get_ascii_text(screenshot)
         #logger.info(f"ascii_text=\n{ascii_text}")
