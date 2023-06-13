@@ -22,7 +22,7 @@ from pynput import keyboard, mouse
 import fire
 import mss.tools
 
-from openadapt import config, crud, utils, window
+from openadapt import config, crud, scrub, utils, window
 
 
 EVENT_TYPES = ("screen", "action", "window")
@@ -389,7 +389,7 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            _window_data = dict(window_data)
+            _window_data = window_data
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
@@ -524,8 +524,7 @@ def record(
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
-
-    logger.info(f"{task_description=}")
+    logger.info(f"{scrub.scrub_text(task_description)=}")
 
     recording = create_recording(task_description)
     recording_timestamp = recording.timestamp
