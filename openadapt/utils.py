@@ -29,16 +29,9 @@ def configure_logging(logger, log_level):
     logger.add(
         sys.stderr,
         level=log_level,
-        filter=filter_log_messages if config.IGNORE_WARNINGS else None,
+        filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
     )
     logger.debug(f"{log_level=}")
-
-
-def filter_log_messages(data):
-    messages_to_ignore = [
-        "Cannot pickle Objective-C objects",
-    ]
-    return not any(msg in data["message"] for msg in messages_to_ignore)
 
 
 def row2dict(row, follow=True):
@@ -173,6 +166,7 @@ def get_monitor_dims():
     return monitor_width, monitor_height
 
 
+# TODO: move parameters to config
 def draw_ellipse(
     x,
     y,
