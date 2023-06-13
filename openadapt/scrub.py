@@ -24,13 +24,9 @@ import fire
 from openadapt import config, utils
 
 
-SCRUB_PROVIDER_TRF = NlpEngineProvider(
-    nlp_configuration=config.SCRUB_CONFIG_TRF
-)
+SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-ANALYZER_TRF = AnalyzerEngine(
-    nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
-)
+ANALYZER_TRF = AnalyzerEngine(nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"])
 ANONYMIZER = AnonymizerEngine()
 IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
 SCRUBBING_ENTITIES = [
@@ -50,10 +46,6 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
     Returns:
         str: Scrubbed text
     """
-
-    if config.SCRUB_ENABLED is False:
-        return text
-
     if text is None:
         return None
 
@@ -90,9 +82,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         text.startswith(config.ACTION_TEXT_NAME_PREFIX)
         or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
     ):
-        anonymized_results.text = config.ACTION_TEXT_SEP.join(
-            anonymized_results.text
-        )
+        anonymized_results.text = config.ACTION_TEXT_SEP.join(anonymized_results.text)
 
     return anonymized_results.text
 
@@ -108,14 +98,11 @@ def scrub_text_all(text: str) -> str:
         str: Scrubbed text
     """
 
-    if config.SCRUB_ENABLED is False:
-        return text
-
     return config.SCRUB_CHAR * len(text)
 
 
 def scrub_image(
-    image: Image, fill_color=config.DEFAULT_SCRUB_FILL_COLOR
+    image: Image, fill_color=config.SCRUB_FILL_COLOR
 ) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor
@@ -126,10 +113,6 @@ def scrub_image(
     Returns:
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
-
-    if config.SCRUB_ENABLED is False:
-        return image
-
     redacted_image = IMAGE_REDACTOR.redact(
         image, fill=fill_color, entities=SCRUBBING_ENTITIES
     )
@@ -189,10 +172,6 @@ def _scrub_text_item(
     Returns:
         str: The scrubbed value
     """
-
-    if config.SCRUB_ENABLED is False:
-        return value
-
     if key in ("text", "canonical_text"):
         return scrub_text(value, is_separated=True)
     if force_scrub_children:
@@ -200,9 +179,7 @@ def _scrub_text_item(
     return scrub_text(value)
 
 
-def _should_scrub_list_item(
-    item: Any, key: Any, list_keys: List[str]
-) -> bool:
+def _should_scrub_list_item(item: Any, key: Any, list_keys: List[str]) -> bool:
     """
     Check if the key and item should be scrubbed and are of correct instance.
 
@@ -239,10 +216,6 @@ def _scrub_list_item(
     Returns:
         dict/str: The scrubbed dict/value respectively
     """
-
-    if config.SCRUB_ENABLED is False:
-        return item
-
     if isinstance(item, dict):
         return scrub_dict(
             item, list_keys, force_scrub_children=force_scrub_children
@@ -265,10 +238,6 @@ def scrub_dict(
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
     """
-
-    if config.SCRUB_ENABLED is False:
-        return input_dict
-
     if list_keys is None:
         list_keys = config.SCRUB_KEYS_HTML
 
@@ -285,9 +254,7 @@ def scrub_dict(
             scrubbed_dict[key] = scrubbed_text
         elif isinstance(value, list):
             scrubbed_list = [
-                _scrub_list_item(
-                    item, key, list_keys, force_scrub_children
-                )
+                _scrub_list_item(item, key, list_keys, force_scrub_children)
                 if _should_scrub_list_item(item, key, list_keys)
                 else item
                 for item in value
@@ -296,9 +263,7 @@ def scrub_dict(
             force_scrub_children = False
         elif isinstance(value, dict):
             if isinstance(key, str) and key == "state":
-                scrubbed_dict[key] = scrub_dict(
-                    value, list_keys, scrub_all=True
-                )
+                scrubbed_dict[key] = scrub_dict(value, list_keys, scrub_all=True)
             else:
                 scrubbed_dict[key] = scrub_dict(value, list_keys)
         else:
@@ -307,9 +272,7 @@ def scrub_dict(
     return scrubbed_dict
 
 
-def scrub_list_dicts(
-    input_list: List[Dict], list_keys: List = None
-) -> List[Dict]:
+def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dict]:
     """
     Scrub the list of dicts of all PII/PHI
     using Presidio ANALYZER.TRF and Anonymizer.
@@ -320,10 +283,6 @@ def scrub_list_dicts(
     Returns:
         list[dict]: The scrubbed list of dicts with PII and PHI removed.
     """
-
-    if config.SCRUB_ENABLED is False:
-        return input_list
-
     scrubbed_list_dicts = []
     for input_dict in input_list:
         scrubbed_list_dicts.append(scrub_dict(input_dict, list_keys))
