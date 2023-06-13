@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import db, utils, window
+from openadapt import config, db, utils, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -131,9 +131,9 @@ class ActionEvent(db.Base):
         )
 
     def _text(self, canonical=False):
-        sep = self._text_sep
-        name_prefix = self._text_name_prefix
-        name_suffix = self._text_name_suffix
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if canonical:
             key_attr = self.canonical_key
             key_name_attr = self.canonical_key_name
@@ -191,10 +191,6 @@ class ActionEvent(db.Base):
         ]
         rval = " ".join(attrs)
         return rval
-
-    _text_sep = "-"
-    _text_name_prefix = "<"
-    _text_name_suffix = ">"
 
     @classmethod
     def from_children(cls, children_dicts):

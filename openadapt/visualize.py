@@ -24,6 +24,7 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
+from openadapt import scrub
 
 
 LOG_LEVEL = "INFO"
@@ -140,11 +141,14 @@ def main():
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
+    recording.task_description = scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
+
+    event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     rows = [
@@ -155,7 +159,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(row2dict(recording))}",
+                text=f"{dict2html(scrub.scrub_dict(row2dict(recording)))}",
             ),
         ),
         row(
@@ -172,6 +176,9 @@ def main():
         image = display_event(action_event)
         diff = display_event(action_event, diff=True)
         mask = action_event.screenshot.diff_mask
+        image = scrub.scrub_image(image)
+        diff = scrub.scrub_image(diff)
+        mask = scrub.scrub_image(mask)
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
@@ -202,14 +209,14 @@ def main():
                             >
                         </div>
                         <table>
-                            {dict2html(row2dict(action_event.window_event), None)}
+                            {dict2html(scrub.scrub_dict(row2dict(action_event.window_event)), None)}
                         </table>
                     """,
                     ),
                     Div(
                         text=f"""
                         <table>
-                            {dict2html(row2dict(action_event))}
+                            {dict2html(scrub.scrub_dict(row2dict(action_event)))}
                         </table>
                     """
                     ),
