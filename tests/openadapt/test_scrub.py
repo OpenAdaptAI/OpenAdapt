@@ -37,9 +37,7 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1
-        for pixel in scrubbed_image.getdata()
-        if pixel == config.DEFAULT_SCRUB_FILL_COLOR
+        1 for pixel in scrubbed_image.getdata() if pixel == config.SCRUB_FILL_COLOR
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
@@ -104,9 +102,7 @@ def test_scrub_credit_card() -> None:
     """
 
     assert (
-        scrub.scrub_text(
-            "My credit card number is 4234-5678-9012-3456 and "
-        )
+        scrub.scrub_text("My credit card number is 4234-5678-9012-3456 and ")
     ) == "My credit card number is ******************* and "
 
 
@@ -218,6 +214,7 @@ def test_scrub_all_together() -> None:
         " his social security number is ***********."
         " He was born on 01/01/1980."
     )
+
 
 if __name__ == "__main__":
     test_scrub_image()
