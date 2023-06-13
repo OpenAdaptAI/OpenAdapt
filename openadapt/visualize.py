@@ -157,9 +157,9 @@ def main():
         event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
-    r2d_recording = row2dict(recording)
+    recording_dict = row2dict(recording)
     if SCRUB:
-        r2d_recording = scrub.scrub_dict(r2d_recording)
+        recording_dict = scrub.scrub_dict(recording_dict)
 
     rows = [
         row(
@@ -169,7 +169,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(r2d_recording)}",
+                text=f"{dict2html(recording_dict)}",
             ),
         ),
         row(
@@ -197,13 +197,13 @@ def main():
         mask_utf8 = image2utf8(mask)
         width, height = image.size
 
-        r2d_ae = row2dict(action_event)
-        r2d_ae_we = row2dict(action_event.window_event)
-        
+        action_event_dict = row2dict(action_event)
+        window_event_dict = row2dict(action_event.window_event)
+
         if SCRUB:
-            r2d_ae = scrub.scrub_dict(r2d_ae)
-            r2d_ae_we = scrub.scrub_dict(r2d_ae_we)
-            
+            action_event_dict = scrub.scrub_dict(action_event_dict)
+            window_event_dict = scrub.scrub_dict(window_event_dict)
+
         rows.append(
             [
                 row(
@@ -230,14 +230,14 @@ def main():
                             >
                         </div>
                         <table>
-                            {dict2html(r2d_ae_we , None)}
+                            {dict2html(window_event_dict , None)}
                         </table>
                     """,
                     ),
                     Div(
                         text=f"""
                         <table>
-                            {dict2html(r2d_ae)}
+                            {dict2html(action_event_dict)}
                         </table>
                     """
                     ),
