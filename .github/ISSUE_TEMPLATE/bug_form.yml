@@ -11,8 +11,10 @@ body:
     id: describe-bug
     attributes:
       label: Describe the bug
-      description: What behaviour was expected and what actually happened?
-      value: I expected ... but what actually happened was ... \n [image to illustrate the issue] \n ```relevant log output```
+      description: What behaviour was expected and what actually happened? Include screenshots and log output where useful.
+      value: I expected ... but what actually happened was ... 
+        [image to illustrate the issue]
+        ```relevant log output```
     validations:
       required: true
   - type: textarea
@@ -20,6 +22,10 @@ body:
     attributes:
       label: To Reproduce
       description: What Operating System did you use and steps would we take to reproduce the behaviour?
-      placeholder: I use [macOS/Microsoft Windows]. \n 1. Go to '...' 2. Click on '....' 3. Scroll down to '....' 
+      value: I use [macOS/Microsoft Windows].
+        Steps: 
+        1. Go to '...' 
+        2. Click on '....' 
+        3. Scroll down to '....' 
     validations:
       required: true

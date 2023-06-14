@@ -18,11 +18,3 @@ body:
       label: Motivation
       description: Please outline the purpose for the proposal (e.g., is it related to a problem?). Add any relevant links (e.g. GitHub issues).
       placeholder: I'm always frustrated when [...] so this feature would [...].
-
-  - type: textarea
-    id: other
-    validations:
-      required: false
-    attributes:
-      label: Other
-      description: Any additional details
