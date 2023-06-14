@@ -66,7 +66,7 @@ CSS = string.Template("""
 MAX_GAP_SECONDS = 15
 PROCESS_EVENTS = False
 LOG_LEVEL = "INFO"
-MAX_PIXEL_DIFF = 50
+MAX_PIXEL_DIFF = 75
 # define task to be at least 4 actions
 MIN_TASK_LENGTH = 4
 
@@ -115,6 +115,7 @@ def compare_events(event1, event2):
 
 
 def find_tasks_brute_force(action_events):
+    # TODO: remove
     configure_logging(logger, LOG_LEVEL)
     logger.info("{} ActionEvents".format(len(action_events)))
     repetitions = {}
@@ -210,7 +211,7 @@ def brents_algo(action_events):
     return tortoise_index, length
 
 
-def brents_count_repetitions(action_events, start, length):
+def brents_tasks(action_events, start, length):
     if start is None:
         return 0
 
@@ -220,6 +221,9 @@ def brents_count_repetitions(action_events, start, length):
 
     num_repetitions = 0
     task_index = 0
+    total_time = 0
+    start_time = 0
+    end_time = 0
     for j in range(0, len(action_events)):
         if compare_events(action_events[j], task[task_index]):
             task_index += 1
@@ -228,12 +232,17 @@ def brents_count_repetitions(action_events, start, length):
         if task_index == len(task):
             num_repetitions += 1
             task_index = 0
+            end_time = action_events[j].timestamp
+            total_time += end_time - start_time
+        if task_index == 1:
+            start_time = action_events[j].timestamp
 
-    return num_repetitions
+    return task, num_repetitions, total_time
 
 
 def brents_numbers(sequence):
     # just for testing purposes :)
+    # TODO: remove
     if len(sequence) == 0:
         return False
 
@@ -268,6 +277,7 @@ def brents_numbers(sequence):
 
 def find_tasks_cydets(action_events):
     # TODO: outdated, remove imports
+    # TODO: remove
     data = []
     for action_event in action_events:
         # convert to real number
@@ -324,7 +334,7 @@ def calculate_productivity():
     duration = action_events[-1].timestamp - action_events[0].timestamp
 
     start, length = brents_algo(filtered_action_events)
-    tasks = brents_count_repetitions(filtered_action_events, start, length)
+    task, num_tasks, total_task_time = brents_tasks(filtered_action_events, start, length)
 
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
@@ -332,7 +342,9 @@ def calculate_productivity():
                  "Total number of key presses": num_key_presses,
                  "Number of windows/tabs used": len(window_events),
                  "Recording length": duration,
-                 f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": tasks
+                 f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
+                 "Total time spent on repetitive tasks": total_task_time,
+                 "Average time spent per repetitive task": total_task_time / num_tasks
                  }
 
     rows = [
@@ -353,7 +365,48 @@ def calculate_productivity():
         )
     ]
 
+    # task screenshots
+    if len(task) > 0:
+        rows.append([
+            row(
+                Div(
+                    text="<hr><h1>Identified Task</h1><hr>"
+                )
+            )
+        ])
+
+    for event in task:
+        screenshot = display_event(event)
+        screenshot_utf8 = image2utf8(screenshot)
+        width, height = screenshot.size
+
+        rows.append([
+            row(
+                Div(
+                    text=f"""
+                        <div class="screenshot">
+                            <img
+                                src="{screenshot_utf8}"
+                                style="
+                                    aspect-ratio: {width}/{height};
+                                "
+                            >
+                        </div>
+                    """,
+                ),
+            ),
+        ])
+
     # window by window
+    if len(window_events) > 0:
+        rows.append([
+            row(
+                Div(
+                    text="<hr><h1>Windows/Tabs</h1><hr>"
+                )
+            )
+        ])
+
     last_timestamp = -1
     curr_action_events = []
     for idx, action_event in enumerate(action_events):
