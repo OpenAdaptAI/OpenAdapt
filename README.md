@@ -9,7 +9,7 @@ with the power of Transformers by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
-- Converting screenshots and user input into tok/enized format
+- Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
 - Replaying synthetic input to complete tasks
 
