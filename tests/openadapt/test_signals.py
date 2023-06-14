@@ -3,6 +3,7 @@ import tempfile
 import os
 import sys
 
+from loguru import logger
 from openadapt.signals import Signals
 
 
@@ -21,7 +22,7 @@ def test_access_database_signal():
     # Assuming you have a table named 'test_table' in your database
     query = 'SELECT * FROM test_table'  
 
-    signal_data = signals.return_signal_data(1, query)
+    signal_data = signals.return_signal_data(1, query=query)
     assert signal_data == [(1, 'Test data')]
     # Add more specific asserts based on what data you expect to retrieve from the database
 
@@ -35,7 +36,7 @@ def test_add_file_signal():
 
 def test_add_url_signal():
     signals = Signals()
-    signals.add_signal("https://platform.openai.com/")
+    signals.add_signal("https://www.accuweather.com/")
     signal_data = signals.return_signal_data(1)
     #TODO: change to a more specific url to see if gathered data is correct and usable
     assert signal_data != None
@@ -49,6 +50,16 @@ def test_add_function_signal():
     signal_data = signals.return_signal_data(1)
     assert signal_data == "Sample function success"
     assert signal["description"] == "Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    "
+
+
+def test_add_function_signal():
+    signals = Signals()
+    sys.path.append(".venv/lib/site-packages")
+    signals.add_signal("openai.Completion.create")
+    signal_data = signals.return_signal_data(1, engine="davinci", prompt="Translate the following English word to French: 'Hello'", max_tokens=10)
+    signal_data = signal_data["choices"][0]["text"]
+    logger.info(signal_data)
+    assert signal_data != None
 
 
 def test_setup_xslx_signal():

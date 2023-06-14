@@ -106,6 +106,7 @@ class Signals:
         response = requests.get(http_url, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
+            raise ValueError(f"HTTP request failed with status code {response.status_code}.")
         else:
             logger.info(f"Success: HTTP request succeeded.")
 
@@ -120,32 +121,71 @@ class Signals:
         return description
 
 
-    def __setup_function_signal(self, function_name):
+    # def __setup_function_signal(self, function_name):
+    #     """
+    #     Return a description of a Python function signal.
+    #     """
+    #     module_name, func_name = function_name.rsplit('.', 1)
+    #     module = importlib.import_module(module_name)
+    #     func = getattr(module, func_name)
+
+    #     # Get the function's docstring, or 'No description provided' if it doesn't have one
+    #     docstring = func.__doc__ if func.__doc__ else 'No description provided'
+
+    #     # Get the function's name and module
+    #     description = (
+    #         f"Function: {func.__name__}, "
+    #         f"Module: {module.__name__}, "
+    #         f"Description: {docstring}"
+    #     )
+
+    #     return description
+
+    def __setup_function_signal(self, function_address):
         """
-        Return a description of a Python function signal.
+        Read a description of a signal from a Python function.
         """
-        module_name, func_name = function_name.rsplit('.', 1)
+        module_name, class_name, func_name = function_address.rsplit('.', 2)
         module = importlib.import_module(module_name)
-        func = getattr(module, func_name)
+        func_class = getattr(module, class_name)
+        func = getattr(func_class, func_name)
 
         # Get the function's docstring, or 'No description provided' if it doesn't have one
-        docstring = func.__doc__ if func.__doc__ else 'No description provided'
+        docstring = func.__doc__ if func.__doc__ else 'No docstring provided'
 
-        # Get the function's name and module
+        # Describe the function
         description = (
-            f"Function: {func.__name__}, "
-            f"Module: {module.__name__}, "
-            f"Description: {docstring}"
+            f"Module: {module_name}, "
+            f"Class: {class_name}, "
+            f"Function: {func_name}, "
+            f"Doctstring: {docstring}"
         )
-
+        
         return description
 
+    def __access_function_signal(self, function_address, **kwargs):
+        """
+        Read signal data from a Python function.
+        """
+        module_name, class_name, func_name = function_address.rsplit('.', 2)
+        module = importlib.import_module(module_name)
+        func_class = getattr(module, class_name)
+        func = getattr(func_class, func_name)
 
-    def __access_database_signal(self, db_url, query):
+        # Call the function and get its result
+        result = func(**kwargs)
+
+        return result
+
+
+
+    def __access_database_signal(self, db_url, **kwargs):
         """
         Read signal data from a database.
         """
         # Get the signal from the database.
+        query = kwargs.get('query')
+
         try:
             conn = sqlite3.connect(db_url)
             cur = conn.cursor()
@@ -198,18 +238,18 @@ class Signals:
         return signal_data
 
 
-    def __access_function_signal(self, function_name):
-        """
-        Read signal data from a Python function.
-        """
-        module_name, func_name = function_name.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        func = getattr(module, func_name)
+    # def __access_function_signal(self, function_name):
+    #     """
+    #     Read signal data from a Python function.
+    #     """
+    #     module_name, func_name = function_name.rsplit('.', 1)
+    #     module = importlib.import_module(module_name)
+    #     func = getattr(module, func_name)
 
-        # Call the function and get its result
-        result = func()
+    #     # Call the function and get its result
+    #     result = func()
 
-        return result
+    #     return result
 
 
     def add_signal(self, signal_address, signal_title="None"):
@@ -262,7 +302,7 @@ class Signals:
             self.signals[i]["number"] -= 1
 
 
-    def return_signal_data(self, signal_number, query=None):
+    def return_signal_data(self, signal_number, **kwargs):
         """
         Return the data of a signal.
         """
@@ -270,13 +310,13 @@ class Signals:
         if len(signal) == 0:
             return None
         elif signal["type"] == "database":
-            return(self.__access_database_signal(signal["address"], query))
+            return(self.__access_database_signal(signal["address"], **kwargs))
         elif signal["type"] == "web_url":
             return(self.__access_url_signal(signal["address"]))
         elif signal["type"] == "file":
             return(self.__access_file_signal(signal["address"]))
         elif signal["type"] == "function":
-            return(self.__access_function_signal(signal["address"]))
+            return(self.__access_function_signal(signal["address"], **kwargs))
         else:
             return None
 
