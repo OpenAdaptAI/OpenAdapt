@@ -8,6 +8,8 @@ import pandas as pd
 
 from loguru import logger
 
+from openadapt import config
+
 
 class Signals:
     """
@@ -103,8 +105,9 @@ class Signals:
         Read a description of a signal from an HTTP URL.
         """
         # Get the signal from the URL.
-        #headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        response = requests.get(http_url, allow_redirects=True)
+        headers = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
+
+        response = requests.get(http_url, headers=headers, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
             raise ValueError(f"HTTP request failed with status code {response.status_code}.")
@@ -178,6 +181,7 @@ class Signals:
         """
         module_name, class_name, func_name = function_address.rsplit('.', 2)
         module = importlib.import_module(module_name)
+        #module = importlib.__import__(module_name, globals=globals(), locals=locals())
         func_class = getattr(module, class_name)
         func = getattr(func_class, func_name)
 
@@ -238,7 +242,8 @@ class Signals:
         Read signal data from an HTTP URL.
         """
         # Get the signal from the URL.
-        response = requests.get(http_url, allow_redirects=True)
+        HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
+        response = requests.get(http_url, headers=HEADERS, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
         else:
@@ -329,22 +334,27 @@ class Signals:
         else:
             return None
 
+
+signals = Signals()
+
+
 #Demonstration test code
 if __name__ == "__main__":
-    r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
-    length = r.headers.get('Content-Length') 
-    type = r.headers.get('Content-Type') 
-    print(length if length else 'Content-Length not provided')
-    print(type if type else 'Content-Type not provided')
+    # r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
+    # length = r.headers.get('Content-Length') 
+    # type = r.headers.get('Content-Type') 
+    # print(length if length else 'Content-Length not provided')
+    # print(type if type else 'Content-Type not provided')
 
+    # signals = Signals()
+    # signals.add_signal("tests/resources/test_signal_data.txt", "test data file")
+    # signals.add_signal("https://en.wikipedia.org/wiki/HTTP#Request_methods", "wikipedia request methods page")
+    # sys.path.append("tests/resources")
+    # signals.add_signal("sample_package.sample_module.sample_function", "test function")
     signals = Signals()
-    signals.add_signal("tests/resources/test_signal_data.txt", "test data file")
-    signals.add_signal("https://en.wikipedia.org/wiki/HTTP#Request_methods", "wikipedia request methods page")
-    sys.path.append("tests/resources")
-    signals.add_signal("sample_package.sample_module.sample_function", "test function")
-
-
-    signal_info = signals.return_signals()
-    for signal in signal_info:
-        print(signal)
+    signals.add_signal("tests/resources/test_data.xlsx")
+    print(signals.return_signals())
+    #signal_info = signals.return_signals()
+    # for signal in signal_info:
+    #     print(signal)
 
