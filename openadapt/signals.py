@@ -169,8 +169,9 @@ class Signals:
             if file_path.endswith(('.xls','.xlsx')):
                 data_frame = pd.read_excel(file_path)
                 content = data_frame.to_string()
-            with open(file_path, 'r') as file:
-                content = file.read()
+            else:
+                with open(file_path, 'r') as file:
+                    content = file.read()
         except FileNotFoundError:
             logger.info(f"Error: File not found.")
             return None
