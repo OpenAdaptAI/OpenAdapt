@@ -12,8 +12,8 @@ body:
     attributes:
       label: Describe the bug
       description: What behaviour was expected and what actually happened? Include screenshots and log output where useful.
-      value: I expected ... but what actually happened was ... 
-        [image to illustrate the issue]
+      value: I expected ... but what actually happened was ... <br>
+        [image to illustrate the issue] <br>
         ```relevant log output```
     validations:
       required: true
@@ -22,7 +22,7 @@ body:
     attributes:
       label: To Reproduce
       description: What Operating System did you use and steps would we take to reproduce the behaviour?
-      value: "I use [macOS/Microsoft Windows].
+      value: "I use [macOS/Microsoft Windows]. <br>
         Steps: 
         1. Go to '...' 
         2. Click on '....' 
