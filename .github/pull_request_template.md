@@ -19,7 +19,7 @@
 
 **How can your code be run and tested?**
 
-<!-- See the README.md for examples. -->
+<!-- See the README.md for examples. Include test output. -->
 
 
 **Other information**
