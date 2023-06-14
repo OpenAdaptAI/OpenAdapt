@@ -13,9 +13,11 @@ cache
 
 # db
 *.db
+*.db-journal
 
 # VSCode
 .VSCode
+.vsCode
 
 # Generated performance charts
 performance
