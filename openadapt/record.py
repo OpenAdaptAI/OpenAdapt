@@ -254,7 +254,7 @@ def on_move(
                 "name": "move",
                 "mouse_x": x,
                 "mouse_y": y,
-            }
+            },
         )
 
 
@@ -276,7 +276,7 @@ def on_click(
                 "mouse_y": y,
                 "mouse_button_name": button.name,
                 "mouse_pressed": pressed,
-            }
+            },
         )
 
 
@@ -298,7 +298,7 @@ def on_scroll(
                 "mouse_y": y,
                 "mouse_dx": dx,
                 "mouse_dy": dy,
-            }
+            },
         )
 
 
@@ -314,8 +314,7 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None)
-        for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -323,14 +322,7 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(
-        event_q,
-        {
-            "name": event_name,
-            **attrs,
-            **canonical_attrs
-        }
-    )
+    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
 
 
 def read_screen_events(
@@ -360,9 +352,9 @@ def read_screen_events(
 
 
 def read_window_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     """
     Read window events and add them to the event queue.
@@ -381,10 +373,11 @@ def read_window_events(
         window_data = window.get_active_window_data()
         if not window_data:
             continue
-        if (
-                window_data["title"] != prev_window_data.get("title") or
-                window_data["window_id"] != prev_window_data.get("window_id")
-        ):
+
+        if window_data["title"] != prev_window_data.get("title") or window_data[
+            "window_id"
+        ] != prev_window_data.get("window_id"):
+
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -392,23 +385,25 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            _window_data = dict(window_data)
+            _window_data = window_data
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("queuing window event for writing")
-            event_q.put(Event(
-                utils.get_timestamp(),
-                "window",
-                window_data,
-            ))
+            event_q.put(
+                Event(
+                    utils.get_timestamp(),
+                    "window",
+                    window_data,
+                )
+            )
         prev_window_data = window_data
 
 
 def performance_stats_writer(
-        perf_q: multiprocessing.Queue,
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
+    perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
 ):
     """
     Write performance stats to the db.
@@ -431,7 +426,10 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
-            recording_timestamp, event_type, start_time, end_time,
+            recording_timestamp,
+            event_type,
+            start_time,
+            end_time,
         )
     logger.info("performance stats writer done")
 
@@ -470,9 +468,9 @@ def create_recording(
 
 
 def read_keyboard_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -526,7 +524,6 @@ def record(
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
-
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)
