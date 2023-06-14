@@ -97,8 +97,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 ## Contributing
 
-### Design
-
 ### Problem Statement
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
