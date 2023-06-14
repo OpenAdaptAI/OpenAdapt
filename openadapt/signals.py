@@ -103,6 +103,7 @@ class Signals:
         Read a description of a signal from an HTTP URL.
         """
         # Get the signal from the URL.
+        #headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
         response = requests.get(http_url, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
@@ -145,10 +146,18 @@ class Signals:
         """
         Read a description of a signal from a Python function.
         """
-        module_name, class_name, func_name = function_address.rsplit('.', 2)
-        module = importlib.import_module(module_name)
-        func_class = getattr(module, class_name)
-        func = getattr(func_class, func_name)
+        parts = function_address.rsplit('.', 2)
+
+        try:
+            module_name, class_name, func_name = parts
+            module = importlib.import_module(module_name)
+            func_class = getattr(module, class_name)
+            func = getattr(func_class, func_name)
+        except AttributeError:  # We don't have a class
+            module_name, func_name = function_address.rsplit('.',1)
+            module = importlib.import_module(module_name)
+            func = getattr(module, func_name)
+            class_name = "N/A"
 
         # Get the function's docstring, or 'No description provided' if it doesn't have one
         docstring = func.__doc__ if func.__doc__ else 'No docstring provided'
@@ -329,9 +338,9 @@ if __name__ == "__main__":
     print(type if type else 'Content-Type not provided')
 
     signals = Signals()
-    signals.add_signal("tests/openadapt/test_signal_data.txt", "test data file")
+    signals.add_signal("tests/resources/test_signal_data.txt", "test data file")
     signals.add_signal("https://en.wikipedia.org/wiki/HTTP#Request_methods", "wikipedia request methods page")
-    sys.path.append("tests/openadapt")
+    sys.path.append("tests/resources")
     signals.add_signal("sample_package.sample_module.sample_function", "test function")
 
 

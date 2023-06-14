@@ -49,17 +49,17 @@ def test_add_function_signal():
     signal = signals.return_signals()[0]
     signal_data = signals.return_signal_data(1)
     assert signal_data == "Sample function success"
-    assert signal["description"] == "Function: sample_function, Module: sample_package.sample_module, Description: \n    This function is used to test the openadapt.signals module\n    "
+    assert signal["description"] == "Module: sample_package.sample_module, Class: N/A, Function: sample_function, Doctstring: \n    This function is used to test the openadapt.signals module\n    "
 
 
-def test_add_function_signal():
-    signals = Signals()
-    sys.path.append(".venv/lib/site-packages")
-    signals.add_signal("openai.Completion.create")
-    signal_data = signals.return_signal_data(1, engine="davinci", prompt="Translate the following English word to French: 'Hello'", max_tokens=10)
-    signal_data = signal_data["choices"][0]["text"]
-    logger.info(signal_data)
-    assert signal_data != None
+# def test_add_function_signal():
+#     signals = Signals()
+#     sys.path.append(".venv/lib/site-packages")
+#     signals.add_signal("openai.Completion.create")
+#     signal_data = signals.return_signal_data(1, engine="davinci", prompt="Translate the following English word to French: 'Hello'", max_tokens=10)
+#     signal_data = signal_data["choices"][0]["text"]
+#     logger.info(signal_data)
+#     assert signal_data != None
 
 
 def test_setup_xslx_signal():
