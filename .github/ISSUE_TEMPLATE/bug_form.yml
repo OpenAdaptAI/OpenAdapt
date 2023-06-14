@@ -12,7 +12,7 @@ body:
     attributes:
       label: Describe the bug
       description: What behaviour was expected and what actually happened?
-      value: I expected ... but what actually happened was ... [image to illustrate the issue] ```relevant log output```
+      value: I expected ... but what actually happened was ... \n [image to illustrate the issue] \n ```relevant log output```
     validations:
       required: true
   - type: textarea
@@ -20,6 +20,6 @@ body:
     attributes:
       label: To Reproduce
       description: What Operating System did you use and steps would we take to reproduce the behaviour?
-      placeholder: I use [macOS/Microsoft Windows]. 1. Go to '...' 2. Click on '....' 3. Scroll down to '....' 
+      placeholder: I use [macOS/Microsoft Windows]. \n 1. Go to '...' 2. Click on '....' 3. Scroll down to '....' 
     validations:
       required: true
