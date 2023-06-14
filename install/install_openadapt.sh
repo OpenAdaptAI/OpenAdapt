@@ -12,6 +12,9 @@ RunAndCheck() {
         exit 1
     fi
 }
+
+RunAndCheck "curl --output https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg" "download Python"
+
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
 RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
