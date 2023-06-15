@@ -86,12 +86,6 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
     occurence = {}
     state = None
 
-    
-    #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cpu fp32')  #heavy weight model
-
-    #model = RWKV(model='/root/rwkv_model/RWKV-4-Pile-14B-20221020-83', strategy='cuda fp16')  #heavy weight model
-    #switch to 'cuda fp16' for better performance
-
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 # Instruction: 
