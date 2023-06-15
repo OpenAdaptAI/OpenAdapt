@@ -19,6 +19,9 @@ cache
 .VSCode
 .vsCode
 
+#Idea
+.idea
+
 # Generated performance charts
 performance
 
