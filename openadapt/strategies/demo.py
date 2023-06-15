@@ -17,9 +17,11 @@ from openadapt.strategies.mixins.huggingface import (
     HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
 )
+
 from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 from openadapt.strategies.mixins.sam import SAMReplayStrategyMixin
+from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
 
 
 class DemoReplayStrategy(
@@ -27,9 +29,9 @@ class DemoReplayStrategy(
     OCRReplayStrategyMixin,
     ASCIIReplayStrategyMixin,
     SAMReplayStrategyMixin,
+    SummaryReplayStrategyMixin,
     BaseReplayStrategy,
 ):
-
     def __init__(
         self,
         recording: Recording,
@@ -45,10 +47,10 @@ class DemoReplayStrategy(
         window_event: WindowEvent,
     ):
         ascii_text = self.get_ascii_text(screenshot)
-        #logger.info(f"ascii_text=\n{ascii_text}")
+        # logger.info(f"ascii_text=\n{ascii_text}")
 
         ocr_text = self.get_ocr_text(screenshot)
-        #logger.info(f"ocr_text=\n{ocr_text}")
+        # logger.info(f"ocr_text=\n{ocr_text}")
 
         screenshot_bbox = self.get_screenshot_bbox(screenshot)
         logger.info(f"screenshot_bbox=\n{screenshot_bbox}")
