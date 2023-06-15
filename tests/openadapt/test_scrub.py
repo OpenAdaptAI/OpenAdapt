@@ -37,7 +37,7 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata() if pixel == config.TEST_SCRUB_FILL_COLOR
+        1 for pixel in scrubbed_image.getdata() if pixel == config.SCRUB_FILL_COLOR
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
