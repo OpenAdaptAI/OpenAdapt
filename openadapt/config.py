@@ -38,7 +38,6 @@ _DEFAULTS = {
     "ACTION_TEXT_NAME_SUFFIX": ">",
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": True,
-    "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
     "SCRUB_FILL_COLOR": (255, 0, 0),
