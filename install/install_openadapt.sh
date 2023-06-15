@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+# Return true if a command/exe is available
+CheckCMDExists() {
+    command=$($1)
+
+    if type -P $command >/dev/null 2>&1; then
+        return 0
+    else 
+        return 1
+    fi
+}
+
 # Remove OpenAdapt
 Cleanup(){
     if [ -d "../OpenAdapt" ]; then
