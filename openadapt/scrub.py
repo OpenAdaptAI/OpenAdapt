@@ -3,14 +3,14 @@
 Usage:
 
     $ python openadapt/scrub.py scrub_text str_arg
-    $ python openadapt/scrub.py scrub_image PIL.Image_arg
+    $ python openadapt/scrub.py scrub_image PIL.Image_arg color mode
     $ python openadapt/scrub.py scrub_dict dict_arg
     $ python openadapt/scrub.py scrub_list_dicts list_of_dicts_arg
 
 """
 
 from typing import List, Dict, Union, Any
-from PIL import Image
+from PIL import Image, ImageColor
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
@@ -102,7 +102,7 @@ def scrub_text_all(text: str) -> str:
 
 
 def scrub_image(
-    image: Image, fill_color=config.SCRUB_FILL_COLOR
+    image: Image, fill_color=config.SCRUB_FILL_COLOR, mode=config.SCRUB_FILL_MODE
 ) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor
@@ -114,7 +114,7 @@ def scrub_image(
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
     redacted_image = IMAGE_REDACTOR.redact(
-        image, fill=fill_color, entities=SCRUBBING_ENTITIES
+        image, fill=ImageColor.getcolor(fill_color, mode), entities=SCRUBBING_ENTITIES
     )
 
     return redacted_image

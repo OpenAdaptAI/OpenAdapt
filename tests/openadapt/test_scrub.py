@@ -4,7 +4,7 @@ from io import BytesIO
 import os
 import warnings
 
-from PIL import Image
+from PIL import Image, ImageColor
 
 from openadapt import scrub, config
 
@@ -33,11 +33,15 @@ def test_scrub_image() -> None:
 
     # Load the scrubbed image from file for manual verification
     scrubbed_image = Image.open(scrubbed_image_path)
-    scrubbed_image = scrubbed_image.convert("RGB")
+    scrubbed_image = scrubbed_image.convert(config.SCRUB_FILL_MODE)
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata() if pixel == config.TEST_SCRUB_FILL_COLOR
+        1 for pixel in scrubbed_image.getdata()
+        if pixel == ImageColor.getcolor(
+            config.SCRUB_FILL_COLOR,
+            config.SCRUB_FILL_MODE
+        )
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
