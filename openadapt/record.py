@@ -642,6 +642,7 @@ def record(
     logger.info(f"saved {recording_timestamp=}")
 
 
+# entry point
 def start():
     fire.Fire(record)
 
