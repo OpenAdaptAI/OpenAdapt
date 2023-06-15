@@ -13,15 +13,14 @@ cache
 
 # db
 *.db
+*.db-journal
 
 # VSCode
 .VSCode
+.vsCode
 
 # Generated performance charts
 performance
 
 # Generated when adding editable dependencies in requirements.txt (-e)
 src
-
-# Generated when downloading SAM checkpoint
-*.pth
