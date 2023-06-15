@@ -19,9 +19,6 @@ cache
 .VSCode
 .vsCode
 
-# Pycharm
-.idea
-
 # Generated performance charts
 performance
 
