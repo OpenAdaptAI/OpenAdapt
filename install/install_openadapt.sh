@@ -6,6 +6,7 @@ $pythonCmd="python3.10"
 $pythonVerStr="Python 3.10*"
 $pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
 $pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
+$pythonInstallerPath ="$HOME/downloads/$pythonInstaller"
 
 # Remove OpenAdapt if it exists
 Cleanup(){
@@ -57,8 +58,33 @@ GetPythonCMD() {
 
     # Install required python version
     RunAndCheck "curl --output https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg" "Download Python"
+    $exists=(test -e "$pythonInstallerPath")
+    if (!$exists) {
+        echo "Failed to download python installer"
+        Cleanup
+        exit 1
+    }
 
     echo "Installing python, click 'Yes' if prompted for permission"
+    open -W "$pythonInstallerPath"
+
+    #Refresh Path Environment Variable
+    export PATH="$PATH:$(echo $PATH | tr ':' '\n' | grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')$(echo $PATH | tr ':' '\n' | grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')"
+
+    # Make sure python is now available and the right version
+    if CheckCMDExists $pythonCmd; then
+        $res=(python --version)
+        if [[ "$res" =~ "$pythonVerStr" ]]; then
+            return $pythonCmd
+        fi
+    fi
+
+    # Otherwise, python is not available
+    echo "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
+    rm -r "$pythonInstallerPath"
+
+    Cleanup
+    exit
 }
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)

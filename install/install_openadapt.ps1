@@ -23,7 +23,7 @@ function CheckCMDExists() {
     )
 
     Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
-    If ($getErr -eq $null) {
+    if ($getErr -eq $null) {
         $true;
     }
     return $false;
