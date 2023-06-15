@@ -30,5 +30,6 @@ sqlalchemy==1.4.43
 tiktoken==0.4.0
 torch==2.0.0
 tqdm==4.64.0
+nicegui==1.2.16
 transformers==4.29.2
 python-dotenv==1.0.0
