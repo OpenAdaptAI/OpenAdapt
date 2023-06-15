@@ -11,7 +11,7 @@ python = "3.10.x"
 atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
 pynput = {git = "https://github.com/abrichr/pynput.git"}
 alembic = "^1.8.1"
-# pygetwindow = {version = "^0.0.9", markers = "sys_platform == 'win32'"}
+# pygetwindow = {version = "^0.0.9", markers = "sys_platform == 'win32'"} # already present in atomacos
 pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
 ascii-magic = "^2.3.0"
 bokeh = "^3.1.1"
