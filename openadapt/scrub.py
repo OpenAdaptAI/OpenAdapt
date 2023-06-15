@@ -61,21 +61,9 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         language=config.SCRUB_LANGUAGE,
     )
 
-    operators = {}
-    for entity in analyzer_results:
-        operators[entity.entity_type] = OperatorConfig(
-            "mask",
-            {
-                "masking_char": config.SCRUB_CHAR,
-                "chars_to_mask": entity.end - entity.start,
-                "from_end": True,
-            },
-        )
-
     anonymized_results = ANONYMIZER.anonymize(
         text=text,
         analyzer_results=analyzer_results,
-        operators=operators,
     )
 
     if is_separated and not (
