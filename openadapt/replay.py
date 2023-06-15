@@ -47,5 +47,9 @@ def replay(
     strategy.run()
 
 
+def start():
+    fire.Fire(replay)
+
+
 if __name__ == "__main__":
     fire.Fire(replay)

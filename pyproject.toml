@@ -6,16 +6,20 @@ authors = ["Richard Abrich <richard.abrich@mldsai.com>"]
 license = "LICENSE"
 readme = "README.md"
 
+repository = "https://github.com/mldsai/openadapt"
+homepage = "https://openadapt.ai/"
+
+
 [tool.poetry.dependencies]
 python = "3.10.x"
 atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
 pynput = {git = "https://github.com/abrichr/pynput.git"}
 alembic = "^1.8.1"
 # pygetwindow = {version = "^0.0.9", markers = "sys_platform == 'win32'"} # already present in atomacos
-pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
-ascii-magic = "^2.3.0"
+pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
+ascii-magic = "2.3.0"
 bokeh = "^3.1.1"
-clipboard = "^0.0.4"
+clipboard = "0.0.4"
 deepdiff = {extras = ["optimize"], version = "^6.3.0"}
 ascii_magic = "2.3.0"
 dictalchemy3 = "1.0.0"
@@ -47,3 +51,8 @@ sphinx = "^7.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+visualize = "openadapt.visualize:main"
+record = "openadapt.record:start"
+replay = "openadapt.replay:start"

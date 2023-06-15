@@ -642,5 +642,9 @@ def record(
     logger.info(f"saved {recording_timestamp=}")
 
 
+def start():
+    fire.Fire(record)
+
+
 if __name__ == "__main__":
     fire.Fire(record)
