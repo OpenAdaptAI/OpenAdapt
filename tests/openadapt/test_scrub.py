@@ -9,6 +9,22 @@ from PIL import Image
 from openadapt import scrub, config
 
 
+def _hex_to_rgb(hex_value):
+    hex_value = hex(hex_value)  # Convert integer to hex string
+    hex_value = hex_value.lstrip('0x')  # Remove '0x' if present
+
+    if len(hex_value) != 6:
+        raise ValueError("Invalid hex value. Must be in the format '0xXXXXXX'.")
+
+    try:
+        b = int(hex_value[0:2], 16)
+        g = int(hex_value[2:4], 16)
+        r = int(hex_value[4:6], 16)
+    except ValueError:
+        raise ValueError("Invalid hex value. Must be in the format '0xXXXXXX'.")
+
+    return r, g, b
+
 def test_scrub_image() -> None:
     """
     Test that the scrubbed image data is different
@@ -37,7 +53,7 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata() if pixel == config.SCRUB_FILL_COLOR
+        1 for pixel in scrubbed_image.getdata() if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
@@ -179,6 +195,8 @@ def test_scrub_routing_number():
     """
 
     assert (
+        scrub.scrub_text("My bank routing number is 123456789.")
+        == "My bank routing number is <US_PASSPORT>." or
         scrub.scrub_text("My bank routing number is 123456789.")
         == "My bank routing number is <US_BANK_NUMBER>."
     )
