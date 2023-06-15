@@ -24,6 +24,9 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
+from pympler import tracker
+tr = tracker.SummaryTracker()
+
 import tracemalloc
 
 tracemalloc.start(25)
@@ -489,6 +492,8 @@ def read_keyboard_events(
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
+        # TODO: remove, just for debugging purposes
+        tr.print_diff()
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -652,7 +657,7 @@ def record(
 
         # top_stats = snapshot.statistics('traceback')
 
-        for stat in stats[:10]:
+        for stat in stats[:3]:
             print(
                 "{} new KiB {} total KiB {} new {} total memory blocks: ".format(
                     stat.size_diff / 1024,
