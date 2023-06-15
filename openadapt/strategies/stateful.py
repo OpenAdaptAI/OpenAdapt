@@ -124,6 +124,7 @@ class StatefulReplayStrategy(
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
         active_action = models.ActionEvent.from_children(active_action_dicts)
         self.recording_action_idx += 1
+        import ipdb; ipdb.set_trace()
         return active_action
 
 
