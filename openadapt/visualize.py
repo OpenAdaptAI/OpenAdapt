@@ -25,6 +25,11 @@ from openadapt.utils import (
     rows2dicts,
 )
 
+from openadapt import config
+
+SCRUB = config.SCRUB_ENABLED
+if SCRUB:
+    from openadapt import scrub
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -140,12 +145,21 @@ def main():
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
+    if SCRUB:
+        scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
+
+    if SCRUB:
+        event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+
+    recording_dict = row2dict(recording)
+    if SCRUB:
+        recording_dict = scrub.scrub_dict(recording_dict)
 
     rows = [
         row(
@@ -155,7 +169,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(row2dict(recording))}",
+                text=f"{dict2html(recording_dict)}",
             ),
         ),
         row(
@@ -172,10 +186,24 @@ def main():
         image = display_event(action_event)
         diff = display_event(action_event, diff=True)
         mask = action_event.screenshot.diff_mask
+
+        if SCRUB:
+            image = scrub.scrub_image(image)
+            diff = scrub.scrub_image(diff)
+            mask = scrub.scrub_image(mask)
+
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
         width, height = image.size
+
+        action_event_dict = row2dict(action_event)
+        window_event_dict = row2dict(action_event.window_event)
+
+        if SCRUB:
+            action_event_dict = scrub.scrub_dict(action_event_dict)
+            window_event_dict = scrub.scrub_dict(window_event_dict)
+
         rows.append(
             [
                 row(
@@ -202,14 +230,14 @@ def main():
                             >
                         </div>
                         <table>
-                            {dict2html(row2dict(action_event.window_event), None)}
+                            {dict2html(window_event_dict , None)}
                         </table>
                     """,
                     ),
                     Div(
                         text=f"""
                         <table>
-                            {dict2html(row2dict(action_event))}
+                            {dict2html(action_event_dict)}
                         </table>
                     """
                     ),

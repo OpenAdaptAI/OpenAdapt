@@ -7,12 +7,12 @@ from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
-config = context.config
+alembic_config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+if alembic_config .config_file_name is not None:
+    fileConfig(alembic_config .config_file_name)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -77,7 +77,7 @@ def run_migrations_online() -> None:
     Returns:
 
     """
-    configuration = config.get_section(config.config_ini_section)
+    configuration = alembic_config .get_section(alembic_config .config_ini_section)
     configuration["sqlalchemy.url"] = get_url()
     connectable = engine_from_config(
         configuration=configuration,

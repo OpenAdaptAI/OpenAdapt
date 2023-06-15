@@ -6,7 +6,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import db, utils, window
+from openadapt import config, db, utils, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -131,9 +131,9 @@ class ActionEvent(db.Base):
         )
 
     def _text(self, canonical=False):
-        sep = self._text_sep
-        name_prefix = self._text_name_prefix
-        name_suffix = self._text_name_suffix
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if canonical:
             key_attr = self.canonical_key
             key_name_attr = self.canonical_key_name
@@ -191,10 +191,6 @@ class ActionEvent(db.Base):
         ]
         rval = " ".join(attrs)
         return rval
-
-    _text_sep = "-"
-    _text_name_prefix = "<"
-    _text_name_suffix = ">"
 
     @classmethod
     def from_children(cls, children_dicts):
@@ -261,6 +257,18 @@ class Screenshot(db.Base):
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
+    
+    def crop_active_window(self, action_event):
+        window_event = action_event.window_event
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+
+        box = (x0, y0, x1, y1)
+        self._image = self._image.crop(box)
 
 
 class WindowEvent(db.Base):
