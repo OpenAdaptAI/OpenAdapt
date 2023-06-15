@@ -45,7 +45,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
 }
-PLOT_PERFORMANCE = False
+PLOT_PERFORMANCE = True
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -134,6 +134,7 @@ def process_events(
                 prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
+        # TODO: make sure that prev_event and its properties are deallocated. del prev_event?
         prev_event = event
     collect_stats()
     logger.info("done")
@@ -366,6 +367,7 @@ def read_screen_events(
             logger.warning("screenshot was None")
             continue
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
+        # TODO: sleep? configurable sleep time .01
     collect_stats()
     logger.info("done")
 
