@@ -136,7 +136,6 @@ def process_events(
             raise Exception(f"unhandled {event.type=}")
         # TODO: make sure that prev_event and its properties are deallocated. del prev_event?
         prev_event = event
-    collect_stats()
     logger.info("done")
 
 
@@ -232,7 +231,6 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
         logger.debug(f"{event_type=} written")
-    collect_stats()
     logger.info(f"{event_type=} done")
 
 
@@ -368,7 +366,6 @@ def read_screen_events(
             continue
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
         # TODO: sleep? configurable sleep time .01
-    collect_stats()
     logger.info("done")
 
 
@@ -416,7 +413,6 @@ def read_window_events(
                 window_data,
             ))
         prev_window_data = window_data
-    collect_stats()
 
 
 def performance_stats_writer(
@@ -447,7 +443,6 @@ def performance_stats_writer(
         crud.insert_perf_stat(
             recording_timestamp, event_type, start_time, end_time,
         )
-    collect_stats()
     logger.info("performance stats writer done")
 
 
@@ -654,20 +649,19 @@ def record(
 
     collect_stats()
 
-    for i in range(0, len(snapshots) - 1):
-        stats = snapshots[-1 - i].compare_to(snapshots[-2 - i], 'traceback')
+    stats = snapshots[-1].compare_to(snapshots[-2], 'traceback')
 
-        # top_stats = snapshot.statistics('traceback')
+    # top_stats = snapshot.statistics('traceback')
 
-        for stat in stats[:3]:
-            print(
-                "{} new KiB {} total KiB {} new {} total memory blocks: ".format(
-                    stat.size_diff / 1024,
-                    stat.size / 1024,
-                    stat.count_diff,
-                    stat.count))
-            for line in stat.traceback.format():
-                print(line)
+    for stat in stats[:3]:
+        print(
+            "{} new KiB {} total KiB {} new {} total memory blocks: ".format(
+                stat.size_diff / 1024,
+                stat.size / 1024,
+                stat.count_diff,
+                stat.count))
+        for line in stat.traceback.format():
+            print(line)
 
     # stat = top_stats[0]
     # print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
