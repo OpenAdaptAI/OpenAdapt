@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# Remove OpenAdapt
+Cleanup(){
+    if [ -d "../OpenAdapt" ]; then
+        cd ..
+        rm -rf OpenAdapt
+        echo "Deleted OpenAdapt directory"
+    fi
+} 
+
 # Run a command and ensure it did not fail
 RunAndCheck() {
     res=$($1)
@@ -9,6 +18,7 @@ RunAndCheck() {
         echo "Success: $2 : $res"
     else
         echo "Failed: $2 : $res"
+        Cleanup
         exit 1
     fi
 }
