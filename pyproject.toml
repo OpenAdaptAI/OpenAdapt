@@ -10,7 +10,8 @@ authors = [
   { name = "Avid Eslami", email = "avid@openadapt.ai" },
   { name = "Dian Rong", email = "dian@openadapt.ai" },
   { name = "Jesica Susanto", email = "jesica@openadapt.ai" },
-  { name = "Owais Zahid", email = "owais@openadapt.ai" }
+  { name = "Owais Zahid", email = "owais@openadapt.ai" },
+  { name = "Andrew Gorton", email = "andrew.gorton@mail.utoronto.ca" }
 ]
 description = "AI-First Process Automation with Transformers"
 readme = "README.md"
