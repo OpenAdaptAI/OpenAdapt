@@ -59,7 +59,8 @@ def get_active_window_meta(active_window) -> dict:
         active_window: The active window object.
 
     Returns:
-        dict: A dictionary containing the meta information of the active window.
+        dict: A dictionary containing the meta information of the
+              active window.
     """
     if not active_window:
         logger.warning(f"{active_window=}")
@@ -103,17 +104,21 @@ def get_element_properties(element):
     Recursively retrieves the properties of each element and its children.
 
     Args:
-        element: An instance of a custom element class that has the `.get_properties()` and `.children()` methods.
+        element: An instance of a custom element class
+                 that has the `.get_properties()` and `.children()` methods.
 
     Returns:
         A nested dictionary containing the properties of each element and its children.
-        The dictionary includes a "children" key for each element, which holds the properties of its children.
+        The dictionary includes a "children" key for each element,
+        which holds the properties of its children.
 
     Example:
         element = Element()
         properties = get_element_properties(element)
         print(properties)
-        # Output: {'prop1': 'value1', 'prop2': 'value2', 'children': [{'prop1': 'child_value1', 'prop2': 'child_value2', 'children': []}]}
+        # Output: {'prop1': 'value1', 'prop2': 'value2',
+                  'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
+                  'children': []}]}
     """
 
     properties = element.get_properties()
