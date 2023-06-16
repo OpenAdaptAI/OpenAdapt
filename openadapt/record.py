@@ -36,6 +36,7 @@ PLOT_PERFORMANCE = False
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 global sequence_detected  # Flag to indicate if a stop sequence is detected
+STOP_SEQUENCES = [list(stop_str) for stop_str in config.STOP_STRS]
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -468,8 +469,8 @@ def read_keyboard_events(
         recording_timestamp: float,
 ) -> None:
     # create list of indices for sequence detection
-    # one index for each stop sequence in config.STOP_SEQUENCES
-    stop_sequence_indices = [0 for _ in config.STOP_SEQUENCES]
+    # one index for each stop sequence in STOP_SEQUENCES
+    stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
 
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -482,9 +483,9 @@ def read_keyboard_events(
         global sequence_detected
         canonical_key_name = getattr(canonical_key, "name", None)
 
-        for i in range(0, len(config.STOP_SEQUENCES)):
+        for i in range(0, len(STOP_SEQUENCES)):
             # check each stop sequence
-            stop_sequence = config.STOP_SEQUENCES[i]
+            stop_sequence = STOP_SEQUENCES[i]
             # stop_sequence_indices[i] is the index for this stop sequence
             # get canonical KeyCode of current letter in this sequence
             canonical_sequence = keyboard_listener.canonical(

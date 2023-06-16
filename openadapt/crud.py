@@ -9,7 +9,9 @@ from openadapt.models import (
     WindowEvent,
     PerformanceStat,
 )
-from openadapt.config import STOP_SEQUENCES
+from openadapt.config import STOP_STRS
+
+STOP_SEQUENCES = [list(stop_str) for stop_str in STOP_STRS]
 
 BATCH_SIZE = 1
 
@@ -143,7 +145,7 @@ def _get(table, recording_timestamp):
 
 def get_action_events(recording):
     action_events = _get(ActionEvent, recording.timestamp)
-    # filter out stop sequences listed in config.STOP_SEQUENCES and Ctrl + C
+    # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
 
@@ -162,7 +164,7 @@ def filter_stop_sequences(action_events):
     # create list of indices for sequence detection
     stop_sequence_indices = []
     for sequence in STOP_SEQUENCES:
-        # one index for each stop sequence in config.STOP_SEQUENCES
+        # one index for each stop sequence in STOP_SEQUENCES
         # start from the back of the sequence
         stop_sequence_indices.append(len(sequence) - 1)
 

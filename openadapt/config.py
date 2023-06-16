@@ -85,7 +85,11 @@ _DEFAULTS = {
 }
 
 # sequences that when typed, will stop the recording of ActionEvents in record.py
-STOP_SEQUENCES = [["o", "a", ".", "s", "t", "o", "p"]]
+STOP_STRS = [
+    "oa.stop",
+    # TODO:
+    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
+]
 
 
 def getenv_fallback(var_name):
