@@ -6,10 +6,12 @@ clipboard==0.0.4
 deepdiff[optimize]==6.3.0
 dictalchemy3==1.0.0
 fire==0.4.0
+fuzzywuzzy==0.18.0
 ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
 mss==6.1.0
+nltk==3.8.1
 openai==0.27.5
 pandas==2.0.0
 pygetwindow==0.0.9; sys_platform == 'win32'
@@ -34,5 +36,7 @@ numpy~=1.24.3
 sounddevice~=0.4.6
 soundfile~=0.12.1
 git+https://github.com/openai/whisper.git
+sumy==0.11.0
+nicegui==1.2.16
 transformers==4.29.2
 python-dotenv==1.0.0
