@@ -9,21 +9,17 @@ from PIL import Image
 from openadapt import scrub, config
 
 
-def _hex_to_rgb(hex_value):
-    hex_value = hex(hex_value)  # Convert integer to hex string
-    hex_value = hex_value.lstrip('0x')  # Remove '0x' if present
+def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
+    """
+    Convert a hex color (int) to RGB
+    """
 
-    if len(hex_value) != 6:
-        raise ValueError("Invalid hex value. Must be in the format '0xXXXXXX'.")
-
-    try:
-        b = int(hex_value[0:2], 16)
-        g = int(hex_value[2:4], 16)
-        r = int(hex_value[4:6], 16)
-    except ValueError:
-        raise ValueError("Invalid hex value. Must be in the format '0xXXXXXX'.")
-
+    assert 0x000000 <= hex_color <= 0xFFFFFF
+    b = (hex_color >> 16) & 0xFF
+    g = (hex_color >> 8) & 0xFF
+    r = hex_color & 0xFF
     return r, g, b
+
 
 def test_scrub_image() -> None:
     """
@@ -53,7 +49,8 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata() if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
+        1 for pixel in scrubbed_image.getdata()
+        if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
