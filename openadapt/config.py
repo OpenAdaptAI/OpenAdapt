@@ -100,8 +100,7 @@ for key in _DEFAULTS:
     locals()[key] = val
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DB_FNAME = getenv_fallback("DB_FNAME")
-DB_FPATH = ROOT_DIRPATH / DB_FNAME
+DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 

@@ -8,6 +8,7 @@ def reset_db():
     The function clears the database by removing the database file and running a
     database migration using Alembic.
     """
+
     if os.path.exists(config.DB_FPATH):
         os.remove(config.DB_FPATH)
 
