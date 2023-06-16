@@ -46,6 +46,7 @@ python-dotenv = "1.0.0"
 pyinstaller = "^5.12.0"
 setuptools-lint = "^0.6.0"
 sphinx = "^7.0.1"
+nicegui = "1.2.16"
 
 [build-system]
 requires = ["poetry-core"]
@@ -55,3 +56,4 @@ build-backend = "poetry.core.masonry.api"
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
+app = "openadapt.app.main:run_app"
