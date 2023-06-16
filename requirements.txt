@@ -27,7 +27,7 @@ scipy==1.9.3
 setuptools-lint
 sphinx
 sqlalchemy==1.4.43
-tiktoken==0.4.0
+tiktoken==0.3.3
 torch==2.0.0
 tqdm==4.64.0
 numpy~=1.24.3
