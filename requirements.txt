@@ -12,6 +12,7 @@ ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
 mss==6.1.0
+nicegui==1.2.16
 nltk==3.8.1
 openai==0.27.5
 pandas==2.0.0
@@ -20,6 +21,8 @@ pyinstaller
 presidio_analyzer==2.2.32
 presidio_anonymizer==2.2.32
 presidio_image_redactor==0.0.46
+pympler==1.0.1
+python-dotenv==1.0.0
 pywin32==306; sys_platform == 'win32'
 pytesseract==0.3.7
 -e git+https://github.com/abrichr/pynput.git#egg=pynput
@@ -35,6 +38,3 @@ tiktoken==0.4.0
 torch==2.0.0
 tqdm==4.64.0
 transformers==4.29.2
-pympler==1.0.1
-nicegui==1.2.16
-python-dotenv==1.0.0
