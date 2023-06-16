@@ -27,9 +27,19 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## Install
 
+Recommended: Install with [Poetry](https://python-poetry.org/):
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
+pip install poetry
+poetry install
+poetry shell
+alembic upgrade head
+pytest
+```
+
+Manual:
+```
 python3.10 -m venv .venv
 source .venv/bin/activate
 pip install wheel

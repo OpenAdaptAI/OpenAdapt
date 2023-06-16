@@ -13,11 +13,12 @@ homepage = "https://openadapt.ai/"
 python = "3.10.x"
 atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
 pynput = {git = "https://github.com/abrichr/pynput.git"}
-alembic = "^1.8.1"
-# pygetwindow = {version = "^0.0.9", markers = "sys_platform == 'win32'"} # already present in atomacos
+alembic = "1.8.1"
+black = "23.3.0"
+pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
 pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
 ascii-magic = "2.3.0"
-bokeh = "^3.1.1"
+bokeh = "2.4.3"
 clipboard = "0.0.4"
 deepdiff = {extras = ["optimize"], version = "^6.3.0"}
 ascii_magic = "2.3.0"
@@ -39,15 +40,20 @@ scikit-learn = "1.2.2"
 scipy = "1.9.3"
 sqlalchemy = "1.4.43"
 tiktoken = "0.4.0"
-torch = "2.0.0"
+torch = "^2.0.0"
 tqdm = "4.64.0"
 transformers = "4.29.2"
 python-dotenv = "1.0.0"
 pyinstaller = "^5.12.0"
 setuptools-lint = "^0.6.0"
-sphinx = "^7.0.1"
+sphinx = "7.0.1"
 nicegui = "1.2.16"
 spacy = "^3.5.3"
+fuzzywuzzy = "0.18.0"
+segment-anything = "^1.0"
+torchvision = "^0.15.2"
+sumy = "0.11.0"
+nltk = "3.8.1"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
