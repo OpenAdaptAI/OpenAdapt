@@ -257,6 +257,18 @@ class Screenshot(db.Base):
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
+    
+    def crop_active_window(self, action_event):
+        window_event = action_event.window_event
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+
+        box = (x0, y0, x1, y1)
+        self._image = self._image.crop(box)
 
     def crop_active_window(self, action_event=None):
         if action_event:
