@@ -31,7 +31,7 @@ def get_active_window_state() -> dict:
         logger.warning(e)
         return {}
     meta = get_active_window_meta(active_window)
-    rectangle_dict = serialize_rect(meta["rectangle"])
+    rectangle_dict = dictify_rect(meta["rectangle"])
     data = get_element_properties(active_window)
     state = {
         "title": meta["texts"][0],
@@ -83,7 +83,7 @@ def get_active_element_state(x: int, y: int):
     active_window = get_active_window()
     active_element = active_window.from_point(x, y)
     properties = active_element.get_properties()
-    properties["rectangle"] = serialize_rect(properties["rectangle"])
+    properties["rectangle"] = dictify_rect(properties["rectangle"])
     return properties
 
 
@@ -127,20 +127,20 @@ def get_element_properties(element):
     if children:
         properties["children"] = [get_element_properties(child) for child in children]
 
-    # Serialize the "rectangle" key
-    properties["rectangle"] = serialize_rect(properties["rectangle"])
+    # Dictify the "rectangle" key
+    properties["rectangle"] = dictify_rect(properties["rectangle"])
 
     return properties
 
 
-def serialize_rect(rect):
-    serialized = {
+def dictify_rect(rect):
+    rect_dict = {
         "left": rect.left,
         "top": rect.top,
         "right": rect.right,
         "bottom": rect.bottom,
     }
-    return serialized
+    return rect_dict
 
 
 def main():
