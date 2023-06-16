@@ -7,52 +7,23 @@ body:
     attributes:
       value: |
         Thanks for taking the time to fill out this bug report!
-  - type: input
+  - type: textarea
     id: describe-bug
     attributes:
       label: Describe the bug
-      description: What behaviour was expected and what actually happened?
-      placeholder: null
+      description: What behaviour was expected and what actually happened? Include screenshots and log output where useful.
+      placeholder: I expected ... but what actually happened was ...
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: To Reproduce
-      description: What steps would we take to reproduce the behaviour
-      placeholder: 1. Go to '...' 2. Click on '....' 3. Scroll down to '....'
+      description: What Operating System did you use and steps would we take to reproduce the behaviour?
+      placeholder: "I use [macOS/Microsoft Windows].
+        Steps: 
+        1. Go to '...' 
+        2. Click on '....' 
+        3. Scroll down to '....' "
     validations:
       required: true
-  - type: textarea
-    id: logs
-    attributes:
-      label: Relevant log output
-      description: Please copy and paste any relevant log output. This will be
-        automatically formatted into code, so no need for backticks.
-      render: shell
-  - type: textarea
-    id: image-upload
-    attributes:
-      label: Upload Screenshot
-      description: Please upload an image that helps illustrate the issue.
-    validations:
-      required: false
-  - type: dropdown
-    id: OS
-    attributes:
-      label: What Operating System did you use?
-      multiple: true
-      options:
-        - macOS
-        - Apple iOS
-        - Microsoft Windows
-        - Google Android
-        - Linux
-        - Other
-    validations:
-      required: true
-  - type: textarea
-    id: other
-    attributes:
-      label: Additional Context
-      description: null
