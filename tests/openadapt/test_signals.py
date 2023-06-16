@@ -119,9 +119,10 @@ def test_remove_signal():
 
 def test_add_signal_with_title():
     signals = Signals()
-    signals.add_signal("tests/resources/test_signal_data.txt", "test title")
+    TEST_TITLE = "test title"
+    signals.add_signal("tests/resources/test_signal_data.txt", TEST_TITLE)
     signals_list = signals.return_signals()
-    assert signals_list[0]["title"] == "test title"
+    assert signals_list[0]["title"] == TEST_TITLE
 
 
 def test_add_invalid_signal():

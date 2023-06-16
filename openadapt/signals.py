@@ -104,11 +104,14 @@ class Signals:
         Read a description of a signal from an HTTP URL.
         """
         # Get the signal from the URL.
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+        HEADERS = {
+            "User-Agent": (
+                "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Mobile/15E148"
+            )
         }
-
-        response = requests.get(http_url, headers=headers, allow_redirects=True)
+        response = requests.get(http_url, headers=HEADERS, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
             raise ValueError(
@@ -220,7 +223,11 @@ class Signals:
         """
         # Get the signal from the URL.
         HEADERS = {
-            "User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+            "User-Agent": (
+                "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                "Mobile/15E148"
+            )
         }
         response = requests.get(http_url, headers=HEADERS, allow_redirects=True)
         if response.status_code != 200:
