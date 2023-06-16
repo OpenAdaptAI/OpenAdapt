@@ -2,7 +2,7 @@ import requests
 import importlib
 import os
 import mimetypes
-import sys #for debugging
+import sys
 import sqlite3
 import pandas as pd
 
@@ -24,6 +24,7 @@ class Signals:
         "description": description of signal (file type, length, etc.),
     }
     """
+
     def __init__(self):
         self.signals = []
 
@@ -32,14 +33,13 @@ class Signals:
         Return the list of signals.
         """
         return self.signals
-    
 
     def __setup_database_signal(self, db_url):
         """
         Read a description of a signal from a database.
         """
         # Get the signal from the database.
-        #TODO: implement database signal
+        # TODO: implement database signal
 
         conn = sqlite3.connect(db_url)
         cur = conn.cursor()
@@ -59,10 +59,9 @@ class Signals:
         for row in rows:
             # The first element is the table name, the second element is the SQL schema
             table_info.append(f"Table: {row[0]}, Schema: {row[1]}")
-        
+
         description = "\n".join(table_info)
         return description
-
 
     def __setup_file_signal(self, file_path):
         """
@@ -72,7 +71,7 @@ class Signals:
         if not os.path.isfile(file_path):
             logger.info(f"Error: File not found.")
             return None
-        
+
         try:
             # Get the file's size and type.
             size = os.path.getsize(file_path)
@@ -83,7 +82,7 @@ class Signals:
                 f"Type: {type if type else 'File type not provided'}"
             )
 
-            if (file_path.endswith(('.xls','.xlsx'))):
+            if file_path.endswith((".xls", ".xlsx")):
                 data_frame = pd.read_excel(file_path)
                 data_frame_description = data_frame.describe().to_string()
                 description += f", Data_Frame_Description: {data_frame_description}"
@@ -95,27 +94,32 @@ class Signals:
             logger.info(f"Error: I/O error.")
             return None
         except pd.errors.ParserError:
-            logger.info(f"Error: Pandas could not parse the excel file, possible formatting issue.")
+            logger.info(
+                f"Error: Pandas could not parse the excel file, possible formatting issue."
+            )
         return description
-
 
     def __setup_url_signal(self, http_url):
         """
         Read a description of a signal from an HTTP URL.
         """
         # Get the signal from the URL.
-        headers = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+        }
 
         response = requests.get(http_url, headers=headers, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
-            raise ValueError(f"HTTP request failed with status code {response.status_code}.")
+            raise ValueError(
+                f"HTTP request failed with status code {response.status_code}."
+            )
         else:
             logger.info(f"Success: HTTP request succeeded.")
 
             # Get the signal's length and type.
-            length = response.headers.get('Content-Length')
-            type = response.headers.get('Content-Type')
+            length = response.headers.get("Content-Length")
+            type = response.headers.get("Content-Type")
 
             description = (
                 f"Length: {length if length else 'Content-Length not provided'}, "
@@ -123,12 +127,11 @@ class Signals:
             )
         return description
 
-
     def __setup_function_signal(self, function_address):
         """
         Read a description of a signal from a Python function.
         """
-        parts = function_address.rsplit('.', 2)
+        parts = function_address.rsplit(".", 2)
 
         try:
             module_name, class_name, func_name = parts
@@ -136,13 +139,13 @@ class Signals:
             func_class = getattr(module, class_name)
             func = getattr(func_class, func_name)
         except AttributeError:  # We don't have a class
-            module_name, func_name = function_address.rsplit('.',1)
+            module_name, func_name = function_address.rsplit(".", 1)
             module = importlib.import_module(module_name)
             func = getattr(module, func_name)
             class_name = "N/A"
 
         # Get the function's docstring, or 'No description provided' if it doesn't have one
-        docstring = func.__doc__ if func.__doc__ else 'No docstring provided'
+        docstring = func.__doc__ if func.__doc__ else "No docstring provided"
 
         # Describe the function
         description = (
@@ -151,17 +154,15 @@ class Signals:
             f"Function: {func_name}, "
             f"Doctstring: {docstring}"
         )
-        
-        return description
 
+        return description
 
     def __access_function_signal(self, function_address, **kwargs):
         """
         Read signal data from a Python function.
         """
-        module_name, class_name, func_name = function_address.rsplit('.', 2)
+        module_name, class_name, func_name = function_address.rsplit(".", 2)
         module = importlib.import_module(module_name)
-        #module = importlib.__import__(module_name, globals=globals(), locals=locals())
         func_class = getattr(module, class_name)
         func = getattr(func_class, func_name)
 
@@ -170,14 +171,12 @@ class Signals:
 
         return result
 
-
-
     def __access_database_signal(self, db_url, **kwargs):
         """
         Read signal data from a database.
         """
         # Get the signal from the database.
-        query = kwargs.get('query')
+        query = kwargs.get("query")
 
         try:
             conn = sqlite3.connect(db_url)
@@ -192,18 +191,17 @@ class Signals:
                 conn.close()
         return data
 
-
     def __access_file_signal(self, file_path):
         """
         Read signal data from a file.
         """
         # Get the signal from the file.
         try:
-            if file_path.endswith(('.xls','.xlsx')):
+            if file_path.endswith((".xls", ".xlsx")):
                 data_frame = pd.read_excel(file_path)
                 content = data_frame.to_string()
             else:
-                with open(file_path, 'r') as file:
+                with open(file_path, "r") as file:
                     content = file.read()
         except FileNotFoundError:
             logger.info(f"Error: File not found.")
@@ -216,13 +214,14 @@ class Signals:
             return None
         return content
 
-
     def __access_url_signal(self, http_url):
         """
         Read signal data from an HTTP URL.
         """
         # Get the signal from the URL.
-        HEADERS = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
+        HEADERS = {
+            "User-Agent": "Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+        }
         response = requests.get(http_url, headers=HEADERS, allow_redirects=True)
         if response.status_code != 200:
             logger.info(f"Error: HTTP request failed.")
@@ -230,7 +229,6 @@ class Signals:
             logger.info(f"Success: HTTP request succeeded.")
             signal_data = response.content
         return signal_data
-
 
     def add_signal(self, signal_address, signal_title="None"):
         signal_description = None
@@ -241,11 +239,13 @@ class Signals:
                 # If the string starts with "pgsql://", treat it as a database URL.
                 signal_description = self.__setup_database_signal(signal_address)
                 signal_type = "database"
-            elif signal_address.startswith("http://") or signal_address.startswith("https://"):
+            elif signal_address.startswith("http://") or signal_address.startswith(
+                "https://"
+            ):
                 # If the string starts with "http://" or "https://", treat it as an HTTP URL.
                 signal_description = self.__setup_url_signal(signal_address)
                 signal_type = "web_url"
-            elif signal_address.endswith(('.json', '.csv', '.txt', '.xlsx', '.xls')):
+            elif signal_address.endswith((".json", ".csv", ".txt", ".xlsx", ".xls")):
                 # If the string ends with a known file extension, treat it as a file path.
                 signal_description = self.__setup_file_signal(signal_address)
                 signal_type = "file"
@@ -258,19 +258,17 @@ class Signals:
         else:
             # If signal is not a string, raise an error.
             raise ValueError("Signal must be a string.")
-            
-        
+
         signal_number = len(self.signals) + 1
 
         signal = {
-            "number": signal_number, 
-            "title": signal_title, 
-            "type": signal_type, 
-            "address": signal_address, 
-            "description": signal_description
+            "number": signal_number,
+            "title": signal_title,
+            "type": signal_type,
+            "address": signal_address,
+            "description": signal_description,
         }
         self.signals.append(signal)
-
 
     def remove_signal(self, signal_number):
         """
@@ -281,7 +279,6 @@ class Signals:
             # Decrement the signal numbers of all signals after the removed signal.
             self.signals[i]["number"] -= 1
 
-
     def return_signal_data(self, signal_number, **kwargs):
         """
         Return the data of a signal.
@@ -290,15 +287,26 @@ class Signals:
         if len(signal) == 0:
             return None
         elif signal["type"] == "database":
-            return(self.__access_database_signal(signal["address"], **kwargs))
+            return self.__access_database_signal(signal["address"], **kwargs)
         elif signal["type"] == "web_url":
-            return(self.__access_url_signal(signal["address"]))
+            return self.__access_url_signal(signal["address"])
         elif signal["type"] == "file":
-            return(self.__access_file_signal(signal["address"]))
+            return self.__access_file_signal(signal["address"])
         elif signal["type"] == "function":
-            return(self.__access_function_signal(signal["address"], **kwargs))
+            return self.__access_function_signal(signal["address"], **kwargs)
         else:
             return None
+
+
+def initialize_default_signals():
+    signals = Signals()
+    for signal_address in config.DEFAULT_SIGNALS:
+        title = "None"
+        if signal_address == "openai.Completion.create":
+            title = "OpenAI"
+            sys.path.append(".venv/lib/site-packages")
+        signals.add_signal(signal_address,signal_title=title)
+    return signals
 
 
 class Signal:
@@ -314,11 +322,12 @@ class DBTableSignal(Signal):
     def __init__(self, number, address, description, type, title="None"):
         super().__init__(number, address, title, description, type)
 
-#Demonstration test code
+
+# Demonstration test code
 if __name__ == "__main__":
     # r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
-    # length = r.headers.get('Content-Length') 
-    # type = r.headers.get('Content-Type') 
+    # length = r.headers.get('Content-Length')
+    # type = r.headers.get('Content-Type')
     # print(length if length else 'Content-Length not provided')
     # print(type if type else 'Content-Type not provided')
 
@@ -330,7 +339,6 @@ if __name__ == "__main__":
     signals = Signals()
     signals.add_signal("tests/resources/test_data.xlsx")
     print(signals.return_signals())
-    #signal_info = signals.return_signals()
+    # signal_info = signals.return_signals()
     # for signal in signal_info:
     #     print(signal)
-

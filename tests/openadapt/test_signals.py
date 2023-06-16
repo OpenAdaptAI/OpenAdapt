@@ -4,7 +4,7 @@ import os
 import sys
 
 from loguru import logger
-from openadapt.signals import Signals
+from openadapt.signals import Signals, initialize_default_signals
 from openadapt import config
 
 
@@ -85,6 +85,12 @@ def test_access_xslx_signal():
     signal_data = signals.return_signal_data(1)
     assert "test_value_1" in signal_data and "test_value_2" in signal_data
 
+
+def test_intialize_default_signals():
+    signals = initialize_default_signals()
+    signal_list = signals.return_signals()
+    assert signal_list[1]["title"] == "OpenAI"
+    assert signals
 
 def test_non_existent_file():
     signals = Signals()
