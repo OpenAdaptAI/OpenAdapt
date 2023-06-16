@@ -33,11 +33,6 @@ tracemalloc.start(25)
 
 snapshots = []
 
-
-def collect_stats():
-    snapshots.append(tracemalloc.take_snapshot())
-
-
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -48,6 +43,10 @@ PROC_WRITE_BY_EVENT_TYPE = {
 PLOT_PERFORMANCE = True
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
+
+
+def collect_stats():
+    snapshots.append(tracemalloc.take_snapshot())
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -135,6 +134,7 @@ def process_events(
         else:
             raise Exception(f"unhandled {event.type=}")
         # TODO: make sure that prev_event and its properties are deallocated. del prev_event?
+        del prev_event
         prev_event = event
     logger.info("done")
 
@@ -366,6 +366,7 @@ def read_screen_events(
             continue
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
         # TODO: sleep? configurable sleep time .01
+        time.sleep(0.1)
     logger.info("done")
 
 
@@ -489,8 +490,6 @@ def read_keyboard_events(
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
-        # TODO: remove, just for debugging purposes
-        tr.print_diff()
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -651,8 +650,6 @@ def record(
 
     stats = snapshots[-1].compare_to(snapshots[-2], 'traceback')
 
-    # top_stats = snapshot.statistics('traceback')
-
     for stat in stats[:3]:
         print(
             "{} new KiB {} total KiB {} new {} total memory blocks: ".format(
@@ -663,13 +660,7 @@ def record(
         for line in stat.traceback.format():
             print(line)
 
-    # stat = top_stats[0]
-    # print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
-    # for line in stat.traceback.format():
-    #     print(line)
-    #
-    # current, peak = tracemalloc.get_traced_memory()
-    # print("Current size: {}, Peak size: {}".format(current, peak))
+    tr.print_diff()
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
