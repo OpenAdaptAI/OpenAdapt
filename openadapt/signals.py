@@ -301,8 +301,18 @@ class Signals:
             return None
 
 
-signals = Signals()
+class Signal:
+    def __init__(self, number, address, description, type, title="None"):
+        self.number = number
+        self.address = address
+        self.title = title
+        self.description = description
+        self.type = type
 
+
+class DBTableSignal(Signal):
+    def __init__(self, number, address, description, type, title="None"):
+        super().__init__(number, address, title, description, type)
 
 #Demonstration test code
 if __name__ == "__main__":
