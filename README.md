@@ -187,7 +187,7 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-![MacOS System Alerts](./assets/macOS_permissions_alert.png)
+![MacOS System Alerts](https://github.com/MLDSAI/OpenAdapt/assets/43456930/dd96ab17-7cd6-4762-9c4f-5131b224a118)
 
 In summary (from https://stackoverflow.com/a/69673312):
 

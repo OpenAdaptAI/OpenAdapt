@@ -21,7 +21,6 @@ requires-python = ">=3.10"
 
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Placeholder License",
     "Operating System :: OS Independent"
 ]
 
