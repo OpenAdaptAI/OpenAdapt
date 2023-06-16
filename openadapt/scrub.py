@@ -14,7 +14,6 @@ from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import (
     ImageRedactorEngine,
     ImageAnalyzerEngine,
