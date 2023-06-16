@@ -29,9 +29,9 @@ tr = tracker.SummaryTracker()
 
 import tracemalloc
 
-tracemalloc.start(25)
+tracemalloc.start()
 
-snapshots = []
+performance_snapshots = []
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -46,7 +46,7 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 
 def collect_stats():
-    snapshots.append(tracemalloc.take_snapshot())
+    performance_snapshots.append(tracemalloc.take_snapshot())
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -641,7 +641,7 @@ def record(
 
     collect_stats()
 
-    stats = snapshots[-1].compare_to(snapshots[-2], 'filename')
+    stats = performance_snapshots[-1].compare_to(performance_snapshots[-2], 'lineno')
 
     for stat in stats[:3]:
         new_KiB = stat.size_diff / 1024
