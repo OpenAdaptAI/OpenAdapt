@@ -144,6 +144,11 @@ def dictify_rect(rect):
 
 
 def main():
+    """
+    Test function for retrieving and inspecting the state of the active window.
+
+    This function is primarily used for testing and debugging purposes.
+    """
     import time
 
     time.sleep(1)
