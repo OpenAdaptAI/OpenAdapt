@@ -73,6 +73,7 @@ _DEFAULTS = {
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     "REPLAY_STRIP_ELEMENT_STATE": True,
     # IGNORES WARNINGS (PICKLING, ETC.)
+    # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
@@ -83,7 +84,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": (255, 0, 0),
+    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
