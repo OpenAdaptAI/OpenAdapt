@@ -25,10 +25,7 @@ performance_stats = []
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
 
-    db_obj = {
-        column.name: None
-        for column in table.__table__.columns
-    }
+    db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
         if key in event_data:
             val = event_data[key]
@@ -98,8 +95,7 @@ def get_perf_stats(recording_timestamp):
     """
 
     return (
-        db
-        .query(PerformanceStat)
+        db.query(PerformanceStat)
         .filter(PerformanceStat.recording_timestamp == recording_timestamp)
         .order_by(PerformanceStat.start_time)
         .all()
@@ -115,28 +111,16 @@ def insert_recording(recording_data):
 
 
 def get_latest_recording():
-    return (
-        db
-        .query(Recording)
-        .order_by(sa.desc(Recording.timestamp))
-        .limit(1)
-        .first()
-    )
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
 def get_recording(timestamp):
-    return (
-        db
-        .query(Recording)
-        .filter(Recording.timestamp == timestamp)
-        .first()
-    )
+    return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
 def _get(table, recording_timestamp):
     return (
-        db
-        .query(table)
+        db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
         .order_by(table.timestamp)
         .all()
@@ -153,8 +137,10 @@ def get_action_events(recording):
 def filter_stop_sequences(action_events):
     # check for ctrl c first
     if len(action_events) >= 2:
-        if action_events[-1].canonical_key_char == 'c' and \
-                action_events[-2].canonical_key_name == 'ctrl':
+        if (
+            action_events[-1].canonical_key_char == "c"
+            and action_events[-2].canonical_key_name == "ctrl"
+        ):
             # remove ctrl c
             # ctrl c must be held down at same time, so no release event
             action_events.pop()
@@ -178,13 +164,15 @@ def filter_stop_sequences(action_events):
         for j in range(len(action_events) - 1, -1, -1):
             # never go past 1st action event, so if a sequence is longer than
             # len(action_events), it can't have been in the recording
-            if action_events[j].canonical_key_char == \
-                    STOP_SEQUENCES[i][stop_sequence_indices[i]] \
-                    and action_events[j].name == 'press':
+            if (
+                action_events[j].canonical_key_char
+                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+                and action_events[j].name == "press"
+            ):
                 # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
-            elif action_events[j].name == 'release':
+            elif action_events[j].name == "release":
                 # can consider any release event as part of the sequence
                 num_to_remove += 1
             else:
