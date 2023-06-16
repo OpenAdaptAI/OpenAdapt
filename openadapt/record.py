@@ -641,19 +641,18 @@ def record(
 
     collect_stats()
 
-    stats = snapshots[-1].compare_to(snapshots[-2], 'traceback')
+    stats = snapshots[-1].compare_to(snapshots[-2], 'filename')
 
     for stat in stats[:3]:
-        print(
-            "{} new KiB {} total KiB {} new {} total memory blocks: ".format(
-                stat.size_diff / 1024,
-                stat.size / 1024,
-                stat.count_diff,
-                stat.count))
-        for line in stat.traceback.format():
-            print(line)
+        new_KiB = stat.size_diff / 1024
+        total_KiB = stat.size / 1024
+        new_blocks = stat.count_diff
+        total_blocks = stat.count
+        source = stat.traceback.format()[0]
+        logger.info(f"{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=} {source=}")
 
-    tr.print_diff()
+    trace_str = '\n'.join(list(tr.format_diff()))
+    logger.info(f"trace_str=\n{trace_str}")
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
