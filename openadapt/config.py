@@ -19,6 +19,7 @@ _DEFAULTS = {
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
+    "TEST_OPENAI": False,
 }
 
 

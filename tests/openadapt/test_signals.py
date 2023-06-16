@@ -5,6 +5,7 @@ import sys
 
 from loguru import logger
 from openadapt.signals import Signals
+from openadapt import config
 
 
 def test_setup_database_signal():
@@ -50,24 +51,25 @@ def test_add_other_url_signal():
     assert signal_data != None
 
 
-# def test_add_function_signal():
-#     signals = Signals()
-#     sys.path.append("tests/resources")
-#     signals.add_signal("sample_package.sample_module.sample_function")
-#     signal = signals.return_signals()[0]
-#     signal_data = signals.return_signal_data(1)
-#     assert signal_data == "Sample function success"
-#     assert signal["description"] == "Module: sample_package.sample_module, Class: N/A, Function: sample_function, Doctstring: \n    This function is used to test the openadapt.signals module\n    "
-
-
-def test_add_openai_function_signal():
+def test_add_function_signal():
     signals = Signals()
-    sys.path.append(".venv/lib/site-packages")
-    signals.add_signal("openai.Completion.create")
-    signal_data = signals.return_signal_data(1, engine="davinci", prompt="Translate the following English word to French: 'Hello'", max_tokens=10)
-    signal_data = signal_data["choices"][0]["text"]
-    logger.info(signal_data)
-    assert signal_data != None
+    sys.path.append("tests/resources")
+    signals.add_signal("sample_package.sample_module.sample_function")
+    signal = signals.return_signals()[0]
+    signal_data = signals.return_signal_data(1)
+    assert signal_data == "Sample function success"
+    assert signal["description"] == "Module: sample_package.sample_module, Class: N/A, Function: sample_function, Doctstring: \n    This function is used to test the openadapt.signals module\n    "
+
+
+if config.TEST_OPENAI == True:
+    def test_add_openai_function_signal():
+        signals = Signals()
+        sys.path.append(".venv/lib/site-packages")
+        signals.add_signal("openai.Completion.create")
+        signal_data = signals.return_signal_data(1, engine="davinci", prompt="Translate the following English word to French: 'Hello'", max_tokens=10)
+        signal_data = signal_data["choices"][0]["text"]
+        logger.info(signal_data)
+        assert signal_data != None
 
 
 def test_setup_xslx_signal():

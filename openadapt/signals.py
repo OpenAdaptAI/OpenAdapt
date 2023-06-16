@@ -97,7 +97,6 @@ class Signals:
         except pd.errors.ParserError:
             logger.info(f"Error: Pandas could not parse the excel file, possible formatting issue.")
         return description
-        
 
 
     def __setup_url_signal(self, http_url):
@@ -124,26 +123,6 @@ class Signals:
             )
         return description
 
-
-    # def __setup_function_signal(self, function_name):
-    #     """
-    #     Return a description of a Python function signal.
-    #     """
-    #     module_name, func_name = function_name.rsplit('.', 1)
-    #     module = importlib.import_module(module_name)
-    #     func = getattr(module, func_name)
-
-    #     # Get the function's docstring, or 'No description provided' if it doesn't have one
-    #     docstring = func.__doc__ if func.__doc__ else 'No description provided'
-
-    #     # Get the function's name and module
-    #     description = (
-    #         f"Function: {func.__name__}, "
-    #         f"Module: {module.__name__}, "
-    #         f"Description: {docstring}"
-    #     )
-
-    #     return description
 
     def __setup_function_signal(self, function_address):
         """
@@ -174,6 +153,7 @@ class Signals:
         )
         
         return description
+
 
     def __access_function_signal(self, function_address, **kwargs):
         """
@@ -250,20 +230,6 @@ class Signals:
             logger.info(f"Success: HTTP request succeeded.")
             signal_data = response.content
         return signal_data
-
-
-    # def __access_function_signal(self, function_name):
-    #     """
-    #     Read signal data from a Python function.
-    #     """
-    #     module_name, func_name = function_name.rsplit('.', 1)
-    #     module = importlib.import_module(module_name)
-    #     func = getattr(module, func_name)
-
-    #     # Call the function and get its result
-    #     result = func()
-
-    #     return result
 
 
     def add_signal(self, signal_address, signal_title="None"):
