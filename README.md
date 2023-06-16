@@ -2,7 +2,9 @@
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
-<img width="853" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/438e7803-667c-4ce8-a135-1d1e10700ced">
+<img width="1512" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/60a85160-7b07-41b0-9295-2d1bfa6a0994">
+
+([Slides](https://docs.google.com/presentation/d/e/2PACX-1vStYEzETEMtzWDGCizJt4L2rdQpoAQin8T2cZkLw6WqNBUtmBhaNm-1BrhvGOVNyFV9UPjyVfa0l6IC/pub?start=false&loop=false&delayms=3000))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
