@@ -40,6 +40,8 @@ pytest
 
 Manual:
 ```
+git clone https://github.com/MLDSAI/OpenAdapt.git
+cd OpenAdapt
 python3.10 -m venv .venv
 source .venv/bin/activate
 pip install wheel
