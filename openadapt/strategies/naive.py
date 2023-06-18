@@ -19,7 +19,6 @@ SLEEP = False
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
-
     def __init__(
         self,
         recording: models.Recording,
@@ -35,8 +34,8 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         self.sleep = sleep
         self.prev_timestamp = None
         self.action_event_idx = -1
-        #event_dicts = utils.rows2dicts(self.processed_action_events)
-        #logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+        # event_dicts = utils.rows2dicts(self.processed_action_events)
+        # logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     def get_next_action_event(
         self,

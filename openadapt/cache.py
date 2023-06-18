@@ -18,6 +18,7 @@ def cache(dir_path=None, enabled=None, verbosity=None, **cache_kwargs):
     cache_dir_path = default(dir_path, config.CACHE_DIR_PATH)
     cache_enabled = default(enabled, config.CACHE_ENABLED)
     cache_verbosity = default(verbosity, config.CACHE_VERBOSITY)
+
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -34,5 +35,7 @@ def cache(dir_path=None, enabled=None, verbosity=None, **cache_kwargs):
             duration = time.time() - start_time
             logger.debug(f"{fn=} {duration=}")
             return rval
+
         return wrapper
+
     return decorator

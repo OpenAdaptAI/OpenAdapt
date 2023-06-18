@@ -18,7 +18,6 @@ MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
-
     def __init__(
         self,
         recording: models.Recording,
@@ -48,14 +47,16 @@ class BaseReplayStrategy(ABC):
             self.window_events.append(window_event)
             try:
                 action_event = self.get_next_action_event(
-                    screenshot, window_event,
+                    screenshot,
+                    window_event,
                 )
             except StopIteration:
                 break
             if self.action_events:
                 prev_action_event = self.action_events[-1]
                 assert prev_action_event.timestamp <= action_event.timestamp, (
-                    prev_action_event, action_event
+                    prev_action_event,
+                    action_event,
                 )
             self.log_fps()
             if action_event:
@@ -64,10 +65,7 @@ class BaseReplayStrategy(ABC):
                     [action_event],
                     drop_constant=False,
                 )[0]
-                logger.info(
-                    f"action_event=\n"
-                    f"{pformat(action_event_dict)}"
-                )
+                logger.info(f"action_event=\n" f"{pformat(action_event_dict)}")
                 try:
                     playback.play_action_event(
                         action_event,
@@ -76,7 +74,9 @@ class BaseReplayStrategy(ABC):
                     )
                 except Exception as exc:
                     logger.exception(exc)
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
+
+                    ipdb.set_trace()
 
     def log_fps(self):
         t = time.time()

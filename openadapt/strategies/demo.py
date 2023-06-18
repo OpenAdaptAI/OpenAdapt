@@ -55,27 +55,25 @@ class DemoReplayStrategy(
         screenshot_bbox = self.get_screenshot_bbox(screenshot)
         logger.info(f"screenshot_bbox=\n{screenshot_bbox}")
 
-        screenshot_click_event_bbox = self.get_click_event_bbox(self.screenshots[self.screenshot_idx])
-        logger.info(f"self.screenshots[self.screenshot_idx].action_event=\n{screenshot_click_event_bbox}")
-        event_strs = [
-            f"<{event}>"
-            for event in self.recording.action_events
-        ]
-        history_strs = [
-            f"<{completion}>"
-            for completion in self.result_history
-        ]
+        screenshot_click_event_bbox = self.get_click_event_bbox(
+            self.screenshots[self.screenshot_idx]
+        )
+        logger.info(
+            f"self.screenshots[self.screenshot_idx].action_event=\n{screenshot_click_event_bbox}"
+        )
+        event_strs = [f"<{event}>" for event in self.recording.action_events]
+        history_strs = [f"<{completion}>" for completion in self.result_history]
         prompt = " ".join(event_strs + history_strs)
         N = max(0, len(prompt) - MAX_INPUT_SIZE)
         prompt = prompt[N:]
-        #logger.info(f"{prompt=}")
+        # logger.info(f"{prompt=}")
         max_tokens = 10
         completion = self.get_completion(prompt, max_tokens)
-        #logger.info(f"{completion=}")
+        # logger.info(f"{completion=}")
 
         # only take the first <...>
         result = completion.split(">")[0].strip(" <>")
-        #logger.info(f"{result=}")
+        # logger.info(f"{result=}")
         self.result_history.append(result)
 
         # TODO: parse result into ActionEvent(s)

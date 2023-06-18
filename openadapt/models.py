@@ -53,10 +53,10 @@ class Recording(db.Base):
     @property
     def processed_action_events(self):
         from openadapt import events
+
         if not self._processed_action_events:
             self._processed_action_events = events.get_events(self)
         return self._processed_action_events
-
 
 
 class ActionEvent(db.Base):
@@ -86,8 +86,8 @@ class ActionEvent(db.Base):
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
     #     AttributeError: 'list' object has no attribute '_sa_instance_state'
-    #children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
-    #parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
+    # children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
+    # parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
 
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
@@ -109,9 +109,7 @@ class ActionEvent(db.Base):
 
     @property
     def key(self):
-        logger.trace(
-            f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
-        )
+        logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
             self.key_name,
             self.key_char,
@@ -157,7 +155,8 @@ class ActionEvent(db.Base):
         else:
             if key_name_attr:
                 text = f"{name_prefix}{key_attr}{name_suffix}".replace(
-                    "Key.", "",
+                    "Key.",
+                    "",
                 )
             else:
                 text = key_attr
@@ -183,16 +182,8 @@ class ActionEvent(db.Base):
             "text",
             "element_state",
         ]
-        attrs = [
-            getattr(self, attr_name)
-            for attr_name in attr_names
-        ]
-        attrs = [
-            int(attr)
-            if isinstance(attr, float)
-            else attr
-            for attr in attrs
-        ]
+        attrs = [getattr(self, attr_name) for attr_name in attr_names]
+        attrs = [int(attr) if isinstance(attr, float) else attr for attr in attrs]
         attrs = [
             f"{attr_name}=`{attr}`"
             for attr_name, attr in zip(attr_names, attrs)
@@ -203,10 +194,7 @@ class ActionEvent(db.Base):
 
     @classmethod
     def from_children(cls, children_dicts):
-        children = [
-            ActionEvent(**child_dict)
-            for child_dict in children_dicts
-        ]
+        children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 
 
@@ -269,11 +257,11 @@ class Screenshot(db.Base):
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
-    
+
     def crop_active_window(self, action_event):
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
-        
+
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio
         x1 = x0 + window_event.width * width_ratio

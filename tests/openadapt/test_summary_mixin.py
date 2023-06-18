@@ -9,6 +9,7 @@ from openadapt.models import Recording
 RECORDING = Recording()
 REPLAY = DemoReplayStrategy(RECORDING)
 
+
 def test_summary_empty():
     empty_text = ""
     actual = REPLAY.get_summary(empty_text, 1)

@@ -34,24 +34,23 @@ encoding = tiktoken.get_encoding("cl100k_base")
 
 
 class OpenAIReplayStrategyMixin(BaseReplayStrategy):
-
     def __init__(
         self,
         recording: models.Recording,
         model_name: str = config.OPENAI_MODEL_NAME,
-        #system_message: str = config.OPENAI_SYSTEM_MESSAGE,
+        # system_message: str = config.OPENAI_SYSTEM_MESSAGE,
     ):
         super().__init__(recording)
 
         logger.info(f"{model_name=}")
         self.model_name = model_name
-        #self.system_message = system_message
+        # self.system_message = system_message
 
     def get_completion(
         self,
         prompt: str,
         system_message: str,
-        #max_tokens: int,
+        # max_tokens: int,
     ):
         messages = [
             {
@@ -61,7 +60,7 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
             {
                 "role": "user",
                 "content": prompt,
-            }
+            },
         ]
         logger.debug(f"messages=\n{pformat(messages)}")
         completion = create_openai_completion(self.model_name, messages)
@@ -110,7 +109,6 @@ def get_completion(
     prompt,
     model="gpt-4",
 ):
-
     logger.info(f"{prompt=}")
 
     messages.append(
@@ -196,7 +194,8 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
             f"""num_tokens_from_messages() is not implemented for model "
             "{model}. See "
             "https://github.com/openai/openai-python/blob/main/chatml.md for "
-            information on how messages are converted to tokens.""")
+            information on how messages are converted to tokens."""
+        )
     num_tokens = 0
     for message in messages:
         num_tokens += tokens_per_message

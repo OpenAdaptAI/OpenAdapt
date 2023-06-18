@@ -88,9 +88,7 @@ def scrub_text_all(text: str) -> str:
     return config.SCRUB_CHAR * len(text)
 
 
-def scrub_image(
-    image: Image, fill_color=config.SCRUB_FILL_COLOR
-) -> Image:
+def scrub_image(image: Image, fill_color=config.SCRUB_FILL_COLOR) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor
 
@@ -146,9 +144,7 @@ def _is_scrubbed(old_text: str, new_text: str) -> bool:
     return old_text != new_text
 
 
-def _scrub_text_item(
-    value: str, key: Any, force_scrub_children: bool = False
-) -> str:
+def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -> str:
     """
     Scrubs the value of a dict item.
 
@@ -179,11 +175,7 @@ def _should_scrub_list_item(item: Any, key: Any, list_keys: List[str]) -> bool:
         bool: True if the key and value should be scrubbed, False otherwise
     """
 
-    return (
-        isinstance(item, (str, dict))
-        and isinstance(key, str)
-        and key in list_keys
-    )
+    return isinstance(item, (str, dict)) and isinstance(key, str) and key in list_keys
 
 
 def _scrub_list_item(
@@ -204,9 +196,7 @@ def _scrub_list_item(
         dict/str: The scrubbed dict/value respectively
     """
     if isinstance(item, dict):
-        return scrub_dict(
-            item, list_keys, force_scrub_children=force_scrub_children
-        )
+        return scrub_dict(item, list_keys, force_scrub_children=force_scrub_children)
     return _scrub_text_item(item, key)
 
 
@@ -231,12 +221,8 @@ def scrub_dict(
     scrubbed_dict = {}
     for key, value in input_dict.items():
         if _should_scrub_text(key, value, list_keys, scrub_all):
-            scrubbed_text = _scrub_text_item(
-                value, key, force_scrub_children
-            )
-            if key in ("text", "canonical_text") and _is_scrubbed(
-                value, scrubbed_text
-            ):
+            scrubbed_text = _scrub_text_item(value, key, force_scrub_children)
+            if key in ("text", "canonical_text") and _is_scrubbed(value, scrubbed_text):
                 force_scrub_children = True
             scrubbed_dict[key] = scrubbed_text
         elif isinstance(value, list):

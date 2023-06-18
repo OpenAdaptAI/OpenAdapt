@@ -49,7 +49,8 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata()
+        1
+        for pixel in scrubbed_image.getdata()
         if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
@@ -193,8 +194,8 @@ def test_scrub_routing_number():
 
     assert (
         scrub.scrub_text("My bank routing number is 123456789.")
-        == "My bank routing number is <US_PASSPORT>." or
-        scrub.scrub_text("My bank routing number is 123456789.")
+        == "My bank routing number is <US_PASSPORT>."
+        or scrub.scrub_text("My bank routing number is 123456789.")
         == "My bank routing number is <US_BANK_NUMBER>."
     )
 
