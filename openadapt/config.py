@@ -31,6 +31,7 @@ _DEFAULTS = {
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
     # IGNORES WARNINGS (PICKLING, ETC.)
+    # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
