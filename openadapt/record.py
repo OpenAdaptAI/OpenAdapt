@@ -47,14 +47,10 @@ def args_to_str(*args):
 
 
 def kwargs_to_str(**kwargs):
-    ret = ""
-    for k, v in kwargs.items():
-        ret += f"{k}={v},"
-
-    return ret[:-1]
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
 
-def logging(logger):
+def trace(logger):
     def decorator(func):
         @functools.wraps(func)
         def wrapper_logging(*args, **kwargs):
@@ -84,7 +80,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
         write_fn(recording_timestamp, event, perf_q)
 
 
-@logging(logger)
+@trace(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
@@ -226,7 +222,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
-@logging(logger)
+@trace(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -388,7 +384,7 @@ def read_screen_events(
     logger.info("done")
 
 
-@logging(logger)
+@trace(logger)
 def read_window_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
@@ -436,7 +432,7 @@ def read_window_events(
         prev_window_data = window_data
 
 
-@logging(logger)
+@trace(logger)
 def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
@@ -471,7 +467,7 @@ def performance_stats_writer (
     logger.info("performance stats writer done")
 
 
-@logging(logger)
+@trace(logger)
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
@@ -548,7 +544,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
-@logging(logger)
+@trace(logger)
 def record(
     task_description: str,
 ):
