@@ -706,14 +706,12 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     if enable_audio:
-        # Save audio frames to the database
-        audio_file = crud.insert_audio_file(compressed_audio_bytes)
-
         # Create AudioInfo entry
-        audio_info = crud.insert_audio_info(result_info['text'],
+        audio_info = crud.insert_audio_info(compressed_audio_bytes,
+                                            result_info['text'],
                                             recording_timestamp,
                                             int(audio_stream.samplerate),
-                                            audio_file, word_list)
+                                            word_list)
 
     logger.info(f"saved {recording_timestamp=}")
 

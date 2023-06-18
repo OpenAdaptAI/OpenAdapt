@@ -10,7 +10,6 @@ from openadapt.models import (
     Recording,
     WindowEvent,
     PerformanceStat,
-    AudioFile,
     AudioInfo
 )
 
@@ -107,31 +106,23 @@ def get_perf_stats(recording_timestamp):
     )
 
 
-def insert_audio_file(data):
-    audio_data = AudioFile(data=data)
-    db.add(audio_data)
-    db.commit()
-    return audio_data
-
-
 def insert_audio_info(
+        audio_data,
         transcribed_text,
         recording_timestamp,
         sample_rate,
-        audio_file,
         word_list
 ):
     """Create an AudioInfo entry in the database."""
     audio_info = AudioInfo(
+        flac_data=audio_data,
         transcribed_text=transcribed_text,
         recording_timestamp=recording_timestamp,
         sample_rate=sample_rate,
-        file=audio_file,
         words_with_timestamps=json.dumps(word_list)
     )
     db.add(audio_info)
     db.commit()
-    return audio_info
 
 
 def insert_recording(recording_data):

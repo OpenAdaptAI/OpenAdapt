@@ -270,11 +270,11 @@ class Screenshot(db.Base):
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
-    
+
     def crop_active_window(self, action_event):
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
-        
+
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio
         x1 = x0 + window_event.width * width_ratio
@@ -310,23 +310,13 @@ class AudioInfo(db.Base):
     __tablename__ = "audio_info"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    flac_data = sa.Column(sa.LargeBinary)
     transcribed_text = sa.Column(sa.String)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    file_id = sa.Column(sa.ForeignKey("audio_file.id"))
     sample_rate = sa.Column(sa.Integer)
     words_with_timestamps = sa.Column(sa.Text)
 
     recording = sa.orm.relationship("Recording", back_populates="audio_info")
-    file = sa.orm.relationship("AudioFile", back_populates="audio_info")
-
-
-class AudioFile(db.Base):
-    __tablename__ = "audio_file"
-
-    id = sa.Column(sa.Integer, primary_key=True)
-    data = sa.Column(sa.LargeBinary)
-
-    audio_info = sa.orm.relationship("AudioInfo", back_populates="file")
 
 
 class PerformanceStat(db.Base):

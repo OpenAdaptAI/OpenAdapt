@@ -150,7 +150,9 @@ def main():
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
-    audio_info = get_audio_info(recording)
+    audio_info = row2dict(get_audio_info(recording))
+    # don't display the FLAC data
+    del audio_info['flac_data']
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
@@ -183,7 +185,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(row2dict(audio_info))}",
+                text=f"{dict2html(audio_info)}",
             ),
         ),
     ]
