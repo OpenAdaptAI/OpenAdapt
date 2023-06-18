@@ -18,25 +18,32 @@ os.environ["RWKV_CUDA_ON"] = '0'
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
 @stub.function(gpu="a100", timeout=18000, image=torch_image)
-def run_RWKV(model=0, instruction=None, task_description=None, input=None, parameters=None):
+def run_RWKV(model=0, instruction=None, task_description=None, input=None, parameters=None, use_cuda=True):
     #use gpu=a100 for Raven-14B and Pile-14B, vs. use gpu=any for other weights
     #switch 'cuda fp16' to 'cpu fp32' if running on cpu is preferred
     if (model == 0):
         title = "RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
-        model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
     elif (model == 1):
         title = "RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
-        model = RWKV(model=model_path, strategy='cuda fp16')  #light weight model
     elif (model == 2):
+        title = "RWKV-4-Raven-1B5-v10-Eng99%-Other1%-20230418-ctx4096"
+        model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
+    elif (model == 3):
         title = "RWKV-4-Pile-14B-20230313-ctx8192-test1050"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-pile-14b", filename=f"{title}.pth")
-        model = RWKV(model=model_path, strategy='cuda fp16')  #heavy weight model
-    elif (model == 3):
+    elif (model == 4):
         title = "RWKV-4-World-1.5B-v1-20230607-ctx4096"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-world", filename=f"{title}.pth")
-        model = RWKV(model=model_path, strategy='cuda fp32')  #heavy weight model
+
+    if use_cuda == True:
+        if model == 4:
+            model = RWKV(model=model_path, strategy='cuda fp32')
+        else:
+            model = RWKV(model=model_path, strategy='cuda fp16')
+    else:
+        model = RWKV(model=model_path, strategy='cpu fp32')
         
 
     tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
@@ -52,7 +59,7 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
         print(f"Failed to download tokenizer. Status code: {response.status_code}")
         return
     
-    if (model == 3):
+    if (model == 4):
         pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
     else:
         pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
@@ -89,7 +96,7 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 # Instruction: 
-{instruction} {task_description}. 
+{instruction} {task_description}
 
 # Input: 
 {input}
