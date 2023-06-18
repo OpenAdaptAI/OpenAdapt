@@ -1,39 +1,97 @@
-[project]
+[tool.poetry]
 name = "openadapt"
-version = "0.0.0"
-
+version = "0.1.0"
+description = "GUI Process Automation with Transformers"
 authors = [
-    { name = "Mustafa Abdulrahman", email = "mustafa@openadapt.ai" },
-    { name = "Richard Abrich", email = "richard.abrich@mldsai.com" },
-    { name = "Avid Eslami", email = "avid@openadapt.ai" },
-    { name = "Andrew Gorton", email = "andrew.gorton@mail.utoronto.ca" },
-    { name = "Krish Patel", email = "krish@openadapt.ai" },
-    { name = "Dian Rong", email = "dian@openadapt.ai" },
-    { name = "Aaron Shah", email = "aaron@openadapt.ai" },
-    { name = "Jesica Susanto", email = "jesica@openadapt.ai" },
-    { name = "Angela Zhuo", email = "angela@openadapt.ai" },
-    { name = "Owais Zahid", email = "owais@openadapt.ai" }
+    'Mustafa Abdulrahman <mustafa@openadapt.ai>',
+    'Richard Abrich <richard.abrich@mldsai.com>',
+    'Avid Eslami <avid@openadapt.ai>',
+    'Andrew Gorton <andrew.gorton@mail.utoronto.ca>',
+    'Krish Patel <krish@openadapt.ai>',
+    'Dian Rong <dian@openadapt.ai>',
+    'Aaron Shah <aaron@openadapt.ai>',
+    'Jesica Susanto <jesica@openadapt.ai>',
+    'Angela Zhuo <angela@openadapt.ai>',
+    'Owais Zahid <owais@openadapt.ai>'
 ]
-
-description = "AI-First Process Automation with Transformers"
-readme = "README.md"
-requires-python = ">=3.10"
-
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent"
 ]
 
-[project.urls]
-"Homepage" = "https://github.com/MLDSAI/OpenAdapt"
+readme = ["README.md"]
+
+repository = "https://github.com/mldsai/openadapt"
+homepage = "https://openadapt.ai/"
+
+[tool.poetry.urls]
 "Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
+
+[tool.poetry.dependencies]
+python = "3.10.x"
+atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
+pynput = {git = "https://github.com/abrichr/pynput.git"}
+alembic = "1.8.1"
+black = "23.3.0"
+pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
+pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
+ascii-magic = "2.3.0"
+bokeh = "2.4.3"
+clipboard = "0.0.4"
+deepdiff = {extras = ["optimize"], version = "^6.3.0"}
+ascii_magic = "2.3.0"
+dictalchemy3 = "1.0.0"
+fire = "0.4.0"
+ipdb = "0.13.11"
+loguru = "0.6.0"
+matplotlib = "3.6.2"
+mss = "6.1.0"
+openai = "0.27.5"
+pandas = "2.0.0"
+presidio_analyzer = "2.2.32"
+presidio_anonymizer = "2.2.32"
+presidio_image_redactor = "0.0.46"
+pytesseract = "0.3.7"
+pytest = "7.1.3"
+rapidocr-onnxruntime = "1.2.3"
+scikit-learn = "1.2.2"
+scipy = "1.9.3"
+sqlalchemy = "1.4.43"
+tiktoken = "0.4.0"
+torch = "^2.0.0"
+tqdm = "4.64.0"
+transformers = "4.29.2"
+python-dotenv = "1.0.0"
+pyinstaller = "^5.12.0"
+setuptools-lint = "^0.6.0"
+sphinx = "7.0.1"
+nicegui = "1.2.16"
+spacy = "^3.5.3"
+fuzzywuzzy = "0.18.0"
+segment-anything = "^1.0"
+torchvision = "^0.15.2"
+sumy = "0.11.0"
+nltk = "3.8.1"
+
+[tool.poetry.dependencies.en_core_web_trf]
+url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+visualize = "openadapt.visualize:main"
+record = "openadapt.record:start"
+replay = "openadapt.replay:start"
+app = "openadapt.app.main:run_app"
 
 [tool.semantic_release]
 version_variable = [
     "openadapt/__init__.py:__version__"
 ]
 version_toml = [
-    "pyproject.toml:project.version"
+    "pyproject.toml:tool.poetry.version"
 ]
 major_on_zero = false
 branch = "main"
@@ -43,4 +101,4 @@ upload_to_PyPI = false
 upload_to_release = true
 upload_to_repository = false
 repository_url = "https://upload.pypi.org/legacy/"
-build_command = "python3 -m pip install --upgrade build && python3 -m build"
+build_command = "pip install poetry && poetry build"

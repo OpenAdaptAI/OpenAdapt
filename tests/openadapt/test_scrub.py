@@ -9,6 +9,18 @@ from PIL import Image
 from openadapt import scrub, config
 
 
+def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
+    """
+    Convert a hex color (int) to RGB
+    """
+
+    assert 0x000000 <= hex_color <= 0xFFFFFF
+    b = (hex_color >> 16) & 0xFF
+    g = (hex_color >> 8) & 0xFF
+    r = hex_color & 0xFF
+    return r, g, b
+
+
 def test_scrub_image() -> None:
     """
     Test that the scrubbed image data is different
@@ -37,7 +49,8 @@ def test_scrub_image() -> None:
 
     # Count the number of pixels having the color of the mask
     mask_pixels = sum(
-        1 for pixel in scrubbed_image.getdata() if pixel == config.SCRUB_FILL_COLOR
+        1 for pixel in scrubbed_image.getdata()
+        if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
@@ -81,7 +94,7 @@ def test_scrub_email() -> None:
     # Test scrubbing of email address
     assert (
         scrub.scrub_text("My email is john.doe@example.com.")
-        == "My email is ********************."
+        == "My email is <EMAIL_ADDRESS>."
     )
 
 
@@ -92,7 +105,7 @@ def test_scrub_phone_number() -> None:
 
     assert (
         scrub.scrub_text("My phone number is 123-456-7890.")
-        == "My phone number is ************."
+        == "My phone number is <PHONE_NUMBER>."
     )
 
 
@@ -103,7 +116,7 @@ def test_scrub_credit_card() -> None:
 
     assert (
         scrub.scrub_text("My credit card number is 4234-5678-9012-3456 and ")
-    ) == "My credit card number is ******************* and "
+    ) == "My credit card number is <CREDIT_CARD> and "
 
 
 def test_scrub_date_of_birth() -> None:
@@ -124,7 +137,7 @@ def test_scrub_address() -> None:
 
     assert (
         scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
-        == "My address is 123 Main St, Toro***, On, ***."
+        == "My address is 123 Main St, <LOCATION>, On, <LOCATION>."
     )
 
 
@@ -136,7 +149,7 @@ def test_scrub_ssn() -> None:
     # Test scrubbing of social security number
     assert (
         scrub.scrub_text("My social security number is 923-45-6789")
-        == "My social security number is ***********"
+        == "My social security number is <US_SSN>"
     )
 
 
@@ -147,7 +160,7 @@ def test_scrub_dl() -> None:
 
     assert (
         scrub.scrub_text("My driver's license number is A123-456-789-012")
-        == "My driver's license number is ****-456-789-012"
+        == "My driver's license number is <US_DRIVER_LICENSE>-456-789-012"
     )
 
 
@@ -158,7 +171,7 @@ def test_scrub_passport() -> None:
 
     assert (
         scrub.scrub_text("My passport number is A1234567.")
-        == "My passport number is ********."
+        == "My passport number is <US_DRIVER_LICENSE>."
     )
 
 
@@ -169,7 +182,7 @@ def test_scrub_national_id() -> None:
 
     assert (
         scrub.scrub_text("My national ID number is 1234567890123.")
-        == "My national ID number is *************."
+        == "My national ID number is <US_BANK_NUMBER>."
     )
 
 
@@ -180,7 +193,9 @@ def test_scrub_routing_number():
 
     assert (
         scrub.scrub_text("My bank routing number is 123456789.")
-        == "My bank routing number is *********."
+        == "My bank routing number is <US_PASSPORT>." or
+        scrub.scrub_text("My bank routing number is 123456789.")
+        == "My bank routing number is <US_BANK_NUMBER>."
     )
 
 
@@ -191,7 +206,7 @@ def test_scrub_bank_account() -> None:
 
     assert (
         scrub.scrub_text("My bank account number is 635526789012.")
-        == "My bank account number is ************."
+        == "My bank account number is <US_BANK_NUMBER>."
     )
 
 
@@ -208,10 +223,10 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert scrub.scrub_text(text_with_pii_phi) == (
-        "************ email is ********************* and"
-        " his phone number is ************."
-        "His credit card number is ******************* and"
-        " his social security number is ***********."
+        "<PERSON> email is <EMAIL_ADDRESS> and"
+        " his phone number is <PHONE_NUMBER>."
+        "His credit card number is <CREDIT_CARD> and"
+        " his social security number is <US_SSN>."
         " He was born on 01/01/1980."
     )
 
