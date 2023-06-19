@@ -32,9 +32,7 @@ def scrub_mp4(sourceVideopath: str) -> str:
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = frame_count / fps
-    fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+    fourcc = cv2.VideoWriter_fourcc("m", "p", "4", "v")
     out = cv2.VideoWriter(
         destVideoPath, fourcc, fps, (frame_width, frame_height)
     )
@@ -74,7 +72,7 @@ def scrub_media_file(media_file_path: str) -> str:
         Path to the scrubbed media file.
     """
 
-    file_extension = os.path.splitext(media_file_path)[1].lower()    
+    file_extension = os.path.splitext(media_file_path)[1].lower()
     scrub_functions = {
         ".mp4": scrub_mp4,
         # Add more extensions and corresponding functions as needed
@@ -83,15 +81,11 @@ def scrub_media_file(media_file_path: str) -> str:
     if file_extension in scrub_functions:
         scrub_function = scrub_functions[file_extension]
         return scrub_function(media_file_path)
-    else:
-        logger.info(
-            "Unsupported media file format: {}".format(file_extension)
-        )
-        return ""
+    logger.info(f"Unsupported media file format: {file_extension}")
+    return ""
 
 
 if __name__ == "__main__":
-
     if (
         len(sys.argv) < 2
         or len(sys.argv) > 2
@@ -102,13 +96,10 @@ if __name__ == "__main__":
             "Usage: python -m openadapt.scripts.scrub <video_file_path>"
         )
         sys.exit(1)
-        
-    media_file_path = sys.argv[1]
-    scrubbed_file_path = scrub_media_file(media_file_path)
+
+    scrubbed_file_path = scrub_media_file(sys.argv[1])
 
     if scrubbed_file_path:
-        logger.info(
-            "Scrubbed media file saved at: {}".format(scrubbed_file_path)
-        )
+        logger.info(f"Scrubbed media file saved at: {scrubbed_file_path}")
     else:
         logger.info("Failed to scrub the media file.")
