@@ -52,7 +52,7 @@ jobs:
 
       - name: Check formatting with Black
         run: |
-          poetry run black --check --exclude "(src|alembic)/" .
+          black --check --exclude "(src|alembic)/" .
 
       # - name: Run headless tests
       #   uses: coactions/setup-xvfb@v1
