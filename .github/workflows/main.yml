@@ -53,7 +53,7 @@ jobs:
       - name: Check formatting with Black
         uses: rickstaa/action-black@v1
         with:
-          black_args: "--check  --exclude "(src|alembic)/" ."
+          black_args: "--check --exclude \"(src|alembic)/\" ."
 
       # - name: Run headless tests
       #   uses: coactions/setup-xvfb@v1
