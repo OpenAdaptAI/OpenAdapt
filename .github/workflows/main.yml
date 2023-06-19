@@ -22,7 +22,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/.local
-          key: poetry-1.5.1-0
+          key: poetry-1.5.1
 
       - uses: snok/install-poetry@v1
         with:
@@ -70,7 +70,7 @@ jobs:
           poetry add flake8-docstrings
 
       - name: Run Flake8
-        run: poetry run flake8 --exclude alembic/versions --docstring-convention google .
+        run: poetry run flake8 --exclude alembic/versions --exclude .venv --docstring-convention google .
 
       # - name: flake8 Lint
       #   uses: py-actions/flake8@v2
