@@ -1267,6 +1267,25 @@ files = [
 speedup = ["python-levenshtein (>=0.12)"]
 
 [[package]]
+name = "gpt4all"
+version = "0.3.4"
+description = "Python bindings for GPT4All"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "gpt4all-0.3.4-py3-none-macosx_10_9_universal2.whl", hash = "sha256:04298e895594f45f31a99505d5c11394c2504b1422bfc1db1de407ff2b50c186"},
+    {file = "gpt4all-0.3.4-py3-none-manylinux1_x86_64.whl", hash = "sha256:8ac13f8b0157411f67f44c30420f495b35de1cd56f4a1d1b1c911ce5b3dbbf8f"},
+    {file = "gpt4all-0.3.4-py3-none-win_amd64.whl", hash = "sha256:4caea41b71a69bc0b350e466e2f726bed4b288c4d303aa6acd1ded19b445af3c"},
+]
+
+[package.dependencies]
+requests = "*"
+tqdm = "*"
+
+[package.extras]
+dev = ["mkautodoc", "mkdocs-jupyter", "mkdocs-material", "mkdocstrings[python]", "pytest", "setuptools", "twine", "wheel"]
+
+[[package]]
 name = "greenlet"
 version = "2.0.2"
 description = "Lightweight in-process concurrent programming"
@@ -5576,4 +5595,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "76bf83ee8b5b63629d8da49cbbd5d03ffc6bc52b2559ceda211a03146a733586"
+content-hash = "df34306ebdb996f9e26a4b3efdeced8c655f189486a1670b925c40f5c3e1350c"
