@@ -113,7 +113,8 @@ def insert_audio_info(
         sample_rate,
         word_list
 ):
-    """Create an AudioInfo entry in the database."""
+    """Insert an AudioInfo entry into the database."""
+    thread_local_db = Session()
     audio_info = AudioInfo(
         flac_data=audio_data,
         transcribed_text=transcribed_text,
@@ -121,8 +122,8 @@ def insert_audio_info(
         sample_rate=sample_rate,
         words_with_timestamps=json.dumps(word_list)
     )
-    db.add(audio_info)
-    db.commit()
+    thread_local_db.add(audio_info)
+    thread_local_db.commit()
 
 
 def insert_recording(recording_data):
