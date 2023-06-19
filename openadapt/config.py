@@ -38,7 +38,7 @@ _DEFAULTS = {
         "presence_penalty": 0.4,
         "token_count": 200, 
         "ctx_limit": 1536},
-    "RWKV_MODEL": 0
+    "RWKV_MODEL": 0,
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
