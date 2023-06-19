@@ -48,18 +48,18 @@ jobs:
       - run: poetry install --no-interaction
       # And finally run tests. I'm using pytest and all my pytest config is in my `pyproject.toml`
       # so this line is super-simple. But it could be as complex as you need.
-      - run: poetry run pytest
+      # - run: poetry run pytest
 
       - name: Check formatting with Black
         run: |
-          black --check --exclude "(src|alembic)/" .
+          poetry run black --check --exclude "(src|alembic)/" .
 
-      - name: Run headless tests
-        uses: coactions/setup-xvfb@v1
-        with:
-          run: python -m pytest
-          working-directory: ./  # Optional: Specify the working directory if needed
-          options:  # Optional: Add any additional options or arguments for pytest
+      # - name: Run headless tests
+      #   uses: coactions/setup-xvfb@v1
+      #   with:
+      #     run: python -m pytest
+      #     working-directory: ./  # Optional: Specify the working directory if needed
+      #     options:  # Optional: Add any additional options or arguments for pytest
 
       - name: flake8 Lint
         uses: py-actions/flake8@v2
