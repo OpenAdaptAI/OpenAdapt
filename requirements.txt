@@ -3,10 +3,10 @@ ascii_magic==2.3.0
 black==23.3.0
 atomacos @ git+https://github.com/abrichr/atomacos.git#egg=atomacos ; sys_platform == 'darwin'
 bokeh==2.4.3
+cairosvg==2.7.0
 clipboard==0.0.4
 deepdiff[optimize]==6.3.0
 dictalchemy3==1.0.0
-drawsvg==2.1.1
 fire==0.4.0
 fuzzywuzzy==0.18.0
 ipdb==0.13.11

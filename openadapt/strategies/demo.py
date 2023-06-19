@@ -20,7 +20,7 @@ from openadapt.strategies.mixins.huggingface import (
 
 from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
-from openadapt.strategies.mixins.svg_mixin import SVGReplayStrategyMixin
+from openadapt.strategies.mixins.svg import SVGReplayStrategyMixin
 from openadapt.strategies.mixins.sam import SAMReplayStrategyMixin
 from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
 
