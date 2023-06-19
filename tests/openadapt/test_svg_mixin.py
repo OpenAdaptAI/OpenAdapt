@@ -2,6 +2,7 @@ from io import BytesIO, StringIO
 from PIL import Image
 import cairosvg as cairo
 import numpy as np
+from loguru import logger
 
 from openadapt.strategies.demo import DemoReplayStrategy
 from openadapt.models import Recording, Screenshot
@@ -35,8 +36,8 @@ def test_one_button():
     cairo.svg2png(file_obj=actual_svg_file, write_to=actual_png_file)
     actual = Image.open(actual_png_file)
 
-    print("almost done")
+    logger.info("saved test images")
     difference = mse(expected, actual)
-    print(difference)
+    logger.info(f"{difference=}")
     assert difference < 100
 

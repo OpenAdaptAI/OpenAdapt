@@ -1,8 +1,5 @@
 """
-Implements a ReplayStrategy mixin using Pypotrace to convert an image to SVG text.
-
-NOTE: additional libraries on the system are needed,
-        see https://github.com/flupke/pypotrace#installation
+Implements a ReplayStrategy mixin using VTracer to convert an image to SVG text.
 
 Usage:
 
@@ -10,15 +7,14 @@ Usage:
         ...
 """
 import subprocess
-import numpy as np
-import drawsvg as draw
+import tempfile
 
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
 
 class SVGReplayStrategyMixin(BaseReplayStrategy):
-    """ReplayStrategy mixin that uses Pypotrace to convert an image to SVG text.
+    """ReplayStrategy mixin that uses VTracer to convert an image to SVG text.
 
     Attributes:
         recording: the recording to be played back
@@ -29,15 +25,17 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
 
     def get_svg_text(self, screenshot: Screenshot) -> str:
         input_img = screenshot.image
-        input_img.save("input.png")
 
-        subprocess.run(["vtracer", "--input", "input.png", "--output", "output.svg"])
+        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.svg')
 
-        with open("output.svg", "r") as file:
+        # Create a temporary png file with the image
+        #   delete=False so the file is deleted after the function returns
+        with tempfile.NamedTemporaryFile(suffix='.png') as temp_input:
+            # Save the image to the temporary file
+            input_img.save(temp_input, 'PNG')
+            subprocess.run(["vtracer", "--input", temp_input.name, "--output", temp_output.name])
+
+        with open(temp_output.name, "r") as file:
             svg_text = file.read()
-
-        # clean-up
-        subprocess.run(["rm", "input.png"])
-        subprocess.run(["rm", "output.svg"])
 
         return svg_text
