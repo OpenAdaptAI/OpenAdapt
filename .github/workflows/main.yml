@@ -53,7 +53,7 @@ jobs:
       - name: Check formatting with Black
         uses: psf/black@stable
         with:
-          options: "--check --exclude \"(src|alembic)/\""
+          options: "--check --exclude \"(src|alembic|venv)/\""
 
       # - name: Run headless tests
       #   uses: coactions/setup-xvfb@v1
