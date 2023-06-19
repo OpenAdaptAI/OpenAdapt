@@ -61,10 +61,18 @@ jobs:
       #     run: python -m pytest
       #     working-directory: ./  # Optional: Specify the working directory if needed
       #     options:  # Optional: Add any additional options or arguments for pytest
+      - name: Run Flake8 with Google Python style docstring check
+        uses: actions/checkout@v3
 
-      - name: flake8 Lint
-        uses: py-actions/flake8@v2
-        with:
-          plugins: "flake8-docstrings"
-          exclude: "alembic/versions"
-          args: "--docstring-convention=google"
+      - name: Install Flake8
+        run: poetry add flake8
+
+      - name: Run Flake8
+        run: poetry run flake8 --exclude alembic/versions --docstring-style google .
+
+      # - name: flake8 Lint
+      #   uses: py-actions/flake8@v2
+      #   with:
+      #     plugins: "flake8-docstrings"
+      #     exclude: "alembic/versions"
+      #     args: "--docstring-convention=google"
