@@ -66,4 +66,5 @@ jobs:
         uses: py-actions/flake8@v2
         with:
           plugins: "flake8-docstrings"
-          extra-args: "--docstring-convention=google --exclude=alembic/versions"
+          exclude: "alembic/versions, .venv"
+          args: "--docstring-convention=google"
