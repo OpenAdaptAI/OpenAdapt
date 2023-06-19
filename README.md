@@ -2,6 +2,10 @@
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
+<img width="1512" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/60a85160-7b07-41b0-9295-2d1bfa6a0994">
+
+([Slides](https://t.ly/7RGr))
+
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
 
@@ -15,14 +19,26 @@ The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
 except that we use transformers instead of conventional RPA tools.
 
-The approach is similar to [adept.ai](https://adept.ai/), with some key differences:
-1. Instead of requiring the user to prompt the model directly, we prompt it behind the
-scenes by observing the user's activities;
-2. We work with all types of desktop applications, not just web apps;
-3. We're open source!
+The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
+1. OpenAdapt is model agnostic;
+1. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted);
+2. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
+3. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
 ## Install
 
+Recommended: Install with [Poetry](https://python-poetry.org/):
+```
+git clone https://github.com/MLDSAI/OpenAdapt.git
+cd OpenAdapt
+pip install poetry
+poetry install
+poetry shell
+alembic upgrade head
+pytest
+```
+
+Manual:
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
@@ -31,9 +47,14 @@ source .venv/bin/activate
 pip install wheel
 pip install -r requirements.txt
 pip install -e .
+python -m spacy download en_core_web_trf
 alembic upgrade head
 pytest
 ```
+
+## Permissions
+
+See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
 ## Run
 
@@ -75,7 +96,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![visualize.py](./assets/visualize.png)
+![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -89,10 +110,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 
 ## Contributing
-
-### Design
-
-![image](https://user-images.githubusercontent.com/774615/236658984-01f9c06b-d132-40ee-a716-205fa76bf3f2.png)
 
 ### Problem Statement
 
@@ -180,25 +197,18 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 ## Troubleshooting
 
-Apple Silicon:
+MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-```
-$ python openadapt/record.py
-...
-This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
-```
+![MacOS System Alerts](./assets/macOS_permissions_alert.png)
 
-Solution:
-https://stackoverflow.com/a/69673312
+In summary (from https://stackoverflow.com/a/69673312):
 
-```
-Settings -> Security & Privacy
-Click on the Privacy tab
-Scroll and click on the Accessibility Row
-Click the +
-Navigate to /System/Applications/Utilities/ or wherever the Terminal.app is installed
-Click okay.
-```
+1. Settings -> Security & Privacy
+2. Click on the Privacy tab
+3. Scroll and click on the Accessibility Row
+4. Click +
+5. Navigate to /System/Applications/Utilities/ (or wherever Terminal.app is installed)
+6. Click okay.
 
 ## Developing
 

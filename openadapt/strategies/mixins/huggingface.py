@@ -1,5 +1,5 @@
 """
-Implements a ReplayStrategy mixin for generating LLM completions.
+Implements a ReplayStrategy mixin for generating completions with HuggingFace.
 
 Usage:
 
@@ -19,13 +19,13 @@ MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
 MAX_INPUT_SIZE = 1024
 
 
-class LLMReplayStrategyMixin(BaseReplayStrategy):
+class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
         self,
         recording: Recording,
         model_name: str = MODEL_NAME,
-        max_input_size: str = MAX_INPUT_SIZE,
+        max_input_size: int = MAX_INPUT_SIZE,
     ):
         super().__init__(recording)
 
@@ -42,7 +42,7 @@ class LLMReplayStrategyMixin(BaseReplayStrategy):
         max_input_size = self.max_input_size
         if max_input_size and len(prompt) > max_input_size:
             logger.warning(
-                f"Truncating from {len(prompt)=} to {max_input_size=}"
+                f"Truncating from {len(prompt) =} to {max_input_size=}"
             )
             prompt = prompt[-max_input_size:]
             logger.warning(
