@@ -7,7 +7,7 @@ on:
 
 jobs:
   run-ci:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -35,7 +35,7 @@ jobs:
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
-          
+
       # Install dependencies. `--no-root` means "install all dependencies but not the project
       # itself", which is what you want to avoid caching _your_ code. The `if` statement
       # ensures this only runs on a cache miss.
