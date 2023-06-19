@@ -51,7 +51,9 @@ jobs:
       # - run: poetry run pytest
 
       - name: Check formatting with Black
-        run: poetry run black --check --exclude "(src|alembic)/" .
+        uses: rickstaa/action-black@v1
+        with:
+          black_args: "--check  --exclude "(src|alembic)/" ."
 
       # - name: Run headless tests
       #   uses: coactions/setup-xvfb@v1
