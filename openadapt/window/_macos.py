@@ -37,7 +37,7 @@ def get_active_window_state():
     }
     rval = deepconvert_objc(rval)
     try:
-        pickle.dumps(rval)
+        pickle.dumps(rval, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logger.warning(f"{exc=}")
         rval.pop("data")
@@ -155,7 +155,7 @@ def get_active_element_state(x, y):
     state = dump_state(el.ref)
     state = deepconvert_objc(state)
     try:
-        pickle.dumps(state)
+        pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logger.warning(f"{exc=}")
         state = {}
@@ -168,7 +168,7 @@ def main():
 
     state = get_active_window_state()
     pprint(state)
-    pickle.dumps(state)
+    pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
     import ipdb; ipdb.set_trace()
 
 
