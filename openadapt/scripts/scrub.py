@@ -15,33 +15,32 @@ import numpy as np
 from openadapt import scrub
 
 
-def scrub_mp4(sourceVideopath: str) -> str:
+def scrub_mp4(mp4_file: str) -> str:
     """
     Scrub a mp4 file.
 
     Args:
-        sourceVideopath: Path to the mp4 file.
+        mp4_file: Path to the mp4 file.
 
     Returns:
         Path to the scrubbed (redacted) mp4 file.
     """
 
-    destVideoPath = sourceVideopath[:-4] + "_scrubbed.mp4"
+    scrubbed_file = mp4_file[:-4] + "_scrubbed.mp4"
 
-    cap = cv2.VideoCapture(sourceVideopath)
+    cap = cv2.VideoCapture(mp4_file)
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     fourcc = cv2.VideoWriter_fourcc("m", "p", "4", "v")
     out = cv2.VideoWriter(
-        destVideoPath, fourcc, fps, (frame_width, frame_height)
+        scrubbed_file, fourcc, fps, (frame_width, frame_height)
     )
-    frameRate = fps
 
     while cap.isOpened():
-        frameId = cap.get(1)  # current frame number
+        # frameId = cap.get(1)  # current frame number
         ret, frame = cap.read()
-        if ret != True:
+        if not ret:
             break
         # Convert frame to PIL.Image
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -58,7 +57,7 @@ def scrub_mp4(sourceVideopath: str) -> str:
     cap.release()
     out.release()
 
-    return destVideoPath
+    return scrubbed_file
 
 
 def scrub_media_file(media_file_path: str) -> str:
