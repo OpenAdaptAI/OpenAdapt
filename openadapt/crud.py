@@ -136,6 +136,7 @@ def get_action_events(recording):
 
 def filter_stop_sequences(action_events):
     # check for ctrl c first
+    # TODO: want to handle sequences like ctrl c the same way as normal sequences
     if len(action_events) >= 2:
         if (
             action_events[-1].canonical_key_char == "c"
@@ -167,8 +168,9 @@ def filter_stop_sequences(action_events):
             if (
                 action_events[j].canonical_key_char
                 == STOP_SEQUENCES[i][stop_sequence_indices[i]]
-                and action_events[j].name == "press"
-            ):
+                or action_events[j].canonical_key_name
+                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+            ) and action_events[j].name == "press":
                 # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
