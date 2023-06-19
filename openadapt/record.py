@@ -50,13 +50,13 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 
 
 def process_events(
-        event_q: queue.Queue,
-        screen_write_q: multiprocessing.Queue,
-        action_write_q: multiprocessing.Queue,
-        window_write_q: multiprocessing.Queue,
-        perf_q: multiprocessing.Queue,
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
+    event_q: queue.Queue,
+    screen_write_q: multiprocessing.Queue,
+    action_write_q: multiprocessing.Queue,
+    window_write_q: multiprocessing.Queue,
+    perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
 ):
     """
     Process events from event queue and write them to respective write queues.
@@ -131,9 +131,9 @@ def process_events(
 
 
 def write_action_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -150,9 +150,9 @@ def write_action_event(
 
 
 def write_screen_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -172,9 +172,9 @@ def write_screen_event(
 
 
 def write_window_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -191,12 +191,12 @@ def write_window_event(
 
 
 def write_events(
-        event_type: str,
-        write_fn: Callable,
-        write_q: multiprocessing.Queue,
-        perf_q: multiprocessing.Queue,
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
+    event_type: str,
+    write_fn: Callable,
+    write_q: multiprocessing.Queue,
+    perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -226,8 +226,8 @@ def write_events(
 
 
 def trigger_action_event(
-        event_q: queue.Queue,
-        action_event_args: Dict[str, Any],
+    event_q: queue.Queue,
+    action_event_args: Dict[str, Any],
 ) -> None:
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
@@ -241,10 +241,10 @@ def trigger_action_event(
 
 
 def on_move(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
@@ -259,12 +259,12 @@ def on_move(
 
 
 def on_click(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        button: mouse.Button,
-        pressed: bool,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    button: mouse.Button,
+    pressed: bool,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
@@ -281,12 +281,12 @@ def on_click(
 
 
 def on_scroll(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        dx: int,
-        dy: int,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    dx: int,
+    dy: int,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
@@ -303,10 +303,10 @@ def on_scroll(
 
 
 def handle_key(
-        event_q: queue.Queue,
-        event_name: str,
-        key: keyboard.KeyCode,
-        canonical_key: keyboard.KeyCode,
+    event_q: queue.Queue,
+    event_name: str,
+    key: keyboard.KeyCode,
+    canonical_key: keyboard.KeyCode,
 ) -> None:
     attr_names = [
         "name",
@@ -326,9 +326,9 @@ def handle_key(
 
 
 def read_screen_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     """
     Read screen events and add them to the event queue.
@@ -377,7 +377,6 @@ def read_window_events(
         if window_data["title"] != prev_window_data.get("title") or window_data[
             "window_id"
         ] != prev_window_data.get("window_id"):
-
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -435,7 +434,7 @@ def performance_stats_writer(
 
 
 def create_recording(
-        task_description: str,
+    task_description: str,
 ) -> Dict[str, Any]:
     """
     Create a new recording entry in the database.
@@ -495,9 +494,9 @@ def read_keyboard_events(
 
 
 def read_mouse_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
@@ -510,10 +509,81 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
-def record(
-        task_description: str,
-        enable_audio: bool = False
-):
+def record_audio(
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
+) -> None:
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+
+    audio_frames = []  # to store audio frames
+
+    def audio_callback(indata, frames, time, status):
+        # called whenever there is new audio frames
+        audio_frames.append(indata.copy())
+
+    # open InputStream and start recording while ActionEvents are recorded
+    audio_stream = sounddevice.InputStream(
+        callback=audio_callback, samplerate=16000, channels=1
+    )
+    logger.info("Audio recording started.")
+    audio_stream.start()
+    terminate_event.wait()
+    audio_stream.stop()
+    audio_stream.close()
+
+    # Concatenate into one Numpy array
+    concatenated_audio = np.concatenate(audio_frames, axis=0)
+    # convert concatenated_audio to format expected by whisper
+    converted_audio = concatenated_audio.flatten().astype(np.float32)
+
+    # Convert audio to text using OpenAI's Whisper
+    logger.info("Transcribing audio...")
+    model = whisper.load_model("base")
+    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+    logger.info(f"The narrated text is: {result_info['text']}")
+    # empty word_list if the user didn't say anything
+    word_list = []
+    # segments could be empty
+    if len(result_info["segments"]) > 0:
+        # there won't be a 'words' list if the user didn't say anything
+        if "words" in result_info["segments"][0]:
+            word_list = result_info["segments"][0]["words"]
+
+    # compress and convert to bytes to save to database
+    logger.info(
+        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
+    )
+    # Create an in-memory file-like object
+    file_obj = io.BytesIO()
+    # Write the audio data using lossless compression
+    soundfile.write(
+        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
+    )
+    # Get the compressed audio data as bytes
+    compressed_audio_bytes = file_obj.getvalue()
+
+    logger.info(
+        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
+    )
+
+    file_obj.close()
+
+    # To decompress the audio and restore it to its original form:
+    # restored_audio, restored_samplerate = sf.read(
+    # io.BytesIO(compressed_audio_bytes))
+
+    # Create AudioInfo entry
+    crud.insert_audio_info(
+        compressed_audio_bytes,
+        result_info["text"],
+        recording_timestamp,
+        int(audio_stream.samplerate),
+        word_list,
+    )
+
+
+def record(task_description: str, enable_audio: bool = False):
     """
     Record Screenshots/ActionEvents/WindowEvents. Optionally record audio narration from the user
     describing what tasks are being done.
@@ -625,70 +695,20 @@ def record(
     )
     perf_stat_writer.start()
 
-    # TODO: discard events until everything is ready
-
-    audio_frames = []  # to store audio frames
-
     if enable_audio:
-        def audio_callback(indata, frames, time, status):
-            # called whenever there is new audio frames
-            audio_frames.append(indata.copy())
+        audio_recorder = threading.Thread(
+            target=record_audio,
+            args=(terminate_event, recording_timestamp),
+        )
+        audio_recorder.start()
 
-        # open InputStream and start recording while ActionEvents are recorded
-        audio_stream = sounddevice.InputStream(
-            callback=audio_callback, samplerate=16000, channels=1)
-        logger.info("Audio recording started.")
-        audio_stream.start()
+    # TODO: discard events until everything is ready
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         terminate_event.set()
-
-    if enable_audio:
-        # stop the recording and close the InputStream
-        audio_stream.stop()
-        audio_stream.close()
-
-        # Concatenate into one Numpy array
-        concatenated_audio = np.concatenate(audio_frames, axis=0)
-        # convert concatenated_audio to format expected by whisper
-        converted_audio = concatenated_audio.flatten().astype(np.float32)
-
-        # Convert audio to text using OpenAI's Whisper
-        logger.info("Transcribing audio...")
-        model = whisper.load_model("base")
-        result_info = model.transcribe(
-            converted_audio, word_timestamps=True, fp16=False)
-        logger.info(f"The narrated text is: {result_info['text']}")
-        # empty word_list if the user didn't say anything
-        word_list = []
-        if len(result_info['segments']) > 0:
-            # segments could be empty
-            if 'words' in result_info['segments'][0]:
-                # there won't be a 'words' list if the user didn't say anything
-                word_list = result_info['segments'][0]['words']
-
-        # compress and convert to bytes to save to database
-        logger.info("Size of uncompressed audio data: {} bytes"
-                    .format(converted_audio.nbytes))
-        # Create an in-memory file-like object
-        file_obj = io.BytesIO()
-        # Write the audio data using lossless compression
-        soundfile.write(file_obj, converted_audio,
-                        int(audio_stream.samplerate), format='FLAC')
-        # Get the compressed audio data as bytes
-        compressed_audio_bytes = file_obj.getvalue()
-
-        logger.info("Size of compressed audio data: {} bytes"
-                    .format(len(compressed_audio_bytes)))
-
-        file_obj.close()
-
-        # To decompress the audio and restore it to its original form:
-        # restored_audio, restored_samplerate = sf.read(
-        # io.BytesIO(compressed_audio_bytes))
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -699,19 +719,13 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    if enable_audio:
+        audio_recorder.join()
 
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
         utils.plot_performance(recording_timestamp)
-
-    if enable_audio:
-        # Create AudioInfo entry
-        audio_info = crud.insert_audio_info(compressed_audio_bytes,
-                                            result_info['text'],
-                                            recording_timestamp,
-                                            int(audio_stream.samplerate),
-                                            word_list)
 
     logger.info(f"saved {recording_timestamp=}")
 
