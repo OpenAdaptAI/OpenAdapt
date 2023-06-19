@@ -68,7 +68,7 @@ jobs:
         run: poetry add flake8
 
       - name: Run Flake8
-        run: poetry run flake8 --exclude alembic/versions --docstring-style google .
+        run: poetry run flake8 --exclude alembic/versions --docstring-convention google .
 
       # - name: flake8 Lint
       #   uses: py-actions/flake8@v2
