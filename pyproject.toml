@@ -3,7 +3,7 @@ name = "openadapt"
 version = "0.1.0"
 description = "GUI Process Automation with Transformers"
 authors = ["Richard Abrich <richard.abrich@mldsai.com>"]
-readme = ["README.md", "LICENSE"]
+readme = "README.md"
 
 repository = "https://github.com/mldsai/openadapt"
 homepage = "https://openadapt.ai/"
