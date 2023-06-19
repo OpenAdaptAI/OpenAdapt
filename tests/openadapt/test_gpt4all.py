@@ -3,10 +3,9 @@ from openadapt.models import Recording
 
 
 def test_gpt4all_initiation():
-    """A smoke test for gpt4all.
-    """
+    """A smoke test for gpt4all."""
     recording = Recording()
-    replay = DemoReplayStrategy(recording) 
+    replay = DemoReplayStrategy(recording)
 
     response = replay.get_gpt4all_completion("Does it work?")
 

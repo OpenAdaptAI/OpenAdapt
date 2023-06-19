@@ -6,10 +6,10 @@ Usage:
     class MyReplayStrategy(GPT4ALLReplayStrategyMixin):
         ...
 """
-from gpt4all import GPT4All
-import transformers as tf
 
-from openadapt.models import Recording, Screenshot
+from gpt4all import GPT4All
+
+from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
 
 MODEL_NAME = "ggml-gpt4all-j-v1.3-groovy.bin"
