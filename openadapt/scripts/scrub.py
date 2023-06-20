@@ -1,6 +1,7 @@
 """Module for scrubbing a media file.
 
-Usage: python -m openadapt.scripts.scrub <media_file_path>
+Usage: 
+    $ python -m openadapt.scripts.scrub scrub_mp4 <mp4_file_path>
 
 """
 
@@ -10,9 +11,10 @@ import sys
 from loguru import logger
 from PIL import Image
 import cv2
+import fire
 import numpy as np
 
-from openadapt import scrub
+from openadapt import scrub, utils
 
 
 def scrub_mp4(mp4_file: str) -> str:
@@ -84,20 +86,4 @@ def scrub_media_file(media_file_path: str) -> str:
 
 
 if __name__ == "__main__":
-    if (
-        len(sys.argv) < 2
-        or len(sys.argv) > 2
-        or sys.argv[1] == "-h"
-        or sys.argv[1] == "--help"
-    ):
-        logger.info(
-            "Usage: python -m openadapt.scripts.scrub <video_file_path>"
-        )
-        sys.exit(1)
-
-    scrubbed_file_path = scrub_media_file(sys.argv[1])
-
-    if scrubbed_file_path:
-        logger.info(f"Scrubbed media file saved at: {scrubbed_file_path}")
-    else:
-        logger.info("Failed to scrub the media file.")
+    fire.Fire(utils.get_functions(__name__))
