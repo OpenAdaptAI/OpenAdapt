@@ -2,9 +2,10 @@ import sqlite3
 import tempfile
 import os
 import sys
+import subprocess
 
 from loguru import logger
-from openadapt.signals import Signals, initialize_default_signals
+from openadapt.signals import Signals, initialize_default_signals, add_files_from_pid
 from openadapt import config
 
 
@@ -141,3 +142,19 @@ def test_return_signal_data_unsupported_type():
         assert True
 
 
+def test_add_signal_from_pid():
+    signals = Signals()
+
+    with open('test_file.txt', 'w') as f:
+        f.write('Test')
+    process = subprocess.Popen(['python', '-c', 
+        'import time; f = open("test_file.txt", "r"); time.sleep(5)'])
+
+    add_files_from_pid(signals,process.pid)
+    process.wait()
+    process.terminate()
+    os.remove('test_file.txt')
+
+    #signal_data = signals.return_signal_data(1)
+    signal_data = signals.return_signals()
+    assert signal_data == None

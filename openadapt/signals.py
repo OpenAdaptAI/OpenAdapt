@@ -5,19 +5,21 @@ import mimetypes
 import sys
 import sqlite3
 import pandas as pd
+import psutil
+import subprocess
 
 from loguru import logger
 
 from openadapt import config
-import psutil
-import subprocess
 
-def add_pid(pid):
+
+def add_files_from_pid(current_signals,pid):
     try:
         process = psutil.Process(pid)
         open_files = process.open_files()
         for file in open_files:
-            print(f"Open file: {file.path}")
+            logger.info(f"Open file: {file.path}")
+            current_signals.add_signal(file.path, type="file")
     except psutil.NoSuchProcess:
         print(f"No process with pid {pid} exists")
 
@@ -248,26 +250,25 @@ class Signals:
             signal_data = response.content
         return signal_data
 
-    def add_signal(self, signal_address, signal_title="None"):
+    def add_signal(self, signal_address, signal_title=None, signal_type=None):
         signal_description = None
-        signal_type = None
         if isinstance(signal_address, str):
             # If signal is a string, it could be a file path, a database URL, an HTTP URL, or a Python function name.
-            if signal_address.startswith("pgsql://") or signal_address.endswith(".db"):
+            if signal_address.startswith("pgsql://") or signal_address.endswith(".db") or signal_type == "database":
                 # If the string starts with "pgsql://", treat it as a database URL.
                 signal_description = self.__setup_database_signal(signal_address)
                 signal_type = "database"
             elif signal_address.startswith("http://") or signal_address.startswith(
                 "https://"
-            ):
+            ) or signal_type == "web_url":
                 # If the string starts with "http://" or "https://", treat it as an HTTP URL.
                 signal_description = self.__setup_url_signal(signal_address)
                 signal_type = "web_url"
-            elif signal_address.endswith((".json", ".csv", ".txt", ".xlsx", ".xls")):
+            elif signal_address.endswith((".json", ".csv", ".txt", ".xlsx", ".xls")) or signal_type == "file":
                 # If the string ends with a known file extension, treat it as a file path.
                 signal_description = self.__setup_file_signal(signal_address)
                 signal_type = "file"
-            elif signal_address.count(".") >= 1:
+            elif signal_address.count(".") >= 1 or signal_type == "function":
                 # Otherwise, treat it as a Python function name.
                 signal_description = self.__setup_function_signal(signal_address)
                 signal_type = "function"
@@ -343,14 +344,7 @@ class DBTableSignal(Signal):
 
 # Demonstration test code
 if __name__ == "__main__":
-
-    with open('test_file.txt', 'w') as f:
-        f.write('Test')
-    process = subprocess.Popen(['python', '-c', 
-        'import time; f = open("test_file.txt", "r"); time.sleep(5)'])
-
-    add_pid(process.pid)
-
+    print(None)
     # r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
     # length = r.headers.get('Content-Length')
     # type = r.headers.get('Content-Type')
