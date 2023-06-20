@@ -9,6 +9,17 @@ import pandas as pd
 from loguru import logger
 
 from openadapt import config
+import psutil
+import subprocess
+
+def add_pid(pid):
+    try:
+        process = psutil.Process(pid)
+        open_files = process.open_files()
+        for file in open_files:
+            print(f"Open file: {file.path}")
+    except psutil.NoSuchProcess:
+        print(f"No process with pid {pid} exists")
 
 
 class Signals:
@@ -332,6 +343,14 @@ class DBTableSignal(Signal):
 
 # Demonstration test code
 if __name__ == "__main__":
+
+    with open('test_file.txt', 'w') as f:
+        f.write('Test')
+    process = subprocess.Popen(['python', '-c', 
+        'import time; f = open("test_file.txt", "r"); time.sleep(5)'])
+
+    add_pid(process.pid)
+
     # r = requests.head("https://en.wikipedia.org/wiki/HTTP#Request_methods", allow_redirects=True)
     # length = r.headers.get('Content-Length')
     # type = r.headers.get('Content-Type')
@@ -343,9 +362,9 @@ if __name__ == "__main__":
     # signals.add_signal("https://en.wikipedia.org/wiki/HTTP#Request_methods", "wikipedia request methods page")
     # sys.path.append("tests/resources")
     # signals.add_signal("sample_package.sample_module.sample_function", "test function")
-    signals = Signals()
-    signals.add_signal("tests/resources/test_data.xlsx")
-    print(signals.return_signals())
+    # signals = Signals()
+    # signals.add_signal("tests/resources/test_data.xlsx")
+    # print(signals.return_signals())
     # signal_info = signals.return_signals()
     # for signal in signal_info:
     #     print(signal)
