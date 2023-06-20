@@ -12,7 +12,7 @@ RECORDING = Recording()
 
 
 class SVGReplayStrategy(SVGReplayStrategyMixin):
-    """Custom Replay Strategy to soley test the SVg Mixin."""
+    """Custom Replay Strategy to solely test the SVg Mixin."""
     def __init__(self, recording: Recording):
         super().__init__(recording)
 
