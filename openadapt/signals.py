@@ -19,7 +19,7 @@ def add_files_from_pid(current_signals,pid):
         open_files = process.open_files()
         for file in open_files:
             logger.info(f"Open file: {file.path}")
-            current_signals.add_signal(file.path, type="file")
+            current_signals.add_signal(file.path, signal_type="file")
     except psutil.NoSuchProcess:
         print(f"No process with pid {pid} exists")
 

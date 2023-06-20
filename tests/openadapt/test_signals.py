@@ -157,4 +157,4 @@ def test_add_signal_from_pid():
 
     #signal_data = signals.return_signal_data(1)
     signal_data = signals.return_signals()
-    assert signal_data == None
+    assert "test_file" in str(signal_data)
