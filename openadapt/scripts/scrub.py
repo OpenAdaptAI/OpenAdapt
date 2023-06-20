@@ -38,7 +38,6 @@ def scrub_mp4(mp4_file: str) -> str:
     )
 
     while cap.isOpened():
-        # frameId = cap.get(1)  # current frame number
         ret, frame = cap.read()
         if not ret:
             break
