@@ -24,6 +24,7 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
+import psutil
 from pympler import tracker
 tr = tracker.SummaryTracker()
 
@@ -43,6 +44,9 @@ PROC_WRITE_BY_EVENT_TYPE = {
 PLOT_PERFORMANCE = True
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
+
+BYTE_TO_MB = float(2 ** 20)
+
 
 
 def collect_stats():
@@ -441,6 +445,32 @@ def performance_stats_writer(
     logger.info("performance stats writer done")
 
 
+def memory_writer(
+        recording_timestamp: float,
+        terminate_event: multiprocessing.Event,
+        record_pid: int
+):
+    # TODO: temporary
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info("Memory writer starting")
+    process = psutil.Process(record_pid)
+
+    with open(utils.MEMORY_FILE, "w") as f:
+        while not terminate_event.is_set():
+            mem_usage = getattr(process, 'memory_info')()[0] / BYTE_TO_MB
+
+            for child in getattr(process, 'children')(recursive=True):
+                mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
+
+            timestamp = utils.get_timestamp()
+
+            # line will be in this format: MEM mem_usage timestamp
+            f.write("{0:.6f} {1}\n".format(mem_usage, timestamp))
+    f.close()
+    logger.info("Memory writer done")
+
+
 def create_recording(
         task_description: str,
 ) -> Dict[str, Any]:
@@ -629,6 +659,18 @@ def record(
     )
     perf_stat_writer.start()
 
+    if PLOT_PERFORMANCE:
+        record_pid = os.getpid()
+        mem_plotter = multiprocessing.Process(
+            target=memory_writer,
+            args=(
+                recording_timestamp,
+                terminate_perf_event,
+                record_pid
+            ),
+        )
+        mem_plotter.start()
+
     # TODO: discard events until everything is ready
 
     collect_stats()
@@ -663,6 +705,8 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    if PLOT_PERFORMANCE:
+        mem_plotter.join()
 
     terminate_perf_event.set()
 

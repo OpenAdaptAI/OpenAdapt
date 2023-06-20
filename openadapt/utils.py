@@ -17,8 +17,10 @@ import numpy as np
 
 from openadapt import common, config
 
-
 EMPTY = (None, [], {}, "")
+
+MEMORY_FILE = 'memory.dat'
+MEM_STRIP_CHARS = ' ME\n'
 
 
 def configure_logging(logger, log_level):
@@ -429,10 +431,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
     type_to_count = Counter()
     type_to_timestamps = defaultdict(list)
 
+    from openadapt import crud
+
     if not recording_timestamp:
         # avoid circular import
-        from openadapt import crud
-
         recording_timestamp = crud.get_latest_recording().timestamp
     perf_stats = crud.get_perf_stats(recording_timestamp)
     perf_stat_dicts = rows2dicts(perf_stats)
@@ -465,6 +467,12 @@ def plot_performance(recording_timestamp: float = None) -> None:
             axes[i].scatter(x, y, label=event_type)
         axes[i].set_title(data_type)
         axes[i].legend()
+
+    memory_ax = axes[0].twinx()
+    timestamps, mem_usage = read_memory_data(MEMORY_FILE)
+    memory_ax.plot(timestamps, mem_usage, label="memory usage", color="red")
+    memory_ax.set_ylabel("Memory Usage (MB)")
+
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     fname_parts = ["performance", f"{recording_timestamp}"]
     fname = "-".join(fname_parts) + ".png"
@@ -473,6 +481,19 @@ def plot_performance(recording_timestamp: float = None) -> None:
     logger.info(f"{fpath=}")
     plt.savefig(fpath)
     os.system(f"open {fpath}")
+
+
+def read_memory_data(filename: str):
+    timestamps = []
+    mem_usage = []
+    with open(filename, 'r') as file:
+        for line in file:
+            memory_usage, timestamp = line.strip(' ME\n').split()
+            timestamps.append(float(timestamp))
+            mem_usage.append(float(memory_usage))
+
+    os.remove(filename)
+    return timestamps, mem_usage
 
 
 def strip_element_state(action_event):
