@@ -12,6 +12,7 @@ RECORDING = Recording()
 
 class SummaryReplayStrategy(SummaryReplayStrategyMixin):
     """Custom Replay Strategy to solely test the Summary Mixin."""
+
     def __init__(self, recording: Recording):
         super().__init__(recording)
 
