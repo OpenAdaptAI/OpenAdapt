@@ -10,7 +10,7 @@ from openadapt.models import Recording
 RECORDING = Recording()
 
 
-class TestSummaryReplayStrategy(SummaryReplayStrategyMixin):
+class SummaryReplayStrategy(SummaryReplayStrategyMixin):
     """Custom Replay Strategy to soley test the Summary Mixin."""
     def __init__(self, recording: Recording):
         super().__init__(recording)
@@ -19,7 +19,7 @@ class TestSummaryReplayStrategy(SummaryReplayStrategyMixin):
         pass
 
 
-REPLAY = TestSummaryReplayStrategy(RECORDING)
+REPLAY = SummaryReplayStrategy(RECORDING)
 
 
 def test_summary_empty():
