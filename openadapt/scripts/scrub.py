@@ -61,29 +61,5 @@ def scrub_mp4(mp4_file: str) -> str:
     return scrubbed_file
 
 
-def scrub_media_file(media_file_path: str) -> str:
-    """
-    Scrub a media file based on its extension.
-
-    Args:
-        media_file_path: Path to the media file.
-
-    Returns:
-        Path to the scrubbed media file.
-    """
-
-    file_extension = os.path.splitext(media_file_path)[1].lower()
-    scrub_functions = {
-        ".mp4": scrub_mp4,
-        # Add more extensions and corresponding functions as needed
-    }
-
-    if file_extension in scrub_functions:
-        scrub_function = scrub_functions[file_extension]
-        return scrub_function(media_file_path)
-    logger.info(f"Unsupported media file format: {file_extension}")
-    return ""
-
-
 if __name__ == "__main__":
     fire.Fire(utils.get_functions(__name__))
