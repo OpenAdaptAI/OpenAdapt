@@ -1,14 +1,13 @@
 """Module for scrubbing a media file.
 
-Usage: 
+Usage:
     $ python -m openadapt.scripts.scrub scrub_mp4 <mp4_file_path>
 
 """
 
-import os
-import sys
+import math
 
-from loguru import logger
+from tqdm import tqdm
 from PIL import Image
 import cv2
 import fire
@@ -39,10 +38,31 @@ def scrub_mp4(mp4_file: str) -> str:
         scrubbed_file, fourcc, fps, (frame_width, frame_height)
     )
 
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    progress_bar_format = (
+        "{desc}: {percentage:.0f}% "
+        "| {bar} | "
+        "{n_fmt}/{total_fmt} | {rate_fmt} | [{elapsed}<{remaining}] |"
+    )
+    progress_bar = tqdm(
+        total=frame_count,
+        desc="Processing",
+        unit="frame",
+        bar_format=progress_bar_format,
+        colour="green",
+    )
+
+    progress_interval = 0.1  # Print progress every 10% of frames
+    progress_threshold = math.floor(
+        frame_count * progress_interval
+    )
+
     while cap.isOpened():
+        frame_id = cap.get(1)  # current frame number
         ret, frame = cap.read()
         if not ret:
             break
+
         # Convert frame to PIL.Image
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
@@ -55,10 +75,20 @@ def scrub_mp4(mp4_file: str) -> str:
         )
         out.write(redacted_frame)
 
+        progress_bar.update(1)
+        if frame_id >= progress_threshold:
+            progress_threshold += math.floor(
+                frame_count * progress_interval
+            )
+
     cap.release()
     out.release()
+    progress_bar.close()
 
-    return scrubbed_file
+    message = (
+        f"Scrubbed .mp4 file saved to the relative path: {scrubbed_file}"
+    )
+    return message
 
 
 if __name__ == "__main__":
