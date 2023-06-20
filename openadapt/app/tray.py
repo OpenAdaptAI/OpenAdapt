@@ -25,13 +25,14 @@ def new_tray():
     image = Image.open(f"{FPATH}/assets/logo_dark.png")
     menu = Menu(
         MenuItem("Record", quick_record),
-        MenuItem("Stop Recording", stop_record),
+        MenuItem("Stop Recording", lambda: stop_record(g_tray)),
         MenuItem("Visualize", lambda: threading.Thread(target=visualize.main).start()),
         MenuItem("Show App", show_app),
         MenuItem("Exit", on_exit),
     )
 
     g_tray = Icon("Pystray", icon=image, menu=menu)
+    g_tray.notify("OpenAdapt", "OpenAdapt is running in the background.")
     return g_tray
 
 
@@ -39,3 +40,7 @@ def run_app():
     tray = new_tray()
     # TODO: get tray.run_detached() working for non-blocking solution
     tray.run()
+
+
+if __name__ == "__main__":
+    run_app()
