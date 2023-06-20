@@ -1,7 +1,6 @@
 """
 Tests the summarization function in summary.py
 """
-import pytest
 from fuzzywuzzy import fuzz
 
 from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
@@ -10,13 +9,18 @@ from openadapt.models import Recording
 
 RECORDING = Recording()
 
+
 class TestSummaryReplayStrategy(SummaryReplayStrategyMixin):
+    """Custom Replay Strategy to soley test the Summary Mixin."""
     def __init__(self, recording: Recording):
         super().__init__(recording)
+
     def get_next_action_event(self):
         pass
 
+
 REPLAY = TestSummaryReplayStrategy(RECORDING)
+
 
 def test_summary_empty():
     empty_text = ""
