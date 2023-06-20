@@ -4,11 +4,23 @@ import cairosvg as cairo
 import numpy as np
 from loguru import logger
 
-from openadapt.strategies.demo import DemoReplayStrategy
+from openadapt.strategies.mixins.svg import SVGReplayStrategyMixin
 from openadapt.models import Recording, Screenshot
 
+
 RECORDING = Recording()
-REPLAY = DemoReplayStrategy(RECORDING)
+
+
+class SVGReplayStrategy(SVGReplayStrategyMixin):
+    """Custom Replay Strategy to soley test the SVg Mixin."""
+    def __init__(self, recording: Recording):
+        super().__init__(recording)
+
+    def get_next_action_event(self):
+        pass
+
+
+REPLAY = SVGReplayStrategy(RECORDING)
 
 
 def mse(image1, image2):
