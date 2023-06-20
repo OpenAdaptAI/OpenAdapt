@@ -37,6 +37,23 @@ def select_import(f):
     import_dialog.open()
 
 
+def stop_record():
+    global PROC
+    PROC.send_signal(signal.SIGINT)
+
+    # wait for process to terminate
+    PROC.wait()
+    PROC = None
+
+
+def quick_record():
+    global PROC
+    PROC = Popen(
+        "python3 -m openadapt.record " + "recording",
+        shell=True,
+    )
+
+
 def recording_prompt(options, record_button):
     if PROC is None:
         with ui.dialog() as dialog, ui.card():
