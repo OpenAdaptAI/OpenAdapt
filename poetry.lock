@@ -737,6 +737,17 @@ humanfriendly = ">=9.1"
 cron = ["capturer (>=2.4)"]
 
 [[package]]
+name = "comtypes"
+version = "1.2.0"
+description = "Pure Python COM package"
+optional = false
+python-versions = "*"
+files = [
+    {file = "comtypes-1.2.0-py2.py3-none-any.whl", hash = "sha256:26f261b1eed6972d5cdaa3af1fadb3fa76fc59877d0a1293835327a76573380d"},
+    {file = "comtypes-1.2.0.zip", hash = "sha256:c8f2f0e995d73baf0bd899a948d62adeb9ab908c8270c66a67ff09dfcf4872b7"},
+]
+
+[[package]]
 name = "confection"
 version = "0.0.4"
 description = "The sweetest config system for Python"
@@ -3679,6 +3690,22 @@ files = [
 ]
 
 [[package]]
+name = "pywinauto"
+version = "0.6.8"
+description = "A set of Python modules to automate the Microsoft Windows GUI"
+optional = false
+python-versions = "*"
+files = [
+    {file = "pywinauto-0.6.8-py2.py3-none-any.whl", hash = "sha256:931ce622d7f402b1892ab472987a1332e4c0681bf87e106f798390d16ca95e58"},
+    {file = "pywinauto-0.6.8.tar.gz", hash = "sha256:de23f1e977cc51e7eddd95c8f365710343136433968d1e2ad377962d6bd6540a"},
+]
+
+[package.dependencies]
+comtypes = "*"
+pywin32 = "*"
+six = "*"
+
+[[package]]
 name = "pyyaml"
 version = "6.0"
 description = "YAML parser and emitter for Python"
@@ -5576,4 +5603,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "76bf83ee8b5b63629d8da49cbbd5d03ffc6bc52b2559ceda211a03146a733586"
+content-hash = "c80f456d614872030710938496c2249a4bd102df91d2981f033e0f7fba99faec"
