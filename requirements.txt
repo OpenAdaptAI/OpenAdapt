@@ -9,7 +9,7 @@ dictalchemy3==1.0.0
 fire==0.4.0
 fuzzywuzzy==0.18.0
 ipdb==0.13.11
-loguru==0.6.0
+loguru==0.7.0
 matplotlib==3.6.2
 mss==6.1.0
 nltk==3.8.1
@@ -34,6 +34,8 @@ sumy==0.11.0
 tiktoken==0.4.0
 torch==2.0.0
 tqdm==4.64.0
-nicegui==1.2.16
+nicegui==1.2.17
 transformers==4.29.2
 python-dotenv==1.0.0
+pillow==9.5.0
+pystray==0.19.4

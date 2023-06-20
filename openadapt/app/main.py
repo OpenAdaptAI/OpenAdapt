@@ -1,19 +1,54 @@
+import signal
 import threading
 import base64
 import os
 
+from PIL import Image
 from nicegui import app, ui
+from pystray import Icon, Menu, MenuItem
 
 from openadapt import replay, visualize
 from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.util import clear_db, on_export, on_import
 from openadapt.app.objects.console import Console
 
-SERVER = "127.0.0.1:8000/upload"
+FPATH = os.path.dirname(__file__)
+
+app_thread = None
+g_tray = None
+
+
+def new_tray():
+    global g_tray
+
+    def on_exit():
+        global app_thread
+        if app_thread is not None:
+            signal.pthread_kill(app_thread.ident, signal.SIGTERM)
+        os._exit(0)
+
+    def show_app():
+        global app_thread
+        app_thread = threading.Thread(target=start)
+        app_thread.start()
+
+    image = Image.open(f"{FPATH}/assets/logo_dark.png")
+    menu = Menu(
+        MenuItem("Show App", show_app),
+        MenuItem("Exit", on_exit),
+    )
+
+    g_tray = Icon("Pystray", icon=image, menu=menu)
+    return g_tray
 
 
 def run_app():
-    file = os.path.dirname(__file__)
+    tray = new_tray()
+    # TODO: get tray.run_detached() working for non-blocking solution
+    tray.run()
+
+
+def start():
     app.native.window_args["resizable"] = False  # too many issues with resizing
     app.native.start_args["debug"] = False
 
@@ -27,7 +62,9 @@ def run_app():
 
         # alignment trick
         with ui.avatar(color="white" if dark else "black", size=128):
-            logo_base64 = base64.b64encode(open(f"{file}/assets/logo.png", "rb").read())
+            logo_base64 = base64.b64encode(
+                open(f"{FPATH}/assets/logo.png", "rb").read()
+            )
             img = bytes(
                 f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
                 encoding="utf-8",
@@ -75,6 +112,7 @@ def run_app():
         window_size=(400, 400),
         fullscreen=False,
         reload=False,
+        show=False,
     )
 
 
