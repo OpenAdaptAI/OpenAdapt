@@ -143,10 +143,12 @@ class Signals:
             )
         return description
 
-    def __setup_function_signal(self, function_address):
+    def __setup_function_signal(self, function_address, function_path=None):
         """
         Read a description of a signal from a Python function.
         """
+        if function_path:
+            sys.path.append(function_path)
         parts = function_address.rsplit(".", 2)
 
         try:
@@ -177,6 +179,14 @@ class Signals:
         """
         Read signal data from a Python function.
         """
+        if isinstance(function_address, tuple):
+            function_path = function_address[0]
+            function_address = function_address[1]
+            
+            sys.path.append(function_path)
+        
+
+
         module_name, class_name, func_name = function_address.rsplit(".", 2)
         module = importlib.import_module(module_name)
         func_class = getattr(module, class_name)
@@ -250,7 +260,7 @@ class Signals:
             signal_data = response.content
         return signal_data
 
-    def add_signal(self, signal_address, signal_title=None, signal_type=None):
+    def add_signal(self, signal_address, signal_path=None, signal_title=None, signal_type=None):
         signal_description = None
         if isinstance(signal_address, str):
             # If signal is a string, it could be a file path, a database URL, an HTTP URL, or a Python function name.
@@ -270,7 +280,7 @@ class Signals:
                 signal_type = "file"
             elif signal_address.count(".") >= 1 or signal_type == "function":
                 # Otherwise, treat it as a Python function name.
-                signal_description = self.__setup_function_signal(signal_address)
+                signal_description = self.__setup_function_signal(signal_address, function_path=signal_path)
                 signal_type = "function"
             else:
                 raise ValueError("Invalid signal address.")
@@ -279,6 +289,9 @@ class Signals:
             raise ValueError("Signal must be a string.")
 
         signal_number = len(self.signals) + 1
+
+        if (signal_type == "function" and signal_path != None):
+            signal_address = (signal_path,signal_address)
 
         signal = {
             "number": signal_number,
