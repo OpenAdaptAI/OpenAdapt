@@ -7,7 +7,7 @@ on:
 
 jobs:
   run-ci:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -48,8 +48,11 @@ jobs:
       - run: poetry install --no-interaction
       # And finally run tests. I'm using pytest and all my pytest config is in my `pyproject.toml`
       # so this line is super-simple. But it could be as complex as you need.
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
       - run: |
-          sudo apt install tesseract-ocr
+          brew install tesseract
           poetry run pytest 
 
       - name: Check formatting with Black
