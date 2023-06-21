@@ -8,7 +8,7 @@ Usage:
 from loguru import logger
 import subprocess
 
-from openadapt.app.main import run_app
+# from openadapt.app.main import run_app
 
 
 def changes_needed(result: str) -> bool:
@@ -35,8 +35,12 @@ def start_openadapt_app() -> None:
         subprocess.run(["git", "stash"])
         print("Changes stashed")
 
-    if "branch is up to date" not in result.stdout:
-        subprocess.run(["git", "pull", "-q"])
+        print("please fix merge commits and ")
+    elif "branch is up to date" not in result.stdout:
+        pull_result = subprocess.run(["git", "pull", "-q"])
+        if "diverged" in pull_result.stdout:
+            print("Please fix merge conflicts and try again")
+            return
         print("Updated the OpenAdapt App")
 
     # run_app()  # start gui
