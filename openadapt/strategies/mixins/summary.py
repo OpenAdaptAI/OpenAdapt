@@ -10,13 +10,13 @@ Usage:
 from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
 
-
 from sumy.summarizers.lsa import LsaSummarizer
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
 import nltk
+from loguru import logger
 
 
 class SummaryReplayStrategyMixin(BaseReplayStrategy):
@@ -51,6 +51,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
                 Tokenizer("english")
                 break
             except:
+                logger.info("Doesn't currently have punkt")
                 nltk.download("punkt")
 
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
