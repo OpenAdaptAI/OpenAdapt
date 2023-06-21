@@ -5,7 +5,7 @@ version of MPT-7b, for inference on CPU.
 
 Usage:
 
-    class MyReplayStrategy(SummaryReplayStrategyMixin):
+    class MyReplayStrategy(MPT7BReplayStrategy):
         ...
 """
 
