@@ -35,6 +35,19 @@ RunAndCheck() {
     fi
 }
 
+# Install a dependency using brew
+Install() {
+    dependency=$($1)
+
+    RunAndCheck "brew install "$dependency"" "Download $dependency"
+    exists=$(CheckCMDExists "$dependency")
+    if [ ! $exists ]; then
+        echo "Failed to download $dependency"
+        Cleanup
+        exit 1
+    fi
+}
+
 # Return true if a command/exe is available
 CheckCMDExists() {
     command=$($1)
@@ -111,14 +124,12 @@ fi
 
 gitExists=$(CheckCMDExists "git")
 if [ ! $gitExists ]; then
-    # Install git
-    RunAndCheck "brew install git" "Download git"
-    gitExists=$(CheckCMDExists "git")
-    if [ ! $gitExists ]; then
-        echo "Failed to download git"
-        Cleanup
-        exit 1
-    fi
+    Install "git"
+fi
+
+tesseractExists=$(CheckCMDExists "tesseract")
+if [ ! $tesseractExists ]; then
+    Install "tesseract"
 fi
 
 GetPythonCMD
