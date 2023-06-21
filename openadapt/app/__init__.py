@@ -1,3 +1,3 @@
-from openadapt.app.tray import run_app
+from openadapt.app.tray import run_tray
 
-run_app()
+run_tray()

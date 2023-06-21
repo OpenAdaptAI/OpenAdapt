@@ -6,7 +6,7 @@ import nicegui
 
 spec = [
     "pyi-makespec",
-    f"{Path(__file__).parent}/main.py",
+    f"{Path(__file__).parent}/tray.py",
     f"--icon={Path(__file__).parent}/assets/logo.ico",
     "--name",
     "OpenAdapt",  # name
@@ -27,4 +27,17 @@ with open("OpenAdapt.spec", "r+") as f:
     f.truncate()
     f.writelines(lines)
 
-subprocess.call(["pyinstaller", "OpenAdapt.spec"])
+# stop pyinstaller from running the tray
+f = open(f"{Path(__file__).parent}/__init__.py", "r+")
+init_file = f.readlines()
+bak = init_file.copy()
+f.seek(0)
+f.truncate()
+
+# building
+proc = subprocess.Popen("pyinstaller OpenAdapt.spec", shell=True)
+proc.wait()
+
+# restore __init__.py
+f.writelines(bak)
+f.close()

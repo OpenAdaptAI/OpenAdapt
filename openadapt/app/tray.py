@@ -36,11 +36,11 @@ def new_tray():
     return g_tray
 
 
-def run_app():
+def run_tray():
     tray = new_tray()
     # TODO: get tray.run_detached() working for non-blocking solution
     tray.run()
 
 
 if __name__ == "__main__":
-    run_app()
+    run_tray()
