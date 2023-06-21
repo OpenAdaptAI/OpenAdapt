@@ -1,3 +1,7 @@
+"""
+Note: requires valid OpenAI API key to run tests. May use disk space for caching.
+"""
+
 import pytest
 import sys
 import io
