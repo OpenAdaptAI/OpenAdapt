@@ -2,12 +2,23 @@
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
+### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
+
+### Foundation Models (e.g. [GPT-4](https://openai.com/research/gpt-4), [ACT-1](https://www.adept.ai/blog/act-1)) are powerful automation tools.
+
+### OpenAdapt connects Foundation Models to GUIs:
+
+<img width="1473" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
+
+
+([Slides](https://t.ly/7RGr))
+
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
-- Converting screenshots and user input into tok/enized format
+- Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
 - Replaying synthetic input to complete tasks
 
@@ -15,14 +26,26 @@ The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
 except that we use transformers instead of conventional RPA tools.
 
-The approach is similar to [adept.ai](https://adept.ai/), with some key differences:
-1. Instead of requiring the user to prompt the model directly, we prompt it behind the
-scenes by observing the user's activities;
-2. We work with all types of desktop applications, not just web apps;
-3. We're open source!
+The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
+1. OpenAdapt is model agnostic;
+1. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted);
+2. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
+3. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
 ## Install
 
+Recommended: Install with [Poetry](https://python-poetry.org/):
+```
+git clone https://github.com/MLDSAI/OpenAdapt.git
+cd OpenAdapt
+pip install poetry
+poetry install
+poetry shell
+alembic upgrade head
+pytest
+```
+
+Manual:
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
@@ -94,8 +117,6 @@ More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 
 ## Contributing
-
-### Design
 
 ### Problem Statement
 
