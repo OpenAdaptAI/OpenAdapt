@@ -48,4 +48,3 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
         summarized = self.summarizer(parser.document, num_sentences)
         return summarized
-
