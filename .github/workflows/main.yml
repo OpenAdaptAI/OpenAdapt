@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: cache poetry install
+      - name: Cache Poetry install
         uses: actions/cache@v2
         with:
           path: ~/.local
@@ -29,57 +29,57 @@ jobs:
           version: 1.5.1
           virtualenvs-create: true
           virtualenvs-in-project: true
-      - name: cache deps
+
+      - name: Cache deps
         id: cache-deps
         uses: actions/cache@v2
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
 
+      - name: Cache Homebrew packages
+        uses: actions/cache@v2
+        with:
+          path: /usr/local/Homebrew
+          key: brew-packages-${{ runner.os }}-${{ hashFiles('Brewfile.lock.json') }}
+          restore-keys: |
+            brew-packages-${{ runner.os }}-
+            brew-packages-
+
       # Install dependencies. `--no-root` means "install all dependencies but not the project
       # itself", which is what you want to avoid caching _your_ code. The `if` statement
       # ensures this only runs on a cache miss.
       - run: poetry install --no-interaction --no-root
         if: steps.cache-deps.outputs.cache-hit != 'true'
+
       # Now install _your_ project. This isn't necessary for many types of projects -- particularly
-      # things like Django apps don't need this. But it's a good idea since it fully-exercises the
-      # pyproject.toml and makes that if you add things like console-scripts at some point that
+      # things like Django apps don't need this. But it's a good idea since it fully exercises the
+      # pyproject.toml and makes sure that if you add things like console-scripts at some point
       # they'll be installed and working.
       - run: poetry install --no-interaction
-      # And finally run tests. I'm using pytest and all my pytest config is in my `pyproject.toml`
-      # so this line is super-simple. But it could be as complex as you need.
-      - name: Set up Homebrew
-        id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@master
-      - run: |
-          brew install tesseract
-          poetry run pytest 
+
+      # Install Tesseract if not restored from cache
+      - name: Install Tesseract
+        run: |
+          if [ ! -d "/usr/local/Cellar/tesseract" ]; then
+            brew install tesseract
+          fi
+
+      - name: Run tests
+        run: poetry run pytest
 
       - name: Check formatting with Black
         uses: psf/black@stable
         with:
           options: "--check --exclude \"(alembic|venv)/\""
 
-      # - name: Run headless tests
-      #   uses: coactions/setup-xvfb@v1
-      #   with:
-      #     run: python -m pytest
-      #     working-directory: ./  # Optional: Specify the working directory if needed
-      #     options:  # Optional: Add any additional options or arguments for pytest
       - name: Run Flake8 with Google Python style docstring check
         uses: actions/checkout@v3
 
-      - name: Install Flake8 and flake8-doctstrings
+      - name: Install Flake8 and flake8-docstrings
         run: |
           poetry add flake8
           poetry add flake8-docstrings
 
       - name: Run Flake8
         run: poetry run flake8 --exclude alembic/versions --exclude .venv --docstring-convention google .
-
-      # - name: flake8 Lint
-      #   uses: py-actions/flake8@v2
-      #   with:
-      #     plugins: "flake8-docstrings"
-      #     exclude: "alembic/versions"
-      #     args: "--docstring-convention=google"
