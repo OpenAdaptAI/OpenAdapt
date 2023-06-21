@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 set -e
 
 # Change these if a different version  is required
@@ -6,7 +7,7 @@ pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
-pythonInstallerPath ="$HOME/downloads/$pythonInstaller"
+pythonInstallerPath="$HOME/downloads/$pythonInstaller"
 
 # Remove OpenAdapt if it exists
 Cleanup() {
@@ -19,14 +20,14 @@ Cleanup() {
 
 # Refresh Path Environment variable
 Refresh() {
-    export PATH="$PATH:$(echo $PATH | tr ':' '\n' | grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')$(echo $PATH | tr ':' '\n' | grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')"
+    export PATH="$PATH:$(echo "$PATH" | tr ':' '\n' | grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')$(echo "$PATH" | tr ':' '\n' | grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')"
 }
 
 # Run a command and ensure it did not fail
 RunAndCheck() {
     res=$($1)
 
-    if [[ -z $res ]] || [[ $res == 0 ]]; then
+    if [[ -z $res ]] || [[ $res -eq 0 ]]; then
         echo "Success: $2 : $res"
     else
         echo "Failed: $2 : $res"
@@ -36,12 +37,11 @@ RunAndCheck() {
 }
 
 # Install a dependency using brew
-Install() {
-    dependency=$($1)
+BrewInstall() {
+    dependency=$1
 
-    RunAndCheck "brew install "$dependency"" "Download $dependency"
-    exists=$(CheckCMDExists "$dependency")
-    if [ ! $exists ]; then
+    RunAndCheck "brew install $dependency" "Download $dependency"
+    if ! CheckCMDExists "$dependency"; then
         echo "Failed to download $dependency"
         Cleanup
         exit 1
@@ -50,9 +50,9 @@ Install() {
 
 # Return true if a command/exe is available
 CheckCMDExists() {
-    command=$($1)
+    command=$1
 
-    if type -P $command >/dev/null 2>&1; then
+    if command -v "$command" >/dev/null 2>&1; then
         return 0
     else
         return 1
@@ -68,16 +68,15 @@ GetPythonCMD() {
     # Use Python exe if it exists and is the required version
     pythonCmd="python"
     if CheckCMDExists $pythonCmd; then
-        $res=$(python --version)
+        res=$(python --version)
         if echo "$res" | grep -q "$pythonVerStr"; then
             return
         fi
     fi
 
     # Install required Python version
-    RunAndCheck "curl --output "$pythonInstallerLoc"" "Download Python"
-    exists=(test -e "$pythonInstallerPath")
-    if [ ! $exists ]; then
+    RunAndCheck "curl --output $pythonInstallerLoc" "Download Python"
+    if [ ! -e "$pythonInstallerPath" ]; then
         echo "Failed to download python installer"
         Cleanup
         exit 1
@@ -85,14 +84,12 @@ GetPythonCMD() {
 
     echo "Installing python, click 'Yes' if prompted for permission"
     open -W "$pythonInstallerPath"
-
-    # Refresh Path Environment Variable
-    export PATH="$PATH:$(echo $PATH | tr ':' '\n' | grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')$(echo $PATH | tr ':' '\n' | grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')"
-
+    Refresh
+    
     # Make sure python is now available and the right version
     if CheckCMDExists $pythonCmd; then
-        res=(python --version)
-        if [[ "$res" =~ "$pythonVerStr" ]]; then
+        res=$(python --version)
+        if [[ "$res" =~ $pythonVerStr ]]; then
             return
         fi
     fi
@@ -110,26 +107,24 @@ GetPythonCMD() {
 ############################################################################################
 
 # Download brew
-brewExists=$(CheckCMDExists "brew")
-if [ ! $brewExists ]; then
-    RunAndCheck "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" "download brew"
+if ! CheckCMDExists "brew"; then
+    echo Downloading brew
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > /dev/null 2>&1)"
     Refresh # necessary ?
     brewExists=$(CheckCMDExists "brew")
-    if [ ! $brewExists ]; then
+    if ! CheckCMDExists "brew"; then
         echo "Failed to download brew"
         Cleanup
         exit 1
     fi
 fi
 
-gitExists=$(CheckCMDExists "git")
-if [ ! $gitExists ]; then
-    Install "git"
+if ! CheckCMDExists "git"; then
+    BrewInstall "git"
 fi
 
-tesseractExists=$(CheckCMDExists "tesseract")
-if [ ! $tesseractExists ]; then
-    Install "tesseract"
+if ! CheckCMDExists "tesseract"; then
+    BrewInstall "tesseract"
 fi
 
 GetPythonCMD
