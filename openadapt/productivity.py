@@ -180,8 +180,10 @@ def brents_algo(action_events):
     length = 1
 
     # Phase 1: Finding a cycle
-    while hare_index < len(action_events) and \
-            not compare_events(action_events[tortoise_index], action_events[hare_index]):
+    while hare_index < len(action_events) - 1:
+        if compare_events(action_events[tortoise_index], action_events[hare_index]) and \
+                compare_events(action_events[tortoise_index + 1], action_events[hare_index + 1]):
+            break
         if length == power:
             tortoise_index = hare_index
             power *= 2
@@ -189,7 +191,8 @@ def brents_algo(action_events):
         hare_index += 1
         length += 1
 
-    if hare_index >= len(action_events):
+    if hare_index >= len(action_events) - 1 and not compare_events(action_events[tortoise_index],
+                                                                   action_events[hare_index]):
         # No repeating subsequence found
         return None, 0
 
@@ -211,9 +214,9 @@ def brents_algo(action_events):
     return tortoise_index, length
 
 
-def brents_tasks(action_events, start, length):
+def find_num_tasks(action_events, start, length):
     if start is None:
-        return 0
+        return 0, 0, 0
 
     task = []
     for i in range(0, length):
@@ -243,65 +246,47 @@ def brents_tasks(action_events, start, length):
     return task, num_repetitions, total_time
 
 
-def brents_numbers(sequence):
-    # just for testing purposes :)
-    # TODO: remove
-    if len(sequence) == 0:
-        return False
+def floyds_algo(action_events):
+    slow_index = 0
+    fast_index = 0
 
-    first_p = 0
-    second_p = 1
-    power = 1
+    while slow_index < len(action_events) and fast_index < len(action_events) - 1:
+        slow_index += 1
+        fast_index += 2
+        if compare_events(action_events[slow_index], action_events[fast_index]):
+            break
+
+    # if no loop exists
+    if not compare_events(action_events[slow_index], action_events[fast_index]):
+        return None, 0
+
+    # meeting point can't be last event
+    fast_index = slow_index
+
+    # reset slow index to 0
+    # and traverse again
+    slow_index = 0
+    # for i in range(0, meeting_point):
+    #     if compare_events(action_events[i], action_events[meeting_point]):
+    #         if compare_events(action_events[i + 1], action_events[meeting_point + 1]):
+    #             fast_index = i
+
+    while not compare_events(action_events[slow_index], action_events[fast_index]):
+        slow_index += 1
+        fast_index += 1
+
+    # slow_index is start of cycle
+    # find length/overestimate
     length = 1
-
-    while second_p < len(sequence) and sequence[second_p] != sequence[first_p]:
-        if length == power:
-            power *= 2
-            length = 0
-            first_p = second_p
-
-        second_p += 1
+    j = slow_index + 1
+    while j < len(action_events) - 1:
+        if compare_events(action_events[j], action_events[slow_index]) and \
+                compare_events(action_events[j + 1], action_events[slow_index + 1]):
+            break
+        j += 1
         length += 1
 
-    if second_p == len(sequence):
-        print("No cycle")
-        return None
-
-    first_p = 0
-    second_p = length
-
-    while sequence[second_p] != sequence[first_p]:
-        second_p += 1
-        first_p += 1
-
-    print("cycle found")
-    return first_p, length
-
-
-def find_tasks_cydets(action_events):
-    # TODO: outdated, remove imports
-    # TODO: remove
-    data = []
-    for action_event in action_events:
-        # convert to real number
-        if action_event.name == "press":
-            if action_event.key_vk:
-                data.append(int(action_event.key_vk))
-            else:
-                data.append(-1)
-        elif action_event.name == "click":
-            data.append(action_event.mouse_x)
-            data.append(action_event.mouse_y)
-
-    series = pd.Series(data)
-
-    cycles = detect_cycles(series)
-
-    print(data)
-
-    print(cycles)
-
-    return len(cycles)
+    return slow_index, length
 
 
 def filter_move_release(action_events):
@@ -316,6 +301,19 @@ def filter_move_release(action_events):
         else:
             filtered_action_events.append(action_event)
     return filtered_action_events
+
+
+def find_errors(action_events):
+    # TODO: how to find click errors
+    errors = 0
+    for i in range(0, len(action_events)):
+        if action_events[i].canonical_key_name == 'backspace' or \
+                action_events[i].canonical_key_name == 'delete':
+            errors += 1
+        elif action_events[i].canonical_key_name == 'ctrl':
+            if i < len(action_events) - 1 and action_events[i + 1].canonical_key_char == 'z':
+                errors += 1
+    return errors
 
 
 def calculate_productivity():
@@ -337,7 +335,12 @@ def calculate_productivity():
     duration = action_events[-1].timestamp - action_events[0].timestamp
 
     start, length = brents_algo(filtered_action_events)
-    task, num_tasks, total_task_time = brents_tasks(filtered_action_events, start, length)
+    task, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length)
+    if num_tasks != 0:
+        ave_task_time = total_task_time / num_tasks
+    else:
+        ave_task_time = 0
+    errors = find_errors(filtered_action_events)
 
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
@@ -347,7 +350,8 @@ def calculate_productivity():
                  "Recording length": duration,
                  f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
                  "Total time spent on repetitive tasks": total_task_time,
-                 "Average time spent per repetitive task": total_task_time / num_tasks
+                 "Average time spent per repetitive task": ave_task_time,
+                 "Number of errors": errors
                  }
 
     rows = [
@@ -369,36 +373,37 @@ def calculate_productivity():
     ]
 
     # task screenshots
-    if len(task) > 0:
-        rows.append([
-            row(
-                Div(
-                    text="<hr><h1>Identified Task</h1><hr>"
+    if num_tasks > 0:
+        if len(task) > 0:
+            rows.append([
+                row(
+                    Div(
+                        text="<hr><h1>Identified Task</h1><hr>"
+                    )
                 )
-            )
-        ])
+            ])
 
-    for event in task:
-        screenshot = display_event(event)
-        screenshot_utf8 = image2utf8(screenshot)
-        width, height = screenshot.size
+        for event in task:
+            screenshot = display_event(event)
+            screenshot_utf8 = image2utf8(screenshot)
+            width, height = screenshot.size
 
-        rows.append([
-            row(
-                Div(
-                    text=f"""
-                        <div class="screenshot">
-                            <img
-                                src="{screenshot_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                        </div>
-                    """,
+            rows.append([
+                row(
+                    Div(
+                        text=f"""
+                            <div class="screenshot">
+                                <img
+                                    src="{screenshot_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                            </div>
+                        """,
+                    ),
                 ),
-            ),
-        ])
+            ])
 
     # window by window
     if len(window_events) > 0:
