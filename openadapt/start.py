@@ -18,9 +18,7 @@ def changes_needed(result: str) -> bool:
     """
     if "Changes to be committed:" in result:
         return True
-    if "Changes not staged for commit:" in result:
-        return True
-    if "Your branch is ahead of" in result:
+    elif "Changes not staged for commit:" in result:
         return True
     return False
 
@@ -33,9 +31,7 @@ def start_openadapt_app() -> None:
 
     if changes_needed(result.stdout):
         subprocess.run(["git", "stash"])
-        print("Changes stashed")
 
-        print("please fix merge commits and ")
     elif "branch is up to date" not in result.stdout:
         pull_result = subprocess.run(["git", "pull", "-q"])
         if "diverged" in pull_result.stdout:
@@ -48,4 +44,3 @@ def start_openadapt_app() -> None:
 
 if __name__ == "__main__":
     start_openadapt_app()
-    logger.info("updated")
