@@ -46,14 +46,13 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         text: str,
         num_sentences: int,
     ) -> str:
+        while(True):
+            try:
+                Tokenizer("english")
+                break
+            except:
+                nltk.download('punkt')
+
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
         summarized = self.summarizer(parser.document, num_sentences)
         return summarized
-
-if __name__ == "__main__":
-    while(True):
-        try:
-            Tokenizer("english")
-            break
-        except:
-            nltk.download('punkt')
