@@ -66,7 +66,9 @@ jobs:
           fi
 
       - name: Run tests
-        run: poetry run pytest
+        run: |
+          poetry run python -c "import nltk; nltk.download('punkt')"
+          poetry run pytest
 
       - name: Check formatting with Black
         uses: psf/black@stable
