@@ -16,8 +16,7 @@ from openadapt.strategies.base import BaseReplayStrategy
 
 MODEL_NAME = "ggml-gpt4all-j-v1.3-groovy.bin"
 # the following keys are the names of the model on GPT4All,
-#   and the value is a list with the 1st element being the name of the model on huggingface,
-#   and the 2nd element being the revision run name
+#   and the value is the name of the model on huggingface
 MODEL_DICTIONARY = {
     "ggml-gpt4all-j-v1.3-groovy.bin": "gpt4all-j",
     "ggml-replit-code-v1-3b.bin": "ggml-replit-code-v1-3b",
@@ -30,7 +29,7 @@ ROLE = "user"
 
 
 class GPT4ALLReplayStrategyMixin(BaseReplayStrategy):
-    """ReplayStrategy mixin that uses GPT4All.
+    """ReplayStrategy mixin that prompts GPT4All.
 
     Attributes:
         recording: the recording to be played back
@@ -41,6 +40,13 @@ class GPT4ALLReplayStrategyMixin(BaseReplayStrategy):
     def __init__(
         self, recording: Recording, model_name: str = MODEL_NAME, tokenizer: str = None
     ):
+        """Initialized the instance based on the GPT4All model requested.
+
+        Args:
+            recording: defines the recording associated with the ReplayStrategy
+            model_name: defines the GPT4All model to be used
+            tokenizer: defines the tokenizer to be used
+        """
         super().__init__(recording)
         self.GPT4All_model = GPT4All(model_name)
         if tokenizer is None:
