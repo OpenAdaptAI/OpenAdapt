@@ -16,6 +16,7 @@ from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
+import nltk
 
 
 class SummaryReplayStrategyMixin(BaseReplayStrategy):
@@ -48,3 +49,11 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
         summarized = self.summarizer(parser.document, num_sentences)
         return summarized
+
+if __name__ == "__main__":
+    while(True):
+        try:
+            Tokenizer("english")
+            break
+        except:
+            nltk.download('punkt')
