@@ -33,3 +33,10 @@ def test_captioning():
     agent.chat("caption the image", image=Image.open("assets/visualize.png"))
     sys.stdout = old
     assert "print" in f.getvalue()
+
+
+if __name__ == "__main__":
+    agent = TransformersAgentsMixin(
+        recording=get_latest_recording(), api_key=config.OPENAI_API_KEY
+    )
+    agent.prompt(debug=True)
