@@ -20,7 +20,7 @@ _DEFAULTS = {
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
     "TEST_OPENAI": False,
-    "DEFAULT_SIGNALS": ["tests/resources/test_data.xlsx","openai.Completion.create"]
+    "DEFAULT_SIGNALS": [(".venv/lib/site-packages","openai.Completion.create")]
 }
 
 

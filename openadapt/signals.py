@@ -333,11 +333,12 @@ class Signals:
 def initialize_default_signals():
     signals = Signals()
     for signal_address in config.DEFAULT_SIGNALS:
-        title = "None"
-        if signal_address == "openai.Completion.create":
-            title = "OpenAI"
-            sys.path.append(".venv/lib/site-packages")
-        signals.add_signal(signal_address,signal_title=title)
+        if isinstance(signal_address, tuple):
+            signal_path = signal_address[0]
+            signal_address = signal_address[1]
+            sys.path.append(signal_path)
+        
+        signals.add_signal(signal_address,signal_path=signal_path)
     return signals
 
 

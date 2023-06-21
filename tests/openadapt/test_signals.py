@@ -90,7 +90,7 @@ def test_access_xslx_signal():
 def test_intialize_default_signals():
     signals = initialize_default_signals()
     signal_list = signals.return_signals()
-    assert signal_list[1]["title"] == "OpenAI"
+    assert signal_list[0]["address"] == (".venv/lib/site-packages","openai.Completion.create")
     assert signals
 
 def test_non_existent_file():
