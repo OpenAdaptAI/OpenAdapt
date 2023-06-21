@@ -6,6 +6,7 @@ Usage:
 """
 
 import math
+import time
 
 from tqdm import tqdm
 from PIL import Image
@@ -56,24 +57,35 @@ def scrub_mp4(mp4_file: str) -> str:
     progress_threshold = math.floor(
         frame_count * progress_interval
     )
+    
+    a = b = c = d = 0
 
     while cap.isOpened():
         frame_id = cap.get(1)  # current frame number
         ret, frame = cap.read()
         if not ret:
             break
-
+        
+        a_start = time.time()
         # Convert frame to PIL.Image
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        a += time.time() - a_start
 
+        b_start = time.time()
         # Apply redaction to the frame
         redacted_image = scrub.scrub_image(image)
+        b += time.time() - b_start
 
+        c_start = time.time()
         # Convert redacted image back to OpenCV format
         redacted_frame = cv2.cvtColor(
             np.array(redacted_image), cv2.COLOR_RGB2BGR
         )
+        c += time.time() - c_start
+
+        d_start = time.time()
         out.write(redacted_frame)
+        d += time.time() - d_start
 
         progress_bar.update(1)
         if frame_id >= progress_threshold:
@@ -84,6 +96,11 @@ def scrub_mp4(mp4_file: str) -> str:
     cap.release()
     out.release()
     progress_bar.close()
+    
+    print(f"Time spent on Line 71: {a}")
+    print(f"Time spent on Line 76: {b}")
+    print(f"Time spent on Line 81: {c}")
+    print(f"Time spent on Line 87: {d}")
 
     message = (
         f"Scrubbed .mp4 file saved to the relative path: {scrubbed_file}"
