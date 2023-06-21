@@ -1,6 +1,5 @@
 """
-Implements the code needed to update the OpenAdapt app
-if needed.
+Implements the code needed to update the OpenAdapt app if needed.
 
 Usage:
     python3 -m openadapt.start
