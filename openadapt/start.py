@@ -32,7 +32,7 @@ def start_openadapt_app() -> None:
     if changes_needed(result.stdout):
         subprocess.run(["git", "stash"])
 
-    if "unmerged" not in result.stdout:
+    if "unmerged" in result.stdout:
         print("Please fix merge conflicts and try again")
         return
         
