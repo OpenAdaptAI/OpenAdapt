@@ -31,13 +31,13 @@ def start_openadapt_app() -> None:
 
     if changes_needed(result.stdout):
         subprocess.run(["git", "stash"])
-        print("Changes stashed")
 
-    if "git pull" in result.stdout:
-        pull_result = subprocess.run(["git", "pull", "-q"])
-        if "diverged" in pull_result.stdout:
-            print("Please fix merge conflicts and try again")
-            return
+    if "unmerged" not in result.stdout:
+        print("Please fix merge conflicts and try again")
+        return
+        
+    if ("git pull" in result.stdout):
+        subprocess.run(["git", "pull", "-q"])
         print("Updated the OpenAdapt App")
 
     # run_app()  # start gui
@@ -45,4 +45,3 @@ def start_openadapt_app() -> None:
 
 if __name__ == "__main__":
     start_openadapt_app()
-
