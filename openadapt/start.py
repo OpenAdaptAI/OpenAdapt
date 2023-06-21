@@ -5,7 +5,7 @@ if needed.
 Usage:
     python3 -m openadapt.start
 """
-
+from loguru import logger
 import subprocess
 
 from openadapt.app.main import run_app
@@ -31,16 +31,17 @@ def start_openadapt_app() -> None:
     """
     result = subprocess.run(["git", "status"], capture_output=True, text=True)
 
-    if "branch is up to date" not in result.stdout:
-        if changes_needed(result.stdout):
-            subprocess.run(["git", "stash"])
-            print("Changes stashed")
+    if changes_needed(result.stdout):
+        subprocess.run(["git", "stash"])
+        print("Changes stashed")
 
-        subprocess.run(["git", "pull"])
+    if "branch is up to date" not in result.stdout:
+        subprocess.run(["git", "pull", "-q"])
         print("Updated the OpenAdapt App")
 
-    run_app()  # start gui
+    # run_app()  # start gui
 
 
 if __name__ == "__main__":
     start_openadapt_app()
+    logger.info("updated")
