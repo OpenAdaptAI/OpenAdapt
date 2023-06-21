@@ -31,7 +31,7 @@ def new_tray():
         MenuItem("Exit", on_exit),
     )
 
-    g_tray = Icon("Pystray", icon=image, menu=menu)
+    g_tray = Icon("OpenAdapt", icon=image, menu=menu)
     g_tray.notify("OpenAdapt", "OpenAdapt is running in the background.")
     return g_tray
 
