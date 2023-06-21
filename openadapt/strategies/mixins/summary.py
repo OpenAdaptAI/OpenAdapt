@@ -50,8 +50,9 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
             try:
                 Tokenizer("english")
                 break
-            except:
-                logger.info("Doesn't currently have punkt")
+            except Exception as e:
+                logger.info(e)
+                logger.info("Downloading punkt now")
                 nltk.download("punkt")
 
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
