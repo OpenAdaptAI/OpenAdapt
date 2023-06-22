@@ -3,10 +3,9 @@ Implements a ReplayStrategy mixin for generating completions with HuggingFace.
 
 Usage:
 
-    class MyReplayStrategy(LLMReplayStrategyMixin):
+    class MyReplayStrategy(HuggingFaceReplayStrategyMixin):
         ...
 """
-
 
 from loguru import logger
 import transformers as tf  # RIP TensorFlow
@@ -20,12 +19,24 @@ MAX_INPUT_SIZE = 1024
 
 
 class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
+    """
+    ReplayStrategy mixin for generating completions with HuggingFace.
+    """
+
     def __init__(
         self,
         recording: Recording,
         model_name: str = MODEL_NAME,
         max_input_size: int = MAX_INPUT_SIZE,
     ):
+        """
+        Initialize the HuggingFaceReplayStrategyMixin.
+
+        Args:
+            recording (Recording): The recording to replay.
+            model_name (str): The name of the HuggingFace model to use (default: "gpt2").
+            max_input_size (int): The maximum input size for the model (default: 1024).
+        """
         super().__init__(recording)
 
         logger.info(f"{model_name=}")
@@ -38,6 +49,16 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         prompt: str,
         max_tokens: int,
     ):
+        """
+        Generate completion for a given prompt using the HuggingFace model.
+
+        Args:
+            prompt (str): The prompt for generating completion.
+            max_tokens (int): The maximum number of tokens to generate.
+
+        Returns:
+            str: The generated completion.
+        """
         max_input_size = self.max_input_size
         if max_input_size and len(prompt) > max_input_size:
             logger.warning(f"Truncating from {len(prompt) =} to {max_input_size=}")

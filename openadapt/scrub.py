@@ -1,4 +1,5 @@
-"""Script to scrub text of all PII/PHI.
+"""
+Script to scrub text of all PII/PHI.
 
 Usage:
 
@@ -7,6 +8,7 @@ Usage:
     $ python openadapt/scrub.py scrub_dict dict_arg
     $ python openadapt/scrub.py scrub_list_dicts list_of_dicts_arg
 
+Module: scrub.py
 """
 
 from typing import List, Dict, Union, Any
@@ -41,6 +43,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
 
     Args:
         text (str): Text to be scrubbed
+        is_separated (bool): Whether the text is separated with special characters
 
     Returns:
         str: Scrubbed text
@@ -84,7 +87,6 @@ def scrub_text_all(text: str) -> str:
     Returns:
         str: Scrubbed text
     """
-
     return config.SCRUB_CHAR * len(text)
 
 
@@ -121,7 +123,6 @@ def _should_scrub_text(
     Returns:
         bool: True if the key and value should be scrubbed, False otherwise
     """
-
     return (
         isinstance(value, str)
         and isinstance(key, str)
@@ -140,7 +141,6 @@ def _is_scrubbed(old_text: str, new_text: str) -> bool:
     Returns:
         bool: True if the text has been scrubbed, False otherwise
     """
-
     return old_text != new_text
 
 
@@ -174,7 +174,6 @@ def _should_scrub_list_item(item: Any, key: Any, list_keys: List[str]) -> bool:
     Returns:
         bool: True if the key and value should be scrubbed, False otherwise
     """
-
     return isinstance(item, (str, dict)) and isinstance(key, str) and key in list_keys
 
 
@@ -211,6 +210,9 @@ def scrub_dict(
 
     Args:
         input_dict (dict): A dict to be scrubbed
+        list_keys (list): List of keys to be scrubbed
+        scrub_all (bool): Whether to scrub all sub-fields/keys/values of that particular key
+        force_scrub_children (bool): Whether to force scrub children even if key is not present
 
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
@@ -247,11 +249,11 @@ def scrub_dict(
 
 def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dict]:
     """
-    Scrub the list of dicts of all PII/PHI
-    using Presidio ANALYZER.TRF and Anonymizer.
+    Scrub the list of dicts of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_list (list[dict]): A list of dicts to be scrubbed
+        list_keys (list): List of keys to be scrubbed
 
     Returns:
         list[dict]: The scrubbed list of dicts with PII and PHI removed.

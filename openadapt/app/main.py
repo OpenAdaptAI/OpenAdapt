@@ -1,3 +1,14 @@
+"""
+openadapt.app.main module
+
+This module provides the main entry point for running the OpenAdapt application.
+
+Example usage:
+    from openadapt.app import run_app
+
+    run_app()
+"""
+
 import threading
 import base64
 import os
@@ -13,6 +24,9 @@ SERVER = "127.0.0.1:8000/upload"
 
 
 def run_app():
+    """
+    Run the OpenAdapt application.
+    """
     file = os.path.dirname(__file__)
     app.native.window_args["resizable"] = False  # too many issues with resizing
     app.native.start_args["debug"] = False
@@ -21,11 +35,9 @@ def run_app():
     logger = None
 
     # Add logo
-    # right align icon
+    # Right-align icon
     with ui.row().classes("w-full justify-right"):
         # settings
-
-        # alignment trick
         with ui.avatar(color="white" if dark else "black", size=128):
             logo_base64 = base64.b64encode(open(f"{file}/assets/logo.png", "rb").read())
             img = bytes(

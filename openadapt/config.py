@@ -87,6 +87,18 @@ _DEFAULTS = {
 
 
 def getenv_fallback(var_name):
+    """
+    Get the value of an environment variable or fallback to the default value.
+
+    Args:
+        var_name (str): The name of the environment variable.
+
+    Returns:
+        The value of the environment variable or the fallback default value.
+
+    Raises:
+        ValueError: If the environment variable is not defined.
+    """
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
@@ -112,18 +124,15 @@ if multiprocessing.current_process().name == "MainProcess":
 
 def filter_log_messages(data):
     """
-    This function filters log messages by ignoring any message that contains a specific string.
+    Filter log messages by ignoring specific strings.
 
     Args:
-      data: The input parameter "data" is expected to be data from a loguru logger.
+        data (dict): Data from a loguru logger.
 
     Returns:
-      a boolean value indicating whether the message in the input data should be ignored or not. If the
-    message contains any of the messages in the `messages_to_ignore` list, the function returns `False`
-    indicating that the message should be ignored. Otherwise, it returns `True` indicating that the
-    message should not be ignored.
+        bool: True if the message should not be ignored, False if it should be ignored.
     """
-    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
+    # TODO: Implement log message filtering logic
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]

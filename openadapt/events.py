@@ -1,3 +1,8 @@
+
+"""
+This module provides functionality for importing necessary modules and packages.
+"""
+
 import time
 
 from loguru import logger
@@ -11,11 +16,20 @@ from openadapt import common, config, crud, models, utils
 MAX_PROCESS_ITERS = 1
 
 
-def get_events(
-    recording,
-    process=True,
-    meta=None,
-):
+def get_events(recording, process=True, meta=None):
+    """Retrieve events for a recording.
+
+    Args:
+        recording (models.Recording): The recording object.
+        process (bool): Whether to process the events by merging and discarding certain
+          types of events. Default is True.
+        meta (dict): Metadata dictionary to populate with information about the processing.
+          Default is None.
+
+    Returns:
+        list: A list of action events.
+
+    """
     start_time = time.time()
     action_events = crud.get_action_events(recording)
     window_events = crud.get_window_events(recording)
@@ -89,6 +103,16 @@ def get_events(
 
 
 def make_parent_event(child, extra=None):
+    """Create a parent event from a child event.
+
+    Args:
+        child (models.ActionEvent): The child event.
+        extra (dict): Extra attributes to include in the parent event. Default is None.
+
+    Returns:
+        models.ActionEvent: The parent event.
+
+    """
     # TODO: record which process_fn created the parent event
     event_dict = {
         # TODO: set parent event to child timestamp?
@@ -106,11 +130,19 @@ def make_parent_event(child, extra=None):
     return models.ActionEvent(**event_dict)
 
 
-# Set by_diff_distance=True to compute distance from mouse to screenshot diff
-# (computationally expensive but keeps more useful events)
 def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
-    """Merge consecutive mouse move events into a single move event"""
+    """Merge consecutive mouse move events into a single move event.
 
+    Args:
+        events (list): The list of events to process.
+        by_diff_distance (bool): Whether to compute the distance from the mouse to
+          the screenshot diff. This is computationally expensive but keeps more useful
+          events. Default is False.
+
+    Returns:
+        list: The merged list of events.
+
+    """
     _all_slowdowns = []
 
     def is_target_event(event, state):
@@ -148,7 +180,8 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
                 if np.any(diff_mask):
                     _ts.append(time.perf_counter())
 
-                    # TODO: compare with https://logicatcore.github.io/2020-08-13-sparse-image-coordinates/
+                    # TODO: compare with
+                    # https://logicatcore.github.io/2020-08-13-sparse-image-coordinates/
 
                     # ~247x slowdown
                     diff_positions = np.argwhere(diff_mask)
@@ -235,8 +268,15 @@ def merge_consecutive_mouse_move_events(events, by_diff_distance=False):
 
 
 def merge_consecutive_mouse_scroll_events(events):
-    """Merge consecutive mouse scroll events into a single scroll event"""
+    """Merge consecutive mouse scroll events into a single scroll event.
 
+    Args:
+        events (list): The list of events to process.
+
+    Returns:
+        list: The merged list of events.
+
+    """
     def is_target_event(event, state):
         return event.name == "scroll"
 
@@ -259,8 +299,15 @@ def merge_consecutive_mouse_scroll_events(events):
 
 
 def merge_consecutive_mouse_click_events(events):
-    """Merge consecutive mouse click events into a single doubleclick event"""
+    """Merge consecutive mouse click events into a single doubleclick event.
 
+    Args:
+        events (list): The list of events to process.
+
+    Returns:
+        list: The merged list of events.
+
+    """
     def get_recording_attr(event, attr_name, fallback):
         attr = getattr(event.recording, attr_name) if event.recording else None
         if attr is None:
@@ -525,7 +572,6 @@ def merge_consecutive_action_events(
     get_merged_events,
 ):
     """Merge consecutive action events into a single event"""
-
     num_events_before = len(events)
     state = {"dt": 0}
     rval = []
@@ -561,6 +607,16 @@ def discard_unused_events(
     action_events,
     referred_timestamp_key,
 ):
+    """Discard unused events based on the referred timestamp key.
+
+    Args:
+        referred_events (list): The list of referred events.
+        action_events (list): The list of action events.
+        referred_timestamp_key (str): The key representing the timestamp in referred events.
+
+    Returns:
+        list: The filtered list of referred events.
+    """
     referred_event_timestamps = set(
         [
             getattr(action_event, referred_timestamp_key)
@@ -580,10 +636,20 @@ def discard_unused_events(
 
 
 def process_events(action_events, window_events, screenshots):
-    # for debugging
-    _action_events = action_events
-    _window_events = window_events
-    _screenshots = screenshots
+    """Process action events, window events, and screenshots.
+
+    Args:
+        action_events (list): The list of action events.
+        window_events (list): The list of window events.
+        screenshots (list): The list of screenshots.
+
+    Returns:
+        tuple: A tuple containing the processed action events, window events, and screenshots.
+    """
+    # For debugging
+    # _action_events = action_events
+    # _window_events = window_events
+    # _screenshots = screenshots
 
     num_action_events = len(action_events)
     num_window_events = len(window_events)

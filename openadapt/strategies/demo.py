@@ -32,10 +32,20 @@ class DemoReplayStrategy(
     SummaryReplayStrategyMixin,
     BaseReplayStrategy,
 ):
+    """
+    Demo replay strategy that combines HuggingFace, OCR, and ASCII mixins.
+    """
+
     def __init__(
         self,
         recording: Recording,
     ):
+        """
+        Initialize the DemoReplayStrategy.
+
+        Args:
+            recording (Recording): The recording to replay.
+        """
         super().__init__(recording)
         self.result_history = []
         self.screenshots = get_screenshots(recording)
@@ -46,10 +56,20 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
         window_event: WindowEvent,
     ):
-        ascii_text = self.get_ascii_text(screenshot)
+        """
+        Get the next action event based on the current screenshot and window event.
+
+        Args:
+            screenshot (Screenshot): The current screenshot.
+            window_event (WindowEvent): The current window event.
+
+        Returns:
+            None: No action event is returned in this demo strategy.
+        """
+        # ascii_text = self.get_ascii_text(screenshot)
         # logger.info(f"ascii_text=\n{ascii_text}")
 
-        ocr_text = self.get_ocr_text(screenshot)
+        # ocr_text = self.get_ocr_text(screenshot)
         # logger.info(f"ocr_text=\n{ocr_text}")
 
         screenshot_bbox = self.get_screenshot_bbox(screenshot)

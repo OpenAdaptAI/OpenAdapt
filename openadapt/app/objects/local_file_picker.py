@@ -1,4 +1,15 @@
-# retrieved from https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
+"""
+openadapt.app.objects.local_file_picker module
+
+This module provides the LocalFilePicker class for selecting a file from the local filesystem.
+
+Example usage:
+    from openadapt.app.objects.local_file_picker import LocalFilePicker
+
+    async def pick_file():
+        result = await LocalFilePicker("~", multiple=True)
+        ui.notify(f"You chose {result}")
+"""
 
 from pathlib import Path
 from typing import Dict, Optional
@@ -7,6 +18,10 @@ from nicegui import ui
 
 
 class LocalFilePicker(ui.dialog):
+    """
+    LocalFilePicker class for selecting a file from the local filesystem.
+    """
+
     def __init__(
         self,
         directory: str,
@@ -16,14 +31,15 @@ class LocalFilePicker(ui.dialog):
         show_hidden_files: bool = False,
         dark_mode: bool = False,
     ) -> None:
-        """Local File Picker
+        """Initialize the LocalFilePicker object.
 
-        This is a simple file picker that allows you to select a file from the local filesystem where NiceGUI is running.
-
-        :param directory: The directory to start in.
-        :param upper_limit: The directory to stop at (None: no limit, default: same as the starting directory).
-        :param multiple: Whether to allow multiple files to be selected.
-        :param show_hidden_files: Whether to show hidden files.
+        Args:
+            directory (str): The directory to start in.
+            upper_limit (Optional[str]): The directory to stop at
+                (None: no limit, default: same as the starting directory).
+            multiple (bool): Whether to allow multiple files to be selected.
+            show_hidden_files (bool): Whether to show hidden files.
+            dark_mode (bool): Whether to use dark mode for the file picker.
         """
         super().__init__()
 
@@ -54,6 +70,9 @@ class LocalFilePicker(ui.dialog):
         self.update_grid()
 
     def update_grid(self) -> None:
+        """
+        Update the grid with file data.
+        """
         paths = list(self.path.glob("*"))
         if not self.show_hidden_files:
             paths = [p for p in paths if not p.name.startswith(".")]
@@ -84,6 +103,12 @@ class LocalFilePicker(ui.dialog):
         self.grid.update()
 
     async def handle_double_click(self, msg: Dict) -> None:
+        """
+        Handle the double-click event on a cell in the grid.
+
+        Args:
+            msg (Dict): Message containing the event data.
+        """
         self.path = Path(msg["args"]["data"]["path"])
         if self.path.is_dir():
             self.update_grid()
@@ -91,6 +116,9 @@ class LocalFilePicker(ui.dialog):
             self.submit([str(self.path)])
 
     async def _handle_ok(self):
+        """
+        Handle the Ok button click event.
+        """
         rows = await ui.run_javascript(
             f"getElement({self.grid.id}).gridOptions.api.getSelectedRows()"
         )
@@ -98,6 +126,9 @@ class LocalFilePicker(ui.dialog):
 
 
 async def pick_file():
+    """
+    Async function for picking a file using LocalFilePicker.
+    """
     result = await LocalFilePicker("~", multiple=True)
     ui.notify(f"You chose {result}")
 

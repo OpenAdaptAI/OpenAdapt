@@ -8,6 +8,7 @@ Usage:
 """
 
 from pprint import pformat
+import time
 
 from loguru import logger
 import openai
@@ -34,12 +35,21 @@ encoding = tiktoken.get_encoding("cl100k_base")
 
 
 class OpenAIReplayStrategyMixin(BaseReplayStrategy):
+    """Mixin class implementing replay strategy using OpenAI models."""
     def __init__(
         self,
         recording: models.Recording,
         model_name: str = config.OPENAI_MODEL_NAME,
         # system_message: str = config.OPENAI_SYSTEM_MESSAGE,
     ):
+        """
+        Initialize the OpenAIReplayStrategyMixin.
+
+        Args:
+            recording (models.Recording): The recording object.
+            model_name (str): The name of the OpenAI model to use.
+
+        """
         super().__init__(recording)
 
         logger.info(f"{model_name=}")
@@ -52,6 +62,16 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         system_message: str,
         # max_tokens: int,
     ):
+        """
+        Generates an LLM completion.
+
+        Args:
+            prompt (str): The prompt for the completion.
+            system_message (str): The system message to set the context.
+
+        Returns:
+            str: The generated completion.
+        """
         messages = [
             {
                 "role": "system",
@@ -87,6 +107,16 @@ def create_openai_completion(
     # logit_bias=None,
     # user=None,
 ):
+    """
+    Creates an LLM completion using the OpenAI API.
+
+    Args:
+        model (str): The model name.
+        messages (list): The list of messages.
+
+    Returns:
+        dict: The completion response.
+    """
     return openai.ChatCompletion.create(
         model=model,
         messages=messages,
@@ -109,6 +139,17 @@ def get_completion(
     prompt,
     model="gpt-4",
 ):
+    """
+    Gets the LLM completion.
+
+    Args:
+        messages (list): The list of messages.
+        prompt (str): The prompt for the completion.
+        model (str): The model name.
+
+    Returns:
+        list: The list of messages with the generated completion.
+    """
     logger.info(f"{prompt=}")
 
     messages.append(
@@ -118,14 +159,21 @@ def get_completion(
         }
     )
     length = MAX_LENGTHS[model]
-    shorten_messages(messages, length)
+    # shorten_messages(messages, length)
     logger.debug(f"messages=\n{pformat(messages)}")
 
     def _get_completion(
         prompt: str,
     ) -> str:
-        """TODO"""
+        """
+        Helper function to get the LLM completion.
 
+        Args:
+            prompt (str): The prompt for the completion.
+
+        Returns:
+            str: The generated completion.
+        """
         try:
             completion = create_openai_completion(model, messages)
             logger.info(f"{completion=}")

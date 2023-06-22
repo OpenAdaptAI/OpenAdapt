@@ -1,3 +1,9 @@
+"""
+openadapt.app.cards module
+
+This module provides functions for managing UI cards in the OpenAdapt application.
+"""
+
 import signal
 from nicegui import ui
 from subprocess import Popen
@@ -8,6 +14,12 @@ PROC = None
 
 
 def settings(dark_mode):
+    """
+    Display the settings dialog.
+
+    Args:
+        dark_mode (bool): Current dark mode setting.
+    """
     with ui.dialog() as settings, ui.card():
         s = ui.switch("Dark mode", on_change=lambda: set_dark(dark_mode, s.value))
         sync_switch(s, dark_mode)
@@ -17,6 +29,12 @@ def settings(dark_mode):
 
 
 def select_import(f):
+    """
+    Display the import file selection dialog.
+
+    Args:
+        f (callable): Function to call when import button is clicked.
+    """
     async def pick_file():
         result = await LocalFilePicker(".")
         ui.notify(f"Selected {result[0]}" if result else "No file selected.")
@@ -38,6 +56,13 @@ def select_import(f):
 
 
 def recording_prompt(options, record_button):
+    """
+    Display the recording prompt dialog.
+
+    Args:
+        options (list): List of autocomplete options.
+        record_button (nicegui.widgets.Button): Record button widget.
+    """
     if PROC is None:
         with ui.dialog() as dialog, ui.card():
             ui.label("Enter a name for the recording: ")

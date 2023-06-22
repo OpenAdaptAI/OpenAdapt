@@ -5,12 +5,9 @@ directly, without considering any screenshots.
 
 from pprint import pformat
 import time
-
 from loguru import logger
 import mss.base
-
 from openadapt import config, events, utils, models, strategies
-
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True
@@ -19,6 +16,8 @@ SLEEP = False
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
+    """Naive playback strategy that replays ActionEvents directly."""
+
     def __init__(
         self,
         recording: models.Recording,
@@ -27,6 +26,16 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         process_events=PROCESS_EVENTS,
         sleep=SLEEP,
     ):
+        """
+        Initialize the NaiveReplayStrategy.
+
+        Args:
+            recording (models.Recording): The recording object.
+            display_events (bool): Flag indicating whether to display the events. Defaults to False.
+            replay_events (bool): Flag indicating whether to replay the events. Defaults to True.
+            process_events (bool): Flag indicating whether to process the events. Defaults to True.
+            sleep (bool): Flag indicating whether to add sleep time between events. Defaults to False.
+        """
         super().__init__(recording)
         self.display_events = display_events
         self.replay_events = replay_events
@@ -42,6 +51,16 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         screenshot: models.Screenshot,
         window_event: models.WindowEvent,
     ):
+        """
+        Get the next ActionEvent for replay.
+
+        Args:
+            screenshot (models.Screenshot): The screenshot object.
+            window_event (models.WindowEvent): The window event object.
+
+        Returns:
+            models.ActionEvent or None: The next ActionEvent for replay or None if there are no more events.
+        """
         if self.process_events:
             action_events = self.recording.processed_action_events
         else:

@@ -1,3 +1,9 @@
+"""
+openadapt.window
+
+This module provides functions to interact with the active window and elements on different platforms.
+"""
+
 import sys
 
 from loguru import logger
@@ -6,13 +12,19 @@ from loguru import logger
 if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform in ("win32", "linux"):
-    # TOOD: implement linux
+    # TODO: implement Linux
     from . import _windows as impl
 else:
-    raise Exception(f"Unsupposed {sys.platform=}")
+    raise Exception(f"Unsupported platform: {sys.platform}")
 
 
 def get_active_window_data():
+    """Get data of the active window.
+
+    Returns:
+        dict or None: A dictionary containing information about the active window,
+        or None if the state is not available.
+    """
     state = get_active_window_state()
     if not state:
         return None
@@ -35,8 +47,13 @@ def get_active_window_data():
 
 
 def get_active_window_state():
+    """Get the state of the active window.
+
+    Returns:
+        dict or None: A dictionary containing the state of the active window,
+        or None if the state is not available.
+    """
     # TODO: save window identifier (a window's title can change, or
-    # multiple windows can have the same title)
     try:
         return impl.get_active_window_state()
     except Exception as exc:
@@ -45,6 +62,16 @@ def get_active_window_state():
 
 
 def get_active_element_state(x, y):
+    """Get the state of the active element at the specified coordinates.
+
+    Args:
+        x (int): The x-coordinate of the element.
+        y (int): The y-coordinate of the element.
+
+    Returns:
+        dict or None: A dictionary containing the state of the active element,
+        or None if the state is not available.
+    """
     try:
         return impl.get_active_element_state(x, y)
     except Exception as exc:

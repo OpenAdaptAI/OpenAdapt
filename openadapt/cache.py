@@ -1,20 +1,53 @@
+"""
+openadapt.cache module
+
+This module provides a caching decorator for functions.
+
+Example usage:
+    from openadapt.cache import cache
+
+    @cache()
+    def my_function():
+        # Function body
+        pass
+"""
+
 from functools import wraps
 import time
 
 from joblib import Memory
 from loguru import logger
 
-
 from openadapt import config
 
 
 def default(val, default):
+    """
+    Set a default value if the given value is None.
+
+    Args:
+        val: The value to check.
+        default: The default value to set.
+
+    Returns:
+        The value or the default value.
+    """
     return val if val is not None else default
 
 
 def cache(dir_path=None, enabled=None, verbosity=None, **cache_kwargs):
-    """TODO"""
+    """
+    Cache decorator for functions.
 
+    Args:
+        dir_path (str): The path to the cache directory.
+        enabled (bool): Whether caching is enabled.
+        verbosity (int): The verbosity level of the cache.
+        **cache_kwargs: Additional keyword arguments to pass to the cache.
+
+    Returns:
+        The decorator function.
+    """
     cache_dir_path = default(dir_path, config.CACHE_DIR_PATH)
     cache_enabled = default(enabled, config.CACHE_ENABLED)
     cache_verbosity = default(verbosity, config.CACHE_VERBOSITY)
@@ -38,4 +71,4 @@ def cache(dir_path=None, enabled=None, verbosity=None, **cache_kwargs):
 
         return wrapper
 
-    return decorator
+    return decorator  # TODO: Implement the caching logic

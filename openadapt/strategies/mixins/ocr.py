@@ -28,15 +28,34 @@ from openadapt.strategies.base import BaseReplayStrategy
 
 
 class OCRReplayStrategyMixin(BaseReplayStrategy):
+    """
+    ReplayStrategy mixin for getting text from images via OCR.
+    """
+
     def __init__(
         self,
         recording: Recording,
     ):
+        """
+        Initialize the OCRReplayStrategyMixin.
+
+        Args:
+            recording (Recording): The recording to replay.
+        """
         super().__init__(recording)
 
         self.ocr = RapidOCR()
 
     def get_ocr_text(self, screenshot: Screenshot):
+        """
+        Get the OCR text from a screenshot.
+
+        Args:
+            screenshot (Screenshot): The screenshot.
+
+        Returns:
+            str: The OCR text.
+        """
         # TOOD: improve performance
         result, elapse = self.ocr(screenshot.array)
         # det_elapse, cls_elapse, rec_elapse = elapse
@@ -66,7 +85,6 @@ def get_text_df(
     Returns:
             pd.DataFrame
     """
-
     coords = [coords for coords, text, confidence in result]
     columns = ["tl", "tr", "bl", "br"]
     df = pd.DataFrame(coords, columns=columns)
@@ -84,15 +102,15 @@ def get_text_df(
 def get_text_from_df(
     df: pd.DataFrame,
 ):
-    """Converts a DataFrame produced by get_text_df into a string.
+    """
+    Convert a DataFrame produced by get_text_df into a string.
 
-    Params:
-        df: DataFrame produced by get_text_df
+    Args:
+        df (pd.DataFrame): The DataFrame produced by get_text_df.
 
     Returns:
-        str
+        str: The converted text.
     """
-
     df["text"] = df["text"].apply(preprocess_text)
     sorted_df = sort_rows(df)
     df["height"] = df.apply(get_height, axis=1)
@@ -104,6 +122,19 @@ def get_text_from_df(
 
 
 def unnest(df, explode, axis, suffixes=None):
+    """
+    Unnest specified columns in a DataFrame by exploding values.
+
+    Args:
+        df (pd.DataFrame): DataFrame to unnest.
+        explode (list): Columns to unnest.
+        axis (int): Axis to unnest along (1 for columns, 0 for rows).
+        suffixes (list, optional): Suffixes for unnested column names.
+
+    Returns:
+        pd.DataFrame: Unnested DataFrame.
+
+    """
     # https://stackoverflow.com/a/53218939
     if axis == 1:
         df1 = pd.concat([df[x].explode() for x in explode], axis=1)
@@ -127,20 +158,57 @@ def unnest(df, explode, axis, suffixes=None):
 
 
 def preprocess_text(text):
+    """
+    Preprocess the OCR text.
+
+    Args:
+        text (str): The OCR text.
+
+    Returns:
+        str: The preprocessed text.
+    """
     return text.strip()
 
 
 def get_centroid(row):
+    """
+    Compute the centroid coordinates from the corners of a rectangle.
+
+    Args:
+        row (pd.Series): Row containing corner coordinates.
+
+    Returns:
+        tuple: Tuple of centroid coordinates (x, y).
+
+    """
     x = (row["tl_x"] + row["tr_x"] + row["bl_x"] + row["br_x"]) / 4
     y = (row["tl_y"] + row["tr_y"] + row["bl_y"] + row["br_y"]) / 4
     return x, y
 
 
 def get_height(row):
+    """
+    Get the height of a row.
+
+    Args:
+        row (pd.Series): The row of the DataFrame.
+
+    Returns:
+        float: The height.
+    """
     return abs(row["tl_y"] - row["bl_y"])
 
 
 def sort_rows(df):
+    """
+    Sort the rows of the DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to sort.
+
+    Returns:
+        pd.DataFrame: The sorted DataFrame.
+    """
     df["centroid"] = df.apply(get_centroid, axis=1)
     df["x"] = df["centroid"].apply(lambda coord: coord[0])
     df["y"] = df["centroid"].apply(lambda coord: coord[1])
@@ -149,6 +217,16 @@ def sort_rows(df):
 
 
 def cluster_lines(df, eps):
+    """
+    Cluster lines in the DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to cluster.
+        eps (float): The epsilon value for DBSCAN.
+
+    Returns:
+        pd.DataFrame: The DataFrame with line clustering.
+    """
     coords = df[["x", "y"]].to_numpy()
     cluster_model = DBSCAN(eps=eps, min_samples=1)
     df["line_cluster"] = cluster_model.fit_predict(coords)
@@ -156,6 +234,15 @@ def cluster_lines(df, eps):
 
 
 def cluster_words(df):
+    """
+    Cluster words in the DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to cluster.
+
+    Returns:
+        pd.DataFrame: The DataFrame with word clustering.
+    """
     line_dfs = []
     for line_cluster in df["line_cluster"].unique():
         line_df = df[df["line_cluster"] == line_cluster].copy()
@@ -173,6 +260,15 @@ def cluster_words(df):
 
 
 def concat_text(df):
+    """
+    Concatenate text from the DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame with clustered words.
+
+    Returns:
+        str: The concatenated text.
+    """
     df.sort_values(by=["line_cluster", "word_cluster"], inplace=True)
     lines = df.groupby("line_cluster")["text"].apply(lambda x: " ".join(x))
     return "\n".join(lines)

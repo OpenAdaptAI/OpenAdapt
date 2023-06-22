@@ -1,11 +1,26 @@
+"""
+openadapt.test_crop
+
+This module provides test cases for the cropping functionality of the openadapt package.
+"""
+
 from unittest.mock import Mock
 from unittest import mock
 from PIL import Image
-import numpy as np
 from openadapt.models import Screenshot
 
 
 def test_crop_active_window():
+    """
+    Test the crop_active_window function.
+
+    This function creates a mock action event with a mock window event,
+    sets up the necessary environment, performs the cropping operation,
+    and verifies that the image size has been reduced.
+
+    Returns:
+        None
+    """
     # Create a mock action event with a mock window event
     action_event_mock = Mock()
     window_event_mock = Mock()

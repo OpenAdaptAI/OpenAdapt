@@ -1,3 +1,11 @@
+"""
+db.py
+
+This module provides functionality for connecting to and interacting with
+the database.
+
+"""
+
 import sqlalchemy as sa
 from dictalchemy import DictableModel
 from sqlalchemy.orm import sessionmaker
@@ -18,9 +26,12 @@ NAMING_CONVENTION = {
 
 
 class BaseModel(DictableModel):
+    """The base model for database tables."""
+
     __abstract__ = True
 
     def __repr__(self):
+        """Return a string representation of the model object."""
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in row2dict(self, follow=False).items()
@@ -30,6 +41,7 @@ class BaseModel(DictableModel):
 
 
 def get_engine():
+    """Create and return a database engine."""
     engine = sa.create_engine(
         DB_URL,
         echo=DB_ECHO,
@@ -38,6 +50,7 @@ def get_engine():
 
 
 def get_base(engine):
+    """Create and return the base model with the provided engine."""
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(
         cls=BaseModel,

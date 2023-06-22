@@ -1,3 +1,12 @@
+"""
+openadapt.app.build module
+
+This module provides functionality for building the OpenAdapt application.
+
+Example usage:
+    python build.py
+"""
+
 import os
 import subprocess
 from pathlib import Path

@@ -1,3 +1,9 @@
+"""
+openadapt.test_events
+
+This module provides test cases for the event processing functionality of the openadapt package.
+"""
+
 from functools import partial
 from pprint import pformat
 import itertools
@@ -39,6 +45,12 @@ timestamp_raw = _start_time
 
 
 def reset_timestamp():
+    """
+    Reset the timestamp counters to their initial values.
+
+    Returns:
+        None
+    """
     global timestamp
     global timestamp_raw
     timestamp = _start_time
@@ -47,15 +59,30 @@ def reset_timestamp():
 
 @pytest.fixture(autouse=True)
 def _reset_timestamp():
+    """
+    Fixture that automatically resets the timestamp counters before each test.
+
+    Returns:
+        None
+    """
     reset_timestamp()
 
 
 def make_action_event(
-    event_dict,
-    dt=None,
-    get_pre_children=None,
-    get_post_children=None,
+    event_dict, dt=None, get_pre_children=None, get_post_children=None,
 ):
+    """
+    Create an ActionEvent instance with the given attributes.
+
+    Args:
+        event_dict (dict): Dictionary containing the event attributes.
+        dt (float, optional): Time difference in seconds from the previous event. Defaults to None.
+        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
+        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class.
+    """
     assert "chidren" not in event_dict, event_dict["children"]
     children = get_children_with_timestamps(get_pre_children)
     event_dict["children"] = children
@@ -91,6 +118,15 @@ def make_action_event(
 
 
 def get_children_with_timestamps(get_children):
+    """
+    Get the list of children events with timestamps.
+
+    Args:
+        get_children (function): Function that returns the list of children events.
+
+    Returns:
+        list: List of children events with timestamps.
+    """
     if not get_children:
         return []
 
@@ -111,12 +147,20 @@ def get_children_with_timestamps(get_children):
 
 
 def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
+    """
+    Create a move event with the given attributes.
+
+    Args:
+        x (int, optional): X-coordinate of the mouse. Defaults to 0.
+        y (int, optional): Y-coordinate of the mouse. Defaults to 0.
+        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
+        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the move event.
+    """
     return make_action_event(
-        {
-            "name": "move",
-            "mouse_x": x,
-            "mouse_y": y,
-        },
+        {"name": "move", "mouse_x": x, "mouse_y": y,},
         get_pre_children=get_pre_children,
         get_post_children=get_post_children,
     )
@@ -131,6 +175,21 @@ def make_click_event(
     get_pre_children=None,
     get_post_children=None,
 ):
+    """
+    Create a click event with the given attributes.
+
+    Args:
+        pressed (bool): True if the mouse button is pressed, False otherwise.
+        mouse_x (int, optional): X-coordinate of the mouse. Defaults to 0.
+        mouse_y (int, optional): Y-coordinate of the mouse. Defaults to 0.
+        dt (float, optional): Time difference in seconds from the previous event. Defaults to None.
+        button_name (str, optional): Name of the mouse button. Defaults to "left".
+        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
+        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the click event.
+    """
     return make_action_event(
         {
             "name": "click",
@@ -146,16 +205,31 @@ def make_click_event(
 
 
 def make_scroll_event(dy=0, dx=0):
-    return make_action_event(
-        {
-            "name": "scroll",
-            "mouse_dx": dx,
-            "mouse_dy": dy,
-        }
-    )
+    """
+    Create a scroll event with the given attributes.
+
+    Args:
+        dy (int, optional): Vertical scroll amount. Defaults to 0.
+        dx (int, optional): Horizontal scroll amount. Defaults to 0.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the scroll event.
+    """
+    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy,})
 
 
 def make_click_events(dt_released, dt_pressed=None, button_name="left"):
+    """
+    Create a pair of click events with the given time differences and button name.
+
+    Args:
+        dt_released (float): Time difference in seconds between the press and release events.
+        dt_pressed (float, optional): Time difference in seconds from the previous event for the press event. Defaults to None.
+        button_name (str, optional): Name of the mouse button. Defaults to "left".
+
+    Returns:
+        tuple: A tuple containing the press and release events.
+    """
     return (
         make_click_event(True, dt=dt_pressed, button_name=button_name),
         make_click_event(False, dt=dt_released, button_name=button_name),
@@ -163,13 +237,22 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 
 
 def make_processed_click_event(
-    name,
-    dt,
-    get_children,
-    mouse_x=0,
-    mouse_y=0,
-    button_name="left",
+    name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+    Create a processed click event with the given attributes.
+
+    Args:
+        name (str): Name of the processed click event.
+        dt (float): Time difference in seconds from the previous event.
+        get_children (function): Function that returns the list of children events.
+        mouse_x (int, optional): X-coordinate of the mouse. Defaults to 0.
+        mouse_y (int, optional): Y-coordinate of the mouse. Defaults to 0.
+        button_name (str, optional): Name of the mouse button. Defaults to "left".
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the processed click event.
+    """
     return make_action_event(
         {
             "name": name,
@@ -183,40 +266,56 @@ def make_processed_click_event(
 
 
 def make_singleclick_event(
-    dt,
-    get_children,
-    mouse_x=0,
-    mouse_y=0,
-    button_name="left",
+    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+    Create a single click event with the given attributes.
+
+    Args:
+        dt (float): Time difference in seconds from the previous event.
+        get_children (function): Function that returns the list of children events.
+        mouse_x (int, optional): X-coordinate of the mouse. Defaults to 0.
+        mouse_y (int, optional): Y-coordinate of the mouse. Defaults to 0.
+        button_name (str, optional): Name of the mouse button. Defaults to "left".
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the single click event.
+    """
     return make_processed_click_event(
-        "singleclick",
-        dt,
-        get_children,
-        mouse_x,
-        mouse_y,
-        button_name,
+        "singleclick", dt, get_children, mouse_x, mouse_y, button_name,
     )
 
 
 def make_doubleclick_event(
-    dt,
-    get_children,
-    mouse_x=0,
-    mouse_y=0,
-    button_name="left",
+    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
 ):
+    """
+    Create a double click event with the given attributes.
+
+    Args:
+        dt (float): Time difference in seconds from the previous event.
+        get_children (function): Function that returns the list of children events.
+        mouse_x (int, optional): X-coordinate of the mouse. Defaults to 0.
+        mouse_y (int, optional): Y-coordinate of the mouse. Defaults to 0.
+        button_name (str, optional): Name of the mouse button. Defaults to "left".
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the double click event.
+    """
     return make_processed_click_event(
-        "doubleclick",
-        dt,
-        get_children,
-        mouse_x,
-        mouse_y,
-        button_name,
+        "doubleclick", dt, get_children, mouse_x, mouse_y, button_name,
     )
 
 
 def test_merge_consecutive_mouse_click_events():
+    """
+    Test case for merging consecutive mouse click events.
+
+    This test case verifies that the merge_consecutive_mouse_click_events function correctly merges consecutive mouse click events.
+
+    Returns:
+        None
+    """
     if OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS:
         override_double_click_interval_seconds(OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS)
     double_click_interval_seconds = get_double_click_interval_seconds()
@@ -241,25 +340,14 @@ def test_merge_consecutive_mouse_click_events():
             *make_click_events(dt_long, button_name="right"),
             make_doubleclick_event(
                 dt_long,
-                lambda: [
-                    *make_click_events(dt_short),
-                    *make_click_events(dt_long),
-                ],
+                lambda: [*make_click_events(dt_short), *make_click_events(dt_long),],
             ),
             make_doubleclick_event(
                 dt_long,
-                lambda: [
-                    *make_click_events(dt_short),
-                    *make_click_events(dt_long),
-                ],
+                lambda: [*make_click_events(dt_short), *make_click_events(dt_long),],
             ),
             *make_click_events(dt_long, button_name="right"),
-            make_singleclick_event(
-                dt_long,
-                lambda: [
-                    *make_click_events(dt_long),
-                ],
-            ),
+            make_singleclick_event(dt_long, lambda: [*make_click_events(dt_long),],),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
@@ -269,6 +357,14 @@ def test_merge_consecutive_mouse_click_events():
 
 
 def test_merge_consecutive_mouse_move_events():
+    """
+    Test case for merging consecutive mouse move events.
+
+    This test case verifies that the merge_consecutive_mouse_move_events function correctly merges consecutive mouse move events.
+
+    Returns:
+        None
+    """
     raw_events = [
         make_scroll_event(),
         make_move_event(0),
@@ -293,11 +389,7 @@ def test_merge_consecutive_mouse_move_events():
             ),
             make_scroll_event(),
             make_move_event(
-                4,
-                get_pre_children=lambda: [
-                    make_move_event(3),
-                    make_move_event(4),
-                ],
+                4, get_pre_children=lambda: [make_move_event(3), make_move_event(4),],
             ),
         ]
     )
@@ -314,6 +406,14 @@ def test_merge_consecutive_mouse_move_events():
 
 
 def test_merge_consecutive_mouse_scroll_events():
+    """
+    Test case for merging consecutive mouse scroll events.
+
+    This test case verifies that the merge_consecutive_mouse_scroll_events function correctly merges consecutive mouse scroll events.
+
+    Returns:
+        None
+    """
     raw_events = [
         make_move_event(),
         make_scroll_event(dx=2),
@@ -340,6 +440,14 @@ def test_merge_consecutive_mouse_scroll_events():
 
 
 def test_remove_redundant_mouse_move_events():
+    """
+    Test case for removing redundant mouse move events.
+
+    This test case verifies that the remove_redundant_mouse_move_events function correctly removes redundant mouse move events.
+
+    Returns:
+        None
+    """
     # certain failure modes only appear in longer event chains
     raw_events = list(
         itertools.chain(
@@ -363,109 +471,99 @@ def test_remove_redundant_mouse_move_events():
     reset_timestamp()
     expected_events = rows2dicts(
         [
+            make_click_event(True, 1, get_pre_children=lambda: [make_move_event(1),],),
             make_click_event(
-                True,
-                1,
-                get_pre_children=lambda: [
-                    make_move_event(1),
-                ],
+                False, 1, get_post_children=lambda: [make_move_event(1),],
             ),
+            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2),],),
             make_click_event(
-                False,
-                1,
-                get_post_children=lambda: [
-                    make_move_event(1),
-                ],
-            ),
-            make_click_event(
-                True,
-                2,
-                get_post_children=lambda: [
-                    make_move_event(2),
-                ],
-            ),
-            make_click_event(
-                False,
-                3,
-                get_post_children=lambda: [
-                    make_move_event(3),
-                ],
+                False, 3, get_post_children=lambda: [make_move_event(3),],
             ),
             make_click_event(
                 True,
                 1,
-                get_post_children=lambda: [
-                    make_move_event(3),
-                    make_move_event(1),
-                ],
+                get_post_children=lambda: [make_move_event(3), make_move_event(1),],
             ),
             make_click_event(
-                False,
-                1,
-                get_post_children=lambda: [
-                    make_move_event(1),
-                ],
+                False, 1, get_post_children=lambda: [make_move_event(1),],
             ),
+            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2),],),
             make_click_event(
-                True,
-                2,
-                get_post_children=lambda: [
-                    make_move_event(2),
-                ],
-            ),
-            make_click_event(
-                False,
-                3,
-                get_post_children=lambda: [
-                    make_move_event(3),
-                ],
+                False, 3, get_post_children=lambda: [make_move_event(3),],
             ),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
-    actual_events = rows2dicts(
-        remove_redundant_mouse_move_events(raw_events),
-    )
+    actual_events = rows2dicts(remove_redundant_mouse_move_events(raw_events),)
     logger.info(f"actual_events=\n{pformat(actual_events)}")
     assert expected_events == actual_events
 
 
 def make_press_event(char=None, name=None):
+    """
+    Create a press event with the given character or key name.
+
+    Args:
+        char (str, optional): Character corresponding to the pressed key. Defaults to None.
+        name (str, optional): Name of the pressed key. Defaults to None.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the press event.
+    """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event(
-        {
-            "name": "press",
-            "key_char": char,
-            "key_name": name,
-        }
-    )
+    return make_action_event({"name": "press", "key_char": char, "key_name": name,})
 
 
 def make_release_event(char=None, name=None):
+    """
+    Create a release event with the given character or key name.
+
+    Args:
+        char (str, optional): Character corresponding to the released key. Defaults to None.
+        name (str, optional): Name of the released key. Defaults to None.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the release event.
+    """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event(
-        {
-            "name": "release",
-            "key_char": char,
-            "key_name": name,
-        }
-    )
+    return make_action_event({"name": "release", "key_char": char, "key_name": name,})
 
 
 def make_type_event(get_children):
-    return make_action_event(
-        {
-            "name": "type",
-        },
-        get_pre_children=get_children,
-    )
+    """
+    Create a type event with the given children events.
+
+    Args:
+        get_children (function): Function that returns the list of children events.
+
+    Returns:
+        ActionEvent: An instance of the ActionEvent class representing the type event.
+    """
+    return make_action_event({"name": "type",}, get_pre_children=get_children,)
 
 
 def make_key_events(char):
+    """
+    Create a pair of press and release events for the given character.
+
+    Args:
+        char (str): Character corresponding to the key.
+
+    Returns:
+        tuple: A tuple containing the press and release events.
+    """
     return make_press_event(char), make_release_event(char)
 
 
 def test_merge_consecutive_keyboard_events():
+    """
+    Test case for merging consecutive keyboard events.
+
+    This test case verifies that the merge_consecutive_keyboard_events function correctly merges consecutive keyboard events.
+
+    Returns:
+        None
+    """
     raw_events = [
         make_click_event(True),
         *make_key_events("a"),
@@ -518,6 +616,14 @@ def test_merge_consecutive_keyboard_events():
 
 
 def test_merge_consecutive_keyboard_events__grouped():
+    """
+    Test case for merging consecutive keyboard events with grouping.
+
+    This test case verifies that the merge_consecutive_keyboard_events function correctly merges consecutive keyboard events with grouping.
+
+    Returns:
+        None
+    """
     raw_events = [
         make_click_event(True),
         *make_key_events("a"),
@@ -538,12 +644,7 @@ def test_merge_consecutive_keyboard_events__grouped():
     expected_events = rows2dicts(
         [
             make_click_event(True),
-            make_type_event(
-                lambda: [
-                    *make_key_events("a"),
-                    *make_key_events("b"),
-                ]
-            ),
+            make_type_event(lambda: [*make_key_events("a"), *make_key_events("b"),]),
             make_type_event(
                 lambda: [
                     make_press_event(name="ctrl"),
@@ -555,12 +656,7 @@ def test_merge_consecutive_keyboard_events__grouped():
                     make_release_event(name="alt"),
                 ]
             ),
-            make_type_event(
-                lambda: [
-                    *make_key_events("f"),
-                    *make_key_events("g"),
-                ]
-            ),
+            make_type_event(lambda: [*make_key_events("f"), *make_key_events("g"),]),
             make_click_event(False),
         ]
     )
@@ -574,10 +670,27 @@ def test_merge_consecutive_keyboard_events__grouped():
 
 
 def make_window_event(event_dict):
+    """
+    Create a WindowEvent with the given attributes.
+
+    Args:
+        event_dict (dict): Dictionary containing the attributes of the WindowEvent.
+
+    Returns:
+        WindowEvent: An instance of the WindowEvent class with the specified attributes.
+    """
     return WindowEvent(**event_dict)
 
 
 def test_discard_unused_events():
+    """
+    Test case for discarding unused events.
+
+    This test case verifies that the discard_unused_events function correctly discards unused events based on the specified timestamp attribute.
+
+    Returns:
+        None
+    """
     window_events = [
         make_window_event({"timestamp": 0}),
         make_window_event({"timestamp": 1}),
@@ -588,16 +701,9 @@ def test_discard_unused_events():
         make_action_event({"window_event_timestamp": 2}),
     ]
     expected_filtered_window_events = rows2dicts(
-        [
-            make_window_event({"timestamp": 0}),
-            make_window_event({"timestamp": 2}),
-        ]
+        [make_window_event({"timestamp": 0}), make_window_event({"timestamp": 2}),]
     )
     actual_filtered_window_events = rows2dicts(
-        discard_unused_events(
-            window_events,
-            action_events,
-            "window_event_timestamp",
-        )
+        discard_unused_events(window_events, action_events, "window_event_timestamp",)
     )
     assert expected_filtered_window_events == actual_filtered_window_events

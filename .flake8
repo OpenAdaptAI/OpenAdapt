@@ -1,3 +1,4 @@
 [flake8]
 exclude=alembic/versions,.venv
 docstring-convention=google
+max-line-length = 100

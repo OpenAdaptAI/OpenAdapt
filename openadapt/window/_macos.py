@@ -9,7 +9,13 @@ import Quartz
 
 
 def get_active_window_state():
-    # pywinctl performance on mac is unusable, see:
+    """Get the state of the active window.
+
+    Returns:
+        dict or None: A dictionary containing the state of the active window,
+        or None if the state is not available.
+    """
+    # pywinctl performance on macOS is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
     data = get_window_data(meta)
@@ -45,6 +51,11 @@ def get_active_window_state():
 
 
 def get_active_window_meta():
+    """Get the metadata of the active window.
+
+    Returns:
+        dict: A dictionary containing the metadata of the active window.
+    """
     windows = Quartz.CGWindowListCopyWindowInfo(
         (
             Quartz.kCGWindowListExcludeDesktopElements
@@ -58,6 +69,15 @@ def get_active_window_meta():
 
 
 def get_active_window(window_meta):
+    """Get the active window from the given metadata.
+
+    Args:
+        window_meta (dict): The metadata of the window.
+
+    Returns:
+        AXUIElement or None: The active window as an AXUIElement object,
+        or None if the active window cannot be retrieved.
+    """
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
     error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
@@ -70,12 +90,29 @@ def get_active_window(window_meta):
 
 
 def get_window_data(window_meta):
+    """Get the data of the window.
+
+    Args:
+        window_meta (dict): The metadata of the window.
+
+    Returns:
+        dict: A dictionary containing the data of the window.
+    """
     window = get_active_window(window_meta)
     state = dump_state(window)
     return state
 
 
 def dump_state(element, elements=None):
+    """Dump the state of the given element and its descendants.
+
+    Args:
+        element: The element to dump the state for.
+        elements (set): Set to track elements to prevent circular traversal.
+
+    Returns:
+        dict or list: The state of the element and its descendants as a dictionary or list.
+    """
     elements = elements or set()
     if element in elements:
         return
@@ -102,11 +139,10 @@ def dump_state(element, elements=None):
         if attr_names:
             state = {}
             for attr_name in attr_names:
-                # don't traverse back up
-                # for WindowEvents:
+                # Don't traverse back up for WindowEvents:
                 if "parent" in attr_name.lower():
                     continue
-                # for ActionEvents:
+                # For ActionEvents:
                 if attr_name in ("AXTopLevelUIElement", "AXWindow"):
                     continue
 
@@ -119,7 +155,7 @@ def dump_state(element, elements=None):
                     None,
                 )
 
-                # for ActionEvents
+                # For ActionEvents:
                 if attr_name == "AXRole" and "application" in attr_val.lower():
                     continue
 
@@ -133,7 +169,14 @@ def dump_state(element, elements=None):
 
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
 def deepconvert_objc(object):
-    """Convert all contents of an ObjC object to Python primitives."""
+    """Convert all contents of an ObjC object to Python primitives.
+
+    Args:
+        object: The object to convert.
+
+    Returns:
+        object: The converted object with Python primitives.
+    """
     value = object
     if isinstance(object, AppKit.NSNumber):
         value = int(object)
@@ -148,6 +191,15 @@ def deepconvert_objc(object):
 
 
 def get_active_element_state(x, y):
+    """Get the state of the active element at the specified coordinates.
+
+    Args:
+        x (int): The x-coordinate of the element.
+        y (int): The y-coordinate of the element.
+
+    Returns:
+        dict: A dictionary containing the state of the active element.
+    """
     window_meta = get_active_window_meta()
     pid = window_meta["kCGWindowOwnerPID"]
     app = atomacos._a11y.AXUIElement.from_pid(pid)
@@ -163,6 +215,15 @@ def get_active_element_state(x, y):
 
 
 def main():
+    """Main function for testing the functionality.
+
+    This function sleeps for 1 second, gets the state of the active window,
+    pretty-prints the state, and pickles the state. It also sets up the ipdb
+    debugger for further debugging.
+
+    Returns:
+        None
+    """
     import time
 
     time.sleep(1)
@@ -170,9 +231,7 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
-    import ipdb
-
-    ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == "__main__":

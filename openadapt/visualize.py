@@ -1,3 +1,8 @@
+"""
+visualize.py
+
+Module for visualization utilities in the OpenAdapt library.
+"""
 from pprint import pformat
 from threading import Timer
 import html
@@ -9,12 +14,8 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from openadapt.crud import (
-    get_latest_recording,
-)
-from openadapt.events import (
-    get_events,
-)
+from openadapt.crud import get_latest_recording
+from openadapt.events import get_events
 from openadapt.utils import (
     configure_logging,
     display_event,
@@ -78,6 +79,16 @@ CSS = string.Template(
 
 
 def recursive_len(lst, key):
+    """
+    Calculate the recursive length of a list based on a key.
+
+    Args:
+        lst (list): The list to calculate the length of.
+        key: The key to access the sublists.
+
+    Returns:
+        int: The recursive length of the list.
+    """
     try:
         _len = len(lst)
     except TypeError:
@@ -91,6 +102,16 @@ def recursive_len(lst, key):
 
 
 def format_key(key, value):
+    """
+    Format a key and value for display.
+
+    Args:
+        key: The key to format.
+        value: The value associated with the key.
+
+    Returns:
+        str: The formatted key and value.
+    """
     if isinstance(value, list):
         return f"{key} ({len(value)}; {recursive_len(value, key)})"
     else:
@@ -98,6 +119,17 @@ def format_key(key, value):
 
 
 def indicate_missing(some, every, indicator):
+    """
+    Indicate missing elements in a list.
+
+    Args:
+        some (list): The list with potentially missing elements.
+        every (list): The reference list with all elements.
+        indicator: The indicator to use for missing elements.
+
+    Returns:
+        list: The list with indicators for missing elements.
+    """
     rval = []
     some_idx = 0
     every_idx = 0
@@ -115,6 +147,16 @@ def indicate_missing(some, every, indicator):
 
 
 def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
+    """
+    Convert a dictionary to an HTML representation.
+
+    Args:
+        obj (dict): The dictionary to convert.
+        max_children (int): The maximum number of child elements to display in a table.
+
+    Returns:
+        str: The HTML representation of the dictionary.
+    """
     if isinstance(obj, list):
         children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
@@ -142,6 +184,9 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
 
 
 def main():
+    """
+    Main function to generate an HTML report for a recording.
+    """
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()

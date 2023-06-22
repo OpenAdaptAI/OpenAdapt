@@ -39,6 +39,19 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
+    """
+    Process an event and take appropriate action based on its type.
+
+    Args:
+        event: The event to process.
+        write_q: The queue for writing the event.
+        write_fn: The function for writing the event.
+        recording_timestamp: The timestamp of the recording.
+        perf_q: The queue for collecting performance statistics.
+
+    Returns:
+        None
+    """
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
         write_q.put(event)
     else:
@@ -55,7 +68,7 @@ def process_events(
     terminate_event: multiprocessing.Event,
 ):
     """
-    Process events from event queue and write them to respective write queues.
+    Process events from the event queue and write them to the respective write queues.
 
     Args:
         event_q: A queue with events to be processed.
@@ -66,10 +79,9 @@ def process_events(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("Starting")
 
     prev_event = None
     prev_screen_event = None
@@ -88,10 +100,10 @@ def process_events(
             prev_window_event = event
         elif event.type == "action":
             if prev_screen_event is None:
-                logger.warning("discarding action that came before screen")
+                logger.warning("Discarding action that came before screen")
                 continue
             if prev_window_event is None:
-                logger.warning("discarding input that came before window")
+                logger.warning("Discarding input that came before window")
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
@@ -123,7 +135,7 @@ def process_events(
         else:
             raise Exception(f"unhandled {event.type=}")
         prev_event = event
-    logger.info("done")
+    logger.info("Done")
 
 
 def write_action_event(
@@ -139,7 +151,6 @@ def write_action_event(
         event: An action event to be written.
         perf_q: A queue for collecting performance data.
     """
-
     assert event.type == "action", event
     crud.insert_action_event(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -158,7 +169,6 @@ def write_screen_event(
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
     """
-
     assert event.type == "screen", event
     screenshot = event.data
     png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
@@ -180,7 +190,6 @@ def write_window_event(
         event: A window event to be written.
         perf_q: A queue for collecting performance data.
     """
-
     assert event.type == "window", event
     crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -195,7 +204,7 @@ def write_events(
     terminate_event: multiprocessing.Event,
 ):
     """
-    Write events of a specific type to the db using the provided write function.
+    Write events of a specific type to the database using the provided write function.
 
     Args:
         event_type: The type of events to be written.
@@ -205,10 +214,9 @@ def write_events(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info(f"{event_type=} starting")
+    logger.info(f"{event_type=} Starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not write_q.empty():
         try:
@@ -218,13 +226,22 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
         logger.debug(f"{event_type=} written")
-    logger.info(f"{event_type=} done")
+    logger.info(f"{event_type=} Done")
 
 
 def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: Dict[str, Any],
 ) -> None:
+    """Triggers an action event and adds it to the event queue.
+
+    Args:
+        event_q: The event queue to add the action event to.
+        action_event_args: A dictionary containing the arguments for the action event.
+
+    Returns:
+        None
+    """
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
     if x is not None and y is not None:
@@ -242,6 +259,17 @@ def on_move(
     y: int,
     injected: bool,
 ) -> None:
+    """Handles the 'move' event.
+
+    Args:
+        event_q: The event queue to add the 'move' event to.
+        x: The x-coordinate of the mouse.
+        y: The y-coordinate of the mouse.
+        injected: Whether the event was injected or not.
+
+    Returns:
+        None
+    """
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -262,6 +290,19 @@ def on_click(
     pressed: bool,
     injected: bool,
 ) -> None:
+    """Handles the 'click' event.
+
+    Args:
+        event_q: The event queue to add the 'click' event to.
+        x: The x-coordinate of the mouse.
+        y: The y-coordinate of the mouse.
+        button: The mouse button.
+        pressed: Whether the button is pressed or released.
+        injected: Whether the event was injected or not.
+
+    Returns:
+        None
+    """
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -284,6 +325,19 @@ def on_scroll(
     dy: int,
     injected: bool,
 ) -> None:
+    """Handles the 'scroll' event.
+
+    Args:
+        event_q: The event queue to add the 'scroll' event to.
+        x: The x-coordinate of the mouse.
+        y: The y-coordinate of the mouse.
+        dx: The horizontal scroll amount.
+        dy: The vertical scroll amount.
+        injected: Whether the event was injected or not.
+
+    Returns:
+        None
+    """
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
         trigger_action_event(
@@ -304,6 +358,17 @@ def handle_key(
     key: keyboard.KeyCode,
     canonical_key: keyboard.KeyCode,
 ) -> None:
+    """Handles a key event.
+
+    Args:
+        event_q: The event queue to add the key event to.
+        event_name: The name of the key event.
+        key: The key code of the key event.
+        canonical_key: The canonical key code of the key event.
+
+    Returns:
+        None
+    """
     attr_names = [
         "name",
         "char",
@@ -334,17 +399,16 @@ def read_screen_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("Starting")
     while not terminate_event.is_set():
         screenshot = utils.take_screenshot()
         if screenshot is None:
-            logger.warning("screenshot was None")
+            logger.warning("Screenshot was None")
             continue
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
-    logger.info("done")
+    logger.info("Done")
 
 
 def read_window_events(
@@ -360,10 +424,9 @@ def read_window_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("Starting")
     prev_window_data = {}
     while not terminate_event.is_set():
         window_data = window.get_active_window_data()
@@ -383,7 +446,7 @@ def read_window_events(
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
-            logger.debug("queuing window event for writing")
+            logger.debug("Queuing window event for writing")
             event_q.put(
                 Event(
                     utils.get_timestamp(),
@@ -400,18 +463,17 @@ def performance_stats_writer(
     terminate_event: multiprocessing.Event,
 ):
     """
-    Write performance stats to the db.
-    Each entry includes the event type, start time and end time
+    Write performance stats to the database.
+    Each entry includes the event type, start time, and end time.
 
     Args:
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info("performance stats writer starting")
+    logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not perf_q.empty():
         try:
@@ -425,7 +487,7 @@ def performance_stats_writer(
             start_time,
             end_time,
         )
-    logger.info("performance stats writer done")
+    logger.info("Performance stats writer done")
 
 
 def create_recording(
@@ -435,13 +497,11 @@ def create_recording(
     Create a new recording entry in the database.
 
     Args:
-        task_description: a text description of the task being implemented
-            in the recording
+        task_description: A text description of the task being recorded.
 
     Returns:
-        The newly created Recording object
+        The newly created Recording object.
     """
-
     timestamp = utils.set_start_time()
     monitor_width, monitor_height = utils.get_monitor_dims()
     double_click_distance_pixels = utils.get_double_click_distance_pixels()
@@ -466,6 +526,16 @@ def read_keyboard_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    """Reads keyboard events and adds them to the event queue.
+
+    Args:
+        event_q: The event queue to add the keyboard events to.
+        terminate_event: The event to signal termination of event reading.
+        recording_timestamp: The timestamp of the recording.
+
+    Returns:
+        None
+    """
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
@@ -493,6 +563,16 @@ def read_mouse_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    """Reads mouse events and adds them to the event queue.
+
+    Args:
+        event_q: The event queue to add the mouse events to.
+        terminate_event: The event to signal termination of event reading.
+        recording_timestamp: The timestamp of the recording.
+
+    Returns:
+        None
+    """
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
@@ -511,9 +591,8 @@ def record(
     Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
-        task_description: a text description of the task that will be recorded
+        task_description: A text description of the task to be recorded.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     logger.info(f"{task_description=}")
 
@@ -616,7 +695,7 @@ def record(
     )
     perf_stat_writer.start()
 
-    # TODO: discard events until everything is ready
+    # TODO: Discard events until everything is ready
 
     try:
         while True:
@@ -624,7 +703,7 @@ def record(
     except KeyboardInterrupt:
         terminate_event.set()
 
-    logger.info(f"joining...")
+    logger.info("Joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
@@ -639,11 +718,12 @@ def record(
     if PLOT_PERFORMANCE:
         utils.plot_performance(recording_timestamp)
 
-    logger.info(f"saved {recording_timestamp=}")
+    logger.info(f"Saved {recording_timestamp=}")
 
 
-# entry point
+# Entry point
 def start():
+    """Starts the recording process."""
     fire.Fire(record)
 
 

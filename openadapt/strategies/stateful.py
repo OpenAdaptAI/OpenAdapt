@@ -13,23 +13,29 @@ from pprint import pformat
 
 from loguru import logger
 import deepdiff
-import numpy as np
-
-from openadapt import config, events, models, strategies, utils
+from openadapt import models, strategies, utils
 from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
-
 IGNORE_BOUNDARY_WINDOWS = True
-
 
 class StatefulReplayStrategy(
     OpenAIReplayStrategyMixin,
     strategies.base.BaseReplayStrategy,
 ):
+    """
+    LLM with window states.
+    """
+
     def __init__(
         self,
         recording: models.Recording,
     ):
+        """
+        Initialize the StatefulReplayStrategy.
+
+        Args:
+            recording (models.Recording): The recording object.
+        """
         super().__init__(recording)
         self.recording_window_state_diffs = get_window_state_diffs(
             recording.processed_action_events
@@ -48,6 +54,16 @@ class StatefulReplayStrategy(
         active_screenshot: models.Screenshot,
         active_window: models.WindowEvent,
     ):
+        """
+        Get the next ActionEvent for replay.
+
+        Args:
+            active_screenshot (models.Screenshot): The active screenshot object.
+            active_window (models.WindowEvent): The active window event object.
+
+        Returns:
+            models.ActionEvent: The next ActionEvent for replay.
+        """
         logger.debug(f"{self.recording_action_idx=}")
         if self.recording_action_idx == len(self.recording.processed_action_events):
             raise StopIteration()
@@ -137,6 +153,15 @@ class StatefulReplayStrategy(
 
 
 def get_action_dict_from_completion(completion):
+    """
+    Convert the completion to a dictionary containing action information.
+
+    Args:
+        completion (str): The completion provided by the user.
+
+    Returns:
+        dict: The action dictionary.
+    """
     try:
         action = eval(completion)
     except Exception as exc:
@@ -149,6 +174,16 @@ def get_window_state_diffs(
     action_events,
     ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
 ):
+    """
+    Get the differences in window state between consecutive action events.
+
+    Args:
+        action_events (List[models.ActionEvent]): The list of action events.
+        ignore_boundary_windows (bool): Flag indicating whether to ignore boundary windows. Defaults to True.
+
+    Returns:
+        List[deepdiff.DeepDiff]: The list of deep diffs representing the differences in window state.
+    """
     ignore_window_ids = set()
     if ignore_boundary_windows:
         first_window_event = action_events[0].window_event

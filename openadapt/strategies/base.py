@@ -1,5 +1,7 @@
 """
 Implements the base class for implementing replay strategies.
+
+Module: base.py
 """
 
 from abc import ABC, abstractmethod
@@ -18,11 +20,22 @@ MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
+    """
+    Base class for implementing replay strategies.
+    """
+
     def __init__(
         self,
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
     ):
+        """
+        Initialize the BaseReplayStrategy.
+
+        Args:
+            recording (models.Recording): The recording to replay.
+            max_frame_times (int): The maximum number of frame times to track.
+        """
         self.recording = recording
         self.max_frame_times = max_frame_times
         self.action_events = []
@@ -35,9 +48,21 @@ class BaseReplayStrategy(ABC):
         self,
         screenshot: models.Screenshot,
     ) -> models.ActionEvent:
+        """
+        Get the next action event based on the current screenshot.
+
+        Args:
+            screenshot (models.Screenshot): The current screenshot.
+
+        Returns:
+            models.ActionEvent: The next action event.
+        """
         pass
 
     def run(self):
+        """
+        Run the replay strategy.
+        """
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
         while True:
@@ -79,6 +104,9 @@ class BaseReplayStrategy(ABC):
                     ipdb.set_trace()
 
     def log_fps(self):
+        """
+        Log the frames per second (FPS) rate.
+        """
         t = time.time()
         self.frame_times.append(t)
         dts = np.diff(self.frame_times)

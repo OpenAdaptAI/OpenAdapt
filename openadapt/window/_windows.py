@@ -69,7 +69,7 @@ def get_active_window_meta(active_window) -> dict:
     return result
 
 
-def get_active_element_state(x: int, y: int):
+def get_active_element_state(x: int, y: int) -> dict:
     """
     Get the state of the active element at the given coordinates.
 
@@ -99,7 +99,7 @@ def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
     return window
 
 
-def get_element_properties(element):
+def get_element_properties(element) -> dict:
     """
     Recursively retrieves the properties of each element and its children.
 
@@ -108,7 +108,7 @@ def get_element_properties(element):
                  that has the `.get_properties()` and `.children()` methods.
 
     Returns:
-        A nested dictionary containing the properties of each element and its children.
+        dict: A nested dictionary containing the properties of each element and its children.
         The dictionary includes a "children" key for each element,
         which holds the properties of its children.
 
@@ -133,7 +133,16 @@ def get_element_properties(element):
     return properties
 
 
-def dictify_rect(rect):
+def dictify_rect(rect) -> dict:
+    """
+    Convert a rectangle object to a dictionary.
+
+    Args:
+        rect: The rectangle object.
+
+    Returns:
+        dict: A dictionary representation of the rectangle.
+    """
     rect_dict = {
         "left": rect.left,
         "top": rect.top,
@@ -156,9 +165,7 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state)
-    import ipdb
-
-    ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == "__main__":
