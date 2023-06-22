@@ -16,7 +16,7 @@ Parameters:
 
 Example: To redact all entities in sample2.mp4
          from the 2nd second to the 16th second and play it at 2x speed:
-    $ python -m openadapt.scripts.scrub scrub_mp4 sample2.mp4 True 2 1 16
+    $ python -m openadapt.scripts.scrub scrub_mp4 sample2.mp4 True 2 2 16
 """
 
 from typing import Optional
