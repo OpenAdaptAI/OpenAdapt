@@ -216,7 +216,7 @@ Set-Location .\OpenAdapt
 
 $python = GetPythonCMD
 
-RunAndCheck "$pip install poetry" "install poetry"
+RunAndCheck "pip install poetry" "install poetry"
 RunAndCheck "poetry install"
 RunAndCheck "poetry shell"
 RunAndCheck "alembic upgrade head" "alembic upgrade head"
