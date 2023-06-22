@@ -7,7 +7,7 @@ Usage:
 from loguru import logger
 import subprocess
 
-# from openadapt.app.main import run_app
+from openadapt.app.main import run_app
 
 
 def changes_needed(result: str) -> bool:
@@ -39,7 +39,7 @@ def start_openadapt_app() -> None:
         subprocess.run(["git", "pull", "-q"])
         print("Updated the OpenAdapt App")
 
-    # run_app()  # start gui
+    run_app()  # start gui
 
 
 if __name__ == "__main__":
