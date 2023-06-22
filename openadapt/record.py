@@ -461,8 +461,10 @@ def memory_writer(
 
         for child in getattr(process, 'children')(recursive=True):
             # after ctrl c, children processes could terminate before running the next line
-            if child.is_running():
+            try:
                 mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
+            except psutil.NoSuchProcess:
+                pass
 
         timestamp = utils.get_timestamp()
 
