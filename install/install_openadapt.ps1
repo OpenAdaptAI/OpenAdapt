@@ -216,11 +216,8 @@ Set-Location .\OpenAdapt
 
 $python = GetPythonCMD
 
-RunAndCheck "$python -m venv .venv" "create python virtual environment"
-RunAndCheck ".venv\Scripts\Activate.ps1" "enable python virtual environment"
-RunAndCheck "pip install wheel" "pip install wheel"
-RunAndCheck "pip install -r requirements.txt" "pip install -r requirements.txt"
-RunAndCheck "pip install -e ." "pip install -e ."
+RunAndCheck "$pip install poetry" "install poetry"
+RunAndCheck "poetry install"
+RunAndCheck "poetry shell"
 RunAndCheck "alembic upgrade head" "alembic upgrade head"
-RunAndCheck "python -m spacy download en_core_web_trf"
 RunAndCheck "pytest" "run OpenAdapt tests"
