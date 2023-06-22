@@ -3,7 +3,7 @@ set -x
 set -e
 
 # Change these if a different version  is required
-exactPythonVersion="python3.10.11"
+exactPythonVersion="3.10.11"
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
@@ -67,8 +67,8 @@ CheckPythonExists() {
     fi
 
     # Use Python exe if it exists and is the required version
-    pythonCmd="python"
-    if CheckCMDExists $pythonCmd; then
+    pythonGenCmd="python3"
+    if CheckCMDExists $pythonGenCmd; then
         res=$(python --version)
         if echo "$res" | grep -q "$pythonVerStr"; then
             return
@@ -77,7 +77,12 @@ CheckPythonExists() {
 
     # Install required Python version
     echo Installing Python
-    brew install pyenv
+
+    # Check if Pyenv needs to be installed
+    if ! CheckCMDExists "pyenv"; then
+        brew install pyenv
+    fi
+    
     pyenv install $exactPythonVersion
 
     # to add pyenv to the PATH
@@ -95,7 +100,6 @@ CheckPythonExists() {
 
     # Otherwise, Python is not available
     echo "Error after installing python"
-    rm -r "$pythonInstallerPath"
 
     Cleanup
     exit
