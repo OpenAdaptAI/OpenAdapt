@@ -15,6 +15,8 @@ spec = [
     "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
     "--add-data",
     f"{Path(nicegui.__file__).parent}{os.pathsep}nicegui",
+    "--add-data",
+    f"{Path(__file__).parent}{os.pathsep}assets",
 ]
 
 subprocess.call(spec)

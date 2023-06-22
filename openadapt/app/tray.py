@@ -1,10 +1,18 @@
 import os
+import sys
 import threading
 from PIL import Image
 from pystray import Icon, Menu, MenuItem
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.main import start, FPATH
 from openadapt import visualize
+
+# hide dock icon on macos
+if sys.platform == "darwin":
+    import AppKit
+
+    info = AppKit.NSBundle.mainBundle().infoDictionary()
+    info["LSBackgroundOnly"] = "1"
 
 app_thread = None
 g_tray = None
@@ -18,11 +26,13 @@ def new_tray():
 
     def show_app():
         global app_thread
-        app_thread = threading.Thread(target=start)
-        app_thread.daemon = True
-        app_thread.start()
 
-    image = Image.open(f"{FPATH}/assets/logo_dark.png")
+        # check if app is already running
+        if app_thread is None or not app_thread.is_alive():
+            app_thread = threading.Thread(target=start, daemon=True)
+            app_thread.start()
+
+    image = Image.open(f"{FPATH}/assets/logo_inverted.png")
     menu = Menu(
         MenuItem("Record", quick_record),
         MenuItem("Stop Recording", lambda: stop_record(g_tray)),
