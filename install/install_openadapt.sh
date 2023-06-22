@@ -3,6 +3,7 @@ set -x
 set -e
 
 # Change these if a different version  is required
+exactPythonVersion="python3.10.11"
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
@@ -36,11 +37,11 @@ RunAndCheck() {
     fi
 }
 
-# Install a dependency using brew
+# Install a command using brew
 BrewInstall() {
     dependency=$1
 
-    RunAndCheck "brew install $dependency" "Download $dependency"
+    brew install "$dependency"
     if ! CheckCMDExists "$dependency"; then
         echo "Failed to download $dependency"
         Cleanup
@@ -59,7 +60,7 @@ CheckCMDExists() {
     fi
 }
 
-GetPythonCMD() {
+CheckPythonExists() {
     # Use Python alias of required version if it exists
     if CheckCMDExists $pythonCmd; then
         return
@@ -75,16 +76,14 @@ GetPythonCMD() {
     fi
 
     # Install required Python version
-    RunAndCheck "curl --output $pythonInstallerLoc" "Download Python"
-    if [ ! -e "$pythonInstallerPath" ]; then
-        echo "Failed to download python installer"
-        Cleanup
-        exit 1
-    fi
+    echo Installing Python
+    brew install pyenv
+    pyenv install $exactPythonVersion
 
-    echo "Installing python, click 'Yes' if prompted for permission"
-    open -W "$pythonInstallerPath"
-    Refresh
+    # to add pyenv to the PATH
+    echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
+    echo -e 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' >> ~/.bash_profile
+    reset
     
     # Make sure python is now available and the right version
     if CheckCMDExists $pythonCmd; then
@@ -95,7 +94,7 @@ GetPythonCMD() {
     fi
 
     # Otherwise, Python is not available
-    echo "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
+    echo "Error after installing python"
     rm -r "$pythonInstallerPath"
 
     Cleanup
@@ -127,7 +126,7 @@ if ! CheckCMDExists "tesseract"; then
     BrewInstall "tesseract"
 fi
 
-GetPythonCMD
+CheckPythonExists
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
 RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
