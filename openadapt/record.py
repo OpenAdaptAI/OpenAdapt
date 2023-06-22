@@ -454,6 +454,7 @@ def memory_writer(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
 
     with open(utils.MEMORY_FILE, "w") as f:
@@ -461,7 +462,9 @@ def memory_writer(
             mem_usage = getattr(process, 'memory_info')()[0] / BYTE_TO_MB
 
             for child in getattr(process, 'children')(recursive=True):
-                mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
+                # after ctrl c, children processes could terminate before running the next line
+                if child.is_running():
+                    mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
 
             timestamp = utils.get_timestamp()
 
@@ -705,12 +708,11 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    if PLOT_PERFORMANCE:
-        mem_plotter.join()
 
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
+        mem_plotter.join()
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
