@@ -56,6 +56,8 @@ sumy = "0.11.0"
 nltk = "3.8.1"
 pystray = "0.19.4"
 pillow = "9.5.0"
+pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
