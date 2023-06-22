@@ -3,7 +3,11 @@ set -x
 set -e
 
 # Change these if a different version  is required
+<<<<<<< HEAD
 exactPythonVersion="3.10.11"
+=======
+exactPythonVersion="python3.10.11"
+>>>>>>> 374dd666093cde783f61a782f1e9046766478e30
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
@@ -100,6 +104,10 @@ CheckPythonExists() {
 
     # Otherwise, Python is not available
     echo "Error after installing python"
+<<<<<<< HEAD
+=======
+    rm -r "$pythonInstallerPath"
+>>>>>>> 374dd666093cde783f61a782f1e9046766478e30
 
     Cleanup
     exit
