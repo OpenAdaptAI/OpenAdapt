@@ -8,6 +8,7 @@ from openadapt.models import (
     Recording,
     WindowEvent,
     PerformanceStat,
+    MemoryStat
 )
 
 
@@ -18,6 +19,8 @@ action_events = []
 screenshots = []
 window_events = []
 performance_stats = []
+memory_stats = []
+
 
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
@@ -87,6 +90,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     }
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
+
 def get_perf_stats(recording_timestamp):
     """
     return performance stats for a given recording
@@ -99,6 +103,34 @@ def get_perf_stats(recording_timestamp):
         .order_by(PerformanceStat.start_time)
         .all()
     )
+
+
+def insert_memory_stat(recording_timestamp, memory_usage, timestamp):
+    """
+    Insert memory stat into db
+    """
+
+    memory_stat = {
+        "recording_timestamp": recording_timestamp,
+        "memory_usage": memory_usage,
+        "timestamp": timestamp,
+    }
+    _insert(memory_stat, MemoryStat, memory_stats)
+
+
+def get_memory_stats(recording_timestamp):
+    """
+    return memory stats for a given recording
+    """
+
+    return (
+        db
+            .query(MemoryStat)
+            .filter(MemoryStat.recording_timestamp == recording_timestamp)
+            .order_by(MemoryStat.timestamp)
+            .all()
+    )
+
 
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)
