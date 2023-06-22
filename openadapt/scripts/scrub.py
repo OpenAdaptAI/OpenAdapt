@@ -1,45 +1,100 @@
 """Module for scrubbing a media file.
 
 Usage:
-    $ python -m openadapt.scripts.scrub scrub_mp4 <mp4_file_path>
+    $ python -m openadapt.scripts.scrub scrub_mp4 <mp4_file_path> \
+        <scrub_all_entities> <playback_speed_multiplier> <crop_start_time> \
+        <crop_end_time>
 
+Parameters:
+        mp4_file_path: Path to the mp4 file (str)
+        scrub_all_entities: True/False
+        playback_speed_multiplier: (float/int)
+        crop_start_time: (int) [in seconds]
+        end_start_time: (int) [in seconds]
+
+    All arguments are required at command line.
+
+Example: To redact all entities in sample2.mp4
+         from the 2nd second to the 16th second and play it at 2x speed:
+    $ python -m openadapt.scripts.scrub scrub_mp4 sample2.mp4 True 2 1 16
 """
 
+from typing import Optional
 import math
-import time
 
 from tqdm import tqdm
 from PIL import Image
-import cv2
+from moviepy.editor import VideoFileClip, VideoClip
+from moviepy.video.fx import speedx
 import fire
 import numpy as np
 
-from openadapt import scrub, utils
+from openadapt import config, scrub, utils
 
 
-def scrub_mp4(mp4_file: str) -> str:
+def _make_frame(time, final, progress_bar, progress_threshold):
+    """
+    Private function to scrub a frame.
+
+    Args:
+        time: Time (in seconds)
+        final: Final video clip
+        progress_bar: Progress bar
+        frame_count: Total number of frames
+        progress_interval: Progress interval
+        progress_threshold: Progress threshold
+
+    Returns:
+        A Redacted frame
+    """
+
+    frame = final.get_frame(time)
+
+    image = Image.fromarray(frame)
+
+    redacted_image = scrub.scrub_image(image)  # Redaction
+
+    # Convert redacted image back to OpenCV format
+    redacted_frame = np.array(redacted_image)
+
+    progress_bar.update(1)  # Update the progress bar
+
+    if progress_bar.n >= progress_threshold:
+        progress_threshold += progress_threshold
+
+    return redacted_frame
+
+
+def scrub_mp4(
+    mp4_file: str,
+    scrub_all_entities: bool = False,
+    playback_speed_multiplier: float = 1.0,
+    crop_start_time: int = 0,
+    crop_end_time: Optional[int] = None,
+) -> str:
     """
     Scrub a mp4 file.
 
     Args:
-        mp4_file: Path to the mp4 file.
+        mp4_file_path: Path to the mp4 file.
+        scrub_all_entities: True/False. If true, scrubs all entities
+        playback_speed_multiplier: Multiplier for playback speed. (float/int)
+        crop_start_time: Start Time (in seconds)
+        end_start_time: End Time (in seconds)
 
     Returns:
         Path to the scrubbed (redacted) mp4 file.
     """
 
-    scrubbed_file = mp4_file[:-4] + "_scrubbed.mp4"
+    if scrub_all_entities:
+        config.SCRUB_IGNORE_ENTITIES = []
 
-    cap = cv2.VideoCapture(mp4_file)
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    fourcc = cv2.VideoWriter_fourcc("m", "p", "4", "v")
-    out = cv2.VideoWriter(
-        scrubbed_file, fourcc, fps, (frame_width, frame_height)
-    )
+    mp4_clip = VideoFileClip(mp4_file)
+    cropped_clip = mp4_clip.subclip(crop_start_time, crop_end_time)
+    final = cropped_clip.fx(VideoClip.speedx, playback_speed_multiplier)
 
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Prepare progress bar
+    frame_count = round(final.duration * final.fps)
     progress_bar_format = (
         "{desc}: {percentage:.0f}% "
         "| {bar} | "
@@ -52,60 +107,26 @@ def scrub_mp4(mp4_file: str) -> str:
         bar_format=progress_bar_format,
         colour="green",
     )
-
     progress_interval = 0.1  # Print progress every 10% of frames
-    progress_threshold = math.floor(
-        frame_count * progress_interval
-    )
-    
-    a = b = c = d = 0
+    progress_threshold = math.floor(frame_count * progress_interval)
 
-    while cap.isOpened():
-        frame_id = cap.get(1)  # current frame number
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        a_start = time.time()
-        # Convert frame to PIL.Image
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        a += time.time() - a_start
+    redacted_clip = VideoClip(
+        make_frame=lambda t: _make_frame(
+            t,
+            final,
+            progress_bar,
+            progress_threshold,
+        ),
+        duration=final.duration,
+    )  # Redact the clip
 
-        b_start = time.time()
-        # Apply redaction to the frame
-        redacted_image = scrub.scrub_image(image)
-        b += time.time() - b_start
+    scrubbed_file = mp4_file[:-4] + "_scrubbed.mp4"
+    redacted_clip.write_videofile(
+        scrubbed_file, fps=final.fps, logger=None
+    )  # Write the redacted clip to a file
 
-        c_start = time.time()
-        # Convert redacted image back to OpenCV format
-        redacted_frame = cv2.cvtColor(
-            np.array(redacted_image), cv2.COLOR_RGB2BGR
-        )
-        c += time.time() - c_start
-
-        d_start = time.time()
-        out.write(redacted_frame)
-        d += time.time() - d_start
-
-        progress_bar.update(1)
-        if frame_id >= progress_threshold:
-            progress_threshold += math.floor(
-                frame_count * progress_interval
-            )
-
-    cap.release()
-    out.release()
     progress_bar.close()
-    
-    print(f"Time spent on Line 71: {a}")
-    print(f"Time spent on Line 76: {b}")
-    print(f"Time spent on Line 81: {c}")
-    print(f"Time spent on Line 87: {d}")
-
-    message = (
-        f"Scrubbed .mp4 file saved to the relative path: {scrubbed_file}"
-    )
-    return message
+    return "Scrubbed File Saved at: " + scrubbed_file
 
 
 if __name__ == "__main__":
