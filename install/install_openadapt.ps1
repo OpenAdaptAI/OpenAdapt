@@ -14,7 +14,10 @@ $VCRedistInstaller = "vc_redist.x64.exe"
 $VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 
-# TODO: Add Tesseract OCR installation: https://tesseract-ocr.github.io/tessdoc/Installation.html
+# Tesseract OCR installation
+$tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractPath = "C:\Program Files\Tesseract-OCR"
 
 # Return true if a command/exe is available
 function CheckCMDExists() {
@@ -81,6 +84,48 @@ function GetPythonCMD() {
     exit
 }
 
+function GetTesseractCMD() {
+    # Use tesseract alias if it exists
+    $tesseractCmd = "tesseract"
+    if (CheckCMDExists($tesseractCmd)) {
+        return $tesseractCmd
+    }
+
+    # Install Tesseract OCR
+    Write-Host "Downloading Tesseract OCR installer"
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
+    $exists = Test-Path -Path $tesseractInstaller -PathType Leaf
+    if(!$exists) {
+        Write-Host "Failed to download Tesseract OCR installer"
+        Cleanup
+        exit
+    }
+
+    Write-Host "Installing Tesseract OCR, click 'Yes' if prompted for permission"
+    Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
+    # Remove-Item $tesseractInstaller
+
+    # Add Tesseract OCR to PATH of Machine Variables
+    $env:Path += ";$tesseractPath"
+    [System.Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Machine)
+
+    # Add Tesseract OCR to PATH of User Variables
+    $userEnvPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::User)
+    [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::User)
+
+    Write-Host "Added Tesseract OCR to PATH"
+    # Make sure tesseract is now available
+    if (CheckCMDExists($tesseractCmd)) {
+        return $tesseractCmd
+    }
+
+    Write-Host "Error after installing Tesseract OCR"
+    # Stop OpenAdapt install
+    Cleanup
+    exit
+}
+
 function Cleanup {
     $exists = Test-Path -Path "..\OpenAdapt"
     if($exists) {
@@ -106,6 +151,9 @@ function RunAndCheck {
 
     Write-Host "Success: $Desc"
 }
+
+$tesseract = GetTesseractCMD
+RunAndCheck "$tesseract --version" "check tesseract version"
 
 $gitExists = CheckCMDExists "git"
 if (!$gitExists) {
@@ -174,5 +222,5 @@ RunAndCheck "pip install wheel" "pip install wheel"
 RunAndCheck "pip install -r requirements.txt" "pip install -r requirements.txt"
 RunAndCheck "pip install -e ." "pip install -e ."
 RunAndCheck "alembic upgrade head" "alembic upgrade head"
-RunAndCheck "python -m spacy download en_core_web_trf" "python -m spacy download en_core_web_trf"
+RunAndCheck "python -m spacy download en_core_web_trf"
 RunAndCheck "pytest" "run OpenAdapt tests"
