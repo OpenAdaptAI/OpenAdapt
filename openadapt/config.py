@@ -20,7 +20,8 @@ _DEFAULTS = {
     # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
     "TEST_OPENAI": False,
-    "DEFAULT_SIGNALS": [(".venv/lib/site-packages","openai.Completion.create")]
+    "DEFAULT_SIGNALS": [(".venv/lib/site-packages","openai.Completion.create")],
+    "DIRECTORIES_TO_AVOID": ["System32", "Windows", "Program Files", "Program Files (x86)"],
 }
 
 

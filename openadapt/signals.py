@@ -13,13 +13,15 @@ from loguru import logger
 from openadapt import config
 
 
-def add_files_from_pid(current_signals,pid):
+def add_files_from_pid(current_signals, pid):
+    directories_to_avoid = config.DIRECTORIES_TO_AVOID
     try:
         process = psutil.Process(pid)
         open_files = process.open_files()
         for file in open_files:
-            logger.info(f"Open file: {file.path}")
-            current_signals.add_signal(file.path, signal_type="file")
+            if not any(directory in str(file.path) for directory in directories_to_avoid):
+                logger.info(f"Open file: {file.path}")
+                current_signals.add_signal(file.path, signal_type="file")
     except psutil.NoSuchProcess:
         print(f"No process with pid {pid} exists")
 

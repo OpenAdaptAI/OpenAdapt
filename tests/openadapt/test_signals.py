@@ -146,15 +146,18 @@ def test_add_signal_from_pid():
     signals = Signals()
 
     with open('test_file.txt', 'w') as f:
-        f.write('Test')
+        f.write('Test Success')
     process = subprocess.Popen(['python', '-c', 
         'import time; f = open("test_file.txt", "r"); time.sleep(5)'])
 
     add_files_from_pid(signals,process.pid)
+    signal_data = signals.return_signal_data(1)
+    print(f"Signal Data: {signal_data}")
+
     process.wait()
     process.terminate()
     os.remove('test_file.txt')
 
-    signal_data = signals.return_signals()
-    print(str(signal_data))
-    assert "test_file" in str(signal_data), str(signal_data)
+    #signal_data = signals.return_signals()
+    #assert "test_file" in str(signal_data), str(signal_data)
+    assert signal_data == "Test Success", signal_data
