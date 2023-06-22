@@ -456,20 +456,21 @@ def memory_writer(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
 
-    with open(utils.MEMORY_FILE, "w") as f:
-        while not terminate_event.is_set():
-            mem_usage = getattr(process, 'memory_info')()[0] / BYTE_TO_MB
+    while not terminate_event.is_set():
+        mem_usage = getattr(process, 'memory_info')()[0] / BYTE_TO_MB
 
-            for child in getattr(process, 'children')(recursive=True):
-                # after ctrl c, children processes could terminate before running the next line
-                if child.is_running():
-                    mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
+        for child in getattr(process, 'children')(recursive=True):
+            # after ctrl c, children processes could terminate before running the next line
+            if child.is_running():
+                mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
 
-            timestamp = utils.get_timestamp()
+        timestamp = utils.get_timestamp()
 
-            # line will be in this format: MEM mem_usage timestamp
-            f.write("{0:.6f} {1}\n".format(mem_usage, timestamp))
-    f.close()
+        crud.insert_memory_stat(
+            recording_timestamp,
+            mem_usage,
+            timestamp,
+        )
     logger.info("Memory writer done")
 
 
