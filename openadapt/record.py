@@ -450,7 +450,6 @@ def memory_writer(
         terminate_event: multiprocessing.Event,
         record_pid: int
 ):
-    # TODO: temporary
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
