@@ -428,10 +428,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
     type_to_count = Counter()
     type_to_timestamps = defaultdict(list)
 
+    from openadapt import crud
+
     if not recording_timestamp:
         # avoid circular import
-        from openadapt import crud
-
         recording_timestamp = crud.get_latest_recording().timestamp
     perf_stats = crud.get_perf_stats(recording_timestamp)
     perf_stat_dicts = rows2dicts(perf_stats)
@@ -476,6 +476,16 @@ def plot_performance(recording_timestamp: float = None) -> None:
     memory_ax = axes[0].twinx()
     memory_ax.plot(timestamps, mem_usages, label="memory usage", color="red")
     memory_ax.set_ylabel("Memory Usage (MB)")
+
+    # Get the handles and labels from both axes
+    handles1, labels1 = axes[0].get_legend_handles_labels()
+    handles2, labels2 = memory_ax.get_legend_handles_labels()
+
+    # Combine the handles and labels from both axes
+    all_handles = handles1 + handles2
+    all_labels = labels1 + labels2
+
+    axes[0].legend(all_handles, all_labels)
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     fname_parts = ["performance", f"{recording_timestamp}"]
