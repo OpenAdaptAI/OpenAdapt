@@ -180,8 +180,8 @@ class Signals:
         Read signal data from a Python function.
         """
         if isinstance(function_address, tuple):
-            function_path = function_address[0]
-            function_address = function_address[1]
+            assert len(function_address) == 2, function_address
+            function_path, function_address = function_address
             
             sys.path.append(function_path)
         
@@ -222,10 +222,22 @@ class Signals:
         Read signal data from a file.
         """
         # Get the signal from the file.
+        pandas_engines = [None, "xlrd", "openpyxl", "odf", "pyxlsb"]
+        # When engine=None, pandas will try to automatically infer the engine
         try:
             if file_path.endswith((".xls", ".xlsx")):
-                data_frame = pd.read_excel(file_path)
-                content = data_frame.to_string()
+                content = None
+                for engine in pandas_engines:
+                    try:
+                        data_frame = pd.read_excel(file_path, engine=engine)
+                        content = data_frame.to_string()
+                        break
+                    except Exception as e:
+                        logger.info(f"Error Message from pandas read: {engine}, {e}")
+                        continue
+                if content is None:
+                    logger.info(f"Error: Pandas could not read the excel file.")
+                    return None
             else:
                 with open(file_path, "r") as file:
                     content = file.read()

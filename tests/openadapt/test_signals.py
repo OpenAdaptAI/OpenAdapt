@@ -97,7 +97,7 @@ def test_non_existent_file():
     signals = Signals()
     signals.add_signal("tests/resources/test_signal_data_non_existent.txt")
     signal_data = signals.return_signal_data(1)
-    assert signal_data == None
+    assert signal_data == None, signals.return_signals() #TODO: consider not adding a signal if it doesn't exist
 
 
 def test_access_private_members():
@@ -155,6 +155,6 @@ def test_add_signal_from_pid():
     process.terminate()
     os.remove('test_file.txt')
 
-    #signal_data = signals.return_signal_data(1)
     signal_data = signals.return_signals()
-    assert "test_file" in str(signal_data)
+    print(str(signal_data))
+    assert "test_file" in str(signal_data), str(signal_data)
