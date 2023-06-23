@@ -214,13 +214,14 @@ def brents_algo(action_events):
     return tortoise_index, length
 
 
-def find_num_tasks(action_events, start, length):
+def find_num_tasks(action_events, start, length, task=None):
     if start is None:
         return 0, 0, 0
 
-    task = []
-    for i in range(0, length):
-        task.append(action_events[start + i])
+    if task is None:
+        task = []
+        for i in range(0, length):
+            task.append(action_events[start + i])
 
     num_repetitions = 0
     task_index = 0
@@ -289,6 +290,49 @@ def floyds_algo(action_events):
     return slow_index, length
 
 
+def longest_repeated_substring(action_events):
+    n = len(action_events)
+    # TODO: rename LCSRe
+    LCSRe = [[0 for _ in range(n + 1)]
+             for _ in range(n + 1)]
+
+    result = []  # To store result
+    res_length = 0  # To store length of result
+
+    # building table in bottom-up manner
+    index = 0
+    for i in range(1, n + 1):
+        for j in range(i + 1, n + 1):
+
+            # (j-i) > LCSRe[i-1][j-1] to remove
+            # overlapping
+            if (compare_events(action_events[i - 1], action_events[j - 1]) and
+                    LCSRe[i - 1][j - 1] < (j - i)):
+                LCSRe[i][j] = LCSRe[i - 1][j - 1] + 1
+
+                # updating maximum length of the
+                # substring and updating the finishing
+                # index of the suffix
+                if LCSRe[i][j] > res_length:
+                    res_length = LCSRe[i][j]
+                    index = max(i, index)
+
+            else:
+                LCSRe[i][j] = 0
+
+    # If we have non-empty result, then insert
+    # all characters from first character to
+    # last character of string
+    if res_length > 0:
+        for i in range(index - res_length + 1,
+                       index + 1):
+            result.append(action_events[i - 1])
+    else:
+        return result, None, res_length
+
+    return result, index - res_length + 1, res_length
+
+
 def filter_move_release(action_events):
     filtered_action_events = []
     for action_event in action_events:
@@ -334,8 +378,10 @@ def calculate_productivity():
     num_key_presses = find_key_presses(action_events)
     duration = action_events[-1].timestamp - action_events[0].timestamp
 
-    start, length = brents_algo(filtered_action_events)
-    task, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length)
+    logger.info("searching for tasks")
+    task, start, length = longest_repeated_substring(filtered_action_events)
+    _, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length, task)
+    logger.info("finished searching for tasks")
     if num_tasks != 0:
         ave_task_time = total_task_time / num_tasks
     else:
