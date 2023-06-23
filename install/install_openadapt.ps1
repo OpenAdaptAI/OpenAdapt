@@ -251,7 +251,7 @@ function GetVSCppRedistCMD {
 
 # Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
 $tesseract = GetTesseractCMD
-RunAndCheck "$tesseract --version" "check Tesseract" > $null
+RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
 
 # $python = GetPythonCMD
 # RunAndCheck "$python --version" "check python version"
