@@ -1,6 +1,14 @@
 # PowerShell script to pull OpenAdapt and install
 
+################################   PARAMETERS   ################################
+
 # Change these if a different version of is required
+
+$tesseractCmd = "tesseract"
+$tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractPath = "C:\Program Files\Tesseract-OCR"
+
 $pythonCmd = "python3.10"
 $pythonVerStr = "Python 3.10*"
 $pythonInstaller = "python-3.10.11-amd64.exe"
@@ -15,13 +23,10 @@ $VCRedistInstaller = "vc_redist.x64.exe"
 $VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 
-# Tesseract OCR installation
-$tesseractCmd = "tesseract"
-$tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
-$tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
-$tesseractPath = "C:\Program Files\Tesseract-OCR"
+################################   PARAMETERS   ################################
 
 
+################################   FUNCTIONS    ################################
 # Run a command and ensure it did not fail
 function RunAndCheck {
     Param
@@ -128,7 +133,6 @@ function GetTesseractCMD() {
         exit
     }
 
-    
     # Install the Tesseract OCR Setup exe (binary file)
     Write-Host "Installing Tesseract OCR, click 'Yes' if prompted for permission"
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
@@ -203,7 +207,43 @@ function GetGitCMD() {
     return $gitCmd
 }
 
-# Check and Install TesseractOCR -> Python 3.10 -> Git
+
+function GetVSCppRedistCMD {
+    # Check if Visual C++ Redist is installed
+    $ErrorActionPreference = "SilentlyContinue"
+    $vcredistExists = Get-ItemPropertyValue -Path $VCRedistRegPath -erroraction 'silentlycontinue' -Name Installed
+    $ErrorActionPreference = "Continue"
+
+    if (!$vcredistExists) {
+        # Install Visual C++ Redist
+        Write-Host "Downloading Visual C++ Redist"
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
+        $exists = Test-Path -Path $VCRedistInstaller -PathType Leaf
+        if(!$exists) {
+            Write-Host "Failed to download Visual C++ installer"
+            Cleanup
+            exit
+        }
+
+        Write-Host "Installing Visual C++ Redist, click 'Yes' if prompted for permission"
+        Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /q /norestart" -Wait
+        Remove-Item $VCRedistInstaller
+
+        if($LastExitCode) {
+            Write-Host "Failed to install Visual C++ Redist: $LastExitCode"
+            Cleanup
+            exit
+        }
+    }
+}
+
+################################   FUNCTIONS    ################################
+
+
+################################   SCRIPT    ################################
+# Script Runs from here:
+# Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
 
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check tesseract version"
@@ -214,34 +254,7 @@ RunAndCheck "$python --version" "check python version"
 $git = GetGitCMD
 RunAndCheck "$git --version" "check git version"
 
-
-    # Check if Visual C++ Redist is installed
-    # Note: Temporarily setting $ErrorActionPreference as -erroraction 'silentlycontinue' doesn't prevent non-terminating error with Get-ItemPropertyValue
-    $ErrorActionPreference="SilentlyContinue"
-    $vcredistExists = Get-ItemPropertyValue -Path $VCRedistRegPath -erroraction 'silentlycontinue' -Name Installed
-    $ErrorActionPreference="Continue"
-
-    if (!$vcredistExists) {
-        # Install Visual C++ Redist
-        Write-Host "Downloading Visual C++ Redist"
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
-        $exists = Test-Path -Path $VCRedistInstaller -PathType Leaf
-        if(!$exists) {
-            Write-Host "Failed to download Visual C++ installer"
-            exit
-        }
-
-        Write-Host "Installing Visual C++ Redist, click 'Yes' if prompted for permission"
-        Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /q /norestart" -Wait
-        Remove-Item $VCRedistInstaller
-
-        if($LastExitCode) {
-            "Failed to install Visual C++ Redist: $LastExitCode"
-            exit
-        }
-    }
-
+GetVSCppRedistCMD
 
 # Install OpenAdapt
 
@@ -252,3 +265,6 @@ RunAndCheck "poetry install"
 RunAndCheck "poetry shell"
 RunAndCheck "alembic upgrade head" "alembic upgrade head"
 RunAndCheck "pytest" "run OpenAdapt tests"
+Write-Host "OpenAdapt installed successfully"
+
+################################   SCRIPT    ################################
