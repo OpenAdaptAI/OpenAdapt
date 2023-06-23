@@ -243,9 +243,8 @@ function GetVSCppRedistCMD {
 
 
 ################################   SCRIPT    ################################
-# Script Runs from here:
-# Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
 
+# Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check tesseract version"
 
@@ -257,8 +256,7 @@ RunAndCheck "$git --version" "check git version"
 
 GetVSCppRedistCMD
 
-# Install OpenAdapt
-
+# OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
 RunAndCheck "pip install poetry" "install poetry"
