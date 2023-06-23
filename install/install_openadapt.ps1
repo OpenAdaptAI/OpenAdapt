@@ -117,7 +117,7 @@ function GetPythonCMD {
 
 function GetTesseractCMD {
     # Use tesseract alias if it exists
-    if (CheckCMDExists($tesseractCmd)) {
+    if (CheckCMDExists $tesseractCmd) {
         return $tesseractCmd
     }
 
