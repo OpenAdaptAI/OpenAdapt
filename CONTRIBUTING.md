@@ -4,7 +4,7 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
+This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), and for imports, we like to put put external imports in alphabetical order first, a new line, and then local imports.
 
 
 ## Creating Issue
