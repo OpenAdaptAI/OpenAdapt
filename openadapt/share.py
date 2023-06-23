@@ -4,6 +4,7 @@ Usage:
     python -m openadapt.share send --recording_id=1 
     python -m openadapt.share receive --wormhole_code=<wormhole_code>
 """
+
 from zipfile import ZipFile, ZIP_DEFLATED
 import os
 import subprocess

@@ -14,7 +14,6 @@ from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import (
     ImageRedactorEngine,
     ImageAnalyzerEngine,
@@ -61,21 +60,9 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         language=config.SCRUB_LANGUAGE,
     )
 
-    operators = {}
-    for entity in analyzer_results:
-        operators[entity.entity_type] = OperatorConfig(
-            "mask",
-            {
-                "masking_char": config.SCRUB_CHAR,
-                "chars_to_mask": entity.end - entity.start,
-                "from_end": True,
-            },
-        )
-
     anonymized_results = ANONYMIZER.anonymize(
         text=text,
         analyzer_results=analyzer_results,
-        operators=operators,
     )
 
     if is_separated and not (
