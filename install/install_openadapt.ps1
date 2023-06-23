@@ -242,6 +242,7 @@ function GetVSCppRedistCMD {
             exit
         }
     }
+    return "cls" # Return a command that always gives Exit Code 0, so that RunAndCheck doesn't fail
 }
 
 ################################   FUNCTIONS    ################################
@@ -257,9 +258,10 @@ $python = GetPythonCMD
 RunAndCheck "$python --version" "check Python" > $null
 
 $git = GetGitCMD
-RunAndCheck "$git --version" "check Git"
+RunAndCheck "$git --version" "check Git" > $null
 
-# GetVSCppRedistCMD
+$vscppredist = GetVSCppRedistCMD
+RunAndCheck "$vscppredist" "check Visual C++ Redist" > $null
 
 # # OpenAdapt Setup
 # RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
