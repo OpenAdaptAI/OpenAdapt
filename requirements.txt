@@ -4,6 +4,7 @@ black==23.3.0
 atomacos @ git+https://github.com/abrichr/atomacos.git#egg=atomacos ; sys_platform == 'darwin'
 bokeh==2.4.3
 clipboard==0.0.4
+ctransformers
 deepdiff[optimize]==6.3.0
 dictalchemy3==1.0.0
 fire==0.4.0
@@ -37,4 +38,3 @@ tqdm==4.64.0
 nicegui==1.2.16
 transformers==4.29.2
 python-dotenv==1.0.0
-ctransformers
