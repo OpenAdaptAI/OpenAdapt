@@ -9,7 +9,7 @@ $tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
 
-$pythonCmd = "python3.10"
+$pythonCmd = "python"
 $pythonVerStr = "Python 3.10*"
 $pythonInstaller = "python-3.10.11-amd64.exe"
 $pythonInstallerLoc = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
@@ -73,7 +73,6 @@ function CheckCMDExists {
 # Get command for python, install python if required version is unavailable
 function GetPythonCMD {
     # Use python exe if it exists and is the required version
-    $pythonCmd = "python"
     if (CheckCMDExists($pythonCmd)) {
         $res = Invoke-Expression "python -V"
         if ($res -like $pythonVerStr) {
