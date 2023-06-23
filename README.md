@@ -2,9 +2,16 @@
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
-<img width="1512" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/60a85160-7b07-41b0-9295-2d1bfa6a0994">
+### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
-([Slides](https://docs.google.com/presentation/d/e/2PACX-1vStYEzETEMtzWDGCizJt4L2rdQpoAQin8T2cZkLw6WqNBUtmBhaNm-1BrhvGOVNyFV9UPjyVfa0l6IC/pub?start=false&loop=false&delayms=3000))
+### Foundation Models (e.g. [GPT-4](https://openai.com/research/gpt-4), [ACT-1](https://www.adept.ai/blog/act-1)) are powerful automation tools.
+
+### OpenAdapt connects Foundation Models to GUIs:
+
+<img width="1473" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
+
+
+([Slides](https://t.ly/7RGr))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Transformers by:
@@ -27,6 +34,18 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## Install
 
+Recommended: Install with [Poetry](https://python-poetry.org/):
+```
+git clone https://github.com/MLDSAI/OpenAdapt.git
+cd OpenAdapt
+pip install poetry
+poetry install
+poetry shell
+alembic upgrade head
+pytest
+```
+
+Manual:
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt

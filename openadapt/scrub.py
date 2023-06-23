@@ -14,7 +14,6 @@ from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
 from presidio_image_redactor import (
     ImageRedactorEngine,
     ImageAnalyzerEngine,
@@ -46,6 +45,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
     Returns:
         str: Scrubbed text
     """
+    
     if text is None:
         return None
 
@@ -61,21 +61,9 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         language=config.SCRUB_LANGUAGE,
     )
 
-    operators = {}
-    for entity in analyzer_results:
-        operators[entity.entity_type] = OperatorConfig(
-            "mask",
-            {
-                "masking_char": config.SCRUB_CHAR,
-                "chars_to_mask": entity.end - entity.start,
-                "from_end": True,
-            },
-        )
-
     anonymized_results = ANONYMIZER.anonymize(
         text=text,
         analyzer_results=analyzer_results,
-        operators=operators,
     )
 
     if is_separated and not (
@@ -113,6 +101,7 @@ def scrub_image(
     Returns:
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
+    
     redacted_image = IMAGE_REDACTOR.redact(
         image, fill=fill_color, entities=SCRUBBING_ENTITIES
     )
@@ -172,6 +161,7 @@ def _scrub_text_item(
     Returns:
         str: The scrubbed value
     """
+    
     if key in ("text", "canonical_text"):
         return scrub_text(value, is_separated=True)
     if force_scrub_children:
@@ -216,6 +206,7 @@ def _scrub_list_item(
     Returns:
         dict/str: The scrubbed dict/value respectively
     """
+    
     if isinstance(item, dict):
         return scrub_dict(
             item, list_keys, force_scrub_children=force_scrub_children
@@ -238,6 +229,7 @@ def scrub_dict(
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
     """
+    
     if list_keys is None:
         list_keys = config.SCRUB_KEYS_HTML
 
@@ -283,6 +275,7 @@ def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dic
     Returns:
         list[dict]: The scrubbed list of dicts with PII and PHI removed.
     """
+    
     scrubbed_list_dicts = []
     for input_dict in input_list:
         scrubbed_list_dicts.append(scrub_dict(input_dict, list_keys))

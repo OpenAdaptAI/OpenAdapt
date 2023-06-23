@@ -42,7 +42,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": (255, 0, 0),
+    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -100,7 +100,7 @@ for key in _DEFAULTS:
     locals()[key] = val
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DB_FPATH = ROOT_DIRPATH / DB_FNAME
+DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 

@@ -730,5 +730,10 @@ def record(task_description: str, enable_audio: bool = False):
     logger.info(f"saved {recording_timestamp=}")
 
 
+# entry point
+def start():
+    fire.Fire(record)
+
+
 if __name__ == "__main__":
     fire.Fire(record)

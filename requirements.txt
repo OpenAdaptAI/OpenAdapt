@@ -1,5 +1,6 @@
 alembic==1.8.1
 ascii_magic==2.3.0
+black==23.3.0
 atomacos @ git+https://github.com/abrichr/atomacos.git#egg=atomacos ; sys_platform == 'darwin'
 bokeh==2.4.3
 clipboard==0.0.4
@@ -10,6 +11,7 @@ fuzzywuzzy==0.18.0
 ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
+moviepy==1.0.3
 mss==6.1.0
 nltk==3.8.1
 openai==0.27.5
@@ -36,3 +38,5 @@ torch==2.0.0
 tqdm==4.64.0
 transformers==4.29.2
 git+https://github.com/openai/whisper.git
+python-dotenv==1.0.0
+python-Levenshtein==0.21.1
