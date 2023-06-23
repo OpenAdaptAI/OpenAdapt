@@ -269,6 +269,6 @@ RunAndCheck "$tesseract --version" "check tesseract version"
 # RunAndCheck "poetry shell"
 # RunAndCheck "alembic upgrade head" "alembic upgrade head"
 # RunAndCheck "pytest" "run OpenAdapt tests"
-# Write-Host "OpenAdapt installed successfully"
+Write-Host "OpenAdapt installed successfully"
 
 ################################   SCRIPT    ################################
