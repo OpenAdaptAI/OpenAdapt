@@ -477,15 +477,16 @@ def plot_performance(recording_timestamp: float = None) -> None:
     memory_ax.plot(timestamps, mem_usages, label="memory usage", color="red")
     memory_ax.set_ylabel("Memory Usage (MB)")
 
-    # Get the handles and labels from both axes
-    handles1, labels1 = axes[0].get_legend_handles_labels()
-    handles2, labels2 = memory_ax.get_legend_handles_labels()
+    if len(mem_usages) > 0:
+        # Get the handles and labels from both axes
+        handles1, labels1 = axes[0].get_legend_handles_labels()
+        handles2, labels2 = memory_ax.get_legend_handles_labels()
 
-    # Combine the handles and labels from both axes
-    all_handles = handles1 + handles2
-    all_labels = labels1 + labels2
+        # Combine the handles and labels from both axes
+        all_handles = handles1 + handles2
+        all_labels = labels1 + labels2
 
-    axes[0].legend(all_handles, all_labels)
+        axes[0].legend(all_handles, all_labels)
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     fname_parts = ["performance", f"{recording_timestamp}"]
