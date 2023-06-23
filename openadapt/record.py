@@ -41,7 +41,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
 }
-PLOT_PERFORMANCE = True
+PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 

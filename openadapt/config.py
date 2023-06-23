@@ -83,6 +83,7 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
+    "PLOT_PERFORMANCE": True,
 }
 
 
