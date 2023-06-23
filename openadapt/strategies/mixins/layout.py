@@ -26,7 +26,6 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
         super.__init__(recording)
         self.img_list = img_list
 
-
     def document_query(
         self, 
         image: np.ndarray,
