@@ -26,6 +26,7 @@ from openadapt import config, crud, utils, window
 
 import psutil
 from pympler import tracker
+
 tr = tracker.SummaryTracker()
 
 import tracemalloc
@@ -45,14 +46,30 @@ PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-BYTE_TO_MB = float(2 ** 20)
+BYTE_TO_MB = float(2**20)
 
 NUM_MEMORY_STATS = 3
 
 
-
 def collect_stats():
     performance_snapshots.append(tracemalloc.take_snapshot())
+
+
+def log_memory_usage():
+    assert len(performance_snapshots) == 2, performance_snapshots
+    first_snapshot, last_snapshot = performance_snapshots
+    stats = last_snapshot.compare_to(first_snapshot, "lineno")
+
+    for stat in stats[:NUM_MEMORY_STATS]:
+        new_KiB = stat.size_diff / 1024
+        total_KiB = stat.size / 1024
+        new_blocks = stat.count_diff
+        total_blocks = stat.count
+        source = stat.traceback.format()[0]
+        logger.info(f"{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=} {source=}")
+
+    trace_str = "\n".join(list(tr.format_diff()))
+    logger.info(f"trace_str=\n{trace_str}")
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
@@ -63,13 +80,13 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 
 
 def process_events(
-        event_q: queue.Queue,
-        screen_write_q: multiprocessing.Queue,
-        action_write_q: multiprocessing.Queue,
-        window_write_q: multiprocessing.Queue,
-        perf_q: multiprocessing.Queue,
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
+    event_q: queue.Queue,
+    screen_write_q: multiprocessing.Queue,
+    action_write_q: multiprocessing.Queue,
+    window_write_q: multiprocessing.Queue,
+    perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
 ):
     """
     Process events from event queue and write them to respective write queues.
@@ -145,9 +162,9 @@ def process_events(
 
 
 def write_action_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -164,9 +181,9 @@ def write_action_event(
 
 
 def write_screen_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -186,9 +203,9 @@ def write_screen_event(
 
 
 def write_window_event(
-        recording_timestamp: float,
-        event: Event,
-        perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -205,12 +222,12 @@ def write_window_event(
 
 
 def write_events(
-        event_type: str,
-        write_fn: Callable,
-        write_q: multiprocessing.Queue,
-        perf_q: multiprocessing.Queue,
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
+    event_type: str,
+    write_fn: Callable,
+    write_q: multiprocessing.Queue,
+    perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -240,8 +257,8 @@ def write_events(
 
 
 def trigger_action_event(
-        event_q: queue.Queue,
-        action_event_args: Dict[str, Any],
+    event_q: queue.Queue,
+    action_event_args: Dict[str, Any],
 ) -> None:
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
@@ -255,10 +272,10 @@ def trigger_action_event(
 
 
 def on_move(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
@@ -273,12 +290,12 @@ def on_move(
 
 
 def on_click(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        button: mouse.Button,
-        pressed: bool,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    button: mouse.Button,
+    pressed: bool,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {button=} {pressed=} {injected=}")
     if not injected:
@@ -295,12 +312,12 @@ def on_click(
 
 
 def on_scroll(
-        event_q: queue.Queue,
-        x: int,
-        y: int,
-        dx: int,
-        dy: int,
-        injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    dx: int,
+    dy: int,
+    injected: bool,
 ) -> None:
     logger.debug(f"{x=} {y=} {dx=} {dy=} {injected=}")
     if not injected:
@@ -317,10 +334,10 @@ def on_scroll(
 
 
 def handle_key(
-        event_q: queue.Queue,
-        event_name: str,
-        key: keyboard.KeyCode,
-        canonical_key: keyboard.KeyCode,
+    event_q: queue.Queue,
+    event_name: str,
+    key: keyboard.KeyCode,
+    canonical_key: keyboard.KeyCode,
 ) -> None:
     attr_names = [
         "name",
@@ -340,9 +357,9 @@ def handle_key(
 
 
 def read_screen_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     """
     Read screen events and add them to the event queue.
@@ -448,9 +465,7 @@ def performance_stats_writer(
 
 
 def memory_writer(
-        recording_timestamp: float,
-        terminate_event: multiprocessing.Event,
-        record_pid: int
+    recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
 ):
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
@@ -459,12 +474,12 @@ def memory_writer(
     process = psutil.Process(record_pid)
 
     while not terminate_event.is_set():
-        mem_usage = getattr(process, 'memory_info')()[0] / BYTE_TO_MB
+        mem_usage = getattr(process, "memory_info")()[0] / BYTE_TO_MB
 
-        for child in getattr(process, 'children')(recursive=True):
+        for child in getattr(process, "children")(recursive=True):
             # after ctrl c, children processes could terminate before running the next line
             try:
-                mem_usage = mem_usage + getattr(child, 'memory_info')()[0] / BYTE_TO_MB
+                mem_usage = mem_usage + getattr(child, "memory_info")()[0] / BYTE_TO_MB
             except psutil.NoSuchProcess:
                 pass
 
@@ -479,7 +494,7 @@ def memory_writer(
 
 
 def create_recording(
-        task_description: str,
+    task_description: str,
 ) -> Dict[str, Any]:
     """
     Create a new recording entry in the database.
@@ -539,9 +554,9 @@ def read_keyboard_events(
 
 
 def read_mouse_events(
-        event_q: queue.Queue,
-        terminate_event: multiprocessing.Event,
-        recording_timestamp: float,
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
 ) -> None:
     utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
@@ -555,7 +570,7 @@ def read_mouse_events(
 
 
 def record(
-        task_description: str,
+    task_description: str,
 ):
     """
     Record Screenshots/ActionEvents/WindowEvents.
@@ -670,11 +685,7 @@ def record(
         record_pid = os.getpid()
         mem_plotter = multiprocessing.Process(
             target=memory_writer,
-            args=(
-                recording_timestamp,
-                terminate_perf_event,
-                record_pid
-            ),
+            args=(recording_timestamp, terminate_perf_event, record_pid),
         )
         mem_plotter.start()
 
@@ -689,21 +700,7 @@ def record(
         terminate_event.set()
 
     collect_stats()
-
-    assert len(performance_snapshots) == 2, performance_snapshots
-    first_snapshot, last_snapshot = performance_snapshots
-    stats = last_snapshot.compare_to(first_snapshot, 'lineno')
-
-    for stat in stats[:NUM_MEMORY_STATS]:
-        new_KiB = stat.size_diff / 1024
-        total_KiB = stat.size / 1024
-        new_blocks = stat.count_diff
-        total_blocks = stat.count
-        source = stat.traceback.format()[0]
-        logger.info(f"{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=} {source=}")
-
-    trace_str = '\n'.join(list(tr.format_diff()))
-    logger.info(f"trace_str=\n{trace_str}")
+    log_memory_usage()
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
