@@ -3,8 +3,6 @@ Note: requires valid OpenAI API key to run tests. May use disk space for caching
 """
 
 import pytest
-import sys
-import io
 from PIL import Image
 from openadapt import config
 from openadapt.crud import get_latest_recording
