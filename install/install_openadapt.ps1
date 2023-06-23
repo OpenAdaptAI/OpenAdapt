@@ -73,7 +73,7 @@ function CheckCMDExists {
 # Get command for python, install python if required version is unavailable
 function GetPythonCMD {
     # Use python exe if it exists and is the required version
-    if (CheckCMDExists($pythonCmd)) {
+    if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
         if ($res -like $pythonVerStr) {
             return $pythonCmd
@@ -98,7 +98,7 @@ function GetPythonCMD {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Make sure python is now available and the right version
-    if (CheckCMDExists($pythonCmd)) {
+    if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
         if ($res -like $pythonVerStr) {
             Remove-Item $pythonInstaller
@@ -182,7 +182,7 @@ function GetTesseractCMD {
 
 
 function GetGitCMD {
-    $gitExists = CheckCMDExists($gitCmd)
+    $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
         # Install git
         Write-Host "Downloading git installer"
@@ -202,7 +202,7 @@ function GetGitCMD {
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Make sure git is now available
-        $gitExists = CheckCMDExists($gitCmd)
+        $gitExists = CheckCMDExists $gitCmd
         if (!$gitExists) {
             Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
             Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
