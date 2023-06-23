@@ -37,7 +37,7 @@ function RunAndCheck {
 
     Invoke-Expression $Command
     if ($LastExitCode) {
-        Write-Host "Failed: $Desc : $LastExitCode"
+        Write-Host "Failed: to $Desc : $LastExitCode"
         Cleanup
         exit
     }
@@ -251,7 +251,7 @@ function GetVSCppRedistCMD {
 
 # Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
 $tesseract = GetTesseractCMD
-RunAndCheck "$tesseract --version" "check tesseract version" > $null
+RunAndCheck "$tesseract --version" "check Tesseract" > $null
 
 # $python = GetPythonCMD
 # RunAndCheck "$python --version" "check python version"
