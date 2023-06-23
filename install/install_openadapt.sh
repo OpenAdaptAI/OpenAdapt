@@ -20,7 +20,11 @@ Cleanup() {
 
 # Refresh Path Environment variable
 Refresh() {
-    export PATH="$PATH:$(echo "$PATH" | tr ':' '\n' | grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')$(echo "$PATH" | tr ':' '\n' | grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | uniq | tr '\n' ':')"
+    export PATH="$PATH:$(echo "$PATH" | tr ':' '\n' | \
+    grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | \
+    uniq | tr '\n' ':')$(echo "$PATH" | tr ':' '\n' | \
+    grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | \
+    uniq | tr '\n' ':')"
 }
 
 # Run a command and ensure it did not fail
