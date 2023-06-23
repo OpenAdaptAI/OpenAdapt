@@ -56,6 +56,8 @@ sumy = "0.11.0"
 nltk = "3.8.1"
 cairosvg = "^2.7.0"
 pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+moviepy = "1.0.3"
+python-levenshtein = "^0.21.1"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
