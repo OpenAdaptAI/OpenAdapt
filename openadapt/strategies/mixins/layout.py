@@ -7,13 +7,12 @@ Usage:
     class MyReplayStrategy(LayoutExtractionReplayStrategyMixin):
         ...
 """
-
+from typing import List
+import numpy as np
 
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
-import numpy as np
 from transformers import pipeline
-from typing import List
 
 
 class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
