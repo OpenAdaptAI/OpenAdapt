@@ -147,7 +147,7 @@ function GetTesseractCMD {
         exit
     }
 
-    #Refresh Path Environment Variable
+    # Refresh Path Environment Variable
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Add Tesseract OCR to the System Path variable
@@ -155,7 +155,7 @@ function GetTesseractCMD {
     $updatedSystemPath = "$systemEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
 
-    #Refresh Path Environment Variable
+    # Refresh Path Environment Variable
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Add Tesseract OCR to the User Path variable
@@ -163,7 +163,7 @@ function GetTesseractCMD {
     $updatedUserPath = "$userEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
 
-    #Refresh Path Environment Variable
+    # Refresh Path Environment Variable
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     Write-Host "Added Tesseract OCR to PATH"
@@ -196,9 +196,9 @@ function GetGitCMD {
 
         Write-Host "Installing git, click 'Yes' if prompted for permission"
         Start-Process -FilePath $gitInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
-        Remove-Item $gitInstaller
+        # Remove-Item $gitInstaller
 
-        #Refresh Path Environment Variable
+        # Refresh Path Environment Variable
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Make sure git is now available
