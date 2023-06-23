@@ -48,7 +48,7 @@ function RunAndCheck {
 
 function Cleanup {
     $exists = Test-Path -Path "..\OpenAdapt"
-    if($exists) {
+    if ($exists) {
         Set-Location ..\
         Remove-Item -LiteralPath "OpenAdapt" -Force -Recurse
     }
@@ -86,17 +86,17 @@ function GetPythonCMD() {
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
-    if(!$exists) {
+    if (!$exists) {
         Write-Host "Failed to download python installer"
         Cleanup
         exit
     }
 
     Write-Host "Installing python, click 'Yes' if prompted for permission"
-    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet','InstallAllUsers=0','PrependPath=1' -Wait
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
 
     #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Make sure python is now available and the right version
     if (CheckCMDExists($pythonCmd)) {
@@ -108,7 +108,7 @@ function GetPythonCMD() {
     }
 
     Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
-    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet','/uninstall' -Wait
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', '/uninstall' -Wait
     Remove-Item $pythonInstaller
 
     # Stop OpenAdapt install
@@ -127,7 +127,7 @@ function GetTesseractCMD() {
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
     $exists = Test-Path -Path $tesseractInstaller -PathType Leaf
-    if(!$exists) {
+    if (!$exists) {
         Write-Host "Failed to download Tesseract OCR installer"
         Cleanup
         exit
@@ -141,7 +141,8 @@ function GetTesseractCMD() {
     # Check if Tesseract OCR was installed
     if (Test-Path -Path $tesseractPath -PathType Container) {
         Write-Host "TesseractOCR installation successful."
-    } else {
+    }
+    else {
         Write-Host "TesseractOCR installation failed."
         Cleanup
         exit
@@ -158,7 +159,7 @@ function GetTesseractCMD() {
     [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
 
     #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     Write-Host "Added Tesseract OCR to PATH"
 
@@ -183,7 +184,7 @@ function GetGitCMD() {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $gitInstallerLoc -OutFile $gitInstaller
         $exists = Test-Path -Path $gitInstaller -PathType Leaf
-        if(!$exists) {
+        if (!$exists) {
             Write-Host "Failed to download git installer"
             exit
         }
@@ -193,13 +194,13 @@ function GetGitCMD() {
         Remove-Item $gitInstaller
 
         #Refresh Path Environment Variable
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Make sure git is now available
         $gitExists = CheckCMDExists $gitCmd = "git"
         if (!$gitExists) {
             Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
-            Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+            Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
             exit
         }
     }
@@ -220,7 +221,7 @@ function GetVSCppRedistCMD {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
         $exists = Test-Path -Path $VCRedistInstaller -PathType Leaf
-        if(!$exists) {
+        if (!$exists) {
             Write-Host "Failed to download Visual C++ installer"
             Cleanup
             exit
@@ -230,7 +231,7 @@ function GetVSCppRedistCMD {
         Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /q /norestart" -Wait
         Remove-Item $VCRedistInstaller
 
-        if($LastExitCode) {
+        if ($LastExitCode) {
             Write-Host "Failed to install Visual C++ Redist: $LastExitCode"
             Cleanup
             exit
