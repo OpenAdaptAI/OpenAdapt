@@ -253,8 +253,8 @@ function GetVSCppRedistCMD {
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
 
-# $python = GetPythonCMD
-# RunAndCheck "$python --version" "check python version"
+$python = GetPythonCMD
+RunAndCheck "$python --version" "check python version"
 
 # $git = GetGitCMD
 # RunAndCheck "$git --version" "check git version"
