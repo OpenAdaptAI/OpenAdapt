@@ -266,9 +266,9 @@ RunAndCheck "$vscppredist" "check Visual C++ Redist" > $null
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "install poetry"
-RunAndCheck "poetry install"
-RunAndCheck "poetry shell"
+RunAndCheck "pip install poetry" "pip install poetry"
+RunAndCheck "poetry install" "Poetry install"
+RunAndCheck "poetry shell" "Poetry shell"
 RunAndCheck "alembic upgrade head" "alembic upgrade head"
 RunAndCheck "pytest" "run OpenAdapt tests"
 Write-Host "OpenAdapt installed successfully"
