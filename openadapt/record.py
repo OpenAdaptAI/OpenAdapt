@@ -47,6 +47,8 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 BYTE_TO_MB = float(2 ** 20)
 
+NUM_MEMORY_STATS = 3
+
 
 
 def collect_stats():
@@ -688,9 +690,11 @@ def record(
 
     collect_stats()
 
-    stats = performance_snapshots[-1].compare_to(performance_snapshots[-2], 'lineno')
+    assert len(performance_snapshots) == 2, performance_snapshots
+    first_snapshot, last_snapshot = performance_snapshots
+    stats = last_snapshot.compare_to(first_snapshot, 'lineno')
 
-    for stat in stats[:3]:
+    for stat in stats[:NUM_MEMORY_STATS]:
         new_KiB = stat.size_diff / 1024
         total_KiB = stat.size / 1024
         new_blocks = stat.count_diff
