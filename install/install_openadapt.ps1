@@ -36,11 +36,6 @@ function CheckCMDExists() {
 
 # Get command for python, install python if required version is unavailable
 function GetPythonCMD() {
-    # Use python alias of required version if it exists
-    if (CheckCMDExists($pythonCmd)) {
-        return $pythonCmd
-    }
-
     # Use python exe if it exists and is the required version
     $pythonCmd = "python"
     if (CheckCMDExists($pythonCmd)) {
