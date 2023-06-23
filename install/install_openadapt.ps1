@@ -48,7 +48,7 @@ function RunAndCheck {
 
 function Cleanup {
     $exists = Test-Path -Path "..\OpenAdapt"
-    if ($exists) {
+    If ($exists) {
         Set-Location ..\
         Remove-Item -LiteralPath "OpenAdapt" -Force -Recurse
     }
@@ -56,7 +56,7 @@ function Cleanup {
 
 
 # Return true if a command/exe is available
-function CheckCMDExists() {
+function CheckCMDExists {
     Param
     (
         [Parameter(Mandatory = $true)] [string] $command
@@ -64,14 +64,14 @@ function CheckCMDExists() {
 
     Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
     If ($getErr -eq $null) {
-        $true;
+       return $true
     }
-    return $false;
+    return $false
 }
 
 
 # Get command for python, install python if required version is unavailable
-function GetPythonCMD() {
+function GetPythonCMD {
     # Use python exe if it exists and is the required version
     $pythonCmd = "python"
     if (CheckCMDExists($pythonCmd)) {
@@ -116,7 +116,7 @@ function GetPythonCMD() {
     exit
 }
 
-function GetTesseractCMD() {
+function GetTesseractCMD {
     # Use tesseract alias if it exists
     if (CheckCMDExists($tesseractCmd)) {
         return $tesseractCmd
@@ -182,8 +182,8 @@ function GetTesseractCMD() {
 }
 
 
-function GetGitCMD() {
-    $gitExists = CheckCMDExists $gitCmd
+function GetGitCMD {
+    $gitExists = CheckCMDExists($gitCmd)
     if (!$gitExists) {
         # Install git
         Write-Host "Downloading git installer"
@@ -203,7 +203,7 @@ function GetGitCMD() {
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Make sure git is now available
-        $gitExists = CheckCMDExists $gitCmd
+        $gitExists = CheckCMDExists($gitCmd)
         if (!$gitExists) {
             Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
             Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
