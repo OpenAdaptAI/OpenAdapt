@@ -182,11 +182,14 @@ def create_db(recording_id, sql, values):
     shutil.copyfile(source_file_path, target_file_path)
     config.set_db_url(db_fname)
 
-    with open(config.ENV_FILE_PATH, "r") as f:
-        lines = f.readlines()
-    lines[1] = f"DB_FNAME={db_fname}\n"
-    with open(config.ENV_FILE_PATH, "w") as f:
-        f.writelines(lines)
+    with open(config.ENV_FILE_PATH, "r") as env_file:
+        env_file_lines = [
+            f"DB_FNAME={db_fname}\n" if env_file_line.startswith("DB_FNAME") else env_file_line
+            for env_file_line in env_file.readlines()
+        ]
+
+    with open(config.ENV_FILE_PATH, "w") as env_file:
+        env_file.writelines(env_file_lines)
 
     engine = sa.create_engine(config.DB_URL)
     Session = sessionmaker(bind=engine)
