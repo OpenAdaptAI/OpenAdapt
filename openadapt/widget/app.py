@@ -1,40 +1,96 @@
-from kivy.app import App
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.button import Button
-from kivy.uix.image import Image
-from kivy.core.window import Window
+import tkinter as tk
+import signal
+from subprocess import Popen
 from openadapt.record import record
-import time
-import win32api
-import win32gui
-import win32con
+import os
 
-class OpenAdapt(App) :
-    def build(self):
+# Initialize the current state
+current_state = "default"
 
-        Window.size = (200, 200)
-        Window.borderless = True
-        Window.always_on_top = True
-        Window.clearcolor = (255, 255, 255, 1)
-        self.window = FloatLayout()
-        self.button = Button(  background_normal="assets/logo.png",
-                                        size_hint=(1, 1),
-                                        pos_hint={"center_x" : 0.5, "center_y" : 0.5},
-                                        text="hi")
-        self.button.bind(on_press=self.callback)
-        self.window.add_widget(self.button)
-        return self.window
-    def callback(self, instance):
-        self.button.disabled = True
-        self.button.background_normal = "assets/noun-recording.png"
-        
-        # self.window.remove_widget(instance)
-        # self.image = Image(  source="assets/noun-recording.png",
-        #                                 size_hint=(1, 1),
-        #                                 pos_hint={"center_x" : 0.5, "center_y" : 0.5})
-        #self.window.add_widget(self.image)
-        #record("testing")
-        #self.image.source = "assets/noun-video-file.png"
+PROC = None
 
-if __name__ == "__main__" :
-    OpenAdapt().run()
+root = None
+def handle_click():
+    global current_state
+    global button
+    global PROC
+    global root
+
+    if current_state == "default":
+        current_state = "recording_in_progress"
+        button["image"] = states[current_state]
+        button["command"] = stop_recording
+        start_recording()
+
+    elif current_state == "recording_in_progress":
+        current_state = "replay_available"
+        button["image"] = states[current_state]
+        button["command"] = handle_replay
+
+    elif current_state == "replay_available":
+        current_state = "replaying_in_progress"
+        button["image"] = states[current_state]
+        button["command"] = None
+
+    elif current_state == "replaying_in_progress":
+        current_state = "replaying_paused"
+        button["image"] = states[current_state]
+        button["command"] = None
+
+def start_recording():
+     global PROC
+     PROC = Popen(
+            "python -m openadapt.record " + "test",
+            shell=True,
+        )
+    
+
+def stop_recording():
+    global PROC
+    PROC.send_signal(signal.SIGINT)
+
+    # Wait for the process to terminate
+    PROC.wait()
+    PROC = None
+
+def handle_exit():
+    global PROC
+    if PROC:
+        stop_recording()
+    root.destroy()
+
+def handle_replay() :
+    pass
+def run_widget():
+    global button
+    global states
+    root = tk.Tk()
+    root.title("OpenAdapt")
+    root.geometry("300x300")
+    root.wm_attributes("-topmost", True) # make the window always on top
+    root.wm_attributes("-transparentcolor", root["bg"])
+    root.overrideredirect(True)
+
+    # Define the states
+    states = {
+        "default": tk.PhotoImage(file="./widget/assets/logo.png"),
+        "recording_in_progress": tk.PhotoImage(file="./widget/assets/noun-recording.png"),
+        "replay_available": tk.PhotoImage(file="./widget/assets/noun-replay-available.png"),
+        "replaying_in_progress": tk.PhotoImage(file="./widget/assets/noun-replaying-inprogress.png"),
+        "replaying_paused": tk.PhotoImage(file="./widget/assets/noun-pause.png")
+    }
+
+    # Create the button
+    button = tk.Button(
+        root,
+        image=states[current_state],
+        text=states[current_state],
+        command=handle_click
+    )
+    button.pack(ipadx=5, ipady=5, expand=True)
+
+    root.protocol("WM_DELETE_WINDOW", handle_exit)
+    root.mainloop()
+
+if __name__ == "__main__":
+    run_widget()
