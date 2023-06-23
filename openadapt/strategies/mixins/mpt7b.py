@@ -9,10 +9,10 @@ Usage:
         ...
 """
 
+from ctransformers import AutoModelForCausalLM
 
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.models import Recording
-from ctransformers import AutoModelForCausalLM
 
 
 class MPT7BReplayStrategy(BaseReplayStrategy):
