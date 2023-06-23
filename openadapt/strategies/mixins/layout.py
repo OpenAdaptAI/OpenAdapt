@@ -7,23 +7,28 @@ Usage:
     class MyReplayStrategy(LayoutExtractionReplayStrategyMixin):
         ...
 """
+from PIL import Image
 from typing import List
+from transformers import pipeline
 import numpy as np
 
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
-from transformers import pipeline
 
 
 class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
-        self, 
+        self,
         recording: Recording,
         img_list: List[np.ndarray]
     ):
         super.__init__(recording)
         self.img_list = img_list
+        
+        for i in range(len(self.img_list)):
+            wrongform = self.img_list[i]
+            self.img_list[i] = Image.open(wrongform).convert('RGB')
 
     def document_query(
         self, 
