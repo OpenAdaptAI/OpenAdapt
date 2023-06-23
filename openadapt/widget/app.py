@@ -14,6 +14,7 @@ def handle_click():
     global current_state
     global button
     global root
+    global PROC
 
     if current_state == "default":
         current_state = "recording_in_progress"
@@ -32,20 +33,18 @@ def handle_click():
         replay_recording()
 
     elif current_state == "replaying_in_progress":
-        import pyautogui
-        # Store the initial mouse position
-        prev_mouse_pos = pyautogui.position()
 
         while PROC.poll() is None:
             # Get the current mouse position
-            current_mouse_pos = pyautogui.position()
+            # current_mouse_pos = pyautogui.position()
 
-            # Compare the current and previous mouse positions
-            if current_mouse_pos != prev_mouse_pos:
-                current_state = "replaying_paused"
-                button["image"] = states[current_state]
-                PROC.send_signal(signal.CTRL_BREAK_EVENT)
-                break
+            # Implement logic to check if the user has moved the mouse
+            # if current_mouse_pos != prev_mouse_pos:
+                # current_state = "replaying_paused"
+                # button["image"] = states[current_state]
+                # PROC.send_signal(signal.CTRL_BREAK_EVENT)
+                # break
+            break
 
     elif current_state == "replaying_paused" :
         PROC.send_signal(signal.CTRL_BREAK_EVENT)
@@ -81,8 +80,7 @@ def handle_exit():
         stop_recording()
     root.destroy()
 
-def handle_replay() :
-    pass
+
 def run_widget():
     global button
     global states
@@ -109,8 +107,8 @@ def run_widget():
         text=states[current_state],
         command=handle_click
     )
-    button.pack(ipadx=5, ipady=5, expand=True)
-
+    button.config( width=300, height=300 )
+    button.pack(ipadx=5, ipady=5)
     root.protocol("WM_DELETE_WINDOW", handle_exit)
     root.mainloop()
 
