@@ -26,6 +26,7 @@ pytesseract==0.3.7
 -e git+https://github.com/abrichr/pynput.git#egg=pynput
 pytest==7.1.3
 python-dotenv==1.0.0
+python-Levenshtein==0.21.1
 rapidocr-onnxruntime==1.2.3
 scikit-learn==1.2.2
 scipy==1.9.3
@@ -38,5 +39,3 @@ torch==2.0.0
 tqdm==4.64.0
 transformers==4.29.2
 git+https://github.com/openai/whisper.git
-python-dotenv==1.0.0
-python-Levenshtein==0.21.1
