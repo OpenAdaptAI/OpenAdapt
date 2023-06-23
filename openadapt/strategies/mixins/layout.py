@@ -36,15 +36,3 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
             model = "impira/layoutlm-document-qa")
 
         return query_pipeline(image, question)[0]['answer']
-
-    def extract_table(
-        self
-    ):
-        # TODO
-        return None
-
-    def gui_query(
-        self
-    ):
-        # TODO
-        return None
