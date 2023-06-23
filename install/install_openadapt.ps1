@@ -148,10 +148,16 @@ function GetTesseractCMD() {
         exit
     }
 
+    #Refresh Path Environment Variable
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
     # Add Tesseract OCR to the System Path variable
     $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $updatedSystemPath = "$systemEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
+
+    #Refresh Path Environment Variable
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Add Tesseract OCR to the User Path variable
     $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -177,7 +183,7 @@ function GetTesseractCMD() {
 
 
 function GetGitCMD() {
-    $gitExists = CheckCMDExists $gitCmd = "git"
+    $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
         # Install git
         Write-Host "Downloading git installer"
@@ -197,7 +203,7 @@ function GetGitCMD() {
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Make sure git is now available
-        $gitExists = CheckCMDExists $gitCmd = "git"
+        $gitExists = CheckCMDExists $gitCmd
         if (!$gitExists) {
             Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
             Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
