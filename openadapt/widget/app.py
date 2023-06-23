@@ -13,29 +13,44 @@ root = None
 def handle_click():
     global current_state
     global button
-    global PROC
     global root
 
     if current_state == "default":
         current_state = "recording_in_progress"
         button["image"] = states[current_state]
-        button["command"] = stop_recording
         start_recording()
 
     elif current_state == "recording_in_progress":
         current_state = "replay_available"
         button["image"] = states[current_state]
-        button["command"] = handle_replay
+        stop_recording()
 
     elif current_state == "replay_available":
         current_state = "replaying_in_progress"
         button["image"] = states[current_state]
         button["command"] = None
+        replay_recording()
 
     elif current_state == "replaying_in_progress":
-        current_state = "replaying_paused"
+        import pyautogui
+        # Store the initial mouse position
+        prev_mouse_pos = pyautogui.position()
+
+        while PROC.poll() is None:
+            # Get the current mouse position
+            current_mouse_pos = pyautogui.position()
+
+            # Compare the current and previous mouse positions
+            if current_mouse_pos != prev_mouse_pos:
+                current_state = "replaying_paused"
+                button["image"] = states[current_state]
+                PROC.send_signal(signal.CTRL_BREAK_EVENT)
+                break
+
+    elif current_state == "replaying_paused" :
+        PROC.send_signal(signal.CTRL_BREAK_EVENT)
+        current_state = "replaying_in_progress"
         button["image"] = states[current_state]
-        button["command"] = None
 
 def start_recording():
      global PROC
@@ -43,15 +58,22 @@ def start_recording():
             "python -m openadapt.record " + "test",
             shell=True,
         )
+     
     
-
 def stop_recording():
     global PROC
-    PROC.send_signal(signal.SIGINT)
+    PROC.send_signal(signal.CTRL_C_EVENT)
 
-    # Wait for the process to terminate
+    # wait for process to terminate
     PROC.wait()
     PROC = None
+
+def replay_recording():
+     global PROC
+     PROC = Popen(
+                "python -m openadapt.replay " + "NaiveReplayStrategy",
+                shell=True,
+            )
 
 def handle_exit():
     global PROC
