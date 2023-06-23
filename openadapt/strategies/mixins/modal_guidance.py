@@ -15,12 +15,12 @@ def key_func():
     valid_medium = ["keyboard", "mouse"]
 
     # define the prompt
-    program = guidance(""" {{description}} Given the above information, fill in the following (with N/A where unapplicable) as a valid json
+    program = guidance(""" {{description}} Given the above description, fill in the following (with N/A where unapplicable) as a valid json
     ```json
     {
         "medium": "{{select 'medium' options=valid_medium}}",
-        "keyclick x-location": {{gen 'location' pattern='[0-9]+[0-9]+[0-9]+' stop=')'}},
-        "keyclick y-location": {{gen 'location' pattern='[0-9]+[0-9]+[0-9]+' stop=')'}},
+        "mouse x-location": {{gen 'location' pattern='[0-9]+[0-9]+[0-9]+' stop=')'}},
+        "mouse y-location": {{gen 'location' pattern='[0-9]+[0-9]+[0-9]+' stop=')'}},
         "character": {{gen 'character' pattern='[a-z]+' stop=','}}
         ]
     }```""")
