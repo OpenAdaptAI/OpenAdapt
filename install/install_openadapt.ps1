@@ -242,7 +242,7 @@ function GetVSCppRedistCMD {
             exit
         }
     }
-    return "cls" # Return a command that always gives Exit Code 0, so that RunAndCheck doesn't fail
+    return "Write-Host" # Return a command that always gives Exit Code 0, so that RunAndCheck doesn't fail
 }
 
 ################################   FUNCTIONS    ################################
