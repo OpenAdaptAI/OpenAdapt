@@ -67,7 +67,7 @@ class TransformersAgentsMixin(OpenAiAgent):
                 screenshot._image.save(f"debug/recording-{self.recording.id}-{idx}.png")
                 diff.save(f"debug/recording-{self.recording.id}-{idx}-diff.png")
 
-            self.chat(
+            return self.chat(
                 f"In the image, you are presented with a screenshot of a user's current active window."
                 f"The user's window event is: {action_event.window_event.title}."
                 f"What is the user doing, and what text do they see? DO NOT SEGMENT, feel free to use text_classifier and text_qa. "

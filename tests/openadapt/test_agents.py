@@ -17,22 +17,12 @@ def test_prompt():
     agent = TransformersAgentsMixin(
         recording=get_latest_recording(), api_key=config.OPENAI_API_KEY
     )
-    f = io.StringIO()
-    old = sys.stdout
-    sys.stdout = f
-    agent.prompt(debug=False)
-    sys.stdout = old
-    assert "print" in f.getvalue()
+    assert agent.prompt(debug=False)
 
 
 def test_captioning():
     agent = TransformersAgentsMixin(recording=None, api_key=config.OPENAI_API_KEY)
-    f = io.StringIO()
-    old = sys.stdout
-    sys.stdout = f
-    agent.chat("caption the image", image=Image.open("assets/visualize.png"))
-    sys.stdout = old
-    assert "print" in f.getvalue()
+    assert agent.chat("caption the image", image=Image.open("assets/visualize.png"))
 
 
 if __name__ == "__main__":
