@@ -77,21 +77,6 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
             )
 
         logger.debug(f"{prompt=} {max_tokens=}")
-        input_tokens = self.tokenizer(prompt, return_tensors="pt")
-        pad_token_id = self.tokenizer.eos_token_id
-        attention_mask = input_tokens["attention_mask"]
-        output_tokens = self.model.generate(
-            input_ids=input_tokens["input_ids"],
-            attention_mask=attention_mask,
-            max_length=input_tokens["input_ids"].shape[-1] + max_tokens,
-            pad_token_id=pad_token_id,
-            num_return_sequences=1
-        )
-        N = input_tokens["input_ids"].shape[-1]
-        completion = self.tokenizer.decode(
-            output_tokens[:, N:][0],
-            clean_up_tokenization_spaces=True,
-        )
 
         completion = PROGRAM(description=prompt, valid_actions=VALID_ACTIONS)
         logger.debug(f"{completion=}")
