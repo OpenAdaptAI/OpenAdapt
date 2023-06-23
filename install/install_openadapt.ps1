@@ -15,6 +15,7 @@ $VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 
 # Tesseract OCR installation
+$tesseractCmd = "tesseract"
 $tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
@@ -86,12 +87,11 @@ function GetPythonCMD() {
 
 function GetTesseractCMD() {
     # Use tesseract alias if it exists
-    $tesseractCmd = "tesseract"
     if (CheckCMDExists($tesseractCmd)) {
         return $tesseractCmd
     }
 
-    # Install Tesseract OCR
+    # Downlaod Tesseract OCR
     Write-Host "Downloading Tesseract OCR installer"
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
@@ -102,19 +102,41 @@ function GetTesseractCMD() {
         exit
     }
 
+    
+    # Install the Tesseract OCR Setup exe (binary file)
     Write-Host "Installing Tesseract OCR, click 'Yes' if prompted for permission"
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
-    # Remove-Item $tesseractInstaller
+    Remove-Item $tesseractInstaller
 
-    # Add Tesseract OCR to PATH of Machine Variables
-    $env:Path += ";$tesseractPath"
-    [System.Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Machine)
+    # Check if Tesseract OCR was installed
+    if (Test-Path -Path $tesseractPath -PathType Container) {
+        Write-Host "TesseractOCR installation successful."
+    } else {
+        Write-Host "TesseractOCR installation failed."
+        Cleanup
+        exit
+    }
 
-    # Add Tesseract OCR to PATH of User Variables
-    $userEnvPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::User)
-    [Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::User)
+
+    # Add Tesseract OCR to the System Path variable
+    $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $updatedSystemPath = "$systemEnvPath;$tesseractPath"
+    [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
+
+    # Add Tesseract OCR to the User Path variable
+    $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $updatedUserPath = "$userEnvPath;$tesseractPath"
+    [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
+
+    # Refresh the environment variables in the current session
+    $refreshTarget = [System.EnvironmentVariableTarget]::Process
+    $refreshedSystemPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $refreshedUserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = $refreshedSystemPath + ";" + $refreshedUserPath
 
     Write-Host "Added Tesseract OCR to PATH"
+
+
     # Make sure tesseract is now available
     if (CheckCMDExists($tesseractCmd)) {
         return $tesseractCmd
@@ -154,6 +176,9 @@ function RunAndCheck {
 
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check tesseract version"
+
+$python = GetPythonCMD
+RunAndCheck "$python --version" "check python version"
 
 $gitExists = CheckCMDExists "git"
 if (!$gitExists) {
@@ -210,12 +235,11 @@ if (!$vcredistExists) {
     }
 }
 
+
+# Install OpenAdapt: Follow README.md instructions
+
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
-
 Set-Location .\OpenAdapt
-
-$python = GetPythonCMD
-
 RunAndCheck "pip install poetry" "install poetry"
 RunAndCheck "poetry install"
 RunAndCheck "poetry shell"
