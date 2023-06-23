@@ -20,6 +20,7 @@ from openadapt import common, config
 
 EMPTY = (None, [], {}, "")
 
+
 def get_now_dt_str(dt_format=config.DT_FMT):
     """
     Get the current date and time as a formatted string.
