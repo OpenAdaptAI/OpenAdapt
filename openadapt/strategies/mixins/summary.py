@@ -7,16 +7,16 @@ Usage:
     class MyReplayStrategy(SummaryReplayStrategyMixin):
         ...
 """
-from openadapt.models import Recording
-from openadapt.strategies.base import BaseReplayStrategy
-
-from sumy.summarizers.lsa import LsaSummarizer
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
+from loguru import logger
 from sumy.nlp.stemmers import Stemmer
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.summarizers.lsa import LsaSummarizer
 from sumy.utils import get_stop_words
 import nltk
-from loguru import logger
+
+from openadapt.models import Recording
+from openadapt.strategies.base import BaseReplayStrategy
 
 
 class SummaryReplayStrategyMixin(BaseReplayStrategy):
