@@ -25,12 +25,11 @@ Refresh() {
 
 # Run a command and ensure it did not fail
 RunAndCheck() {
-    res=$($1)
 
-    if [[ -z $res ]] || [[ $res -eq 0 ]]; then
-        echo "Success: $2 : $res"
+    if $1 ; then
+        echo "Success: $2"
     else
-        echo "Failed: $2 : $res"
+        echo "Failed: $2"
         Cleanup
         exit 1
     fi
@@ -80,7 +79,7 @@ CheckPythonExists() {
 
     # Make sure python is now available and the right version
     if CheckCMDExists $pythonCmd; then
-        res=$(python --version)
+        res=$(python3.10 --version)
         if [[ "$res" =~ $pythonVerStr ]]; then
             return
         fi
@@ -99,9 +98,9 @@ CheckPythonExists() {
 
 # Download brew
 if ! CheckCMDExists "brew"; then
-    echo Downloading brew
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > /dev/null 2>&1)"
-    Refresh # necessary ?
+    echo Downloading brew, follow the instructions
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    # Refresh # necessary ?
     brewExists=$(CheckCMDExists "brew")
     if ! CheckCMDExists "brew"; then
         echo "Failed to download brew"
