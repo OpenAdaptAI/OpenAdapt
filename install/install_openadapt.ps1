@@ -259,16 +259,16 @@ RunAndCheck "$tesseract --version" "check tesseract version"
 # $git = GetGitCMD
 # RunAndCheck "$git --version" "check git version"
 
-GetVSCppRedistCMD
+# GetVSCppRedistCMD
 
-# OpenAdapt Setup
-RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
-Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "install poetry"
-RunAndCheck "poetry install"
-RunAndCheck "poetry shell"
-RunAndCheck "alembic upgrade head" "alembic upgrade head"
-RunAndCheck "pytest" "run OpenAdapt tests"
-Write-Host "OpenAdapt installed successfully"
+# # OpenAdapt Setup
+# RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
+# Set-Location .\OpenAdapt
+# RunAndCheck "pip install poetry" "install poetry"
+# RunAndCheck "poetry install"
+# RunAndCheck "poetry shell"
+# RunAndCheck "alembic upgrade head" "alembic upgrade head"
+# RunAndCheck "pytest" "run OpenAdapt tests"
+# Write-Host "OpenAdapt installed successfully"
 
 ################################   SCRIPT    ################################
