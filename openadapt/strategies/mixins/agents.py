@@ -55,6 +55,7 @@ class TransformersAgentsMixin(OpenAiAgent):
 
         for idx, action_event in enumerate(self.action_events):
             screenshot = action_event.screenshot
+            self.screenshots.append(screenshot)
             screenshot.crop_active_window(action_event)
             if debug:
                 diff = display_event(action_event, diff=True)
