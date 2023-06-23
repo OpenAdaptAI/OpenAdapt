@@ -256,8 +256,8 @@ RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
 $python = GetPythonCMD
 RunAndCheck "$python --version" "check Python" > $null
 
-# $git = GetGitCMD
-# RunAndCheck "$git --version" "check git version"
+$git = GetGitCMD
+RunAndCheck "$git --version" "check Git"
 
 # GetVSCppRedistCMD
 
