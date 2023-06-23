@@ -36,7 +36,7 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
         query_pipeline = pipeline("document-question-answering",
             model = "impira/layoutlm-document-qa")
 
-        return query_pipeline(image, question)['answer']
+        return query_pipeline(image, question)[0]['answer']
 
     def extract_table(
         self
