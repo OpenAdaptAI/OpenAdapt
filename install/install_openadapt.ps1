@@ -139,7 +139,6 @@ function GetTesseractCMD {
 
     Write-Host "Added Tesseract OCR to PATH." -ForegroundColor Green
 
-
     # Make sure tesseract is now available
     if (CheckCMDExists($tesseractCmd)) {
         return $tesseractCmd
