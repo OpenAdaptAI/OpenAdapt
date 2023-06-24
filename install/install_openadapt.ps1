@@ -32,14 +32,14 @@ function RunAndCheck {
         [string] $Desc,
 
         [Parameter(Mandatory = $false)]
-        [switch] $CleanupOnFailure = $false
+        [switch] $SkipCleanup = $false
     )
-    $CleanupOnFailure = !$CleanupOnFailure
+    $SkipCleanup = !$SkipCleanup
 
     Invoke-Expression $Command
     if ($LastExitCode) {
         Write-Host "Failed: $Desc - Exit code: $LastExitCode"
-        if ($CleanupOnFailure) {
+        if ($SkipCleanup) {
             Cleanup
             exit
         }
