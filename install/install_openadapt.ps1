@@ -3,6 +3,8 @@
 ################################   PARAMETERS   ################################
 # Change these if a different version of is required
 
+$setupdir = "C:/OpenAdaptSetup"
+
 $tesseractCmd = "tesseract"
 $tesseractInstaller = "tesseract.exe"
 $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
@@ -49,11 +51,14 @@ function RunAndCheck {
 }
 
 
+/**
+ * Cleanup function to remove OpenAdapt folder created during the install process
+ */
 function Cleanup {
-    $exists = Test-Path -Path "..\OpenAdapt"
+    $exists = Test-Path -Path $setupdir
     If ($exists) {
-        Set-Location ..\
-        Remove-Item -LiteralPath "OpenAdapt" -Force -Recurse
+        Set-Location $setupdir
+        Remove-Item -LiteralPath $setupdir -Force -Recurse
     }
 }
 
@@ -72,50 +77,6 @@ function CheckCMDExists {
     return $false
 }
 
-
-# Get command for python, install python if required version is unavailable
-function GetPythonCMD {
-    # Use python exe if it exists and is the required version
-    if (CheckCMDExists $pythonCmd) {
-        $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
-            return $pythonCmd
-        }
-    }
-
-    # Install required python version
-    Write-Host "Downloading python installer..."
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
-    $exists = Test-Path -Path $pythonInstaller -PathType Leaf
-    if (!$exists) {
-        Write-Host "Failed to download python installer" -ForegroundColor Red
-        Cleanup
-        exit
-    }
-
-    Write-Host "Installing python..."
-    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
-
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    # Make sure python is now available and the right version
-    if (CheckCMDExists $pythonCmd) {
-        $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
-            Remove-Item $pythonInstaller
-            return $pythonCmd
-        }
-    }
-
-    Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
-    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', '/uninstall' -Wait
-    Remove-Item $pythonInstaller
-    # Stop OpenAdapt install
-    Cleanup
-    exit
-}
 
 function GetTesseractCMD {
     # Use tesseract alias if it exists
@@ -191,6 +152,50 @@ function GetTesseractCMD {
 }
 
 
+function GetPythonCMD {
+    # Use python exe if it exists and is the required version
+    if (CheckCMDExists $pythonCmd) {
+        $res = Invoke-Expression "python -V"
+        if ($res -like $pythonVerStr) {
+            return $pythonCmd
+        }
+    }
+
+    # Install required python version
+    Write-Host "Downloading python installer..."
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
+    $exists = Test-Path -Path $pythonInstaller -PathType Leaf
+    if (!$exists) {
+        Write-Host "Failed to download python installer" -ForegroundColor Red
+        Cleanup
+        exit
+    }
+
+    Write-Host "Installing python..."
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
+
+    #Refresh Path Environment Variable
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+    # Make sure python is now available and the right version
+    if (CheckCMDExists $pythonCmd) {
+        $res = Invoke-Expression "python -V"
+        if ($res -like $pythonVerStr) {
+            Remove-Item $pythonInstaller
+            return $pythonCmd
+        }
+    }
+
+    Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', '/uninstall' -Wait
+    Remove-Item $pythonInstaller
+    # Stop OpenAdapt install
+    Cleanup
+    exit
+}
+
+
 function GetGitCMD {
     $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
@@ -229,8 +234,8 @@ function GetGitCMD {
 ################################   SCRIPT    ################################
 
 # Create a new directory and run the setup from there
-New-Item -ItemType Directory -Path "C:/OpenAdaptSetup"  -Force
-Set-Location -Path "C:/OpenAdaptSetup"
+New-Item -ItemType Directory -Path $setupdir -Force
+Set-Location -Path $setupdir
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
