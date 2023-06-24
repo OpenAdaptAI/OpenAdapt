@@ -31,14 +31,26 @@ $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 function RunAndCheck {
     Param
     (
-        [Parameter(Mandatory = $true)] [string] $Command,
-        [Parameter(Mandatory = $true)] [string] $Desc
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Desc,
+
+        [Parameter(Mandatory = $false)]
+        [switch] $CleanupOnFailure
     )
+
+    if (-not $CleanupOnFailure) {
+        $CleanupOnFailure = $true
+    }
 
     Invoke-Expression $Command
     if ($LastExitCode) {
-        Write-Host "Failed: to $Desc : $LastExitCode"
-        Cleanup
+        Write-Host "Failed: $Desc - Exit code: $LastExitCode"
+        if ($CleanupOnFailure) {
+            Cleanup
+        }
         exit
     }
 
