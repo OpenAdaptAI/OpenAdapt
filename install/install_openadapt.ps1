@@ -278,11 +278,11 @@ RunAndCheck "$git --version" "check Git" > $null
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "pip install poetry"
-RunAndCheck "poetry install" "Poetry install"
-RunAndCheck "poetry run alembic upgrade head" "alembic upgrade head" - CleanupOnFailure:$false
-RunAndCheck "poetry run pytest" "Run OpenAdapt tests" -CleanupOnFailure:$false
+RunAndCheck "pip install poetry" "Run ``pip install poetry``"
+RunAndCheck "poetry install" "Run ``poetry install``"
+RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" - CleanupOnFailure:$false
+RunAndCheck "poetry run pytest" "Run ``Pytest``" -CleanupOnFailure:$false
 Write-Host "OpenAdapt installed successfully"
-RunAndCheck "poetry shell" "Poetry shell"
+RunAndCheck "poetry shell" "Run ``poetry shell``" -CleanupOnFailure:$false
 
 ################################   SCRIPT    ################################
