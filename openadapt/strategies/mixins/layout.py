@@ -21,7 +21,7 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
     def __init__(
         self,
         recording: Recording,
-        img_list: List[np.ndarray]
+        img_list: List[str]
     ):
         super.__init__(recording)
         self.img_list = img_list
