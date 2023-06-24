@@ -4,7 +4,7 @@
 # Change these if a different version of is required
 
 $tesseractCmd = "tesseract"
-$tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractInstaller = "tesseract.exe"
 $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
 
@@ -147,7 +147,7 @@ function GetTesseractCMD {
     # Start the installation process
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
     Remove-Item $tesseractInstaller
-    
+
     # Check if Tesseract OCR was installed
     if (Test-Path -Path $tesseractPath -PathType Container) {
         Write-Host "TesseractOCR installation successful." -ForegroundColor Green
