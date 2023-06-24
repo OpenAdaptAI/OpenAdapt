@@ -51,9 +51,6 @@ function RunAndCheck {
 }
 
 
-/**
- * Cleanup function to remove OpenAdapt folder created during the install process
- */
 function Cleanup {
     $exists = Test-Path -Path $setupdir
     If ($exists) {
