@@ -1,7 +1,6 @@
 # PowerShell script to pull OpenAdapt and install
 
 ################################   PARAMETERS   ################################
-
 # Change these if a different version of is required
 
 $tesseractCmd = "tesseract"
@@ -18,11 +17,6 @@ $gitCmd = "git"
 $gitInstaller = "Git-2.40.1-64-bit.exe"
 $gitInstallerLoc = "https://github.com/git-for-windows/git/releases/download/v2.40.1.windows.1/Git-2.40.1-64-bit.exe"
 $gitUninstaller = "C:\Program Files\Git\unins000.exe"
-
-$VCRedistInstaller = "vc_redist.x64.exe"
-$VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-$VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
-
 ################################   PARAMETERS   ################################
 
 
@@ -225,7 +219,6 @@ function GetGitCMD {
     # Return the git command
     return $gitCmd
 }
-
 ################################   FUNCTIONS    ################################
 
 
