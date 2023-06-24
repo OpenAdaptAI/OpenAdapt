@@ -226,38 +226,6 @@ function GetGitCMD {
     return $gitCmd
 }
 
-
-function GetVSCppRedistCMD {
-    # Check if Visual C++ Redist is installed
-    $ErrorActionPreference = "SilentlyContinue"
-    $vcredistExists = Get-ItemPropertyValue -Path $VCRedistRegPath -erroraction 'silentlycontinue' -Name Installed
-    $ErrorActionPreference = "Continue"
-
-    if (!$vcredistExists) {
-        # Install Visual C++ Redist
-        Write-Host "Downloading Visual C++ Redist"
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
-        $exists = Test-Path -Path $VCRedistInstaller -PathType Leaf
-        if (!$exists) {
-            Write-Host "Failed to download Visual C++ installer"
-            Cleanup
-            exit
-        }
-
-        Write-Host "Installing Visual C++ Redist, click 'Yes' if prompted for permission"
-        Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /q /norestart" -Wait
-        Remove-Item $VCRedistInstaller
-
-        if ($LastExitCode) {
-            Write-Host "Failed to install Visual C++ Redist: $LastExitCode"
-            Cleanup
-            exit
-        }
-    }
-    return ";" # Return a command that always gives Exit Code 0, so that RunAndCheck doesn't fail
-}
-
 ################################   FUNCTIONS    ################################
 
 
@@ -272,9 +240,6 @@ RunAndCheck "$python --version" "check Python" > $null
 
 $git = GetGitCMD
 RunAndCheck "$git --version" "check Git" > $null
-
-# $vscppredist = GetVSCppRedistCMD
-# RunAndCheck "$vscppredist" "check Visual C++ Redist" > $null
 
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
