@@ -229,8 +229,8 @@ function GetGitCMD {
 ################################   SCRIPT    ################################
 
 # Create a new directory and run the setup from there
-New-Item -ItemType Directory -Path $setupdir -Force
-Set-Location -Path $setupdir
+New-Item -ItemType Directory -Path $setupdir -Force > $null
+Set-Location -Path $setupdir > $null
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
