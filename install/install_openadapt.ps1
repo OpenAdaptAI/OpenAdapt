@@ -262,7 +262,7 @@ function GetVSCppRedistCMD {
 
 ################################   SCRIPT    ################################
 
-# Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
+# Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
 
