@@ -254,23 +254,23 @@ function GetVSCppRedistCMD {
 $tesseract = GetTesseractCMD
 RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
 
-# $python = GetPythonCMD
-# RunAndCheck "$python --version" "check Python" > $null
+$python = GetPythonCMD
+RunAndCheck "$python --version" "check Python" > $null
 
-# $git = GetGitCMD
-# RunAndCheck "$git --version" "check Git" > $null
+$git = GetGitCMD
+RunAndCheck "$git --version" "check Git" > $null
 
 # $vscppredist = GetVSCppRedistCMD
 # RunAndCheck "$vscppredist" "check Visual C++ Redist" > $null
 
-# # OpenAdapt Setup
-# RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
-# Set-Location .\OpenAdapt
-# RunAndCheck "pip install poetry" "pip install poetry"
-# RunAndCheck "poetry install" "Poetry install"
-# RunAndCheck "poetry shell" "Poetry shell"
-# RunAndCheck "alembic upgrade head" "alembic upgrade head"
-# RunAndCheck "pytest" "run OpenAdapt tests"
-# Write-Host "OpenAdapt installed successfully"
+# OpenAdapt Setup
+RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
+Set-Location .\OpenAdapt
+RunAndCheck "pip install poetry" "pip install poetry"
+RunAndCheck "poetry install" "Poetry install"
+RunAndCheck "poetry run alembic upgrade head" "alembic upgrade head"
+RunAndCheck "poetry run pytest" "run OpenAdapt tests"
+Write-Host "OpenAdapt installed successfully"
+RunAndCheck "poetry shell" "Poetry shell"
 
 ################################   SCRIPT    ################################
