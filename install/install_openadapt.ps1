@@ -123,10 +123,12 @@ function GetTesseractCMD {
         return $tesseractCmd
     }
 
-    # Create a new directory
-    New-Item -ItemType Directory -Path "C:/OpenAdaptSetup"  -Force
-    # Change current location to the Tesseract directory
-    Set-Location -Path "C:/OpenAdaptSetup"
+    # Check if tesseractPath exists and delete it if it does
+    if (Test-Path -Path $tesseractPath -PathType Container) {
+        Write-Host "Found Existing Old TesseractOCR, Deleting existing TesseractOCR folder"
+        # Delete the whole folder
+        Remove-Item $tesseractPath -Force -Recurse
+    }
 
     # Downlaod Tesseract OCR
     Write-Host "Downloading Tesseract OCR installer"
@@ -225,6 +227,10 @@ function GetGitCMD {
 
 
 ################################   SCRIPT    ################################
+
+# Create a new directory and run the setup from there
+New-Item -ItemType Directory -Path "C:/OpenAdaptSetup"  -Force
+Set-Location -Path "C:/OpenAdaptSetup"
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
