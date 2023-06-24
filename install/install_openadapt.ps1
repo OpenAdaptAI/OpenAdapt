@@ -104,7 +104,6 @@ function GetTesseractCMD {
 
     # Install the Tesseract OCR Setup exe (binary file)
     Write-Host "Installing Tesseract OCR..."
-    # Start the installation process
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
     Remove-Item $tesseractInstaller
 
