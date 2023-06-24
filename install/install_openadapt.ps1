@@ -232,13 +232,13 @@ $git = GetGitCMD
 RunAndCheck "$git --version" "check Git" > $null
 
 # OpenAdapt Setup
-RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
+RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo" > $null
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "Run ``pip install poetry``"
-RunAndCheck "poetry install" "Run ``poetry install``"
-RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -CleanupOnFailure:$false
-RunAndCheck "poetry run pytest" "Run ``Pytest``" -CleanupOnFailure:$false
+RunAndCheck "pip install poetry" "Run ``pip install poetry``" > $null
+RunAndCheck "poetry install" "Run ``poetry install``" > $null
+RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true > $null
+RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true > $null
 Write-Host "OpenAdapt installed successfully"
-RunAndCheck "poetry shell" "Run ``poetry shell``" -CleanupOnFailure:$false
+RunAndCheck "poetry shell" "Run ``poetry shell``" -SkipCleanup:$true > $null
 
 ################################   SCRIPT    ################################
