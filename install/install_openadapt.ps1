@@ -196,7 +196,7 @@ function GetGitCMD {
 
         Write-Host "Installing git, click 'Yes' if prompted for permission"
         Start-Process -FilePath $gitInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
-        # Remove-Item $gitInstaller
+        Remove-Item $gitInstaller
 
         # Refresh Path Environment Variable
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
