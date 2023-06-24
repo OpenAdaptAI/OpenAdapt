@@ -250,6 +250,6 @@ RunAndCheck "poetry install" "Run ``poetry install``" > $null
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true > $null
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true > $null
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit","-Command poetry shell"
+Start-Process powershell -ArgumentList "-Command poetry shell"
 
 ################################   SCRIPT    ################################
