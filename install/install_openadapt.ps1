@@ -50,11 +50,12 @@ function RunAndCheck {
         Write-Host "Failed: $Desc - Exit code: $LastExitCode"
         if ($CleanupOnFailure) {
             Cleanup
+            exit
         }
-        exit
     }
-
-    Write-Host "Success: $Desc"
+    else {
+        Write-Host "Success: $Desc"
+    }
 }
 
 
@@ -280,7 +281,7 @@ RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git re
 Set-Location .\OpenAdapt
 RunAndCheck "pip install poetry" "Run ``pip install poetry``"
 RunAndCheck "poetry install" "Run ``poetry install``"
-RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" - CleanupOnFailure:$false
+RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -CleanupOnFailure:$false
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -CleanupOnFailure:$false
 Write-Host "OpenAdapt installed successfully"
 RunAndCheck "poetry shell" "Run ``poetry shell``" -CleanupOnFailure:$false
