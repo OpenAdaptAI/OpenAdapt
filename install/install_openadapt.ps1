@@ -134,11 +134,20 @@ function GetTesseractCMD {
         exit
     }
 
+    # Create a new directory
+    New-Item -Path "C:/Windows/Tesseract" -ItemType Directory -Force
+    # Move the file
+    Move-Item -Path "C:/Windows/System32/tesseract.exe" -Destination "C:/Windows/Tesseract/tesseract.exe"
+    # Change current location to the Tesseract directory
+    Set-Location -Path "C:/Windows/Tesseract"
+    # Set the installer's path (Relative to the Tesseract directory)
+    $tesseractInstaller = "./tesseract.exe"
     # Install the Tesseract OCR Setup exe (binary file)
     Write-Host "Installing Tesseract OCR..."
+    # Start the installation process
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
     Remove-Item $tesseractInstaller
-
+    
     # Check if Tesseract OCR was installed
     if (Test-Path -Path $tesseractPath -PathType Container) {
         Write-Host "TesseractOCR installation successful." -ForegroundColor Green
