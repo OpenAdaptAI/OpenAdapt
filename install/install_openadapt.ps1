@@ -123,6 +123,11 @@ function GetTesseractCMD {
         return $tesseractCmd
     }
 
+    # Create a new directory
+    New-Item -ItemType Directory -Path "C:/OpenAdaptSetup"  -Force
+    # Change current location to the Tesseract directory
+    Set-Location -Path "C:/OpenAdaptSetup"
+
     # Downlaod Tesseract OCR
     Write-Host "Downloading Tesseract OCR installer"
     $ProgressPreference = 'SilentlyContinue'
@@ -134,12 +139,6 @@ function GetTesseractCMD {
         exit
     }
 
-    # Create a new directory
-    New-Item -Path "C:/Windows/Tesseract" -ItemType Directory -Force
-    # Move the file
-    Move-Item -Path "C:/Windows/System32/tesseract.exe" -Destination "C:/Windows/Tesseract/tesseract.exe"
-    # Change current location to the Tesseract directory
-    Set-Location -Path "C:/Windows/Tesseract"
     # Set the installer's path (Relative to the Tesseract directory)
     $tesseractInstaller = "./tesseract.exe"
     # Install the Tesseract OCR Setup exe (binary file)
@@ -177,7 +176,7 @@ function GetTesseractCMD {
     # Refresh Path Environment Variable
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-    Write-Host "Added Tesseract OCR to PATH."
+    Write-Host "Added Tesseract OCR to PATH." -ForegroundColor Green
 
 
     # Make sure tesseract is now available
