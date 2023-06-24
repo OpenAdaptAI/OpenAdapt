@@ -32,12 +32,9 @@ function RunAndCheck {
         [string] $Desc,
 
         [Parameter(Mandatory = $false)]
-        [switch] $CleanupOnFailure
+        [switch] $CleanupOnFailure = $false
     )
-
-    if (-not $CleanupOnFailure) {
-        $CleanupOnFailure = $true
-    }
+    $CleanupOnFailure = !$CleanupOnFailure
 
     Invoke-Expression $Command
     if ($LastExitCode) {
