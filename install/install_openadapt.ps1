@@ -37,14 +37,14 @@ function RunAndCheck {
 
     Invoke-Expression $Command
     if ($LastExitCode) {
-        Write-Host "Failed: $Desc - Exit code: $LastExitCode"
+        Write-Host "Failed: $Desc - Exit code: $LastExitCode" -ForegroundColor Red
         if (!$SkipCleanup) {
             Cleanup
             exit
         }
     }
     else {
-        Write-Host "Success: $Desc"
+        Write-Host "Success: $Desc" -ForegroundColor Green
     }
 }
 
@@ -89,7 +89,7 @@ function GetPythonCMD {
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
     if (!$exists) {
-        Write-Host "Failed to download python installer"
+        Write-Host "Failed to download python installer" -ForegroundColor Red
         Cleanup
         exit
     }
@@ -129,7 +129,7 @@ function GetTesseractCMD {
     Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
     $exists = Test-Path -Path $tesseractInstaller -PathType Leaf
     if (!$exists) {
-        Write-Host "Failed to download Tesseract OCR installer"
+        Write-Host "Failed to download Tesseract OCR installer" -ForegroundColor Red
         Cleanup
         exit
     }
@@ -141,10 +141,10 @@ function GetTesseractCMD {
 
     # Check if Tesseract OCR was installed
     if (Test-Path -Path $tesseractPath -PathType Container) {
-        Write-Host "TesseractOCR installation successful."
+        Write-Host "TesseractOCR installation successful." -ForegroundColor Green
     }
     else {
-        Write-Host "TesseractOCR installation failed."
+        Write-Host "TesseractOCR installation failed." -ForegroundColor Red
         Cleanup
         exit
     }
@@ -192,7 +192,7 @@ function GetGitCMD {
         Invoke-WebRequest -Uri $gitInstallerLoc -OutFile $gitInstaller
         $exists = Test-Path -Path $gitInstaller -PathType Leaf
         if (!$exists) {
-            Write-Host "Failed to download git installer"
+            Write-Host "Failed to download git installer" -ForegroundColor Red
             exit
         }
 
@@ -237,7 +237,7 @@ RunAndCheck "pip install poetry" "Run ``pip install poetry``" > $null
 RunAndCheck "poetry install" "Run ``poetry install``" > $null
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true > $null
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true > $null
-RunAndCheck "Write-Host ""OpenAdapt installed Successfully!"""
+Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
 Start-Process powershell -ArgumentList "-NoExit","-Command poetry shell"
 
 ################################   SCRIPT    ################################
