@@ -84,7 +84,7 @@ function GetPythonCMD {
     }
 
     # Install required python version
-    Write-Host "Downloading python installer"
+    Write-Host "Downloading python installer..."
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
@@ -94,7 +94,7 @@ function GetPythonCMD {
         exit
     }
 
-    Write-Host "Installing python, click 'Yes' if prompted for permission"
+    Write-Host "Installing python..."
     Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
 
     #Refresh Path Environment Variable
@@ -112,7 +112,6 @@ function GetPythonCMD {
     Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
     Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', '/uninstall' -Wait
     Remove-Item $pythonInstaller
-
     # Stop OpenAdapt install
     Cleanup
     exit
@@ -136,7 +135,7 @@ function GetTesseractCMD {
     }
 
     # Install the Tesseract OCR Setup exe (binary file)
-    Write-Host "Installing Tesseract OCR, click 'Yes' if prompted for permission"
+    Write-Host "Installing Tesseract OCR..."
     Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
     Remove-Item $tesseractInstaller
 
@@ -169,7 +168,7 @@ function GetTesseractCMD {
     # Refresh Path Environment Variable
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-    Write-Host "Added Tesseract OCR to PATH"
+    Write-Host "Added Tesseract OCR to PATH."
 
 
     # Make sure tesseract is now available
@@ -177,7 +176,7 @@ function GetTesseractCMD {
         return $tesseractCmd
     }
 
-    Write-Host "Error after installing Tesseract OCR"
+    Write-Host "Error after installing Tesseract OCR."
     # Stop OpenAdapt install
     Cleanup
     exit
@@ -188,7 +187,7 @@ function GetGitCMD {
     $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
         # Install git
-        Write-Host "Downloading git installer"
+        Write-Host "Downloading git installer..."
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $gitInstallerLoc -OutFile $gitInstaller
         $exists = Test-Path -Path $gitInstaller -PathType Leaf
@@ -197,7 +196,7 @@ function GetGitCMD {
             exit
         }
 
-        Write-Host "Installing git, click 'Yes' if prompted for permission"
+        Write-Host "Installing git..."
         Start-Process -FilePath $gitInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
         Remove-Item $gitInstaller
 
@@ -207,8 +206,9 @@ function GetGitCMD {
         # Make sure git is now available
         $gitExists = CheckCMDExists $gitCmd
         if (!$gitExists) {
-            Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
+            Write-Host "Error after installing git. Uninstalling..."
             Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+            Cleanup
             exit
         }
     }
@@ -237,7 +237,7 @@ RunAndCheck "pip install poetry" "Run ``pip install poetry``" > $null
 RunAndCheck "poetry install" "Run ``poetry install``" > $null
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true > $null
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true > $null
-Write-Host "OpenAdapt installed successfully"
-RunAndCheck "poetry shell" "Run ``poetry shell``" -SkipCleanup:$true > $null
+RunAndCheck "Write-Host ""OpenAdapt installed Successfully!"""
+Start-Process powershell -ArgumentList "-NoExit","-Command poetry shell"
 
 ################################   SCRIPT    ################################
