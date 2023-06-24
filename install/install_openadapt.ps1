@@ -139,8 +139,6 @@ function GetTesseractCMD {
         exit
     }
 
-    # Set the installer's path (Relative to the Tesseract directory)
-    $tesseractInstaller = "./tesseract.exe"
     # Install the Tesseract OCR Setup exe (binary file)
     Write-Host "Installing Tesseract OCR..."
     # Start the installation process
