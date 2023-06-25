@@ -162,7 +162,9 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state)
-    import ipdb; ipdb.set_trace()  # noqa: E702
+    import ipdb
+
+    ipdb.set_trace()  # noqa: E702
 
 
 if __name__ == "__main__":

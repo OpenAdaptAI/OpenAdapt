@@ -73,9 +73,7 @@ CSS = string.Template(
         display: block;
     }
 """
-).substitute(
-    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
-)
+).substitute(IMG_WIDTH_PCT=IMG_WIDTH_PCT,)
 
 
 def recursive_len(lst, key):
@@ -207,22 +205,9 @@ def main():
         recording_dict = scrub.scrub_dict(recording_dict)
 
     rows = [
-        row(
-            Div(
-                text=f"<style>{CSS}</style>",
-            ),
-        ),
-        row(
-            Div(
-                text=f"{dict2html(recording_dict)}",
-            ),
-        ),
-        row(
-            Div(
-                text=f"{dict2html(meta)}",
-                width_policy="max",
-            ),
-        ),
+        row(Div(text=f"<style>{CSS}</style>",),),
+        row(Div(text=f"{dict2html(recording_dict)}",),),
+        row(Div(text=f"{dict2html(meta)}", width_policy="max",),),
     ]
     logger.info(f"{len(action_events)=}")
     for idx, action_event in enumerate(action_events):
@@ -295,11 +280,7 @@ def main():
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
-    result = show(
-        layout(
-            rows,
-        )
-    )
+    result = show(layout(rows,))
 
     def cleanup():
         os.remove(fname_out)

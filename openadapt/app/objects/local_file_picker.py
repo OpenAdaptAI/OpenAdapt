@@ -93,11 +93,7 @@ class LocalFilePicker(ui.dialog):
             and self.path != self.upper_limit
         ):
             self.grid.options["rowData"].insert(
-                0,
-                {
-                    "name": "📁 <strong>..</strong>",
-                    "path": str(self.path.parent),
-                },
+                0, {"name": "📁 <strong>..</strong>", "path": str(self.path.parent)},
             )
 
         self.grid.update()

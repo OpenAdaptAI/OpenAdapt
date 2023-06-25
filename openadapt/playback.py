@@ -25,9 +25,7 @@ def play_mouse_event(event, mouse_controller):
     dy = event.mouse_dy
     button_name = event.mouse_button_name
     pressed = event.mouse_pressed
-    logger.debug(
-        f"{name=} {x=} {y=} {dx=} {dy=} {button_name=} {pressed=}"
-    )
+    logger.debug(f"{name=} {x=} {y=} {dx=} {dy=} {button_name=} {pressed=}")
 
     mouse_controller.position = (x, y)
     if name == "move":
@@ -64,11 +62,7 @@ def play_key_event(event, keyboard_controller, canonical=True):
     """
     assert event.name in KEY_EVENTS, event
 
-    key = (
-        event.canonical_key
-        if canonical and event.canonical_key
-        else event.key
-    )
+    key = event.canonical_key if canonical and event.canonical_key else event.key
 
     if event.name == "press":
         keyboard_controller.press(key)
@@ -95,9 +89,7 @@ def play_action_event(event, mouse_controller, keyboard_controller):
     # currently we use children to replay type events
     if event.children and event.name in KEY_EVENTS:
         for child in event.children:
-            play_action_event(
-                child, mouse_controller, keyboard_controller
-            )
+            play_action_event(child, mouse_controller, keyboard_controller)
     else:
         assert event.name in MOUSE_EVENTS + KEY_EVENTS, event
         if event.name in MOUSE_EVENTS:

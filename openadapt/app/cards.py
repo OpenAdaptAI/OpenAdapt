@@ -35,6 +35,7 @@ def select_import(f):
     Args:
         f (callable): Function to call when import button is clicked.
     """
+
     async def pick_file():
         result = await LocalFilePicker(".")
         ui.notify(f"Selected {result[0]}" if result else "No file selected.")
@@ -95,13 +96,8 @@ def recording_prompt(options, record_button):
     def begin():
         name = result.text.__getattribute__("value")
 
-        ui.notify(
-            f"Recording {name}... Press CTRL + C in terminal window to cancel",
-        )
-        PROC = Popen(
-            "python3 -m openadapt.record " + name,
-            shell=True,
-        )
+        ui.notify(f"Recording {name}... Press CTRL + C in terminal window to cancel",)
+        PROC = Popen("python3 -m openadapt.record " + name, shell=True,)
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())
         record_button.update()

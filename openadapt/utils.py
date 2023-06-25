@@ -60,13 +60,7 @@ def row2dict(row, follow=True):
     """
     if isinstance(row, dict):
         return row
-    try_follow = (
-        [
-            "children",
-        ]
-        if follow
-        else []
-    )
+    try_follow = ["children",] if follow else []
     to_follow = [key for key in try_follow if hasattr(row, key)]
 
     # follow children recursively
@@ -104,10 +98,7 @@ def round_timestamps(events, num_digits):
 
 
 def rows2dicts(
-    rows,
-    drop_empty=True,
-    drop_constant=True,
-    num_digits=None,
+    rows, drop_empty=True, drop_constant=True, num_digits=None,
 ):
     """
     Convert a list of rows to a list of dictionaries.
@@ -150,9 +141,7 @@ def rows2dicts(
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
-                row_dict["children"],
-                drop_empty,
-                drop_constant,
+                row_dict["children"], drop_empty, drop_constant,
             )
     return row_dicts
 

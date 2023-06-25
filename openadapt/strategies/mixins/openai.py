@@ -36,6 +36,7 @@ encoding = tiktoken.get_encoding("cl100k_base")
 
 class OpenAIReplayStrategyMixin(BaseReplayStrategy):
     """Mixin class implementing replay strategy using OpenAI models."""
+
     def __init__(
         self,
         recording: models.Recording,
@@ -73,14 +74,8 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
             str: The generated completion.
         """
         messages = [
-            {
-                "role": "system",
-                "content": system_message,
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt},
         ]
         logger.debug(f"messages=\n{pformat(messages)}")
         completion = create_openai_completion(self.model_name, messages)
@@ -135,9 +130,7 @@ def create_openai_completion(
 
 @cache.cache()
 def get_completion(
-    messages,
-    prompt,
-    model="gpt-4",
+    messages, prompt, model="gpt-4",
 ):
     """
     Gets the LLM completion.
@@ -153,18 +146,13 @@ def get_completion(
     logger.info(f"{prompt=}")
 
     messages.append(
-        {
-            "role": "user",
-            "content": prompt,
-        }
+        {"role": "user", "content": prompt}
     )
     length = MAX_LENGTHS[model]
     # shorten_messages(messages, length)
     logger.debug(f"messages=\n{pformat(messages)}")
 
-    def _get_completion(
-        prompt: str,
-    ) -> str:
+    def _get_completion(prompt: str,) -> str:
         """
         Helper function to get the LLM completion.
 

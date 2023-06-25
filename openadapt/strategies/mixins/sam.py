@@ -105,9 +105,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             plt.show()
         return str(bbox_list)
 
-    def get_click_event_bbox(
-        self, screenshot, show_plots=SHOW_PLOTS
-    ) -> str:
+    def get_click_event_bbox(self, screenshot, show_plots=SHOW_PLOTS) -> str:
         """
         Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
 

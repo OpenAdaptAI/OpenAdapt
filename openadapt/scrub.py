@@ -58,14 +58,11 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
         text = "".join(text.split(config.ACTION_TEXT_SEP))
 
     analyzer_results = ANALYZER_TRF.analyze(
-        text=text,
-        entities=SCRUBBING_ENTITIES,
-        language=config.SCRUB_LANGUAGE,
+        text=text, entities=SCRUBBING_ENTITIES, language=config.SCRUB_LANGUAGE,
     )
 
     anonymized_results = ANONYMIZER.anonymize(
-        text=text,
-        analyzer_results=analyzer_results,
+        text=text, analyzer_results=analyzer_results,
     )
 
     if is_separated and not (

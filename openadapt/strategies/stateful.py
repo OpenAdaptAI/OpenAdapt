@@ -20,16 +20,14 @@ IGNORE_BOUNDARY_WINDOWS = True
 
 
 class StatefulReplayStrategy(
-    OpenAIReplayStrategyMixin,
-    strategies.base.BaseReplayStrategy,
+    OpenAIReplayStrategyMixin, strategies.base.BaseReplayStrategy,
 ):
     """
     LLM with window states.
     """
 
     def __init__(
-        self,
-        recording: models.Recording,
+        self, recording: models.Recording,
     ):
         """
         Initialize the StatefulReplayStrategy.
@@ -51,9 +49,7 @@ class StatefulReplayStrategy(
         self.recording_action_idx = 0
 
     def get_next_action_event(
-        self,
-        active_screenshot: models.Screenshot,
-        active_window: models.WindowEvent,
+        self, active_screenshot: models.Screenshot, active_window: models.WindowEvent,
     ):
         """
         Get the next ActionEvent for replay.
@@ -173,8 +169,7 @@ def get_action_dict_from_completion(completion):
 
 
 def get_window_state_diffs(
-    action_events,
-    ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
+    action_events, ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
 ):
     """
     Get the differences in window state between consecutive action events.

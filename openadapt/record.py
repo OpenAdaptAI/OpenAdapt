@@ -108,11 +108,7 @@ def process_events(
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
             process_event(
-                event,
-                action_write_q,
-                write_action_event,
-                recording_timestamp,
-                perf_q,
+                event, action_write_q, write_action_event, recording_timestamp, perf_q,
             )
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
@@ -139,9 +135,7 @@ def process_events(
 
 
 def write_action_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -157,9 +151,7 @@ def write_action_event(
 
 
 def write_screen_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -178,9 +170,7 @@ def write_screen_event(
 
 
 def write_window_event(
-    recording_timestamp: float,
-    event: Event,
-    perf_q: multiprocessing.Queue,
+    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -230,8 +220,7 @@ def write_events(
 
 
 def trigger_action_event(
-    event_q: queue.Queue,
-    action_event_args: Dict[str, Any],
+    event_q: queue.Queue, action_event_args: Dict[str, Any],
 ) -> None:
     """Triggers an action event and adds it to the event queue.
 
@@ -253,12 +242,7 @@ def trigger_action_event(
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
-def on_move(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    injected: bool,
-) -> None:
+def on_move(event_q: queue.Queue, x: int, y: int, injected: bool,) -> None:
     """Handles the 'move' event.
 
     Args:
@@ -273,12 +257,7 @@ def on_move(
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
-            event_q,
-            {
-                "name": "move",
-                "mouse_x": x,
-                "mouse_y": y,
-            },
+            event_q, {"name": "move", "mouse_x": x, "mouse_y": y},
         )
 
 
@@ -318,12 +297,7 @@ def on_click(
 
 
 def on_scroll(
-    event_q: queue.Queue,
-    x: int,
-    y: int,
-    dx: int,
-    dy: int,
-    injected: bool,
+    event_q: queue.Queue, x: int, y: int, dx: int, dy: int, injected: bool,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -447,13 +421,7 @@ def read_window_events(
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            event_q.put(
-                Event(
-                    utils.get_timestamp(),
-                    "window",
-                    window_data,
-                )
-            )
+            event_q.put(Event(utils.get_timestamp(), "window", window_data,))
         prev_window_data = window_data
 
 
@@ -482,17 +450,12 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
-            recording_timestamp,
-            event_type,
-            start_time,
-            end_time,
+            recording_timestamp, event_type, start_time, end_time,
         )
     logger.info("Performance stats writer done")
 
 
-def create_recording(
-    task_description: str,
-) -> Dict[str, Any]:
+def create_recording(task_description: str,) -> Dict[str, Any]:
     """
     Create a new recording entry in the database.
 
@@ -536,6 +499,7 @@ def read_keyboard_events(
     Returns:
         None
     """
+
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
@@ -550,8 +514,7 @@ def read_keyboard_events(
 
     utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
-        on_press=partial(on_press, event_q),
-        on_release=partial(on_release, event_q),
+        on_press=partial(on_press, event_q), on_release=partial(on_release, event_q),
     )
     keyboard_listener.start()
     terminate_event.wait()
@@ -584,9 +547,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
-def record(
-    task_description: str,
-):
+def record(task_description: str,):
     """
     Record Screenshots/ActionEvents/WindowEvents.
 
@@ -608,14 +569,12 @@ def record(
     terminate_event = multiprocessing.Event()
 
     window_event_reader = threading.Thread(
-        target=read_window_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        target=read_window_events, args=(event_q, terminate_event, recording_timestamp),
     )
     window_event_reader.start()
 
     screen_event_reader = threading.Thread(
-        target=read_screen_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        target=read_screen_events, args=(event_q, terminate_event, recording_timestamp),
     )
     screen_event_reader.start()
 
@@ -626,8 +585,7 @@ def record(
     keyboard_event_reader.start()
 
     mouse_event_reader = threading.Thread(
-        target=read_mouse_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        target=read_mouse_events, args=(event_q, terminate_event, recording_timestamp),
     )
     mouse_event_reader.start()
 
@@ -687,11 +645,7 @@ def record(
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
-        args=(
-            perf_q,
-            recording_timestamp,
-            terminate_perf_event,
-        ),
+        args=(perf_q, recording_timestamp, terminate_perf_event,),
     )
     perf_stat_writer.start()
 

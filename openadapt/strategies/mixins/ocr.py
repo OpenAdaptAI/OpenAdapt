@@ -33,8 +33,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
     """
 
     def __init__(
-        self,
-        recording: Recording,
+        self, recording: Recording,
     ):
         """
         Initialize the OCRReplayStrategyMixin.
@@ -68,9 +67,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         return text
 
 
-def get_text_df(
-    result: List[List[Union[List[float], str, float]]],
-):
+def get_text_df(result: List[List[Union[List[float], str, float]]],):
     """
     Convert RapidOCR result to DataFrame.
 
@@ -99,9 +96,7 @@ def get_text_df(
     return df
 
 
-def get_text_from_df(
-    df: pd.DataFrame,
-):
+def get_text_from_df(df: pd.DataFrame,):
     """
     Convert a DataFrame produced by get_text_df into a string.
 
@@ -143,18 +138,13 @@ def unnest(df, explode, axis, suffixes=None):
         df1 = pd.concat(
             [
                 pd.DataFrame(
-                    df[x].tolist(),
-                    index=df.index,
-                    columns=suffixes,
+                    df[x].tolist(), index=df.index, columns=suffixes,
                 ).add_prefix(x)
                 for x in explode
             ],
             axis=1,
         )
-        return df1.join(
-            df.drop(explode, axis=1),
-            how="left",
-        )
+        return df1.join(df.drop(explode, axis=1), how="left",)
 
 
 def preprocess_text(text):

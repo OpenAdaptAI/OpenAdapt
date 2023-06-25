@@ -160,7 +160,7 @@ def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
         ActionEvent: An instance of the ActionEvent class representing the move event.
     """
     return make_action_event(
-        {"name": "move", "mouse_x": x, "mouse_y": y, },
+        {"name": "move", "mouse_x": x, "mouse_y": y},
         get_pre_children=get_pre_children,
         get_post_children=get_post_children,
     )
@@ -215,7 +215,7 @@ def make_scroll_event(dy=0, dx=0):
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the scroll event.
     """
-    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy, })
+    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy})
 
 
 def make_click_events(dt_released, dt_pressed=None, button_name="left"):
@@ -503,7 +503,7 @@ def make_press_event(char=None, name=None):
         ActionEvent: An instance of the ActionEvent class representing the press event.
     """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({"name": "press", "key_char": char, "key_name": name, })
+    return make_action_event({"name": "press", "key_char": char, "key_name": name})
 
 
 def make_release_event(char=None, name=None):
@@ -518,7 +518,7 @@ def make_release_event(char=None, name=None):
         ActionEvent: An instance of the ActionEvent class representing the release event.
     """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({"name": "release", "key_char": char, "key_name": name, })
+    return make_action_event({"name": "release", "key_char": char, "key_name": name})
 
 
 def make_type_event(get_children):

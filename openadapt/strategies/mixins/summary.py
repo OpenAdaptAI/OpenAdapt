@@ -20,8 +20,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
     """ReplayStrategy mixin for summarizing text content."""
 
     def __init__(
-        self,
-        recording: Recording,
+        self, recording: Recording,
     ):
         """
         Initialize the SummaryReplayStrategyMixin.
@@ -39,11 +38,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         summarizer.stop_words = get_stop_words("english")
         self.summarizer = summarizer
 
-    def get_summary(
-        self,
-        text: str,
-        num_sentences: int,
-    ) -> str:
+    def get_summary(self, text: str, num_sentences: int,) -> str:
         """
         Generate a summary of the given text.
 

@@ -150,9 +150,7 @@ def dump_state(element, elements=None):
                     error_code,
                     attr_val,
                 ) = ApplicationServices.AXUIElementCopyAttributeValue(
-                    element,
-                    attr_name,
-                    None,
+                    element, attr_name, None,
                 )
 
                 # For ActionEvents:
@@ -231,7 +229,9 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
-    import ipdb; ipdb.set_trace()  # noqa: E702
+    import ipdb
+
+    ipdb.set_trace()  # noqa: E702
 
 
 if __name__ == "__main__":

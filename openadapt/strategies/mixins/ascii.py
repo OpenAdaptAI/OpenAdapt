@@ -25,8 +25,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
     """
 
     def __init__(
-        self,
-        recording: Recording,
+        self, recording: Recording,
     ):
         """
         Initialize the ASCIIReplayStrategyMixin.
@@ -57,9 +56,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         """
         ascii_art = AsciiArt.from_pillow_image(screenshot.image)
         ascii_text = ascii_art.to_ascii(
-            monochrome=monochrome,
-            columns=columns,
-            width_ratio=width_ratio,
+            monochrome=monochrome, columns=columns, width_ratio=width_ratio,
         )
         logger.debug(f"ascii_text=\n{ascii_text}")
         return ascii_text

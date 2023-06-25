@@ -42,21 +42,14 @@ class BaseModel(DictableModel):
 
 def get_engine():
     """Create and return a database engine."""
-    engine = sa.create_engine(
-        DB_URL,
-        echo=DB_ECHO,
-    )
+    engine = sa.create_engine(DB_URL, echo=DB_ECHO,)
     return engine
 
 
 def get_base(engine):
     """Create and return the base model with the provided engine."""
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-    Base = declarative_base(
-        cls=BaseModel,
-        bind=engine,
-        metadata=metadata,
-    )
+    Base = declarative_base(cls=BaseModel, bind=engine, metadata=metadata,)
     return Base
 
 
