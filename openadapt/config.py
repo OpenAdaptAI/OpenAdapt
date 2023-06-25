@@ -13,30 +13,8 @@ import multiprocessing
 import os
 import pathlib
 
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
 from loguru import logger
-
-ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
-
-ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
-logger.info(f"{ENV_FILE_PATH=}")
-dotenv_file = find_dotenv()
-load_dotenv(dotenv_file)
-
-
-def set_db_url(db_fname):
-    """Set the database URL based on the given database file name.
-
-    Args:
-        db_fname (str): The database file name.
-    """
-    global DB_FNAME, DB_FPATH, DB_URL
-    DB_FNAME = db_fname
-    DB_FPATH = ROOT_DIRPATH / DB_FNAME
-    DB_URL = f"sqlite:///{DB_FPATH}"
-    logger.info(f"{DB_URL=}")
-    os.environ["DB_FNAME"] = db_fname    
 
 
 _DEFAULTS = {
@@ -46,8 +24,11 @@ _DEFAULTS = {
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
     "OPENAI_API_KEY": "<set your api key in .env>",
+    # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
+    # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
+    # TODO: remove?
     "REPLAY_STRIP_ELEMENT_STATE": True,
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
@@ -123,17 +104,19 @@ def getenv_fallback(var_name):
     return rval
 
 
+load_dotenv()
+
 for key in _DEFAULTS:
     val = getenv_fallback(key)
     locals()[key] = val
 
-
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
-DIRNAME_PERFORMANCE_PLOTS = "performance"
-DB_ECHO = False
 DT_FMT = "%Y-%m-%d_%H-%M-%S"
+DIRNAME_PERFORMANCE_PLOTS = "performance"
+ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
+ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
 
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in locals().items():
@@ -158,3 +141,17 @@ def filter_log_messages(data):
         "Cannot pickle Objective-C objects",
     ]
     return not any(msg in data["message"] for msg in messages_to_ignore)
+
+
+def set_db_url(db_fname):
+    """Set the database URL based on the given database file name.
+
+    Args:
+        db_fname (str): The database file name.
+    """
+    global DB_FNAME, DB_FPATH, DB_URL
+    DB_FNAME = db_fname
+    DB_FPATH = ROOT_DIRPATH / DB_FNAME
+    DB_URL = f"sqlite:///{DB_FPATH}"
+    logger.info(f"{DB_URL=}")
+    os.environ["DB_FNAME"] = db_fname  
