@@ -42,7 +42,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -123,6 +123,7 @@ if multiprocessing.current_process().name == "MainProcess":
         if not key.startswith("_") and key.isupper():
             logger.info(f"{key}={val}")
 
+
 def filter_log_messages(data):
     """
     This function filters log messages by ignoring any message that contains a specific string.
@@ -154,4 +155,4 @@ def set_db_url(db_fname):
     DB_FPATH = ROOT_DIRPATH / DB_FNAME
     DB_URL = f"sqlite:///{DB_FPATH}"
     logger.info(f"{DB_URL=}")
-    os.environ["DB_FNAME"] = db_fname  
+    os.environ["DB_FNAME"] = db_fname
