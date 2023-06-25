@@ -86,7 +86,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
 
         Args:
             screenshot (Screenshot): The screenshot object containing the image.
-            show_plots (bool): Flag indicating whether to display the plots or not. 
+            show_plots (bool): Flag indicating whether to display the plots or not.
 
         Returns:
             str: A string representation of a list containing the bounding boxes of objects.

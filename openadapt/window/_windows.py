@@ -120,7 +120,6 @@ def get_element_properties(element) -> dict:
                   'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
                   'children': []}]}
     """
-
     properties = element.get_properties()
     children = element.children()
 
@@ -158,14 +157,12 @@ def main():
 
     This function is primarily used for testing and debugging purposes.
     """
-    import time
-
     time.sleep(1)
 
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state)
-    import ipdb; ipdb.set_trace()
+    import ipdb; ipdb.set_trace()  # noqa: E702
 
 
 if __name__ == "__main__":

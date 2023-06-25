@@ -18,6 +18,7 @@ from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
 IGNORE_BOUNDARY_WINDOWS = True
 
+
 class StatefulReplayStrategy(
     OpenAIReplayStrategyMixin,
     strategies.base.BaseReplayStrategy,
@@ -128,7 +129,8 @@ class StatefulReplayStrategy(
             f"{reference_window_dict=}\n"
             f"{reference_action_dicts=}\n"
             f"{active_window_dict=}\n"
-            "Provide valid Python3 code containing the action dicts by completing the following, and nothing else:\n"
+            "Provide valid Python3 code containing the action dicts by completing the following,"
+            " and nothing else:\n"
             "active_action_dicts="
         )
         system_message = (

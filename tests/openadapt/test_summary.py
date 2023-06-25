@@ -13,9 +13,18 @@ class SummaryReplayStrategy(SummaryReplayStrategyMixin):
     """Custom Replay Strategy to solely test the Summary Mixin."""
 
     def __init__(self, recording: Recording):
+        """
+        Initialize the SummaryReplayStrategy object.
+
+        Args:
+            recording (Recording): The recording object.
+        """
         super().__init__(recording)
 
     def get_next_action_event(self):
+        """
+        Get the next action event.
+        """
         pass
 
 

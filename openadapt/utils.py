@@ -197,7 +197,7 @@ def get_double_click_distance_pixels():
         int: The double click distance in pixels.
     """
     if sys.platform == "darwin":
-        # From https://developer.apple.com/documentation/appkit/nspressgesturerecognizer/1527495-allowablemovement:
+        # From https://developer.apple.com/documentation/appkit/nspressgesturerecognizer/1527495-allowablemovement:  # noqa: E501
         #     The default value of this property is the same as the
         #     double-click distance.
         # TODO: do this more robustly; see:
@@ -250,11 +250,11 @@ def draw_ellipse(
         x (float): The x-coordinate of the center of the ellipse.
         y (float): The y-coordinate of the center of the ellipse.
         image (PIL.Image.Image): The image to draw on.
-        width_pct (float): The percentage of the image width for the width of the ellipse. Defaults to 0.03.
-        height_pct (float): The percentage of the image height for the height of the ellipse. Defaults to 0.03.
-        fill_transparency (float): The transparency of the ellipse fill. Defaults to 0.25.
-        outline_transparency (float): The transparency of the ellipse outline. Defaults to 0.5.
-        outline_width (int): The width of the ellipse outline. Defaults to 2.
+        width_pct (float): The percentage of the image width for the width of the ellipse.
+        height_pct (float): The percentage of the image height for the height of the ellipse.
+        fill_transparency (float): The transparency of the ellipse fill.
+        outline_transparency (float): The transparency of the ellipse outline.
+        outline_width (int): The width of the ellipse outline.
 
     Returns:
         PIL.Image.Image: The image with the ellipse drawn on it.

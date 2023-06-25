@@ -76,9 +76,9 @@ def make_action_event(
 
     Args:
         event_dict (dict): Dictionary containing the event attributes.
-        dt (float, optional): Time difference in seconds from the previous event. Defaults to None.
-        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
-        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+        dt (float, optional): Time difference in seconds from the previous event.
+        get_pre_children (function, optional): returns the list of pre-children events.
+        get_post_children (function, optional): returns the list of post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class.
@@ -153,14 +153,14 @@ def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
     Args:
         x (int, optional): X-coordinate of the mouse. Defaults to 0.
         y (int, optional): Y-coordinate of the mouse. Defaults to 0.
-        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
-        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+        get_pre_children (function, optional): returns the list of pre-children events.
+        get_post_children (function, optional): returns the list of post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the move event.
     """
     return make_action_event(
-        {"name": "move", "mouse_x": x, "mouse_y": y,},
+        {"name": "move", "mouse_x": x, "mouse_y": y, },
         get_pre_children=get_pre_children,
         get_post_children=get_post_children,
     )
@@ -180,12 +180,12 @@ def make_click_event(
 
     Args:
         pressed (bool): True if the mouse button is pressed, False otherwise.
-        mouse_x (int, optional): X-coordinate of the mouse. Defaults to 0.
-        mouse_y (int, optional): Y-coordinate of the mouse. Defaults to 0.
-        dt (float, optional): Time difference in seconds from the previous event. Defaults to None.
+        mouse_x (int, optional): X-coordinate of the mouse.
+        mouse_y (int, optional): Y-coordinate of the mouse.
+        dt (float, optional): Time difference in seconds from the previous event.
         button_name (str, optional): Name of the mouse button. Defaults to "left".
-        get_pre_children (function, optional): Function that returns the list of pre-children events. Defaults to None.
-        get_post_children (function, optional): Function that returns the list of post-children events. Defaults to None.
+        get_pre_children (function, optional): Function that returns the list of pre-children events.
+        get_post_children (function, optional): Function that returns the list of post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the click event.
@@ -215,7 +215,7 @@ def make_scroll_event(dy=0, dx=0):
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the scroll event.
     """
-    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy,})
+    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy, })
 
 
 def make_click_events(dt_released, dt_pressed=None, button_name="left"):
@@ -224,7 +224,7 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 
     Args:
         dt_released (float): Time difference in seconds between the press and release events.
-        dt_pressed (float, optional): Time difference in seconds from the previous event for the press event. Defaults to None.
+        dt_pressed (float, optional): Time difference in seconds from the previous event for the press event.
         button_name (str, optional): Name of the mouse button. Defaults to "left".
 
     Returns:
@@ -311,8 +311,6 @@ def test_merge_consecutive_mouse_click_events():
     """
     Test case for merging consecutive mouse click events.
 
-    This test case verifies that the merge_consecutive_mouse_click_events function correctly merges consecutive mouse click events.
-
     Returns:
         None
     """
@@ -359,8 +357,6 @@ def test_merge_consecutive_mouse_click_events():
 def test_merge_consecutive_mouse_move_events():
     """
     Test case for merging consecutive mouse move events.
-
-    This test case verifies that the merge_consecutive_mouse_move_events function correctly merges consecutive mouse move events.
 
     Returns:
         None
@@ -409,8 +405,6 @@ def test_merge_consecutive_mouse_scroll_events():
     """
     Test case for merging consecutive mouse scroll events.
 
-    This test case verifies that the merge_consecutive_mouse_scroll_events function correctly merges consecutive mouse scroll events.
-
     Returns:
         None
     """
@@ -442,8 +436,6 @@ def test_merge_consecutive_mouse_scroll_events():
 def test_remove_redundant_mouse_move_events():
     """
     Test case for removing redundant mouse move events.
-
-    This test case verifies that the remove_redundant_mouse_move_events function correctly removes redundant mouse move events.
 
     Returns:
         None
@@ -511,7 +503,7 @@ def make_press_event(char=None, name=None):
         ActionEvent: An instance of the ActionEvent class representing the press event.
     """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({"name": "press", "key_char": char, "key_name": name,})
+    return make_action_event({"name": "press", "key_char": char, "key_name": name, })
 
 
 def make_release_event(char=None, name=None):
@@ -526,7 +518,7 @@ def make_release_event(char=None, name=None):
         ActionEvent: An instance of the ActionEvent class representing the release event.
     """
     assert (char or name) and not (char and name), (char, name)
-    return make_action_event({"name": "release", "key_char": char, "key_name": name,})
+    return make_action_event({"name": "release", "key_char": char, "key_name": name, })
 
 
 def make_type_event(get_children):
@@ -539,7 +531,7 @@ def make_type_event(get_children):
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the type event.
     """
-    return make_action_event({"name": "type",}, get_pre_children=get_children,)
+    return make_action_event({"name": "type"}, get_pre_children=get_children)
 
 
 def make_key_events(char):
@@ -558,8 +550,6 @@ def make_key_events(char):
 def test_merge_consecutive_keyboard_events():
     """
     Test case for merging consecutive keyboard events.
-
-    This test case verifies that the merge_consecutive_keyboard_events function correctly merges consecutive keyboard events.
 
     Returns:
         None
@@ -618,8 +608,6 @@ def test_merge_consecutive_keyboard_events():
 def test_merge_consecutive_keyboard_events__grouped():
     """
     Test case for merging consecutive keyboard events with grouping.
-
-    This test case verifies that the merge_consecutive_keyboard_events function correctly merges consecutive keyboard events with grouping.
 
     Returns:
         None
@@ -686,7 +674,7 @@ def test_discard_unused_events():
     """
     Test case for discarding unused events.
 
-    This test case verifies that the discard_unused_events function correctly discards unused events based on the specified timestamp attribute.
+    Tests that the discard_unused_events function discards unused events based on specified timestamp.
 
     Returns:
         None

@@ -231,7 +231,7 @@ def main():
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
-    import ipdb; ipdb.set_trace()
+    import ipdb; ipdb.set_trace()  # noqa: E702
 
 
 if __name__ == "__main__":
