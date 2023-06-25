@@ -28,7 +28,6 @@ def export_recording_to_folder(recording_id):
     Returns:
         str: The path of the created zip file.
     """
-    # TODO: export recording db file instead of the entire db file
     recording_db_path = crud.export_recording(recording_id)
 
     if recording_db_path:

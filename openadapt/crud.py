@@ -175,9 +175,9 @@ def create_db(recording_id, sql, values):
     db.close()
     db_fname = f"recording_{recording_id}.db"
 
-    t = time.time()
+    timestamp = time.time()
     source_file_path = config.ENV_FILE_PATH
-    target_file_path = f"{config.ENV_FILE_PATH}-{t}"
+    target_file_path = f"{config.ENV_FILE_PATH}-{timestamp}"
     logger.info(f"source_file_path={source_file_path}, target_file_path={target_file_path}")
     shutil.copyfile(source_file_path, target_file_path)
     config.set_db_url(db_fname)
@@ -202,7 +202,7 @@ def create_db(recording_id, sql, values):
 
     db_file_path = config.DB_FPATH.resolve()
 
-    return t, db_file_path
+    return timestamp, db_file_path
 
 
 def restore_db(timestamp):
@@ -227,8 +227,8 @@ def export_recording(recording_id):
         str: The file path of the new database.
     """
     sql, values = export_sql(recording_id)
-    t, db_file_path = create_db(recording_id, sql, values)
-    restore_db(t)
+    timestamp, db_file_path = create_db(recording_id, sql, values)
+    restore_db(timestamp)
     return db_file_path
 
 def get_recording(timestamp):
