@@ -48,7 +48,6 @@ def _make_frame(time, final, progress_bar, progress_threshold):
     Returns:
         A Redacted frame
     """
-
     frame = final.get_frame(time)
 
     image = Image.fromarray(frame)
@@ -86,7 +85,6 @@ def scrub_mp4(
     Returns:
         Path to the scrubbed (redacted) mp4 file.
     """
-
     logger.info(f"{mp4_file=}")
     logger.info(f"{scrub_all_entities=}")
     logger.info(f"{playback_speed_multiplier=}")
@@ -118,12 +116,7 @@ def scrub_mp4(
     progress_threshold = math.floor(frame_count * progress_interval)
 
     redacted_clip = VideoClip(
-        make_frame=lambda t: _make_frame(
-            t,
-            final,
-            progress_bar,
-            progress_threshold,
-        ),
+        make_frame=lambda t: _make_frame(t, final, progress_bar, progress_threshold),
         duration=final.duration,
     )  # Redact the clip
 

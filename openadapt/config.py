@@ -118,6 +118,20 @@ DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 
 def obfuscate(val, pct_reveal=0.1, char="*"):
+    """
+    Obfuscates a value by replacing a portion of characters.
+
+    Args:
+        val (str): The value to obfuscate.
+        pct_reveal (float, optional): Percentage of characters to reveal (default: 0.1).
+        char (str, optional): Obfuscation character (default: "*").
+
+    Returns:
+        str: Obfuscated value with a portion of characters replaced.
+
+    Raises:
+        AssertionError: If length of obfuscated value does not match original value.
+    """
     num_reveal = int(len(val) * pct_reveal)
     num_obfuscate = len(val) - num_reveal
     obfuscated = char * num_obfuscate
@@ -127,15 +141,14 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")

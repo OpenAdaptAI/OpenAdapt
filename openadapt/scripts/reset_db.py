@@ -22,7 +22,7 @@ def reset_db():
 
     # Prevents duplicate logging of config values by piping stderr and filtering the output.
     result = run(["alembic", "upgrade", "head"], stderr=PIPE, text=True)
-    print(result.stderr[result.stderr.find("INFO  [alembic"):])
+    print(result.stderr[result.stderr.find("INFO  [alembic") :])  # noqa: E203
     if result.returncode != 0:
         raise RuntimeError("Database migration failed.")
     else:

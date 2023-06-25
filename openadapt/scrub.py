@@ -48,7 +48,6 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
     Returns:
         str: Scrubbed text
     """
-    
     if text is None:
         return None
 
@@ -98,7 +97,6 @@ def scrub_image(image: Image, fill_color=config.SCRUB_FILL_COLOR) -> Image:
     Returns:
         PIL.Image: The scrubbed image with PII and PHI removed.
     """
-    
     redacted_image = IMAGE_REDACTOR.redact(
         image, fill=fill_color, entities=SCRUBBING_ENTITIES
     )
@@ -154,7 +152,6 @@ def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -
     Returns:
         str: The scrubbed value
     """
-    
     if key in ("text", "canonical_text"):
         return scrub_text(value, is_separated=True)
     if force_scrub_children:
@@ -194,7 +191,6 @@ def _scrub_list_item(
     Returns:
         dict/str: The scrubbed dict/value respectively
     """
-    
     if isinstance(item, dict):
         return scrub_dict(item, list_keys, force_scrub_children=force_scrub_children)
     return _scrub_text_item(item, key)
@@ -218,7 +214,6 @@ def scrub_dict(
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
     """
-    
     if list_keys is None:
         list_keys = config.SCRUB_KEYS_HTML
 
@@ -260,7 +255,6 @@ def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dic
     Returns:
         list[dict]: The scrubbed list of dicts with PII and PHI removed.
     """
-    
     scrubbed_list_dicts = []
     for input_dict in input_list:
         scrubbed_list_dicts.append(scrub_dict(input_dict, list_keys))

@@ -145,9 +145,7 @@ def get_completion(
     """
     logger.info(f"{prompt=}")
 
-    messages.append(
-        {"role": "user", "content": prompt}
-    )
+    messages.append({"role": "user", "content": prompt})
     length = MAX_LENGTHS[model]
     # shorten_messages(messages, length)
     logger.debug(f"messages=\n{pformat(messages)}")
