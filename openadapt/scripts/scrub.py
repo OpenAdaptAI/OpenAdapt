@@ -22,10 +22,11 @@ Example: To redact all entities in sample2.mp4
 from typing import Optional
 import math
 
-from tqdm import tqdm
+from loguru import logger
 from PIL import Image
 from moviepy.editor import VideoFileClip, VideoClip
 from moviepy.video.fx import speedx
+from tqdm import tqdm
 import fire
 import numpy as np
 
@@ -85,6 +86,12 @@ def scrub_mp4(
     Returns:
         Path to the scrubbed (redacted) mp4 file.
     """
+
+    logger.info(f"{mp4_file=}")
+    logger.info(f"{scrub_all_entities=}")
+    logger.info(f"{playback_speed_multiplier=}")
+    logger.info(f"{crop_start_time=}")
+    logger.info(f"{crop_end_time=}")
 
     if scrub_all_entities:
         config.SCRUB_IGNORE_ENTITIES = []
