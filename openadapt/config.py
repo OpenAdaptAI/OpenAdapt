@@ -116,11 +116,15 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
 
 
 
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
-            if any([phrase in parts for phrase in ("KEY", "PASSWORD", "TOKEN")]):
+            if (
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
+                val != _DEFAULTS[key]
+            ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
