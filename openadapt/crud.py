@@ -151,7 +151,7 @@ def export_sql(recording_id):
             recording.double_click_interval_seconds,
             recording.double_click_distance_pixels,
             recording.platform,
-            recording.task_description
+            recording.task_description,
         )
 
         logger.info(f"Recording with ID {recording_id} exported successfully.")
@@ -178,13 +178,17 @@ def create_db(recording_id, sql, values):
     timestamp = time.time()
     source_file_path = config.ENV_FILE_PATH
     target_file_path = f"{config.ENV_FILE_PATH}-{timestamp}"
-    logger.info(f"source_file_path={source_file_path}, target_file_path={target_file_path}")
+    logger.info(
+        f"source_file_path={source_file_path}, target_file_path={target_file_path}"
+    )
     shutil.copyfile(source_file_path, target_file_path)
     config.set_db_url(db_fname)
 
     with open(config.ENV_FILE_PATH, "r") as env_file:
         env_file_lines = [
-            f"DB_FNAME={db_fname}\n" if env_file_line.startswith("DB_FNAME") else env_file_line
+            f"DB_FNAME={db_fname}\n"
+            if env_file_line.startswith("DB_FNAME")
+            else env_file_line
             for env_file_line in env_file.readlines()
         ]
 
@@ -230,6 +234,7 @@ def export_recording(recording_id):
     timestamp, db_file_path = create_db(recording_id, sql, values)
     restore_db(timestamp)
     return db_file_path
+
 
 def get_recording(timestamp):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()

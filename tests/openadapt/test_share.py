@@ -14,7 +14,9 @@ class ShareTestCase(unittest.TestCase):
             f.write("Recording data")
 
         # Mock the crud.export_recording() function to return the temporary file path
-        with patch("openadapt.share.crud.export_recording", return_value=recording_db_path):
+        with patch(
+            "openadapt.share.crud.export_recording", return_value=recording_db_path
+        ):
             zip_file_path = share.export_recording_to_folder(recording_id)
 
             self.assertIsNotNone(zip_file_path)
@@ -34,14 +36,18 @@ class ShareTestCase(unittest.TestCase):
             share.send_file(file_path)
 
             # Verify that the command is called with the correct arguments
-            mock_run.assert_called_once_with(["wormhole", "send", file_path], check=True)
+            mock_run.assert_called_once_with(
+                ["wormhole", "send", file_path], check=True
+            )
 
         # Clean up the temporary file
         os.remove(file_path)
 
     def test_send_recording(self):
         # Mock the export_recording_to_folder() function to return a zip file path
-        with patch("openadapt.share.export_recording_to_folder", return_value="temp.zip"):
+        with patch(
+            "openadapt.share.export_recording_to_folder", return_value="temp.zip"
+        ):
             # Mock the send_file() function to avoid sending the file
             with patch("openadapt.share.send_file"):
                 share.send_recording(1)
