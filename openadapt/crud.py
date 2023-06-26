@@ -113,7 +113,7 @@ def get_latest_recording():
 
 
 def get_recording_by_id(recording_id):
-    return db.query(Recording).filter_by(id=recording_id).first().all()
+    return db.query(Recording).filter_by(id=recording_id).first()
 
 
 def get_recording(timestamp):

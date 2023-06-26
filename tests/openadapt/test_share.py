@@ -1,4 +1,5 @@
 import subprocess
+import tempfile
 import unittest
 import os
 from unittest.mock import patch
@@ -6,6 +7,14 @@ from openadapt import share
 
 
 class ShareTestCase(unittest.TestCase):
+    """
+    A test case for the share module.
+
+    This test case verifies the functionality of the share module,
+    including exporting a recording to a folder, sending a file,
+    sending a recording, and receiving a recording.
+    """
+
     def test_export_recording_to_folder(self):
         # Create a temporary recording database file
         recording_id = 1
@@ -15,7 +24,7 @@ class ShareTestCase(unittest.TestCase):
 
         # Mock the crud.export_recording() function to return the temporary file path
         with patch(
-            "openadapt.share.crud.export_recording", return_value=recording_db_path
+            "openadapt.share.db.export_recording", return_value=recording_db_path
         ):
             zip_file_path = share.export_recording_to_folder(recording_id)
 
@@ -27,9 +36,9 @@ class ShareTestCase(unittest.TestCase):
 
     def test_send_file(self):
         # Create a temporary file
-        file_path = "temp.txt"
-        with open(file_path, "w") as f:
-            f.write("File data")
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            file_path = temp_file.name
+            temp_file.write(b"File data")
 
         # Mock the subprocess.run() function to avoid executing the command
         with patch("openadapt.share.subprocess.run") as mock_run:
@@ -65,7 +74,3 @@ class ShareTestCase(unittest.TestCase):
             subprocess.run.assert_called_once_with(
                 ["wormhole", "receive", "wormhole_code"], check=True
             )
-
-
-if __name__ == "__main__":
-    unittest.main()
