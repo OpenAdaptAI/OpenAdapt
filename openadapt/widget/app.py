@@ -64,10 +64,9 @@ class OpenAdaptWidget(FloatLayout):
             width = bounds["Width"]
             self.window.left = left
         if (self.window.top, self.window.right) != self.prev_active_window_position:
-                self.prev_active_window_position = (self.window.top, self.window.right)
-                if self.current_state == "replay_in_progress":
-                    self.current_state == "replay_paused"
-
+            self.prev_active_window_position = (self.window.top, self.window.right)
+            if self.current_state == "replay_in_progress":
+                self.current_state == "replay_paused"
 
     def callback(self, instance):
         if self.current_state == "default":
