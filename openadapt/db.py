@@ -23,7 +23,6 @@ NAMING_CONVENTION = {
 
 
 class BaseModel(DictableModel):
-
     __abstract__ = True
 
     def __repr__(self):
@@ -57,8 +56,10 @@ engine = get_engine()
 Base = get_base(engine)
 Session = sessionmaker(bind=engine)
 
+
 def export_sql(recording_id):
     from openadapt.crud import get_recording_by_id  # to avoid circular import
+
     """Export the recording data as SQL statements.
 
     Args:
@@ -107,7 +108,6 @@ def create_db(recording_id, sql, values):
     Returns:
         tuple: A tuple containing the timestamp and the file path of the new database.
     """
-    # engine.close()
     db_fname = f"recording_{recording_id}.db"
 
     timestamp = time.time()
@@ -134,7 +134,6 @@ def create_db(recording_id, sql, values):
     Session = sessionmaker(bind=engine)
     session = Session()
     os.system("alembic upgrade head")
-    # db.engine = engine
 
     with engine.begin() as connection:
         connection.execute(sql, values)
@@ -144,15 +143,16 @@ def create_db(recording_id, sql, values):
     return timestamp, db_file_path
 
 
-def restore_db(timestamp):
+def restore_db(timestamp, original_db):
     """Restore the database to a previous state.
 
     Args:
         timestamp (float): The timestamp associated with the backup file.
+        original_db (string): Original database name before overwriting.
     """
     backup_file = f"{config.ENV_FILE_PATH}-{timestamp}"
     shutil.copyfile(backup_file, config.ENV_FILE_PATH)
-    config.set_db_url("openadapt.db")
+    config.set_db_url(original_db)
     engine = get_engine()
 
 
@@ -165,7 +165,8 @@ def export_recording(recording_id):
     Returns:
         str: The file path of the new database.
     """
+    original_db = os.environ["DB_FNAME"]
     sql, values = export_sql(recording_id)
     timestamp, db_file_path = create_db(recording_id, sql, values)
-    restore_db(timestamp)
+    restore_db(timestamp, original_db)
     return db_file_path
