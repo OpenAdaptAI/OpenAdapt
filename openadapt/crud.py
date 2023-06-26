@@ -170,8 +170,10 @@ def filter_stop_sequences(action_events):
                 # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
-            elif action_events[j].name == "release" and (action_events[j].canonical_key_char in \
-                    STOP_SEQUENCES[i] or action_events[j].canonical_key_name in STOP_SEQUENCES[i]):
+            elif action_events[j].name == "release" and (
+                action_events[j].canonical_key_char in STOP_SEQUENCES[i]
+                or action_events[j].canonical_key_name in STOP_SEQUENCES[i]
+            ):
                 # can consider any release event with any sequence char as part of the sequence
                 num_to_remove += 1
             else:

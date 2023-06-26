@@ -94,7 +94,9 @@ STOP_STRS = [
 # containing special chars, separated by keys
 SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 # sequences that when typed, will stop the recording of ActionEvents in record.py
-STOP_SEQUENCES = [list(stop_str) for stop_str in STOP_STRS] + SPECIAL_CHAR_STOP_SEQUENCES
+STOP_SEQUENCES = [
+    list(stop_str) for stop_str in STOP_STRS
+] + SPECIAL_CHAR_STOP_SEQUENCES
 
 
 def getenv_fallback(var_name):
