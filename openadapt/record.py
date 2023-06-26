@@ -43,14 +43,41 @@ utils.configure_logging(logger, LOG_LEVEL)
 
 
 def args_to_str(*args):
+    """
+    Convert positional arguments to a string representation.
+
+    Args:
+        *args: Positional arguments.
+
+    Returns:
+        str: Comma-separated string representation of positional arguments.
+    """
     return ", ".join(map(str, args))
 
 
 def kwargs_to_str(**kwargs):
+    """
+    Convert keyword arguments to a string representation.
+
+    Args:
+        **kwargs: Keyword arguments.
+
+    Returns:
+        str: Comma-separated string representation of keyword arguments in form "key=value".
+    """
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
 
 def trace(logger):
+    """
+    Decorator that logs the function entry and exit using the provided logger.
+
+    Args:
+        logger: The logger object to use for logging.
+
+    Returns:
+        A decorator that can be used to wrap functions and log their entry and exit.
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper_logging(*args, **kwargs):
@@ -464,7 +491,7 @@ def read_window_events(
 
 
 @trace(logger)
-def performance_stats_writer (
+def performance_stats_writer(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
