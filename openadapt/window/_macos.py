@@ -104,6 +104,8 @@ def dump_state(element, elements=None):
         if attr_names:
             state = {}
             for attr_name in attr_names:
+                if attr_name is None:
+                    continue
                 # don't traverse back up
                 # for WindowEvents:
                 if "parent" in attr_name.lower():
@@ -122,7 +124,9 @@ def dump_state(element, elements=None):
                 )
 
                 # for ActionEvents
-                if attr_name == "AXRole" and "application" in attr_val.lower():
+                if attr_val is not None and (
+                    attr_name == "AXRole" and "application" in attr_val.lower()
+                ):
                     continue
 
                 _state = dump_state(attr_val, elements)
@@ -149,16 +153,19 @@ def deepconvert_objc(object):
     # handle core-foundation class AXValueRef
     elif isinstance(object, ApplicationServices.AXValueRef):
         # convert to dict - note: this object is not iterable
-        result_string = repr(object)
-        values = re.findall(r"(\w+)\s?=\s?([\w.]+)", result_string)
-        value = {}
-        for k, v in values:
-            if v.isdigit():
-                value[k] = int(v)
-            elif v.replace(".", "", 1).isdigit():
-                value[k] = float(v)
-            else:
-                value[k] = v
+        rep = repr(object)
+        x_value = re.search(r"x:([\d.]+)", rep)
+        y_value = re.search(r"y:([\d.]+)", rep)
+        w_value = re.search(r"w:([\d.]+)", rep)
+        h_value = re.search(r"h:([\d.]+)", rep)
+        type_value = re.search(r"type\s?=\s?(\w+)", rep)
+        value = {
+            "x": float(x_value.group(1)) if x_value else None,
+            "y": float(y_value.group(1)) if y_value else None,
+            "w": float(w_value.group(1)) if w_value else None,
+            "h": float(h_value.group(1)) if h_value else None,
+            "type": type_value.group(1) if type_value else None,
+        }
         handled = True
     elif isinstance(object, Foundation.NSURL):
         value = str(object.absoluteString())
@@ -170,6 +177,9 @@ def deepconvert_objc(object):
         or isinstance(object, Quartz.CGPathRef)
     ):
         value = str(object)
+        handled = True
+    elif isinstance(object, Foundation.__NSCFAttributedString):
+        value = str(object.string())
         handled = True
     else:
         if not isinstance(object, bool):
