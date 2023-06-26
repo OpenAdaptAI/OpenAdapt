@@ -12,6 +12,7 @@ from ctypes import wintypes
 from kivy.clock import Clock
 import sys
 import pywinauto
+import Quartz
 
 
 class OpenAdaptWidget(FloatLayout):
@@ -40,39 +41,43 @@ class OpenAdaptWidget(FloatLayout):
                     active_only=True
                 )
                 window = app.active()
-                active_window_position = window.get_properties()
-                top, left, right, bottom, width, height = (
-                    active_window_position["rectangle"].top,
-                    active_window_position["rectangle"].left,
-                    active_window_position["rectangle"].right,
-                    active_window_position["rectangle"].bottom,
-                    active_window_position["rectangle"].width(),
-                    active_window_position["rectangle"].height(),
+                active_window_properties = window.get_properties()
+                self.window.top, self.window.right = (
+                    active_window_properties["rectangle"].top,
+                    active_window_properties["rectangle"].right,
                 )
-                if active_window_position != self.active_window_position:
-                    self.window.left = right - 25
-                    self.window.top = top - 25
-                    if self.current_state == "replay_in_progress":
-                        self.current_state == "replay_paused"
-                # logger.info(f"T{top},L{left},R{right},N{bottom},W{width},H{height}")
-                # logger.info(f"left {self.window.left}, top {self.window.top}")
-                # self.window.left = right - 25
-                # self.window.top = top - 25
-                # logger.info(f"left {self.window.left}, top {self.window.top}")
             except:
                 pass
+        elif sys.platform == "darwin":
+            windows = Quartz.CGWindowListCopyWindowInfo(
+                (
+                    Quartz.kCGWindowListExcludeDesktopElements
+                    | Quartz.kCGWindowListOptionOnScreenOnly
+                ),
+                Quartz.kCGNullWindowID,
+            )
+            active_windows_info = [win for win in windows if win["kCGWindowLayer"] == 0]
+            meta = active_windows_info[0]
+            bounds = meta["kCGWindowBounds"]
+            left = bounds["X"]
+            self.window.top = bounds["Y"] + 10
+            width = bounds["Width"]
+            self.window.left = left
+        if (self.window.top, self.window.right) != self.prev_active_window_position:
+                self.prev_active_window_position = (self.window.top, self.window.right)
+                if self.current_state == "replay_in_progress":
+                    self.current_state == "replay_paused"
+
 
     def callback(self, instance):
         if self.current_state == "default":
             self.button.background_normal = "assets/recording_inprogress.png"
             self.current_state = "recording_in_progress"
             self.start_recording()
-
         elif self.current_state == "recording_in_progress":
             self.button.background_normal = "assets/replay_available.png"
             self.current_state = "replay_available"
             self.stop_recording()
-
         elif self.current_state == "replay_available":
             self.button.background_normal = "assets/replay_inprogress.png"
             self.current_state = "replaying_in_progress"
