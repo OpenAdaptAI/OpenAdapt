@@ -35,6 +35,7 @@ if SCRUB:
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
+MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template(
@@ -144,13 +145,14 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     """
     Convert a dictionary to an HTML representation.
 
     Args:
         obj (dict): The dictionary to convert.
         max_children (int): The maximum number of child elements to display in a table.
+        max_len (int): The maximum length of a string value in the HTML representation.
 
     Returns:
         str: The HTML representation of the dictionary.
@@ -178,6 +180,13 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
+        if len(html_str) > max_len:
+            n = max_len // 2
+            head = html_str[:n]
+            tail = html_str[-n:]
+            snipped = html_str[n:-n]
+            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
+            html_str = head + middle + tail
     return html_str
 
 
