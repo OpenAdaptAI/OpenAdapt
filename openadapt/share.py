@@ -12,7 +12,7 @@ import subprocess
 from loguru import logger
 import fire
 
-from openadapt import config, crud, utils
+from openadapt import config, db, utils
 
 
 LOG_LEVEL = "INFO"
@@ -28,7 +28,7 @@ def export_recording_to_folder(recording_id):
     Returns:
         str: The path of the created zip file.
     """
-    recording_db_path = crud.export_recording(recording_id)
+    recording_db_path = db.export_recording(recording_id)
 
     if recording_db_path:
         # Create the directory if it doesn't exist
