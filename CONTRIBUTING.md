@@ -65,7 +65,7 @@ The type must be one of the following:
 
 ### Scope
 
-The scope specifies the location of the commit change. For example: `$location`, `$browser`, `$compile`, `$rootScope`, `ngHref`, `ngClick`, `ngView`, etc. Use `*` when the change affects more than a single scope.
+The scope specifies the location of the commit change. For example: `db`, `crud`, `strategies`, `utils`, etc. Use `*` when the change affects more than a single scope.
 
 ### Subject
 
@@ -79,19 +79,6 @@ The subject should be a succinct description of the change. Please follow these 
 The body should provide the motivation for the change and contrast it with the previous behavior. Use the imperative, present tense (e.g., "change" not "changed" or "changes").
 
 The body or footer can begin with **BREAKING CHANGE:** followed by a short description to create a major release. For example, a major release would increment the version number from `0.1.0` to `1.1.0`.
-
-### Version Bump
-
-We use semantic versioning for our releases. The version number is automatically determined based on the commit types mentioned above. Here's how the version numbers are incremented:
-
-- **MAJOR** version for incompatible changes or major features
-  - Increments the major version number (e.g., 1.0.0 -> 2.0.0)
-
-- **MINOR** version for new features or backward-compatible changes
-  - Increments the minor version number (e.g., 1.0.0 -> 1.1.0)
-
-- **PATCH** version for backward-compatible bug fixes or small changes
-  - Increments the patch version number (e.g., 1.0.0 -> 1.0.1)
 
 ## Submitting Changes
 
