@@ -6,6 +6,8 @@ import atomacos
 import AppKit
 import ApplicationServices
 import Quartz
+import re
+import Foundation
 
 
 def get_active_window_state():
@@ -14,8 +16,8 @@ def get_active_window_state():
     meta = get_active_window_meta()
     data = get_window_data(meta)
     title_parts = [
-        meta['kCGWindowOwnerName'],
-        meta['kCGWindowName'],
+        meta["kCGWindowOwnerName"],
+        meta["kCGWindowName"],
     ]
     title_parts = [part for part in title_parts if part]
     title = " ".join(title_parts)
@@ -47,14 +49,12 @@ def get_active_window_state():
 def get_active_window_meta():
     windows = Quartz.CGWindowListCopyWindowInfo(
         (
-            Quartz.kCGWindowListExcludeDesktopElements |
-            Quartz.kCGWindowListOptionOnScreenOnly
+            Quartz.kCGWindowListExcludeDesktopElements
+            | Quartz.kCGWindowListOptionOnScreenOnly
         ),
         Quartz.kCGNullWindowID,
     )
-    active_windows_info = [
-        win for win in windows if win['kCGWindowLayer'] == 0
-    ]
+    active_windows_info = [win for win in windows if win["kCGWindowLayer"] == 0]
     active_window_info = active_windows_info[0]
     return active_window_info
 
@@ -63,7 +63,7 @@ def get_active_window(window_meta):
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
     error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
-        app_ref, 'AXFocusedWindow', None
+        app_ref, "AXFocusedWindow", None
     )
     if error_code:
         logger.error("Error getting focused window")
@@ -98,13 +98,12 @@ def dump_state(element, elements=None):
                 state[k] = _state
         return state
     else:
-        error_code, attr_names = (
-            ApplicationServices.AXUIElementCopyAttributeNames(element, None)
+        error_code, attr_names = ApplicationServices.AXUIElementCopyAttributeNames(
+            element, None
         )
         if attr_names:
             state = {}
             for attr_name in attr_names:
-
                 # don't traverse back up
                 # for WindowEvents:
                 if "parent" in attr_name.lower():
@@ -113,10 +112,13 @@ def dump_state(element, elements=None):
                 if attr_name in ("AXTopLevelUIElement", "AXWindow"):
                     continue
 
-                error_code, attr_val = (
-                    ApplicationServices.AXUIElementCopyAttributeValue(
-                        element, attr_name, None,
-                    )
+                (
+                    error_code,
+                    attr_val,
+                ) = ApplicationServices.AXUIElementCopyAttributeValue(
+                    element,
+                    attr_name,
+                    None,
                 )
 
                 # for ActionEvents
@@ -135,15 +137,46 @@ def dump_state(element, elements=None):
 def deepconvert_objc(object):
     """Convert all contents of an ObjC object to Python primitives."""
     value = object
+    handled = False
     if isinstance(object, AppKit.NSNumber):
         value = int(object)
     elif isinstance(object, AppKit.NSArray) or isinstance(object, list):
         value = [deepconvert_objc(x) for x in object]
     elif isinstance(object, AppKit.NSDictionary) or isinstance(object, dict):
-        value = dict(object)
-        for k, v in value.items():
-            value[k] = deepconvert_objc(v)
-    value = atomacos._converter.Converter().convert_value(value)
+        value = {deepconvert_objc(k): deepconvert_objc(v) for k, v in object.items()}
+    elif isinstance(object, AppKit.NSString) or isinstance(object, str):
+        value = str(object)
+    # handle core-foundation class AXValueRef
+    elif isinstance(object, ApplicationServices.AXValueRef):
+        # convert to dict - note: this object is not iterable
+        result_string = repr(object)
+        values = re.findall(r"(\w+)\s?=\s?([\w.]+)", result_string)
+        value = {}
+        for k, v in values:
+            if v.isdigit():
+                value[k] = int(v)
+            elif v.replace(".", "", 1).isdigit():
+                value[k] = float(v)
+            else:
+                value[k] = v
+        handled = True
+    elif isinstance(object, Foundation.NSURL):
+        value = str(object.absoluteString())
+        handled = True
+    elif (
+        isinstance(object, ApplicationServices.AXTextMarkerRangeRef)
+        or isinstance(object, ApplicationServices.AXUIElementRef)
+        or isinstance(object, ApplicationServices.AXTextMarkerRef)
+        or isinstance(object, Quartz.CGPathRef)
+    ):
+        value = str(object)
+        handled = True
+    else:
+        if not isinstance(object, bool):
+            logger.warning(f"Unknown type: {type(object)}")
+    value = (
+        atomacos._converter.Converter().convert_value(value) if not handled else value
+    )
     return value
 
 
@@ -164,12 +197,15 @@ def get_active_element_state(x, y):
 
 def main():
     import time
+
     time.sleep(1)
 
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
 
 
 if __name__ == "__main__":
