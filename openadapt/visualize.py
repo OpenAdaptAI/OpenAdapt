@@ -189,10 +189,16 @@ def main():
         ),
     ]
     logger.info(f"{len(action_events)=}")
-    
+
     rows = []
-    num_events = min(MAX_EVENTS, len(action_events)) if MAX_EVENTS is not None else len(action_events)
-    with alive_bar(total=num_events, title="Processing HTML for visualization:") as progress:
+    num_events = (
+        min(MAX_EVENTS, len(action_events))
+        if MAX_EVENTS is not None
+        else len(action_events)
+    )
+    with alive_bar(
+        total=num_events, title="Processing HTML for visualization:"
+    ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
@@ -257,7 +263,7 @@ def main():
                     ),
                 ]
             )
-            
+
             progress()
 
     title = f"recording-{recording.id}"

@@ -60,7 +60,9 @@ def trace(logger):
             func_kwargs = kwargs_to_str(**kwargs)
 
             if func_kwargs != "":
-                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+                logger.info(
+                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
+                )
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
 
@@ -249,7 +251,9 @@ def write_events(
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    with alive_bar(total=write_q.qsize(), title=f"Writing {event_type} events") as progress:
+    with alive_bar(
+        total=write_q.qsize(), title=f"Writing {event_type} events"
+    ) as progress:
         while not terminate_event.is_set() or not write_q.empty():
             try:
                 event = write_q.get_nowait()
@@ -352,7 +356,8 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None)
+        for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -360,7 +365,9 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
+    trigger_action_event(
+        event_q, {"name": event_name, **attrs, **canonical_attrs}
+    )
 
 
 def read_screen_events(
@@ -438,7 +445,7 @@ def read_window_events(
 
 
 @trace(logger)
-def performance_stats_writer (
+def performance_stats_writer(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
