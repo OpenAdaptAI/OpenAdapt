@@ -12,6 +12,7 @@ fuzzywuzzy==0.18.0
 ipdb==0.13.11
 loguru==0.6.0
 matplotlib==3.6.2
+moviepy==1.0.3
 mss==6.1.0
 nltk==3.8.1
 openai==0.27.5
@@ -38,3 +39,4 @@ tqdm==4.64.0
 nicegui==1.2.16
 transformers==4.29.2
 python-dotenv==1.0.0
+python-Levenshtein==0.21.1

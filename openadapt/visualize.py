@@ -34,6 +34,7 @@ if SCRUB:
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
+MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template(
@@ -114,7 +115,7 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     if isinstance(obj, list):
         children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
@@ -138,6 +139,13 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
+        if len(html_str) > max_len:
+            n = max_len // 2
+            head = html_str[:n]
+            tail = html_str[-n:]
+            snipped = html_str[n:-n]
+            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
+            html_str = head + middle + tail
     return html_str
 
 
