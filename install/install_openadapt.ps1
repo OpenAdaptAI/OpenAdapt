@@ -271,4 +271,4 @@ RunAndCheck "alembic upgrade head" "alembic upgrade head"
 RunAndCheck "pytest" "run OpenAdapt tests"
 Write-Host "OpenAdapt installed successfully"
 
-################################   SCRIPT    ################################ 
+################################   SCRIPT    ################################
