@@ -83,12 +83,12 @@ Wait until all three event writers have started:
 Type a few words into the terminal and move your mouse around the screen
 to generate some events, then stop the recording by pressing CTRL+C.
 
-Current limitations: 
+Current limitations:
 - recording should be short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
 [open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
 possible memory leak
-- the only touchpad and trackpad gestures currently supported are 
+- the only touchpad and trackpad gestures currently supported are
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/MLDSAI/OpenAdapt/issues/145)
 
@@ -134,7 +134,7 @@ course of action.
 
 ### Dataset
 
-The dataset consists of the following entities: 
+The dataset consists of the following entities:
 1. `Recording`: Contains information about the screen dimensions, platform, and
    other metadata.
 2. `ActionEvent`: Represents a user action event such as a mouse click or key
@@ -146,7 +146,7 @@ The dataset consists of the following entities:
 4. `WindowEvent`: Represents a window event such as a change in window title,
    position, or size.
 
-You can assume that you have access to the following functions: 
+You can assume that you have access to the following functions:
 - `create_recording("doing taxes")`: Creates a recording.
 - `get_latest_recording()`: Gets the latest recording.
 - `get_events(recording)`: Returns a list of `ActionEvent` objects for the given
@@ -156,7 +156,7 @@ You can assume that you have access to the following functions:
 
 [Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw). Then:
 
-1. Fork this repository and clone it to your local machine. 
+1. Fork this repository and clone it to your local machine.
 2. Get OpenAdapt up and running by following the instructions under [Setup](#Setup).
 3. Look through the list of open issues at https://github.com/MLDSAI/OpenAdapt/issues
 and once you find one you would like to address, indicate your interest with a comment.
@@ -169,7 +169,7 @@ feedback and iterate on the approach.
 
 ### Evaluation Criteria
 
-Your submission will be evaluated based on the following criteria: 
+Your submission will be evaluated based on the following criteria:
 
 1. **Functionality** : Your implementation should correctly generate the new
    `ActionEvent` objects that can be replayed in order to accomplish the task in
@@ -224,6 +224,29 @@ In summary (from https://stackoverflow.com/a/69673312):
 ```
 alembic revision --autogenerate -m "<msg>"
 ```
+
+### Pre-commit Hooks
+
+To ensure code quality and consistency, OpenAdapt uses pre-commit hooks. These hooks will be executed automatically before each commit to perform various checks and validations on your codebase.
+
+The following pre-commit hooks are used in OpenAdapt:
+
+- [check-yaml](https://github.com/pre-commit/pre-commit-hooks#check-yaml): Validates the syntax and structure of YAML files.
+- [end-of-file-fixer](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer): Ensures that files end with a newline character.
+- [trailing-whitespace](https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace): Detects and removes trailing whitespace at the end of lines.
+- [isort](https://github.com/PyCQA/isort): Sorts Python import statements in a consistent and standardized manner.
+
+To set up the pre-commit hooks, follow these steps:
+
+1. Navigate to the root directory of your OpenAdapt repository.
+
+3. Run the following command to install the hooks:
+
+```
+pre-commit install
+```
+
+Now, the pre-commit hooks are installed and will run automatically before each commit. They will enforce code quality standards and prevent committing code that doesn't pass the defined checks.
 
 # Submitting an Issue
 
