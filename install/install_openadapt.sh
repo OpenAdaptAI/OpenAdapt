@@ -5,9 +5,7 @@ set -e
 # Change these if a different version  is required
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
-pythonInstaller="python-3.10.11-macos11 21.11.47.pkg"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
-pythonInstallerPath="$HOME/downloads/$pythonInstaller"
 
 # Remove OpenAdapt if it exists
 Cleanup() {
@@ -78,6 +76,7 @@ CheckPythonExists() {
         fi
     fi
 
+<<<<<<< HEAD
     # Install required Python version
     echo Installing Python
     brew install python@3.10
@@ -95,6 +94,12 @@ CheckPythonExists() {
 
     Cleanup
     exit
+=======
+    # Install required python version
+    RunAndCheck "curl --output https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg" "Download Python"
+
+    echo "Installing python, click 'Yes' if prompted for permission"
+>>>>>>> parent of a7944c6 (python installation script complete)
 }
 
 ############################################################################################

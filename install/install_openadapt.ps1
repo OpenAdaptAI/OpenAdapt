@@ -25,6 +25,78 @@ $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 
 ################################   PARAMETERS   ################################
 
+# Return true if a command/exe is available
+function CheckCMDExists() {
+    Param
+    (
+        [Parameter(Mandatory = $true)] [string] $command
+    )
+
+    Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
+    If ($getErr -eq $null) {
+        $true;
+    }
+    return $false;
+}
+
+# Get command for python, install python if required version is unavailable
+function GetPythonCMD() {
+    # Use python alias of required version if it exists
+    if (CheckCMDExists($pythonCmd)) {
+        return $pythonCmd
+    }
+
+    # Use python exe if it exists and is the required version
+    $pythonCmd = "python"
+    if (CheckCMDExists($pythonCmd)) {
+        $res = Invoke-Expression "python -V"
+        if ($res -like $pythonVerStr) {
+            return $pythonCmd
+        }
+    }
+
+    # Install required python version
+    Write-Host "Downloading python installer"
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
+    $exists = Test-Path -Path $pythonInstaller -PathType Leaf
+    if(!$exists) {
+        Write-Host "Failed to download python installer"
+        Cleanup
+        exit
+    }
+
+    Write-Host "Installing python, click 'Yes' if prompted for permission"
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet','InstallAllUsers=0','PrependPath=1' -Wait
+
+    #Refresh Path Environment Variable
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    # Make sure python is now available and the right version
+    if (CheckCMDExists($pythonCmd)) {
+        $res = Invoke-Expression "python -V"
+        if ($res -like $pythonVerStr) {
+            Remove-Item $pythonInstaller
+            return $pythonCmd
+        }
+    }
+
+    Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
+    Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet','/uninstall' -Wait
+    Remove-Item $pythonInstaller
+
+    # Stop OpenAdapt install
+    Cleanup
+    exit
+}
+
+function Cleanup {
+    $exists = Test-Path -Path "..\OpenAdapt"
+    if($exists) {
+        Set-Location ..\
+        Remove-Item -LiteralPath "OpenAdapt" -Force -Recurse
+    }
+}
 
 ################################   FUNCTIONS    ################################
 # Run a command and ensure it did not fail
