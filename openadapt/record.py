@@ -24,6 +24,9 @@ import mss.tools
 
 from openadapt import config, crud, utils, window
 
+import functools
+
+
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -38,6 +41,39 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 global sequence_detected  # Flag to indicate if a stop sequence is detected
 STOP_SEQUENCES = config.STOP_SEQUENCES
 
+utils.configure_logging(logger, LOG_LEVEL)
+
+
+def args_to_str(*args):
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs):
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
+
+
+def trace(logger):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper_logging(*args, **kwargs):
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
+
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
+
+            result = func(*args, **kwargs)
+
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
+
+        return wrapper_logging
+
+    return decorator
+
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
@@ -46,6 +82,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
         write_fn(recording_timestamp, event, perf_q)
 
 
+@trace(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
@@ -187,6 +224,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
+@trace(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -348,6 +386,7 @@ def read_screen_events(
     logger.info("done")
 
 
+@trace(logger)
 def read_window_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
@@ -396,7 +435,8 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def performance_stats_writer(
+@trace(logger)
+def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -430,6 +470,7 @@ def performance_stats_writer(
     logger.info("performance stats writer done")
 
 
+@trace(logger)
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
@@ -540,6 +581,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+@trace(logger)
 def record(
     task_description: str,
 ):
@@ -681,6 +723,11 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
+
+
+# entry point
+def start():
+    fire.Fire(record)
 
 
 if __name__ == "__main__":
