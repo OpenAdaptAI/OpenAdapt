@@ -7,7 +7,7 @@ Usage:
 """
 
 from collections import namedtuple
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict
 import multiprocessing
 import os
@@ -16,24 +16,18 @@ import signal
 import sys
 import threading
 import time
+import tracemalloc
 
 from loguru import logger
+from pympler import tracker
 from pynput import keyboard, mouse
 import fire
 import mss.tools
+import psutil
 
 from openadapt import config, crud, utils, window
 
-import psutil
-from pympler import tracker
-
-tr = tracker.SummaryTracker()
-
-import tracemalloc
-
-tracemalloc.start()
-
-performance_snapshots = []
+Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -43,12 +37,12 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
-
-Event = namedtuple("Event", ("timestamp", "type", "data"))
-
 BYTE_TO_MB = float(2**20)
-
 NUM_MEMORY_STATS = 3
+
+tr = tracker.SummaryTracker()
+tracemalloc.start()
+performance_snapshots = []
 
 
 def collect_stats():
@@ -72,6 +66,37 @@ def log_memory_usage():
     logger.info(f"trace_str=\n{trace_str}")
 
 
+def args_to_str(*args):
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs):
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
+
+
+def trace(logger):
+    def decorator(func):
+        @wraps(func)
+        def wrapper_logging(*args, **kwargs):
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
+
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
+
+            result = func(*args, **kwargs)
+
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
+
+        return wrapper_logging
+
+    return decorator
+
+
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
         write_q.put(event)
@@ -79,6 +104,7 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
         write_fn(recording_timestamp, event, perf_q)
 
 
+@trace(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: multiprocessing.Queue,
@@ -221,6 +247,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
+@trace(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -382,6 +409,7 @@ def read_screen_events(
     logger.info("done")
 
 
+@trace(logger)
 def read_window_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
@@ -430,7 +458,8 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def performance_stats_writer(
+@trace(logger)
+def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -477,9 +506,9 @@ def memory_writer(
         mem_usage = getattr(process, "memory_info")()[0] / BYTE_TO_MB
 
         for child in getattr(process, "children")(recursive=True):
-            # after ctrl c, children processes could terminate before running the next line
+            # after ctrl+c, children processes could terminate before running the next line
             try:
-                mem_usage = mem_usage + getattr(child, "memory_info")()[0] / BYTE_TO_MB
+                mem_usage += getattr(child, "memory_info")()[0] / BYTE_TO_MB
             except psutil.NoSuchProcess:
                 pass
 
@@ -493,6 +522,7 @@ def memory_writer(
     logger.info("Memory writer done")
 
 
+@trace(logger)
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
@@ -569,6 +599,7 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+@trace(logger)
 def record(
     task_description: str,
 ):
