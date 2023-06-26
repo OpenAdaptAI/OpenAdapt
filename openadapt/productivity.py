@@ -9,9 +9,6 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-import pandas as pd
-from cydets.algorithm import detect_cycles
-
 from openadapt.crud import (
     get_latest_recording,
     get_window_events
@@ -112,65 +109,6 @@ def compare_events(event1, event2):
         if event1.key == event2.key:
             return True
     return False
-
-
-def find_tasks_brute_force(action_events):
-    # TODO: remove
-    configure_logging(logger, LOG_LEVEL)
-    logger.info("{} ActionEvents".format(len(action_events)))
-    repetitions = {}
-    # find candidates for start of a sequence that repeat within some error
-    # store list of indices of repetitions
-    logger.info("Finding candidates...")
-    for i in range(0, len(action_events)):
-        is_repeated = False
-        for stored_event in repetitions:
-            if compare_events(stored_event, action_events[i]):
-                repetitions[stored_event].append(i)
-                is_repeated = True
-        if not is_repeated:
-            repetitions[action_events[i]] = [i]
-
-    candidates = [event for event, indices in repetitions.items() if len(indices) >= 2]
-
-    logger.info("Found {} candidates".format(len(candidates)))
-
-    tasks = []
-
-    # compare candidate sequences
-    # TODO: alternatively try hashing method again
-    # TODO: optimize!!! O(n^4)
-    logger.info("Finding sequences")
-    for candidate in candidates:
-        indices = repetitions[candidate]
-        for i in range(0, len(indices)):
-            # compare indices[i] with each next index
-            # want to find largest parts that repeat
-            index1 = indices[i]
-            skip_to_next_j = False
-            # TODO: if any found tasks are subtasks, only include the larger tasks
-            # don't have to compare unless they're farther than MIN_TASK_LENGTH
-            for j in range(i + 1, len(indices)):
-                index2 = indices[j]
-                if index2 < index1 + MIN_TASK_LENGTH:
-                    continue
-                possible_task = []
-                if len(action_events) - index1 < MIN_TASK_LENGTH or \
-                        len(action_events) - index2 < MIN_TASK_LENGTH:
-                    break
-                while index1 < len(action_events) and index2 < len(action_events):
-                    if compare_events(action_events[index1], action_events[index2]):
-                        possible_task.append(action_events[index1])
-                    else:
-                        skip_to_next_j = True
-                        break
-                if skip_to_next_j:
-                    continue
-                if len(possible_task) > MIN_TASK_LENGTH:
-                    tasks.append(possible_task)
-                    logger.info("Found potential task")
-
-    return len(tasks)
 
 
 def brents_algo(action_events):
