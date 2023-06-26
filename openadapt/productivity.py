@@ -161,6 +161,9 @@ def find_num_tasks(action_events, start, length, task=None):
         for i in range(0, length):
             task.append(action_events[start + i])
 
+    if len(task) < MIN_TASK_LENGTH:
+        return 0, 0, 0
+
     num_repetitions = 0
     task_index = 0
     total_time = 0
@@ -399,22 +402,30 @@ def calculate_productivity():
             )
         ])
 
-    last_timestamp = -1
+    last_timestamp = action_events[0].window_event_timestamp
+    last_title = action_events[0].window_event.title
+    last_event = action_events[0]
     curr_action_events = []
     for idx, action_event in enumerate(action_events):
+        # TODO:
         if idx == MAX_EVENTS:
             break
-        curr_action_events.append(action_event)
-        if action_event.window_event_timestamp != last_timestamp:
+        if action_event.window_event_timestamp != last_timestamp and \
+                action_event.window_event.title is not None and \
+                action_event.window_event.title != last_title:
             last_timestamp = action_event.window_event_timestamp
-            image = display_event(action_event)
+            last_title = action_event.window_event.title
+            image = display_event(curr_action_events[-1])
             image_utf8 = image2utf8(image)
             width, height = image.size
 
             gaps, time_in_gaps = find_gaps(curr_action_events)
             num_clicks = find_clicks(curr_action_events)
             num_key_presses = find_key_presses(curr_action_events)
-            window_duration = curr_action_events[-1].timestamp - curr_action_events[0].timestamp
+            if len(curr_action_events) > 1:
+                window_duration = curr_action_events[-1].timestamp - curr_action_events[0].timestamp
+            else:
+                window_duration = curr_action_events[0].timestamp - last_event.timestamp
             window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                            "Total time spent during pauses": time_in_gaps,
                            "Total number of mouse clicks": num_clicks,
@@ -435,7 +446,7 @@ def calculate_productivity():
                                 >
                             </div>
                             <table>
-                                {dict2html(row2dict(action_event.window_event), None)}
+                                {dict2html(row2dict(curr_action_events[-1].window_event), None)}
                             </table>
                         """,
                     ),
@@ -450,6 +461,9 @@ def calculate_productivity():
             ])
             # flush curr_action_events
             curr_action_events = []
+        curr_action_events.append(action_event)
+        if idx > 1:
+            last_event = action_events[idx - 2]
     # TODO: change the one at the bottom
 
     # display data
