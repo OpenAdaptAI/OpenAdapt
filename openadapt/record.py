@@ -36,7 +36,7 @@ PLOT_PERFORMANCE = False
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 global sequence_detected  # Flag to indicate if a stop sequence is detected
-STOP_SEQUENCES = [list(stop_str) for stop_str in config.STOP_STRS]
+STOP_SEQUENCES = config.STOP_SEQUENCES
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):

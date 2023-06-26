@@ -9,9 +9,7 @@ from openadapt.models import (
     WindowEvent,
     PerformanceStat,
 )
-from openadapt.config import STOP_STRS
-
-STOP_SEQUENCES = [list(stop_str) for stop_str in STOP_STRS]
+from openadapt.config import STOP_SEQUENCES
 
 BATCH_SIZE = 1
 
