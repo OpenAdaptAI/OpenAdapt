@@ -4,6 +4,7 @@ import html
 import os
 import string
 
+from alive_progress import alive_bar
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
@@ -188,70 +189,74 @@ def main():
         ),
     ]
     logger.info(f"{len(action_events)=}")
-    for idx, action_event in enumerate(action_events):
-        if idx == MAX_EVENTS:
-            break
-        image = display_event(action_event)
-        diff = display_event(action_event, diff=True)
-        mask = action_event.screenshot.diff_mask
+    
+    with alive_bar(total=min(MAX_EVENTS, len(action_events)), title="Processing Action Events") as progress:
+        for idx, action_event in enumerate(action_events):
+            if idx == MAX_EVENTS:
+                break
+            image = display_event(action_event)
+            diff = display_event(action_event, diff=True)
+            mask = action_event.screenshot.diff_mask
 
-        if SCRUB:
-            image = scrub.scrub_image(image)
-            diff = scrub.scrub_image(diff)
-            mask = scrub.scrub_image(mask)
+            if SCRUB:
+                image = scrub.scrub_image(image)
+                diff = scrub.scrub_image(diff)
+                mask = scrub.scrub_image(mask)
 
-        image_utf8 = image2utf8(image)
-        diff_utf8 = image2utf8(diff)
-        mask_utf8 = image2utf8(mask)
-        width, height = image.size
+            image_utf8 = image2utf8(image)
+            diff_utf8 = image2utf8(diff)
+            mask_utf8 = image2utf8(mask)
+            width, height = image.size
 
-        action_event_dict = row2dict(action_event)
-        window_event_dict = row2dict(action_event.window_event)
+            action_event_dict = row2dict(action_event)
+            window_event_dict = row2dict(action_event.window_event)
 
-        if SCRUB:
-            action_event_dict = scrub.scrub_dict(action_event_dict)
-            window_event_dict = scrub.scrub_dict(window_event_dict)
+            if SCRUB:
+                action_event_dict = scrub.scrub_dict(action_event_dict)
+                window_event_dict = scrub.scrub_dict(window_event_dict)
 
-        rows.append(
-            [
-                row(
-                    Div(
-                        text=f"""
-                        <div class="screenshot">
-                            <img
-                                src="{image_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{diff_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{mask_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                        </div>
-                        <table>
-                            {dict2html(window_event_dict , None)}
-                        </table>
-                    """,
+            rows.append(
+                [
+                    row(
+                        Div(
+                            text=f"""
+                            <div class="screenshot">
+                                <img
+                                    src="{image_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{diff_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{mask_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                            </div>
+                            <table>
+                                {dict2html(window_event_dict , None)}
+                            </table>
+                        """,
+                        ),
+                        Div(
+                            text=f"""
+                            <table>
+                                {dict2html(action_event_dict)}
+                            </table>
+                        """
+                        ),
                     ),
-                    Div(
-                        text=f"""
-                        <table>
-                            {dict2html(action_event_dict)}
-                        </table>
-                    """
-                    ),
-                ),
-            ]
-        )
+                ]
+            )
+            
+            progress()
 
     title = f"recording-{recording.id}"
     fname_out = f"recording-{recording.id}.html"
