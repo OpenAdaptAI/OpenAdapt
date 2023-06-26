@@ -149,11 +149,9 @@ def filter_stop_sequences(action_events):
             return
 
     # create list of indices for sequence detection
-    stop_sequence_indices = []
-    for sequence in STOP_SEQUENCES:
-        # one index for each stop sequence in STOP_SEQUENCES
-        # start from the back of the sequence
-        stop_sequence_indices.append(len(sequence) - 1)
+    # one index for each stop sequence in STOP_SEQUENCES
+    # start from the back of the sequence
+    stop_sequence_indices = [len(sequence) - 1 for sequence in STOP_SEQUENCES]
 
     # index of sequence to remove, -1 if none found
     sequence_to_remove = -1
@@ -174,12 +172,13 @@ def filter_stop_sequences(action_events):
                 # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
-            elif action_events[j].name == "release":
-                # can consider any release event as part of the sequence
+            elif action_events[j].name == "release" and (action_events[j].canonical_key_char in \
+                    STOP_SEQUENCES[i] or action_events[j].canonical_key_name in STOP_SEQUENCES[i]):
+                # can consider any release event with any sequence char as part of the sequence
                 num_to_remove += 1
             else:
                 # not part of the sequence, so exit inner loop
-                continue
+                break
 
         if stop_sequence_indices[i] == -1:
             # completed whole sequence, so set sequence_to_remove to
