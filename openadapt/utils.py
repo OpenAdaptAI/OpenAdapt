@@ -436,7 +436,6 @@ def plot_performance(recording_timestamp: float = None) -> None:
     perf_stats = crud.get_perf_stats(recording_timestamp)
     perf_stat_dicts = rows2dicts(perf_stats)
     mem_stats = crud.get_memory_stats(recording_timestamp)
-    mem_stat_dicts = rows2dicts(mem_stats)
     for perf_stat in perf_stat_dicts:
         prev_start_time = type_to_prev_start_time.get(
             perf_stat["event_type"], perf_stat["start_time"]
@@ -469,9 +468,9 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     timestamps = []
     mem_usages = []
-    for mem_stat in mem_stat_dicts:
-        mem_usages.append(mem_stat["memory_usage"])
-        timestamps.append(mem_stat["timestamp"])
+    for mem_stat in mem_stats:
+        mem_usages.append(mem_stat.memory_usage)
+        timestamps.append(mem_stat.timestamp)
 
     memory_ax = axes[0].twinx()
     memory_ax.plot(timestamps, mem_usages, label="memory usage", color="red")
