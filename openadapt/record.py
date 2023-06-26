@@ -436,7 +436,7 @@ def read_window_events(
 
 
 @trace(logger)
-def performance_stats_writer (
+def performance_stats_writer(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
