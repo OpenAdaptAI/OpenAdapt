@@ -250,20 +250,14 @@ def write_events(
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    with alive_bar(
-        total=write_q.qsize(), title=f"Writing {event_type} events"
-    ) as progress:
-        while not terminate_event.is_set() or not write_q.empty():
-            try:
-                event = write_q.get_nowait()
-            except queue.Empty:
-                continue
-            assert event.type == event_type, (event_type, event)
-            write_fn(recording_timestamp, event, perf_q)
-            logger.debug(f"{event_type=} written")
-            progress()
-
+    while not terminate_event.is_set() or not write_q.empty():
+        try:
+            event = write_q.get_nowait()
+        except queue.Empty:
+            continue
+        assert event.type == event_type, (event_type, event)
+        write_fn(recording_timestamp, event, perf_q)
+        logger.debug(f"{event_type=} written")
     logger.info(f"{event_type=} done")
 
 
