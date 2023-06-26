@@ -51,11 +51,11 @@ class GPT4ALLReplayStrategyMixin(BaseReplayStrategy):
         self.GPT4All_model = GPT4All(model_name)
         if tokenizer is None:
             if model_name in MODEL_DICTIONARY:
-                tokenizer = "nomic-ai/" + MODEL_DICTIONARY[model_name]
+                tokenizer_string = "nomic-ai/" + MODEL_DICTIONARY[model_name]
             else:
                 logger.info("There is no known tokenizer for %s", model_name)
                 return
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_string)
 
     def get_gpt4all_completion(self, prompt: str, role: str = ROLE) -> str:
         """
@@ -70,14 +70,13 @@ class GPT4ALLReplayStrategyMixin(BaseReplayStrategy):
         NOTE: As indicated in logger msg, for computers without GPU support, it is recommended that
         less than 750 tokens are used for the prompt and response.
         """
-        encoded_dict = self.tokenizer.encode(prompt)
-        num_tokens = len(encoded_dict[0])
+        encoded_list = self.tokenizer.encode(prompt)
+        num_tokens = len(encoded_list)
         if num_tokens > 750:
             logger.info(
-                "For computers without GPU support, \
-                        it is recommended that <750 tokens are used for the prompt and response. \
-                         There are %s tokens in the prompt",
-                num_tokens,
+                "For computers without GPU support, "
+                 "it is recommended that <750 tokens are used for the prompt and response. "
+                 f"There are {num_tokens} tokens in the prompt."
             )
 
         messages = [{"role": role, "content": prompt}]
