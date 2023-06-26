@@ -12,6 +12,7 @@ from transformers import OpenAiAgent
 from openadapt import config
 from openadapt.events import get_events
 from openadapt.models import Recording, Screenshot, ActionEvent
+from loguru import logger
 
 from openadapt.utils import display_event
 
@@ -31,7 +32,7 @@ class TransformersAgentsMixin(OpenAiAgent):
         chat_prompt_template=None,
         run_prompt_template=None,
         additional_tools=None,
-        screenshots=None,
+        screenshots=[],
     ):
         super().__init__(
             MODEL_NAME,
@@ -41,7 +42,7 @@ class TransformersAgentsMixin(OpenAiAgent):
             additional_tools,
         )
         if recording is None:
-            print("warning: no recording given")
+            logger.warning("no recording given")
         else:
             self.recording = recording
             self.screenshots = screenshots
@@ -55,22 +56,32 @@ class TransformersAgentsMixin(OpenAiAgent):
 
         for idx, action_event in enumerate(self.action_events):
             screenshot = action_event.screenshot
-            self.screenshots.append(screenshot)
-            screenshot.crop_active_window(action_event)
-            if debug:
-                diff = display_event(action_event, diff=True)
-                if not os.path.exists("debug"):
-                    os.mkdir("debug")
-                else:
-                    for f in os.listdir("debug"):
-                        os.remove(os.path.join("debug", f))
-                screenshot._image.save(f"debug/recording-{self.recording.id}-{idx}.png")
-                diff.save(f"debug/recording-{self.recording.id}-{idx}-diff.png")
+            if screenshot is not None:
+                self.screenshots.append(screenshot)
+                screenshot.crop_active_window(action_event)
+                if debug:
+                    diff = display_event(action_event, diff=True)
+                    if not os.path.exists("debug"):
+                        logger.info("creating debug directory")
+                        os.mkdir("debug")
+                    else:
+                        for f in os.listdir("debug"):
+                            logger.info({"debug directory found"})
+                            logger.info(f"removing {f}")
+                            os.remove(os.path.join("debug", f))
+                    logger.info("writing debug files")
+                    screenshot._image.save(
+                        f"debug/recording-{self.recording.id}-{idx}.png"
+                    )
+                    diff.save(f"debug/recording-{self.recording.id}-{idx}-diff.png")
 
-            return self.chat(
-                f"In the image, you are presented with a screenshot of a user's current active window."
-                f"The user's window event is: {action_event.window_event.title}."
-                f"What is the user doing, and what text do they see? DO NOT SEGMENT, feel free to use text_classifier and text_qa. "
-                f"If you have been given another image previously, please use that image and list the user's next possible actions.",
-                image=screenshot.image.convert("RGB"),
-            )
+                return self.chat(
+                    f"In the image, you are presented with a screenshot of a user's current active window."
+                    f"The user's window event is: {action_event.window_event.title}."
+                    f"What is the user doing, and what text do they see? DO NOT SEGMENT, feel free to use text_classifier and text_qa. "
+                    f"If you have been given another image previously, please use that image and list the user's next possible actions.",
+                    image=screenshot.image.convert("RGB"),
+                )
+            else:
+                logger.warning("screenshot invalid")
+                return False
