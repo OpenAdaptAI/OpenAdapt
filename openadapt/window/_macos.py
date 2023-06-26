@@ -6,8 +6,8 @@ import atomacos
 import AppKit
 import ApplicationServices
 import Quartz
-import re
 import Foundation
+import re
 
 
 def get_active_window_state():
