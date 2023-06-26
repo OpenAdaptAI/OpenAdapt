@@ -354,7 +354,9 @@ def display_event(
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
         if config.SCRUB_ENABLED:
-            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
+            from openadapt import scrub
+
+            text = scrub.scrub_text(text, is_separated=True)
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
