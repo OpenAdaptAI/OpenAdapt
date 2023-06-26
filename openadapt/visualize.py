@@ -192,7 +192,7 @@ def main():
     
     rows = []
     num_events = min(MAX_EVENTS, len(action_events)) if MAX_EVENTS is not None else len(action_events)
-    with alive_bar(total=num_events, title="Processing Action Events") as progress:
+    with alive_bar(total=num_events, title="Processing HTML for visualization:") as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
