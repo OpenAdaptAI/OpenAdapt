@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 
+from alive_progress import alive_bar
 from loguru import logger
 from pynput import keyboard, mouse
 import fire
@@ -247,14 +248,18 @@ def write_events(
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while not terminate_event.is_set() or not write_q.empty():
-        try:
-            event = write_q.get_nowait()
-        except queue.Empty:
-            continue
-        assert event.type == event_type, (event_type, event)
-        write_fn(recording_timestamp, event, perf_q)
-        logger.debug(f"{event_type=} written")
+
+    with alive_bar(total=write_q.qsize(), title=f"Writing {event_type} events") as progress:
+        while not terminate_event.is_set() or not write_q.empty():
+            try:
+                event = write_q.get_nowait()
+            except queue.Empty:
+                continue
+            assert event.type == event_type, (event_type, event)
+            write_fn(recording_timestamp, event, perf_q)
+            logger.debug(f"{event_type=} written")
+            progress()
+
     logger.info(f"{event_type=} done")
 
 
