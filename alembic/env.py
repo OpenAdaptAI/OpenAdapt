@@ -8,7 +8,6 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 from openadapt.config import DB_URL
-from openadapt.models import *
 from openadapt.db import Base
 
 # This is the Alembic Config object, which provides

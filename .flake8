@@ -2,4 +2,4 @@
 exclude=alembic/versions,.venv
 docstring-convention=google
 max-line-length = 110
-extend-ignore = D212, F403, D200, F401, E731, F841, D205, ANN001, ANN201, ANN101, ANN204, ANN202, ANN003, ANN002, ANN102, ANN206
+extend-ignore = D212, D200, F401, E731, F841, D205, ANN001, ANN201, ANN101, ANN204, ANN202, ANN003, ANN002, ANN102, ANN206
