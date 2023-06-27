@@ -24,14 +24,15 @@ class OpenAdaptWidget(FloatLayout):
         self.window.size = (50, 50)
         self.window.clearcolor = (255, 255, 255)
         self.window.always_on_top = True
-        self.PROC = None
+        self.record_proc = None
+        self.replay_proc = None
         self.button = Button(background_normal="assets/logo.png")
         self.button.bind(on_press=self.callback)
         self.current_state = "default"
         self.add_widget(self.button)
         # Check for active window changes every 0.5 seconds
         self.prev_active_window_position = None
-        self._active_window_checker = Clock.schedule_interval(
+        Clock.schedule_interval(
             self.position_above_active_window, 0.5
         )
 
@@ -67,32 +68,26 @@ class OpenAdaptWidget(FloatLayout):
             self.resume_replay()
 
     def start_recording(self):
-        self.PROC = Popen(
+        self.record_proc = Popen(
             "python -m openadapt.record " + "test",
             shell=True,
         )
 
     def stop_recording(self):
-        try:
-            self.PROC.send_signal(signal.CTRL_C_EVENT)
-            # Wait for process to terminate
-            self.PROC.wait()
-        except KeyboardInterrupt:
-            # Catch the KeyboardInterrupt exception to prevent termination
-            pass
-        self.PROC = None
+        self.record_proc.send_signal(signal.CTRL_C_EVENT)
+        self.record_proc.wait()
 
     def replay_recording(self):
-        self.PROC = Popen(
+        self.replay_proc = Popen(
             "python -m openadapt.replay " + "NaiveReplayStrategy",
             shell=True,
         )
 
     def pause_replay(self):
-        self.PROC.send_signal(signal.SIGSTOP)
+        self.replay_proc.send_signal(signal.SIGSTOP)
 
     def resume_replay(self):
-        self.PROC.send_signal(signal.SIGCONT)
+        self.replay_proc.send_signal(signal.SIGCONT)
 
 
 class OpenAdapt(App):
