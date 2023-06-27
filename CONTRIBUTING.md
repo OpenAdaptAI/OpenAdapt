@@ -4,8 +4,26 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), and for imports, we like to put put external imports in alphabetical order first, a new line, and then local imports.
+This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html),
+with the following modifications:
+- imports are ordered first by group (in order of built-in, external, local), then lexicographically
+- import groups are separated by newlines
 
+For example:
+
+```
+# built-in
+from functools import partial
+from pprint import pformat
+import json
+
+# external
+from loguru import logger
+import numpy as np
+
+# local
+from openadapt import models
+```
 ## Creating Issues
 In order to effectively communicate any bugs or request new features, please select the appropriate form. If none of the options suit your needs, you can click on "Open a blank issue" located at the bottom.
 
