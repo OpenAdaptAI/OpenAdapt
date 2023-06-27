@@ -1,8 +1,4 @@
-"""
-openadapt.test_events
-
-This module provides test cases for the event processing functionality of the openadapt package.
-"""
+"""Module to test events.py."""
 
 from functools import partial
 from pprint import pformat

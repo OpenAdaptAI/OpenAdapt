@@ -39,7 +39,7 @@ SCRUBBING_ENTITIES = [
 
 def scrub_text(text: str, is_separated: bool = False) -> str:
     """
-    Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer
+    Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         text (str): Text to be scrubbed
@@ -76,7 +76,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
 
 def scrub_text_all(text: str) -> str:
     """
-    Scrub the text by replacing all characters with config.SCRUB_CHAR
+    Scrub the text by replacing all characters with config.SCRUB_CHAR.
 
     Args:
         text (str): Text to be scrubbed
@@ -89,7 +89,7 @@ def scrub_text_all(text: str) -> str:
 
 def scrub_image(image: Image, fill_color=config.SCRUB_FILL_COLOR) -> Image:
     """
-    Scrub the image of all PII/PHI using Presidio Image Redactor
+    Scrub the image of all PII/PHI using Presidio Image Redactor.
 
     Args:
         image (PIL.Image): A PIL.Image object to be scrubbed
@@ -129,7 +129,7 @@ def _should_scrub_text(
 
 def _is_scrubbed(old_text: str, new_text: str) -> bool:
     """
-    Check if the text has been scrubbed
+    Check if the text has been scrubbed.
 
     Args:
         old_text (str): The original text

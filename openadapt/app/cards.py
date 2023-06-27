@@ -1,5 +1,5 @@
 """
-openadapt.app.cards module
+openadapt.app.cards module.
 
 This module provides functions for managing UI cards in the OpenAdapt application.
 """

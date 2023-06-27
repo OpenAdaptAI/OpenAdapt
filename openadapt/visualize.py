@@ -1,8 +1,7 @@
 """
-visualize.py
-
-Module for visualization utilities in the OpenAdapt library.
+Implements visualization utilities for OpenAdapt.
 """
+
 from pprint import pformat
 from threading import Timer
 import html

@@ -401,7 +401,7 @@ def merge_consecutive_mouse_click_events(events):
 
 
 def merge_consecutive_keyboard_events(events, group_named_keys=True):
-    """Merge consecutive keyboard char press events into a single press event"""
+    """Merge consecutive keyboard char press events into a single press event."""
 
     def is_target_event(event, state):
         is_target_event = bool(event.key)
@@ -480,7 +480,7 @@ def merge_consecutive_keyboard_events(events, group_named_keys=True):
 
 
 def remove_redundant_mouse_move_events(events):
-    """Remove mouse move events that don't change the mouse position"""
+    """Remove mouse move events that don't change the mouse position."""
 
     def is_target_event(event, state):
         return event.name in ("move", "click")
@@ -537,7 +537,7 @@ def remove_redundant_mouse_move_events(events):
 def merge_consecutive_action_events(
     name, events, is_target_event, get_merged_events,
 ):
-    """Merge consecutive action events into a single event"""
+    """Merge consecutive action events into a single event."""
     num_events_before = len(events)
     state = {"dt": 0}
     rval = []

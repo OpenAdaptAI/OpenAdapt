@@ -1,8 +1,5 @@
-"""
-openadapt.test_crop
+"""Module to test cropping functionality."""
 
-This module provides test cases for the cropping functionality of the openadapt package.
-"""
 
 from unittest.mock import Mock
 from unittest import mock

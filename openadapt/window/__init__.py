@@ -1,7 +1,7 @@
 """
-openadapt.window
+Package containing functions to interact with the active window and elements on different platforms.
 
-This module provides functions to interact with the active window and elements on different platforms.
+Module: __init__.py
 """
 
 import sys

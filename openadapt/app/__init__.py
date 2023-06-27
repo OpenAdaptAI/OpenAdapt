@@ -1,5 +1,5 @@
 """
-openadapt.app package
+openadapt.app package.
 
 This package contains modules for the OpenAdapt application.
 

@@ -1,9 +1,7 @@
 """
-crud.py
+Implements basic CRUD (Create, Read, Update, Delete) operations for interacting with a database.
 
-This module provides basic CRUD (Create, Read, Update, Delete) operations
-for interacting with a database.
-
+Module: crud.py
 """
 
 from loguru import logger

@@ -1,9 +1,7 @@
 """
-db.py
+Implements functionality for connecting to and interacting with the database.
 
-This module provides functionality for connecting to and interacting with
-the database.
-
+Module: db.py
 """
 
 import sqlalchemy as sa

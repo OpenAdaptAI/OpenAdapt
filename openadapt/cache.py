@@ -1,5 +1,5 @@
 """
-openadapt.cache module
+openadapt.cache module.
 
 This module provides a caching decorator for functions.
 

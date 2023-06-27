@@ -1,5 +1,5 @@
 """
-openadapt.app.util module
+openadapt.app.util module.
 
 This module provides utility functions for the OpenAdapt application.
 

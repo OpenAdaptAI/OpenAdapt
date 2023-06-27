@@ -1,4 +1,4 @@
-"""Module to test scrub.py"""
+"""Module to test scrub.py."""
 
 from io import BytesIO
 import os

@@ -1,5 +1,5 @@
 """
-openadapt.app.objects.local_file_picker module
+openadapt.app.objects.local_file_picker module.
 
 This module provides the LocalFilePicker class for selecting a file from the local filesystem.
 

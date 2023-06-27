@@ -1,5 +1,5 @@
 """
-openadapt.app.main module
+openadapt.app.main module.
 
 This module provides the main entry point for running the OpenAdapt application.
 

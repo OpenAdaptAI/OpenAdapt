@@ -14,8 +14,7 @@ from openadapt import config
 
 def reset_db():
     """
-    Clears the database by removing the database file and running a database migration
-    using Alembic.
+    Clears the database by removing the db file and running a db migration using Alembic.
     """
     if os.path.exists(config.DB_FPATH):
         os.remove(config.DB_FPATH)

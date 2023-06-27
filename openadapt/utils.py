@@ -697,7 +697,7 @@ def strip_element_state(action_event):
 
 def get_functions(name) -> dict:
     """
-    Get a dictionary of function names to functions for all non-private functions
+    Get a dictionary of function names to functions for all non-private functions.
 
     Usage:
 

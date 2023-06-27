@@ -77,6 +77,7 @@ flake8 = "^6.0.0"
 flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+flake8-annotations = "^3.0.1"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"

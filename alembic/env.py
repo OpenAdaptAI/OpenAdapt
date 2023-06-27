@@ -1,8 +1,7 @@
 """
-Alembic Environment Configuration
+Alembic Environment Configuration.
 
-This module provides the environment configuration for Alembic, including
-running migrations in offline and online modes.
+This module provides the environment configuration for Alembic.
 """
 
 from logging.config import fileConfig
