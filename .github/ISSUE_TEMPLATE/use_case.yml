@@ -1,0 +1,42 @@
+name: Use Case
+description: Describe a new use case for OpenAdapt
+title: "Use Case: "
+labels: usecase
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to add a new use case! Default text extracted from [here] (https://github.com/MLDSAI/OpenAdapt/issues/72#issuecomment-1601991759).
+  - type: input
+    id: role
+    attributes:
+      label: Role
+      description: Who is this use case about?
+      placeholder: Travel Agent
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What is this use case about?
+      placeholder: Book a flight for 4 people to Barcelona
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow
+      description: How is the task accomplished?
+      placeholder: Open Chrome 
+        - Navigate to Google Flights 
+        - Set the departure city
+        - Set the arrival city
+        - Select the departure date
+        - Select the return date
+        - Click "Search"
+        - Update number of travelers by clicking on person icon and selecting "4"
+        - Update price filter to $10,000
+        - Update stops to "1 stops or fewer"
+    validations:
+      required: true
