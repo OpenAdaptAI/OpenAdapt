@@ -70,7 +70,7 @@ def get_events(recording, process=True, meta=None):
                 break
 
     if meta is not None:
-        format_num = lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"
+        format_num = lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"  # noqa
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
             num_action_events, num_action_events_raw,

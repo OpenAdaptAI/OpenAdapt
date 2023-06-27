@@ -498,6 +498,7 @@ def performance_stats_writer(
 ):
     """
     Write performance stats to the database.
+
     Each entry includes the event type, start time, and end time.
 
     Args:

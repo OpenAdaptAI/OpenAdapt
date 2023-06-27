@@ -655,7 +655,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     y_data = {"proc_times": {}, "start_time_deltas": {}}
     for i, event_type in enumerate(type_to_count):
-        type_count = type_to_count[event_type]
+        # type_count = type_to_count[event_type]
         start_time_deltas = type_to_start_time_deltas[event_type]
         proc_times = type_to_proc_times[event_type]
         y_data["proc_times"][event_type] = proc_times

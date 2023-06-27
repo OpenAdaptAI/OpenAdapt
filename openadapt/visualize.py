@@ -284,7 +284,7 @@ def main():
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
-    result = show(layout(rows,))
+    # result = show(layout(rows,))
 
     def cleanup():
         os.remove(fname_out)
