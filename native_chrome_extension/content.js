@@ -1,24 +1,32 @@
 /*
- * Function to extract relevant information from the document
+ * Function to send a message to the background script
 */
-function extractDocumentInfo() {
-  const documentInfo = {
-    title: document.title,
-    url: window.location.href,
-    html: document.documentElement.outerHTML
-  };
-  return documentInfo;
+function sendMessageToBackgroundScript(message) {
+  chrome.runtime.sendMessage(message);
 }
 
 
 /*
- * Send the document info to the background script
+ * Function to detect DOM changes
 */
-function sendDocumentInfo() {
-    const documentInfo = extractDocumentInfo();
-    chrome.runtime.sendMessage({ type: 'document', documentInfo });
+function detectDOMChanges() {
+  // Create a mutation observer
+  const observer = new MutationObserver(function(mutationsList) {
+    // Send a message to the background script when a DOM change is detected
+    sendMessageToBackgroundScript({
+      action: 'logDOMChange',
+      documentObject: document,
+    });
+  });
+
+  // Start observing DOM changes
+  observer.observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    characterData: true,
+  });
 }
 
-
-sendDocumentInfo();
-document.addEventListener('DOMSubtreeModified', sendDocumentInfo);
+// Call the function to start detecting DOM changes
+detectDOMChanges();
