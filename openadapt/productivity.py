@@ -73,7 +73,7 @@ def find_gaps(action_events):
     time_in_gaps = 0
     # check every pair of action events for gap length
     for i in range(0, len(action_events) - 1):
-        curr_gap = action_events[i + 1].screenshot_timestamp - action_events[i].screenshot_timestamp
+        curr_gap = action_events[i + 1].timestamp - action_events[i].timestamp
         if curr_gap > MAX_GAP_SECONDS:
             num_gaps += 1
             time_in_gaps += curr_gap
@@ -174,16 +174,16 @@ def find_num_tasks(action_events, start, length, task=None):
             task_index += 1
         else:
             task_index = 0
+        if task_index == 1:
+            # start of a task
+            start_time = action_events[j].timestamp
         if task_index == len(task):
-            # check if there's more that is the same after the last ActionEvent
+            # TODO: check if there's more that is the same after the last ActionEvent
             # completed another task
             num_repetitions += 1
             task_index = 0
             end_time = action_events[j].timestamp
-            total_time += end_time - start_time
-        if task_index == 1:
-            # start of a task
-            start_time = action_events[j].timestamp
+            total_time = total_time + end_time - start_time
 
     return task, num_repetitions, total_time
 
@@ -484,8 +484,4 @@ def calculate_productivity():
 
 
 if __name__ == "__main__":
-    # sequence = [1, 2, 3, 4]
-    # start, length = brents_numbers(sequence)
-    # for i in range(0, length):
-    #     print(sequence[start + i])
     calculate_productivity()
