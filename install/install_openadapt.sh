@@ -36,7 +36,7 @@ InstallSVGDependencies() {
 }
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/dianzrong/OpenAdapt.git" "clone git repo"
+RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 
 cd OpenAdapt
 
