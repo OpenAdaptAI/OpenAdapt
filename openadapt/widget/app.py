@@ -13,6 +13,7 @@ from kivy.clock import Clock
 import sys
 import pywinauto
 import Quartz
+from openadapt import window
 
 
 class OpenAdaptWidget(FloatLayout):
@@ -29,42 +30,17 @@ class OpenAdaptWidget(FloatLayout):
         self.current_state = "default"
         self.add_widget(self.button)
         # Check for active window changes every 0.5 seconds
-        self.active_window = None
+        self.prev_active_window_position = None
         self._active_window_checker = Clock.schedule_interval(
             self.position_above_active_window, 0.5
         )
 
     def position_above_active_window(self, *args):
-        if sys.platform == "win32":
-            try:
-                app = pywinauto.application.Application(backend="win32").connect(
-                    active_only=True
-                )
-                window = app.active()
-                active_window_properties = window.get_properties()
-                self.window.top, self.window.right = (
-                    active_window_properties["rectangle"].top,
-                    active_window_properties["rectangle"].right,
-                )
-            except:
-                pass
-        elif sys.platform == "darwin":
-            windows = Quartz.CGWindowListCopyWindowInfo(
-                (
-                    Quartz.kCGWindowListExcludeDesktopElements
-                    | Quartz.kCGWindowListOptionOnScreenOnly
-                ),
-                Quartz.kCGNullWindowID,
-            )
-            active_windows_info = [win for win in windows if win["kCGWindowLayer"] == 0]
-            meta = active_windows_info[0]
-            bounds = meta["kCGWindowBounds"]
-            left = bounds["X"]
-            self.window.top = bounds["Y"] + 10
-            width = bounds["Width"]
-            self.window.left = left
+        window_data = window.get_active_window_data()
+        self.window.top = window_data["top"] + 10
+        self.window.left = window_data["left"] + window_data["width"]
         if (self.window.top, self.window.right) != self.prev_active_window_position:
-            self.prev_active_window_position = (self.window.top, self.window.right)
+            self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
 
