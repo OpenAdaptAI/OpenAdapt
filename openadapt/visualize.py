@@ -25,13 +25,20 @@ from openadapt.utils import (
     rows2dicts,
 )
 
+from openadapt import config
+
+SCRUB = config.SCRUB_ENABLED
+if SCRUB:
+    from openadapt import scrub
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
+MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template("""
+CSS = string.Template(
+    """
     table {
         outline: 1px solid black;
     }
@@ -65,7 +72,8 @@ CSS = string.Template("""
     .screenshot:active img:nth-child(3) {
         display: block;
     }
-""").substitute(
+"""
+).substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -107,7 +115,7 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     if isinstance(obj, list):
         children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
@@ -116,19 +124,28 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN):
             children = indicate_missing(children, all_children, "...")
         html_str = "\n".join(children)
     elif isinstance(obj, dict):
-        rows_html = "\n".join([
-            f"""
+        rows_html = "\n".join(
+            [
+                f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
                     <td>{dict2html(value, max_children)}</td>
                 </tr>
             """
-            for key, value in obj.items()
-            if value not in EMPTY
-        ])
+                for key, value in obj.items()
+                if value not in EMPTY
+            ]
+        )
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
+        if len(html_str) > max_len:
+            n = max_len // 2
+            head = html_str[:n]
+            tail = html_str[-n:]
+            snipped = html_str[n:-n]
+            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
+            html_str = head + middle + tail
     return html_str
 
 
@@ -136,12 +153,21 @@ def main():
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
+    if SCRUB:
+        scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
+
+    if SCRUB:
+        event_dicts = scrub.scrub_list_dicts(event_dicts)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+
+    recording_dict = row2dict(recording)
+    if SCRUB:
+        recording_dict = scrub.scrub_dict(recording_dict)
 
     rows = [
         row(
@@ -151,7 +177,7 @@ def main():
         ),
         row(
             Div(
-                text=f"{dict2html(row2dict(recording))}",
+                text=f"{dict2html(recording_dict)}",
             ),
         ),
         row(
@@ -159,7 +185,7 @@ def main():
                 text=f"{dict2html(meta)}",
                 width_policy="max",
             ),
-        )
+        ),
     ]
     logger.info(f"{len(action_events)=}")
     for idx, action_event in enumerate(action_events):
@@ -168,14 +194,29 @@ def main():
         image = display_event(action_event)
         diff = display_event(action_event, diff=True)
         mask = action_event.screenshot.diff_mask
+
+        if SCRUB:
+            image = scrub.scrub_image(image)
+            diff = scrub.scrub_image(diff)
+            mask = scrub.scrub_image(mask)
+
         image_utf8 = image2utf8(image)
         diff_utf8 = image2utf8(diff)
         mask_utf8 = image2utf8(mask)
         width, height = image.size
-        rows.append([
-            row(
-                Div(
-                    text=f"""
+
+        action_event_dict = row2dict(action_event)
+        window_event_dict = row2dict(action_event.window_event)
+
+        if SCRUB:
+            action_event_dict = scrub.scrub_dict(action_event_dict)
+            window_event_dict = scrub.scrub_dict(window_event_dict)
+
+        rows.append(
+            [
+                row(
+                    Div(
+                        text=f"""
                         <div class="screenshot">
                             <img
                                 src="{image_utf8}"
@@ -197,19 +238,20 @@ def main():
                             >
                         </div>
                         <table>
-                            {dict2html(row2dict(action_event.window_event), None)}
+                            {dict2html(window_event_dict , None)}
                         </table>
                     """,
-                ),
-                Div(
-                    text=f"""
+                    ),
+                    Div(
+                        text=f"""
                         <table>
-                            {dict2html(row2dict(action_event))}
+                            {dict2html(action_event_dict)}
                         </table>
                     """
+                    ),
                 ),
-            ),
-        ])
+            ]
+        )
 
     title = f"recording-{recording.id}"
     fname_out = f"recording-{recording.id}.html"
@@ -222,12 +264,10 @@ def main():
         )
     )
 
-
     def cleanup():
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
-
 
     Timer(1, cleanup).start()
 

@@ -13,12 +13,20 @@ cache
 
 # db
 *.db
+*.db-journal
 
 # VSCode
 .VSCode
+.vsCode
+
+#Idea
+.idea
 
 # Generated performance charts
 performance
 
 # Generated when adding editable dependencies in requirements.txt (-e)
 src
+
+# MacOS file
+.DS_Store
