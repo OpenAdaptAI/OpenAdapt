@@ -27,16 +27,7 @@ body:
     id: workflow
     attributes:
       label: Workflow
-      description: How is the task accomplished?
-      placeholder: Open Chrome 
-        - Navigate to Google Flights 
-        - Set the departure city
-        - Set the arrival city
-        - Select the departure date
-        - Select the return date
-        - Click "Search"
-        - Update number of travelers by clicking on person icon and selecting "4"
-        - Update price filter to $10,000
-        - Update stops to "1 stops or fewer"
+      description: How is the task accomplished? Please place each step on a new line.
+      placeholder: Open Chrome -> Navigate to Google Flights -> Set the departure city -> ...
     validations:
       required: true
