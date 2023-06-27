@@ -1,10 +1,8 @@
 """Implements a naive playback strategy, replaying ActionEvents without screenshots."""
 
-from pprint import pformat
 import time
 from loguru import logger
-import mss.base
-from openadapt import config, events, utils, models, strategies
+from openadapt import config, utils, models, strategies
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True

@@ -4,7 +4,6 @@ Utility functions for OpenAdapt.
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from datetime import datetime, timedelta
 from io import BytesIO
 from collections import Counter, defaultdict
 import base64

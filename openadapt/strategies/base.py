@@ -10,10 +10,9 @@ import time
 
 from loguru import logger
 from pynput import keyboard, mouse
-import mss.base
 import numpy as np
 
-from openadapt import models, playback, utils, window
+from openadapt import models, playback, utils
 
 
 MAX_FRAME_TIMES = 1000

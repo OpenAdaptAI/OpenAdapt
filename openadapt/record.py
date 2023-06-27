@@ -10,7 +10,6 @@ from collections import namedtuple
 from functools import partial
 from typing import Any, Callable, Dict
 import multiprocessing
-import os
 import queue
 import signal
 import sys

@@ -25,7 +25,6 @@ import math
 from loguru import logger
 from PIL import Image
 from moviepy.editor import VideoFileClip, VideoClip
-from moviepy.video.fx import speedx
 from tqdm import tqdm
 import fire
 import numpy as np

@@ -8,15 +8,11 @@ Usage:
     class MyReplayStrategy(SAMReplayStrategyMixin):
         ...
 """
-from pprint import pformat
-from mss import mss
-from openadapt import models
+
 from segment_anything import SamPredictor, sam_model_registry, SamAutomaticMaskGenerator
 from PIL import Image
 from loguru import logger
-from openadapt.events import get_events
-from openadapt.utils import display_event, rows2dicts
-from openadapt.models import Recording, Screenshot, WindowEvent
+from openadapt.models import Recording, Screenshot
 from pathlib import Path
 import urllib
 import numpy as np

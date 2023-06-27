@@ -1,5 +1,3 @@
-import collections
-import sys
 from loguru import logger
 import pywinauto
 from pywinauto import Desktop
