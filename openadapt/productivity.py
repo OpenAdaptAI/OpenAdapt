@@ -402,20 +402,19 @@ def calculate_productivity():
             )
         ])
 
-    last_timestamp = action_events[0].window_event_timestamp
-    last_title = action_events[0].window_event.title
     last_event = action_events[0]
     curr_action_events = []
-    for idx, action_event in enumerate(action_events):
+    for i in range(0, len(action_events) - 1):
         # TODO:
-        if idx == MAX_EVENTS:
+        if i == MAX_EVENTS:
             break
-        if action_event.window_event_timestamp != last_timestamp and \
-                action_event.window_event.title is not None and \
-                action_event.window_event.title != last_title:
-            last_timestamp = action_event.window_event_timestamp
-            last_title = action_event.window_event.title
-            image = display_event(curr_action_events[-1])
+        curr_event = action_events[i]
+        next_event = action_events[i + 1]
+        curr_action_events.append(curr_event)
+        if curr_event.window_event_timestamp != next_event.window_event_timestamp and \
+                curr_event.window_event.title != "" and \
+                curr_event.window_event.title != next_event.window_event.title:
+            image = display_event(curr_event)
             image_utf8 = image2utf8(image)
             width, height = image.size
 
@@ -446,7 +445,7 @@ def calculate_productivity():
                                 >
                             </div>
                             <table>
-                                {dict2html(row2dict(curr_action_events[-1].window_event), None)}
+                                {dict2html(row2dict(curr_event.window_event), None)}
                             </table>
                         """,
                     ),
@@ -461,9 +460,7 @@ def calculate_productivity():
             ])
             # flush curr_action_events
             curr_action_events = []
-        curr_action_events.append(action_event)
-        if idx > 1:
-            last_event = action_events[idx - 2]
+            last_event = curr_event
     # TODO: change the one at the bottom
 
     # display data
