@@ -266,7 +266,8 @@ def write_events(
                 progress = tqdm(
                     total=num_left,
                     desc="Writing to Database",
-                    unit="event", colour="green",
+                    unit="event",
+                    colour="green",
                     dynamic_ncols=True,
                 )
         if (

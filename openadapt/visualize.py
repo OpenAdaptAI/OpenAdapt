@@ -197,12 +197,12 @@ def main():
         else len(action_events)
     )
     with tqdm(
-        total=num_events,
-        desc="Processing HTML for Visualization",
-        colour="green",
-        dynamic_ncols=True,
-        
-    ) as progress:
+            total=num_left,
+            desc="Writing to Database",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
