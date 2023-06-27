@@ -17,9 +17,9 @@ import sys
 import threading
 import time
 
-from alive_progress import alive_bar
 from loguru import logger
 from pynput import keyboard, mouse
+from tqdm import tqdm
 import fire
 import mss.tools
 
@@ -233,6 +233,7 @@ def write_events(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    term_pipe: multiprocessing.Pipe,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -244,13 +245,36 @@ def write_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        term_pipe: A pipe for communicating \
+            the number of events left to be written.
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while not terminate_event.is_set() or not write_q.empty():
+
+    num_left = 0
+    progress = None
+    while (
+        not terminate_event.is_set() or
+        not write_q.empty()
+    ):
+        if term_pipe.poll():
+            num_left = term_pipe.recv()
+            if num_left != 0 and progress is None:
+                progress = tqdm(
+                    total=num_left,
+                    desc="Writing to Database",
+                    unit="event", colour="green",
+                    dynamic_ncols=True,
+                )
+        if (
+            terminate_event.is_set() and
+            num_left != 0 and 
+            progress is not None
+        ):
+            progress.update()
         try:
             event = write_q.get_nowait()
         except queue.Empty:
@@ -258,6 +282,10 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
         logger.debug(f"{event_type=} written")
+
+    if progress is not None:
+        progress.close()
+
     logger.info(f"{event_type=} done")
 
 
@@ -574,7 +602,11 @@ def record(
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = multiprocessing.Queue()
     terminate_event = multiprocessing.Event()
-
+    
+    term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
+    term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
+    term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
+    
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -622,6 +654,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_screen,
         ),
     )
     screen_event_writer.start()
@@ -635,6 +668,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_action,
         ),
     )
     action_event_writer.start()
@@ -648,6 +682,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_window,
         ),
     )
     window_event_writer.start()
@@ -671,6 +706,10 @@ def record(
     except KeyboardInterrupt:
         terminate_event.set()
 
+    term_pipe_parent_window.send(window_write_q.qsize())
+    term_pipe_parent_action.send(action_write_q.qsize())
+    term_pipe_parent_screen.send(screen_write_q.qsize())
+
     logger.info(f"joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
@@ -680,7 +719,6 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
