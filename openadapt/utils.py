@@ -70,7 +70,7 @@ def row2dict(row, follow=True):
     """
     if isinstance(row, dict):
         return row
-    try_follow = ["children",] if follow else []
+    try_follow = ["children"] if follow else []
     to_follow = [key for key in try_follow if hasattr(row, key)]
 
     # follow children recursively

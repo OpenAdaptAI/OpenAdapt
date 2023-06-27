@@ -388,7 +388,7 @@ def merge_consecutive_mouse_click_events(events):
                         "mouse_x": event.mouse_x,
                         "mouse_y": event.mouse_y,
                         "mouse_button_name": event.mouse_button_name,
-                        "children": [event, t_to_event[release_t],],
+                        "children": [event, t_to_event[release_t]]
                     },
                 )
             event.timestamp -= state["dt"]

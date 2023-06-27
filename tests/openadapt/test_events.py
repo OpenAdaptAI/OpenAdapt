@@ -338,14 +338,14 @@ def test_merge_consecutive_mouse_click_events():
             *make_click_events(dt_long, button_name="right"),
             make_doubleclick_event(
                 dt_long,
-                lambda: [*make_click_events(dt_short), *make_click_events(dt_long),],
+                lambda: [*make_click_events(dt_short), *make_click_events(dt_long)],
             ),
             make_doubleclick_event(
                 dt_long,
-                lambda: [*make_click_events(dt_short), *make_click_events(dt_long),],
+                lambda: [*make_click_events(dt_short), *make_click_events(dt_long)],
             ),
             *make_click_events(dt_long, button_name="right"),
-            make_singleclick_event(dt_long, lambda: [*make_click_events(dt_long),],),
+            make_singleclick_event(dt_long, lambda: [*make_click_events(dt_long)]),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
@@ -385,7 +385,7 @@ def test_merge_consecutive_mouse_move_events():
             ),
             make_scroll_event(),
             make_move_event(
-                4, get_pre_children=lambda: [make_move_event(3), make_move_event(4),],
+                4, get_pre_children=lambda: [make_move_event(3), make_move_event(4)],
             ),
         ]
     )
@@ -463,25 +463,25 @@ def test_remove_redundant_mouse_move_events():
     reset_timestamp()
     expected_events = rows2dicts(
         [
-            make_click_event(True, 1, get_pre_children=lambda: [make_move_event(1),],),
+            make_click_event(True, 1, get_pre_children=lambda: [make_move_event(1)]),
             make_click_event(
-                False, 1, get_post_children=lambda: [make_move_event(1),],
+                False, 1, get_post_children=lambda: [make_move_event(1)],
             ),
-            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2),],),
+            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2)],),
             make_click_event(
-                False, 3, get_post_children=lambda: [make_move_event(3),],
+                False, 3, get_post_children=lambda: [make_move_event(3)],
             ),
             make_click_event(
                 True,
                 1,
-                get_post_children=lambda: [make_move_event(3), make_move_event(1),],
+                get_post_children=lambda: [make_move_event(3), make_move_event(1)],
             ),
             make_click_event(
-                False, 1, get_post_children=lambda: [make_move_event(1),],
+                False, 1, get_post_children=lambda: [make_move_event(1)],
             ),
-            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2),],),
+            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2)]),
             make_click_event(
-                False, 3, get_post_children=lambda: [make_move_event(3),],
+                False, 3, get_post_children=lambda: [make_move_event(3)],
             ),
         ]
     )
@@ -632,7 +632,7 @@ def test_merge_consecutive_keyboard_events__grouped():
     expected_events = rows2dicts(
         [
             make_click_event(True),
-            make_type_event(lambda: [*make_key_events("a"), *make_key_events("b"),]),
+            make_type_event(lambda: [*make_key_events("a"), *make_key_events("b")]),
             make_type_event(
                 lambda: [
                     make_press_event(name="ctrl"),
@@ -644,7 +644,7 @@ def test_merge_consecutive_keyboard_events__grouped():
                     make_release_event(name="alt"),
                 ]
             ),
-            make_type_event(lambda: [*make_key_events("f"), *make_key_events("g"),]),
+            make_type_event(lambda: [*make_key_events("f"), *make_key_events("g")]),
             make_click_event(False),
         ]
     )
@@ -689,7 +689,7 @@ def test_discard_unused_events():
         make_action_event({"window_event_timestamp": 2}),
     ]
     expected_filtered_window_events = rows2dicts(
-        [make_window_event({"timestamp": 0}), make_window_event({"timestamp": 2}),]
+        [make_window_event({"timestamp": 0}), make_window_event({"timestamp": 2})]
     )
     actual_filtered_window_events = rows2dicts(
         discard_unused_events(window_events, action_events, "window_event_timestamp",)
