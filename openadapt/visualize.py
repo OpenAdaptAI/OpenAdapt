@@ -4,11 +4,11 @@ import html
 import os
 import string
 
-from alive_progress import alive_bar
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
+from tqdm import tqdm
 
 from openadapt.crud import (
     get_latest_recording,
@@ -196,8 +196,12 @@ def main():
         if MAX_EVENTS is not None
         else len(action_events)
     )
-    with alive_bar(
-        total=num_events, title="Processing HTML for visualization:"
+    with tqdm(
+        total=num_events,
+        desc="Processing HTML for Visualization",
+        colour="green",
+        dynamic_ncols=True,
+        
     ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
@@ -264,7 +268,7 @@ def main():
                 ]
             )
 
-            progress()
+            progress.update()
 
     title = f"recording-{recording.id}"
     fname_out = f"recording-{recording.id}.html"
