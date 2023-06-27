@@ -1,18 +1,11 @@
-import kivy
 from subprocess import Popen
 import signal
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
 from kivy.core.window import Window
-import pygetwindow as gw
 from loguru import logger
-import ctypes
-from ctypes import wintypes
 from kivy.clock import Clock
-import sys
-import pywinauto
-import Quartz
 from openadapt import window
 
 
