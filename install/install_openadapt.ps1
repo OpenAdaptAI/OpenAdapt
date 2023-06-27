@@ -50,7 +50,7 @@ function RunAndCheck {
     }
 }
 
-
+# Cleanup function to delete the setup directory
 function Cleanup {
     $exists = Test-Path -Path $setupdir
     if ($exists) {
@@ -68,13 +68,34 @@ function CheckCMDExists {
     )
 
     Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
-    If ($getErr -eq $null) {
-       return $true
+    if ($getErr -eq $null) {
+        return $true
     }
     return $false
 }
 
 
+# Return the current user's PATH variable
+function GetUserPath {
+    $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    return $userEnvPath
+}
+
+
+# Return the system's PATH variable
+function GetSystemPath {
+    $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    return $systemEnvPath
+}
+
+
+# Refresh Path Environment Variable for both Curent User and System
+function RefreshPathVariables {
+    $env:Path = GetUserPath + ";" + GetSystemPath
+}
+
+
+# Return true if a command/exe is available
 function GetTesseractCMD {
     # Use tesseract alias if it exists
     if (CheckCMDExists $tesseractCmd) {
@@ -114,19 +135,17 @@ function GetTesseractCMD {
         exit
     }
 
-    # Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    RefreshPathVariables
 
     # Add Tesseract OCR to the System Path variable
-    $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $systemEnvPath = GetSystemPath
     $updatedSystemPath = "$systemEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
 
-    # Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    RefreshPathVariables
 
     # Add Tesseract OCR to the User Path variable
-    $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $userEnvPath = GetUserPath
     $updatedUserPath = "$userEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
 
@@ -144,6 +163,7 @@ function GetTesseractCMD {
 }
 
 
+# Check and Istall Python and return the python command
 function GetPythonCMD {
     # Use python exe if it exists and is the required version
     if (CheckCMDExists $pythonCmd) {
@@ -167,8 +187,7 @@ function GetPythonCMD {
     Write-Host "Installing python..."
     Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
 
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    RefreshPathVariables
 
     # Make sure python is now available and the right version
     if (CheckCMDExists $pythonCmd) {
@@ -188,6 +207,7 @@ function GetPythonCMD {
 }
 
 
+# Check and Install Git and return the git command
 function GetGitCMD {
     $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
@@ -205,8 +225,7 @@ function GetGitCMD {
         Start-Process -FilePath $gitInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
         Remove-Item $gitInstaller
 
-        # Refresh Path Environment Variable
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        RefreshPathVariables
 
         # Make sure git is now available
         $gitExists = CheckCMDExists $gitCmd
