@@ -130,9 +130,6 @@ function GetTesseractCMD {
     $updatedUserPath = "$userEnvPath;$tesseractPath"
     [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
 
-    # Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
     Write-Host "Added Tesseract OCR to PATH." -ForegroundColor Green
 
     # Make sure tesseract is now available
