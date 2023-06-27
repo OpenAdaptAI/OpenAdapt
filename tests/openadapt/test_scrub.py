@@ -21,6 +21,37 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
     return r, g, b
 
 
+def test_analyze_emr() -> None:
+    """
+    Test to analyze some EMR PII data
+    """
+
+    # warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+    # Read test image data from file
+    for i in range(1, 9):
+        # resources/sample_emr_{i}.png
+        test_image_path = "resources/sample_emr_"
+        test_image_path = test_image_path + str(i) + ".png"
+        with open(test_image_path, "rb") as file:
+            test_image_data = file.read()
+
+        # Convert image data to PIL Image object
+        test_image = Image.open(BytesIO(test_image_data))
+
+        # Scrub the image
+        scrubbed_image = scrub.scrub_image(test_image)
+
+        # Save the scrubbed image data to a file
+        scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
+        scrubbed_image.save(scrubbed_image_path)
+     
+    # Assert that resources has the scrubbed files
+    assert os.path.exists("resources/sample_emr_1_scrubbed.png")
+        
+    # TODO: Add code to analyze the scrubbed image
+        
+
 def test_scrub_image() -> None:
     """
     Test that the scrubbed image data is different
