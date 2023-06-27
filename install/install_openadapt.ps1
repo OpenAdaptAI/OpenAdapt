@@ -1,7 +1,7 @@
 # PowerShell script to pull OpenAdapt and install
 
 ################################   PARAMETERS   ################################
-# Change these if a different version of is required
+# Change these if a different version is required
 
 $setupdir = "C:/OpenAdaptSetup"
 
