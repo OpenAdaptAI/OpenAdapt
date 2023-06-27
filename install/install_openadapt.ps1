@@ -53,7 +53,7 @@ function RunAndCheck {
 
 function Cleanup {
     $exists = Test-Path -Path $setupdir
-    If ($exists) {
+    if ($exists) {
         Set-Location $setupdir
         Remove-Item -LiteralPath $setupdir -Force -Recurse
     }
