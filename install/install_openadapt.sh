@@ -1,11 +1,15 @@
 #!/bin/bash
 set -e
+set -x
 
+################################    PARAMETERS   ################################
 
-# Change these if a different version  is required
+# Change these if a different version is required
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
+
+################################ HELPER FUNCTIONS ################################
 
 # Remove OpenAdapt if it exists
 Cleanup() {
@@ -95,9 +99,7 @@ CheckPythonExists() {
     exit
 }
 
-############################################################################################
-# Installation starts here
-############################################################################################
+################################ INSTALLATION ################################
 
 # Download brew
 if ! CheckCMDExists "brew"; then
@@ -127,18 +129,8 @@ RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
 
 cd OpenAdapt
 
-RunAndCheck "python3.10 -m venv .venv" "Create python virtual environment"
-source .venv/bin/activate
-pip install wheel
-
-# the following line generates a warning:
-#   Ignoring pywin32: markers 'sys_platform == "win32"' don't match your environment
-pip install -r requirements.txt
-
-# the following line generates a warning:
-#   [notice] To update, run: pip install --upgrade pip
-pip install -e .
-
+RunAndCheck "pip install poetry" "Install Poetry"
+RunAndCheck "poetry install" "Install Python dependencies"
+RunAndCheck "poetry shell" "Activate virtual environment"
 RunAndCheck "alembic upgrade head" "Update database"
-RunAndCheck "python3.10 -m spacy download en_core_web_trf" "Download spacy model"
 RunAndCheck "pytest" "Run tests"
