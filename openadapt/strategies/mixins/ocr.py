@@ -28,9 +28,7 @@ from openadapt.strategies.base import BaseReplayStrategy
 
 
 class OCRReplayStrategyMixin(BaseReplayStrategy):
-    """
-    ReplayStrategy mixin for getting text from images via OCR.
-    """
+    """ReplayStrategy mixin for getting text from images via OCR."""
 
     def __init__(
         self, recording: Recording,

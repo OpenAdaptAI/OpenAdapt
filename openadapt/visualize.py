@@ -1,6 +1,4 @@
-"""
-Implements visualization utilities for OpenAdapt.
-"""
+"""Implements visualization utilities for OpenAdapt."""
 
 from pprint import pformat
 from threading import Timer
@@ -190,9 +188,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
 
 
 def main():
-    """
-    Main function to generate an HTML report for a recording.
-    """
+    """Main function to generate an HTML report for a recording."""
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()

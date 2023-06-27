@@ -20,9 +20,7 @@ MONOCHROME = True
 
 
 class ASCIIReplayStrategyMixin(BaseReplayStrategy):
-    """
-    ReplayStrategy mixin for converting images to ASCII.
-    """
+    """ReplayStrategy mixin for converting images to ASCII."""
 
     def __init__(
         self, recording: Recording,

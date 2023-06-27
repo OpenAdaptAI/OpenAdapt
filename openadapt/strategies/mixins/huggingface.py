@@ -19,9 +19,7 @@ MAX_INPUT_SIZE = 1024
 
 
 class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
-    """
-    ReplayStrategy mixin for generating completions with HuggingFace.
-    """
+    """ReplayStrategy mixin for generating completions with HuggingFace."""
 
     def __init__(
         self,

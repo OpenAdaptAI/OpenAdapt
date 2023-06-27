@@ -1,6 +1,4 @@
-"""
-Implements a naive playback strategy, replaying ActionEvents without screenshots.
-"""
+"""Implements a naive playback strategy, replaying ActionEvents without screenshots."""
 
 from pprint import pformat
 import time

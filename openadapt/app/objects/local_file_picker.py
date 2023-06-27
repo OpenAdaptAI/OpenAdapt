@@ -18,9 +18,7 @@ from nicegui import ui
 
 
 class LocalFilePicker(ui.dialog):
-    """
-    LocalFilePicker class for selecting a file from the local filesystem.
-    """
+    """LocalFilePicker class for selecting a file from the local filesystem."""
 
     def __init__(
         self,
@@ -70,9 +68,7 @@ class LocalFilePicker(ui.dialog):
         self.update_grid()
 
     def update_grid(self) -> None:
-        """
-        Update the grid with file data.
-        """
+        """Update the grid with file data."""
         paths = list(self.path.glob("*"))
         if not self.show_hidden_files:
             paths = [p for p in paths if not p.name.startswith(".")]
@@ -112,9 +108,7 @@ class LocalFilePicker(ui.dialog):
             self.submit([str(self.path)])
 
     async def _handle_ok(self):
-        """
-        Handle the Ok button click event.
-        """
+        """Handle the Ok button click event."""
         rows = await ui.run_javascript(
             f"getElement({self.grid.id}).gridOptions.api.getSelectedRows()"
         )
@@ -122,9 +116,7 @@ class LocalFilePicker(ui.dialog):
 
 
 async def pick_file():
-    """
-    Async function for picking a file using LocalFilePicker.
-    """
+    """Async function for picking a file using LocalFilePicker."""
     result = await LocalFilePicker("~", multiple=True)
     ui.notify(f"You chose {result}")
 

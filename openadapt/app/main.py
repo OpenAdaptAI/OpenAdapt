@@ -24,9 +24,7 @@ SERVER = "127.0.0.1:8000/upload"
 
 
 def run_app():
-    """
-    Run the OpenAdapt application.
-    """
+    """Run the OpenAdapt application."""
     file = os.path.dirname(__file__)
     app.native.window_args["resizable"] = False  # too many issues with resizing
     app.native.start_args["debug"] = False

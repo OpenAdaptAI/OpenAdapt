@@ -1,6 +1,4 @@
-"""
-This module provides functionality for importing necessary modules and packages.
-"""
+"""This module provides functionality for importing necessary modules and packages."""
 
 import time
 

@@ -20,9 +20,7 @@ MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
-    """
-    Base class for implementing replay strategies.
-    """
+    """Base class for implementing replay strategies."""
 
     def __init__(
         self, recording: models.Recording, max_frame_times: int = MAX_FRAME_TIMES,
@@ -57,9 +55,7 @@ class BaseReplayStrategy(ABC):
         pass
 
     def run(self):
-        """
-        Run the replay strategy.
-        """
+        """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
         while True:
@@ -95,9 +91,7 @@ class BaseReplayStrategy(ABC):
                     ipdb.set_trace()
 
     def log_fps(self):
-        """
-        Log the frames per second (FPS) rate.
-        """
+        """Log the frames per second (FPS) rate."""
         t = time.time()
         self.frame_times.append(t)
         dts = np.diff(self.frame_times)

@@ -37,9 +37,7 @@ SHOW_PLOTS = True
 
 
 class SAMReplayStrategyMixin(BaseReplayStrategy):
-    """
-    ReplayStrategy mixin for segmenting images via the SAM model.
-    """
+    """ReplayStrategy mixin for segmenting images via the SAM model."""
 
     def __init__(
         self,

@@ -14,14 +14,10 @@ from nicegui import ui
 
 
 class Console(object):
-    """
-    Console class for redirecting stderr to a NiceGUI log.
-    """
+    """Console class for redirecting stderr to a NiceGUI log."""
 
     def __init__(self):
-        """
-        Initialize the Console object.
-        """
+        """Initialize the Console object."""
         self.log = ui.log().classes("w-full h-20")
         self.old_stderr = sys.stderr
         sys.stderr = self
@@ -37,14 +33,10 @@ class Console(object):
         self.log.update()
 
     def flush(self):
-        """
-        Flush the log.
-        """
+        """Flush the log."""
         self.log.update()
 
     def reset(self):
-        """
-        Reset the log and restore stderr.
-        """
+        """Reset the log and restore stderr."""
         self.log.clear()
         sys.stderr = self.old_stderr

@@ -11,9 +11,7 @@ from openadapt.app.main import run_app
 
 
 def main() -> None:
-    """
-    The main function which runs the OpenAdapt app when it is updated.
-    """
+    """The main function which runs the OpenAdapt app when it is updated."""
     result = subprocess.run(["git", "status"], capture_output=True, text=True)
 
     if "unmerged" in result.stdout:

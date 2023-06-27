@@ -1,6 +1,4 @@
-"""
-This module defines the models used in the OpenAdapt system.
-"""
+"""This module defines the models used in the OpenAdapt system."""
 
 import io
 

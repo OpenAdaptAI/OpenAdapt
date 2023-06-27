@@ -22,9 +22,7 @@ IGNORE_BOUNDARY_WINDOWS = True
 class StatefulReplayStrategy(
     OpenAIReplayStrategyMixin, strategies.base.BaseReplayStrategy,
 ):
-    """
-    LLM with window states.
-    """
+    """LLM with window states."""
 
     def __init__(
         self, recording: models.Recording,

@@ -32,9 +32,7 @@ class DemoReplayStrategy(
     SummaryReplayStrategyMixin,
     BaseReplayStrategy,
 ):
-    """
-    Demo replay strategy that combines HuggingFace, OCR, and ASCII mixins.
-    """
+    """Demo replay strategy that combines HuggingFace, OCR, and ASCII mixins."""
 
     def __init__(
         self, recording: Recording,
