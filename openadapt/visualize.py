@@ -190,7 +190,6 @@ def main():
     ]
     logger.info(f"{len(action_events)=}")
 
-    rows = []
     num_events = (
         min(MAX_EVENTS, len(action_events))
         if MAX_EVENTS is not None
