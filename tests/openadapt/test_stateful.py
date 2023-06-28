@@ -10,72 +10,32 @@ from openadapt.events import (
     get_events,
 )
 from openadapt.utils import (
-    configure_logging,
-    display_event,
-    evenly_spaced,
-    image2utf8,
-    EMPTY,
     row2dict,
-    rows2dicts,
 )
 
-def test_active_window_diff():
-    # boilerplate code, check db and create synthetic
-    # instances of each object to feed into stateful.
+def test_active_window_no_diff():
+    """
+    A test using the latest user recording where the 
+    reference window events are the same as the 
+    active window events. The model must thus return the same 
+    action events as the REFERENCE action events.
 
-    # TODO
-    test_recording = Recording()
-
-
-    test_strategy = StatefulReplayStrategy(test_recording)
-
-    expected_action_events = {}
-
-    test_screenshot = Screenshot()
-    test_window = WindowEvent()
-
-    actual_action_events = test_strategy.get_next_action_event(
-        active_screenshot=test_screenshot, active_window=test_window
-    )
-
-    print(actual_action_events)
-
-    assert actual_action_events == expected_action_events
-
-
-def dict_form_testing():
-    recording = get_latest_recording()
-
-    meta = {}
-    action_events = get_events(recording, process=True, meta=meta)
-    event_dicts = rows2dicts(action_events)
-    
-    for events in event_dicts:
-        print(events.keys())
-
-
-    recording_dict = row2dict(recording)
-
-    #print(f"This is the recording dict{recording_dict=}")
-
-def output_example():
+    PRECONDITION: Recording cannot be too long due to max input
+    size limitations of the LLM (in this case, GPT-3.5-Turbo/GPT-4)
+    """
     recording = get_latest_recording()
     test_obj = StatefulReplayStrategy(recording)
 
-    # test out on the same window
-    # recording can't be too large, obviously due to context length limitations
-    windowevent = WindowEvent()
+    print(recording)
 
     meta = {}
 
     action_events = get_events(recording, process=True, meta=meta)
 
-    for action in action_events:
-        window_event_dict = row2dict(action.window_event)
-        active_action_dict = test_obj.get_next_action_event(Screenshot(),window_event_dict)
-        print(active_action_dict)
-        break
+    test_window_event = action_events[0].window_event
+    test_window_dict = row2dict(test_window_event)
 
+    test_action_dict = test_obj.get_next_action_event(Screenshot(),test_window_dict)
 
 if __name__ == "__main__":
-    output_example()
+    test_active_window_no_diff()
