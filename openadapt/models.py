@@ -321,5 +321,5 @@ class MemoryStat(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
-    memory_usage = sa.Column(ForceFloat)
+    memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
