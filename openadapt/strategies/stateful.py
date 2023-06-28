@@ -119,7 +119,7 @@ class StatefulReplayStrategy(
             "Your response should be valid Python3 code. "
             "Do not respond with any other text. "
         )
-        completion = self.get_completion(prompt, system_message)
+        completion = self.get_completion(prompt, system_message)[21:-1]
         active_action_dicts = get_action_dict_from_completion(completion)
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
         active_action = models.ActionEvent.from_children(active_action_dicts)
