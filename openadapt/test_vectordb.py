@@ -21,13 +21,14 @@ print(results["ids"])
 # More Complicated Test
 
 collection.add(
-    documents=["The engineers name was Richard", "The artsts name was Alex"],
-    ids=["id3","id4"]
+    documents=["The engineers name was Richard", "Alex was an artist","Richard eats apples often","Astronauts were amazed by Richard"],
+    ids=["id3","id4","id5","id6"]
 )
 
 results = collection.query(
-    query_texts=["Who was Richard?"],
+    query_texts=["What was Richard?"],
     n_results=1
 )
 
 print(results["ids"])
+print(collection.get(results["ids"][0])["documents"])
