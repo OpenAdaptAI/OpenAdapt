@@ -21,7 +21,17 @@ MODEL_NAME = config.OPENAI_MODEL_NAME
 
 
 def get_prompt(diffs=False, *args):
-    """Returns a prompt for the agent."""
+    """
+    Returns a prompt for the agent.
+
+    Args:
+        diffs (bool, *optional*, defaults to `False`):
+            Whether or not to mention diffs in the prompt.
+        *args:
+            Any additional arguments to pass along to the prompt.
+            The first argument is assumed to be an `ActionEvent`.
+    """
+
     return (
         f"In the image, you are presented with a screenshot of a user's current active window."
         f"The user's current window event is: {args[0].window_event.title}."
@@ -96,6 +106,7 @@ class TransformersAgentsMixin(OpenAiAgent):
         Preconditions:
             - `self.recording` is not `None`
         """
+
         if self.recording is None:
             raise ValueError("recording is invalid")
         else:
