@@ -197,7 +197,7 @@ def main():
     )
     with tqdm(
             total=num_events,
-            desc="Writing to Database",
+            desc="Preparing HTML",
             unit="event",
             colour="green",
             dynamic_ncols=True,
@@ -269,23 +269,25 @@ def main():
 
             progress.update()
 
-        title = f"recording-{recording.id}"
-        fname_out = f"recording-{recording.id}.html"
-        logger.info(f"{fname_out=}")
-        output_file(fname_out, title=title)
+        progress.close()
 
-        result = show(
-            layout(
-                rows,
-            )
+    title = f"recording-{recording.id}"
+    fname_out = f"recording-{recording.id}.html"
+    logger.info(f"{fname_out=}")
+    output_file(fname_out, title=title)
+
+    result = show(
+        layout(
+            rows,
         )
+    )
 
-        def cleanup():
-            os.remove(fname_out)
-            removed = not os.path.exists(fname_out)
-            logger.info(f"{removed=}")
+    def cleanup():
+        os.remove(fname_out)
+        removed = not os.path.exists(fname_out)
+        logger.info(f"{removed=}")
 
-        Timer(1, cleanup).start()
+    Timer(1, cleanup).start()
 
 
 if __name__ == "__main__":
