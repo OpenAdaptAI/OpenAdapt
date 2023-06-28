@@ -39,3 +39,4 @@ nicegui==1.2.16
 transformers==4.29.2
 python-dotenv==1.0.0
 python-Levenshtein==0.21.1
+chromadb==0.3.26
