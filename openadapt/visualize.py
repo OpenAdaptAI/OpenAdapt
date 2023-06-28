@@ -197,7 +197,7 @@ def main():
         else len(action_events)
     )
     with tqdm(
-            total=num_left,
+            total=num_events,
             desc="Writing to Database",
             unit="event",
             colour="green",
