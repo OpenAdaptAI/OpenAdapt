@@ -23,6 +23,7 @@ def test_active_window_diff():
     # boilerplate code, check db and create synthetic
     # instances of each object to feed into stateful.
 
+    # TODO
     test_recording = Recording()
 
 
