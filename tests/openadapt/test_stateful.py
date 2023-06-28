@@ -58,14 +58,24 @@ def dict_form_testing():
 
     #print(f"This is the recording dict{recording_dict=}")
 
-def generic_output():
+def output_example():
     recording = get_latest_recording()
     test_obj = StatefulReplayStrategy(recording)
 
     # test out on the same window
-    active_action_dict = test_obj.get_next_action_event(Screenshot(),recording)
-    print(active_action_dict)
+    # recording can't be too large, obviously due to context length limitations
+    windowevent = WindowEvent()
+
+    meta = {}
+
+    action_events = get_events(recording, process=True, meta=meta)
+
+    for action in action_events:
+        window_event_dict = row2dict(action.window_event)
+        active_action_dict = test_obj.get_next_action_event(Screenshot(),window_event_dict)
+        print(active_action_dict)
+        break
 
 
 if __name__ == "__main__":
-    generic_output()
+    output_example()
