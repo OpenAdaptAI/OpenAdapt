@@ -13,7 +13,7 @@ else:
 
 
 def get_active_window_data():
-    state = get_active_window_state()
+    state = get_active_window_state(show_data=SHOW_DATA)
     if not state:
         return None
     title = state["title"]

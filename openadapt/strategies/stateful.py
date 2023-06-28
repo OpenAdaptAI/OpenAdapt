@@ -96,8 +96,10 @@ class StatefulReplayStrategy(
             and not key.endswith("id")
             #and not isinstance(getattr(models.WindowEvent, key), property)
         })
-        reference_window_dict["state"].pop("data")
-        active_window_dict["state"].pop("data")
+        if reference_window_dict and "state" in reference_window_dict:
+            reference_window_dict["state"].pop("data")
+        if active_window_dict and "state" in active_window_dict :
+            active_window_dict["state"].pop("data")
 
         prompt = (
             f"{reference_window_dict=}\n"
@@ -143,11 +145,18 @@ def get_window_state_diffs(
     ignore_window_ids = set()
     if ignore_boundary_windows:
         first_window_event = action_events[0].window_event
-        first_window_id = first_window_event.state["window_id"]
-        first_window_title = first_window_event.title
+        if first_window_event.state :
+            first_window_id = first_window_event.state["window_id"]
+        else :
+            first_window_id = None
+            first_window_title = first_window_event.title
         last_window_event = action_events[-1].window_event
-        last_window_id = last_window_event.state["window_id"]
-        last_window_title = last_window_event.title
+        if last_window_event.state :
+            last_window_id = last_window_event.state["window_id"]
+            last_window_title = last_window_event.title
+        else :
+            last_window_id = None
+            last_window_title = last_window_event.title
         if first_window_id != last_window_id:
             logger.warning(f"{first_window_id=} != {last_window_id=}")
         ignore_window_ids.add(first_window_id)
@@ -155,7 +164,7 @@ def get_window_state_diffs(
         logger.info(f"ignoring {first_window_title=} {last_window_title=}")
     window_event_states = [
         action_event.window_event.state
-        if action_event.window_event.state["window_id"] not in ignore_window_ids
+        if action_event.window_event.state is not None and action_event.window_event.state["window_id"] not in ignore_window_ids
         else {}
         for action_event in action_events
     ]

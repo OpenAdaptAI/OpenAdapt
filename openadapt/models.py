@@ -203,11 +203,14 @@ class ActionEvent(db.Base):
 
     @classmethod
     def from_children(cls, children_dicts):
-        children = [
-            ActionEvent(**child_dict)
-            for child_dict in children_dicts
-        ]
-        return ActionEvent(children=children)
+        if children_dicts :
+            children = [
+                ActionEvent(**child_dict)
+                for child_dict in children_dicts
+            ]
+            return ActionEvent(children=children)
+        else :
+            return None
 
 
 class Screenshot(db.Base):
