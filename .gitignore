@@ -6,6 +6,7 @@ __pycache__
 cache
 *.egg-info
 .venv
+chroma
 *~
 
 # Vim
