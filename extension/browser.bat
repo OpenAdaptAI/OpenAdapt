@@ -1,3 +1,3 @@
 @echo off
 
-python -u "P:\\OpenAdapt AI - MLDS AI\\cloned_repo\\OpenAdapt\\native_chrome_extension\\browser.py"
+python -u "P:\\OpenAdapt AI - MLDS AI\\cloned_repo\\OpenAdapt\\extension\\browser.py"
