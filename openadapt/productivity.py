@@ -349,6 +349,11 @@ def calculate_productivity():
         ),
         row(
             Div(
+                text="<hr><h1>Productivity Metrics</h1><hr>",
+            ),
+        ),
+        row(
+            Div(
                 text=f"{dict2html(row2dict(recording))}",
             ),
         ),
