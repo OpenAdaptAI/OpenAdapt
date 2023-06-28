@@ -1,5 +1,5 @@
 let port = null;  // Native Messaging port
-const hostName = 'openadapt';
+const hostName = 'mldsai';
 
 
 /*
