@@ -22,4 +22,4 @@ port = chrome.runtime.connectNative(hostName);
 port.onMessage.addListener(onReceived);
 port.onDisconnect.addListener(onDisconnectedFromNativeHost);
 console.log('Connected to native messaging host: ' + hostName);
-port.postMessage({ text: "Hello, my_application" });
+port.postMessage("Hello, my_application");
