@@ -71,7 +71,6 @@ def send_message(encoded_message):
     # TODO: Named Pipe
 
 
-send_message(encode_message("Hello from Python!"))
 DOM_UPDATE_COUNTER = 0
 while True:
     receivedMessage = get_message()
