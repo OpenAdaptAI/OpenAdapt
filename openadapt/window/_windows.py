@@ -8,7 +8,7 @@ from pprint import pprint
 import pickle
 
 
-def get_active_window_state() -> dict:
+def get_active_window_state(show_data) -> dict:
     """
     Get the state of the active window.
 
@@ -32,7 +32,10 @@ def get_active_window_state() -> dict:
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
-    data = get_element_properties(active_window)
+    if show_data:
+        data = get_element_properties(active_window)
+    else:
+        data = None
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,

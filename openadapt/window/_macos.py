@@ -8,14 +8,17 @@ import ApplicationServices
 import Quartz
 
 
-def get_active_window_state():
+def get_active_window_state(show_data):
     # pywinctl performance on mac is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
-    data = get_window_data(meta)
+    if show_data:
+        data = get_window_data(meta)
+    else:
+        data = None
     title_parts = [
-        meta['kCGWindowOwnerName'],
-        meta['kCGWindowName'],
+        meta["kCGWindowOwnerName"],
+        meta["kCGWindowName"],
     ]
     title_parts = [part for part in title_parts if part]
     title = " ".join(title_parts)
@@ -47,14 +50,12 @@ def get_active_window_state():
 def get_active_window_meta():
     windows = Quartz.CGWindowListCopyWindowInfo(
         (
-            Quartz.kCGWindowListExcludeDesktopElements |
-            Quartz.kCGWindowListOptionOnScreenOnly
+            Quartz.kCGWindowListExcludeDesktopElements
+            | Quartz.kCGWindowListOptionOnScreenOnly
         ),
         Quartz.kCGNullWindowID,
     )
-    active_windows_info = [
-        win for win in windows if win['kCGWindowLayer'] == 0
-    ]
+    active_windows_info = [win for win in windows if win["kCGWindowLayer"] == 0]
     active_window_info = active_windows_info[0]
     return active_window_info
 
@@ -63,7 +64,7 @@ def get_active_window(window_meta):
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
     error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
-        app_ref, 'AXFocusedWindow', None
+        app_ref, "AXFocusedWindow", None
     )
     if error_code:
         logger.error("Error getting focused window")
@@ -98,13 +99,12 @@ def dump_state(element, elements=None):
                 state[k] = _state
         return state
     else:
-        error_code, attr_names = (
-            ApplicationServices.AXUIElementCopyAttributeNames(element, None)
+        error_code, attr_names = ApplicationServices.AXUIElementCopyAttributeNames(
+            element, None
         )
         if attr_names:
             state = {}
             for attr_name in attr_names:
-
                 # don't traverse back up
                 # for WindowEvents:
                 if "parent" in attr_name.lower():
@@ -113,10 +113,13 @@ def dump_state(element, elements=None):
                 if attr_name in ("AXTopLevelUIElement", "AXWindow"):
                     continue
 
-                error_code, attr_val = (
-                    ApplicationServices.AXUIElementCopyAttributeValue(
-                        element, attr_name, None,
-                    )
+                (
+                    error_code,
+                    attr_val,
+                ) = ApplicationServices.AXUIElementCopyAttributeValue(
+                    element,
+                    attr_name,
+                    None,
                 )
 
                 # for ActionEvents
@@ -164,12 +167,15 @@ def get_active_element_state(x, y):
 
 def main():
     import time
+
     time.sleep(1)
 
     state = get_active_window_state()
     pprint(state)
     pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
 
 
 if __name__ == "__main__":

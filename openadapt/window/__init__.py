@@ -2,7 +2,7 @@ import sys
 
 from loguru import logger
 
-
+SHOW_DATA = True
 if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform in ("win32", "linux"):
@@ -34,11 +34,11 @@ def get_active_window_data():
     return window_data
 
 
-def get_active_window_state():
+def get_active_window_state(show_data):
     # TODO: save window identifier (a window's title can change, or
     # multiple windows can have the same title)
     try:
-        return impl.get_active_window_state()
+        return impl.get_active_window_state(show_data)
     except Exception as exc:
         logger.warning(f"{exc=}")
         return None

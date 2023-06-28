@@ -24,21 +24,30 @@ class OpenAdaptWidget(FloatLayout):
         self.button.bind(on_press=self.callback)
         self.current_state = "default"
         self.add_widget(self.button)
+        # add border
+        # create new window, top left, top middle top right, ..., query size , verify pos window correctly,
         # Check for active window changes every 0.5 , detect when window moves instead of using clock
         self.prev_active_window_position = None
-        Clock.schedule_interval(
-            self.position_above_active_window, 0.5
-        )
+        Clock.schedule_interval(self.position_above_active_window, 0.5)
 
     def position_above_active_window(self, *args):
-        #add flag to only get the meta only, by default false
-        window_data = window.get_active_window_data()
-        if window_data and (window_data["top"], window_data["left"]) != self.prev_active_window_position:
-            self.window.top = window_data["top"]-30
-            self.window.left = window_data["left"]+window_data["width"]
-            top,left,width= window_data["top"], window_data["left"],window_data["width"]
+        window_data = window.get_active_window_state(False)
+        if (
+            window_data
+            and (window_data["top"], window_data["left"])
+            != self.prev_active_window_position
+        ):
+            self.window.top = window_data["top"] - 30
+            self.window.left = window_data["left"] + window_data["width"]
+            top, left, width = (
+                window_data["top"],
+                window_data["left"],
+                window_data["width"],
+            )
             logger.info(f"widget_top={self.window.top},widget_left{self.window.left}")
-            logger.info(f"active_top={top},active_right={left+width},active_width={width}, active_left={left}")
+            logger.info(
+                f"active_top={top},active_right={left+width},active_width={width}, active_left={left}"
+            )
             self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
