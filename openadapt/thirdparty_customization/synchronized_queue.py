@@ -1,5 +1,12 @@
+""" 
+    Module for customizing multiprocessing.Queue to avoid NotImplementedError in MacOS
+"""
+
+
 from multiprocessing.queues import Queue
 import multiprocessing
+
+# Credit: https://gist.github.com/FanchenBao/d8577599c46eab1238a81857bb7277c9
 
 # The following implementation of custom SynchronizedQueue to avoid NotImplementedError
 # when calling queue.qsize() in MacOS X comes almost entirely from this github

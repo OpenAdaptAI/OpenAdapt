@@ -24,7 +24,7 @@ import fire
 import mss.tools
 
 from openadapt import config, crud, utils, window
-from openadapt.thirdparty_customization.my_queue import SynchronizedQueue
+from openadapt.thirdparty_customization import synchronized_queue as sq
 
 import functools
 
@@ -87,10 +87,10 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 @trace(logger)
 def process_events(
     event_q: queue.Queue,
-    screen_write_q: SynchronizedQueue,
-    action_write_q: SynchronizedQueue,
-    window_write_q: SynchronizedQueue,
-    perf_q: SynchronizedQueue,
+    screen_write_q: sq.SynchronizedQueue,
+    action_write_q: sq.SynchronizedQueue,
+    window_write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -169,7 +169,7 @@ def process_events(
 def write_action_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -188,7 +188,7 @@ def write_action_event(
 def write_screen_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -210,7 +210,7 @@ def write_screen_event(
 def write_window_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -230,8 +230,8 @@ def write_window_event(
 def write_events(
     event_type: str,
     write_fn: Callable,
-    write_q: SynchronizedQueue,
-    perf_q: SynchronizedQueue,
+    write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
     term_pipe: multiprocessing.Pipe,
@@ -470,7 +470,7 @@ def read_window_events(
 
 @trace(logger)
 def performance_stats_writer(
-    perf_q: SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -598,11 +598,11 @@ def record(
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
-    screen_write_q = SynchronizedQueue()
-    action_write_q = SynchronizedQueue()
-    window_write_q = SynchronizedQueue()
+    screen_write_q = sq.SynchronizedQueue()
+    action_write_q = sq.SynchronizedQueue()
+    window_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
-    perf_q = SynchronizedQueue()
+    perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
     
     term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
