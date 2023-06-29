@@ -3,51 +3,41 @@ import signal
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.gridlayout import GridLayout
 from kivy.core.window import Window
+from kivy.config import Config
 from loguru import logger
 from kivy.clock import Clock
 from openadapt import window
-
-
+from PIL import ImageGrab
+SCREEN_SCALE = (Window.dpi / 96.0)
 class OpenAdaptWidget(FloatLayout):
     def __init__(self, **kwargs):
         super(OpenAdaptWidget, self).__init__(**kwargs)
         self.window = Window
         self.window.borderless = True
+        self.window.opacity = 0.5
         self.window.size = (50, 50)
         self.window.clearcolor = (255, 255, 255, 0.5)
         self.window.always_on_top = True
         self.record_proc = None
         self.replay_proc = None
+        self.window.position = "custom"
         self.button = Button(background_normal="assets/logo.png")
         self.button.bind(on_press=self.callback)
         self.current_state = "default"
         self.add_widget(self.button)
-        # add border
-        # create new window, top left, top middle top right, ..., query size , verify pos window correctly,
-        # Check for active window changes every 0.5 , detect when window moves instead of using clock
         self.prev_active_window_position = None
         Clock.schedule_interval(self.position_above_active_window, 0.5)
-
+    
     def position_above_active_window(self, *args):
         window_data = window.get_active_window_state(False)
         if (
-            window_data
+          window_data
             and (window_data["top"], window_data["left"])
             != self.prev_active_window_position
         ):
-            self.window.top = window_data["top"] - 30
-            self.window.left = window_data["left"] + window_data["width"]
-            top, left, width = (
-                window_data["top"],
-                window_data["left"],
-                window_data["width"],
-            )
-            logger.info(f"widget_top={self.window.top},widget_left{self.window.left}")
-            logger.info(
-                f"active_top={top},active_right={left+width},active_width={width}, active_left={left}"
-            )
+            self.window.top = ((window_data["top"])// SCREEN_SCALE)-50
+            self.window.left = ((window_data["left"]+window_data["width"]) // SCREEN_SCALE)-50
             self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
