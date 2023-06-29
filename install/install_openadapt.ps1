@@ -245,26 +245,26 @@ function GetGitCMD {
 ################################   SCRIPT    ################################
 
 # Create a new directory and run the setup from there
-New-Item -ItemType Directory -Path $setupdir -Force > $null
-Set-Location -Path $setupdir > $null
+New-Item -ItemType Directory -Path $setupdir -Force
+Set-Location -Path $setupdir
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
-RunAndCheck "$tesseract --version" "check TesseractOCR" > $null
+RunAndCheck "$tesseract --version" "check TesseractOCR"
 
 $python = GetPythonCMD
-RunAndCheck "$python --version" "check Python" > $null
+RunAndCheck "$python --version" "check Python"
 
 $git = GetGitCMD
-RunAndCheck "$git --version" "check Git" > $null
+RunAndCheck "$git --version" "check Git"
 
 # OpenAdapt Setup
-RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo" > $null
+RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "Run ``pip install poetry``" > $null
-RunAndCheck "poetry install" "Run ``poetry install``" > $null
-RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true > $null
-RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true > $null
+RunAndCheck "pip install poetry" "Run ``pip install poetry``"
+RunAndCheck "poetry install" "Run ``poetry install``"
+RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
+RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
 Start-Process powershell -ArgumentList "-Command poetry shell"
 
