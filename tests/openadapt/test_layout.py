@@ -23,10 +23,10 @@ class TestQAPipeline:
 
 
 IMAGE_LIST = [
-    "/Users/owaiszahid/Desktop/LL/OpenAdapt/tests/openadapt/test_ladingbill.png",
-    "/Users/owaiszahid/Desktop/LL/OpenAdapt/tests/openadapt/test_invoice.png",
-    "/Users/owaiszahid/Desktop/LL/OpenAdapt/tests/openadapt/test_calendar.png",
-    "/Users/owaiszahid/Desktop/LL/OpenAdapt/tests/openadapt/test_calc.png",
+    "test_ladingbill.png",
+    "test_invoice.png",
+    "test_calendar.png",
+    "test_calc.png",
 ]
 
 LAYOUT_OBJ = TestQAPipeline(image_file_paths=IMAGE_LIST)
