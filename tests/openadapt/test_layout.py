@@ -19,7 +19,7 @@ class TestQAPipeline:
         output = query_pipeline(image, question)
         if output != []:
             return query_pipeline(image, question)[0]["answer"]
-        return None
+        return "Unsupported document type, please input a text-based document"
 
 
 IMAGE_LIST = [
@@ -84,7 +84,10 @@ def test_calc_screenshot():
         image=LAYOUT_OBJ.image_list[3],
         question="What is the current number on the screen?",
     )
-    assert output == "10" or output == None
+    assert (
+        output == "10"
+        or output == "Unsupported document type, please input a text-based document"
+    )
 
 
 if __name__ == "__main__":
