@@ -7,6 +7,8 @@ Usage:
         ...
 """
 
+from typing import Any
+
 from loguru import logger
 import transformers as tf  # RIP TensorFlow
 
@@ -26,7 +28,7 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         recording: Recording,
         model_name: str = MODEL_NAME,
         max_input_size: int = MAX_INPUT_SIZE,
-    ):
+    ) -> None:
         """
         Initialize the HuggingFaceReplayStrategyMixin.
 
@@ -44,7 +46,7 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
 
     def get_completion(
         self, prompt: str, max_tokens: int,
-    ):
+    ) -> Any:
         """
         Generate completion for a given prompt using the HuggingFace model.
 

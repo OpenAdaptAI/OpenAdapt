@@ -6,7 +6,7 @@ from pynput import mouse
 from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
-def play_mouse_event(event, mouse_controller):
+def play_mouse_event(event, mouse_controller) -> None:
     """
     Play a mouse event.
 
@@ -48,7 +48,7 @@ def play_mouse_event(event, mouse_controller):
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_key_event(event, keyboard_controller, canonical=True):
+def play_key_event(event, keyboard_controller, canonical=True) -> None:
     """
     Play a key event.
 
@@ -74,7 +74,7 @@ def play_key_event(event, keyboard_controller, canonical=True):
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_action_event(event, mouse_controller, keyboard_controller):
+def play_action_event(event, mouse_controller, keyboard_controller) -> None:
     """
     Play an action event.
 

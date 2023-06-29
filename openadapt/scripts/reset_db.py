@@ -12,7 +12,7 @@ from subprocess import run, PIPE
 from openadapt import config
 
 
-def reset_db():
+def reset_db() -> None:
     """Clears the database by removing the db file and running a db migration using Alembic."""
     if os.path.exists(config.DB_FPATH):
         os.remove(config.DB_FPATH)

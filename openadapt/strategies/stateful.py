@@ -26,7 +26,7 @@ class StatefulReplayStrategy(
 
     def __init__(
         self, recording: models.Recording,
-    ):
+    ) -> None:
         """
         Initialize the StatefulReplayStrategy.
 
@@ -48,7 +48,7 @@ class StatefulReplayStrategy(
 
     def get_next_action_event(
         self, active_screenshot: models.Screenshot, active_window: models.WindowEvent,
-    ):
+    ) -> models.ActionEvent:
         """
         Get the next ActionEvent for replay.
 
@@ -148,7 +148,7 @@ class StatefulReplayStrategy(
         return active_action
 
 
-def get_action_dict_from_completion(completion):
+def get_action_dict_from_completion(completion) -> dict:
     """
     Convert the completion to a dictionary containing action information.
 
@@ -168,7 +168,7 @@ def get_action_dict_from_completion(completion):
 
 def get_window_state_diffs(
     action_events, ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
-):
+) -> list:
     """
     Get the differences in window state between consecutive action events.
 

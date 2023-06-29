@@ -29,7 +29,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
         self, recording: Recording,
-    ):
+    ) -> None:
         """
         Initialize the OCRReplayStrategyMixin.
 
@@ -40,7 +40,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
         self.ocr = RapidOCR()
 
-    def get_ocr_text(self, screenshot: Screenshot):
+    def get_ocr_text(self, screenshot: Screenshot) -> str:
         """
         Get the OCR text from a screenshot.
 
@@ -62,7 +62,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         return text
 
 
-def get_text_df(result: List[List[Union[List[float], str, float]]],):
+def get_text_df(result: List[List[Union[List[float], str, float]]]) -> pd.DataFrame:
     """
     Convert RapidOCR result to DataFrame.
 
@@ -91,7 +91,7 @@ def get_text_df(result: List[List[Union[List[float], str, float]]],):
     return df
 
 
-def get_text_from_df(df: pd.DataFrame,):
+def get_text_from_df(df: pd.DataFrame) -> str:
     """
     Convert a DataFrame produced by get_text_df into a string.
 
@@ -111,7 +111,7 @@ def get_text_from_df(df: pd.DataFrame,):
     return result
 
 
-def unnest(df, explode, axis, suffixes=None):
+def unnest(df, explode, axis, suffixes=None) -> pd.DataFrame:
     """
     Unnest specified columns in a DataFrame by exploding values.
 
@@ -142,7 +142,7 @@ def unnest(df, explode, axis, suffixes=None):
         return df1.join(df.drop(explode, axis=1), how="left",)
 
 
-def preprocess_text(text):
+def preprocess_text(text) -> str:
     """
     Preprocess the OCR text.
 
@@ -155,7 +155,7 @@ def preprocess_text(text):
     return text.strip()
 
 
-def get_centroid(row):
+def get_centroid(row) -> tuple:
     """
     Compute the centroid coordinates from the corners of a rectangle.
 
@@ -171,7 +171,7 @@ def get_centroid(row):
     return x, y
 
 
-def get_height(row):
+def get_height(row) -> float:
     """
     Get the height of a row.
 
@@ -184,7 +184,7 @@ def get_height(row):
     return abs(row["tl_y"] - row["bl_y"])
 
 
-def sort_rows(df):
+def sort_rows(df) -> pd.DataFrame:
     """
     Sort the rows of the DataFrame.
 
@@ -201,7 +201,7 @@ def sort_rows(df):
     return df
 
 
-def cluster_lines(df, eps):
+def cluster_lines(df, eps) -> pd.DataFrame:
     """
     Cluster lines in the DataFrame.
 
@@ -218,7 +218,7 @@ def cluster_lines(df, eps):
     return df
 
 
-def cluster_words(df):
+def cluster_words(df) -> pd.DataFrame:
     """
     Cluster words in the DataFrame.
 
@@ -244,7 +244,7 @@ def cluster_words(df):
     return pd.concat(line_dfs)
 
 
-def concat_text(df):
+def concat_text(df) -> str:
     """
     Concatenate text from the DataFrame.
 

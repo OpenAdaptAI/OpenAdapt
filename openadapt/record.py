@@ -41,7 +41,7 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def args_to_str(*args):
+def args_to_str(*args) -> str:
     """
     Convert positional arguments to a string representation.
 
@@ -54,7 +54,7 @@ def args_to_str(*args):
     return ", ".join(map(str, args))
 
 
-def kwargs_to_str(**kwargs):
+def kwargs_to_str(**kwargs) -> str:
     """
     Convert keyword arguments to a string representation.
 
@@ -67,7 +67,7 @@ def kwargs_to_str(**kwargs):
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
 
-def trace(logger):
+def trace(logger) -> Any:
     """
     Decorator that logs the function entry and exit using the provided logger.
 
@@ -77,9 +77,9 @@ def trace(logger):
     Returns:
         A decorator that can be used to wrap functions and log their entry and exit.
     """
-    def decorator(func):
+    def decorator(func) -> Any:
         @functools.wraps(func)
-        def wrapper_logging(*args, **kwargs):
+        def wrapper_logging(*args, **kwargs) -> Any:
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
@@ -99,7 +99,7 @@ def trace(logger):
     return decorator
 
 
-def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
+def process_event(event, write_q, write_fn, recording_timestamp, perf_q) -> None:
     """
     Process an event and take appropriate action based on its type.
 
@@ -128,7 +128,7 @@ def process_events(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
-):
+) -> None:
     """
     Process events from the event queue and write them to the respective write queues.
 
@@ -198,7 +198,7 @@ def process_events(
 
 def write_action_event(
     recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
-):
+) -> None:
     """
     Write an action event to the database and update the performance queue.
 
@@ -214,7 +214,7 @@ def write_action_event(
 
 def write_screen_event(
     recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
-):
+) -> None:
     """
     Write a screen event to the database and update the performance queue.
 
@@ -233,7 +233,7 @@ def write_screen_event(
 
 def write_window_event(
     recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
-):
+) -> None:
     """
     Write a window event to the database and update the performance queue.
 
@@ -255,7 +255,7 @@ def write_events(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
-):
+) -> None:
     """
     Write events of a specific type to the database using the provided write function.
 
@@ -494,7 +494,7 @@ def performance_stats_writer(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
-):
+) -> None:
     """
     Write performance stats to the database.
 
@@ -569,13 +569,13 @@ def read_keyboard_events(
         None
     """
 
-    def on_press(event_q, key, injected):
+    def on_press(event_q, key, injected) -> None:
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
-    def on_release(event_q, key, injected):
+    def on_release(event_q, key, injected) -> None:
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
@@ -619,7 +619,7 @@ def read_mouse_events(
 @trace(logger)
 def record(
     task_description: str,
-):
+) -> None:
     """
     Record Screenshots/ActionEvents/WindowEvents.
 
@@ -748,7 +748,7 @@ def record(
 
 
 # Entry point
-def start():
+def start() -> None:
     """Starts the recording process."""
     fire.Fire(record)
 

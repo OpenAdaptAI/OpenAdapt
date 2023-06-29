@@ -40,7 +40,7 @@ timestamp = _start_time
 timestamp_raw = _start_time
 
 
-def reset_timestamp():
+def reset_timestamp() -> None:
     """
     Reset the timestamp counters to their initial values.
 
@@ -54,7 +54,7 @@ def reset_timestamp():
 
 
 @pytest.fixture(autouse=True)
-def _reset_timestamp():
+def _reset_timestamp() -> None:
     """
     Fixture that automatically resets the timestamp counters before each test.
 
@@ -66,7 +66,7 @@ def _reset_timestamp():
 
 def make_action_event(
     event_dict, dt=None, get_pre_children=None, get_post_children=None,
-):
+) -> ActionEvent:
     """
     Create an ActionEvent instance with the given attributes.
 
@@ -113,7 +113,7 @@ def make_action_event(
     return event
 
 
-def get_children_with_timestamps(get_children):
+def get_children_with_timestamps(get_children) -> list:
     """
     Get the list of children events with timestamps.
 
@@ -142,7 +142,7 @@ def get_children_with_timestamps(get_children):
     return children
 
 
-def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None):
+def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None) -> ActionEvent:
     """
     Create a move event with the given attributes.
 
@@ -170,7 +170,7 @@ def make_click_event(
     button_name="left",
     get_pre_children=None,
     get_post_children=None,
-):
+) -> ActionEvent:
     """
     Create a click event with the given attributes.
 
@@ -200,7 +200,7 @@ def make_click_event(
     )
 
 
-def make_scroll_event(dy=0, dx=0):
+def make_scroll_event(dy=0, dx=0) -> ActionEvent:
     """
     Create a scroll event with the given attributes.
 
@@ -214,7 +214,7 @@ def make_scroll_event(dy=0, dx=0):
     return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy})
 
 
-def make_click_events(dt_released, dt_pressed=None, button_name="left"):
+def make_click_events(dt_released, dt_pressed=None, button_name="left") -> tuple[ActionEvent, ActionEvent]:
     """
     Create a pair of click events with the given time differences and button name.
 
@@ -234,7 +234,7 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left"):
 
 def make_processed_click_event(
     name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
-):
+) -> ActionEvent:
     """
     Create a processed click event with the given attributes.
 
@@ -263,7 +263,7 @@ def make_processed_click_event(
 
 def make_singleclick_event(
     dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
-):
+) -> ActionEvent:
     """
     Create a single click event with the given attributes.
 
@@ -284,7 +284,7 @@ def make_singleclick_event(
 
 def make_doubleclick_event(
     dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
-):
+) -> ActionEvent:
     """
     Create a double click event with the given attributes.
 
@@ -303,7 +303,7 @@ def make_doubleclick_event(
     )
 
 
-def test_merge_consecutive_mouse_click_events():
+def test_merge_consecutive_mouse_click_events() -> None:
     """
     Test case for merging consecutive mouse click events.
 
@@ -350,7 +350,7 @@ def test_merge_consecutive_mouse_click_events():
     assert expected_events == actual_events
 
 
-def test_merge_consecutive_mouse_move_events():
+def test_merge_consecutive_mouse_move_events() -> None:
     """
     Test case for merging consecutive mouse move events.
 
@@ -397,7 +397,7 @@ def test_merge_consecutive_mouse_move_events():
     assert expected_events == actual_events
 
 
-def test_merge_consecutive_mouse_scroll_events():
+def test_merge_consecutive_mouse_scroll_events() -> None:
     """
     Test case for merging consecutive mouse scroll events.
 
@@ -429,7 +429,7 @@ def test_merge_consecutive_mouse_scroll_events():
     assert expected_events == actual_events
 
 
-def test_remove_redundant_mouse_move_events():
+def test_remove_redundant_mouse_move_events() -> None:
     """
     Test case for removing redundant mouse move events.
 
@@ -487,7 +487,7 @@ def test_remove_redundant_mouse_move_events():
     assert expected_events == actual_events
 
 
-def make_press_event(char=None, name=None):
+def make_press_event(char=None, name=None) -> ActionEvent:
     """
     Create a press event with the given character or key name.
 
@@ -502,7 +502,7 @@ def make_press_event(char=None, name=None):
     return make_action_event({"name": "press", "key_char": char, "key_name": name})
 
 
-def make_release_event(char=None, name=None):
+def make_release_event(char=None, name=None) -> ActionEvent:
     """
     Create a release event with the given character or key name.
 
@@ -517,7 +517,7 @@ def make_release_event(char=None, name=None):
     return make_action_event({"name": "release", "key_char": char, "key_name": name})
 
 
-def make_type_event(get_children):
+def make_type_event(get_children) -> ActionEvent:
     """
     Create a type event with the given children events.
 
@@ -530,7 +530,7 @@ def make_type_event(get_children):
     return make_action_event({"name": "type"}, get_pre_children=get_children)
 
 
-def make_key_events(char):
+def make_key_events(char) -> tuple[ActionEvent, ActionEvent]:
     """
     Create a pair of press and release events for the given character.
 
@@ -543,7 +543,7 @@ def make_key_events(char):
     return make_press_event(char), make_release_event(char)
 
 
-def test_merge_consecutive_keyboard_events():
+def test_merge_consecutive_keyboard_events() -> None:
     """
     Test case for merging consecutive keyboard events.
 
@@ -601,7 +601,7 @@ def test_merge_consecutive_keyboard_events():
     assert not diff, pformat(diff)
 
 
-def test_merge_consecutive_keyboard_events__grouped():
+def test_merge_consecutive_keyboard_events__grouped() -> None:
     """
     Test case for merging consecutive keyboard events with grouping.
 
@@ -653,7 +653,7 @@ def test_merge_consecutive_keyboard_events__grouped():
     assert not diff, pformat(diff)
 
 
-def make_window_event(event_dict):
+def make_window_event(event_dict) -> WindowEvent:
     """
     Create a WindowEvent with the given attributes.
 
@@ -666,7 +666,7 @@ def make_window_event(event_dict):
     return WindowEvent(**event_dict)
 
 
-def test_discard_unused_events():
+def test_discard_unused_events() -> None:
     """
     Test case for discarding unused events.
 

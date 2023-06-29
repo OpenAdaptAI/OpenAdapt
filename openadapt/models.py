@@ -1,6 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 import io
+from typing import Any
 
 from loguru import logger
 from pynput import keyboard
@@ -18,7 +19,7 @@ class ForceFloat(sa.TypeDecorator):
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(self, value, dialect) -> (float | None):
         """Convert the result value to float."""
         if value is not None:
             value = float(value)
@@ -52,7 +53,7 @@ class Recording(db.Base):
     _processed_action_events = None
 
     @property
-    def processed_action_events(self):
+    def processed_action_events(self) -> list:
         """Get the processed action events for the recording."""
         from openadapt import events
 
@@ -99,7 +100,7 @@ class ActionEvent(db.Base):
 
     # TODO: playback_timestamp / original_timestamp
 
-    def _key(self, key_name, key_char, key_vk):
+    def _key(self, key_name, key_char, key_vk) -> Any:
         """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
@@ -113,13 +114,13 @@ class ActionEvent(db.Base):
         return key
 
     @property
-    def key(self):
+    def key(self) -> Any:
         """Get the key associated with the action event."""
         logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(self.key_name, self.key_char, self.key_vk,)
 
     @property
-    def canonical_key(self):
+    def canonical_key(self) -> Any:
         """Get the canonical key associated with the action event."""
         logger.trace(
             f"{self.name=} "
@@ -131,7 +132,7 @@ class ActionEvent(db.Base):
             self.canonical_key_name, self.canonical_key_char, self.canonical_key_vk,
         )
 
-    def _text(self, canonical=False):
+    def _text(self, canonical=False) -> (str | None):
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
@@ -162,16 +163,16 @@ class ActionEvent(db.Base):
         return text
 
     @property
-    def text(self):
+    def text(self) -> str:
         """Get the text representation of the action event."""
         return self._text()
 
     @property
-    def canonical_text(self):
+    def canonical_text(self) -> str:
         """Get the canonical text representation of the action event."""
         return self._text(canonical=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return a string representation of the action event."""
         attr_names = [
             "name",
@@ -195,7 +196,7 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls, children_dicts):
+    def from_children(cls, children_dicts) -> Any:
         """Create an ActionEvent instance from a list of child event dictionaries.
 
         Args:
@@ -232,7 +233,7 @@ class Screenshot(db.Base):
     _diff_mask = None
 
     @property
-    def image(self):
+    def image(self) -> Image:
         """Get the image associated with the screenshot."""
         if not self._image:
             if self.sct_img:
@@ -245,7 +246,7 @@ class Screenshot(db.Base):
         return self._image
 
     @property
-    def diff(self):
+    def diff(self) -> Image:
         """Get the difference between the current and previous screenshot."""
         if not self._diff:
             assert self.prev, "Attempted to compute diff before setting prev"
@@ -253,7 +254,7 @@ class Screenshot(db.Base):
         return self._diff
 
     @property
-    def diff_mask(self):
+    def diff_mask(self) -> Any:
         """Get the difference mask of the screenshot."""
         if not self._diff_mask:
             if self.diff:
@@ -261,18 +262,18 @@ class Screenshot(db.Base):
         return self._diff_mask
 
     @property
-    def array(self):
+    def array(self) -> np.ndarray:
         """Get the NumPy array representation of the image."""
         return np.array(self.image)
 
     @classmethod
-    def take_screenshot(cls):
+    def take_screenshot(cls) -> Any:
         """Capture a screenshot."""
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event):
+    def crop_active_window(self, action_event) -> None:
         """Crop the screenshot to the active window defined by the action event."""
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
@@ -306,7 +307,7 @@ class WindowEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_event(cls):
+    def get_active_window_event(cls) -> Any:
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 

@@ -7,7 +7,7 @@ from PIL import Image
 from openadapt.models import Screenshot
 
 
-def test_crop_active_window():
+def test_crop_active_window() -> None:
     """
     Test the crop_active_window function.
 

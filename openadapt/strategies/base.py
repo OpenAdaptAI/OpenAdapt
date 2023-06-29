@@ -23,7 +23,7 @@ class BaseReplayStrategy(ABC):
 
     def __init__(
         self, recording: models.Recording, max_frame_times: int = MAX_FRAME_TIMES,
-    ):
+    ) -> None:
         """
         Initialize the BaseReplayStrategy.
 
@@ -53,7 +53,7 @@ class BaseReplayStrategy(ABC):
         """
         pass
 
-    def run(self):
+    def run(self) -> None:
         """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
@@ -89,7 +89,7 @@ class BaseReplayStrategy(ABC):
 
                     ipdb.set_trace()
 
-    def log_fps(self):
+    def log_fps(self) -> None:
         """Log the frames per second (FPS) rate."""
         t = time.time()
         self.frame_times.append(t)

@@ -24,7 +24,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
         self, recording: Recording,
-    ):
+    ) -> None:
         """
         Initialize the SummaryReplayStrategyMixin.
 

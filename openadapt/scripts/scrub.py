@@ -32,7 +32,7 @@ import numpy as np
 from openadapt import config, scrub, utils
 
 
-def _make_frame(time, final, progress_bar, progress_threshold):
+def _make_frame(time, final, progress_bar, progress_threshold) -> np.ndarray:
     """
     Private function to scrub a frame.
 

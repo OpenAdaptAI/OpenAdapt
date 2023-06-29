@@ -21,7 +21,7 @@ from nicegui import ui
 from openadapt.scripts.reset_db import reset_db
 
 
-def clear_db(log=None):
+def clear_db(log=None) -> None:
     """
     Clear the database.
 
@@ -38,7 +38,7 @@ def clear_db(log=None):
     sys.stdout = o
 
 
-def on_import(selected_file, delete=False, src="openadapt.db"):
+def on_import(selected_file, delete=False, src="openadapt.db") -> None:
     """
     Import data from a selected file.
 
@@ -57,7 +57,7 @@ def on_import(selected_file, delete=False, src="openadapt.db"):
     ui.notify("Imported data.")
 
 
-def on_export(dest):
+def on_export(dest) -> None:
     """
     Export data to a destination.
 
@@ -85,7 +85,7 @@ def on_export(dest):
     ui.notify("Exported data.")
 
 
-def sync_switch(switch, prop):
+def sync_switch(switch, prop) -> None:
     """
     Synchronize the value of a switch with a property.
 
@@ -96,7 +96,7 @@ def sync_switch(switch, prop):
     switch.value = prop.value
 
 
-def set_dark(dark_mode, value):
+def set_dark(dark_mode, value) -> None:
     """
     Set the dark mode.
 

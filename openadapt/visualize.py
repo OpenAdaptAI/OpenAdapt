@@ -74,7 +74,7 @@ CSS = string.Template(
 ).substitute(IMG_WIDTH_PCT=IMG_WIDTH_PCT,)
 
 
-def recursive_len(lst, key):
+def recursive_len(lst, key) -> int:
     """
     Calculate the recursive length of a list based on a key.
 
@@ -97,7 +97,7 @@ def recursive_len(lst, key):
     return _len
 
 
-def format_key(key, value):
+def format_key(key, value) -> str:
     """
     Format a key and value for display.
 
@@ -114,7 +114,7 @@ def format_key(key, value):
         return key
 
 
-def indicate_missing(some, every, indicator):
+def indicate_missing(some, every, indicator) -> list:
     """
     Indicate missing elements in a list.
 
@@ -142,7 +142,7 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
+def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN) -> str:
     """
     Convert a dictionary to an HTML representation.
 
@@ -187,7 +187,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     return html_str
 
 
-def main():
+def main() -> None:
     """Main function to generate an HTML report for a recording."""
     configure_logging(logger, LOG_LEVEL)
 
@@ -286,7 +286,7 @@ def main():
 
     # result = show(layout(rows,))
 
-    def cleanup():
+    def cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")

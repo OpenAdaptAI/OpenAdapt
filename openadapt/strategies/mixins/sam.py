@@ -9,6 +9,8 @@ Usage:
         ...
 """
 
+from typing import Any
+
 from segment_anything import SamPredictor, sam_model_registry, SamAutomaticMaskGenerator
 from PIL import Image
 from loguru import logger
@@ -40,7 +42,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         recording: Recording,
         model_name=MODEL_NAME,
         checkpoint_dir_path=CHECKPOINT_DIR_PATH,
-    ):
+    ) -> None:
         """
         Initialize the SAMReplayStrategyMixin.
 
@@ -54,7 +56,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         self.sam_predictor = SamPredictor(self.sam_model)
         self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
 
-    def _initialize_model(self, model_name, checkpoint_dir_path):
+    def _initialize_model(self, model_name, checkpoint_dir_path) -> Any:
         """
         Initialize the SAM model.
 
@@ -184,7 +186,7 @@ def resize_image(image: Image) -> Image:
     return image_resized
 
 
-def show_mask(mask, ax, random_color=False):
+def show_mask(mask, ax, random_color=False) -> None:
     """
     Display the mask on the plot.
 
@@ -202,7 +204,7 @@ def show_mask(mask, ax, random_color=False):
     ax.imshow(mask_image)
 
 
-def show_points(coords, labels, ax, marker_size=120):
+def show_points(coords, labels, ax, marker_size=120) -> None:
     """
     Display the points on the plot.
 
@@ -234,7 +236,7 @@ def show_points(coords, labels, ax, marker_size=120):
     )
 
 
-def show_box(box, ax):
+def show_box(box, ax) -> None:
     """
     Display the bounding box on the plot.
 
@@ -249,7 +251,7 @@ def show_box(box, ax):
     )
 
 
-def show_anns(anns):
+def show_anns(anns) -> None:
     """
     Display the annotations on the plot.
 

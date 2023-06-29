@@ -42,7 +42,7 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         recording: models.Recording,
         model_name: str = config.OPENAI_MODEL_NAME,
         # system_message: str = config.OPENAI_SYSTEM_MESSAGE,
-    ):
+    ) -> None:
         """
         Initialize the OpenAIReplayStrategyMixin.
 
@@ -62,7 +62,7 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         prompt: str,
         system_message: str,
         # max_tokens: int,
-    ):
+    ) -> str:
         """
         Generates an LLM completion.
 
@@ -101,7 +101,7 @@ def create_openai_completion(
     # frequency_penalty=0,
     # logit_bias=None,
     # user=None,
-):
+) -> dict:
     """
     Creates an LLM completion using the OpenAI API.
 
@@ -131,7 +131,7 @@ def create_openai_completion(
 @cache.cache()
 def get_completion(
     messages, prompt, model="gpt-4",
-):
+) -> list:
     """
     Gets the LLM completion.
 
@@ -150,7 +150,7 @@ def get_completion(
     # shorten_messages(messages, length)
     logger.debug(f"messages=\n{pformat(messages)}")
 
-    def _get_completion(prompt: str,) -> str:
+    def _get_completion(prompt: str) -> str:
         """
         Helper function to get the LLM completion.
 
@@ -196,7 +196,7 @@ def get_completion(
 
 # XXX TODO not currently in use
 # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301") -> int:
     """Returns the number of tokens used by a list of messages."""
     try:
         encoding = tiktoken.encoding_for_model(model)

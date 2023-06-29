@@ -107,7 +107,7 @@ class LocalFilePicker(ui.dialog):
         else:
             self.submit([str(self.path)])
 
-    async def _handle_ok(self):
+    async def _handle_ok(self) -> None:
         """Handle the Ok button click event."""
         rows = await ui.run_javascript(
             f"getElement({self.grid.id}).gridOptions.api.getSelectedRows()"
@@ -115,7 +115,7 @@ class LocalFilePicker(ui.dialog):
         self.submit([r["path"] for r in rows])
 
 
-async def pick_file():
+async def pick_file() -> None:
     """Async function for picking a file using LocalFilePicker."""
     result = await LocalFilePicker("~", multiple=True)
     ui.notify(f"You chose {result}")

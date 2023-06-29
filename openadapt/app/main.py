@@ -23,7 +23,7 @@ from openadapt.app.objects.console import Console
 SERVER = "127.0.0.1:8000/upload"
 
 
-def run_app():
+def run_app() -> None:
     """Run the OpenAdapt application."""
     file = os.path.dirname(__file__)
     app.native.window_args["resizable"] = False  # too many issues with resizing

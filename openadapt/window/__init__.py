@@ -4,6 +4,7 @@ Package containing functions to interact with the active window and elements on 
 Module: __init__.py
 """
 
+from typing import Any
 import sys
 
 from loguru import logger
@@ -18,7 +19,7 @@ else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 
 
-def get_active_window_data():
+def get_active_window_data() -> Any:
     """Get data of the active window.
 
     Returns:
@@ -46,7 +47,7 @@ def get_active_window_data():
     return window_data
 
 
-def get_active_window_state():
+def get_active_window_state() -> dict:
     """Get the state of the active window.
 
     Returns:
@@ -61,7 +62,7 @@ def get_active_window_state():
         return None
 
 
-def get_active_element_state(x, y):
+def get_active_element_state(x, y) -> dict:
     """Get the state of the active element at the specified coordinates.
 
     Args:

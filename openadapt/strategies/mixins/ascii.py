@@ -7,6 +7,8 @@ Usage:
         ...
 """
 
+from typing import Any
+
 from ascii_magic import AsciiArt
 from loguru import logger
 
@@ -24,7 +26,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(
         self, recording: Recording,
-    ):
+    ) -> None:
         """
         Initialize the ASCIIReplayStrategyMixin.
 
@@ -39,7 +41,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         monochrome: bool = MONOCHROME,
         columns: int = COLUMNS,
         width_ratio: float = WIDTH_RATIO,
-    ):
+    ) -> Any:
         """
         Convert the screenshot image to ASCII text.
 

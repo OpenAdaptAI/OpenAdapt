@@ -21,7 +21,7 @@ from openadapt import crud, utils
 LOG_LEVEL = "INFO"
 
 
-def replay(strategy_name: str, timestamp: Union[str, None] = None):
+def replay(strategy_name: str, timestamp: Union[str, None] = None) -> None:
     """
     Replay recorded events using the specified strategy.
 
@@ -60,7 +60,7 @@ def replay(strategy_name: str, timestamp: Union[str, None] = None):
 
 
 # Entry point
-def start():
+def start() -> None:
     """Starts the replay."""
     fire.Fire(replay)
 

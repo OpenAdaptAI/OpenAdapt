@@ -4,6 +4,8 @@ Implements basic CRUD (Create, Read, Update, Delete) operations for interacting 
 Module: crud.py
 """
 
+from typing import Any
+
 from loguru import logger
 import sqlalchemy as sa
 
@@ -26,7 +28,7 @@ window_events = []
 performance_stats = []
 
 
-def _insert(event_data, table, buffer=None):
+def _insert(event_data, table, buffer=None) -> (Any | None):
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
@@ -58,7 +60,7 @@ def _insert(event_data, table, buffer=None):
         return result
 
 
-def insert_action_event(recording_timestamp, event_timestamp, event_data):
+def insert_action_event(recording_timestamp, event_timestamp, event_data) -> None:
     """Insert an action event into the database.
 
     Args:
@@ -74,7 +76,7 @@ def insert_action_event(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, ActionEvent, action_events)
 
 
-def insert_screenshot(recording_timestamp, event_timestamp, event_data):
+def insert_screenshot(recording_timestamp, event_timestamp, event_data) -> None:
     """Insert a screenshot into the database.
 
     Args:
@@ -90,7 +92,7 @@ def insert_screenshot(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, Screenshot, screenshots)
 
 
-def insert_window_event(recording_timestamp, event_timestamp, event_data):
+def insert_window_event(recording_timestamp, event_timestamp, event_data) -> None:
     """Insert a window event into the database.
 
     Args:
@@ -106,7 +108,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
+def insert_perf_stat(recording_timestamp, event_type, start_time, end_time) -> None:
     """Insert an event performance stat into the database.
 
     Args:
@@ -124,7 +126,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp):
+def get_perf_stats(recording_timestamp) -> list[Any]:
     """Get performance stats for a given recording.
 
     Args:
@@ -141,7 +143,7 @@ def get_perf_stats(recording_timestamp):
     )
 
 
-def insert_recording(recording_data):
+def insert_recording(recording_data) -> Recording:
     """Insert a recording into the database.
 
     Args:
@@ -157,7 +159,7 @@ def insert_recording(recording_data):
     return db_obj
 
 
-def get_latest_recording():
+def get_latest_recording() -> (Any | None):
     """Get the latest recording.
 
     Returns:
@@ -166,7 +168,7 @@ def get_latest_recording():
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording(timestamp):
+def get_recording(timestamp) -> (Any | None):
     """Get a recording by timestamp.
 
     Args:
@@ -178,7 +180,7 @@ def get_recording(timestamp):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table, recording_timestamp):
+def _get(table, recording_timestamp) -> list[Any]:
     return (
         db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
@@ -187,7 +189,7 @@ def _get(table, recording_timestamp):
     )
 
 
-def get_action_events(recording):
+def get_action_events(recording) -> list[Any]:
     """Get action events for a given recording.
 
     Args:
@@ -199,7 +201,7 @@ def get_action_events(recording):
     return _get(ActionEvent, recording.timestamp)
 
 
-def get_screenshots(recording, precompute_diffs=False):
+def get_screenshots(recording, precompute_diffs=False) -> list[Any]:
     """Get screenshots for a given recording.
 
     Args:
@@ -224,7 +226,7 @@ def get_screenshots(recording, precompute_diffs=False):
     return screenshots
 
 
-def get_window_events(recording):
+def get_window_events(recording) -> list[Any]:
     """Get window events for a given recording.
 
     Args:

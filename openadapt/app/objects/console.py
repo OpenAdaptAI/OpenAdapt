@@ -16,13 +16,13 @@ from nicegui import ui
 class Console(object):
     """Console class for redirecting stderr to a NiceGUI log."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the Console object."""
         self.log = ui.log().classes("w-full h-20")
         self.old_stderr = sys.stderr
         sys.stderr = self
 
-    def write(self, data):
+    def write(self, data: str) -> None:
         """
         Write data to the log.
 
@@ -32,11 +32,11 @@ class Console(object):
         self.log.push(data[:-1])
         self.log.update()
 
-    def flush(self):
+    def flush(self) -> None:
         """Flush the log."""
         self.log.update()
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the log and restore stderr."""
         self.log.clear()
         sys.stderr = self.old_stderr

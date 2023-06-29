@@ -6,6 +6,7 @@ This module provides various utility functions used throughout OpenAdapt.
 
 from io import BytesIO
 from collections import Counter, defaultdict
+from typing import Any
 import base64
 import fire
 import inspect
@@ -27,7 +28,7 @@ from openadapt import common, config
 EMPTY = (None, [], {}, "")
 
 
-def configure_logging(logger, log_level):
+def configure_logging(logger, log_level) -> None:
     """
     Configure the logging settings for OpenAdapt.
 
@@ -56,7 +57,7 @@ def configure_logging(logger, log_level):
     logger.debug(f"{log_level=}")
 
 
-def row2dict(row, follow=True):
+def row2dict(row, follow=True) -> dict:
     """
     Convert a row object to a dictionary.
 
@@ -88,7 +89,7 @@ def row2dict(row, follow=True):
     return row_dict
 
 
-def round_timestamps(events, num_digits):
+def round_timestamps(events, num_digits) -> None:
     """
     Round timestamps in a list of events.
 
@@ -108,7 +109,7 @@ def round_timestamps(events, num_digits):
 
 def rows2dicts(
     rows, drop_empty=True, drop_constant=True, num_digits=None,
-):
+) -> list[dict]:
     """
     Convert a list of rows to a list of dictionaries.
 
@@ -155,7 +156,7 @@ def rows2dicts(
     return row_dicts
 
 
-def override_double_click_interval_seconds(override_value):
+def override_double_click_interval_seconds(override_value) -> None:
     """
     Override the double click interval in seconds.
 
@@ -165,7 +166,7 @@ def override_double_click_interval_seconds(override_value):
     get_double_click_interval_seconds.override_value = override_value
 
 
-def get_double_click_interval_seconds():
+def get_double_click_interval_seconds() -> float:
     """
     Get the double click interval in seconds.
 
@@ -187,7 +188,7 @@ def get_double_click_interval_seconds():
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_double_click_distance_pixels():
+def get_double_click_distance_pixels() -> int:
     """
     Get the double click distance in pixels.
 
@@ -216,7 +217,7 @@ def get_double_click_distance_pixels():
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_monitor_dims():
+def get_monitor_dims() -> tuple:
     """
     Get the dimensions of the monitor.
 
@@ -240,14 +241,14 @@ def draw_ellipse(
     fill_transparency=0.25,
     outline_transparency=0.5,
     outline_width=2,
-):
+) -> tuple[Image.Image, Any, Any]:
     """
     Draw an ellipse on the image.
 
     Args:
         x (float): The x-coordinate of the center of the ellipse.
         y (float): The y-coordinate of the center of the ellipse.
-        image (PIL.Image.Image): The image to draw on.
+        image (Image.Image): The image to draw on.
         width_pct (float): The percentage of the image width for the width of the ellipse.
         height_pct (float): The percentage of the image height for the height of the ellipse.
         fill_transparency (float): The transparency of the ellipse fill.
@@ -255,7 +256,7 @@ def draw_ellipse(
         outline_width (int): The width of the ellipse outline.
 
     Returns:
-        PIL.Image.Image: The image with the ellipse drawn on it.
+        Image.Image: The image with the ellipse drawn on it.
         float: The width of the ellipse.
         float: The height of the ellipse.
     """
@@ -278,7 +279,7 @@ def draw_ellipse(
     return image, width, height
 
 
-def get_font(original_font_name, font_size):
+def get_font(original_font_name, font_size) -> ImageFont.FreeTypeFont:
     """
     Get a font object.
 
@@ -314,7 +315,7 @@ def draw_text(
     stroke_width=3,
     outline=False,
     outline_padding=10,
-):
+) -> Image:
     """
     Draw text on the image.
 
@@ -381,7 +382,7 @@ def draw_rectangle(
     outline_transparency=0.5,
     outline_width=2,
     invert=False,
-):
+) -> Image:
     """
     Draw a rectangle on the image.
 
@@ -419,7 +420,7 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(action_event):
+def get_scale_ratios(action_event) -> Any:
     """
     Get the scale ratios for the action event.
 
@@ -444,7 +445,7 @@ def display_event(
     marker_fill_transparency=0.25,
     marker_outline_transparency=0.5,
     diff=False,
-):
+) -> Image:
     """
     Display an action event on the image.
 
@@ -518,7 +519,7 @@ def display_event(
     return image
 
 
-def image2utf8(image):
+def image2utf8(image) -> str:
     """
     Convert an image to UTF-8 format.
 
@@ -542,7 +543,7 @@ _start_time = None
 _start_perf_counter = None
 
 
-def set_start_time(value=None):
+def set_start_time(value=None) -> float:
     """
     Set the start time for performance measurements.
 
@@ -558,7 +559,7 @@ def set_start_time(value=None):
     return _start_time
 
 
-def get_timestamp(is_global=False):
+def get_timestamp(is_global=False) -> float:
     """
     Get the current timestamp.
 
@@ -573,7 +574,7 @@ def get_timestamp(is_global=False):
 
 
 # https://stackoverflow.com/a/50685454
-def evenly_spaced(arr, N):
+def evenly_spaced(arr, N) -> list:
     """
     Get evenly spaced elements from the array.
 
@@ -604,7 +605,7 @@ def take_screenshot() -> mss.base.ScreenShot:
     return sct_img
 
 
-def get_strategy_class_by_name():
+def get_strategy_class_by_name() -> dict:
     """
     Get a dictionary of strategy classes by their names.
 
@@ -678,7 +679,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
     os.system(f"open {fpath}")
 
 
-def strip_element_state(action_event):
+def strip_element_state(action_event) -> Any:
     """
     Strip the element state from the action event and its children.
 

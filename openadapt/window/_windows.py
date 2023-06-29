@@ -149,7 +149,7 @@ def dictify_rect(rect) -> dict:
     return rect_dict
 
 
-def main():
+def main() -> None:
     """
     Test function for retrieving and inspecting the state of the active window.
 

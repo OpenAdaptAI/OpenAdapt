@@ -1,4 +1,5 @@
 from pprint import pprint
+from typing import Any
 import pickle
 
 from loguru import logger
@@ -8,7 +9,7 @@ import ApplicationServices
 import Quartz
 
 
-def get_active_window_state():
+def get_active_window_state() -> (dict | None):
     """Get the state of the active window.
 
     Returns:
@@ -50,7 +51,7 @@ def get_active_window_state():
     return rval
 
 
-def get_active_window_meta():
+def get_active_window_meta() -> dict:
     """Get the metadata of the active window.
 
     Returns:
@@ -68,7 +69,7 @@ def get_active_window_meta():
     return active_window_info
 
 
-def get_active_window(window_meta):
+def get_active_window(window_meta) -> Any:
     """Get the active window from the given metadata.
 
     Args:
@@ -89,7 +90,7 @@ def get_active_window(window_meta):
     return window
 
 
-def get_window_data(window_meta):
+def get_window_data(window_meta) -> dict:
     """Get the data of the window.
 
     Args:
@@ -103,7 +104,7 @@ def get_window_data(window_meta):
     return state
 
 
-def dump_state(element, elements=None):
+def dump_state(element, elements=None) -> (dict | list):
     """Dump the state of the given element and its descendants.
 
     Args:
@@ -166,7 +167,7 @@ def dump_state(element, elements=None):
 
 
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
-def deepconvert_objc(object):
+def deepconvert_objc(object) -> Any:
     """Convert all contents of an ObjC object to Python primitives.
 
     Args:
@@ -188,7 +189,7 @@ def deepconvert_objc(object):
     return value
 
 
-def get_active_element_state(x, y):
+def get_active_element_state(x, y) -> dict:
     """Get the state of the active element at the specified coordinates.
 
     Args:
@@ -212,7 +213,7 @@ def get_active_element_state(x, y):
     return state
 
 
-def main():
+def main() -> None:
     """Main function for testing the functionality.
 
     This function sleeps for 1 second, gets the state of the active window,

@@ -13,7 +13,7 @@ from openadapt.app.util import set_dark, sync_switch
 PROC = None
 
 
-def settings(dark_mode):
+def settings(dark_mode: bool) -> None:
     """
     Display the settings dialog.
 
@@ -28,7 +28,7 @@ def settings(dark_mode):
     settings.open()
 
 
-def select_import(f):
+def select_import(f: callable) -> None:
     """
     Display the import file selection dialog.
 
@@ -36,7 +36,7 @@ def select_import(f):
         f (callable): Function to call when import button is clicked.
     """
 
-    async def pick_file():
+    async def pick_file() -> None:
         result = await LocalFilePicker(".")
         ui.notify(f"Selected {result[0]}" if result else "No file selected.")
         selected_file.text = result[0] if result else ""
@@ -56,7 +56,7 @@ def select_import(f):
     import_dialog.open()
 
 
-def recording_prompt(options, record_button):
+def recording_prompt(options: list, record_button: ui.widgets.Button) -> None:
     """
     Display the recording prompt dialog.
 
@@ -81,7 +81,7 @@ def recording_prompt(options, record_button):
 
             dialog.open()
 
-    def terminate():
+    def terminate() -> None:
         global PROC
         PROC.send_signal(signal.SIGINT)
 
@@ -93,17 +93,17 @@ def recording_prompt(options, record_button):
 
         PROC = None
 
-    def begin():
+    def begin() -> None:
         name = result.text.__getattribute__("value")
 
-        ui.notify(f"Recording {name}... Press CTRL + C in terminal window to cancel",)
-        PROC = Popen("python3 -m openadapt.record " + name, shell=True,)
+        ui.notify(f"Recording {name}... Press CTRL + C in terminal window to cancel")
+        PROC = Popen("python3 -m openadapt.record " + name, shell=True)
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())
         record_button.update()
         return PROC
 
-    def on_record():
+    def on_record() -> None:
         global PROC
         dialog.close()
         PROC = begin()

@@ -20,7 +20,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         replay_events=REPLAY_EVENTS,
         process_events=PROCESS_EVENTS,
         sleep=SLEEP,
-    ):
+    ) -> None:
         """
         Initialize the NaiveReplayStrategy.
 
@@ -43,7 +43,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
 
     def get_next_action_event(
         self, screenshot: models.Screenshot, window_event: models.WindowEvent,
-    ):
+    ) -> (models.ActionEvent | None):
         """
         Get the next ActionEvent for replay.
 

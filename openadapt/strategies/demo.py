@@ -33,7 +33,7 @@ class DemoReplayStrategy(
 
     def __init__(
         self, recording: Recording,
-    ):
+    ) -> None:
         """
         Initialize the DemoReplayStrategy.
 
@@ -47,7 +47,7 @@ class DemoReplayStrategy(
 
     def get_next_action_event(
         self, screenshot: Screenshot, window_event: WindowEvent,
-    ):
+    ) -> None:
         """
         Get the next action event based on the current screenshot and window event.
 
