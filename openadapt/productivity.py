@@ -409,6 +409,7 @@ def calculate_productivity():
 
     last_event = action_events[0]
     curr_action_events = []
+    window_detected = False
     for i in range(0, len(action_events) - 1):
         # TODO:
         if i == MAX_EVENTS:
@@ -419,6 +420,7 @@ def calculate_productivity():
         if curr_event.window_event_timestamp != next_event.window_event_timestamp and \
                 curr_event.window_event.title != "" and \
                 curr_event.window_event.title != next_event.window_event.title:
+            window_detected = True
             image = display_event(curr_event)
             image_utf8 = image2utf8(image)
             width, height = image.size
@@ -467,6 +469,50 @@ def calculate_productivity():
             curr_action_events = []
             last_event = curr_event
     # TODO: change the one at the bottom
+
+    if not window_detected and len(window_events) > 0:
+        # only one window event
+        image = display_event(action_events[-1])
+        image_utf8 = image2utf8(image)
+        width, height = image.size
+
+        gaps, time_in_gaps = find_gaps(action_events)
+        num_clicks = find_clicks(action_events)
+        num_key_presses = find_key_presses(action_events)
+        window_duration = duration
+        window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+                       "Total time spent during pauses": time_in_gaps,
+                       "Total number of mouse clicks": num_clicks,
+                       "Total number of key presses": num_key_presses,
+                       "Time spent on this window/tab": window_duration,
+                       }
+
+        rows.append([
+            row(
+                Div(
+                    text=f"""
+                                    <div class="screenshot">
+                                        <img
+                                            src="{image_utf8}"
+                                            style="
+                                                aspect-ratio: {width}/{height};
+                                            "
+                                        >
+                                    </div>
+                                    <table>
+                                        {dict2html(row2dict(action_events[-1].window_event), None)}
+                                    </table>
+                                """,
+                ),
+                Div(
+                    text=f"""
+                                    <table>
+                                        {dict2html(window_info)}
+                                    </table>
+                                """
+                ),
+            ),
+        ])
 
     # display data
     title = f"Productivity metrics for recording-{recording.id}"
