@@ -2,12 +2,30 @@
 name = "openadapt"
 version = "0.1.0"
 description = "GUI Process Automation with Transformers"
-authors = ["Richard Abrich <richard.abrich@mldsai.com>"]
-readme = ["README.md", "LICENSE"]
+authors = [
+    'Mustafa Abdulrahman <mustafa@openadapt.ai>',
+    'Richard Abrich <richard.abrich@mldsai.com>',
+    'Avid Eslami <avid@openadapt.ai>',
+    'Andrew Gorton <andrew.gorton@mail.utoronto.ca>',
+    'Krish Patel <krish@openadapt.ai>',
+    'Dian Rong <dian@openadapt.ai>',
+    'Aaron Shah <aaron@openadapt.ai>',
+    'Jesica Susanto <jesica@openadapt.ai>',
+    'Angela Zhuo <angela@openadapt.ai>',
+    'Owais Zahid <owais@openadapt.ai>'
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+
+readme = ["README.md"]
 
 repository = "https://github.com/mldsai/openadapt"
 homepage = "https://openadapt.ai/"
 
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
 
 [tool.poetry.dependencies]
 python = "3.10.x"
@@ -74,3 +92,20 @@ record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.tray:run_tray"
 reset = "openadapt.scripts.reset_db:reset_db"
+
+[tool.semantic_release]
+version_variable = [
+    "openadapt/__init__.py:__version__"
+]
+version_toml = [
+    "pyproject.toml:tool.poetry.version"
+]
+major_on_zero = false
+branch = "main"
+commit_subject = "chore(release): v{version}"
+commit_version_number = true
+upload_to_PyPI = false
+upload_to_release = true
+upload_to_repository = false
+repository_url = "https://upload.pypi.org/legacy/"
+build_command = "pip install poetry && poetry build"
