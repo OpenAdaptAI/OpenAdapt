@@ -30,5 +30,7 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
             "document-question-answering", 
             model="impira/layoutlm-document-qa"
         )
-
-        return query_pipeline(image, question)[0]["answer"]
+        output = query_pipeline(image, question)
+        if output != []:
+            return query_pipeline(image, question)[0]['answer']
+        return None
