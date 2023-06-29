@@ -118,9 +118,28 @@ DIRNAME_PERFORMANCE_PLOTS = "performance"
 ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
 ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
 
+
+def obfuscate(val, pct_reveal=0.1, char="*"):
+    num_reveal = int(len(val) * pct_reveal)
+    num_obfuscate = len(val) - num_reveal
+    obfuscated = char * num_obfuscate
+    revealed = val[-num_reveal:]
+    rval = f"{obfuscated}{revealed}"
+    assert len(rval) == len(val), (val, rval)
+    return rval
+
+
+
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
-    for key, val in locals().items():
+    for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
+            parts = key.split("_")
+            if (
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
+                val != _DEFAULTS[key]
+            ):
+                val = obfuscate(val)
             logger.info(f"{key}={val}")
 
 
