@@ -24,7 +24,7 @@ import fire
 import mss.tools
 
 from openadapt import config, crud, utils, window
-from openadapt.customized_imports import synchronized_queue as sq
+from openadapt.extensions import synchronized_queue as sq
 
 import functools
 
