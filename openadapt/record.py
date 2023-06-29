@@ -24,6 +24,7 @@ import fire
 import mss.tools
 
 from openadapt import config, crud, utils, window
+from openadapt.custom.my_queue import MyQueue
 
 import functools
 
@@ -86,10 +87,10 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 @trace(logger)
 def process_events(
     event_q: queue.Queue,
-    screen_write_q: multiprocessing.Queue,
-    action_write_q: multiprocessing.Queue,
-    window_write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    screen_write_q: MyQueue,
+    action_write_q: MyQueue,
+    window_write_q: MyQueue,
+    perf_q: MyQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -168,7 +169,7 @@ def process_events(
 def write_action_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: MyQueue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -187,7 +188,7 @@ def write_action_event(
 def write_screen_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: MyQueue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -209,7 +210,7 @@ def write_screen_event(
 def write_window_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: MyQueue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -229,8 +230,8 @@ def write_window_event(
 def write_events(
     event_type: str,
     write_fn: Callable,
-    write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    write_q: MyQueue,
+    perf_q: MyQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
     term_pipe: multiprocessing.Pipe,
@@ -469,7 +470,7 @@ def read_window_events(
 
 @trace(logger)
 def performance_stats_writer(
-    perf_q: multiprocessing.Queue,
+    perf_q: MyQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -597,11 +598,11 @@ def record(
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
-    screen_write_q = multiprocessing.Queue()
-    action_write_q = multiprocessing.Queue()
-    window_write_q = multiprocessing.Queue()
+    screen_write_q = MyQueue()
+    action_write_q = MyQueue()
+    window_write_q = MyQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
-    perf_q = multiprocessing.Queue()
+    perf_q = MyQueue()
     terminate_event = multiprocessing.Event()
     
     term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
