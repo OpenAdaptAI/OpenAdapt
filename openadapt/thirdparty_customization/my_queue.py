@@ -1,7 +1,7 @@
 from multiprocessing.queues import Queue
 import multiprocessing
 
-# The following implementation of custom MyQueue to avoid NotImplementedError
+# The following implementation of custom SynchronizedQueue to avoid NotImplementedError
 # when calling queue.qsize() in MacOS X comes almost entirely from this github
 # discussion: https://github.com/keras-team/autokeras/issues/368
 # Necessary modification is made to make the code compatible with Python3.
@@ -34,7 +34,7 @@ class SharedCounter(object):
         return self.count.value
 
 
-class MyQueue(Queue):
+class SynchronizedQueue(Queue):
     """ A portable implementation of multiprocessing.Queue.
     Because of multithreading / multiprocessing semantics, Queue.qsize() may
     raise the NotImplementedError exception on Unix platforms like Mac OS X
@@ -45,9 +45,9 @@ class MyQueue(Queue):
     being raised, but also allows us to implement a reliable version of both
     qsize() and empty().
     Note the implementation of __getstate__ and __setstate__ which help to
-    serialize MyQueue when it is passed between processes. If these functions
-    are not defined, MyQueue cannot be serialized, which will lead to the error
-    of "AttributeError: 'MyQueue' object has no attribute 'size'".
+    serialize SynchronizedQueue when it is passed between processes. If these functions
+    are not defined, SynchronizedQueue cannot be serialized, which will lead to the error
+    of "AttributeError: 'SynchronizedQueue' object has no attribute 'size'".
     See the answer provided here: https://stackoverflow.com/a/65513291/9723036
     
     For documentation of using __getstate__ and __setstate__ 
@@ -60,9 +60,9 @@ class MyQueue(Queue):
         self.size = SharedCounter(0)
 
     def __getstate__(self):
-        """Help to make MyQueue instance serializable.
+        """Help to make SynchronizedQueue instance serializable.
         Note that we record the parent class state, which is the state of the
-        actual queue, and the size of the queue, which is the state of MyQueue.
+        actual queue, and the size of the queue, which is the state of SynchronizedQueue.
         self.size is a SharedCounter instance. It is itself serializable.
         """
         return {
