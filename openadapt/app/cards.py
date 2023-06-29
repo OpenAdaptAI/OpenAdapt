@@ -1,6 +1,9 @@
 import signal
-from nicegui import ui
+from datetime import datetime
 from subprocess import Popen
+
+from nicegui import ui
+
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import set_dark, sync_switch
 
@@ -54,8 +57,9 @@ def stop_record(tray):
 
 def quick_record():
     global record_proc
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc = Popen(
-        "python3 -m openadapt.record " + "recording",
+        f"python3 -m openadapt.record '{now}'",
         shell=True,
     )
 

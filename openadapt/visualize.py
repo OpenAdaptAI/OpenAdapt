@@ -149,10 +149,11 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     return html_str
 
 
-def main():
+def main(recording=None):
     configure_logging(logger, LOG_LEVEL)
 
-    recording = get_latest_recording()
+    if recording is None:
+        recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")

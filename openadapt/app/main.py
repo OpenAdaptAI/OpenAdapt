@@ -16,6 +16,9 @@ from openadapt.app.objects.console import Console
 SERVER = "127.0.0.1:8000/upload"
 FPATH = os.path.dirname(__file__)
 
+# Recording description autocomplete
+OPTIONS = ["test"]
+
 app.native.window_args["resizable"] = False  # too many issues with resizing
 app.native.start_args["debug"] = False
 
@@ -49,16 +52,13 @@ with ui.row().classes("w-full justify-right"):
         "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
     )
 
-# Recording description autocomplete
-options = ["test"]
-
 with ui.splitter(value=20) as splitter:
     splitter.classes("w-full h-full")
     with splitter.before:
         with ui.column().classes("w-full h-full"):
             record_button = (
                 ui.icon("radio_button_checked", size="64px")
-                .on("click", lambda: recording_prompt(options, record_button))
+                .on("click", lambda: recording_prompt(OPTIONS, record_button))
                 .tooltip("Record a new replay / Stop recording")
             )
             ui.icon("visibility", size="64px").on(

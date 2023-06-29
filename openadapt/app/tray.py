@@ -1,11 +1,14 @@
 import os
 import sys
 import threading
+
 from PIL import Image
 from pystray import Icon, Menu, MenuItem
-from openadapt.app.cards import quick_record, stop_record
-from openadapt.app.main import start, FPATH
+
 from openadapt import visualize
+from openadapt.app.cards import quick_record, stop_record
+from openadapt.app.main import FPATH, start
+from openadapt.crud import get_all_recordings
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -16,6 +19,19 @@ if sys.platform == "darwin":
 
 app_thread = None
 g_tray = None
+
+
+def get_visualize_menu():
+    recordings = get_all_recordings()
+    menu_items = [MenuItem("latest", lambda: visualize.main())]
+    for i in range(1, len(recordings)):
+        menu_items.append(
+            MenuItem(
+                f"{recordings[i].task_description}",
+                lambda: visualize.main(recording=recordings[i]),
+            )
+        )
+    return Menu(*menu_items)
 
 
 def new_tray():
@@ -36,7 +52,10 @@ def new_tray():
     menu = Menu(
         MenuItem("Record", quick_record),
         MenuItem("Stop Recording", lambda: stop_record(g_tray)),
-        MenuItem("Visualize", lambda: threading.Thread(target=visualize.main).start()),
+        MenuItem(
+            "Visualize",
+            get_visualize_menu(),
+        ),
         MenuItem("Show App", show_app),
         MenuItem("Exit", on_exit),
     )

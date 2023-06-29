@@ -19,6 +19,7 @@ screenshots = []
 window_events = []
 performance_stats = []
 
+
 def _insert(event_data, table, buffer=None):
     """Insert using Core API for improved performance (no rows are returned)"""
 
@@ -74,6 +75,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     }
     _insert(event_data, WindowEvent, window_events)
 
+
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
     Insert event performance stat into db
@@ -86,6 +88,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
         "end_time": end_time,
     }
     _insert(event_perf_stat, PerformanceStat, performance_stats)
+
 
 def get_perf_stats(recording_timestamp):
     """
@@ -100,12 +103,22 @@ def get_perf_stats(recording_timestamp):
         .all()
     )
 
+
 def insert_recording(recording_data):
     db_obj = Recording(**recording_data)
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+def get_all_recordings():
+    return (
+        db
+        .query(Recording)
+        .order_by(sa.desc(Recording.timestamp))
+        .all()
+    )
 
 
 def get_latest_recording():
