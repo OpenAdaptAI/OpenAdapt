@@ -5,6 +5,7 @@ import modal
 import requests
 from huggingface_hub import hf_hub_download
 
+from rwkv import rwkv_tokenizer
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
 from transformers import PreTrainedTokenizerFast
@@ -15,38 +16,121 @@ stub = modal.Stub("openadapt-rwkv")
 os.environ["RWKV_JIT_ON"] = '1'
 os.environ["RWKV_CUDA_ON"] = '0'
 
+class RWKV_TOKENIZER():
+    table: list[list[list[bytes]]]
+    good: list[set[int]]
+    wlen: list[int]
+    def __init__(self, file_name):
+        self.idx2token = {}
+        sorted = [] # must be already sorted
+        lines = open(file_name, "r", encoding="utf-8").readlines()
+        for l in lines:
+            idx = int(l[:l.index(' ')])
+            x = eval(l[l.index(' '):l.rindex(' ')])
+            x = x.encode("utf-8") if isinstance(x, str) else x
+            assert isinstance(x, bytes)
+            assert len(x) == int(l[l.rindex(' '):])
+            sorted += [x]
+            self.idx2token[idx] = x
+
+        self.token2idx = {}
+        for k, v in self.idx2token.items():
+            self.token2idx[v] = int(k)
+
+        # precompute some tables for fast matching
+        self.table = [[[] for j in range(256)] for i in range(256)]
+        self.good = [set() for i in range(256)]
+        self.wlen = [0 for i in range(256)]
+
+        for i in reversed(range(len(sorted))): # reverse order - match longer tokens first
+            s = sorted[i]
+            if len(s) >= 2:
+                s0 = int(s[0])
+                s1 = int(s[1])
+                self.table[s0][s1] += [s]
+                self.wlen[s0] = max(self.wlen[s0], len(s))
+                self.good[s0].add(s1)
+
+    def encodeBytes(self, src: bytes) -> list[int]:
+        src_len: int = len(src)
+        tokens: list[int] = []
+        i: int = 0
+        while i < src_len:
+            s: bytes = src[i : i + 1]
+
+            if i < src_len - 1:
+                s1: int = int(src[i + 1])
+                s0: int = int(src[i])
+                if s1 in self.good[s0]:
+                    sss: bytes = src[i : i + self.wlen[s0]]
+                    try:
+                        s = next(filter(sss.startswith, self.table[s0][s1]))
+                    except:
+                        pass
+            tokens.append(self.token2idx[s])
+            i += len(s)
+
+        return tokens
+
+    def decodeBytes(self, tokens):
+        return b''.join(map(lambda i: self.idx2token[i], tokens))
+
+    def encode(self, src: str):
+        return self.encodeBytes(src.encode("utf-8"))
+
+    def decode(self, tokens):
+        return self.decodeBytes(tokens).decode('utf-8')
+
+    def printTokens(self, tokens):
+        for i in tokens:
+            s = self.idx2token[i]
+            try:
+                s = s.decode('utf-8')
+            except:
+                pass
+            print(f'{repr(s)}{i}', end=' ')
+            # print(repr(s), i)
+        print()
+
+
 torch_image = modal.Image.debian_slim().pip_install("torch", "rwkv", "numpy", "transformers")
 
 @stub.function(gpu="a100", timeout=18000, image=torch_image)
-def run_RWKV(model=0, instruction=None, task_description=None, input=None, parameters=None, use_cuda=True):
+def run_RWKV(model_number=0, instruction=None, task_description=None, input=None, parameters=None, use_cuda=True):
     #use gpu=a100 for Raven-14B and Pile-14B, vs. use gpu=any for other weights
     #switch 'cuda fp16' to 'cpu fp32' if running on cpu is preferred
-    if (model == 0):
+    if (model_number == 0):
         title = "RWKV-4-Raven-14B-v12-Eng98%-Other2%-20230523-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
-    elif (model == 1):
+    elif (model_number == 1):
         title = "RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
-    elif (model == 2):
+    elif (model_number == 2):
         title = "RWKV-4-Raven-1B5-v10-Eng99%-Other1%-20230418-ctx4096"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
-    elif (model == 3):
+    elif (model_number == 3):
         title = "RWKV-4-Pile-14B-20230313-ctx8192-test1050"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-pile-14b", filename=f"{title}.pth")
-    elif (model == 4):
+    elif (model_number == 4):
+        title = "RWKV-4-World-7B-v1-20230626-ctx4096"
+        model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-world", filename=f"{title}.pth")
+    elif (model_number == 5):
         title = "RWKV-4-World-1.5B-v1-20230607-ctx4096"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-world", filename=f"{title}.pth")
 
+
     if use_cuda == True:
-        if model == 4:
+        if model_number == 4 or model_number == 5:
             model = RWKV(model=model_path, strategy='cuda fp32')
         else:
             model = RWKV(model=model_path, strategy='cuda fp16')
     else:
         model = RWKV(model=model_path, strategy='cpu fp32')
         
-
-    tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
+    if (model_number == 4):
+        tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/ChatRWKV/main/tokenizer/rwkv_vocab_v20230424.txt"
+    else:
+        tokenizer_url = "https://raw.githubusercontent.com/BlinkDL/RWKV-LM/main/RWKV-v4/20B_tokenizer.json"
     response = requests.get(tokenizer_url)
     if response.status_code == 200:
         # Specify a path to save the tokenizer to if running in a local environment
@@ -54,12 +138,15 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
         os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
         with open(tokenizer_path, 'wb') as f:
             f.write(response.content)
-        tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path)
+        #tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path)
     else:
         print(f"Failed to download tokenizer. Status code: {response.status_code}")
         return
     
-    if (model == 4):
+    if (model_number == 4):
+        pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
+        pipeline.tokenizer = RWKV_TOKENIZER("/root/rwkv_model/20B_tokenizer.json")
+    elif (model_number == 5):
         pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
     else:
         pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
@@ -127,7 +214,7 @@ def run_RWKV(model=0, instruction=None, task_description=None, input=None, param
             out_str += tmp
             out_last = i + 1
 
-    print(out_str.strip())
+    #print(out_str.strip())
     return(out_str.strip())
 
 @stub.local_entrypoint()

@@ -6,16 +6,23 @@ from openadapt import config
 
 if __name__ == '__main__':
 
-    MODEL = config.RWKV_MODEL
+    for i in range(10):
+        MODEL = config.RWKV_MODEL
+        USE_MODAL = True
+        MODEL = 4
 
-    instruction = "You will be given a short sentence representing the start of a story."
-    task_description = "Continue the story."
-    input = "The machine learning engineer was working on a new model, when suddenly the power went out. He decided to name the model: "
+        instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "
 
-    if config.USE_MODAL:
-        Func = modal.Function.lookup("openadapt-rwkv", "run_RWKV")
-        parameters = config.RWKV_PARAMETERS
-        print("Output:",Func.call(model=MODEL,parameters=parameters, instruction=instruction, task_description=task_description, input=input, use_cuda=True))
-    else:
-        parameters = config.RWKV_PARAMETERS
-        print("Output:",run_RWKV(model=MODEL,parameters=parameters, instruction=instruction, task_description=task_description, input=input, use_cuda=False))
+        task_description = ("filling forms and submitting data on web pages")
+        
+        input = f"""[{{'number': 1, 'title': 'restaurant menu', 'type': 'file', 'address': 'tests/openadapt/restaurant_menu_data.txt', 'description': 'Size: 17, Type: text/plain'}}
+,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
+,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Summary: function is used to compute the square root of a given number.'}}]"""
+        
+        if config.USE_MODAL:
+            Func = modal.Function.lookup("openadapt-rwkv", "run_RWKV")
+            parameters = config.RWKV_PARAMETERS
+            print("Output:",Func.call(model_number=MODEL,parameters=parameters, instruction=instruction, task_description=task_description, input=input, use_cuda=True))
+        else:
+            parameters = config.RWKV_PARAMETERS
+            print("Output:",run_RWKV(model_number=MODEL,parameters=parameters, instruction=instruction, task_description=task_description, input=input, use_cuda=False))
