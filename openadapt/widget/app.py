@@ -1,5 +1,6 @@
 from subprocess import Popen
 import signal
+import sys
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
@@ -9,6 +10,8 @@ from loguru import logger
 from kivy.clock import Clock
 from openadapt import window
 from PIL import ImageGrab
+
+
 SCREEN_SCALE = (Window.dpi / 96.0)
 class OpenAdapt(FloatLayout):
     def __init__(self, **kwargs):
@@ -36,8 +39,23 @@ class OpenAdapt(FloatLayout):
             and (window_data["top"], window_data["left"])
             != self.prev_active_window_position and window_data["title"] != "OpenAdaptWidget"
         ):
-            self.window.top = ((window_data["top"])// SCREEN_SCALE)-50
-            self.window.left = ((window_data["left"]+window_data["width"]) // SCREEN_SCALE)-50
+            if sys.platform == "darwin" :
+                top = ((window_data["top"])// SCREEN_SCALE)-50
+                left = (window_data["left"] // SCREEN_SCALE)
+            elif sys.platform in ("win32", "linux") :
+                top = ((window_data["top"])// SCREEN_SCALE)-50
+                left = ((window_data["left"]+window_data["width"]) // SCREEN_SCALE)-50
+            else :
+                raise Exception(f"Unsupposed {sys.platform=}")
+            resolution = ImageGrab.grab().size
+            screen_width, screen_height = resolution[0] // SCREEN_SCALE, resolution[1] // SCREEN_SCALE
+            logger.info(f"{screen_width=},{screen_height=}")
+            if top >= 0 and left >= 0 and top <= screen_height and left <= screen_width:
+                self.window.top = top
+                self.window.left = left
+            else :
+                self.window.top = 0
+                self.window.left = screen_width - 50
             self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
