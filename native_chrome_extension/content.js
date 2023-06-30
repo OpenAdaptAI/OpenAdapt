@@ -13,9 +13,10 @@ function detectDOMChanges() {
   // Create a mutation observer
   const observer = new MutationObserver(function(mutationsList) {
     // Send a message to the background script when a DOM change is detected
+    console.log({ mutationsList })
     sendMessageToBackgroundScript({
       action: 'logDOMChange',
-      documentObject: document,
+      documentObject: document.body.innerHTML,
     });
   });
 

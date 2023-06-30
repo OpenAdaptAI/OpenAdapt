@@ -3,14 +3,16 @@ let port = null;
 const hostName = 'openadapt';
 
 
-// Handle received messages
+// Handle received messages from content.js
 function onReceived(response) {
   console.log(response);
 }
 
 
+
 // Message listener for content script
 function messageListener(message, sender, sendResponse) {
+  console.log({ message, sender, sendResponse });
   port.postMessage(message);
 }
 
