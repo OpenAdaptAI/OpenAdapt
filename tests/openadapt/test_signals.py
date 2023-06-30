@@ -58,8 +58,12 @@ def test_add_function_signal():
     signals.add_signal("sample_package.sample_module.sample_function")
     signal = signals.return_signals()[0]
     signal_data = signals.return_signal_data(1)
+    
     assert signal_data == "Sample function success"
-    assert signal["description"] == "Module: sample_package.sample_module, Class: N/A, Function: sample_function, Doctstring: \n    This function is used to test the openadapt.signals module\n    "
+    assert signal["description"]["Class"] == "N/A"
+    assert signal["description"]["Docstring"] == "\n    This function is used to test the openadapt.signals module\n    "
+    assert signal["description"]["Function"] == "sample_function"
+    assert signal["description"]["Module"] == "sample_package.sample_module"
 
 
 if config.TEST_OPENAI == True:

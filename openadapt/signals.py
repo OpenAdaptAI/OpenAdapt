@@ -73,9 +73,9 @@ class Signals:
 
         for row in rows:
             # The first element is the table name, the second element is the SQL schema
-            table_info.append(f"Table: {row[0]}, Schema: {row[1]}")
+            table_info.append({"Table": (row[0]), "Schema": (row[1])})
 
-        description = "\n".join(table_info)
+        description = table_info
         return description
 
     def __setup_file_signal(self, file_path):
@@ -139,10 +139,10 @@ class Signals:
             length = response.headers.get("Content-Length")
             type = response.headers.get("Content-Type")
 
-            description = (
-                f"Length: {length if length else 'Content-Length not provided'}, "
-                f"Type: {type if type else 'Content-Type not provided'}"
-            )
+            description = {
+                "Length": (length if length else 'Content-Length not provided'), 
+                "Type": (type if type else 'Content-Type not provided')
+            }
         return description
 
     def __setup_function_signal(self, function_address, function_path=None):
@@ -168,12 +168,12 @@ class Signals:
         docstring = func.__doc__ if func.__doc__ else "No docstring provided"
 
         # Describe the function
-        description = (
-            f"Module: {module_name}, "
-            f"Class: {class_name}, "
-            f"Function: {func_name}, "
-            f"Doctstring: {docstring}"
-        )
+        description = {
+            "Module": (module_name), 
+            "Class": (class_name),
+           "Function": (func_name), 
+            "Docstring": (docstring)
+        }
 
         return description
 
