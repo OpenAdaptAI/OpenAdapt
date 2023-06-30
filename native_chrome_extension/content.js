@@ -1,35 +1,32 @@
-let port = null;  // Native Messaging port
-const hostName = 'openadapt';
-
-
 /*
- * Handle received messages
+ * Function to send a message to the background script
 */
-function onReceived(response) {
-  console.log(response);
-}
-
-/*
- * Handle disconnection from native app
-*/
-function onDisconnectedFromNativeHost() {
-  console.log('Disconnected from native host');
-  port = null;
+function sendMessageToBackgroundScript(message) {
+  chrome.runtime.sendMessage(message);
 }
 
 
-port = chrome.runtime.connectNative(hostName);
-port.onMessage.addListener(onReceived);
-port.onDisconnect.addListener(onDisconnectedFromNativeHost);
-console.log('Connected to native messaging host: ' + hostName);
-port.postMessage({ text: "Hello, my_application" });
-
 /*
-* Forward messages from content scripts to the native app
+ * Function to detect DOM changes
 */
-chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
-  if (message.action === 'logDOMChange') {
-    port.postMessage(message.documentInfo);
-    console.log('Message forwarded to native app');
-  }
-});
+function detectDOMChanges() {
+  // Create a mutation observer
+  const observer = new MutationObserver(function(mutationsList) {
+    // Send a message to the background script when a DOM change is detected
+    sendMessageToBackgroundScript({
+      action: 'logDOMChange',
+      documentObject: document,
+    });
+  });
+
+  // Start observing DOM changes
+  observer.observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    characterData: true,
+  });
+}
+
+// Call the function to start detecting DOM changes
+detectDOMChanges();
