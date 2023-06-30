@@ -88,6 +88,8 @@ _DEFAULTS = {
 
 def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
+    if type(rval) is str and rval.lower() in ("true", "false", "1", "0"):
+        rval = rval.lower() == "true" or rval == "1"
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
