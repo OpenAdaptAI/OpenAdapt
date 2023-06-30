@@ -1,3 +1,6 @@
+// System Diagram: https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
+
+
 /*
  * Function to send a message to the background script
 */
