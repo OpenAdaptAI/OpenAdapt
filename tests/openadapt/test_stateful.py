@@ -71,7 +71,7 @@ def create_win_dict(
     width: int,
     height: int,
     window_id: int,
-    meta: dict[str],
+    meta: dict[str] = {},
 ):
     win_dict = {
         "state": {
