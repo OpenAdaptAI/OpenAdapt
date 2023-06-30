@@ -50,10 +50,9 @@ if __name__ == "__main__":
     # Load the trained model for prediction
     model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly")
     config = model.config
-    config.lags_sequence.insert(1, 0)
-    config.lags_sequence.insert(1, 0)
-    config.lags_sequence.insert(1, 0)
+    config.lags_sequence = [*range(1, 20)]
 
+    config.num_time_features = 1
     context_length = config.context_length + max(config.lags_sequence)
     prediction_length = config.prediction_length
     batch_size = len(events_as_numbers) // context_length
@@ -107,9 +106,9 @@ if __name__ == "__main__":
     future_time_features = future_timestamps.unsqueeze(0).repeat(combined_timestamps_tensor.shape[0], 1).unsqueeze(-1)
 
     # Expand dimensions to match the desired shape
-    future_time_features = future_time_features.expand(combined_timestamps_tensor.shape[0], prediction_length, 1)
+    future_time_features_tensor = future_time_features.expand(combined_timestamps_tensor.shape[0], prediction_length, 1)
 
-    print(future_time_features.shape)
+    print(future_time_features_tensor.shape)
 
     # Generate predictions
     # import ipdb; ipdb.set_trace()
@@ -117,7 +116,7 @@ if __name__ == "__main__":
     outputs = model.generate(
         past_values=combined_past_values_tensor,
         past_time_features=combined_timestamps_tensor,
-        future_time_features=future_time_features,
+        future_time_features=future_time_features_tensor,
         past_observed_mask=mask
     )
 
@@ -125,5 +124,6 @@ if __name__ == "__main__":
 
     # Use the mean prediction for further analysis or tasks
     print(mean_prediction)
+    print(mean_prediction.shape)
 
     # TODO: turn into ActionEvents
