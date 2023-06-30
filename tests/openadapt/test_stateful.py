@@ -71,7 +71,7 @@ def create_win_dict(
     width: int,
     height: int,
     window_id: int,
-    meta: dict[str] = {},
+    meta: dict[str],
 ):
     win_dict = {
         "state": {
@@ -99,7 +99,7 @@ def create_action_dict(
     mouse_y: Union[int, float],
     mouse_button_name: str,
     mouse_pressed: bool,
-    element_state: dict,
+    element_state: dict = {},
 ):
     output_dict = [
         {
