@@ -35,7 +35,6 @@ def get_active_window_state(show_data) -> dict:
     if show_data:
         data = get_element_properties(active_window)
     else:
-        logger.info("SHOW_DATA = FALSE")
         data = None
     state = {
         "title": meta["texts"][0],
