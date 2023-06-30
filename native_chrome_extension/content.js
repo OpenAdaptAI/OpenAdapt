@@ -11,7 +11,9 @@ function extractDocumentInfo() {
 // Send the document info to the background script
 function sendDocumentInfo() {
     const documentInfo = extractDocumentInfo();
-    chrome.runtime.sendMessage({ type: 'document', documentInfo });
+    chrome.runtime.sendMessage({ type: 'document', documentInfo }, function(response) {
+      console.log('Document info sent to background script');
+    });
 }
 
 
