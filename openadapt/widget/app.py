@@ -40,7 +40,7 @@ class OpenAdapt(FloatLayout):
         self.prev_active_window_position = None
         Clock.schedule_interval(self.position_above_active_window, 0.5)
 
-    def position_above_active_window(self):
+    def position_above_active_window(self, *args):
         """
         Positions the OpenAdapt window above the currently active window.
 
@@ -88,15 +88,7 @@ class OpenAdapt(FloatLayout):
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
 
-    def callback(self):
-        """
-        Callback function for button press event.
-
-        Handles the button press event based on the current state.
-
-        Args:
-            instance: The instance of the button that triggered the event.
-        """
+    def callback(self, instance):
         # Handle button press based on the current state
         if self.current_state == "default":
             self.button.background_normal = "assets/recording_inprogress.png"
