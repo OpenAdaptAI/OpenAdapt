@@ -12,8 +12,8 @@ else:
     raise Exception(f"Unsupposed {sys.platform=}")
 
 
-def get_active_window_data():
-    state = get_active_window_state(show_data=SHOW_DATA)
+def get_active_window_data(show_data=SHOW_DATA):
+    state = get_active_window_state(show_data)
     if not state:
         return None
     title = state["title"]
@@ -31,6 +31,7 @@ def get_active_window_data():
         "window_id": window_id,
         "state": state,
     }
+    logger.info(f"{window_data}")
     return window_data
 
 

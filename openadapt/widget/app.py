@@ -30,7 +30,7 @@ class OpenAdaptWidget(FloatLayout):
         Clock.schedule_interval(self.position_above_active_window, 0.5)
     
     def position_above_active_window(self, *args):
-        window_data = window.get_active_window_state(False)
+        window_data = window.get_active_window_data(False)
         if (
           window_data
             and (window_data["top"], window_data["left"])
