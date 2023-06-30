@@ -20,7 +20,7 @@ from openadapt.utils import display_event
 MODEL_NAME = config.OPENAI_MODEL_NAME
 
 
-def get_prompt(diffs=False, action_event):
+def get_prompt(action_event, diffs=False)):
     """
     Returns a prompt for the agent.
 
@@ -76,7 +76,7 @@ class TransformersAgentsMixin(OpenAiAgent):
         screenshots=[],
     ):
         super().__init__(
-            MODEL_NAME,
+            model_name
             api_key,
             chat_prompt_template,
             run_prompt_template,
