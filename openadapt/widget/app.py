@@ -12,9 +12,17 @@ from openadapt import window
 from PIL import ImageGrab
 
 
-SCREEN_SCALE = (Window.dpi / 96.0)
+SCREEN_SCALE = Window.dpi / 96.0
+
+
 class OpenAdapt(FloatLayout):
     def __init__(self, **kwargs):
+        """
+        A Kivy widget for controlling screen recording and replaying.
+
+        Args:
+            kwargs: Additional keyword arguments to pass to the parent class.
+        """
         super(OpenAdapt, self).__init__(**kwargs)
         self.window = Window
         self.window.borderless = True
@@ -31,36 +39,65 @@ class OpenAdapt(FloatLayout):
         self.add_widget(self.button)
         self.prev_active_window_position = None
         Clock.schedule_interval(self.position_above_active_window, 0.5)
-    
-    def position_above_active_window(self, *args):
+
+    def position_above_active_window(self):
+        """
+        Positions the OpenAdapt window above the currently active window.
+
+        This function is called periodically to update the position of the OpenAdapt window
+        to be above the currently active window on the screen.
+
+        Args:
+            args: Additional positional arguments (not used).
+        """
         window_data = window.get_active_window_data(False)
         if (
-          window_data
+            window_data
             and (window_data["top"], window_data["left"])
-            != self.prev_active_window_position and window_data["title"] != "OpenAdaptWidget"
+            != self.prev_active_window_position
+            and window_data["title"] != "OpenAdaptWidget"
         ):
-            if sys.platform == "darwin" :
-                top = ((window_data["top"])// SCREEN_SCALE)-50
-                left = (window_data["left"] // SCREEN_SCALE)
-            elif sys.platform in ("win32", "linux") :
-                top = ((window_data["top"])// SCREEN_SCALE)-50
-                left = ((window_data["left"]+window_data["width"]) // SCREEN_SCALE)-50
-            else :
+            if sys.platform == "darwin":
+                # Adjust top and left coordinates for macOS
+                top = ((window_data["top"]) // SCREEN_SCALE) - 50
+                left = window_data["left"] // SCREEN_SCALE
+            elif sys.platform in ("win32", "linux"):
+                # Adjust top and left coordinates for Windows and Linux
+                top = ((window_data["top"]) // SCREEN_SCALE) - 50
+                left = (
+                    (window_data["left"] + window_data["width"]) // SCREEN_SCALE
+                ) - 50
+            else:
                 raise Exception(f"Unsupposed {sys.platform=}")
+            # Get screen resolution and adjust coordinates accordingly
             resolution = ImageGrab.grab().size
-            screen_width, screen_height = resolution[0] // SCREEN_SCALE, resolution[1] // SCREEN_SCALE
+            screen_width, screen_height = (
+                resolution[0] // SCREEN_SCALE,
+                resolution[1] // SCREEN_SCALE,
+            )
             logger.info(f"{screen_width=},{screen_height=}")
             if top >= 0 and left >= 0 and top <= screen_height and left <= screen_width:
+                # Widget coordinates are within the screen boundaries
                 self.window.top = top
                 self.window.left = left
-            else :
+            else:
+                # Widget coordinates are outside the screen boundaries
                 self.window.top = 0
                 self.window.left = screen_width - 50
             self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
 
-    def callback(self, instance):
+    def callback(self):
+        """
+        Callback function for button press event.
+
+        Handles the button press event based on the current state.
+
+        Args:
+            instance: The instance of the button that triggered the event.
+        """
+        # Handle button press based on the current state
         if self.current_state == "default":
             self.button.background_normal = "assets/recording_inprogress.png"
             self.current_state = "recording_in_progress"
