@@ -41,6 +41,7 @@ def sendMessage(encodedMessage):
 reply_num = 0
 while True:
     receivedMessage = getMessage()
+    # pipe.send(receivedMessage)
     reply_num += 1
     sendMessage(encodeMessage(str(reply_num)))
     sendMessage(encodeMessage(receivedMessage))

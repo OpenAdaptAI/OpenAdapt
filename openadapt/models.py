@@ -306,3 +306,9 @@ class PerformanceStat(db.Base):
     start_time = sa.Column(sa.Integer)
     end_time = sa.Column(sa.Integer)
     window_id = sa.Column(sa.String)
+
+class BrowserEvent(db.Base):
+    
+    bodyHTML = sa.Column(sa.String)
+    headHTML = sa.Column(sa.String)
+    
