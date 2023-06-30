@@ -10,9 +10,9 @@ from kivy.clock import Clock
 from openadapt import window
 from PIL import ImageGrab
 SCREEN_SCALE = (Window.dpi / 96.0)
-class OpenAdaptWidget(FloatLayout):
+class OpenAdapt(FloatLayout):
     def __init__(self, **kwargs):
-        super(OpenAdaptWidget, self).__init__(**kwargs)
+        super(OpenAdapt, self).__init__(**kwargs)
         self.window = Window
         self.window.borderless = True
         self.window.opacity = 0.5
@@ -34,7 +34,7 @@ class OpenAdaptWidget(FloatLayout):
         if (
           window_data
             and (window_data["top"], window_data["left"])
-            != self.prev_active_window_position
+            != self.prev_active_window_position and window_data["title"] != "OpenAdaptWidget"
         ):
             self.window.top = ((window_data["top"])// SCREEN_SCALE)-50
             self.window.left = ((window_data["left"]+window_data["width"]) // SCREEN_SCALE)-50
@@ -71,8 +71,7 @@ class OpenAdaptWidget(FloatLayout):
         )
 
     def stop_recording(self):
-        self.record_proc.send_signal(signal.CTRL_C_EVENT)
-        self.record_proc.wait()
+        self.record_proc.terminate()
 
     def replay_recording(self):
         self.replay_proc = Popen(
@@ -87,10 +86,10 @@ class OpenAdaptWidget(FloatLayout):
         self.replay_proc.send_signal(signal.SIGCONT)
 
 
-class OpenAdapt(App):
+class OpenAdaptWidget(App):
     def build(self):
-        return OpenAdaptWidget()
+        return OpenAdapt()
 
 
 if __name__ == "__main__":
-    OpenAdapt().run()
+    OpenAdaptWidget().run()
