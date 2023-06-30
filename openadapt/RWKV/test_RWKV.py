@@ -6,11 +6,10 @@ from openadapt import config
 
 if __name__ == '__main__':
 
-    for i in range(10):
+    for i in range(1):
         MODEL = config.RWKV_MODEL
-        USE_MODAL = True
         MODEL = 4
-
+        
         instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "
 
         task_description = ("filling forms and submitting data on web pages")
