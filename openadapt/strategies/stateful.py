@@ -166,4 +166,4 @@ def get_window_state_diffs(
         )
     ]
     return diffs
-
+    
