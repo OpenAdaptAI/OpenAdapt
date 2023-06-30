@@ -20,7 +20,7 @@ from openadapt.utils import display_event
 MODEL_NAME = config.OPENAI_MODEL_NAME
 
 
-def get_prompt(action_event, diffs=False)):
+def get_prompt(action_event, diffs=False):
     """
     Returns a prompt for the agent.
 
@@ -76,7 +76,7 @@ class TransformersAgentsMixin(OpenAiAgent):
         screenshots=[],
     ):
         super().__init__(
-            model_name
+            model_name,
             api_key,
             chat_prompt_template,
             run_prompt_template,
@@ -109,7 +109,10 @@ class TransformersAgentsMixin(OpenAiAgent):
         if self.recording is None:
             raise ValueError("recording is invalid")
         else:
-            debug_path = f"{config.DEBUG_DIR_NAME}/{self.recording.task_description}-{self.recording.timestamp}"
+            debug_path = os.path.join(
+                config.DEBUG_DIR_NAME,
+                f"{self.recording.task_description}-{self.recording.timestamp}",
+            )
 
         for idx, action_event in enumerate(self.action_events):
             if n != -1 and idx >= n:
@@ -122,25 +125,23 @@ class TransformersAgentsMixin(OpenAiAgent):
                 diff = display_event(action_event, diff=True) if diffs else None
 
                 if debug:
-                    # create debug directories if it doesn't exist
-                    if not os.path.exists(config.DEBUG_DIR_NAME):
-                        logger.info("creating debug directory")
-                        os.mkdir(config.DEBUG_DIR_NAME)
-
-                    if not os.path.exists(debug_path):
-                        logger.info("creating new directory for this timestamp")
-                        os.mkdir(debug_path)
-
+                    logger.info("creating debug directory")
+                    os.makedirs(debug_path, exist_ok=True)
                     logger.info("writing debug files")
                     screenshot._image.save(
-                        f"{debug_path}/recording-{self.recording.id}-{idx}.png"
+                        os.path.join(
+                            debug_path, f"recording-{self.recording.id}-{idx}.png"
+                        )
                     )
                     if diff is not None:
                         diff.save(
-                            f"{debug_path}/recording-{self.recording.id}-{idx}-diff.png"
+                            os.path.join(
+                                debug_path,
+                                "recording-{self.recording.id}-{idx}-diff.png",
+                            )
                         )
             try:
-                self.chat(get_prompt(diffs, action_event), image=screenshot.image)
+                self.chat(get_prompt(action_event, diffs), image=screenshot.image)
                 if diffs:
                     self.chat(
                         f"Here is a diff of the screenshot. The event text is {action_event.text} What can you conclude?",
