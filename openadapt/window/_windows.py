@@ -95,7 +95,7 @@ def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
         Desktop: The active window object.
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
-    window = app.active()
+    window = app.top_window()
     return window
 
 
