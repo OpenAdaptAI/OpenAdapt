@@ -31,7 +31,6 @@ def get_active_window_data(show_data=SHOW_DATA):
         "window_id": window_id,
         "state": state,
     }
-    logger.info(f"{window_data}")
     return window_data
 
 
