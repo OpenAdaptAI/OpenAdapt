@@ -56,7 +56,7 @@ class OpenAdaptWidget(FloatLayout):
             self.current_state = "replaying_in_progress"
             self.replay_recording()
         elif self.current_state == "replaying_in_progress":
-            self.button.background_normal = "assets/replay_paused"
+            self.button.background_normal = "assets/replay_paused.png"
             self.current_state = "replaying_paused"
             self.pause_replay()
         elif self.current_state == "replaying_paused":
