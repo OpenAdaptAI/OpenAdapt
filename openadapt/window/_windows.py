@@ -35,6 +35,7 @@ def get_active_window_state(show_data) -> dict:
     if show_data:
         data = get_element_properties(active_window)
     else:
+        logger.info("SHOW_DATA = FALSE")
         data = None
     state = {
         "title": meta["texts"][0],
@@ -98,7 +99,7 @@ def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
         Desktop: The active window object.
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
-    window = app.active()
+    window = app.top_window()
     return window
 
 
