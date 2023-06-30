@@ -20,21 +20,20 @@ from openadapt.utils import display_event
 MODEL_NAME = config.OPENAI_MODEL_NAME
 
 
-def get_prompt(diffs=False, *args):
+def get_prompt(diffs=False, action_event):
     """
     Returns a prompt for the agent.
 
     Args:
         diffs (bool, *optional*, defaults to `False`):
             Whether or not to mention diffs in the prompt.
-        *args:
-            Any additional arguments to pass along to the prompt.
-            The first argument is assumed to be an `ActionEvent`.
+        action_event:
+            An `ActionEvent`.
     """
 
     return (
         f"In the image, you are presented with a screenshot of a user's current active window."
-        f"The user's current window event is: {args[0].window_event.title}."
+        f"The user's current window event is: {action_event.window_event.title}."
         f"What is the user doing, and what text do they see? DO NOT SEGMENT, feel free to use text_classifier and text_qa."
     ) + (
         " A diff of the screenshot may be given after the prompt, if it does not contain useful information, disregard it."
