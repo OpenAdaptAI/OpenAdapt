@@ -1,11 +1,12 @@
 # PowerShell script to pull OpenAdapt and install
 
 ################################   PARAMETERS   ################################
+# Change these if a different version is required
 
-# Change these if a different version of is required
+$setupdir = "C:/OpenAdaptSetup"
 
 $tesseractCmd = "tesseract"
-$tesseractInstaller = "tesseract-ocr-w64-setup-5.3.1.20230401.exe"
+$tesseractInstaller = "tesseract.exe"
 $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe"
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
 
@@ -18,11 +19,6 @@ $gitCmd = "git"
 $gitInstaller = "Git-2.40.1-64-bit.exe"
 $gitInstallerLoc = "https://github.com/git-for-windows/git/releases/download/v2.40.1.windows.1/Git-2.40.1-64-bit.exe"
 $gitUninstaller = "C:\Program Files\Git\unins000.exe"
-
-$VCRedistInstaller = "vc_redist.x64.exe"
-$VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-$VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
-
 ################################   PARAMETERS   ################################
 
 
@@ -31,26 +27,35 @@ $VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 function RunAndCheck {
     Param
     (
-        [Parameter(Mandatory = $true)] [string] $Command,
-        [Parameter(Mandatory = $true)] [string] $Desc
+        [Parameter(Mandatory = $true)]
+        [string] $Command,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Desc,
+
+        [Parameter(Mandatory = $false)]
+        [switch] $SkipCleanup = $false
     )
 
     Invoke-Expression $Command
     if ($LastExitCode) {
-        Write-Host "Failed: $Desc : $LastExitCode"
-        Cleanup
-        exit
+        Write-Host "Failed: $Desc - Exit code: $LastExitCode" -ForegroundColor Red
+        if (!$SkipCleanup) {
+            Cleanup
+            exit
+        }
     }
-
-    Write-Host "Success: $Desc"
+    else {
+        Write-Host "Success: $Desc" -ForegroundColor Green
+    }
 }
 
-
+# Cleanup function to delete the setup directory
 function Cleanup {
-    $exists = Test-Path -Path "..\OpenAdapt"
-    If ($exists) {
-        Set-Location ..\
-        Remove-Item -LiteralPath "OpenAdapt" -Force -Recurse
+    $exists = Test-Path -Path $setupdir
+    if ($exists) {
+        Set-Location $setupdir
+        Remove-Item -LiteralPath $setupdir -Force -Recurse
     }
 }
 
@@ -63,17 +68,105 @@ function CheckCMDExists {
     )
 
     Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
-    If ($getErr -eq $null) {
-       return $true
+    if ($getErr -eq $null) {
+        return $true
     }
     return $false
 }
 
 
-# Get command for python, install python if required version is unavailable
+# Return the current user's PATH variable
+function GetUserPath {
+    $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    return $userEnvPath
+}
+
+
+# Return the system's PATH variable
+function GetSystemPath {
+    $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    return $systemEnvPath
+}
+
+
+# Refresh Path Environment Variable for both Curent User and System
+function RefreshPathVariables {
+    $env:Path = GetUserPath + ";" + GetSystemPath
+}
+
+
+# Return true if a command/exe is available
+function GetTesseractCMD {
+    # Use tesseract alias if it exists
+    if (CheckCMDExists $tesseractCmd) {
+        return $tesseractCmd
+    }
+
+    # Check if tesseractPath exists and delete it if it does
+    if (Test-Path -Path $tesseractPath -PathType Container) {
+        Write-Host "Found Existing Old TesseractOCR, Deleting existing TesseractOCR folder"
+        # Delete the whole folder
+        Remove-Item $tesseractPath -Force -Recurse
+    }
+
+    # Downlaod Tesseract OCR
+    Write-Host "Downloading Tesseract OCR installer"
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
+    $exists = Test-Path -Path $tesseractInstaller -PathType Leaf
+    if (!$exists) {
+        Write-Host "Failed to download Tesseract OCR installer" -ForegroundColor Red
+        Cleanup
+        exit
+    }
+
+    # Install the Tesseract OCR Setup exe (binary file)
+    Write-Host "Installing Tesseract OCR..."
+    Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
+    Remove-Item $tesseractInstaller
+
+    # Check if Tesseract OCR was installed
+    if (Test-Path -Path $tesseractPath -PathType Container) {
+        Write-Host "TesseractOCR installation successful." -ForegroundColor Green
+    }
+    else {
+        Write-Host "TesseractOCR installation failed." -ForegroundColor Red
+        Cleanup
+        exit
+    }
+
+    RefreshPathVariables
+
+    # Add Tesseract OCR to the System Path variable
+    $systemEnvPath = GetSystemPath
+    $updatedSystemPath = "$systemEnvPath;$tesseractPath"
+    [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
+
+    RefreshPathVariables
+
+    # Add Tesseract OCR to the User Path variable
+    $userEnvPath = GetUserPath
+    $updatedUserPath = "$userEnvPath;$tesseractPath"
+    [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
+
+    Write-Host "Added Tesseract OCR to PATH." -ForegroundColor Green
+
+    # Make sure tesseract is now available
+    if (CheckCMDExists($tesseractCmd)) {
+        return $tesseractCmd
+    }
+
+    Write-Host "Error after installing Tesseract OCR."
+    # Stop OpenAdapt install
+    Cleanup
+    exit
+}
+
+
+# Check and Istall Python and return the python command
 function GetPythonCMD {
     # Use python exe if it exists and is the required version
-    if (CheckCMDExists($pythonCmd)) {
+    if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
         if ($res -like $pythonVerStr) {
             return $pythonCmd
@@ -81,24 +174,23 @@ function GetPythonCMD {
     }
 
     # Install required python version
-    Write-Host "Downloading python installer"
+    Write-Host "Downloading python installer..."
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
     if (!$exists) {
-        Write-Host "Failed to download python installer"
+        Write-Host "Failed to download python installer" -ForegroundColor Red
         Cleanup
         exit
     }
 
-    Write-Host "Installing python, click 'Yes' if prompted for permission"
+    Write-Host "Installing python..."
     Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1' -Wait
 
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    RefreshPathVariables
 
     # Make sure python is now available and the right version
-    if (CheckCMDExists($pythonCmd)) {
+    if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
         if ($res -like $pythonVerStr) {
             Remove-Item $pythonInstaller
@@ -109,166 +201,71 @@ function GetPythonCMD {
     Write-Host "Error after installing python. Uninstalling, click 'Yes' if prompted for permission"
     Start-Process -FilePath $pythonInstaller -Verb runAs -ArgumentList '/quiet', '/uninstall' -Wait
     Remove-Item $pythonInstaller
-
-    # Stop OpenAdapt install
-    Cleanup
-    exit
-}
-
-function GetTesseractCMD {
-    # Use tesseract alias if it exists
-    if (CheckCMDExists($tesseractCmd)) {
-        return $tesseractCmd
-    }
-
-    # Downlaod Tesseract OCR
-    Write-Host "Downloading Tesseract OCR installer"
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $tesseractInstallerLoc -OutFile $tesseractInstaller
-    $exists = Test-Path -Path $tesseractInstaller -PathType Leaf
-    if (!$exists) {
-        Write-Host "Failed to download Tesseract OCR installer"
-        Cleanup
-        exit
-    }
-
-    # Install the Tesseract OCR Setup exe (binary file)
-    Write-Host "Installing Tesseract OCR, click 'Yes' if prompted for permission"
-    Start-Process -FilePath $tesseractInstaller -Verb runAs -ArgumentList "/S" -Wait
-    Remove-Item $tesseractInstaller
-
-    # Check if Tesseract OCR was installed
-    if (Test-Path -Path $tesseractPath -PathType Container) {
-        Write-Host "TesseractOCR installation successful."
-    }
-    else {
-        Write-Host "TesseractOCR installation failed."
-        Cleanup
-        exit
-    }
-
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    # Add Tesseract OCR to the System Path variable
-    $systemEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
-    $updatedSystemPath = "$systemEnvPath;$tesseractPath"
-    [System.Environment]::SetEnvironmentVariable("Path", $updatedSystemPath, "Machine")
-
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    # Add Tesseract OCR to the User Path variable
-    $userEnvPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-    $updatedUserPath = "$userEnvPath;$tesseractPath"
-    [System.Environment]::SetEnvironmentVariable("Path", $updatedUserPath, "User")
-
-    #Refresh Path Environment Variable
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    Write-Host "Added Tesseract OCR to PATH"
-
-
-    # Make sure tesseract is now available
-    if (CheckCMDExists($tesseractCmd)) {
-        return $tesseractCmd
-    }
-
-    Write-Host "Error after installing Tesseract OCR"
     # Stop OpenAdapt install
     Cleanup
     exit
 }
 
 
+# Check and Install Git and return the git command
 function GetGitCMD {
-    $gitExists = CheckCMDExists($gitCmd)
+    $gitExists = CheckCMDExists $gitCmd
     if (!$gitExists) {
         # Install git
-        Write-Host "Downloading git installer"
+        Write-Host "Downloading git installer..."
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $gitInstallerLoc -OutFile $gitInstaller
         $exists = Test-Path -Path $gitInstaller -PathType Leaf
         if (!$exists) {
-            Write-Host "Failed to download git installer"
+            Write-Host "Failed to download git installer" -ForegroundColor Red
             exit
         }
 
-        Write-Host "Installing git, click 'Yes' if prompted for permission"
+        Write-Host "Installing git..."
         Start-Process -FilePath $gitInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"' -Wait
         Remove-Item $gitInstaller
 
-        #Refresh Path Environment Variable
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        RefreshPathVariables
 
         # Make sure git is now available
-        $gitExists = CheckCMDExists($gitCmd)
+        $gitExists = CheckCMDExists $gitCmd
         if (!$gitExists) {
-            Write-Host "Error after installing git. Uninstalling, click 'Yes' if prompted for permission"
+            Write-Host "Error after installing git. Uninstalling..."
             Start-Process -FilePath $gitUninstaller -Verb runAs -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+            Cleanup
             exit
         }
     }
     # Return the git command
     return $gitCmd
 }
-
-
-function GetVSCppRedistCMD {
-    # Check if Visual C++ Redist is installed
-    $ErrorActionPreference = "SilentlyContinue"
-    $vcredistExists = Get-ItemPropertyValue -Path $VCRedistRegPath -erroraction 'silentlycontinue' -Name Installed
-    $ErrorActionPreference = "Continue"
-
-    if (!$vcredistExists) {
-        # Install Visual C++ Redist
-        Write-Host "Downloading Visual C++ Redist"
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
-        $exists = Test-Path -Path $VCRedistInstaller -PathType Leaf
-        if (!$exists) {
-            Write-Host "Failed to download Visual C++ installer"
-            Cleanup
-            exit
-        }
-
-        Write-Host "Installing Visual C++ Redist, click 'Yes' if prompted for permission"
-        Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /q /norestart" -Wait
-        Remove-Item $VCRedistInstaller
-
-        if ($LastExitCode) {
-            Write-Host "Failed to install Visual C++ Redist: $LastExitCode"
-            Cleanup
-            exit
-        }
-    }
-}
-
 ################################   FUNCTIONS    ################################
 
 
 ################################   SCRIPT    ################################
 
-# Check and Install TesseractOCR -> Python 3.10 -> Git -> VS C++ Redist.
+# Create a new directory and run the setup from there
+New-Item -ItemType Directory -Path $setupdir -Force
+Set-Location -Path $setupdir
+
+# Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
-RunAndCheck "$tesseract --version" "check tesseract version"
+RunAndCheck "$tesseract --version" "check TesseractOCR"
 
 $python = GetPythonCMD
-RunAndCheck "$python --version" "check python version"
+RunAndCheck "$python --version" "check Python"
 
 $git = GetGitCMD
-RunAndCheck "$git --version" "check git version"
-
-GetVSCppRedistCMD
+RunAndCheck "$git --version" "check Git"
 
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "install poetry"
-RunAndCheck "poetry install"
-RunAndCheck "poetry shell"
-RunAndCheck "alembic upgrade head" "alembic upgrade head"
-RunAndCheck "pytest" "run OpenAdapt tests"
-Write-Host "OpenAdapt installed successfully"
+RunAndCheck "pip install poetry" "Run ``pip install poetry``"
+RunAndCheck "poetry install" "Run ``poetry install``"
+RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
+RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
+Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
+Start-Process powershell -ArgumentList "-Command poetry shell"
 
 ################################   SCRIPT    ################################
