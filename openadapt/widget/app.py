@@ -13,7 +13,8 @@ from PIL import ImageGrab
 
 
 SCREEN_SCALE = Window.dpi / 96.0
-
+WIDGET_HEIGHT = 50
+WIDGET_WIDTH = 50
 
 class OpenAdapt(FloatLayout):
     def __init__(self, **kwargs):
@@ -26,13 +27,11 @@ class OpenAdapt(FloatLayout):
         super(OpenAdapt, self).__init__(**kwargs)
         self.window = Window
         self.window.borderless = True
-        self.window.opacity = 0.5
-        self.window.size = (50, 50)
+        self.window.size = (WIDGET_HEIGHT, WIDGET_WIDTH)
         self.window.clearcolor = (255, 255, 255, 0.5)
         self.window.always_on_top = True
         self.record_proc = None
         self.replay_proc = None
-        self.window.position = "custom"
         self.button = Button(background_normal="assets/logo.png")
         self.button.bind(on_press=self.callback)
         self.current_state = "default"
@@ -59,14 +58,14 @@ class OpenAdapt(FloatLayout):
         ):
             if sys.platform == "darwin":
                 # Adjust top and left coordinates for macOS
-                top = ((window_data["top"]) // SCREEN_SCALE) - 50
+                top = ((window_data["top"]) // SCREEN_SCALE) - WIDGET_HEIGHT
                 left = window_data["left"] // SCREEN_SCALE
             elif sys.platform in ("win32", "linux"):
                 # Adjust top and left coordinates for Windows and Linux
-                top = ((window_data["top"]) // SCREEN_SCALE) - 50
+                top = ((window_data["top"]) // SCREEN_SCALE) - WIDGET_HEIGHT
                 left = (
                     (window_data["left"] + window_data["width"]) // SCREEN_SCALE
-                ) - 50
+                ) - WIDGET_WIDTH
             else:
                 raise Exception(f"Unsupposed {sys.platform=}")
             # Get screen resolution and adjust coordinates accordingly
@@ -75,7 +74,6 @@ class OpenAdapt(FloatLayout):
                 resolution[0] // SCREEN_SCALE,
                 resolution[1] // SCREEN_SCALE,
             )
-            logger.info(f"{screen_width=},{screen_height=}")
             if top >= 0 and left >= 0 and top <= screen_height and left <= screen_width:
                 # Widget coordinates are within the screen boundaries
                 self.window.top = top
@@ -83,7 +81,7 @@ class OpenAdapt(FloatLayout):
             else:
                 # Widget coordinates are outside the screen boundaries
                 self.window.top = 0
-                self.window.left = screen_width - 50
+                self.window.left = screen_width - WIDGET_WIDTH
             self.prev_active_window_position = (self.window.top, self.window.left)
             if self.current_state == "replay_in_progress":
                 self.current_state == "replay_paused"
