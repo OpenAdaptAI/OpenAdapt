@@ -68,7 +68,6 @@ def send_message(encoded_message):
     sys.stdout.buffer.write(encoded_message["length"])
     sys.stdout.buffer.write(encoded_message["content"])
     sys.stdout.buffer.flush()
-    # TODO: Named Pipe
 
 
 DOM_UPDATE_COUNTER = 0
