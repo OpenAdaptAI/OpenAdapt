@@ -9,11 +9,11 @@ PARAMETERS = config.RWKV_PARAMETERS
 
 # Choose a model:
 MODEL = config.RWKV_MODEL
-# model 0: RWKV-4-Raven-14B
+# model 0: RWKV-4-Raven-14B  <-- Largest model, finetuned version of model 3
 # model 1: RWKV-4-Raven-7B
-# model 2: RWKV-4-Raven-1B5
+# model 2: RWKV-4-Raven-1B5  <-- smallest model
 # model 3: RWKV-4-Pile-14B
-# model 4: RWKV-4-World-7B
+# model 4: RWKV-4-World-7B   <-- multilang model
 # model 5: RWKV-4-World-1.5B
 
 class RWKVReplayStrategyMixin:
