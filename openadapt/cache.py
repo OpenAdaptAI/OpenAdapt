@@ -41,7 +41,7 @@ def cache(
     dir_path: Optional[str] = None,
     enabled: Optional[bool] = None,
     verbosity: Optional[int] = None,
-    **cache_kwargs: Union[str, int, bool]
+    **cache_kwargs: Union[str, int, bool],
 ) -> Callable[[Callable], Callable]:
     """
     Cache decorator for functions.

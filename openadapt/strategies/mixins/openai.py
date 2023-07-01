@@ -130,7 +130,9 @@ def create_openai_completion(
 
 @cache.cache()
 def get_completion(
-    messages: list, prompt: str, model: str = "gpt-4",
+    messages: list,
+    prompt: str,
+    model: str = "gpt-4",
 ) -> list:
     """
     Gets the LLM completion.

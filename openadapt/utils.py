@@ -108,7 +108,10 @@ def round_timestamps(events: list, num_digits: int) -> None:
 
 
 def rows2dicts(
-    rows: list, drop_empty: bool = True, drop_constant: bool = True, num_digits: int = None,
+    rows: list,
+    drop_empty: bool = True,
+    drop_constant: bool = True,
+    num_digits: int = None,
 ) -> list[dict]:
     """
     Convert a list of rows to a list of dictionaries.
@@ -151,7 +154,9 @@ def rows2dicts(
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
-                row_dict["children"], drop_empty, drop_constant,
+                row_dict["children"],
+                drop_empty,
+                drop_constant,
             )
     return row_dicts
 

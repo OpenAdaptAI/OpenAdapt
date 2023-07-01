@@ -45,7 +45,9 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         self.max_input_size = max_input_size
 
     def get_completion(
-        self, prompt: str, max_tokens: int,
+        self,
+        prompt: str,
+        max_tokens: int,
     ) -> Any:
         """
         Generate completion for a given prompt using the HuggingFace model.
@@ -76,7 +78,8 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         )
         N = input_tokens["input_ids"].shape[-1]
         completion = self.tokenizer.decode(
-            output_tokens[:, N:][0], clean_up_tokenization_spaces=True,
+            output_tokens[:, N:][0],
+            clean_up_tokenization_spaces=True,
         )
         logger.debug(f"{completion=}")
         return completion

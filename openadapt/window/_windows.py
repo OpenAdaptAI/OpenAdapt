@@ -87,7 +87,9 @@ def get_active_element_state(x: int, y: int) -> dict:
     return properties
 
 
-def get_active_window(depth: int = 10, max_width: int = 10, filename: str = None) -> Desktop:
+def get_active_window(
+    depth: int = 10, max_width: int = 10, filename: str = None
+) -> Desktop:
     """
     Get the active window object.
 

@@ -22,7 +22,9 @@ class BaseReplayStrategy(ABC):
     """Base class for implementing replay strategies."""
 
     def __init__(
-        self, recording: models.Recording, max_frame_times: int = MAX_FRAME_TIMES,
+        self,
+        recording: models.Recording,
+        max_frame_times: int = MAX_FRAME_TIMES,
     ) -> None:
         """
         Initialize the BaseReplayStrategy.
@@ -40,7 +42,8 @@ class BaseReplayStrategy(ABC):
 
     @abstractmethod
     def get_next_action_event(
-        self, screenshot: models.Screenshot,
+        self,
+        screenshot: models.Screenshot,
     ) -> models.ActionEvent:
         """
         Get the next action event based on the current screenshot.
@@ -63,7 +66,10 @@ class BaseReplayStrategy(ABC):
             window_event = models.WindowEvent.get_active_window_event()
             self.window_events.append(window_event)
             try:
-                action_event = self.get_next_action_event(screenshot, window_event,)
+                action_event = self.get_next_action_event(
+                    screenshot,
+                    window_event,
+                )
             except StopIteration:
                 break
             if self.action_events:
@@ -76,12 +82,15 @@ class BaseReplayStrategy(ABC):
             if action_event:
                 self.action_events.append(action_event)
                 action_event_dict = utils.rows2dicts(
-                    [action_event], drop_constant=False,
+                    [action_event],
+                    drop_constant=False,
                 )[0]
                 logger.info(f"action_event=\n" f"{pformat(action_event_dict)}")
                 try:
                     playback.play_action_event(
-                        action_event, mouse_controller, keyboard_controller,
+                        action_event,
+                        mouse_controller,
+                        keyboard_controller,
                     )
                 except Exception as exc:
                     logger.exception(exc)

@@ -69,7 +69,7 @@ def make_action_event(
     event_dict: dict,
     dt: float = None,
     get_pre_children: Callable[[], List[ActionEvent]] = None,
-    get_post_children: Callable[[], List[ActionEvent]] = None
+    get_post_children: Callable[[], List[ActionEvent]] = None,
 ) -> ActionEvent:
     """
     Create an ActionEvent instance with the given attributes.
@@ -224,9 +224,7 @@ def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
 
 
 def make_click_events(
-    dt_released: float,
-    dt_pressed: float = None,
-    button_name: str = "left"
+    dt_released: float, dt_pressed: float = None, button_name: str = "left"
 ) -> tuple[ActionEvent, ActionEvent]:
     """
     Create a pair of click events with the given time differences and button name.
@@ -300,7 +298,12 @@ def make_singleclick_event(
         ActionEvent: An instance of the ActionEvent class representing the single click event.
     """
     return make_processed_click_event(
-        "singleclick", dt, get_children, mouse_x, mouse_y, button_name,
+        "singleclick",
+        dt,
+        get_children,
+        mouse_x,
+        mouse_y,
+        button_name,
     )
 
 
@@ -325,7 +328,12 @@ def make_doubleclick_event(
         ActionEvent: An instance of the ActionEvent class representing the double click event.
     """
     return make_processed_click_event(
-        "doubleclick", dt, get_children, mouse_x, mouse_y, button_name,
+        "doubleclick",
+        dt,
+        get_children,
+        mouse_x,
+        mouse_y,
+        button_name,
     )
 
 
@@ -407,7 +415,8 @@ def test_merge_consecutive_mouse_move_events() -> None:
             ),
             make_scroll_event(),
             make_move_event(
-                4, get_pre_children=lambda: [make_move_event(3), make_move_event(4)],
+                4,
+                get_pre_children=lambda: [make_move_event(3), make_move_event(4)],
             ),
         ]
     )
@@ -487,11 +496,19 @@ def test_remove_redundant_mouse_move_events() -> None:
         [
             make_click_event(True, 1, get_pre_children=lambda: [make_move_event(1)]),
             make_click_event(
-                False, 1, get_post_children=lambda: [make_move_event(1)],
+                False,
+                1,
+                get_post_children=lambda: [make_move_event(1)],
             ),
-            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2)],),
             make_click_event(
-                False, 3, get_post_children=lambda: [make_move_event(3)],
+                True,
+                2,
+                get_post_children=lambda: [make_move_event(2)],
+            ),
+            make_click_event(
+                False,
+                3,
+                get_post_children=lambda: [make_move_event(3)],
             ),
             make_click_event(
                 True,
@@ -499,16 +516,22 @@ def test_remove_redundant_mouse_move_events() -> None:
                 get_post_children=lambda: [make_move_event(3), make_move_event(1)],
             ),
             make_click_event(
-                False, 1, get_post_children=lambda: [make_move_event(1)],
+                False,
+                1,
+                get_post_children=lambda: [make_move_event(1)],
             ),
             make_click_event(True, 2, get_post_children=lambda: [make_move_event(2)]),
             make_click_event(
-                False, 3, get_post_children=lambda: [make_move_event(3)],
+                False,
+                3,
+                get_post_children=lambda: [make_move_event(3)],
             ),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
-    actual_events = rows2dicts(remove_redundant_mouse_move_events(raw_events),)
+    actual_events = rows2dicts(
+        remove_redundant_mouse_move_events(raw_events),
+    )
     logger.info(f"actual_events=\n{pformat(actual_events)}")
     assert expected_events == actual_events
 
@@ -543,7 +566,9 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
     return make_action_event({"name": "release", "key_char": char, "key_name": name})
 
 
-def make_type_event(get_children: Optional[Callable[[], List[ActionEvent]]]) -> ActionEvent:
+def make_type_event(
+    get_children: Optional[Callable[[], List[ActionEvent]]]
+) -> ActionEvent:
     """
     Create a type event with the given children events.
 
@@ -714,6 +739,10 @@ def test_discard_unused_events() -> None:
         [make_window_event({"timestamp": 0}), make_window_event({"timestamp": 2})]
     )
     actual_filtered_window_events = rows2dicts(
-        discard_unused_events(window_events, action_events, "window_event_timestamp",)
+        discard_unused_events(
+            window_events,
+            action_events,
+            "window_event_timestamp",
+        )
     )
     assert expected_filtered_window_events == actual_filtered_window_events

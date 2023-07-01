@@ -32,7 +32,8 @@ class DemoReplayStrategy(
     """Demo replay strategy that combines HuggingFace, OCR, and ASCII mixins."""
 
     def __init__(
-        self, recording: Recording,
+        self,
+        recording: Recording,
     ) -> None:
         """
         Initialize the DemoReplayStrategy.
@@ -46,7 +47,9 @@ class DemoReplayStrategy(
         self.screenshot_idx = 0
 
     def get_next_action_event(
-        self, screenshot: Screenshot, window_event: WindowEvent,
+        self,
+        screenshot: Screenshot,
+        window_event: WindowEvent,
     ) -> None:
         """
         Get the next action event based on the current screenshot and window event.

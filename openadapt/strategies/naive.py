@@ -42,8 +42,10 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         # logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     def get_next_action_event(
-        self, screenshot: models.Screenshot, window_event: models.WindowEvent,
-    ) -> (models.ActionEvent | None):
+        self,
+        screenshot: models.Screenshot,
+        window_event: models.WindowEvent,
+    ) -> models.ActionEvent | None:
         """
         Get the next ActionEvent for replay.
 

@@ -23,7 +23,8 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
     """ReplayStrategy mixin for summarizing text content."""
 
     def __init__(
-        self, recording: Recording,
+        self,
+        recording: Recording,
     ) -> None:
         """
         Initialize the SummaryReplayStrategyMixin.

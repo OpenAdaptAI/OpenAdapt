@@ -50,7 +50,9 @@ def play_mouse_event(event: Any, mouse_controller: Any) -> None:
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_key_event(event: Any, keyboard_controller: Any, canonical: bool = True) -> None:
+def play_key_event(
+    event: Any, keyboard_controller: Any, canonical: bool = True
+) -> None:
     """
     Play a key event.
 
@@ -76,7 +78,9 @@ def play_key_event(event: Any, keyboard_controller: Any, canonical: bool = True)
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_action_event(event: Any, mouse_controller: Any, keyboard_controller: Any) -> None:
+def play_action_event(
+    event: Any, mouse_controller: Any, keyboard_controller: Any
+) -> None:
     """
     Play an action event.
 

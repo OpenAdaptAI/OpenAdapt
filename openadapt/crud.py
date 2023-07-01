@@ -28,7 +28,7 @@ window_events = []
 performance_stats = []
 
 
-def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> (Any | None):
+def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> Any | None:
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
@@ -60,7 +60,9 @@ def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> (Any | No
         return result
 
 
-def insert_action_event(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
+def insert_action_event(
+    recording_timestamp: int, event_timestamp: int, event_data: dict
+) -> None:
     """Insert an action event into the database.
 
     Args:
@@ -76,7 +78,9 @@ def insert_action_event(recording_timestamp: int, event_timestamp: int, event_da
     _insert(event_data, ActionEvent, action_events)
 
 
-def insert_screenshot(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
+def insert_screenshot(
+    recording_timestamp: int, event_timestamp: int, event_data: dict
+) -> None:
     """Insert a screenshot into the database.
 
     Args:
@@ -92,7 +96,9 @@ def insert_screenshot(recording_timestamp: int, event_timestamp: int, event_data
     _insert(event_data, Screenshot, screenshots)
 
 
-def insert_window_event(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
+def insert_window_event(
+    recording_timestamp: int, event_timestamp: int, event_data: dict
+) -> None:
     """Insert a window event into the database.
 
     Args:
@@ -108,7 +114,9 @@ def insert_window_event(recording_timestamp: int, event_timestamp: int, event_da
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_perf_stat(recording_timestamp: int, event_type: str, start_time: float, end_time: float) -> None:
+def insert_perf_stat(
+    recording_timestamp: int, event_type: str, start_time: float, end_time: float
+) -> None:
     """Insert an event performance stat into the database.
 
     Args:
@@ -159,7 +167,7 @@ def insert_recording(recording_data: dict) -> Recording:
     return db_obj
 
 
-def get_latest_recording() -> (Any | None):
+def get_latest_recording() -> Any | None:
     """Get the latest recording.
 
     Returns:
@@ -168,7 +176,7 @@ def get_latest_recording() -> (Any | None):
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording(timestamp: int) -> (Any | None):
+def get_recording(timestamp: int) -> Any | None:
     """Get a recording by timestamp.
 
     Args:

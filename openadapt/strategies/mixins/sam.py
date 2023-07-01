@@ -76,7 +76,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
 
-    def get_screenshot_bbox(self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS) -> str:
+    def get_screenshot_bbox(
+        self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
+    ) -> str:
         """
         Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
 
@@ -101,7 +103,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             plt.show()
         return str(bbox_list)
 
-    def get_click_event_bbox(self, screenshot: Any, show_plots: bool = SHOW_PLOTS) -> str:
+    def get_click_event_bbox(
+        self, screenshot: Any, show_plots: bool = SHOW_PLOTS
+    ) -> str:
         """
         Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
 
@@ -204,7 +208,9 @@ def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
     ax.imshow(mask_image)
 
 
-def show_points(coords: np.ndarray, labels: np.ndarray, ax: Any, marker_size: int = 120) -> None:
+def show_points(
+    coords: np.ndarray, labels: np.ndarray, ax: Any, marker_size: int = 120
+) -> None:
     """
     Display the points on the plot.
 

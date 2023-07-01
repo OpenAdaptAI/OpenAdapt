@@ -77,6 +77,7 @@ def trace(logger: Any) -> Any:
     Returns:
         A decorator that can be used to wrap functions and log their entry and exit.
     """
+
     def decorator(func: Any) -> Any:
         @functools.wraps(func)
         def wrapper_logging(*args: tuple, **kwargs: dict[str, Any]) -> Any:
@@ -99,7 +100,9 @@ def trace(logger: Any) -> Any:
     return decorator
 
 
-def process_event(event: Any, write_q: Any, write_fn: Any, recording_timestamp: int, perf_q: Any) -> None:
+def process_event(
+    event: Any, write_q: Any, write_fn: Any, recording_timestamp: int, perf_q: Any
+) -> None:
     """
     Process an event and take appropriate action based on its type.
 
@@ -170,7 +173,11 @@ def process_events(
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
             process_event(
-                event, action_write_q, write_action_event, recording_timestamp, perf_q,
+                event,
+                action_write_q,
+                write_action_event,
+                recording_timestamp,
+                perf_q,
             )
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
@@ -197,7 +204,9 @@ def process_events(
 
 
 def write_action_event(
-    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ) -> None:
     """
     Write an action event to the database and update the performance queue.
@@ -213,7 +222,9 @@ def write_action_event(
 
 
 def write_screen_event(
-    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ) -> None:
     """
     Write a screen event to the database and update the performance queue.
@@ -232,7 +243,9 @@ def write_screen_event(
 
 
 def write_window_event(
-    recording_timestamp: float, event: Event, perf_q: multiprocessing.Queue,
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
 ) -> None:
     """
     Write a window event to the database and update the performance queue.
@@ -320,7 +333,8 @@ def on_move(event_q: queue.Queue, x: int, y: int, injected: bool) -> None:
     logger.debug(f"{x=} {y=} {injected=}")
     if not injected:
         trigger_action_event(
-            event_q, {"name": "move", "mouse_x": x, "mouse_y": y},
+            event_q,
+            {"name": "move", "mouse_x": x, "mouse_y": y},
         )
 
 
@@ -360,7 +374,12 @@ def on_click(
 
 
 def on_scroll(
-    event_q: queue.Queue, x: int, y: int, dx: int, dy: int, injected: bool,
+    event_q: queue.Queue,
+    x: int,
+    y: int,
+    dx: int,
+    dy: int,
+    injected: bool,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -485,7 +504,13 @@ def read_window_events(
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            event_q.put(Event(utils.get_timestamp(), "window", window_data,))
+            event_q.put(
+                Event(
+                    utils.get_timestamp(),
+                    "window",
+                    window_data,
+                )
+            )
         prev_window_data = window_data
 
 
@@ -516,7 +541,10 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
-            recording_timestamp, event_type, start_time, end_time,
+            recording_timestamp,
+            event_type,
+            start_time,
+            end_time,
         )
     logger.info("Performance stats writer done")
 
@@ -583,7 +611,8 @@ def read_keyboard_events(
 
     utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
-        on_press=partial(on_press, event_q), on_release=partial(on_release, event_q),
+        on_press=partial(on_press, event_q),
+        on_release=partial(on_release, event_q),
     )
     keyboard_listener.start()
     terminate_event.wait()
@@ -641,12 +670,14 @@ def record(
     terminate_event = multiprocessing.Event()
 
     window_event_reader = threading.Thread(
-        target=read_window_events, args=(event_q, terminate_event, recording_timestamp),
+        target=read_window_events,
+        args=(event_q, terminate_event, recording_timestamp),
     )
     window_event_reader.start()
 
     screen_event_reader = threading.Thread(
-        target=read_screen_events, args=(event_q, terminate_event, recording_timestamp),
+        target=read_screen_events,
+        args=(event_q, terminate_event, recording_timestamp),
     )
     screen_event_reader.start()
 
@@ -657,7 +688,8 @@ def record(
     keyboard_event_reader.start()
 
     mouse_event_reader = threading.Thread(
-        target=read_mouse_events, args=(event_q, terminate_event, recording_timestamp),
+        target=read_mouse_events,
+        args=(event_q, terminate_event, recording_timestamp),
     )
     mouse_event_reader.start()
 
@@ -717,7 +749,11 @@ def record(
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
-        args=(perf_q, recording_timestamp, terminate_perf_event,),
+        args=(
+            perf_q,
+            recording_timestamp,
+            terminate_perf_event,
+        ),
     )
     perf_stat_writer.start()
 

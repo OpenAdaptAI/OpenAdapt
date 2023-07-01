@@ -9,7 +9,7 @@ import ApplicationServices
 import Quartz
 
 
-def get_active_window_state() -> (dict | None):
+def get_active_window_state() -> dict | None:
     """Get the state of the active window.
 
     Returns:
@@ -104,7 +104,7 @@ def get_window_data(window_meta: dict) -> dict:
     return state
 
 
-def dump_state(element: Any, elements: set = None) -> (dict | list):
+def dump_state(element: Any, elements: set = None) -> dict | list:
     """Dump the state of the given element and its descendants.
 
     Args:
@@ -151,7 +151,9 @@ def dump_state(element: Any, elements: set = None) -> (dict | list):
                     error_code,
                     attr_val,
                 ) = ApplicationServices.AXUIElementCopyAttributeValue(
-                    element, attr_name, None,
+                    element,
+                    attr_name,
+                    None,
                 )
 
                 # For ActionEvents:

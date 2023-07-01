@@ -28,7 +28,8 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
     """ReplayStrategy mixin for getting text from images via OCR."""
 
     def __init__(
-        self, recording: Recording,
+        self,
+        recording: Recording,
     ) -> None:
         """
         Initialize the OCRReplayStrategyMixin.
@@ -111,7 +112,9 @@ def get_text_from_df(df: pd.DataFrame) -> str:
     return result
 
 
-def unnest(df: pd.DataFrame, explode: list, axis: int, suffixes: list = None) -> pd.DataFrame:
+def unnest(
+    df: pd.DataFrame, explode: list, axis: int, suffixes: list = None
+) -> pd.DataFrame:
     """
     Unnest specified columns in a DataFrame by exploding values.
 
@@ -133,13 +136,18 @@ def unnest(df: pd.DataFrame, explode: list, axis: int, suffixes: list = None) ->
         df1 = pd.concat(
             [
                 pd.DataFrame(
-                    df[x].tolist(), index=df.index, columns=suffixes,
+                    df[x].tolist(),
+                    index=df.index,
+                    columns=suffixes,
                 ).add_prefix(x)
                 for x in explode
             ],
             axis=1,
         )
-        return df1.join(df.drop(explode, axis=1), how="left",)
+        return df1.join(
+            df.drop(explode, axis=1),
+            how="left",
+        )
 
 
 def preprocess_text(text: str) -> str:

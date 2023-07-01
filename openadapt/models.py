@@ -19,7 +19,7 @@ class ForceFloat(sa.TypeDecorator):
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value: Any, dialect: Any) -> (float | None):
+    def process_result_value(self, value: Any, dialect: Any) -> float | None:
         """Convert the result value to float."""
         if value is not None:
             value = float(value)
@@ -41,13 +41,19 @@ class Recording(db.Base):
     task_description = sa.Column(sa.String)
 
     action_events = sa.orm.relationship(
-        "ActionEvent", back_populates="recording", order_by="ActionEvent.timestamp",
+        "ActionEvent",
+        back_populates="recording",
+        order_by="ActionEvent.timestamp",
     )
     screenshots = sa.orm.relationship(
-        "Screenshot", back_populates="recording", order_by="Screenshot.timestamp",
+        "Screenshot",
+        back_populates="recording",
+        order_by="Screenshot.timestamp",
     )
     window_events = sa.orm.relationship(
-        "WindowEvent", back_populates="recording", order_by="WindowEvent.timestamp",
+        "WindowEvent",
+        back_populates="recording",
+        order_by="WindowEvent.timestamp",
     )
 
     _processed_action_events = None
@@ -117,7 +123,11 @@ class ActionEvent(db.Base):
     def key(self) -> Any:
         """Get the key associated with the action event."""
         logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
-        return self._key(self.key_name, self.key_char, self.key_vk,)
+        return self._key(
+            self.key_name,
+            self.key_char,
+            self.key_vk,
+        )
 
     @property
     def canonical_key(self) -> Any:
@@ -129,10 +139,12 @@ class ActionEvent(db.Base):
             f"{self.canonical_key_vk=}"
         )
         return self._key(
-            self.canonical_key_name, self.canonical_key_char, self.canonical_key_vk,
+            self.canonical_key_name,
+            self.canonical_key_char,
+            self.canonical_key_vk,
         )
 
-    def _text(self, canonical: bool = False) -> (str | None):
+    def _text(self, canonical: bool = False) -> str | None:
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
@@ -157,7 +169,10 @@ class ActionEvent(db.Base):
                 text = None
         else:
             if key_name_attr:
-                text = f"{name_prefix}{key_attr}{name_suffix}".replace("Key.", "",)
+                text = f"{name_prefix}{key_attr}{name_suffix}".replace(
+                    "Key.",
+                    "",
+                )
             else:
                 text = key_attr
         return text
@@ -238,7 +253,11 @@ class Screenshot(db.Base):
         if not self._image:
             if self.sct_img:
                 self._image = Image.frombytes(
-                    "RGB", self.sct_img.size, self.sct_img.bgra, "raw", "BGRX",
+                    "RGB",
+                    self.sct_img.size,
+                    self.sct_img.bgra,
+                    "raw",
+                    "BGRX",
                 )
             else:
                 buffer = io.BytesIO(self.png_data)

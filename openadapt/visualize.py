@@ -72,7 +72,9 @@ CSS = string.Template(
         display: block;
     }
 """
-).substitute(IMG_WIDTH_PCT=IMG_WIDTH_PCT,)
+).substitute(
+    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
+)
 
 
 def recursive_len(lst: list, key: Any) -> int:
@@ -143,7 +145,9 @@ def indicate_missing(some: list, every: list, indicator: Any) -> list:
     return rval
 
 
-def dict2html(obj: dict, max_children: int = MAX_TABLE_CHILDREN, max_len: int = MAX_TABLE_STR_LEN) -> str:
+def dict2html(
+    obj: dict, max_children: int = MAX_TABLE_CHILDREN, max_len: int = MAX_TABLE_STR_LEN
+) -> str:
     """
     Convert a dictionary to an HTML representation.
 
@@ -210,9 +214,22 @@ def main() -> None:
         recording_dict = scrub.scrub_dict(recording_dict)
 
     rows = [
-        row(Div(text=f"<style>{CSS}</style>",),),
-        row(Div(text=f"{dict2html(recording_dict)}",),),
-        row(Div(text=f"{dict2html(meta)}", width_policy="max",),),
+        row(
+            Div(
+                text=f"<style>{CSS}</style>",
+            ),
+        ),
+        row(
+            Div(
+                text=f"{dict2html(recording_dict)}",
+            ),
+        ),
+        row(
+            Div(
+                text=f"{dict2html(meta)}",
+                width_policy="max",
+            ),
+        ),
     ]
     logger.info(f"{len(action_events)=}")
     for idx, action_event in enumerate(action_events):
