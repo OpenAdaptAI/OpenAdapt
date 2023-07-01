@@ -7,7 +7,7 @@ on:
 
 jobs:
   run-ci:
-    runs-on: [macos-latest, windows-latest]
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -43,7 +43,7 @@ jobs:
           path: /usr/local/Homebrew
           key: brew-packages-${{ runner.os }}-${{ hashFiles('Brewfile.lock.json') }}
           restore-keys: |
-            brew-packages-macos-latest-${{ hashFiles('Brewfile.lock.json') }}
+            brew-packages-${{ runner.os }}-
             brew-packages-
 
       # Install dependencies. `--no-root` means "install all dependencies but not the project
@@ -58,20 +58,11 @@ jobs:
       # they'll be installed and working.
       - run: poetry install --no-interaction
 
-      # Install Tesseract if not restored from cache (macOS)
-      - name: Install Tesseract (macOS)
-        if: runner.os == 'macos-latest'
+      # Install Tesseract if not restored from cache
+      - name: Install Tesseract
         run: |
           if [ ! -d "/usr/local/Cellar/tesseract" ]; then
             brew install tesseract
-          fi
-
-      # Install Tesseract if not restored from cache (Windows)
-      - name: Install Tesseract (Windows)
-        if: runner.os == 'windows-latest'
-        run: |
-          if [ ! -f "$env:ProgramFiles\\Tesseract-OCR\\tesseract.exe" ]; then
-            choco install tesseract -y
           fi
 
       - name: Run tests
@@ -82,5 +73,6 @@ jobs:
         with:
           options: "--check --exclude \"(alembic|venv)/\""
 
-      - name: Run Flake8 with .flake8 configuration
-        run: poetry run flake8
+      - name: Run Flake8 with Google Python style docstring check
+        uses: actions/checkout@v3
+        run: poetry run flake8 --exclude alembic/versions --exclude .venv --docstring-convention google .
