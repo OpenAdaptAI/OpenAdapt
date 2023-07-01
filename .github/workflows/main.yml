@@ -75,4 +75,6 @@ jobs:
 
       - name: Run Flake8 with Google Python style docstring check
         uses: actions/checkout@v3
+
+      - name: Run Flake8
         run: poetry run flake8 --exclude alembic/versions --exclude .venv --docstring-convention google .
