@@ -1,5 +1,4 @@
-"""
-openadapt.common module.
+"""openadapt.common module.
 
 This module defines common constants and variables used in OpenAdapt.
 

@@ -1,5 +1,4 @@
-"""
-LLM with window states.
+"""LLM with window states.
 
 Usage:
 
@@ -30,8 +29,7 @@ class StatefulReplayStrategy(
         self,
         recording: models.Recording,
     ) -> None:
-        """
-        Initialize the StatefulReplayStrategy.
+        """Initialize the StatefulReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
@@ -54,8 +52,7 @@ class StatefulReplayStrategy(
         active_screenshot: models.Screenshot,
         active_window: models.WindowEvent,
     ) -> models.ActionEvent:
-        """
-        Get the next ActionEvent for replay.
+        """Get the next ActionEvent for replay.
 
         Args:
             active_screenshot (models.Screenshot): The active screenshot object.
@@ -154,8 +151,7 @@ class StatefulReplayStrategy(
 
 
 def get_action_dict_from_completion(completion: str) -> dict:
-    """
-    Convert the completion to a dictionary containing action information.
+    """Convert the completion to a dictionary containing action information.
 
     Args:
         completion (str): The completion provided by the user.
@@ -175,8 +171,7 @@ def get_window_state_diffs(
     action_events: List[models.ActionEvent],
     ignore_boundary_windows: bool = IGNORE_BOUNDARY_WINDOWS,
 ) -> list:
-    """
-    Get the differences in window state between consecutive action events.
+    """Get the differences in window state between consecutive action events.
 
     Args:
         action_events (List[models.ActionEvent]): The list of action events.

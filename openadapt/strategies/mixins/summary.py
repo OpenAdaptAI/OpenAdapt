@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin which summarizes the content of texts.
+"""Implements a ReplayStrategy mixin which summarizes the content of texts.
 
 Usage:
 
@@ -26,8 +25,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
     ) -> None:
-        """
-        Initialize the SummaryReplayStrategyMixin.
+        """Initialize the SummaryReplayStrategyMixin.
 
         Args:
             recording (Recording): The recording object.
@@ -47,8 +45,7 @@ class SummaryReplayStrategyMixin(BaseReplayStrategy):
         text: str,
         num_sentences: int,
     ) -> str:
-        """
-        Generate a summary of the given text.
+        """Generate a summary of the given text.
 
         Args:
             text (str): The text to summarize.

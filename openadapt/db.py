@@ -1,5 +1,4 @@
-"""
-Implements functionality for connecting to and interacting with the database.
+"""Implements functionality for connecting to and interacting with the database.
 
 Module: db.py
 """

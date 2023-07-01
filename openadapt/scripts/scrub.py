@@ -35,8 +35,7 @@ from openadapt import config, scrub, utils
 def _make_frame(
     time: Any, final: Any, progress_bar: Any, progress_threshold: Any
 ) -> np.ndarray:
-    """
-    Private function to scrub a frame.
+    """Private function to scrub a frame.
 
     Args:
         time: Time (in seconds)
@@ -73,8 +72,7 @@ def scrub_mp4(
     crop_start_time: int = 0,
     crop_end_time: Optional[int] = None,
 ) -> str:
-    """
-    Scrub a mp4 file.
+    """Scrub a mp4 file.
 
     Args:
         mp4_file_path: Path to the mp4 file.

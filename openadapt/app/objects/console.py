@@ -1,5 +1,4 @@
-"""
-openadapt.app.objects.console module.
+"""openadapt.app.objects.console module.
 
 This module provides the Console class for redirecting stderr to a NiceGUI log.
 
@@ -23,8 +22,7 @@ class Console(object):
         sys.stderr = self
 
     def write(self, data: str) -> None:
-        """
-        Write data to the log.
+        """Write data to the log.
 
         Args:
             data (str): Data to be written.

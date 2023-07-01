@@ -11,8 +11,7 @@ class SummaryReplayStrategy(SummaryReplayStrategyMixin):
     """Custom Replay Strategy to solely test the Summary Mixin."""
 
     def __init__(self, recording: Recording) -> None:
-        """
-        Initialize the SummaryReplayStrategy object.
+        """Initialize the SummaryReplayStrategy object.
 
         Args:
             recording (Recording): The recording object.

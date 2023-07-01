@@ -9,8 +9,7 @@ import pickle
 
 
 def get_active_window_state() -> dict:
-    """
-    Get the state of the active window.
+    """Get the state of the active window.
 
     Returns:
         dict: A dictionary containing the state of the active window.
@@ -52,8 +51,7 @@ def get_active_window_state() -> dict:
 
 
 def get_active_window_meta(active_window: Any) -> dict:
-    """
-    Get the meta information of the active window.
+    """Get the meta information of the active window.
 
     Args:
         active_window: The active window object.
@@ -70,8 +68,7 @@ def get_active_window_meta(active_window: Any) -> dict:
 
 
 def get_active_element_state(x: int, y: int) -> dict:
-    """
-    Get the state of the active element at the given coordinates.
+    """Get the state of the active element at the given coordinates.
 
     Args:
         x (int): The x-coordinate.
@@ -90,8 +87,7 @@ def get_active_element_state(x: int, y: int) -> dict:
 def get_active_window(
     depth: int = 10, max_width: int = 10, filename: str = None
 ) -> Desktop:
-    """
-    Get the active window object.
+    """Get the active window object.
 
     Returns:
         Desktop: The active window object.
@@ -102,8 +98,7 @@ def get_active_window(
 
 
 def get_element_properties(element: Any) -> dict:
-    """
-    Recursively retrieves the properties of each element and its children.
+    """Recursively retrieves the properties of each element and its children.
 
     Args:
         element: An instance of a custom element class
@@ -135,8 +130,7 @@ def get_element_properties(element: Any) -> dict:
 
 
 def dictify_rect(rect: Any) -> dict:
-    """
-    Convert a rectangle object to a dictionary.
+    """Convert a rectangle object to a dictionary.
 
     Args:
         rect: The rectangle object.
@@ -154,8 +148,7 @@ def dictify_rect(rect: Any) -> dict:
 
 
 def main() -> None:
-    """
-    Test function for retrieving and inspecting the state of the active window.
+    """Test function for retrieving and inspecting the state of the active window.
 
     This function is primarily used for testing and debugging purposes.
     """

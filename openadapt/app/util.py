@@ -1,5 +1,4 @@
-"""
-openadapt.app.util module.
+"""openadapt.app.util module.
 
 This module provides utility functions for the OpenAdapt application.
 
@@ -23,8 +22,7 @@ from openadapt.scripts.reset_db import reset_db
 
 
 def clear_db(log: Any = None) -> None:
-    """
-    Clear the database.
+    """Clear the database.
 
     Args:
         log: Optional NiceGUI log object.
@@ -42,8 +40,7 @@ def clear_db(log: Any = None) -> None:
 def on_import(
     selected_file: str, delete: bool = False, src: str = "openadapt.db"
 ) -> None:
-    """
-    Import data from a selected file.
+    """Import data from a selected file.
 
     Args:
         selected_file (str): The path of the selected file.
@@ -61,8 +58,7 @@ def on_import(
 
 
 def on_export(dest: str) -> None:
-    """
-    Export data to a destination.
+    """Export data to a destination.
 
     Args:
         dest (str): The destination to export the data to.
@@ -89,8 +85,7 @@ def on_export(dest: str) -> None:
 
 
 def sync_switch(switch: Any, prop: Any) -> None:
-    """
-    Synchronize the value of a switch with a property.
+    """Synchronize the value of a switch with a property.
 
     Args:
         switch: The switch object.
@@ -100,8 +95,7 @@ def sync_switch(switch: Any, prop: Any) -> None:
 
 
 def set_dark(dark_mode: Any, value: Any) -> None:
-    """
-    Set the dark mode.
+    """Set the dark mode.
 
     Args:
         dark_mode: The dark mode object.

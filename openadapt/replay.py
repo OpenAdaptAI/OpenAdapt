@@ -22,8 +22,7 @@ LOG_LEVEL = "INFO"
 
 
 def replay(strategy_name: str, timestamp: Union[str, None] = None) -> None:
-    """
-    Replay recorded events using the specified strategy.
+    """Replay recorded events using the specified strategy.
 
     Args:
         strategy_name: Name of the replay strategy to use.

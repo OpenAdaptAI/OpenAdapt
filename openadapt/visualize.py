@@ -78,8 +78,7 @@ CSS = string.Template(
 
 
 def recursive_len(lst: list, key: Any) -> int:
-    """
-    Calculate the recursive length of a list based on a key.
+    """Calculate the recursive length of a list based on a key.
 
     Args:
         lst (list): The list to calculate the length of.
@@ -101,8 +100,7 @@ def recursive_len(lst: list, key: Any) -> int:
 
 
 def format_key(key: Any, value: Any) -> str:
-    """
-    Format a key and value for display.
+    """Format a key and value for display.
 
     Args:
         key: The key to format.
@@ -118,8 +116,7 @@ def format_key(key: Any, value: Any) -> str:
 
 
 def indicate_missing(some: list, every: list, indicator: Any) -> list:
-    """
-    Indicate missing elements in a list.
+    """Indicate missing elements in a list.
 
     Args:
         some (list): The list with potentially missing elements.
@@ -148,8 +145,7 @@ def indicate_missing(some: list, every: list, indicator: Any) -> list:
 def dict2html(
     obj: dict, max_children: int = MAX_TABLE_CHILDREN, max_len: int = MAX_TABLE_STR_LEN
 ) -> str:
-    """
-    Convert a dictionary to an HTML representation.
+    """Convert a dictionary to an HTML representation.
 
     Args:
         obj (dict): The dictionary to convert.

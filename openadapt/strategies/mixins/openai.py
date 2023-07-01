@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin for generating LLM completions.
+"""Implements a ReplayStrategy mixin for generating LLM completions.
 
 Usage:
 
@@ -43,8 +42,7 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         model_name: str = config.OPENAI_MODEL_NAME,
         # system_message: str = config.OPENAI_SYSTEM_MESSAGE,
     ) -> None:
-        """
-        Initialize the OpenAIReplayStrategyMixin.
+        """Initialize the OpenAIReplayStrategyMixin.
 
         Args:
             recording (models.Recording): The recording object.
@@ -63,8 +61,7 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
         system_message: str,
         # max_tokens: int,
     ) -> str:
-        """
-        Generates an LLM completion.
+        """Generates an LLM completion.
 
         Args:
             prompt (str): The prompt for the completion.
@@ -102,8 +99,7 @@ def create_openai_completion(
     # logit_bias=None,
     # user=None,
 ) -> dict:
-    """
-    Creates an LLM completion using the OpenAI API.
+    """Creates an LLM completion using the OpenAI API.
 
     Args:
         model (str): The model name.
@@ -134,8 +130,7 @@ def get_completion(
     prompt: str,
     model: str = "gpt-4",
 ) -> list:
-    """
-    Gets the LLM completion.
+    """Gets the LLM completion.
 
     Args:
         messages (list): The list of messages.
@@ -153,8 +148,7 @@ def get_completion(
     logger.debug(f"messages=\n{pformat(messages)}")
 
     def _get_completion(prompt: str) -> str:
-        """
-        Helper function to get the LLM completion.
+        """Helper function to get the LLM completion.
 
         Args:
             prompt (str): The prompt for the completion.

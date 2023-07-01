@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin for generating completions with HuggingFace.
+"""Implements a ReplayStrategy mixin for generating completions with HuggingFace.
 
 Usage:
 
@@ -29,8 +28,7 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         model_name: str = MODEL_NAME,
         max_input_size: int = MAX_INPUT_SIZE,
     ) -> None:
-        """
-        Initialize the HuggingFaceReplayStrategyMixin.
+        """Initialize the HuggingFaceReplayStrategyMixin.
 
         Args:
             recording (Recording): The recording to replay.
@@ -49,8 +47,7 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
         prompt: str,
         max_tokens: int,
     ) -> Any:
-        """
-        Generate completion for a given prompt using the HuggingFace model.
+        """Generate completion for a given prompt using the HuggingFace model.
 
         Args:
             prompt (str): The prompt for generating completion.

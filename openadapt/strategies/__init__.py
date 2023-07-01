@@ -1,5 +1,4 @@
-"""
-Package containing different replay strategies.
+"""Package containing different replay strategies.
 
 Module: __init__.py
 """

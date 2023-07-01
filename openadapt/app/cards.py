@@ -1,5 +1,4 @@
-"""
-openadapt.app.cards module.
+"""openadapt.app.cards module.
 
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
@@ -14,8 +13,7 @@ PROC = None
 
 
 def settings(dark_mode: bool) -> None:
-    """
-    Display the settings dialog.
+    """Display the settings dialog.
 
     Args:
         dark_mode (bool): Current dark mode setting.
@@ -29,8 +27,7 @@ def settings(dark_mode: bool) -> None:
 
 
 def select_import(f: callable) -> None:
-    """
-    Display the import file selection dialog.
+    """Display the import file selection dialog.
 
     Args:
         f (callable): Function to call when import button is clicked.
@@ -57,8 +54,7 @@ def select_import(f: callable) -> None:
 
 
 def recording_prompt(options: list, record_button: ui.widgets.Button) -> None:
-    """
-    Display the recording prompt dialog.
+    """Display the recording prompt dialog.
 
     Args:
         options (list): List of autocomplete options.

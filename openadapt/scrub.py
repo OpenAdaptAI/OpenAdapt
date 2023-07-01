@@ -1,5 +1,4 @@
-"""
-Script to scrub text of all PII/PHI.
+"""Script to scrub text of all PII/PHI.
 
 Usage:
 
@@ -38,8 +37,7 @@ SCRUBBING_ENTITIES = [
 
 
 def scrub_text(text: str, is_separated: bool = False) -> str:
-    """
-    Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
+    """Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         text (str): Text to be scrubbed
@@ -78,8 +76,7 @@ def scrub_text(text: str, is_separated: bool = False) -> str:
 
 
 def scrub_text_all(text: str) -> str:
-    """
-    Scrub the text by replacing all characters with config.SCRUB_CHAR.
+    """Scrub the text by replacing all characters with config.SCRUB_CHAR.
 
     Args:
         text (str): Text to be scrubbed
@@ -91,8 +88,7 @@ def scrub_text_all(text: str) -> str:
 
 
 def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Image:
-    """
-    Scrub the image of all PII/PHI using Presidio Image Redactor.
+    """Scrub the image of all PII/PHI using Presidio Image Redactor.
 
     Args:
         image (PIL.Image): A PIL.Image object to be scrubbed
@@ -110,8 +106,7 @@ def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Imag
 def _should_scrub_text(
     key: Any, value: Any, list_keys: List[str], scrub_all: bool = False
 ) -> bool:
-    """
-    Check if the key and value should be scrubbed and are of correct instance.
+    """Check if the key and value should be scrubbed and are of correct instance.
 
     Args:
         key (Any): The key of the dict item
@@ -131,8 +126,7 @@ def _should_scrub_text(
 
 
 def _is_scrubbed(old_text: str, new_text: str) -> bool:
-    """
-    Check if the text has been scrubbed.
+    """Check if the text has been scrubbed.
 
     Args:
         old_text (str): The original text
@@ -145,8 +139,7 @@ def _is_scrubbed(old_text: str, new_text: str) -> bool:
 
 
 def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -> str:
-    """
-    Scrubs the value of a dict item.
+    """Scrubs the value of a dict item.
 
     Args:
         value (str): The value of the dict item
@@ -163,8 +156,7 @@ def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -
 
 
 def _should_scrub_list_item(item: Any, key: Any, list_keys: List[str]) -> bool:
-    """
-    Check if the key and item should be scrubbed and are of correct instance.
+    """Check if the key and item should be scrubbed and are of correct instance.
 
     Args:
         item (str/dict/other): The value of the dict item
@@ -183,8 +175,7 @@ def _scrub_list_item(
     list_keys: List[str],
     force_scrub_children: bool = False,
 ) -> Union[str, Dict]:
-    """
-    Scrubs the value of a dict item.
+    """Scrubs the value of a dict item.
 
     Args:
         item (str/dict): The value of the dict item
@@ -205,8 +196,7 @@ def scrub_dict(
     scrub_all: bool = False,
     force_scrub_children: bool = False,
 ) -> dict:
-    """
-    Scrub the dict of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
+    """Scrub the dict of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_dict (dict): A dict to be scrubbed
@@ -248,8 +238,7 @@ def scrub_dict(
 
 
 def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dict]:
-    """
-    Scrub the list of dicts of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
+    """Scrub the list of dicts of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_list (list[dict]): A list of dicts to be scrubbed

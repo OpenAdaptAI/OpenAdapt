@@ -1,5 +1,4 @@
-"""
-Package containing functions to interact with the active window and elements on different platforms.
+"""Package containing functions to interact with the active window and elements on different platforms.
 
 Module: __init__.py
 """

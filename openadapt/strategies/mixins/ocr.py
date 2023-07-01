@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin for getting text from images via OCR.
+"""Implements a ReplayStrategy mixin for getting text from images via OCR.
 
 Uses RapidOCR: github.com/RapidAI/RapidOCR/blob/main/python/README.md
 
@@ -31,8 +30,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
     ) -> None:
-        """
-        Initialize the OCRReplayStrategyMixin.
+        """Initialize the OCRReplayStrategyMixin.
 
         Args:
             recording (Recording): The recording to replay.
@@ -42,8 +40,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         self.ocr = RapidOCR()
 
     def get_ocr_text(self, screenshot: Screenshot) -> str:
-        """
-        Get the OCR text from a screenshot.
+        """Get the OCR text from a screenshot.
 
         Args:
             screenshot (Screenshot): The screenshot.
@@ -64,8 +61,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
 
 
 def get_text_df(result: List[List[Union[List[float], str, float]]]) -> pd.DataFrame:
-    """
-    Convert RapidOCR result to DataFrame.
+    """Convert RapidOCR result to DataFrame.
 
     Args:
             result: list of [coordinates, text, confidence]
@@ -93,8 +89,7 @@ def get_text_df(result: List[List[Union[List[float], str, float]]]) -> pd.DataFr
 
 
 def get_text_from_df(df: pd.DataFrame) -> str:
-    """
-    Convert a DataFrame produced by get_text_df into a string.
+    """Convert a DataFrame produced by get_text_df into a string.
 
     Args:
         df (pd.DataFrame): The DataFrame produced by get_text_df.
@@ -115,8 +110,7 @@ def get_text_from_df(df: pd.DataFrame) -> str:
 def unnest(
     df: pd.DataFrame, explode: list, axis: int, suffixes: list = None
 ) -> pd.DataFrame:
-    """
-    Unnest specified columns in a DataFrame by exploding values.
+    """Unnest specified columns in a DataFrame by exploding values.
 
     Args:
         df (pd.DataFrame): DataFrame to unnest.
@@ -151,8 +145,7 @@ def unnest(
 
 
 def preprocess_text(text: str) -> str:
-    """
-    Preprocess the OCR text.
+    """Preprocess the OCR text.
 
     Args:
         text (str): The OCR text.
@@ -164,8 +157,7 @@ def preprocess_text(text: str) -> str:
 
 
 def get_centroid(row: pd.Series) -> tuple:
-    """
-    Compute the centroid coordinates from the corners of a rectangle.
+    """Compute the centroid coordinates from the corners of a rectangle.
 
     Args:
         row (pd.Series): Row containing corner coordinates.
@@ -180,8 +172,7 @@ def get_centroid(row: pd.Series) -> tuple:
 
 
 def get_height(row: pd.Series) -> float:
-    """
-    Get the height of a row.
+    """Get the height of a row.
 
     Args:
         row (pd.Series): The row of the DataFrame.
@@ -193,8 +184,7 @@ def get_height(row: pd.Series) -> float:
 
 
 def sort_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Sort the rows of the DataFrame.
+    """Sort the rows of the DataFrame.
 
     Args:
         df (pd.DataFrame): The DataFrame to sort.
@@ -210,8 +200,7 @@ def sort_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def cluster_lines(df: pd.DataFrame, eps: float) -> pd.DataFrame:
-    """
-    Cluster lines in the DataFrame.
+    """Cluster lines in the DataFrame.
 
     Args:
         df (pd.DataFrame): The DataFrame to cluster.
@@ -227,8 +216,7 @@ def cluster_lines(df: pd.DataFrame, eps: float) -> pd.DataFrame:
 
 
 def cluster_words(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Cluster words in the DataFrame.
+    """Cluster words in the DataFrame.
 
     Args:
         df (pd.DataFrame): The DataFrame to cluster.
@@ -253,8 +241,7 @@ def cluster_words(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def concat_text(df: pd.DataFrame) -> str:
-    """
-    Concatenate text from the DataFrame.
+    """Concatenate text from the DataFrame.
 
     Args:
         df (pd.DataFrame): The DataFrame with clustered words.

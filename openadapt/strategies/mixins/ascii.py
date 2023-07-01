@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin for converting images to ASCII.
+"""Implements a ReplayStrategy mixin for converting images to ASCII.
 
 Usage:
 
@@ -28,8 +27,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         self,
         recording: Recording,
     ) -> None:
-        """
-        Initialize the ASCIIReplayStrategyMixin.
+        """Initialize the ASCIIReplayStrategyMixin.
 
         Args:
             recording (Recording): The recording to replay.
@@ -43,8 +41,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         columns: int = COLUMNS,
         width_ratio: float = WIDTH_RATIO,
     ) -> Any:
-        """
-        Convert the screenshot image to ASCII text.
+        """Convert the screenshot image to ASCII text.
 
         Args:
             screenshot (Screenshot): The screenshot to convert.

@@ -1,5 +1,4 @@
-"""
-openadapt.app.build module.
+"""openadapt.app.build module.
 
 This module provides functionality for building the OpenAdapt application.
 

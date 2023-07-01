@@ -2,4 +2,4 @@
 exclude=alembic/versions,.venv
 docstring-convention=google
 max-line-length = 110
-extend-ignore = D212, ANN101
+extend-ignore = ANN101

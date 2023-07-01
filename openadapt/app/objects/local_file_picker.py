@@ -1,5 +1,4 @@
-"""
-openadapt.app.objects.local_file_picker module.
+"""openadapt.app.objects.local_file_picker module.
 
 This module provides the LocalFilePicker class for selecting a file from the local filesystem.
 
@@ -96,8 +95,7 @@ class LocalFilePicker(ui.dialog):
         self.grid.update()
 
     async def handle_double_click(self, msg: Dict) -> None:
-        """
-        Handle the double-click event on a cell in the grid.
+        """Handle the double-click event on a cell in the grid.
 
         Args:
             msg (Dict): Message containing the event data.

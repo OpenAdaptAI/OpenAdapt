@@ -1,5 +1,4 @@
-"""
-Implements a ReplayStrategy mixin for getting segmenting images via SAM model.
+"""Implements a ReplayStrategy mixin for getting segmenting images via SAM model.
 
 Uses SAM model:https://github.com/facebookresearch/segment-anything
 
@@ -43,8 +42,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         model_name: str = MODEL_NAME,
         checkpoint_dir_path: str = CHECKPOINT_DIR_PATH,
     ) -> None:
-        """
-        Initialize the SAMReplayStrategyMixin.
+        """Initialize the SAMReplayStrategyMixin.
 
         Args:
             recording (Recording): The recording object.
@@ -57,8 +55,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
 
     def _initialize_model(self, model_name: str, checkpoint_dir_path: str) -> Any:
-        """
-        Initialize the SAM model.
+        """Initialize the SAM model.
 
         Args:
             model_name (str): The name of the SAM model.
@@ -79,8 +76,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     def get_screenshot_bbox(
         self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
     ) -> str:
-        """
-        Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
+        """Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
 
         Args:
             screenshot (Screenshot): The screenshot object containing the image.
@@ -106,8 +102,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     def get_click_event_bbox(
         self, screenshot: Any, show_plots: bool = SHOW_PLOTS
     ) -> str:
-        """
-        Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
+        """Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
 
         Args:
             screenshot: The screenshot object containing the image.
@@ -175,8 +170,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
 
 
 def resize_image(image: Image) -> Image:
-    """
-    Resize the given image.
+    """Resize the given image.
 
     Args:
         image (PIL.Image.Image): The image to be resized.
@@ -191,8 +185,7 @@ def resize_image(image: Image) -> Image:
 
 
 def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
-    """
-    Display the mask on the plot.
+    """Display the mask on the plot.
 
     Args:
         mask (np.ndarray): The mask array.
@@ -211,8 +204,7 @@ def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
 def show_points(
     coords: np.ndarray, labels: np.ndarray, ax: Any, marker_size: int = 120
 ) -> None:
-    """
-    Display the points on the plot.
+    """Display the points on the plot.
 
     Args:
         coords (np.ndarray): The coordinates of the points.
@@ -243,8 +235,7 @@ def show_points(
 
 
 def show_box(box: List[int], ax: Any) -> None:
-    """
-    Display the bounding box on the plot.
+    """Display the bounding box on the plot.
 
     Args:
         box (List[int]): The bounding box coordinates in XYWH format.
@@ -258,8 +249,7 @@ def show_box(box: List[int], ax: Any) -> None:
 
 
 def show_anns(anns: Any) -> None:
-    """
-    Display the annotations on the plot.
+    """Display the annotations on the plot.
 
     Args:
         anns: The annotations.

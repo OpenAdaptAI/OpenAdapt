@@ -9,8 +9,7 @@ from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
 def play_mouse_event(event: Any, mouse_controller: Any) -> None:
-    """
-    Play a mouse event.
+    """Play a mouse event.
 
     Args:
         event (ActionEvent): The mouse event to be played.
@@ -53,8 +52,7 @@ def play_mouse_event(event: Any, mouse_controller: Any) -> None:
 def play_key_event(
     event: Any, keyboard_controller: Any, canonical: bool = True
 ) -> None:
-    """
-    Play a key event.
+    """Play a key event.
 
     Args:
         event (ActionEvent): The key event to be played.
@@ -81,8 +79,7 @@ def play_key_event(
 def play_action_event(
     event: Any, mouse_controller: Any, keyboard_controller: Any
 ) -> None:
-    """
-    Play an action event.
+    """Play an action event.
 
     Args:
         event (ActionEvent): The action event to be played.

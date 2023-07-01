@@ -42,8 +42,7 @@ timestamp_raw = _start_time
 
 
 def reset_timestamp() -> None:
-    """
-    Reset the timestamp counters to their initial values.
+    """Reset the timestamp counters to their initial values.
 
     Returns:
         None
@@ -56,8 +55,7 @@ def reset_timestamp() -> None:
 
 @pytest.fixture(autouse=True)
 def _reset_timestamp() -> None:
-    """
-    Fixture that automatically resets the timestamp counters before each test.
+    """Fixture that automatically resets the timestamp counters before each test.
 
     Returns:
         None
@@ -71,8 +69,7 @@ def make_action_event(
     get_pre_children: Callable[[], List[ActionEvent]] = None,
     get_post_children: Callable[[], List[ActionEvent]] = None,
 ) -> ActionEvent:
-    """
-    Create an ActionEvent instance with the given attributes.
+    """Create an ActionEvent instance with the given attributes.
 
     Args:
         event_dict (dict): Dictionary containing the event attributes.
@@ -118,8 +115,7 @@ def make_action_event(
 
 
 def get_children_with_timestamps(get_children: Callable[[], List[Any]]) -> List[Any]:
-    """
-    Get the list of children events with timestamps.
+    """Get the list of children events with timestamps.
 
     Args:
         get_children (Callable[[], List[Any]]): Function that returns the list of children events.
@@ -152,8 +148,7 @@ def make_move_event(
     get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
     get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
 ) -> ActionEvent:
-    """
-    Create a move event with the given attributes.
+    """Create a move event with the given attributes.
 
     Args:
         x (int, optional): X-coordinate of the mouse.
@@ -180,8 +175,7 @@ def make_click_event(
     get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
     get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
 ) -> ActionEvent:
-    """
-    Create a click event with the given attributes.
+    """Create a click event with the given attributes.
 
     Args:
         pressed (bool): True if the mouse button is pressed, False otherwise.
@@ -210,8 +204,7 @@ def make_click_event(
 
 
 def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
-    """
-    Create a scroll event with the given attributes.
+    """Create a scroll event with the given attributes.
 
     Args:
         dy (int, optional): Vertical scroll amount. Defaults to 0.
@@ -226,8 +219,7 @@ def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
 def make_click_events(
     dt_released: float, dt_pressed: float = None, button_name: str = "left"
 ) -> tuple[ActionEvent, ActionEvent]:
-    """
-    Create a pair of click events with the given time differences and button name.
+    """Create a pair of click events with the given time differences and button name.
 
     Args:
         dt_released (float): Time difference in seconds between the press and release events.
@@ -251,8 +243,7 @@ def make_processed_click_event(
     mouse_y: int = 0,
     button_name: str = "left",
 ) -> ActionEvent:
-    """
-    Create a processed click event with the given attributes.
+    """Create a processed click event with the given attributes.
 
     Args:
         name (str): Name of the processed click event.
@@ -284,8 +275,7 @@ def make_singleclick_event(
     mouse_y: int = 0,
     button_name: str = "left",
 ) -> ActionEvent:
-    """
-    Create a single click event with the given attributes.
+    """Create a single click event with the given attributes.
 
     Args:
         dt (float): Time difference in seconds from the previous event.
@@ -314,8 +304,7 @@ def make_doubleclick_event(
     mouse_y: int = 0,
     button_name: str = "left",
 ) -> ActionEvent:
-    """
-    Create a double click event with the given attributes.
+    """Create a double click event with the given attributes.
 
     Args:
         dt (float): Time difference in seconds from the previous event.
@@ -338,8 +327,7 @@ def make_doubleclick_event(
 
 
 def test_merge_consecutive_mouse_click_events() -> None:
-    """
-    Test case for merging consecutive mouse click events.
+    """Test case for merging consecutive mouse click events.
 
     Returns:
         None
@@ -385,8 +373,7 @@ def test_merge_consecutive_mouse_click_events() -> None:
 
 
 def test_merge_consecutive_mouse_move_events() -> None:
-    """
-    Test case for merging consecutive mouse move events.
+    """Test case for merging consecutive mouse move events.
 
     Returns:
         None
@@ -433,8 +420,7 @@ def test_merge_consecutive_mouse_move_events() -> None:
 
 
 def test_merge_consecutive_mouse_scroll_events() -> None:
-    """
-    Test case for merging consecutive mouse scroll events.
+    """Test case for merging consecutive mouse scroll events.
 
     Returns:
         None
@@ -465,8 +451,7 @@ def test_merge_consecutive_mouse_scroll_events() -> None:
 
 
 def test_remove_redundant_mouse_move_events() -> None:
-    """
-    Test case for removing redundant mouse move events.
+    """Test case for removing redundant mouse move events.
 
     Returns:
         None
@@ -537,8 +522,7 @@ def test_remove_redundant_mouse_move_events() -> None:
 
 
 def make_press_event(char: str = None, name: str = None) -> ActionEvent:
-    """
-    Create a press event with the given character or key name.
+    """Create a press event with the given character or key name.
 
     Args:
         char (str, optional): Character corresponding to the pressed key. Defaults to None.
@@ -552,8 +536,7 @@ def make_press_event(char: str = None, name: str = None) -> ActionEvent:
 
 
 def make_release_event(char: str = None, name: str = None) -> ActionEvent:
-    """
-    Create a release event with the given character or key name.
+    """Create a release event with the given character or key name.
 
     Args:
         char (str, optional): Character corresponding to the released key. Defaults to None.
@@ -569,8 +552,7 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
 def make_type_event(
     get_children: Optional[Callable[[], List[ActionEvent]]]
 ) -> ActionEvent:
-    """
-    Create a type event with the given children events.
+    """Create a type event with the given children events.
 
     Args:
         get_children (function): Function that returns the list of children events.
@@ -582,8 +564,7 @@ def make_type_event(
 
 
 def make_key_events(char: str) -> tuple[ActionEvent, ActionEvent]:
-    """
-    Create a pair of press and release events for the given character.
+    """Create a pair of press and release events for the given character.
 
     Args:
         char (str): Character corresponding to the key.
@@ -595,8 +576,7 @@ def make_key_events(char: str) -> tuple[ActionEvent, ActionEvent]:
 
 
 def test_merge_consecutive_keyboard_events() -> None:
-    """
-    Test case for merging consecutive keyboard events.
+    """Test case for merging consecutive keyboard events.
 
     Returns:
         None
@@ -653,8 +633,7 @@ def test_merge_consecutive_keyboard_events() -> None:
 
 
 def test_merge_consecutive_keyboard_events__grouped() -> None:
-    """
-    Test case for merging consecutive keyboard events with grouping.
+    """Test case for merging consecutive keyboard events with grouping.
 
     Returns:
         None
@@ -705,8 +684,7 @@ def test_merge_consecutive_keyboard_events__grouped() -> None:
 
 
 def make_window_event(event_dict: dict) -> WindowEvent:
-    """
-    Create a WindowEvent with the given attributes.
+    """Create a WindowEvent with the given attributes.
 
     Args:
         event_dict (dict): Dictionary containing the attributes of the WindowEvent.
@@ -718,8 +696,7 @@ def make_window_event(event_dict: dict) -> WindowEvent:
 
 
 def test_discard_unused_events() -> None:
-    """
-    Test case for discarding unused events.
+    """Test case for discarding unused events.
 
     Tests that the discard_unused_events function discards unused events based on specified timestamp.
 

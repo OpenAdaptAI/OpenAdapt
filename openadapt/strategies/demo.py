@@ -1,5 +1,4 @@
-"""
-Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
+"""Demonstration of HuggingFace, OCR, and ASCII ReplayStrategyMixins.
 
 Usage:
 
@@ -35,8 +34,7 @@ class DemoReplayStrategy(
         self,
         recording: Recording,
     ) -> None:
-        """
-        Initialize the DemoReplayStrategy.
+        """Initialize the DemoReplayStrategy.
 
         Args:
             recording (Recording): The recording to replay.
@@ -51,8 +49,7 @@ class DemoReplayStrategy(
         screenshot: Screenshot,
         window_event: WindowEvent,
     ) -> None:
-        """
-        Get the next action event based on the current screenshot and window event.
+        """Get the next action event based on the current screenshot and window event.
 
         Args:
             screenshot (Screenshot): The current screenshot.

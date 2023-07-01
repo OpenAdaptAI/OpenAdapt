@@ -1,5 +1,4 @@
-"""
-Implements basic CRUD (Create, Read, Update, Delete) operations for interacting with a database.
+"""Implements basic CRUD (Create, Read, Update, Delete) operations for interacting with a database.
 
 Module: crud.py
 """

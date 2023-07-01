@@ -8,8 +8,7 @@ from openadapt.models import Screenshot
 
 
 def test_crop_active_window() -> None:
-    """
-    Test the crop_active_window function.
+    """Test the crop_active_window function.
 
     This function creates a mock action event with a mock window event,
     sets up the necessary environment, performs the cropping operation,

@@ -1,5 +1,4 @@
-"""
-Scripts package.
+"""Scripts package.
 
 This package contains scripts for various purposes.
 

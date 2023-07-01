@@ -1,5 +1,4 @@
-"""
-Implements the base class for implementing replay strategies.
+"""Implements the base class for implementing replay strategies.
 
 Module: base.py
 """
@@ -26,8 +25,7 @@ class BaseReplayStrategy(ABC):
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
     ) -> None:
-        """
-        Initialize the BaseReplayStrategy.
+        """Initialize the BaseReplayStrategy.
 
         Args:
             recording (models.Recording): The recording to replay.
@@ -45,8 +43,7 @@ class BaseReplayStrategy(ABC):
         self,
         screenshot: models.Screenshot,
     ) -> models.ActionEvent:
-        """
-        Get the next action event based on the current screenshot.
+        """Get the next action event based on the current screenshot.
 
         Args:
             screenshot (models.Screenshot): The current screenshot.

@@ -87,8 +87,7 @@ _DEFAULTS = {
 
 
 def getenv_fallback(var_name: str) -> str:
-    """
-    Get the value of an environment variable or fallback to the default value.
+    """Get the value of an environment variable or fallback to the default value.
 
     Args:
         var_name (str): The name of the environment variable.
@@ -120,8 +119,7 @@ DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
-    """
-    Obfuscates a value by replacing a portion of characters.
+    """Obfuscates a value by replacing a portion of characters.
 
     Args:
         val (str): The value to obfuscate.
@@ -157,8 +155,7 @@ if multiprocessing.current_process().name == "MainProcess":
 
 
 def filter_log_messages(data: dict) -> bool:
-    """
-    Filter log messages by ignoring specific strings.
+    """Filter log messages by ignoring specific strings.
 
     Args:
         data (dict): Data from a loguru logger.

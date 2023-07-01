@@ -1,5 +1,4 @@
-"""
-Utility functions for OpenAdapt.
+"""Utility functions for OpenAdapt.
 
 This module provides various utility functions used throughout OpenAdapt.
 """
@@ -29,8 +28,7 @@ EMPTY = (None, [], {}, "")
 
 
 def configure_logging(logger: Any, log_level: str) -> None:
-    """
-    Configure the logging settings for OpenAdapt.
+    """Configure the logging settings for OpenAdapt.
 
     Args:
         logger (loguru.logger): The logger object.
@@ -58,8 +56,7 @@ def configure_logging(logger: Any, log_level: str) -> None:
 
 
 def row2dict(row: Any, follow: bool = True) -> dict:
-    """
-    Convert a row object to a dictionary.
+    """Convert a row object to a dictionary.
 
     Args:
         row: The row object.
@@ -90,8 +87,7 @@ def row2dict(row: Any, follow: bool = True) -> dict:
 
 
 def round_timestamps(events: list, num_digits: int) -> None:
-    """
-    Round timestamps in a list of events.
+    """Round timestamps in a list of events.
 
     Args:
         events (list): The list of events.
@@ -113,8 +109,7 @@ def rows2dicts(
     drop_constant: bool = True,
     num_digits: int = None,
 ) -> list[dict]:
-    """
-    Convert a list of rows to a list of dictionaries.
+    """Convert a list of rows to a list of dictionaries.
 
     Args:
         rows (list): The list of rows.
@@ -162,8 +157,7 @@ def rows2dicts(
 
 
 def override_double_click_interval_seconds(override_value: float) -> None:
-    """
-    Override the double click interval in seconds.
+    """Override the double click interval in seconds.
 
     Args:
         override_value (float): The new value for the double click interval.
@@ -172,8 +166,7 @@ def override_double_click_interval_seconds(override_value: float) -> None:
 
 
 def get_double_click_interval_seconds() -> float:
-    """
-    Get the double click interval in seconds.
+    """Get the double click interval in seconds.
 
     Returns:
         float: The double click interval in seconds.
@@ -194,8 +187,7 @@ def get_double_click_interval_seconds() -> float:
 
 
 def get_double_click_distance_pixels() -> int:
-    """
-    Get the double click distance in pixels.
+    """Get the double click distance in pixels.
 
     Returns:
         int: The double click distance in pixels.
@@ -223,8 +215,7 @@ def get_double_click_distance_pixels() -> int:
 
 
 def get_monitor_dims() -> tuple:
-    """
-    Get the dimensions of the monitor.
+    """Get the dimensions of the monitor.
 
     Returns:
         tuple: The width and height of the monitor.
@@ -247,8 +238,7 @@ def draw_ellipse(
     outline_transparency: float = 0.5,
     outline_width: int = 2,
 ) -> tuple[Image.Image, Any, Any]:
-    """
-    Draw an ellipse on the image.
+    """Draw an ellipse on the image.
 
     Args:
         x (float): The x-coordinate of the center of the ellipse.
@@ -285,8 +275,7 @@ def draw_ellipse(
 
 
 def get_font(original_font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
-    """
-    Get a font object.
+    """Get a font object.
 
     Args:
         original_font_name (str): The original font name.
@@ -321,8 +310,7 @@ def draw_text(
     outline: bool = False,
     outline_padding: int = 10,
 ) -> Image:
-    """
-    Draw text on the image.
+    """Draw text on the image.
 
     Args:
         x (float): The x-coordinate of the text anchor point.
@@ -388,8 +376,7 @@ def draw_rectangle(
     outline_width: int = 2,
     invert: bool = False,
 ) -> Image:
-    """
-    Draw a rectangle on the image.
+    """Draw a rectangle on the image.
 
     Args:
         x0 (float): The x-coordinate of the top-left corner of the rectangle.
@@ -426,8 +413,7 @@ def draw_rectangle(
 
 
 def get_scale_ratios(action_event: Any) -> tuple[float, float]:
-    """
-    Get the scale ratios for the action event.
+    """Get the scale ratios for the action event.
 
     Args:
         action_event (ActionEvent): The action event.
@@ -451,8 +437,7 @@ def display_event(
     marker_outline_transparency: float = 0.5,
     diff: bool = False,
 ) -> Image:
-    """
-    Display an action event on the image.
+    """Display an action event on the image.
 
     Args:
         action_event (ActionEvent): The action event to display.
@@ -525,8 +510,7 @@ def display_event(
 
 
 def image2utf8(image: Image) -> str:
-    """
-    Convert an image to UTF-8 format.
+    """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
@@ -549,8 +533,7 @@ _start_perf_counter = None
 
 
 def set_start_time(value: float = None) -> float:
-    """
-    Set the start time for performance measurements.
+    """Set the start time for performance measurements.
 
     Args:
         value (float): The start time value. Defaults to the current time.
@@ -565,8 +548,7 @@ def set_start_time(value: float = None) -> float:
 
 
 def get_timestamp(is_global: bool = False) -> float:
-    """
-    Get the current timestamp.
+    """Get the current timestamp.
 
     Args:
         is_global (bool): Flag indicating whether to use the global start time. Defaults to False.
@@ -580,8 +562,7 @@ def get_timestamp(is_global: bool = False) -> float:
 
 # https://stackoverflow.com/a/50685454
 def evenly_spaced(arr: list, N: list) -> list:
-    """
-    Get evenly spaced elements from the array.
+    """Get evenly spaced elements from the array.
 
     Args:
         arr (list): The input array.
@@ -597,8 +578,7 @@ def evenly_spaced(arr: list, N: list) -> list:
 
 
 def take_screenshot() -> mss.base.ScreenShot:
-    """
-    Take a screenshot.
+    """Take a screenshot.
 
     Returns:
         mss.base.ScreenShot: The screenshot.
@@ -611,8 +591,7 @@ def take_screenshot() -> mss.base.ScreenShot:
 
 
 def get_strategy_class_by_name() -> dict:
-    """
-    Get a dictionary of strategy classes by their names.
+    """Get a dictionary of strategy classes by their names.
 
     Returns:
         dict: A dictionary of strategy classes.
@@ -626,8 +605,7 @@ def get_strategy_class_by_name() -> dict:
 
 
 def plot_performance(recording_timestamp: float = None) -> None:
-    """
-    Plot the performance of the event processing and writing.
+    """Plot the performance of the event processing and writing.
 
     Args:
         recording_timestamp (float): The timestamp of the recording (defaults to latest).
@@ -685,8 +663,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
 
 def strip_element_state(action_event: Any) -> Any:
-    """
-    Strip the element state from the action event and its children.
+    """Strip the element state from the action event and its children.
 
     Args:
         action_event (ActionEvent): The action event to strip.
@@ -701,8 +678,7 @@ def strip_element_state(action_event: Any) -> Any:
 
 
 def get_functions(name: str) -> dict:
-    """
-    Get a dictionary of function names to functions for all non-private functions.
+    """Get a dictionary of function names to functions for all non-private functions.
 
     Usage:
 

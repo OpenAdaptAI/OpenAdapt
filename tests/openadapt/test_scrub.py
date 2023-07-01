@@ -10,8 +10,7 @@ from openadapt import scrub, config
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
-    """
-    Convert a hex color (int) to RGB.
+    """Convert a hex color (int) to RGB.
 
     Args:
         hex_color (int): Hex color value.

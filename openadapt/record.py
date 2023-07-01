@@ -42,8 +42,7 @@ utils.configure_logging(logger, LOG_LEVEL)
 
 
 def args_to_str(*args: tuple) -> str:
-    """
-    Convert positional arguments to a string representation.
+    """Convert positional arguments to a string representation.
 
     Args:
         *args: Positional arguments.
@@ -55,8 +54,7 @@ def args_to_str(*args: tuple) -> str:
 
 
 def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
-    """
-    Convert keyword arguments to a string representation.
+    """Convert keyword arguments to a string representation.
 
     Args:
         **kwargs: Keyword arguments.
@@ -68,8 +66,7 @@ def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
 
 
 def trace(logger: Any) -> Any:
-    """
-    Decorator that logs the function entry and exit using the provided logger.
+    """Decorator that logs the function entry and exit using the provided logger.
 
     Args:
         logger: The logger object to use for logging.
@@ -103,8 +100,7 @@ def trace(logger: Any) -> Any:
 def process_event(
     event: Any, write_q: Any, write_fn: Any, recording_timestamp: int, perf_q: Any
 ) -> None:
-    """
-    Process an event and take appropriate action based on its type.
+    """Process an event and take appropriate action based on its type.
 
     Args:
         event: The event to process.
@@ -132,8 +128,7 @@ def process_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
-    """
-    Process events from the event queue and write them to the respective write queues.
+    """Process events from the event queue and write them to the respective write queues.
 
     Args:
         event_q: A queue with events to be processed.
@@ -208,8 +203,7 @@ def write_action_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ) -> None:
-    """
-    Write an action event to the database and update the performance queue.
+    """Write an action event to the database and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
@@ -226,8 +220,7 @@ def write_screen_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ) -> None:
-    """
-    Write a screen event to the database and update the performance queue.
+    """Write a screen event to the database and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
@@ -247,8 +240,7 @@ def write_window_event(
     event: Event,
     perf_q: multiprocessing.Queue,
 ) -> None:
-    """
-    Write a window event to the database and update the performance queue.
+    """Write a window event to the database and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
@@ -269,8 +261,7 @@ def write_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
-    """
-    Write events of a specific type to the database using the provided write function.
+    """Write events of a specific type to the database using the provided write function.
 
     Args:
         event_type: The type of events to be written.
@@ -447,8 +438,7 @@ def read_screen_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    """
-    Read screen events and add them to the event queue.
+    """Read screen events and add them to the event queue.
 
     Args:
         event_q: A queue for adding screen events.
@@ -473,8 +463,7 @@ def read_window_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    """
-    Read window events and add them to the event queue.
+    """Read window events and add them to the event queue.
 
     Args:
         event_q: A queue for adding window events.
@@ -520,8 +509,7 @@ def performance_stats_writer(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
-    """
-    Write performance stats to the database.
+    """Write performance stats to the database.
 
     Each entry includes the event type, start time, and end time.
 
@@ -553,8 +541,7 @@ def performance_stats_writer(
 def create_recording(
     task_description: str,
 ) -> Dict[str, Any]:
-    """
-    Create a new recording entry in the database.
+    """Create a new recording entry in the database.
 
     Args:
         task_description: A text description of the task being recorded.
@@ -649,8 +636,7 @@ def read_mouse_events(
 def record(
     task_description: str,
 ) -> None:
-    """
-    Record Screenshots/ActionEvents/WindowEvents.
+    """Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
         task_description: A text description of the task to be recorded.

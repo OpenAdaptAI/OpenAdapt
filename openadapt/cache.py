@@ -1,5 +1,4 @@
-"""
-openadapt.cache module.
+"""openadapt.cache module.
 
 This module provides a caching decorator for functions.
 
@@ -24,8 +23,7 @@ from openadapt import config
 
 
 def default(val: Optional[Any], default: Any) -> Any:
-    """
-    Set a default value if the given value is None.
+    """Set a default value if the given value is None.
 
     Args:
         val: The value to check.
@@ -43,8 +41,7 @@ def cache(
     verbosity: Optional[int] = None,
     **cache_kwargs: Union[str, int, bool],
 ) -> Callable[[Callable], Callable]:
-    """
-    Cache decorator for functions.
+    """Cache decorator for functions.
 
     Args:
         dir_path (str): The path to the cache directory.

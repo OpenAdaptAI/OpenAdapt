@@ -1,5 +1,4 @@
-"""
-Reset Database Script.
+"""Reset Database Script.
 
 This script clears the database by removing the database file and
 running a database migration using Alembic.

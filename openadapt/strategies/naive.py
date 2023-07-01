@@ -21,8 +21,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         process_events: bool = PROCESS_EVENTS,
         sleep: bool = SLEEP,
     ) -> None:
-        """
-        Initialize the NaiveReplayStrategy.
+        """Initialize the NaiveReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
@@ -46,8 +45,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         screenshot: models.Screenshot,
         window_event: models.WindowEvent,
     ) -> models.ActionEvent | None:
-        """
-        Get the next ActionEvent for replay.
+        """Get the next ActionEvent for replay.
 
         Args:
             screenshot (models.Screenshot): The screenshot object.
