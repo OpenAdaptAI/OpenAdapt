@@ -1,12 +1,14 @@
 """Utilities for playing back ActionEvents."""
 
+from typing import Any
+
 from loguru import logger
 from pynput import mouse
 
 from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 
 
-def play_mouse_event(event, mouse_controller) -> None:
+def play_mouse_event(event: Any, mouse_controller: Any) -> None:
     """
     Play a mouse event.
 
@@ -48,7 +50,7 @@ def play_mouse_event(event, mouse_controller) -> None:
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_key_event(event, keyboard_controller, canonical=True) -> None:
+def play_key_event(event: Any, keyboard_controller: Any, canonical: bool = True) -> None:
     """
     Play a key event.
 
@@ -74,7 +76,7 @@ def play_key_event(event, keyboard_controller, canonical=True) -> None:
         raise Exception(f"Unhandled event name: {event.name}")
 
 
-def play_action_event(event, mouse_controller, keyboard_controller) -> None:
+def play_action_event(event: Any, mouse_controller: Any, keyboard_controller: Any) -> None:
     """
     Play an action event.
 

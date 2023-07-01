@@ -1,3 +1,5 @@
+from typing import Any
+
 from loguru import logger
 import pywinauto
 from pywinauto import Desktop
@@ -49,7 +51,7 @@ def get_active_window_state() -> dict:
     return state
 
 
-def get_active_window_meta(active_window) -> dict:
+def get_active_window_meta(active_window: Any) -> dict:
     """
     Get the meta information of the active window.
 
@@ -85,7 +87,7 @@ def get_active_element_state(x: int, y: int) -> dict:
     return properties
 
 
-def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
+def get_active_window(depth: int = 10, max_width: int = 10, filename: str = None) -> Desktop:
     """
     Get the active window object.
 
@@ -97,7 +99,7 @@ def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
     return window
 
 
-def get_element_properties(element) -> dict:
+def get_element_properties(element: Any) -> dict:
     """
     Recursively retrieves the properties of each element and its children.
 
@@ -130,7 +132,7 @@ def get_element_properties(element) -> dict:
     return properties
 
 
-def dictify_rect(rect) -> dict:
+def dictify_rect(rect: Any) -> dict:
     """
     Convert a rectangle object to a dictionary.
 

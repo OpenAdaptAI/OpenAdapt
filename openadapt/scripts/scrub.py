@@ -19,7 +19,7 @@ Example: To redact all entities in sample2.mp4
     $ python -m openadapt.scripts.scrub scrub_mp4 sample2.mp4 True 2 2 16
 """
 
-from typing import Optional
+from typing import Optional, Any
 import math
 
 from loguru import logger
@@ -32,7 +32,7 @@ import numpy as np
 from openadapt import config, scrub, utils
 
 
-def _make_frame(time, final, progress_bar, progress_threshold) -> np.ndarray:
+def _make_frame(time: Any, final: Any, progress_bar: Any, progress_threshold: Any) -> np.ndarray:
     """
     Private function to scrub a frame.
 

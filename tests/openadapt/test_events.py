@@ -2,6 +2,7 @@
 
 from functools import partial
 from pprint import pformat
+from typing import Any, Callable, List, Optional
 import itertools
 import pytest
 
@@ -65,7 +66,10 @@ def _reset_timestamp() -> None:
 
 
 def make_action_event(
-    event_dict, dt=None, get_pre_children=None, get_post_children=None,
+    event_dict: dict,
+    dt: float = None,
+    get_pre_children: Callable[[], List[ActionEvent]] = None,
+    get_post_children: Callable[[], List[ActionEvent]] = None
 ) -> ActionEvent:
     """
     Create an ActionEvent instance with the given attributes.
@@ -113,15 +117,15 @@ def make_action_event(
     return event
 
 
-def get_children_with_timestamps(get_children) -> list:
+def get_children_with_timestamps(get_children: Callable[[], List[Any]]) -> List[Any]:
     """
     Get the list of children events with timestamps.
 
     Args:
-        get_children (function): Function that returns the list of children events.
+        get_children (Callable[[], List[Any]]): Function that returns the list of children events.
 
     Returns:
-        list: List of children events with timestamps.
+        List[Any]: List of children events with timestamps.
     """
     if not get_children:
         return []
@@ -142,14 +146,19 @@ def get_children_with_timestamps(get_children) -> list:
     return children
 
 
-def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None) -> ActionEvent:
+def make_move_event(
+    x: int = 0,
+    y: int = 0,
+    get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
+    get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
+) -> ActionEvent:
     """
     Create a move event with the given attributes.
 
     Args:
-        x (int, optional): X-coordinate of the mouse. Defaults to 0.
-        y (int, optional): Y-coordinate of the mouse. Defaults to 0.
-        get_pre_children (function, optional): returns the list of pre-children events.
+        x (int, optional): X-coordinate of the mouse.
+        y (int, optional): Y-coordinate of the mouse.
+        get_pre_children (function, optional): returns list of pre-children events.
         get_post_children (function, optional): returns the list of post-children events.
 
     Returns:
@@ -163,13 +172,13 @@ def make_move_event(x=0, y=0, get_pre_children=None, get_post_children=None) -> 
 
 
 def make_click_event(
-    pressed,
-    mouse_x=0,
-    mouse_y=0,
-    dt=None,
-    button_name="left",
-    get_pre_children=None,
-    get_post_children=None,
+    pressed: bool,
+    mouse_x: int = 0,
+    mouse_y: int = 0,
+    dt: float = None,
+    button_name: str = "left",
+    get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
+    get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
 ) -> ActionEvent:
     """
     Create a click event with the given attributes.
@@ -200,7 +209,7 @@ def make_click_event(
     )
 
 
-def make_scroll_event(dy=0, dx=0) -> ActionEvent:
+def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
     """
     Create a scroll event with the given attributes.
 
@@ -214,7 +223,11 @@ def make_scroll_event(dy=0, dx=0) -> ActionEvent:
     return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy})
 
 
-def make_click_events(dt_released, dt_pressed=None, button_name="left") -> tuple[ActionEvent, ActionEvent]:
+def make_click_events(
+    dt_released: float,
+    dt_pressed: float = None,
+    button_name: str = "left"
+) -> tuple[ActionEvent, ActionEvent]:
     """
     Create a pair of click events with the given time differences and button name.
 
@@ -233,7 +246,12 @@ def make_click_events(dt_released, dt_pressed=None, button_name="left") -> tuple
 
 
 def make_processed_click_event(
-    name, dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    name: str,
+    dt: float,
+    get_children: Optional[Callable[[], List[ActionEvent]]],
+    mouse_x: int = 0,
+    mouse_y: int = 0,
+    button_name: str = "left",
 ) -> ActionEvent:
     """
     Create a processed click event with the given attributes.
@@ -262,7 +280,11 @@ def make_processed_click_event(
 
 
 def make_singleclick_event(
-    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    dt: float,
+    get_children: Optional[Callable[[], List[ActionEvent]]],
+    mouse_x: int = 0,
+    mouse_y: int = 0,
+    button_name: str = "left",
 ) -> ActionEvent:
     """
     Create a single click event with the given attributes.
@@ -283,7 +305,11 @@ def make_singleclick_event(
 
 
 def make_doubleclick_event(
-    dt, get_children, mouse_x=0, mouse_y=0, button_name="left",
+    dt: float,
+    get_children: Optional[Callable[[], List[ActionEvent]]],
+    mouse_x: int = 0,
+    mouse_y: int = 0,
+    button_name: str = "left",
 ) -> ActionEvent:
     """
     Create a double click event with the given attributes.
@@ -487,7 +513,7 @@ def test_remove_redundant_mouse_move_events() -> None:
     assert expected_events == actual_events
 
 
-def make_press_event(char=None, name=None) -> ActionEvent:
+def make_press_event(char: str = None, name: str = None) -> ActionEvent:
     """
     Create a press event with the given character or key name.
 
@@ -502,7 +528,7 @@ def make_press_event(char=None, name=None) -> ActionEvent:
     return make_action_event({"name": "press", "key_char": char, "key_name": name})
 
 
-def make_release_event(char=None, name=None) -> ActionEvent:
+def make_release_event(char: str = None, name: str = None) -> ActionEvent:
     """
     Create a release event with the given character or key name.
 
@@ -517,7 +543,7 @@ def make_release_event(char=None, name=None) -> ActionEvent:
     return make_action_event({"name": "release", "key_char": char, "key_name": name})
 
 
-def make_type_event(get_children) -> ActionEvent:
+def make_type_event(get_children: Optional[Callable[[], List[ActionEvent]]]) -> ActionEvent:
     """
     Create a type event with the given children events.
 
@@ -530,7 +556,7 @@ def make_type_event(get_children) -> ActionEvent:
     return make_action_event({"name": "type"}, get_pre_children=get_children)
 
 
-def make_key_events(char) -> tuple[ActionEvent, ActionEvent]:
+def make_key_events(char: str) -> tuple[ActionEvent, ActionEvent]:
     """
     Create a pair of press and release events for the given character.
 
@@ -653,7 +679,7 @@ def test_merge_consecutive_keyboard_events__grouped() -> None:
     assert not diff, pformat(diff)
 
 
-def make_window_event(event_dict) -> WindowEvent:
+def make_window_event(event_dict: dict) -> WindowEvent:
     """
     Create a WindowEvent with the given attributes.
 

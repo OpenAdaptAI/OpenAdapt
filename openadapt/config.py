@@ -86,7 +86,7 @@ _DEFAULTS = {
 }
 
 
-def getenv_fallback(var_name) -> str:
+def getenv_fallback(var_name: str) -> str:
     """
     Get the value of an environment variable or fallback to the default value.
 
@@ -117,7 +117,7 @@ DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 
-def obfuscate(val, pct_reveal=0.1, char="*") -> str:
+def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     """
     Obfuscates a value by replacing a portion of characters.
 
@@ -154,7 +154,7 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
-def filter_log_messages(data) -> bool:
+def filter_log_messages(data: dict) -> bool:
     """
     Filter log messages by ignoring specific strings.
 

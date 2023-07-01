@@ -19,7 +19,7 @@ class ForceFloat(sa.TypeDecorator):
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value, dialect) -> (float | None):
+    def process_result_value(self, value: Any, dialect: Any) -> (float | None):
         """Convert the result value to float."""
         if value is not None:
             value = float(value)
@@ -100,7 +100,7 @@ class ActionEvent(db.Base):
 
     # TODO: playback_timestamp / original_timestamp
 
-    def _key(self, key_name, key_char, key_vk) -> Any:
+    def _key(self, key_name: Any, key_char: Any, key_vk: Any) -> Any:
         """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
@@ -132,7 +132,7 @@ class ActionEvent(db.Base):
             self.canonical_key_name, self.canonical_key_char, self.canonical_key_vk,
         )
 
-    def _text(self, canonical=False) -> (str | None):
+    def _text(self, canonical: bool = False) -> (str | None):
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
@@ -196,7 +196,7 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls, children_dicts) -> Any:
+    def from_children(cls: Any, children_dicts: list) -> Any:
         """Create an ActionEvent instance from a list of child event dictionaries.
 
         Args:
@@ -267,13 +267,13 @@ class Screenshot(db.Base):
         return np.array(self.image)
 
     @classmethod
-    def take_screenshot(cls) -> Any:
+    def take_screenshot(cls: Any) -> Any:
         """Capture a screenshot."""
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event) -> None:
+    def crop_active_window(self, action_event: Any) -> None:
         """Crop the screenshot to the active window defined by the action event."""
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
@@ -307,7 +307,7 @@ class WindowEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_event(cls) -> Any:
+    def get_active_window_event(cls: Any) -> Any:
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 

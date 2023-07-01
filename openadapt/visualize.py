@@ -2,6 +2,7 @@
 
 from pprint import pformat
 from threading import Timer
+from typing import Any
 import html
 import os
 import string
@@ -74,7 +75,7 @@ CSS = string.Template(
 ).substitute(IMG_WIDTH_PCT=IMG_WIDTH_PCT,)
 
 
-def recursive_len(lst, key) -> int:
+def recursive_len(lst: list, key: Any) -> int:
     """
     Calculate the recursive length of a list based on a key.
 
@@ -97,7 +98,7 @@ def recursive_len(lst, key) -> int:
     return _len
 
 
-def format_key(key, value) -> str:
+def format_key(key: Any, value: Any) -> str:
     """
     Format a key and value for display.
 
@@ -114,7 +115,7 @@ def format_key(key, value) -> str:
         return key
 
 
-def indicate_missing(some, every, indicator) -> list:
+def indicate_missing(some: list, every: list, indicator: Any) -> list:
     """
     Indicate missing elements in a list.
 
@@ -142,7 +143,7 @@ def indicate_missing(some, every, indicator) -> list:
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN) -> str:
+def dict2html(obj: dict, max_children: int = MAX_TABLE_CHILDREN, max_len: int = MAX_TABLE_STR_LEN) -> str:
     """
     Convert a dictionary to an HTML representation.
 

@@ -28,7 +28,7 @@ from openadapt import common, config
 EMPTY = (None, [], {}, "")
 
 
-def configure_logging(logger, log_level) -> None:
+def configure_logging(logger: Any, log_level: str) -> None:
     """
     Configure the logging settings for OpenAdapt.
 
@@ -57,7 +57,7 @@ def configure_logging(logger, log_level) -> None:
     logger.debug(f"{log_level=}")
 
 
-def row2dict(row, follow=True) -> dict:
+def row2dict(row: Any, follow: bool = True) -> dict:
     """
     Convert a row object to a dictionary.
 
@@ -89,7 +89,7 @@ def row2dict(row, follow=True) -> dict:
     return row_dict
 
 
-def round_timestamps(events, num_digits) -> None:
+def round_timestamps(events: list, num_digits: int) -> None:
     """
     Round timestamps in a list of events.
 
@@ -108,7 +108,7 @@ def round_timestamps(events, num_digits) -> None:
 
 
 def rows2dicts(
-    rows, drop_empty=True, drop_constant=True, num_digits=None,
+    rows: list, drop_empty: bool = True, drop_constant: bool = True, num_digits: int = None,
 ) -> list[dict]:
     """
     Convert a list of rows to a list of dictionaries.
@@ -156,7 +156,7 @@ def rows2dicts(
     return row_dicts
 
 
-def override_double_click_interval_seconds(override_value) -> None:
+def override_double_click_interval_seconds(override_value: float) -> None:
     """
     Override the double click interval in seconds.
 
@@ -233,14 +233,14 @@ def get_monitor_dims() -> tuple:
 
 # TODO: move parameters to config
 def draw_ellipse(
-    x,
-    y,
-    image,
-    width_pct=0.03,
-    height_pct=0.03,
-    fill_transparency=0.25,
-    outline_transparency=0.5,
-    outline_width=2,
+    x: float,
+    y: float,
+    image: Image.Image,
+    width_pct: float = 0.03,
+    height_pct: float = 0.03,
+    fill_transparency: float = 0.25,
+    outline_transparency: float = 0.5,
+    outline_width: int = 2,
 ) -> tuple[Image.Image, Any, Any]:
     """
     Draw an ellipse on the image.
@@ -279,7 +279,7 @@ def draw_ellipse(
     return image, width, height
 
 
-def get_font(original_font_name, font_size) -> ImageFont.FreeTypeFont:
+def get_font(original_font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
     """
     Get a font object.
 
@@ -304,17 +304,17 @@ def get_font(original_font_name, font_size) -> ImageFont.FreeTypeFont:
 
 
 def draw_text(
-    x,
-    y,
-    text,
-    image,
-    font_size_pct=0.01,
-    font_name="Arial.ttf",
-    fill=(255, 0, 0),
-    stroke_fill=(255, 255, 255),
-    stroke_width=3,
-    outline=False,
-    outline_padding=10,
+    x: float,
+    y: float,
+    text: str,
+    image: Image,
+    font_size_pct: float = 0.01,
+    font_name: str = "Arial.ttf",
+    fill: tuple = (255, 0, 0),
+    stroke_fill: tuple = (255, 255, 255),
+    stroke_width: int = 3,
+    outline: bool = False,
+    outline_padding: int = 10,
 ) -> Image:
     """
     Draw text on the image.
@@ -369,19 +369,19 @@ def draw_text(
 
 
 def draw_rectangle(
-    x0,
-    y0,
-    x1,
-    y1,
-    image,
-    bg_color=(0, 0, 0),
-    fg_color=(255, 255, 255),
-    outline_color=(255, 0, 0),
-    bg_transparency=0.25,
-    fg_transparency=0,
-    outline_transparency=0.5,
-    outline_width=2,
-    invert=False,
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    image: Image,
+    bg_color: tuple = (0, 0, 0),
+    fg_color: tuple = (255, 255, 255),
+    outline_color: tuple = (255, 0, 0),
+    bg_transparency: float = 0.25,
+    fg_transparency: float = 0,
+    outline_transparency: float = 0.5,
+    outline_width: int = 2,
+    invert: bool = False,
 ) -> Image:
     """
     Draw a rectangle on the image.
@@ -420,7 +420,7 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(action_event) -> Any:
+def get_scale_ratios(action_event: Any) -> tuple[float, float]:
     """
     Get the scale ratios for the action event.
 
@@ -439,12 +439,12 @@ def get_scale_ratios(action_event) -> Any:
 
 
 def display_event(
-    action_event,
-    marker_width_pct=0.03,
-    marker_height_pct=0.03,
-    marker_fill_transparency=0.25,
-    marker_outline_transparency=0.5,
-    diff=False,
+    action_event: Any,
+    marker_width_pct: float = 0.03,
+    marker_height_pct: float = 0.03,
+    marker_fill_transparency: float = 0.25,
+    marker_outline_transparency: float = 0.5,
+    diff: bool = False,
 ) -> Image:
     """
     Display an action event on the image.
@@ -519,7 +519,7 @@ def display_event(
     return image
 
 
-def image2utf8(image) -> str:
+def image2utf8(image: Image) -> str:
     """
     Convert an image to UTF-8 format.
 
@@ -543,7 +543,7 @@ _start_time = None
 _start_perf_counter = None
 
 
-def set_start_time(value=None) -> float:
+def set_start_time(value: float = None) -> float:
     """
     Set the start time for performance measurements.
 
@@ -559,7 +559,7 @@ def set_start_time(value=None) -> float:
     return _start_time
 
 
-def get_timestamp(is_global=False) -> float:
+def get_timestamp(is_global: bool = False) -> float:
     """
     Get the current timestamp.
 
@@ -574,7 +574,7 @@ def get_timestamp(is_global=False) -> float:
 
 
 # https://stackoverflow.com/a/50685454
-def evenly_spaced(arr, N) -> list:
+def evenly_spaced(arr: list, N: list) -> list:
     """
     Get evenly spaced elements from the array.
 
@@ -679,7 +679,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
     os.system(f"open {fpath}")
 
 
-def strip_element_state(action_event) -> Any:
+def strip_element_state(action_event: Any) -> Any:
     """
     Strip the element state from the action event and its children.
 
@@ -695,7 +695,7 @@ def strip_element_state(action_event) -> Any:
     return action_event
 
 
-def get_functions(name) -> dict:
+def get_functions(name: str) -> dict:
     """
     Get a dictionary of function names to functions for all non-private functions.
 

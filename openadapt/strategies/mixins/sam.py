@@ -9,7 +9,7 @@ Usage:
         ...
 """
 
-from typing import Any
+from typing import Any, List
 
 from segment_anything import SamPredictor, sam_model_registry, SamAutomaticMaskGenerator
 from PIL import Image
@@ -40,8 +40,8 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     def __init__(
         self,
         recording: Recording,
-        model_name=MODEL_NAME,
-        checkpoint_dir_path=CHECKPOINT_DIR_PATH,
+        model_name: str = MODEL_NAME,
+        checkpoint_dir_path: str = CHECKPOINT_DIR_PATH,
     ) -> None:
         """
         Initialize the SAMReplayStrategyMixin.
@@ -56,7 +56,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         self.sam_predictor = SamPredictor(self.sam_model)
         self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
 
-    def _initialize_model(self, model_name, checkpoint_dir_path) -> Any:
+    def _initialize_model(self, model_name: str, checkpoint_dir_path: str) -> Any:
         """
         Initialize the SAM model.
 
@@ -76,7 +76,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
 
-    def get_screenshot_bbox(self, screenshot: Screenshot, show_plots=SHOW_PLOTS) -> str:
+    def get_screenshot_bbox(self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS) -> str:
         """
         Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
 
@@ -101,7 +101,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             plt.show()
         return str(bbox_list)
 
-    def get_click_event_bbox(self, screenshot, show_plots=SHOW_PLOTS) -> str:
+    def get_click_event_bbox(self, screenshot: Any, show_plots: bool = SHOW_PLOTS) -> str:
         """
         Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
 
@@ -186,7 +186,7 @@ def resize_image(image: Image) -> Image:
     return image_resized
 
 
-def show_mask(mask, ax, random_color=False) -> None:
+def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
     """
     Display the mask on the plot.
 
@@ -204,7 +204,7 @@ def show_mask(mask, ax, random_color=False) -> None:
     ax.imshow(mask_image)
 
 
-def show_points(coords, labels, ax, marker_size=120) -> None:
+def show_points(coords: np.ndarray, labels: np.ndarray, ax: Any, marker_size: int = 120) -> None:
     """
     Display the points on the plot.
 
@@ -236,7 +236,7 @@ def show_points(coords, labels, ax, marker_size=120) -> None:
     )
 
 
-def show_box(box, ax) -> None:
+def show_box(box: List[int], ax: Any) -> None:
     """
     Display the bounding box on the plot.
 
@@ -251,7 +251,7 @@ def show_box(box, ax) -> None:
     )
 
 
-def show_anns(anns) -> None:
+def show_anns(anns: Any) -> None:
     """
     Display the annotations on the plot.
 

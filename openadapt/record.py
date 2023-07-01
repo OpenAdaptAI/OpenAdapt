@@ -41,7 +41,7 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def args_to_str(*args) -> str:
+def args_to_str(*args: tuple) -> str:
     """
     Convert positional arguments to a string representation.
 
@@ -54,7 +54,7 @@ def args_to_str(*args) -> str:
     return ", ".join(map(str, args))
 
 
-def kwargs_to_str(**kwargs) -> str:
+def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
     """
     Convert keyword arguments to a string representation.
 
@@ -67,7 +67,7 @@ def kwargs_to_str(**kwargs) -> str:
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
 
-def trace(logger) -> Any:
+def trace(logger: Any) -> Any:
     """
     Decorator that logs the function entry and exit using the provided logger.
 
@@ -77,9 +77,9 @@ def trace(logger) -> Any:
     Returns:
         A decorator that can be used to wrap functions and log their entry and exit.
     """
-    def decorator(func) -> Any:
+    def decorator(func: Any) -> Any:
         @functools.wraps(func)
-        def wrapper_logging(*args, **kwargs) -> Any:
+        def wrapper_logging(*args: tuple, **kwargs: dict[str, Any]) -> Any:
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
@@ -99,7 +99,7 @@ def trace(logger) -> Any:
     return decorator
 
 
-def process_event(event, write_q, write_fn, recording_timestamp, perf_q) -> None:
+def process_event(event: Any, write_q: Any, write_fn: Any, recording_timestamp: int, perf_q: Any) -> None:
     """
     Process an event and take appropriate action based on its type.
 
@@ -305,7 +305,7 @@ def trigger_action_event(
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
-def on_move(event_q: queue.Queue, x: int, y: int, injected: bool,) -> None:
+def on_move(event_q: queue.Queue, x: int, y: int, injected: bool) -> None:
     """Handles the 'move' event.
 
     Args:
@@ -569,13 +569,13 @@ def read_keyboard_events(
         None
     """
 
-    def on_press(event_q, key, injected) -> None:
+    def on_press(event_q: queue.Queue, key: Any, injected: Any) -> None:
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
 
-    def on_release(event_q, key, injected) -> None:
+    def on_release(event_q: queue.Queue, key: Any, injected: Any) -> None:
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:

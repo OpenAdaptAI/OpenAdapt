@@ -46,8 +46,15 @@ def get_engine() -> Any:
     return engine
 
 
-def get_base(engine) -> Any:
-    """Create and return the base model with the provided engine."""
+def get_base(engine: Any) -> Any:
+    """Create and return the base model with the provided engine.
+
+    Args:
+        engine (Any): The database engine to bind to the base model.
+
+    Returns:
+        Any: The base model object.
+    """
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(cls=BaseModel, bind=engine, metadata=metadata,)
     return Base

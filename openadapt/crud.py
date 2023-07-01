@@ -28,7 +28,7 @@ window_events = []
 performance_stats = []
 
 
-def _insert(event_data, table, buffer=None) -> (Any | None):
+def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> (Any | None):
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
@@ -60,7 +60,7 @@ def _insert(event_data, table, buffer=None) -> (Any | None):
         return result
 
 
-def insert_action_event(recording_timestamp, event_timestamp, event_data) -> None:
+def insert_action_event(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
     """Insert an action event into the database.
 
     Args:
@@ -76,7 +76,7 @@ def insert_action_event(recording_timestamp, event_timestamp, event_data) -> Non
     _insert(event_data, ActionEvent, action_events)
 
 
-def insert_screenshot(recording_timestamp, event_timestamp, event_data) -> None:
+def insert_screenshot(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
     """Insert a screenshot into the database.
 
     Args:
@@ -92,7 +92,7 @@ def insert_screenshot(recording_timestamp, event_timestamp, event_data) -> None:
     _insert(event_data, Screenshot, screenshots)
 
 
-def insert_window_event(recording_timestamp, event_timestamp, event_data) -> None:
+def insert_window_event(recording_timestamp: int, event_timestamp: int, event_data: dict) -> None:
     """Insert a window event into the database.
 
     Args:
@@ -108,7 +108,7 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data) -> Non
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_perf_stat(recording_timestamp, event_type, start_time, end_time) -> None:
+def insert_perf_stat(recording_timestamp: int, event_type: str, start_time: float, end_time: float) -> None:
     """Insert an event performance stat into the database.
 
     Args:
@@ -126,7 +126,7 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time) -> N
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp) -> list[Any]:
+def get_perf_stats(recording_timestamp: int) -> list[Any]:
     """Get performance stats for a given recording.
 
     Args:
@@ -143,7 +143,7 @@ def get_perf_stats(recording_timestamp) -> list[Any]:
     )
 
 
-def insert_recording(recording_data) -> Recording:
+def insert_recording(recording_data: dict) -> Recording:
     """Insert a recording into the database.
 
     Args:
@@ -168,7 +168,7 @@ def get_latest_recording() -> (Any | None):
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording(timestamp) -> (Any | None):
+def get_recording(timestamp: int) -> (Any | None):
     """Get a recording by timestamp.
 
     Args:
@@ -180,7 +180,16 @@ def get_recording(timestamp) -> (Any | None):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table, recording_timestamp) -> list[Any]:
+def _get(table: Any, recording_timestamp: int) -> list[Any]:
+    """Retrieve records from the database table based on the recording timestamp.
+
+    Args:
+        table (Any): The database table to query.
+        recording_timestamp (int): The recording timestamp to filter the records.
+
+    Returns:
+        List[Any]: A list of records retrieved from the database table, ordered by timestamp.
+    """
     return (
         db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
@@ -189,7 +198,7 @@ def _get(table, recording_timestamp) -> list[Any]:
     )
 
 
-def get_action_events(recording) -> list[Any]:
+def get_action_events(recording: Recording) -> list[Any]:
     """Get action events for a given recording.
 
     Args:
@@ -201,7 +210,7 @@ def get_action_events(recording) -> list[Any]:
     return _get(ActionEvent, recording.timestamp)
 
 
-def get_screenshots(recording, precompute_diffs=False) -> list[Any]:
+def get_screenshots(recording: Recording, precompute_diffs: bool = False) -> list[Any]:
     """Get screenshots for a given recording.
 
     Args:
@@ -226,7 +235,7 @@ def get_screenshots(recording, precompute_diffs=False) -> list[Any]:
     return screenshots
 
 
-def get_window_events(recording) -> list[Any]:
+def get_window_events(recording: Recording) -> list[Any]:
     """Get window events for a given recording.
 
     Args:

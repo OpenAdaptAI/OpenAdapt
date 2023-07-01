@@ -8,6 +8,7 @@ Usage:
 
 from copy import deepcopy
 from pprint import pformat
+from typing import List
 
 # import datetime
 
@@ -148,7 +149,7 @@ class StatefulReplayStrategy(
         return active_action
 
 
-def get_action_dict_from_completion(completion) -> dict:
+def get_action_dict_from_completion(completion: str) -> dict:
     """
     Convert the completion to a dictionary containing action information.
 
@@ -167,7 +168,7 @@ def get_action_dict_from_completion(completion) -> dict:
 
 
 def get_window_state_diffs(
-    action_events, ignore_boundary_windows=IGNORE_BOUNDARY_WINDOWS,
+    action_events: List[models.ActionEvent], ignore_boundary_windows: bool = IGNORE_BOUNDARY_WINDOWS,
 ) -> list:
     """
     Get the differences in window state between consecutive action events.

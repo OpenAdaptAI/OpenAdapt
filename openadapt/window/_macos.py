@@ -69,7 +69,7 @@ def get_active_window_meta() -> dict:
     return active_window_info
 
 
-def get_active_window(window_meta) -> Any:
+def get_active_window(window_meta: dict) -> Any:
     """Get the active window from the given metadata.
 
     Args:
@@ -90,7 +90,7 @@ def get_active_window(window_meta) -> Any:
     return window
 
 
-def get_window_data(window_meta) -> dict:
+def get_window_data(window_meta: dict) -> dict:
     """Get the data of the window.
 
     Args:
@@ -104,7 +104,7 @@ def get_window_data(window_meta) -> dict:
     return state
 
 
-def dump_state(element, elements=None) -> (dict | list):
+def dump_state(element: Any, elements: set = None) -> (dict | list):
     """Dump the state of the given element and its descendants.
 
     Args:
@@ -167,7 +167,7 @@ def dump_state(element, elements=None) -> (dict | list):
 
 
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
-def deepconvert_objc(object) -> Any:
+def deepconvert_objc(object: Any) -> Any:
     """Convert all contents of an ObjC object to Python primitives.
 
     Args:
@@ -189,7 +189,7 @@ def deepconvert_objc(object) -> Any:
     return value
 
 
-def get_active_element_state(x, y) -> dict:
+def get_active_element_state(x: int, y: int) -> dict:
     """Get the state of the active element at the specified coordinates.
 
     Args:

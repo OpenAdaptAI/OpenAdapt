@@ -111,7 +111,7 @@ def get_text_from_df(df: pd.DataFrame) -> str:
     return result
 
 
-def unnest(df, explode, axis, suffixes=None) -> pd.DataFrame:
+def unnest(df: pd.DataFrame, explode: list, axis: int, suffixes: list = None) -> pd.DataFrame:
     """
     Unnest specified columns in a DataFrame by exploding values.
 
@@ -142,7 +142,7 @@ def unnest(df, explode, axis, suffixes=None) -> pd.DataFrame:
         return df1.join(df.drop(explode, axis=1), how="left",)
 
 
-def preprocess_text(text) -> str:
+def preprocess_text(text: str) -> str:
     """
     Preprocess the OCR text.
 
@@ -155,7 +155,7 @@ def preprocess_text(text) -> str:
     return text.strip()
 
 
-def get_centroid(row) -> tuple:
+def get_centroid(row: pd.Series) -> tuple:
     """
     Compute the centroid coordinates from the corners of a rectangle.
 
@@ -171,7 +171,7 @@ def get_centroid(row) -> tuple:
     return x, y
 
 
-def get_height(row) -> float:
+def get_height(row: pd.Series) -> float:
     """
     Get the height of a row.
 
@@ -184,7 +184,7 @@ def get_height(row) -> float:
     return abs(row["tl_y"] - row["bl_y"])
 
 
-def sort_rows(df) -> pd.DataFrame:
+def sort_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
     Sort the rows of the DataFrame.
 
@@ -201,7 +201,7 @@ def sort_rows(df) -> pd.DataFrame:
     return df
 
 
-def cluster_lines(df, eps) -> pd.DataFrame:
+def cluster_lines(df: pd.DataFrame, eps: float) -> pd.DataFrame:
     """
     Cluster lines in the DataFrame.
 
@@ -218,7 +218,7 @@ def cluster_lines(df, eps) -> pd.DataFrame:
     return df
 
 
-def cluster_words(df) -> pd.DataFrame:
+def cluster_words(df: pd.DataFrame) -> pd.DataFrame:
     """
     Cluster words in the DataFrame.
 
@@ -244,7 +244,7 @@ def cluster_words(df) -> pd.DataFrame:
     return pd.concat(line_dfs)
 
 
-def concat_text(df) -> str:
+def concat_text(df: pd.DataFrame) -> str:
     """
     Concatenate text from the DataFrame.
 

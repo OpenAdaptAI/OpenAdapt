@@ -87,7 +87,7 @@ def scrub_text_all(text: str) -> str:
     return config.SCRUB_CHAR * len(text)
 
 
-def scrub_image(image: Image, fill_color=config.SCRUB_FILL_COLOR) -> Image:
+def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Image:
     """
     Scrub the image of all PII/PHI using Presidio Image Redactor.
 

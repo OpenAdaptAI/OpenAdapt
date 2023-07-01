@@ -62,7 +62,7 @@ def get_active_window_state() -> dict:
         return None
 
 
-def get_active_element_state(x, y) -> dict:
+def get_active_element_state(x: int, y: int) -> dict:
     """Get the state of the active element at the specified coordinates.
 
     Args:

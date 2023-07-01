@@ -89,8 +89,8 @@ class OpenAIReplayStrategyMixin(BaseReplayStrategy):
 
 @cache.cache()
 def create_openai_completion(
-    model,
-    messages,
+    model: str,
+    messages: list,
     # temperatere=1,
     # top_p=1,
     # n=1,
@@ -130,7 +130,7 @@ def create_openai_completion(
 
 @cache.cache()
 def get_completion(
-    messages, prompt, model="gpt-4",
+    messages: list, prompt: str, model: str = "gpt-4",
 ) -> list:
     """
     Gets the LLM completion.
@@ -196,7 +196,7 @@ def get_completion(
 
 # XXX TODO not currently in use
 # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301") -> int:
+def num_tokens_from_messages(messages: list, model: str = "gpt-3.5-turbo-0301") -> int:
     """Returns the number of tokens used by a list of messages."""
     try:
         encoding = tiktoken.encoding_for_model(model)

@@ -16,10 +16,10 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        display_events=DISPLAY_EVENTS,
-        replay_events=REPLAY_EVENTS,
-        process_events=PROCESS_EVENTS,
-        sleep=SLEEP,
+        display_events: bool = DISPLAY_EVENTS,
+        replay_events: bool = REPLAY_EVENTS,
+        process_events: bool = PROCESS_EVENTS,
+        sleep: bool = SLEEP,
     ) -> None:
         """
         Initialize the NaiveReplayStrategy.

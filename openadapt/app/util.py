@@ -13,6 +13,7 @@ Example usage:
     set_dark(dark_mode, value)
 """
 
+from typing import Any
 import bz2
 import os
 import sys
@@ -21,7 +22,7 @@ from nicegui import ui
 from openadapt.scripts.reset_db import reset_db
 
 
-def clear_db(log=None) -> None:
+def clear_db(log: Any = None) -> None:
     """
     Clear the database.
 
@@ -38,7 +39,7 @@ def clear_db(log=None) -> None:
     sys.stdout = o
 
 
-def on_import(selected_file, delete=False, src="openadapt.db") -> None:
+def on_import(selected_file: str, delete: bool = False, src: str = "openadapt.db") -> None:
     """
     Import data from a selected file.
 
@@ -57,7 +58,7 @@ def on_import(selected_file, delete=False, src="openadapt.db") -> None:
     ui.notify("Imported data.")
 
 
-def on_export(dest) -> None:
+def on_export(dest: str) -> None:
     """
     Export data to a destination.
 
@@ -85,7 +86,7 @@ def on_export(dest) -> None:
     ui.notify("Exported data.")
 
 
-def sync_switch(switch, prop) -> None:
+def sync_switch(switch: Any, prop: Any) -> None:
     """
     Synchronize the value of a switch with a property.
 
@@ -96,7 +97,7 @@ def sync_switch(switch, prop) -> None:
     switch.value = prop.value
 
 
-def set_dark(dark_mode, value) -> None:
+def set_dark(dark_mode: Any, value: Any) -> None:
     """
     Set the dark mode.
 
