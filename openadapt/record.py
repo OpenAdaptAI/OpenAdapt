@@ -37,10 +37,9 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
-BYTE_TO_MB = float(2**20)
-NUM_MEMORY_STATS = 3
+NUM_MEMORY_STATS_TO_LOG = 3
 
-tr = tracker.SummaryTracker()
+tracker = tracker.SummaryTracker()
 tracemalloc.start()
 performance_snapshots = []
 
@@ -54,15 +53,16 @@ def log_memory_usage():
     first_snapshot, last_snapshot = performance_snapshots
     stats = last_snapshot.compare_to(first_snapshot, "lineno")
 
-    for stat in stats[:NUM_MEMORY_STATS]:
+    for stat in stats[:NUM_MEMORY_STATS_TO_LOG]:
         new_KiB = stat.size_diff / 1024
         total_KiB = stat.size / 1024
         new_blocks = stat.count_diff
         total_blocks = stat.count
-        source = stat.traceback.format()[0]
-        logger.info(f"{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=} {source=}")
+        source = stat.traceback.format()[0].strip()
+        logger.info(f"{source=}")
+        logger.info(f"\t{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=}")
 
-    trace_str = "\n".join(list(tr.format_diff()))
+    trace_str = "\n".join(list(tracker.format_diff()))
     logger.info(f"trace_str=\n{trace_str}")
 
 
@@ -503,20 +503,26 @@ def memory_writer(
     process = psutil.Process(record_pid)
 
     while not terminate_event.is_set():
-        mem_usage = getattr(process, "memory_info")()[0] / BYTE_TO_MB
+        memory_usage_bytes = 0
 
-        for child in getattr(process, "children")(recursive=True):
-            # after ctrl+c, children processes could terminate before running the next line
+        memory_info = process.memory_info()
+        rss = memory_info.rss  # Resident Set Size: non-swapped physical memory
+        memory_usage_bytes += rss
+
+        for child in process.children(recursive=True):
+            # after ctrl+c, children may terminate before the next line
             try:
-                mem_usage += getattr(child, "memory_info")()[0] / BYTE_TO_MB
+                child_memory_info = child.memory_info()
             except psutil.NoSuchProcess:
-                pass
+                continue
+            child_rss = child_memory_info.rss
+            rss += child_rss
 
         timestamp = utils.get_timestamp()
 
         crud.insert_memory_stat(
             recording_timestamp,
-            mem_usage,
+            rss,
             timestamp,
         )
     logger.info("Memory writer done")

@@ -105,14 +105,14 @@ def get_perf_stats(recording_timestamp):
     )
 
 
-def insert_memory_stat(recording_timestamp, memory_usage, timestamp):
+def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
     """
     Insert memory stat into db
     """
 
     memory_stat = {
         "recording_timestamp": recording_timestamp,
-        "memory_usage": memory_usage,
+        "memory_usage_bytes": memory_usage_bytes,
         "timestamp": timestamp,
     }
     _insert(memory_stat, MemoryStat, memory_stats)
