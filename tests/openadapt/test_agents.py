@@ -12,8 +12,12 @@ from openadapt.strategies.mixins.agents import TransformersAgentsMixin
 from transformers import Tool
 
 
-# requires valid recording
-@pytest.mark.skipif(get_latest_recording() is None, reason="no recording")
+skip_no_recording = get_latest_recording() is None
+skip_no_api_key = config.OPENAI_API_KEY == config._DEFAULTS["OPENAI_API_KEY"]
+
+
+@pytest.mark.skipif(skip_no_recording, reason="no recording")
+@pytest.mark.skipif(skip_no_api_key, reason="no api key")
 def test_prompt():
     agent = TransformersAgentsMixin(
         recording=get_latest_recording(), api_key=config.OPENAI_API_KEY
@@ -21,12 +25,16 @@ def test_prompt():
     assert agent.prompt(debug=False)
 
 
+@pytest.mark.skipif(skip_no_recording, reason="no recording")
+@pytest.mark.skipif(skip_no_api_key, reason="no api key")
 def test_captioning():
     agent = TransformersAgentsMixin(recording=None, api_key=config.OPENAI_API_KEY)
     assert agent.chat("caption the image", image=Image.open("assets/visualize.png"))
 
 
 # see https://huggingface.co/docs/transformers/custom_tools#using-custom-tools for more info
+@pytest.mark.skipif(skip_no_recording, reason="no recording")
+@pytest.mark.skipif(skip_no_api_key, reason="no api key")
 def test_tools():
     class StringReverser(Tool):
         name = "string_reverser"
