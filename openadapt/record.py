@@ -7,7 +7,7 @@ Usage:
 """
 
 from collections import namedtuple
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict
 import multiprocessing
 import os
@@ -16,16 +16,18 @@ import signal
 import sys
 import threading
 import time
+import tracemalloc
 
 from loguru import logger
+from pympler import tracker
 from pynput import keyboard, mouse
 import fire
 import mss.tools
+import psutil
 
 from openadapt import config, crud, utils, window
 
-import functools
-
+Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -34,14 +36,37 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
 }
-PLOT_PERFORMANCE = False
-
-Event = namedtuple("Event", ("timestamp", "type", "data"))
-
-global sequence_detected  # Flag to indicate if a stop sequence is detected
+PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
+NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
 
+stop_sequence_detected = False
+performance_snapshots = []
+tracker = tracker.SummaryTracker()
+tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
+
+
+def collect_stats():
+    performance_snapshots.append(tracemalloc.take_snapshot())
+
+
+def log_memory_usage():
+    assert len(performance_snapshots) == 2, performance_snapshots
+    first_snapshot, last_snapshot = performance_snapshots
+    stats = last_snapshot.compare_to(first_snapshot, "lineno")
+
+    for stat in stats[:NUM_MEMORY_STATS_TO_LOG]:
+        new_KiB = stat.size_diff / 1024
+        total_KiB = stat.size / 1024
+        new_blocks = stat.count_diff
+        total_blocks = stat.count
+        source = stat.traceback.format()[0].strip()
+        logger.info(f"{source=}")
+        logger.info(f"\t{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=}")
+
+    trace_str = "\n".join(list(tracker.format_diff()))
+    logger.info(f"trace_str=\n{trace_str}")
 
 
 def args_to_str(*args):
@@ -54,7 +79,7 @@ def kwargs_to_str(**kwargs):
 
 def trace(logger):
     def decorator(func):
-        @functools.wraps(func)
+        @wraps(func)
         def wrapper_logging(*args, **kwargs):
             func_name = func.__qualname__
             func_args = args_to_str(*args)
@@ -160,6 +185,7 @@ def process_events(
                 prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
+        del prev_event
         prev_event = event
     logger.info("done")
 
@@ -470,6 +496,41 @@ def performance_stats_writer(
     logger.info("performance stats writer done")
 
 
+def memory_writer(
+    recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
+):
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info("Memory writer starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    process = psutil.Process(record_pid)
+
+    while not terminate_event.is_set():
+        memory_usage_bytes = 0
+
+        memory_info = process.memory_info()
+        rss = memory_info.rss  # Resident Set Size: non-swapped physical memory
+        memory_usage_bytes += rss
+
+        for child in process.children(recursive=True):
+            # after ctrl+c, children may terminate before the next line
+            try:
+                child_memory_info = child.memory_info()
+            except psutil.NoSuchProcess:
+                continue
+            child_rss = child_memory_info.rss
+            rss += child_rss
+
+        timestamp = utils.get_timestamp()
+
+        crud.insert_memory_stat(
+            recording_timestamp,
+            rss,
+            timestamp,
+        )
+    logger.info("Memory writer done")
+
+
 @trace(logger)
 def create_recording(
     task_description: str,
@@ -521,7 +582,7 @@ def read_keyboard_events(
 
         # stop sequence code
         nonlocal stop_sequence_indices
-        global sequence_detected
+        global stop_sequence_detected
         canonical_key_name = getattr(canonical_key, "name", None)
 
         for i in range(0, len(STOP_SEQUENCES)):
@@ -547,7 +608,7 @@ def read_keyboard_events(
             # Check if the entire sequence has been entered correctly
             if stop_sequence_indices[i] == len(stop_sequence):
                 logger.info("Stop sequence entered! Stopping recording now.")
-                sequence_detected = True  # Set global flag to end recording
+                stop_sequence_detected = True
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -694,18 +755,29 @@ def record(
     )
     perf_stat_writer.start()
 
+    if PLOT_PERFORMANCE:
+        record_pid = os.getpid()
+        mem_plotter = multiprocessing.Process(
+            target=memory_writer,
+            args=(recording_timestamp, terminate_perf_event, record_pid),
+        )
+        mem_plotter.start()
+
     # TODO: discard events until everything is ready
 
-    global sequence_detected
-    sequence_detected = False
+    collect_stats()
+    global stop_sequence_detected
 
     try:
-        while not sequence_detected:
+        while not stop_sequence_detected:
             time.sleep(1)
 
         terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
+
+    collect_stats()
+    log_memory_usage()
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -720,6 +792,7 @@ def record(
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
+        mem_plotter.join()
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
