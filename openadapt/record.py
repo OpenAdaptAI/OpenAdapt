@@ -36,8 +36,10 @@ PROC_WRITE_BY_EVENT_TYPE = {
 }
 PLOT_PERFORMANCE = False
 
-
 Event = namedtuple("Event", ("timestamp", "type", "data"))
+
+global sequence_detected  # Flag to indicate if a stop sequence is detected
+STOP_SEQUENCES = config.STOP_SEQUENCES
 
 utils.configure_logging(logger, LOG_LEVEL)
 
@@ -407,6 +409,7 @@ def read_window_events(
         window_data = window.get_active_window_data()
         if not window_data:
             continue
+
         if window_data["title"] != prev_window_data.get("title") or window_data[
             "window_id"
         ] != prev_window_data.get("window_id"):
@@ -433,7 +436,7 @@ def read_window_events(
 
 
 @trace(logger)
-def performance_stats_writer (
+def performance_stats_writer(
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -506,11 +509,45 @@ def read_keyboard_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    # create list of indices for sequence detection
+    # one index for each stop sequence in STOP_SEQUENCES
+    stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
+
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
+
+        # stop sequence code
+        nonlocal stop_sequence_indices
+        global sequence_detected
+        canonical_key_name = getattr(canonical_key, "name", None)
+
+        for i in range(0, len(STOP_SEQUENCES)):
+            # check each stop sequence
+            stop_sequence = STOP_SEQUENCES[i]
+            # stop_sequence_indices[i] is the index for this stop sequence
+            # get canonical KeyCode of current letter in this sequence
+            canonical_sequence = keyboard_listener.canonical(
+                keyboard.KeyCode.from_char(stop_sequence[stop_sequence_indices[i]])
+            )
+
+            # Check if the pressed key matches the current key in this sequence
+            if (
+                canonical_key == canonical_sequence
+                or canonical_key_name == stop_sequence[stop_sequence_indices[i]]
+            ):
+                # increment this index
+                stop_sequence_indices[i] += 1
+            else:
+                # Reset index since pressed key doesn't match sequence key
+                stop_sequence_indices[i] = 0
+
+            # Check if the entire sequence has been entered correctly
+            if stop_sequence_indices[i] == len(stop_sequence):
+                logger.info("Stop sequence entered! Stopping recording now.")
+                sequence_detected = True  # Set global flag to end recording
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -659,9 +696,14 @@ def record(
 
     # TODO: discard events until everything is ready
 
+    global sequence_detected
+    sequence_detected = False
+
     try:
-        while True:
+        while not sequence_detected:
             time.sleep(1)
+
+        terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
 

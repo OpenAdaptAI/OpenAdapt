@@ -85,6 +85,20 @@ _DEFAULTS = {
     ],
 }
 
+# each string in STOP_STRS should only contain strings that don't contain special characters
+STOP_STRS = [
+    "oa.stop",
+    # TODO:
+    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
+]
+# each list in SPECIAL_CHAR_STOP_SEQUENCES should contain sequences
+# containing special chars, separated by keys
+SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
+# sequences that when typed, will stop the recording of ActionEvents in record.py
+STOP_SEQUENCES = [
+    list(stop_str) for stop_str in STOP_STRS
+] + SPECIAL_CHAR_STOP_SEQUENCES
+
 
 def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
