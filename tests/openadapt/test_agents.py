@@ -26,7 +26,6 @@ def test_prompt():
     assert agent.prompt(debug=False)
 
 
-@pytest.mark.skipif(skip_no_recording, reason="no recording")
 @pytest.mark.skipif(skip_no_api_key, reason="no api key")
 def test_captioning():
     agent = TransformersAgentsMixin(recording=None, api_key=config.OPENAI_API_KEY)
@@ -34,7 +33,6 @@ def test_captioning():
 
 
 # see https://huggingface.co/docs/transformers/custom_tools#using-custom-tools for more info
-@pytest.mark.skipif(skip_no_recording, reason="no recording")
 @pytest.mark.skipif(skip_no_api_key, reason="no api key")
 def test_tools():
     class StringReverser(Tool):

@@ -125,7 +125,6 @@ class TransformersAgentsMixin(OpenAiAgent):
                 diff = display_event(action_event, diff=True) if diffs else None
 
                 if debug:
-                    logger.info("creating debug directory")
                     os.makedirs(debug_path, exist_ok=True)
                     logger.info("writing debug files")
                     screenshot._image.save(
