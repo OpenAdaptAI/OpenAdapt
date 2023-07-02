@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.0 (2023-07-02)
+
+### Feature
+
+* **record:** Memory profiling ([`ef0d5eb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ef0d5ebcf400c216c0b16c7ffb552391544b0a0c))
+
 ## v0.2.0 (2023-07-02)
 
 ### Feature
