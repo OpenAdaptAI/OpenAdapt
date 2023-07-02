@@ -2,6 +2,16 @@
 
 <!--next-version-placeholder-->
 
+## v0.2.0 (2023-07-02)
+
+### Feature
+
+* Stop listener ([`385963c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/385963ce098fbb9bdbe7adce8be97ea6213b0c20))
+
+### Documentation
+
+* Contributing ([`5b9f735`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b9f735da42c0bcdda2e47747f2acabb0f5f45fd))
+
 ## v0.1.0 (2023-06-29)
 
 ### Feature
