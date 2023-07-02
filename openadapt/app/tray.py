@@ -21,17 +21,31 @@ app_thread = None
 g_tray = None
 
 
+from functools import partial
+
+
+def callback(recording, *args, **kwargs):
+    visualize.main(recording)
+
+
 def get_visualize_menu():
     recordings = get_all_recordings()
     menu_items = [MenuItem("latest", lambda: visualize.main())]
-    for i in range(1, len(recordings)):
+    for recording in recordings:
+        print(recording.task_description)
+    for recording in recordings[1:]:
         menu_items.append(
             MenuItem(
-                f"{recordings[i].task_description}",
-                lambda: visualize.main(recording=recordings[i]),
+                f"{recording.task_description}",
+                partial(callback, recording),
             )
         )
     return Menu(*menu_items)
+
+
+def _quick_record():
+    g_tray.notify("OpenAdapt", "Starting recording...")
+    quick_record()
 
 
 def new_tray():
@@ -50,7 +64,7 @@ def new_tray():
 
     image = Image.open(f"{FPATH}/assets/logo_inverted.png")
     menu = Menu(
-        MenuItem("Record", quick_record),
+        MenuItem("Record", _quick_record),
         MenuItem("Stop Recording", lambda: stop_record(g_tray)),
         MenuItem(
             "Visualize",
