@@ -4,7 +4,7 @@ set -x
 
 ################################    PARAMETERS   ################################
 
-# Change these if a different version is required
+# Change these if a different version of Python is required
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
@@ -19,16 +19,6 @@ Cleanup() {
         echo "Deleted OpenAdapt directory"
     fi
 }
-
-# Refresh Path Environment variable
-Refresh() {
-    export PATH="$PATH:$(echo "$PATH" | tr ':' '\n' | \
-    grep -v -e '^$' -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | \
-    uniq | tr '\n' ':')$(echo "$PATH" | tr ':' '\n' | \
-    grep -e '^/usr/local/share/dotnet' -e '^/usr/local/bin' | \
-    uniq | tr '\n' ':')"
-}
-
 
 # Run a command and ensure it did not fail
 RunAndCheck() {
@@ -94,9 +84,8 @@ CheckPythonExists() {
 
     # Otherwise, Python is not available
     echo "Error after installing python"
-
     Cleanup
-    exit
+    exit 1
 }
 
 ################################ INSTALLATION ################################
@@ -104,8 +93,7 @@ CheckPythonExists() {
 # Download brew
 if ! CheckCMDExists "brew"; then
     echo Downloading brew, follow the instructions
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    # Refresh # necessary ?
+    bash -c "`curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh`"
     brewExists=$(CheckCMDExists "brew")
     if ! CheckCMDExists "brew"; then
         echo "Failed to download brew"
@@ -131,6 +119,7 @@ cd OpenAdapt
 
 RunAndCheck "pip install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
+RunAndCheck "poetry run alembic upgrade head" "Update database"
+RunAndCheck "poetry run pytest" "Run tests"
 RunAndCheck "poetry shell" "Activate virtual environment"
-RunAndCheck "alembic upgrade head" "Update database"
-RunAndCheck "pytest" "Run tests"
+echo OpenAdapt installed successfully!
