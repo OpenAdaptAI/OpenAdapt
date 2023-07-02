@@ -1,0 +1,24 @@
+name: Semantic Release
+on:
+  push:
+    branches:
+      - main
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+      - name: Python Semantic Release
+        id: semantic_release
+        uses: relekang/python-semantic-release@master
+        with:
+          github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+          repository_username: __token__
+          repository_password: ${{ secrets.PYPI_TOKEN }}
+          git_committer_name: "OpenAdapt Bot"
+          git_committer_email: "bot@openadapt.ai"
