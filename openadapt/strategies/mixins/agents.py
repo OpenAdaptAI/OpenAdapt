@@ -8,14 +8,14 @@ Usage:
 """
 
 import os
+
+from loguru import logger
 from transformers import OpenAiAgent
+
 from openadapt import config
 from openadapt.events import get_events
 from openadapt.models import Recording
-from loguru import logger
-
 from openadapt.utils import display_event
-
 
 MODEL_NAME = config.OPENAI_MODEL_NAME
 

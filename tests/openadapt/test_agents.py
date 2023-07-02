@@ -3,14 +3,15 @@ Note: requires valid OpenAI API key to run tests. May use disk space for caching
 """
 
 import sys
-import pytest
 from io import StringIO
+
+import pytest
 from PIL import Image
+from transformers import Tool
+
 from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.strategies.mixins.agents import TransformersAgentsMixin
-from transformers import Tool
-
 
 skip_no_recording = get_latest_recording() is None
 skip_no_api_key = config.OPENAI_API_KEY == config._DEFAULTS["OPENAI_API_KEY"]
