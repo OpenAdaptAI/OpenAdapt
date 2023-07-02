@@ -94,6 +94,15 @@ CheckPythonExists() {
 if ! CheckCMDExists "brew"; then
     echo Downloading brew, follow the instructions
     bash -c "`curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh`"
+
+    # Check the type of chip
+    cpu=$(sysctl machdep.cpu.brand_string)
+        if [[ $cpu == *"Apple"* ]]; then
+            # Add brew to path
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        fi
+    
     brewExists=$(CheckCMDExists "brew")
     if ! CheckCMDExists "brew"; then
         echo "Failed to download brew"
