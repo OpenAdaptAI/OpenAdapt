@@ -112,3 +112,133 @@ def create_action_dict(
         }
     ]
     return output_dict
+
+def test_single_mouse_diff():
+    win_dict = create_win_dict(
+        title="Calculator",
+        left=0,
+        top=30,
+        width=1123,
+        height=749,
+        window_id=107079,
+        meta={},
+    )
+
+    act_dict = create_action_dict(
+        name="click",
+        mouse_x=25,
+        mouse_y=55,
+        mouse_button_name="left",
+        mouse_pressed=True,
+        element_state={},
+    )
+
+    active_win_dict = create_win_dict(
+        title="Calculator",
+        left=113,
+        top=64,
+        width=1123,
+        height=749,
+        window_id=107079,
+        meta={},
+    )
+
+    expected_dict = create_action_dict(
+        name="click",
+        mouse_x=138,
+        mouse_y=89,
+        mouse_button_name="left",
+        mouse_pressed=True,
+        element_state={},
+    )
+
+    test_generalizable_single_action(win_dict, act_dict, active_win_dict, expected_dict)
+
+
+def test_multi_click_diff():
+    win_dict = create_win_dict(
+        title="Calculator",
+        left=0,
+        top=30,
+        width=1123,
+        height=749,
+        window_id=107079,
+        meta={},
+    )
+
+    total_actions = []
+
+    for i in range(12):
+        act_dict_1 = create_action_dict(
+            name="click",
+            mouse_x=25 + i,
+            mouse_y=55,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        act_dict_2 = create_action_dict(
+            name="click",
+            mouse_x=25,
+            mouse_y=55 + i,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        act_dict_3 = create_action_dict(
+            name="click",
+            mouse_x=25 + i,
+            mouse_y=55 + i,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        new_dict = act_dict_1 + act_dict_2 + act_dict_3
+        total_actions += new_dict
+
+    active_win_dict = create_win_dict(
+        title="Calculator",
+        left=113,
+        top=64,
+        width=1123,
+        height=749,
+        window_id=107079,
+        meta={},
+    )
+
+    expected_actions = []
+    for i in range(12):
+        act_dict_1 = create_action_dict(
+            name="click",
+            mouse_x=138 + i,
+            mouse_y=89,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        act_dict_2 = create_action_dict(
+            name="click",
+            mouse_x=25,
+            mouse_y=89 + i,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        act_dict_3 = create_action_dict(
+            name="click",
+            mouse_x=138 + i,
+            mouse_y=89 + i,
+            mouse_button_name="left",
+            mouse_pressed=True,
+            element_state={},
+        )
+        new_dict = act_dict_1 + act_dict_2 + act_dict_3
+        expected_actions += new_dict
+
+    test_generalizable_single_action(
+        win_dict, total_actions, active_win_dict, expected_actions
+    )
+
+
+if __name__ == "__main__":
+    test_multi_click_diff()
