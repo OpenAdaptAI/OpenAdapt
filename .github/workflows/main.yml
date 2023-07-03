@@ -37,22 +37,21 @@ jobs:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Cache Homebrew packages
-        id: cache-tesseract
-        uses: actions/cache@v2
+      - name: Cache Homebrew Packages
+        id: cache-homebrew-packages
+        uses: actions/cache@v3
+        env:
+          cache-name: homebrew-packages
         with:
-          path: /usr/local/Homebrew
-          key: brew-packages-${{ runner.os }}-${{ hashFiles('Brewfile.lock.json') }}
-          restore-keys: |
-            brew-packages-${{ runner.os }}-
-            brew-packages-
+          path: $(brew --prefix)
+          key: ${{ matrix.os }}-${{ env.cache-name }}-${{ hashFiles('.config/brew/Brewfile') }}
 
       - run: poetry install --no-interaction --no-root
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Install Tesseract
         run: brew install tesseract
-        if: steps.cache-tesseract.outputs.cache-hit != 'true'
+        if: steps.cache-homebrew-packages.outputs.cache-hit != 'true'
 
       - name: Run tests
         run: poetry run pytest
