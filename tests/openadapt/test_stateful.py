@@ -218,7 +218,7 @@ def test_multi_click_diff():
         )
         act_dict_2 = create_action_dict(
             name="click",
-            mouse_x=25,
+            mouse_x=138,
             mouse_y=89 + i,
             mouse_button_name="left",
             mouse_pressed=True,
