@@ -110,6 +110,7 @@ def scrub_mp4(
         unit="frame",
         bar_format=progress_bar_format,
         colour="green",
+        dynamic_ncols=True,
     )
     progress_interval = 0.1  # Print progress every 10% of frames
     progress_threshold = math.floor(frame_count * progress_interval)

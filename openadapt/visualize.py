@@ -11,6 +11,7 @@ from bokeh.io import output_file
 from bokeh.layouts import row
 from bokeh.models.widgets import Div
 from loguru import logger
+from tqdm import tqdm
 
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
@@ -228,70 +229,87 @@ def main() -> None:
         ),
     ]
     logger.info(f"{len(action_events)=}")
-    for idx, action_event in enumerate(action_events):
-        if idx == MAX_EVENTS:
-            break
-        image = display_event(action_event)
-        diff = display_event(action_event, diff=True)
-        mask = action_event.screenshot.diff_mask
 
-        if SCRUB:
-            image = scrub.scrub_image(image)
-            diff = scrub.scrub_image(diff)
-            mask = scrub.scrub_image(mask)
+    num_events = (
+        min(MAX_EVENTS, len(action_events))
+        if MAX_EVENTS is not None
+        else len(action_events)
+    )
+    with tqdm(
+            total=num_events,
+            desc="Preparing HTML",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
+        for idx, action_event in enumerate(action_events):
+            if idx == MAX_EVENTS:
+                break
+            image = display_event(action_event)
+            diff = display_event(action_event, diff=True)
+            mask = action_event.screenshot.diff_mask
 
-        image_utf8 = image2utf8(image)
-        diff_utf8 = image2utf8(diff)
-        mask_utf8 = image2utf8(mask)
-        width, height = image.size
+            if SCRUB:
+                image = scrub.scrub_image(image)
+                diff = scrub.scrub_image(diff)
+                mask = scrub.scrub_image(mask)
 
-        action_event_dict = row2dict(action_event)
-        window_event_dict = row2dict(action_event.window_event)
+            image_utf8 = image2utf8(image)
+            diff_utf8 = image2utf8(diff)
+            mask_utf8 = image2utf8(mask)
+            width, height = image.size
 
-        if SCRUB:
-            action_event_dict = scrub.scrub_dict(action_event_dict)
-            window_event_dict = scrub.scrub_dict(window_event_dict)
+            action_event_dict = row2dict(action_event)
+            window_event_dict = row2dict(action_event.window_event)
 
-        rows.append(
-            [
-                row(
-                    Div(
-                        text=f"""
-                        <div class="screenshot">
-                            <img
-                                src="{image_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{diff_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{mask_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                        </div>
-                        <table>
-                            {dict2html(window_event_dict , None)}
-                        </table>
-                    """,
+            if SCRUB:
+                action_event_dict = scrub.scrub_dict(action_event_dict)
+                window_event_dict = scrub.scrub_dict(window_event_dict)
+
+            rows.append(
+                [
+                    row(
+                        Div(
+                            text=f"""
+                            <div class="screenshot">
+                                <img
+                                    src="{image_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{diff_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{mask_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                            </div>
+                            <table>
+                                {dict2html(window_event_dict , None)}
+                            </table>
+                        """,
+                        ),
+                        Div(
+                            text=f"""
+                            <table>
+                                {dict2html(action_event_dict)}
+                            </table>
+                        """
+                        ),
                     ),
-                    Div(
-                        text=f"""
-                        <table>
-                            {dict2html(action_event_dict)}
-                        </table>
-                    """
-                    ),
-                ),
-            ]
-        )
+                ]
+            )
+
+            progress.update()
+
+        progress.close()
 
     title = f"recording-{recording.id}"
     fname_out = f"recording-{recording.id}.html"
