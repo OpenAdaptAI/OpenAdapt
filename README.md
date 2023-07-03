@@ -34,6 +34,13 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## Install
 
+Required dependencies:
+- Python 3.10
+- Git
+- Tesseract (for OCR)
+
+Follow the setup instructions in setup.md for your operating system.
+
 
 Install with [Poetry](https://python-poetry.org/) (recommended):
 ```
