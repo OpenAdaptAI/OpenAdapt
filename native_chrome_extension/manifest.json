@@ -1,0 +1,27 @@
+{
+
+    "name": "openadapt",
+    "description": "Native messaging example add-on",
+    "version": "1.0",
+    "manifest_version": 3,
+    "icons": {
+      "48": "icons/MLDSAI_logo.png"
+    },
+    "action": {
+      "default_icon": "icons/MLDSAI_logo.png"
+    },
+    "background": {
+      "service_worker": "background.js"
+    },
+    "permissions": [
+      "activeTab",
+      "tabs",
+      "nativeMessaging",
+      "scripting"
+    ],
+    "content_scripts": [{
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }]
+  }
+  
