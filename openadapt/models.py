@@ -269,11 +269,11 @@ class Screenshot(db.Base):
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
-    
+
     def crop_active_window(self, action_event):
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
-        
+
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio
         x1 = x0 + window_event.width * width_ratio
@@ -315,6 +315,16 @@ class PerformanceStat(db.Base):
     end_time = sa.Column(sa.Integer)
     window_id = sa.Column(sa.String)
 
+
+class MemoryStat(db.Base):
+    __tablename__ = "memory_stat"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.Integer)
+    memory_usage_bytes = sa.Column(ForceFloat)
+    timestamp = sa.Column(ForceFloat)
+
+    
 class BrowserEvent(db.Base):
     
     bodyHTML = sa.Column(sa.String)
