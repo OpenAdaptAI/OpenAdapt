@@ -4,6 +4,9 @@
 # in order to ensure that stdin and stdout are opened in binary, rather
 # than text, mode.
 
+""" Module for the browser-side native messaging host/server. """
+
+
 import json
 import struct
 import subprocess as sp
