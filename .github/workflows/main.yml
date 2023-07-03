@@ -19,10 +19,10 @@ jobs:
           python-version: '3.10'
 
       - name: Cache Poetry install
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/Library/Caches/pypoetry
-          key: poetry-1.5.1
+          key: poetry-cache-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ env.POETRY_VERSION }}
 
       - uses: snok/install-poetry@v1
         with:
@@ -38,6 +38,7 @@ jobs:
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
 
       - name: Cache Homebrew packages
+        id: cache-tesseract
         uses: actions/cache@v2
         with:
           path: /usr/local/Homebrew
@@ -50,8 +51,8 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Install Tesseract
-        run: |
-          brew install tesseract || true
+        run: brew install tesseract
+        if: steps.cache-tesseract.outputs.cache-hit != 'true'
 
       - name: Run tests
         run: poetry run pytest
