@@ -126,7 +126,7 @@ RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
 
 cd OpenAdapt
 
-RunAndCheck "pip install poetry" "Install Poetry"
+RunAndCheck "pip3 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
 RunAndCheck "poetry run pytest" "Run tests"
