@@ -187,11 +187,12 @@ def deepconvert_objc(object):
             logger.warning(
                 f"Unknown type: {type(object)} - please report this on Github (https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+)"
             )
-    value = (
-        atomacos._converter.Converter().convert_value(value)
-        if not handled
-        else value  # no need to convert if we converted above
-    )
+    if value:
+        value = (
+            atomacos._converter.Converter().convert_value(value)
+            if not handled
+            else value  # no need to convert if we converted above
+        )
     return value
 
 
