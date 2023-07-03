@@ -38,10 +38,10 @@ function detectDOMChanges() {
   });
 }
 
-// Call the function to start detecting DOM changes
-detectDOMChanges();
 
-
+/*
+ * Function to get the positions of all elements in the page
+*/
 function getElementPositions() {
   // iterate over all elements in the page
   const elements = document.getElementsByTagName("*");
@@ -61,3 +61,6 @@ function getElementPositions() {
   // - on update, use mutations to only update elements that have changed
 }
 
+
+// Call the function to start detecting DOM changes
+detectDOMChanges();

@@ -1,8 +1,6 @@
 // System Diagram: https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
 
 // Native Messaging port
-
-
 let port = null;
 const hostName = 'openadapt';
 
