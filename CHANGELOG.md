@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.1 (2023-07-03)
+
+### Fix
+
+* **window:** Prevent SegmentationFault ([`cf0fc0b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf0fc0bebb984b1bc3b9f61920bf8d048361b220))
+
 ## v0.3.0 (2023-07-02)
 
 ### Feature
