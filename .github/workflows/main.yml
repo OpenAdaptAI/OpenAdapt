@@ -46,24 +46,12 @@ jobs:
             brew-packages-${{ runner.os }}-
             brew-packages-
 
-      # Install dependencies. `--no-root` means "install all dependencies but not the project
-      # itself", which is what you want to avoid caching _your_ code. The `if` statement
-      # ensures this only runs on a cache miss.
       - run: poetry install --no-interaction --no-root
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
-      # Now install _your_ project. This isn't necessary for many types of projects -- particularly
-      # things like Django apps don't need this. But it's a good idea since it fully exercises the
-      # pyproject.toml and makes sure that if you add things like console-scripts at some point
-      # they'll be installed and working.
-      - run: poetry install --no-interaction
-
-      # Install Tesseract if not restored from cache
       - name: Install Tesseract
         run: |
-          if [ ! -d "/usr/local/Cellar/tesseract" ]; then
-            brew install tesseract
-          fi
+          brew install tesseract || true
 
       - name: Run tests
         run: poetry run pytest
