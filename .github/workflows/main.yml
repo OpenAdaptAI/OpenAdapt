@@ -1,80 +1,39 @@
 name: Python CI
-
-on:
+'on':
   push:
     branches:
       - '**'
-
 jobs:
   run-ci:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v3
-
+      - name: Install Poetry
+        run: |
+          pipx install poetry
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Cache Poetry install
-        uses: actions/cache@v2
-        with:
-          path: ~/.local
-          key: poetry-1.5.1
-
-      - uses: snok/install-poetry@v1
-        with:
-          version: 1.5.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache deps
-        id: cache-deps
-        uses: actions/cache@v2
-        with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Cache Homebrew packages
-        uses: actions/cache@v2
-        with:
-          path: /usr/local/Homebrew
-          key: brew-packages-${{ runner.os }}-${{ hashFiles('Brewfile.lock.json') }}
-          restore-keys: |
-            brew-packages-${{ runner.os }}-
-            brew-packages-
-
-      # Install dependencies. `--no-root` means "install all dependencies but not the project
-      # itself", which is what you want to avoid caching _your_ code. The `if` statement
-      # ensures this only runs on a cache miss.
-      - run: poetry install --no-interaction --no-root
-        if: steps.cache-deps.outputs.cache-hit != 'true'
-
-      # Now install _your_ project. This isn't necessary for many types of projects -- particularly
-      # things like Django apps don't need this. But it's a good idea since it fully exercises the
-      # pyproject.toml and makes sure that if you add things like console-scripts at some point
-      # they'll be installed and working.
-      - run: poetry install --no-interaction
-
-      # Install Tesseract if not restored from cache
+          cache: poetry
+          cache-dependency-path: poetry.lock
+      - name: Set Poetry environment
+        run: |
+          poetry env use 3.10
+      - name: Install dependencies
+        run: |
+          poetry install --no-root
       - name: Install Tesseract
         run: |
           if [ ! -d "/usr/local/Cellar/tesseract" ]; then
             brew install tesseract
           fi
-
       - name: Run tests
         run: poetry run pytest
-
       - name: Check formatting with Black
         uses: psf/black@stable
         with:
-          options: "--check --exclude \"(alembic|venv)/\""
-
-      - name: Run Flake8 with Google Python style docstring check
-        uses: actions/checkout@v3
-
+          options: '--check --exclude "(alembic|venv)/"'
       - name: Run Flake8
-        run: poetry run flake8 --exclude alembic/versions --exclude .venv --docstring-convention google .
+        run: poetry run flake8 
