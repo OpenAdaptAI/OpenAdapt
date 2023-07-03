@@ -98,7 +98,7 @@ if ! CheckCMDExists "brew"; then
     # Check the type of chip
     cpu=$(sysctl machdep.cpu.brand_string)
         if [[ $cpu == *"Apple"* ]]; then
-            # Add brew to path
+            # Add brew to PATH
             echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
@@ -126,7 +126,7 @@ RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
 
 cd OpenAdapt
 
-RunAndCheck "pip3 install poetry" "Install Poetry"
+RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
 RunAndCheck "poetry run pytest" "Run tests"
