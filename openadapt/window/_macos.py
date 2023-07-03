@@ -187,7 +187,8 @@ def deepconvert_objc(object: Any) -> Any:
         value = dict(object)
         for k, v in value.items():
             value[k] = deepconvert_objc(v)
-    value = atomacos._converter.Converter().convert_value(value)
+    if value:
+        value = atomacos._converter.Converter().convert_value(value)
     return value
 
 

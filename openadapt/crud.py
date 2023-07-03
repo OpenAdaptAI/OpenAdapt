@@ -15,8 +15,9 @@ from openadapt.models import (
     Recording,
     WindowEvent,
     PerformanceStat,
+    MemoryStat
 )
-
+from openadapt.config import STOP_SEQUENCES
 
 BATCH_SIZE = 1
 
@@ -25,6 +26,7 @@ action_events = []
 screenshots = []
 window_events = []
 performance_stats = []
+memory_stats = []
 
 
 def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> Any | None:
@@ -149,26 +151,42 @@ def get_perf_stats(recording_timestamp: int) -> list[Any]:
         .all()
     )
 
+  
+def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
+    """Insert memory stat into db."""
 
-def insert_recording(recording_data: dict) -> Recording:
-    """Insert a recording into the database.
+    memory_stat = {
+        "recording_timestamp": recording_timestamp,
+        "memory_usage_bytes": memory_usage_bytes,
+        "timestamp": timestamp,
+    }
+    _insert(memory_stat, MemoryStat, memory_stats)
 
-    Args:
-        recording_data (dict): The data of the recording.
 
-    Returns:
-        Recording: The inserted recording object.
-    """
+def get_memory_stats(recording_timestamp):
+    """return memory stats for a given recording."""
+
+    return (
+        db
+            .query(MemoryStat)
+            .filter(MemoryStat.recording_timestamp == recording_timestamp)
+            .order_by(MemoryStat.timestamp)
+            .all()
+    )
+
+
+def insert_recording(recording_data):
+    """Insert the recording into to the db."""
     db_obj = Recording(**recording_data)
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
     return db_obj
 
-
+  
 def get_latest_recording() -> Any | None:
     """Get the latest recording.
-
+    
     Returns:
         Recording: The latest recording object.
     """
@@ -214,7 +232,70 @@ def get_action_events(recording: Recording) -> list[Any]:
     Returns:
         List[ActionEvent]: A list of action events for the recording.
     """
-    return _get(ActionEvent, recording.timestamp)
+    action_events = _get(ActionEvent, recording.timestamp)
+    # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
+    filter_stop_sequences(action_events)
+    return action_events
+    
+
+def filter_stop_sequences(action_events):
+    # check for ctrl c first
+    # TODO: want to handle sequences like ctrl c the same way as normal sequences
+    if len(action_events) >= 2:
+        if (
+            action_events[-1].canonical_key_char == "c"
+            and action_events[-2].canonical_key_name == "ctrl"
+        ):
+            # remove ctrl c
+            # ctrl c must be held down at same time, so no release event
+            action_events.pop()
+            action_events.pop()
+            return
+
+    # create list of indices for sequence detection
+    # one index for each stop sequence in STOP_SEQUENCES
+    # start from the back of the sequence
+    stop_sequence_indices = [len(sequence) - 1 for sequence in STOP_SEQUENCES]
+
+    # index of sequence to remove, -1 if none found
+    sequence_to_remove = -1
+    # number of events to remove
+    num_to_remove = 0
+
+    for i in range(0, len(STOP_SEQUENCES)):
+        # iterate backwards through list of action events
+        for j in range(len(action_events) - 1, -1, -1):
+            # never go past 1st action event, so if a sequence is longer than
+            # len(action_events), it can't have been in the recording
+            if (
+                action_events[j].canonical_key_char
+                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+                or action_events[j].canonical_key_name
+                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+            ) and action_events[j].name == "press":
+                # for press events, compare the characters
+                stop_sequence_indices[i] -= 1
+                num_to_remove += 1
+            elif action_events[j].name == "release" and (
+                action_events[j].canonical_key_char in STOP_SEQUENCES[i]
+                or action_events[j].canonical_key_name in STOP_SEQUENCES[i]
+            ):
+                # can consider any release event with any sequence char as part of the sequence
+                num_to_remove += 1
+            else:
+                # not part of the sequence, so exit inner loop
+                break
+
+        if stop_sequence_indices[i] == -1:
+            # completed whole sequence, so set sequence_to_remove to
+            # current sequence and exit outer loop
+            sequence_to_remove = i
+            break
+
+    if sequence_to_remove != -1:
+        # remove that sequence
+        for _ in range(0, num_to_remove):
+            action_events.pop()
 
 
 def get_screenshots(recording: Recording, precompute_diffs: bool = False) -> list[Any]:
