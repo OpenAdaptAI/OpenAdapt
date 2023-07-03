@@ -4,7 +4,7 @@ This module provides various utility functions used throughout OpenAdapt.
 """
 
 from io import BytesIO
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import Any
 import base64
 import fire
@@ -623,9 +623,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
         end_time = perf_stat.end_time
-        type_to_proc_times[event_type].append(
-            end_time - start_time
-        )
+        type_to_proc_times[event_type].append(end_time - start_time)
         event_types.add(event_type)
         type_to_timestamps[event_type].append(start_time)
 
@@ -646,7 +644,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     memory_ax = ax.twinx()
     memory_ax.plot(
-        timestamps, mem_usages, label="memory usage", color="red",
+        timestamps,
+        mem_usages,
+        label="memory usage",
+        color="red",
     )
     memory_ax.set_ylabel("Memory Usage (bytes)")
 

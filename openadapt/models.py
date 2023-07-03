@@ -345,6 +345,8 @@ class PerformanceStat(db.Base):
 
 
 class MemoryStat(db.Base):
+    """Class representing a memory usage statistic in the database."""
+
     __tablename__ = "memory_stat"
 
     id = sa.Column(sa.Integer, primary_key=True)

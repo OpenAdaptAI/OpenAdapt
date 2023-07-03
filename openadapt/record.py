@@ -10,6 +10,7 @@ from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Dict
 import multiprocessing
+import os
 import queue
 import signal
 import sys
@@ -46,11 +47,13 @@ tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def collect_stats():
+def collect_stats() -> None:
+    """Collects and appends performance snapshots using tracemalloc."""
     performance_snapshots.append(tracemalloc.take_snapshot())
 
 
-def log_memory_usage():
+def log_memory_usage() -> None:
+    """Logs memory usage stats and allocation trace based on snapshots."""
     assert len(performance_snapshots) == 2, performance_snapshots
     first_snapshot, last_snapshot = performance_snapshots
     stats = last_snapshot.compare_to(first_snapshot, "lineno")
@@ -101,10 +104,10 @@ def trace(logger: Any) -> Any:
     Returns:
         A decorator that can be used to wrap functions and log their entry and exit.
     """
-    
+
     def decorator(func: Any) -> Any:
         @wraps(func)
-        def wrapper_logging(*args, **kwargs):
+        def wrapper_logging(*args: Any, **kwargs: dict[str, Any]) -> Any:
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
@@ -568,7 +571,17 @@ def performance_stats_writer(
 
 def memory_writer(
     recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
-):
+) -> None:
+    """Writes memory usage statistics to the database.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+        terminate_event (multiprocessing.Event): The event used to terminate the process.
+        record_pid (int): The process ID to monitor memory usage for.
+
+    Returns:
+        None
+    """
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
@@ -640,9 +653,9 @@ def read_keyboard_events(
     """Reads keyboard events and adds them to the event queue.
 
     Args:
-        event_q: The event queue to add the keyboard events to.
-        terminate_event: The event to signal termination of event reading.
-        recording_timestamp: The timestamp of the recording.
+        event_q (queue.Queue): The event queue to add the keyboard events to.
+        terminate_event (multiprocessing.Event): The event to signal termination of event reading.
+        recording_timestamp (float): The timestamp of the recording.
 
     Returns:
         None
@@ -651,7 +664,19 @@ def read_keyboard_events(
     # one index for each stop sequence in STOP_SEQUENCES
     stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
 
-    def on_press(event_q, key, injected):
+    def on_press(
+        event_q: queue.Queue, key: keyboard.KeyboardEvent, injected: bool
+    ) -> None:
+        """Event handler for key press events.
+
+        Args:
+            event_q (queue.Queue): The event queue for processing key events.
+            key (keyboard.KeyboardEvent): The key event object representing the pressed key.
+            injected (bool): A flag indicating whether the key event was injected.
+
+        Returns:
+            None
+        """
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
@@ -687,7 +712,19 @@ def read_keyboard_events(
                 logger.info("Stop sequence entered! Stopping recording now.")
                 stop_sequence_detected = True
 
-    def on_release(event_q, key, injected):
+    def on_release(
+        event_q: queue.Queue, key: keyboard.KeyboardEvent, injected: bool
+    ) -> None:
+        """Event handler for key release events.
+
+        Args:
+            event_q (queue.Queue): The event queue for processing key events.
+            key (keyboard.KeyboardEvent): The key event object representing the released key.
+            injected (bool): A flag indicating whether the key event was injected.
+
+        Returns:
+            None
+        """
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
@@ -864,7 +901,7 @@ def record(
     collect_stats()
     log_memory_usage()
 
-    logger.info(f"joining...")
+    logger.info("joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()

@@ -3,7 +3,7 @@
 Module: crud.py
 """
 
-from typing import Any
+from typing import Any, List
 
 from loguru import logger
 import sqlalchemy as sa
@@ -15,7 +15,7 @@ from openadapt.models import (
     Recording,
     WindowEvent,
     PerformanceStat,
-    MemoryStat
+    MemoryStat,
 )
 from openadapt.config import STOP_SEQUENCES
 
@@ -151,10 +151,11 @@ def get_perf_stats(recording_timestamp: int) -> list[Any]:
         .all()
     )
 
-  
-def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
-    """Insert memory stat into db."""
 
+def insert_memory_stat(
+    recording_timestamp: int, memory_usage_bytes: int, timestamp: int
+) -> None:
+    """Insert memory stat into db."""
     memory_stat = {
         "recording_timestamp": recording_timestamp,
         "memory_usage_bytes": memory_usage_bytes,
@@ -163,19 +164,17 @@ def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
     _insert(memory_stat, MemoryStat, memory_stats)
 
 
-def get_memory_stats(recording_timestamp):
-    """return memory stats for a given recording."""
-
+def get_memory_stats(recording_timestamp: int) -> None:
+    """Return memory stats for a given recording."""
     return (
-        db
-            .query(MemoryStat)
-            .filter(MemoryStat.recording_timestamp == recording_timestamp)
-            .order_by(MemoryStat.timestamp)
-            .all()
+        db.query(MemoryStat)
+        .filter(MemoryStat.recording_timestamp == recording_timestamp)
+        .order_by(MemoryStat.timestamp)
+        .all()
     )
 
 
-def insert_recording(recording_data):
+def insert_recording(recording_data: Any) -> Recording:
     """Insert the recording into to the db."""
     db_obj = Recording(**recording_data)
     db.add(db_obj)
@@ -183,17 +182,17 @@ def insert_recording(recording_data):
     db.refresh(db_obj)
     return db_obj
 
-  
-def get_latest_recording() -> Any | None:
+
+def get_latest_recording() -> Recording:
     """Get the latest recording.
-    
+
     Returns:
         Recording: The latest recording object.
     """
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording(timestamp: int) -> Any | None:
+def get_recording(timestamp: int) -> Recording:
     """Get a recording by timestamp.
 
     Args:
@@ -236,9 +235,17 @@ def get_action_events(recording: Recording) -> list[Any]:
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
-    
 
-def filter_stop_sequences(action_events):
+
+def filter_stop_sequences(action_events: List[ActionEvent]) -> None:
+    """Filter stop sequences.
+
+    Args:
+        List[ActionEvent]: A list of action events for the recording.
+
+    Returns:
+        None
+    """
     # check for ctrl c first
     # TODO: want to handle sequences like ctrl c the same way as normal sequences
     if len(action_events) >= 2:
