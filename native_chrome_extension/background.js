@@ -5,18 +5,24 @@ let port = null;
 const hostName = 'openadapt';
 
 
-// Handle received messages from content.js
+/*
+ * Function to log messages to service-worker console
+*/
 function onReceived(response) {
   console.log(response);
 }
 
 
 
-// Message listener for content script
+/*
+ * Function to listen for messages from content script and 
+ * send them to the native app
+*/
 function messageListener(message, sender, sendResponse) {
   // console.log({ message, sender, sendResponse });
   port.postMessage(message);
 }
+
 
 port = chrome.runtime.connectNative(hostName);
 port.onMessage.addListener(onReceived);
