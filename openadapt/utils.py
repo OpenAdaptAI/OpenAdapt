@@ -18,7 +18,6 @@ from logging import StreamHandler
 
 from openadapt import common, config
 
-
 EMPTY = (None, [], {}, "")
 
 
@@ -435,50 +434,62 @@ def plot_performance(recording_timestamp: float = None) -> None:
         perf_q: A queue with performance data.
     """
 
-    type_to_prev_start_time = defaultdict(list)
-    type_to_start_time_deltas = defaultdict(list)
     type_to_proc_times = defaultdict(list)
-    type_to_count = Counter()
     type_to_timestamps = defaultdict(list)
+    event_types = set()
+
+    # avoid circular import
+    from openadapt import crud
 
     if not recording_timestamp:
-        # avoid circular import
-        from openadapt import crud
-
         recording_timestamp = crud.get_latest_recording().timestamp
     perf_stats = crud.get_perf_stats(recording_timestamp)
-    perf_stat_dicts = rows2dicts(perf_stats)
-    for perf_stat in perf_stat_dicts:
-        prev_start_time = type_to_prev_start_time.get(
-            perf_stat["event_type"], perf_stat["start_time"]
+    for perf_stat in perf_stats:
+        event_type = perf_stat.event_type
+        start_time = perf_stat.start_time
+        end_time = perf_stat.end_time
+        type_to_proc_times[event_type].append(
+            end_time - start_time
         )
-        start_time_delta = perf_stat["start_time"] - prev_start_time
-        type_to_start_time_deltas[perf_stat["event_type"]].append(start_time_delta)
-        type_to_prev_start_time[perf_stat["event_type"]] = perf_stat["start_time"]
-        type_to_proc_times[perf_stat["event_type"]].append(
-            perf_stat["end_time"] - perf_stat["start_time"]
-        )
-        type_to_count[perf_stat["event_type"]] += 1
-        type_to_timestamps[perf_stat["event_type"]].append(perf_stat["start_time"])
+        event_types.add(event_type)
+        type_to_timestamps[event_type].append(start_time)
 
-    y_data = {"proc_times": {}, "start_time_deltas": {}}
-    for i, event_type in enumerate(type_to_count):
-        type_count = type_to_count[event_type]
-        start_time_deltas = type_to_start_time_deltas[event_type]
-        proc_times = type_to_proc_times[event_type]
-        y_data["proc_times"][event_type] = proc_times
-        y_data["start_time_deltas"][event_type] = start_time_deltas
+    fig, ax = plt.subplots(1, 1, figsize=(20, 10))
+    for event_type in type_to_proc_times:
+        x = type_to_timestamps[event_type]
+        y = type_to_proc_times[event_type]
+        ax.scatter(x, y, label=event_type)
+    ax.legend()
+    ax.set_ylabel("Duration (seconds)")
 
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(20, 10))
-    for i, data_type in enumerate(y_data):
-        for event_type in y_data[data_type]:
-            x = type_to_timestamps[event_type]
-            y = y_data[data_type][event_type]
-            axes[i].scatter(x, y, label=event_type)
-        axes[i].set_title(data_type)
-        axes[i].legend()
+    mem_stats = crud.get_memory_stats(recording_timestamp)
+    timestamps = []
+    mem_usages = []
+    for mem_stat in mem_stats:
+        mem_usages.append(mem_stat.memory_usage_bytes)
+        timestamps.append(mem_stat.timestamp)
+
+    memory_ax = ax.twinx()
+    memory_ax.plot(
+        timestamps, mem_usages, label="memory usage", color="red",
+    )
+    memory_ax.set_ylabel("Memory Usage (bytes)")
+
+    if len(mem_usages) > 0:
+        # Get the handles and labels from both axes
+        handles1, labels1 = ax.get_legend_handles_labels()
+        handles2, labels2 = memory_ax.get_legend_handles_labels()
+
+        # Combine the handles and labels from both axes
+        all_handles = handles1 + handles2
+        all_labels = labels1 + labels2
+
+        ax.legend(all_handles, all_labels)
+
+    ax.set_title(f"{recording_timestamp=}")
+
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", f"{recording_timestamp}"]
+    fname_parts = ["performance", str(recording_timestamp)]
     fname = "-".join(fname_parts) + ".png"
     os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
     fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
