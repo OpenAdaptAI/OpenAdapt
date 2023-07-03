@@ -2416,6 +2416,20 @@ files = [
 ]
 
 [[package]]
+name = "namedpipe"
+version = "0.1.0"
+description = "Cross-platform named pipe manager"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "namedpipe-0.1.0-py3-none-any.whl", hash = "sha256:660293988e20de1762e26fce4ec3f5cd71ff798882aeb3bc77e24423823cf0d0"},
+    {file = "namedpipe-0.1.0.tar.gz", hash = "sha256:eb78bc132297c3f0332a5a7a3e31ac8fdca4a32c8262d715cba7bf65d1065651"},
+]
+
+[package.dependencies]
+pywin32 = {version = "*", markers = "platform_system == \"Windows\""}
+
+[[package]]
 name = "networkx"
 version = "3.1"
 description = "Python package for creating and manipulating graphs and networks"
@@ -5919,4 +5933,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "dee9d1c731617db5df7919ad57d2126eccd9ce3fd7a6ca0688adaeb93086daec"
+content-hash = "ba1aab0681d0568c7d60e8cdcda1bc7ad18099dcd57cc770af6732a762e3f56b"
