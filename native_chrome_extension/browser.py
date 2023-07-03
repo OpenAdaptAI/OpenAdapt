@@ -4,13 +4,29 @@
 # in order to ensure that stdin and stdout are opened in binary, rather
 # than text, mode.
 
-import sys
 import json
 import struct
+import subprocess as sp
+import sys
+import time
+
+from namedpipe import NPopen
 
 
-# Read a message from stdin and decode it.
-def getMessage():
+# Credit and Reference:
+# https://github.com/Rayquaza01/nativemessaging/blob/master/nativemessaging/
+
+def getMessage() -> Any:
+    """
+    Read a message from stdin and decode it.
+
+    Args:
+        None
+
+    Returns:
+        A Python object, corresponding to the decoded message.
+    """
+
     rawLength = sys.stdin.buffer.read(4)
     if len(rawLength) == 0:
         sys.exit(0)
@@ -19,9 +35,18 @@ def getMessage():
     return json.loads(message)
 
 
-# Encode a message for transmission,
-# given its content.
-def encodeMessage(messageContent):
+def encodeMessage(messageContent: Any) -> Dict[str, bytes]:
+    """
+    Encode a message for transmission,
+    given its content.
+    
+    Args:
+        messageContent: The content of the message to encode.
+    
+    Returns:
+        A dictionary containing the encoded message.
+    """
+
     # https://docs.python.org/3/library/json.html#basic-usage
     # To get the most compact JSON representation, you should specify 
     # (',', ':') to eliminate whitespace.
@@ -31,17 +56,41 @@ def encodeMessage(messageContent):
     return {'length': encodedLength, 'content': encodedContent}
 
 
-# Send an encoded message to stdout
-def sendMessage(encodedMessage):
+def sendMessage(encodedMessage: Dict[str, bytes]) -> None:
+    """
+    Send an encoded message to stdout
+    
+    Args:
+        encodedMessage: The encoded message to send.
+    
+    Returns:
+        None
+    """
+
     sys.stdout.buffer.write(encodedMessage['length'])
     sys.stdout.buffer.write(encodedMessage['content'])
     sys.stdout.buffer.flush()
 
 
-reply_num = 0
-while True:
-    receivedMessage = getMessage()
-    # pipe.send(receivedMessage)
-    reply_num += 1
-    sendMessage(encodeMessage(str(reply_num)))
-    sendMessage(encodeMessage(receivedMessage))
+def server():
+    """
+    The main function of the browser-side native messaging host/server.__annotations__
+    
+    Args:
+        None
+
+    Returns:
+        None
+    """
+
+    reply_num = 0
+    while True:
+        receivedMessage = getMessage()
+        # pipe.send(receivedMessage)
+        reply_num += 1
+        sendMessage(encodeMessage(str(reply_num)))
+        sendMessage(encodeMessage(receivedMessage))
+
+
+if __name__ == "__main__":
+    server()
