@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.0 (2023-07-03)
+
+### Feature
+
+* **install:** Download and install MacOS dependencies ([`25b70c0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/25b70c0af2d33c92003b574c56f55b027321b162))
+
 ## v0.3.1 (2023-07-03)
 
 ### Fix
