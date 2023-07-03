@@ -8,15 +8,18 @@ if __name__ == '__main__':
 
     for i in range(1):
         MODEL = config.RWKV_MODEL
-        MODEL = 4
+        MODEL = 0
         
-        instruction = "You are given a list of signals, each detailed in a JSON format. Please provide only the signal number that would return data that is most beneficial to the task of "
+        instruction = "You are given a task, and a list of signals in JSON format. Please provide only the id of the signal that is most relevant to the task."
 
         task_description = ("filling forms and submitting data on web pages")
         
-        input = f"""[{{'number': 1, 'title': 'restaurant menu', 'type': 'file', 'address': 'tests/openadapt/restaurant_menu_data.txt', 'description': 'Size: 17, Type: text/plain'}}
-,{{'number': 2, 'title': 'wikipedia web development page', 'type': 'web_url', 'address': 'https://en.wikipedia.org/wiki/Web_development', 'description': 'Length: 63230, Type: text/html; charset=UTF-8'}}
-,{{'number': 3, 'title': 'square root function', 'type': 'function', 'address': 'math.sqrt', 'description': 'Function: sqrt, Module: math, Summary: function is used to compute the square root of a given number.'}}]"""
+        input = f"""Task: creating a website
+
+Signals: 
+[{{'id': 0, 'type': 'file', 'descriptor': 'restaurant_menu_data.txt'}}
+,{{'id': 1, 'type': 'url', 'descriptor': 'https://en.wikipedia.org/wiki/Web_development'}}
+,{{'id': 2, 'type': 'function', 'descriptor': 'math.sqrt'}}]"""
         
         if config.USE_MODAL:
             Func = modal.Function.lookup("openadapt-rwkv", "run_RWKV")

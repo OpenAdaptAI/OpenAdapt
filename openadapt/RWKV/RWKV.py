@@ -3,8 +3,9 @@ import torch
 import numpy as np
 import modal
 import requests
-from huggingface_hub import hf_hub_download
+import tempfile
 
+from huggingface_hub import hf_hub_download
 from rwkv import rwkv_tokenizer
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE, PIPELINE_ARGS
@@ -106,7 +107,7 @@ def run_RWKV(model_number=0, instruction=None, task_description=None, input=None
         title = "RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
     elif (model_number == 2):
-        title = "RWKV-4-Raven-1B5-v10-Eng99%-Other1%-20230418-ctx4096"
+        title = "RWKV-4-Raven-1B5-v12-Eng98%-Other2%-20230520-ctx4096"
         model_path = hf_hub_download(repo_id="BlinkDL/rwkv-4-raven", filename=f"{title}.pth")
     elif (model_number == 3):
         title = "RWKV-4-Pile-14B-20230313-ctx8192-test1050"
@@ -136,8 +137,11 @@ def run_RWKV(model_number=0, instruction=None, task_description=None, input=None
         # Specify a path to save the tokenizer to if running in a local environment
         tokenizer_path = "/root/rwkv_model/20B_tokenizer.json"
         os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
-        with open(tokenizer_path, 'wb') as f:
-            f.write(response.content)
+        # with open(tokenizer_path, 'wb') as f:
+        #     f.write(response.content)
+        tokenizer = tempfile.NamedTemporaryFile(delete=False)
+        tokenizer.write(response.content)
+        tokenizer.close()
         #tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path)
     else:
         print(f"Failed to download tokenizer. Status code: {response.status_code}")
@@ -145,12 +149,13 @@ def run_RWKV(model_number=0, instruction=None, task_description=None, input=None
     
     if (model_number == 4):
         pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
-        pipeline.tokenizer = RWKV_TOKENIZER("/root/rwkv_model/20B_tokenizer.json")
+        pipeline.tokenizer = RWKV_TOKENIZER(tokenizer.name)
     elif (model_number == 5):
         pipeline = PIPELINE(model,"rwkv_vocab_v20230424")
     else:
-        pipeline = PIPELINE(model,"/root/rwkv_model/20B_tokenizer.json")
+        pipeline = PIPELINE(model,tokenizer.name)
 
+    os.unlink(tokenizer.name)
 
     if not parameters:
         temperature = 1.0
@@ -183,7 +188,7 @@ def run_RWKV(model_number=0, instruction=None, task_description=None, input=None
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 # Instruction: 
-{instruction} {task_description}
+{instruction}
 
 # Input: 
 {input}
