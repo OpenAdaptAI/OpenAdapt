@@ -91,7 +91,7 @@ def server():
         None
     """
 
-    sendMessage(encodeMessage("Waiting for client to connect..."))
+    # sendMessage(encodeMessage("Waiting for client to connect..."))
 
     with NPopen('wt', name=config.PIPE_NAME) as pipe:  # writable text pipe
         stream = pipe.wait()
@@ -106,7 +106,17 @@ def server():
                 # Write message to the stream
                 pipe.stream.write(receivedMessage)
                 pipe.stream.flush()
+                
+                
+def server2():
+    n = 0
+    while Ture:
+        n += 1
+        message = get_message()
+        sendMessage(encodeMessage(str(n)))
+        sendMessage(encodeMessage(message))
+
 
 
 if __name__ == "__main__":
-    server()
+    server2()
