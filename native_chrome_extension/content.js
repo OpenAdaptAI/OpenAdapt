@@ -24,9 +24,6 @@ function detectDOMChanges() {
       documentBody: document.body.outerHTML,
       documentHead: document.head.outerHTML
     });
-
-    // Clear the observer variable after handling mutations
-    observer = null;
   });
 
   // Start observing DOM changes
