@@ -15,10 +15,11 @@ import time
 
 from namedpipe import NPopen
 
+from openadapt import config
+
 
 # Credit and Reference:
 # https://github.com/Rayquaza01/nativemessaging/blob/master/nativemessaging/
-
 
 def getMessage() -> Any:
     """
@@ -90,13 +91,21 @@ def server():
         None
     """
 
-    reply_num = 0
-    while True:
-        receivedMessage = getMessage()
-        # pipe.send(receivedMessage)
-        reply_num += 1
-        sendMessage(encodeMessage(str(reply_num)))
-        sendMessage(encodeMessage(receivedMessage))
+    sendMessage(encodeMessage("Waiting for client to connect..."))
+
+    with NPopen('wt', name=config.PIPE_NAME) as pipe:  # writable text pipe
+        stream = pipe.wait()
+        sendMessage(encodeMessage("Client connected: " + str(stream)))
+
+        while True:
+            receivedMessage = getMessage()
+
+            # Check if client (record.py) is still connected
+            if pipe.stream:
+                message = message + '\n'
+                # Write message to the stream
+                pipe.stream.write(receivedMessage)
+                pipe.stream.flush()
 
 
 if __name__ == "__main__":
