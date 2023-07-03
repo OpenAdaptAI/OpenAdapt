@@ -26,4 +26,7 @@ function messageListener(message, sender, sendResponse) {
 
 port = chrome.runtime.connectNative(hostName);
 port.onMessage.addListener(onReceived);
+port.onDisconnect.addListener(function() {
+  port = null;
+});
 chrome.runtime.onMessage.addListener(messageListener); // Listen for messages from content scripts

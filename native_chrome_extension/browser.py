@@ -92,13 +92,18 @@ def server():
     """
 
     # sendMessage(encodeMessage("Waiting for client to connect..."))
+    
+    # Create a new txt file to show the brower has connected
+    with open('browser_connected.txt', 'w') as f:
+        f.write('Browser connected')
 
     with NPopen('wt', name=config.PIPE_NAME) as pipe:  # writable text pipe
         stream = pipe.wait()
         sendMessage(encodeMessage("Client connected: " + str(stream)))
-
+        dom_change_num = 0
         while True:
             receivedMessage = getMessage()
+            dom_change_num += 1
 
             # Check if client (record.py) is still connected
             if pipe.stream:
@@ -106,17 +111,20 @@ def server():
                 # Write message to the stream
                 pipe.stream.write(receivedMessage)
                 pipe.stream.flush()
+
+            sendMessage(encodeMessage(str(dom_change_num)))
+            sendMessage(encodeMessage(message))
                 
                 
 def server2():
+    sendMessage(encodeMessage("Waiting for client to connect..."))
     n = 0
-    while Ture:
+    while True:
         n += 1
         message = get_message()
         sendMessage(encodeMessage(str(n)))
         sendMessage(encodeMessage(message))
 
 
-
 if __name__ == "__main__":
-    server2()
+    server()
