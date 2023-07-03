@@ -14,7 +14,6 @@ matplotlib==3.6.2
 moviepy==1.0.3
 mss==6.1.0
 namedpipe==0.1.0
-nativemessaging==1.0.1
 nicegui==1.2.16
 nltk==3.8.1
 openai==0.27.5
