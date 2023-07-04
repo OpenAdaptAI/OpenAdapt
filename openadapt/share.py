@@ -91,7 +91,6 @@ def send_recording(recording_id: int) -> None:
                 logger.info(f"Deleted zip file of the recording: {zip_file_path}")
 
 
-
 def receive_recording(wormhole_code: str) -> None:
     """Receive a recording zip file from another computer using a wormhole code.
 

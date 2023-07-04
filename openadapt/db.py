@@ -186,7 +186,9 @@ def export_recording(recording_id: int) -> str:
     try:
         original_db = os.environ["DB_FNAME"]
     except KeyError:
-        logger.warning("Warning: The 'DB_FNAME' environment variable is not set in .env. Using default value: openadapt.db.")
+        logger.warning(
+            "Warning: The 'DB_FNAME' environment variable is not set in .env. Using default value: openadapt.db."
+        )
         original_db = "openadapt.db"
     sql, values = export_sql(recording_id)
     timestamp, db_file_path = create_db(recording_id, sql, values)
