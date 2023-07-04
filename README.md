@@ -50,7 +50,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 - Press Windows Key, type "powershell", and press Enter
 - Copy and paste the following command into the terminal, and press Enter:
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-  Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/MLDSAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
+   powershell -noexit -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.ps1' | Invoke-Expression"
   </pre>
 
 #### MacOS
@@ -58,7 +58,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 - Press Command+Space, type "terminal", and press Enter
 - Copy and paste the following command into the terminal, and press Enter:
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/install/HEAD/install_puterbot.sh)"
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
   </pre>
 
 <br/>
