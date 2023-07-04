@@ -32,15 +32,48 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
 4. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
+
 ## Install
 
-Required dependencies:
+<br/>
+
+| Installation Method  |               [Installation Scripts](https://openadapt.ai/)                |                               Manual Setup                                |
+|:--------------------:|:--------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
+|   Recommended for    |                            Non-technical users                             |                              Technical users                              |
+|     Ease of Use      | Streamlines the installation process for users unfamiliar with setup steps | Allows for more control and customization during the installation process |
+
+<br/>
+
+### Installation Scripts
+
+#### Windows
+- Press Windows Key, type "powershell", and press Enter
+- Copy and paste the following command into the terminal, and press Enter:
+  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
+  Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/MLDSAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
+  </pre>
+
+#### MacOS
+- Download and install Git and Python 3.10
+- Press Command+Space, type "terminal", and press Enter
+- Copy and paste the following command into the terminal, and press Enter:
+  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/install/HEAD/install_puterbot.sh)"
+  </pre>
+
+<br/>
+<br/>
+
+### Manual Setup
+
+Pre-requites:
 - Python 3.10
 - Git
 - Tesseract (for OCR)
 
-Follow the setup instructions [here](./SETUP.md).
+For the setup of any/all of the above dependencies, follow the steps [here](./SETUP.md).
 
+<br/>
 
 Install with [Poetry](https://python-poetry.org/) (recommended):
 ```
@@ -53,7 +86,9 @@ alembic upgrade head
 pytest
 ```
 
-Manual:
+OR
+
+Virual Enviornment (venv) + Pip:
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
