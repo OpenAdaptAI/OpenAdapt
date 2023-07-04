@@ -25,8 +25,10 @@ def get_active_window_state() -> dict:
                 - "window_id": ID of the active window.
     """
     # catch specific exceptions, when except happens do log.warning
-    active_window = get_active_window()
-
+    try:
+        active_window = get_active_window()
+    except RuntimeError as e:
+        return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
     data = get_element_properties(active_window)
