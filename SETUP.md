@@ -47,7 +47,7 @@
 #### Windows:
 - Download the following binary (.exe) file:
     [Tesseract Setup](https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.1.20230401.exe)
-- Run the setup file and Install the Tesseract OCR
+- Run the downloaded file to install Tesseract OCR
 - Add Tesseract to User and System PATH variable.
     Follow the following article for the above step.
     - See Step 5 and 6 in https://linuxhint.com/install-tesseract-windows/
