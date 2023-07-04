@@ -185,8 +185,9 @@ def deepconvert_objc(object):
         # we can ignore bools since atomacos converts them
         if not isinstance(object, bool):
             logger.warning(
-                f"Unknown type: {type(object)}: "
-                f"please report this on Github https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
+                f"Unknown type: {type(object)} - "
+                f"Please report this on GitHub: "
+                f"https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
             )
     value = atomacos._converter.Converter().convert_value(value)
     return value
