@@ -141,7 +141,6 @@ def dump_state(element, elements=None):
 def deepconvert_objc(object):
     """Convert all contents of an ObjC object to Python primitives."""
     value = object
-    handled = False
     if isinstance(object, AppKit.NSNumber):
         value = int(object)
     elif isinstance(object, AppKit.NSArray) or isinstance(object, list):
@@ -166,10 +165,11 @@ def deepconvert_objc(object):
             "h": float(h_value.group(1)) if h_value else None,
             "type": type_value.group(1) if type_value else None,
         }
-        handled = True
+        logger.warning(value)
+        return value
     elif isinstance(object, Foundation.NSURL):
         value = str(object.absoluteString())
-        handled = True
+        return value
     elif (
         isinstance(object, ApplicationServices.AXTextMarkerRangeRef)
         or isinstance(object, ApplicationServices.AXUIElementRef)
@@ -177,22 +177,18 @@ def deepconvert_objc(object):
         or isinstance(object, Quartz.CGPathRef)
     ):
         value = str(object)
-        handled = True
+        return value
     elif isinstance(object, Foundation.__NSCFAttributedString):
         value = str(object.string())
-        handled = True
+        return value
     else:
         # we can ignore bools since atomacos converts them
         if not isinstance(object, bool):
             logger.warning(
-                f"Unknown type: {type(object)} - please report this on Github (https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+)"
+                f"Unknown type: {type(object)}: "
+                f"please report this on Github https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
             )
-    if value:
-        value = (
-            atomacos._converter.Converter().convert_value(value)
-            if not handled
-            else value  # no need to convert if we converted above
-        )
+    value = atomacos._converter.Converter().convert_value(value)
     return value
 
 
