@@ -27,18 +27,19 @@ The goal is similar to that of
 except that we use transformers instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
-1. OpenAdapt is model agnostic;
-1. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted);
-2. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
-3. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
+1. OpenAdapt is model agnostic
+2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
+3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
+4. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
 ## Install
 
-Recommended: Install with [Poetry](https://python-poetry.org/):
+
+Install with [Poetry](https://python-poetry.org/) (recommended):
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
-pip install poetry
+pip3 install poetry
 poetry install
 poetry shell
 alembic upgrade head

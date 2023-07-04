@@ -7,7 +7,7 @@ Usage:
 """
 
 from collections import namedtuple
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict
 import multiprocessing
 import os
@@ -16,16 +16,20 @@ import signal
 import sys
 import threading
 import time
+import tracemalloc
 
 from loguru import logger
+from pympler import tracker
 from pynput import keyboard, mouse
+from tqdm import tqdm
 import fire
 import mss.tools
+import psutil
 
 from openadapt import config, crud, utils, window
+from openadapt.extensions import synchronized_queue as sq
 
-import functools
-
+Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
@@ -34,12 +38,37 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
 }
-PLOT_PERFORMANCE = False
+PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
+NUM_MEMORY_STATS_TO_LOG = 3
+STOP_SEQUENCES = config.STOP_SEQUENCES
 
-
-Event = namedtuple("Event", ("timestamp", "type", "data"))
-
+stop_sequence_detected = False
+performance_snapshots = []
+tracker = tracker.SummaryTracker()
+tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
+
+
+def collect_stats():
+    performance_snapshots.append(tracemalloc.take_snapshot())
+
+
+def log_memory_usage():
+    assert len(performance_snapshots) == 2, performance_snapshots
+    first_snapshot, last_snapshot = performance_snapshots
+    stats = last_snapshot.compare_to(first_snapshot, "lineno")
+
+    for stat in stats[:NUM_MEMORY_STATS_TO_LOG]:
+        new_KiB = stat.size_diff / 1024
+        total_KiB = stat.size / 1024
+        new_blocks = stat.count_diff
+        total_blocks = stat.count
+        source = stat.traceback.format()[0].strip()
+        logger.info(f"{source=}")
+        logger.info(f"\t{new_KiB=} {total_KiB=} {new_blocks=} {total_blocks=}")
+
+    trace_str = "\n".join(list(tracker.format_diff()))
+    logger.info(f"trace_str=\n{trace_str}")
 
 
 def args_to_str(*args):
@@ -52,14 +81,16 @@ def kwargs_to_str(**kwargs):
 
 def trace(logger):
     def decorator(func):
-        @functools.wraps(func)
+        @wraps(func)
         def wrapper_logging(*args, **kwargs):
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
 
             if func_kwargs != "":
-                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+                logger.info(
+                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
+                )
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
 
@@ -83,10 +114,10 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 @trace(logger)
 def process_events(
     event_q: queue.Queue,
-    screen_write_q: multiprocessing.Queue,
-    action_write_q: multiprocessing.Queue,
-    window_write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    screen_write_q: sq.SynchronizedQueue,
+    action_write_q: sq.SynchronizedQueue,
+    window_write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -158,6 +189,7 @@ def process_events(
                 prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
+        del prev_event
         prev_event = event
     logger.info("done")
 
@@ -165,7 +197,7 @@ def process_events(
 def write_action_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -184,7 +216,7 @@ def write_action_event(
 def write_screen_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -206,7 +238,7 @@ def write_screen_event(
 def write_window_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -226,10 +258,11 @@ def write_window_event(
 def write_events(
     event_type: str,
     write_fn: Callable,
-    write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    term_pipe: multiprocessing.Pipe,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -241,13 +274,37 @@ def write_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        term_pipe: A pipe for communicating \
+            the number of events left to be written.
     """
 
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while not terminate_event.is_set() or not write_q.empty():
+
+    num_left = 0
+    progress = None
+    while (
+        not terminate_event.is_set() or
+        not write_q.empty()
+    ):
+        if term_pipe.poll():
+            num_left = term_pipe.recv()
+            if num_left != 0 and progress is None:
+                progress = tqdm(
+                    total=num_left,
+                    desc="Writing to Database",
+                    unit="event",
+                    colour="green",
+                    dynamic_ncols=True,
+                )
+        if (
+            terminate_event.is_set() and
+            num_left != 0 and 
+            progress is not None
+        ):
+            progress.update()
         try:
             event = write_q.get_nowait()
         except queue.Empty:
@@ -255,6 +312,10 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
         logger.debug(f"{event_type=} written")
+
+    if progress is not None:
+        progress.close()
+
     logger.info(f"{event_type=} done")
 
 
@@ -347,7 +408,8 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None)
+        for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -355,7 +417,9 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
+    trigger_action_event(
+        event_q, {"name": event_name, **attrs, **canonical_attrs}
+    )
 
 
 def read_screen_events(
@@ -407,6 +471,7 @@ def read_window_events(
         window_data = window.get_active_window_data()
         if not window_data:
             continue
+
         if window_data["title"] != prev_window_data.get("title") or window_data[
             "window_id"
         ] != prev_window_data.get("window_id"):
@@ -433,8 +498,8 @@ def read_window_events(
 
 
 @trace(logger)
-def performance_stats_writer (
-    perf_q: multiprocessing.Queue,
+def performance_stats_writer(
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -465,6 +530,41 @@ def performance_stats_writer (
             end_time,
         )
     logger.info("performance stats writer done")
+
+
+def memory_writer(
+    recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
+):
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info("Memory writer starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    process = psutil.Process(record_pid)
+
+    while not terminate_event.is_set():
+        memory_usage_bytes = 0
+
+        memory_info = process.memory_info()
+        rss = memory_info.rss  # Resident Set Size: non-swapped physical memory
+        memory_usage_bytes += rss
+
+        for child in process.children(recursive=True):
+            # after ctrl+c, children may terminate before the next line
+            try:
+                child_memory_info = child.memory_info()
+            except psutil.NoSuchProcess:
+                continue
+            child_rss = child_memory_info.rss
+            rss += child_rss
+
+        timestamp = utils.get_timestamp()
+
+        crud.insert_memory_stat(
+            recording_timestamp,
+            rss,
+            timestamp,
+        )
+    logger.info("Memory writer done")
 
 
 @trace(logger)
@@ -506,11 +606,45 @@ def read_keyboard_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    # create list of indices for sequence detection
+    # one index for each stop sequence in STOP_SEQUENCES
+    stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
+
     def on_press(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
         logger.debug(f"{key=} {injected=} {canonical_key=}")
         if not injected:
             handle_key(event_q, "press", key, canonical_key)
+
+        # stop sequence code
+        nonlocal stop_sequence_indices
+        global stop_sequence_detected
+        canonical_key_name = getattr(canonical_key, "name", None)
+
+        for i in range(0, len(STOP_SEQUENCES)):
+            # check each stop sequence
+            stop_sequence = STOP_SEQUENCES[i]
+            # stop_sequence_indices[i] is the index for this stop sequence
+            # get canonical KeyCode of current letter in this sequence
+            canonical_sequence = keyboard_listener.canonical(
+                keyboard.KeyCode.from_char(stop_sequence[stop_sequence_indices[i]])
+            )
+
+            # Check if the pressed key matches the current key in this sequence
+            if (
+                canonical_key == canonical_sequence
+                or canonical_key_name == stop_sequence[stop_sequence_indices[i]]
+            ):
+                # increment this index
+                stop_sequence_indices[i] += 1
+            else:
+                # Reset index since pressed key doesn't match sequence key
+                stop_sequence_indices[i] = 0
+
+            # Check if the entire sequence has been entered correctly
+            if stop_sequence_indices[i] == len(stop_sequence):
+                logger.info("Stop sequence entered! Stopping recording now.")
+                stop_sequence_detected = True
 
     def on_release(event_q, key, injected):
         canonical_key = keyboard_listener.canonical(key)
@@ -562,13 +696,17 @@ def record(
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
-    screen_write_q = multiprocessing.Queue()
-    action_write_q = multiprocessing.Queue()
-    window_write_q = multiprocessing.Queue()
+    screen_write_q = sq.SynchronizedQueue()
+    action_write_q = sq.SynchronizedQueue()
+    window_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
-    perf_q = multiprocessing.Queue()
+    perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
-
+    
+    term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
+    term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
+    term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
+    
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -616,6 +754,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_screen,
         ),
     )
     screen_event_writer.start()
@@ -629,6 +768,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_action,
         ),
     )
     action_event_writer.start()
@@ -642,6 +782,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_window,
         ),
     )
     window_event_writer.start()
@@ -657,13 +798,34 @@ def record(
     )
     perf_stat_writer.start()
 
+    if PLOT_PERFORMANCE:
+        record_pid = os.getpid()
+        mem_plotter = multiprocessing.Process(
+            target=memory_writer,
+            args=(recording_timestamp, terminate_perf_event, record_pid),
+        )
+        mem_plotter.start()
+
     # TODO: discard events until everything is ready
 
+    collect_stats()
+    global stop_sequence_detected
+
     try:
-        while True:
+        while not stop_sequence_detected:
             time.sleep(1)
+
+        terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
+
+
+    collect_stats()
+    log_memory_usage()
+
+    term_pipe_parent_window.send(window_write_q.qsize())
+    term_pipe_parent_action.send(action_write_q.qsize())
+    term_pipe_parent_screen.send(screen_write_q.qsize())
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -674,10 +836,10 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
+        mem_plotter.join()
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"saved {recording_timestamp=}")
