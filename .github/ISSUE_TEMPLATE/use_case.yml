@@ -20,7 +20,15 @@ body:
     attributes:
       label: Task
       description: What is this use case about?
-      placeholder: Book a flight for 4 people to Barcelona
+      placeholder: Book a flight
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What background information is there?
+      placeholder: There are 4 people traveling to Barcelona, 2 of which require first class tickets
     validations:
       required: true
   - type: textarea
@@ -28,6 +36,10 @@ body:
     attributes:
       label: Workflow
       description: How is the task accomplished? Please place each step on a new line.
-      placeholder: Open Chrome -> Navigate to Google Flights -> Set the departure city -> ...
+      placeholder: | 
+        Open Chrome
+        Navigate to Google Flights
+        Set the departure city
+        ...
     validations:
       required: true
