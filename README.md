@@ -48,9 +48,9 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 #### Windows
 - Press Windows Key, type "powershell", and press Enter
-- Copy and paste the following command into the terminal, and press Enter:
+- Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   powershell -noexit -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.ps1' | Invoke-Expression"
+   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/MLDSAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
   </pre>
 
 #### MacOS
