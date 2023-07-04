@@ -9,6 +9,7 @@ from openadapt.events import (
 )
 
 from torch.nn.utils.rnn import pad_sequence
+from huggingface_hub import hf_hub_download
 
 PROCESS_EVENTS = False
 
@@ -17,7 +18,7 @@ def event_to_number_timestamp(action_event):
     # negative number for clicks = groups of 2
     # return as list
     if action_event.name == "click":
-        return [-action_event.mouse_x, -action_event.mouse_y], [action_event.timestamp,
+        return [- action_event.mouse_x, - action_event.mouse_y], [action_event.timestamp,
                                                                 action_event.timestamp]
     elif action_event.name == "press":
         # TODO: special chars? normal can use vk
@@ -48,10 +49,10 @@ if __name__ == "__main__":
 
     # Inference
     # Load the trained model for prediction
-    model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly")
+    model = AutoformerForPrediction.from_pretrained("kashif/autoformer-electricity-hourly")
     config = model.config
-    config.lags_sequence = [*range(1, 20)]
-
+    config.lags_sequence = [*range(1, 47)]
+    # config.scaling = False
     config.num_time_features = 1
     context_length = config.context_length + max(config.lags_sequence)
     prediction_length = config.prediction_length
@@ -75,6 +76,7 @@ if __name__ == "__main__":
 
     # Print the combined tensor
     print("Combined data shape:", combined_past_values_tensor.shape)
+    print(combined_past_values_tensor)
 
     # Create the mask tensor
     mask = (combined_past_values_tensor != 0).to(torch.bool)
@@ -95,6 +97,11 @@ if __name__ == "__main__":
 
     # Combine the full batches and the last batch into a single tensor
     combined_timestamps_tensor = pad_sequence(full_batches + [last_batch], batch_first=True)
+    shape = combined_timestamps_tensor.shape
+    num_elements = combined_timestamps_tensor.numel()
+    values = torch.arange(1, num_elements + 1)
+    values = values.reshape(shape)
+    combined_timestamps_tensor = values
 
     # Print the combined tensor
     print("Combined timestamps shape:", combined_timestamps_tensor.shape)
@@ -107,6 +114,10 @@ if __name__ == "__main__":
 
     # Expand dimensions to match the desired shape
     future_time_features_tensor = future_time_features.expand(combined_timestamps_tensor.shape[0], prediction_length, 1)
+    shape = future_time_features_tensor.shape
+    values = torch.arange(num_elements + 1, num_elements + prediction_length + 1)
+    values = values.reshape(shape)
+    future_time_features_tensor = values
 
     print(future_time_features_tensor.shape)
 
@@ -127,3 +138,4 @@ if __name__ == "__main__":
     print(mean_prediction.shape)
 
     # TODO: turn into ActionEvents
+    # TODO: make sure numbers are ints
