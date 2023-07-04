@@ -236,12 +236,12 @@ def main() -> None:
         else len(action_events)
     )
     with tqdm(
-            total=num_events,
-            desc="Preparing HTML",
-            unit="event",
-            colour="green",
-            dynamic_ncols=True,
-        ) as progress:
+        total=num_events,
+        desc="Preparing HTML",
+        unit="event",
+        colour="green",
+        dynamic_ncols=True,
+    ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break

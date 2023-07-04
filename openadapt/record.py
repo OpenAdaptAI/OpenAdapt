@@ -115,9 +115,7 @@ def trace(logger: Any) -> Any:
             func_kwargs = kwargs_to_str(**kwargs)
 
             if func_kwargs != "":
-                logger.info(
-                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
-                )
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
 
@@ -297,8 +295,7 @@ def write_events(
     terminate_event: multiprocessing.Event,
     term_pipe: multiprocessing.Pipe,
 ) -> None:
-    """
-    Write events of a specific type to the db using the provided write function.
+    """Write events of a specific type to the db using the provided write function.
 
     Args:
         event_type: The type of events to be written.
@@ -310,7 +307,6 @@ def write_events(
         term_pipe: A pipe for communicating \
             the number of events left to be written.
     """
-
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
@@ -318,10 +314,7 @@ def write_events(
 
     num_left = 0
     progress = None
-    while (
-        not terminate_event.is_set() or
-        not write_q.empty()
-    ):
+    while not terminate_event.is_set() or not write_q.empty():
         if term_pipe.poll():
             num_left = term_pipe.recv()
             if num_left != 0 and progress is None:
@@ -332,11 +325,7 @@ def write_events(
                     colour="green",
                     dynamic_ncols=True,
                 )
-        if (
-            terminate_event.is_set() and
-            num_left != 0 and 
-            progress is not None
-        ):
+        if terminate_event.is_set() and num_left != 0 and progress is not None:
             progress.update()
         try:
             event = write_q.get_nowait()
@@ -350,7 +339,7 @@ def write_events(
         progress.close()
 
     logger.info(f"{event_type=} done")
-    
+
 
 def trigger_action_event(
     event_q: queue.Queue, action_event_args: Dict[str, Any]
@@ -488,8 +477,7 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None)
-        for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -497,9 +485,7 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(
-        event_q, {"name": event_name, **attrs, **canonical_attrs}
-    )
+    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
 
 
 def read_screen_events(
@@ -826,11 +812,11 @@ def record(
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
-    
+
     term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
     term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
     term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
-    
+
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -942,7 +928,6 @@ def record(
         terminate_event.set()
     except KeyboardInterrupt:
         terminate_event.set()
-
 
     collect_stats()
     log_memory_usage()
