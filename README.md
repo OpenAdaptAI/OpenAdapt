@@ -71,7 +71,7 @@ Prerequisite:
 - Git
 - Tesseract (for OCR)
 
-For the setup of any/all of the above dependencies, follow the steps [here](./SETUP.md).
+For the setup of any/all of the above dependencies, follow the steps [SETUP.md](./SETUP.md).
 
 <br/>
 
