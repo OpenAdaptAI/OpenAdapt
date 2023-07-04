@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.1 (2023-07-04)
+
+### Fix
+
+* Add pympler and psutil ([`f853839`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f8538398d3c0da51dbd6fb56f3e891c7558df6fb))
+
 ## v0.5.0 (2023-07-03)
 
 ### Feature
