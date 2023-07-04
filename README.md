@@ -66,7 +66,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ### Manual Setup
 
-Pre-requites:
+Prerequisite:
 - Python 3.10
 - Git
 - Tesseract (for OCR)
