@@ -75,7 +75,7 @@ For the setup of any/all of the above dependencies, follow the steps [here](./SE
 
 <br/>
 
-Install with [Poetry](https://python-poetry.org/) (recommended):
+Install with [Poetry](https://python-poetry.org/) :
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
@@ -86,21 +86,6 @@ alembic upgrade head
 pytest
 ```
 
-OR
-
-Virual Enviornment (venv) + Pip:
-```
-git clone https://github.com/MLDSAI/OpenAdapt.git
-cd OpenAdapt
-python3.10 -m venv .venv
-source .venv/bin/activate
-pip install wheel
-pip install -r requirements.txt
-pip install -e .
-python -m spacy download en_core_web_trf
-alembic upgrade head
-pytest
-```
 
 ## Permissions
 
