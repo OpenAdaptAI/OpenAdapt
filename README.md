@@ -39,7 +39,7 @@ Required dependencies:
 - Git
 - Tesseract (for OCR)
 
-Follow the setup instructions in setup.md for your operating system.
+Follow the setup instructions [here](./setup.md).
 
 
 Install with [Poetry](https://python-poetry.org/) (recommended):
