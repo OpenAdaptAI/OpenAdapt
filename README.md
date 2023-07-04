@@ -228,7 +228,9 @@ alembic revision --autogenerate -m "<msg>"
 
 ### Pre-commit Hooks
 
-To ensure code quality and consistency, OpenAdapt uses pre-commit hooks. These hooks will be executed automatically before each commit to perform various checks and validations on your codebase.
+To ensure code quality and consistency, OpenAdapt uses pre-commit hooks. These hooks 
+will be executed automatically before each commit to perform various checks and
+validations on your codebase.
 
 The following pre-commit hooks are used in OpenAdapt:
 
@@ -240,8 +242,8 @@ The following pre-commit hooks are used in OpenAdapt:
 To set up the pre-commit hooks, follow these steps:
 
 1. Navigate to the root directory of your OpenAdapt repository.
-
-3. Run the following command to install the hooks:
+ 
+2. Run the following command to install the hooks:
 
 ```
 pre-commit install
