@@ -37,7 +37,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 <br/>
 
-| Installation Method  |               [Installation Scripts](https://openadapt.ai/)                |                               Manual Setup                                |
+| Installation Method  |               [Installation Scripts](https://openadapt.ai/#start)                |                               Manual Setup                                |
 |:--------------------:|:--------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
 |   Recommended for    |                            Non-technical users                             |                              Technical users                              |
 |     Ease of Use      | Streamlines the installation process for users unfamiliar with setup steps | Allows for more control and customization during the installation process |
