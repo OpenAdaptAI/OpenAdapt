@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+from functools import partial
 
 from PIL import Image
 from pystray import Icon, Menu, MenuItem
@@ -21,18 +22,12 @@ app_thread = None
 g_tray = None
 
 
-from functools import partial
-
-
-def callback(recording, *args, **kwargs):
-    visualize.main(recording)
-
-
 def get_visualize_menu():
+    def callback(recording, *args, **kwargs):
+        visualize.main(recording)
+
     recordings = get_all_recordings()
     menu_items = [MenuItem("latest", lambda: visualize.main())]
-    for recording in recordings:
-        print(recording.task_description)
     for recording in recordings[1:]:
         menu_items.append(
             MenuItem(
