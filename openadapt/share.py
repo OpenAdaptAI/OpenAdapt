@@ -19,7 +19,7 @@ LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def export_recording_to_folder(recording_id):
+def export_recording_to_folder(recording_id: int) -> None:
     """Export a recording to a zip file.
 
     Args:
@@ -47,10 +47,14 @@ def export_recording_to_folder(recording_id):
 
         logger.info(f"Created zip file of the recording: {zip_path}")
 
+        # delete db file
+        os.remove(recording_db_path)
+        logger.info(f"Deleted db file of the recording: {recording_db_path}")
+
         return zip_path
 
 
-def send_file(file_path):
+def send_file(file_path: str) -> None:
     """Send a file using the 'wormhole' command-line tool.
 
     Args:
@@ -66,7 +70,7 @@ def send_file(file_path):
         raise Exception(f"Error occurred while running 'wormhole send': {e}")
 
 
-def send_recording(recording_id):
+def send_recording(recording_id: int) -> None:
     """Export a recording to a zip file and send it to another computer.
 
     Args:
@@ -77,12 +81,18 @@ def send_recording(recording_id):
     if zip_file_path:
         try:
             send_file(zip_file_path)
+            # File sent successfully
         except Exception as e:
             logger.error(str(e))
-            # Handle the error as needed
+        finally:
+            # Delete the zip file after sending or in case of exception
+            if os.path.exists(zip_file_path):
+                os.remove(zip_file_path)
+                logger.info(f"Deleted zip file of the recording: {zip_file_path}")
 
 
-def receive_recording(wormhole_code):
+
+def receive_recording(wormhole_code: str) -> None:
     """Receive a recording zip file from another computer using a wormhole code.
 
     Args:

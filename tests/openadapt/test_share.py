@@ -31,8 +31,10 @@ class ShareTestCase(unittest.TestCase):
             self.assertIsNotNone(zip_file_path)
             self.assertTrue(os.path.exists(zip_file_path))
 
-        # Clean up the temporary file
-        os.remove(recording_db_path)
+        # Assert that the file is removed after calling export_recording_to_folder
+        self.assertFalse(
+            os.path.exists(recording_db_path), "Temporary file was not removed."
+        )
 
     def test_send_file(self):
         # Create a temporary file

@@ -57,7 +57,7 @@ Base = get_base(engine)
 Session = sessionmaker(bind=engine)
 
 
-def export_sql(recording_id):
+def export_sql(recording_id: int) -> tuple:
     from openadapt.crud import get_recording_by_id  # to avoid circular import
 
     """Export the recording data as SQL statements.
@@ -66,7 +66,7 @@ def export_sql(recording_id):
         recording_id (int): The ID of the recording.
 
     Returns:
-        str: The SQL statement to insert the recording into the output file.
+        sql (str): The SQL statement to insert the recording into the output file.
     """
     engine = sa.create_engine(config.DB_URL)
     Session = sessionmaker(bind=engine)
@@ -98,27 +98,7 @@ def export_sql(recording_id):
     return sql, values
 
 
-def create_db(recording_id, sql, values):
-    """Create a new database and import the recording data.
-
-    Args:
-        recording_id (int): The ID of the recording.
-        sql (str): The SQL statements to import the recording.
-
-    Returns:
-        tuple: A tuple containing the timestamp and the file path of the new database.
-    """
-    db_fname = f"recording_{recording_id}.db"
-
-    timestamp = time.time()
-    source_file_path = config.ENV_FILE_PATH
-    target_file_path = f"{config.ENV_FILE_PATH}-{timestamp}"
-    logger.info(
-        f"source_file_path={source_file_path}, target_file_path={target_file_path}"
-    )
-    shutil.copyfile(source_file_path, target_file_path)
-    config.set_db_url(db_fname)
-
+def update_db_fname_in_env_file(db_fname: str) -> None:
     with open(config.ENV_FILE_PATH, "r") as env_file:
         env_file_lines = [
             f"DB_FNAME={db_fname}\n"
@@ -130,20 +110,58 @@ def create_db(recording_id, sql, values):
     with open(config.ENV_FILE_PATH, "w") as env_file:
         env_file.writelines(env_file_lines)
 
-    engine = sa.create_engine(config.DB_URL)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    os.system("alembic upgrade head")
 
-    with engine.begin() as connection:
-        connection.execute(sql, values)
+def create_db(recording_id: int, sql: str, values) -> tuple[float, str]:
+    """Create a new database and import the recording data.
 
-    db_file_path = config.DB_FPATH.resolve()
+    Args:
+        recording_id (int): The ID of the recording.
+        sql (str): The SQL statements to import the recording.
 
-    return timestamp, db_file_path
+    Returns:
+        tuple: A tuple containing the timestamp and the file path of the new database.
+    """
+    db_file_path = None  # Initialize with a default value
+    try:
+        db_fname = f"recording_{recording_id}.db"
+        original_db_fname = config.DB_FNAME  # Store the original value
+
+        timestamp = time.time()
+        source_file_path = config.ENV_FILE_PATH
+        target_file_path = f"{config.ENV_FILE_PATH}-{timestamp}"
+        logger.info(
+            f"source_file_path={source_file_path}, target_file_path={target_file_path}"
+        )
+        shutil.copyfile(source_file_path, target_file_path)
+        config.set_db_url(db_fname)
+        update_db_fname_in_env_file(db_fname)
+        db_file_path = config.DB_FPATH.resolve()
+
+        engine = sa.create_engine(config.DB_URL)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        os.system("alembic upgrade head")
+
+        with engine.begin() as connection:
+            connection.execute(sql, values)
+
+        return timestamp, db_file_path
+
+    except KeyboardInterrupt:
+        # Perform cleanup if Ctrl+C is pressed during execution
+        if db_file_path and os.path.exists(db_file_path):
+            os.remove(db_file_path)
+        update_db_fname_in_env_file(original_db_fname)
+        raise
+
+    except Exception as e:
+        # Handle other exceptions
+        logger.error(f"Error occurred in create_db: {e}")
+        # Perform necessary cleanup or error handling actions
+        raise
 
 
-def restore_db(timestamp, original_db):
+def restore_db(timestamp: float, original_db: str) -> None:
     """Restore the database to a previous state.
 
     Args:
@@ -156,7 +174,7 @@ def restore_db(timestamp, original_db):
     engine = get_engine()
 
 
-def export_recording(recording_id):
+def export_recording(recording_id: int) -> str:
     """Export a recording by creating a new database, importing the recording, and then restoring the previous state.
 
     Args:
@@ -165,7 +183,11 @@ def export_recording(recording_id):
     Returns:
         str: The file path of the new database.
     """
-    original_db = os.environ["DB_FNAME"]
+    try:
+        original_db = os.environ["DB_FNAME"]
+    except KeyError:
+        logger.warning("Warning: The 'DB_FNAME' environment variable is not set in .env. Using default value: openadapt.db.")
+        original_db = "openadapt.db"
     sql, values = export_sql(recording_id)
     timestamp, db_file_path = create_db(recording_id, sql, values)
     restore_db(timestamp, original_db)
