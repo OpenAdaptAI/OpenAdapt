@@ -122,7 +122,12 @@ fi
 # for SVG mixin
 if ! CheckCMDExists "vtracer"; then
     if ! CheckCMDExists "cargo"; then
-       BrewInstall "rust"
+       brew install rust
+       if ! CheckCMDExists "cargo"; then
+            echo "Failed to download rust"
+            Cleanup
+            exit 1
+        fi
     fi
     RunAndCheck "cargo install vtracer" "install vtracer"
 fi
