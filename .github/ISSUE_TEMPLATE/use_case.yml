@@ -37,9 +37,9 @@ body:
       label: Workflow
       description: How is the task accomplished? Please place each step on a new line.
       placeholder: | 
-        Open Chrome
-        Navigate to Google Flights
-        Set the departure city
-        ...
+        1. Open Chrome
+        2. Navigate to Google Flights
+        3. Set the departure city
+        4. ...
     validations:
       required: true
