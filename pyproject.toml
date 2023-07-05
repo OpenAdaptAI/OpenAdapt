@@ -43,7 +43,7 @@ ascii_magic = "2.3.0"
 dictalchemy3 = "1.0.0"
 fire = "0.4.0"
 ipdb = "0.13.11"
-loguru = "0.7.0"
+loguru = "0.6.0"
 matplotlib = "3.6.2"
 mss = "6.1.0"
 openai = "0.27.5"
@@ -77,6 +77,8 @@ pillow = "9.5.0"
 pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+pyside6 = "^6.5.1.1"
+notify-py = "^0.3.42"
 
 
 [tool.poetry.dependencies.en_core_web_trf]
