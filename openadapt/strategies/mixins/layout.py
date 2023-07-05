@@ -12,15 +12,15 @@ from typing import List
 from transformers import pipeline
 import numpy as np
 
-from openadapt.models import Recording, Screenshot
+from openadapt.models import Recording, Screenshot, ActionEvent
 from openadapt.strategies.base import BaseReplayStrategy
 
 
 class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(self, recording: Recording, image_file_paths: List[str]):
-        super.__init__(recording)
-        self.image_list = [
+        super().__init__(recording)
+        self.images = [
             Image.open(img_file_path).convert("RGB")
             for img_file_path in image_file_paths
         ]
@@ -34,3 +34,6 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
         if output != []:
             return query_pipeline(image, question)[0]['answer']
         return "Unsupported document type, please input a text-based document"
+    
+    def get_next_action_event(self, screenshot: Screenshot) -> ActionEvent:
+        return super().get_next_action_event(screenshot)

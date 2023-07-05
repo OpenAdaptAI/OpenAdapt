@@ -1,5 +1,6 @@
 from typing import List
 from openadapt.models import Recording
+from openadapt.strategies.mixins.layout import LayoutExtractionReplayStrategyMixin
 from PIL import Image
 from transformers import pipeline
 import numpy as np
@@ -22,14 +23,14 @@ class TestQAPipeline:
         return "Unsupported document type, please input a text-based document"
 
 
-IMAGE_LIST = [
+IMAGE_FILE_NAMES = [
     "test_ladingbill.png",
     "test_invoice.png",
     "test_calendar.png",
     "test_calc.png",
 ]
 
-LAYOUT_OBJ = TestQAPipeline(image_file_paths=IMAGE_LIST)
+LAYOUT_OBJ = LayoutExtractionReplayStrategyMixin(Recording(), IMAGE_FILE_NAMES)
 
 
 def test_lading_bill_screenshot():
@@ -42,7 +43,7 @@ def test_lading_bill_screenshot():
 
     output_answers = []
     for q in questions:
-        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.image_list[0], question=q)
+        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.images[0], question=q)
         output_answers.append(output)
 
     expected_output = [
@@ -63,25 +64,25 @@ def test_invoice_screenshot():
         "What is the daily interest rate on overdue balances?",
     ]
 
-    answers = ["321-956-7331,", "MELBOURNE,", "45.00", "$ 3,165.00", "0.5%"]
+    expected_answers = ["321-956-7331,", "MELBOURNE,", "45.00", "$ 3,165.00", "0.5%"]
 
     output_answers = []
     for q in questions:
-        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.image_list[1], question=q)
+        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.images[1], question=q)
         output_answers.append(output)
-    assert output_answers == answers
+    assert output_answers == expected_answers
 
 
 def test_calendar_screenshot():
     output = LAYOUT_OBJ.document_query(
-        image=LAYOUT_OBJ.image_list[2], question="What month is it?"
+        image=LAYOUT_OBJ.images[2], question="What month is it?"
     )
-    assert output == "June" or output == "JUNE"
+    assert output.lower() == "june"
 
 
 def test_calc_screenshot():
     output = LAYOUT_OBJ.document_query(
-        image=LAYOUT_OBJ.image_list[3],
+        image=LAYOUT_OBJ.images[3],
         question="What is the current number on the screen?",
     )
     assert (
