@@ -165,7 +165,6 @@ def deepconvert_objc(object):
             "h": float(h_value.group(1)) if h_value else None,
             "type": type_value.group(1) if type_value else None,
         }
-        logger.warning(value)
         return value
     elif isinstance(object, Foundation.NSURL):
         value = str(object.absoluteString())
