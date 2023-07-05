@@ -43,7 +43,8 @@ class StatefulReplayStrategy(
             for action_event in self.recording.processed_action_events
         ][:-1]
         self.recording_action_diff_tups = zip(
-            self.recording_window_state_diffs, self.recording_action_strs
+            self.recording_window_state_diffs,
+            self.recording_action_strs,
         )
         self.recording_action_idx = 0
 

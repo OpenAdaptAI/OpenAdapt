@@ -41,7 +41,7 @@ class SharedCounter(object):
             self.count.value += n
 
     @property
-    def value(self) -> Any:
+    def value(self) -> int:
         """Return the value of the counter."""
         return self.count.value
 
@@ -73,7 +73,7 @@ class SynchronizedQueue(Queue):
         super().__init__(ctx=multiprocessing.get_context())
         self.size = SharedCounter(0)
 
-    def __getstate__(self) -> dict[str, Any]:
+    def __getstate__(self) -> dict[str, int]:
         """Help to make SynchronizedQueue instance serializable.
 
         Note that we record the parent class state, which is the state of the
@@ -102,13 +102,13 @@ class SynchronizedQueue(Queue):
         super().put(*args, **kwargs)
         self.size.increment(1)
 
-    def get(self, *args: tuple, **kwargs: dict[str, Any]) -> None:
+    def get(self, *args: tuple, **kwargs: dict[str, Any]) -> Any:
         """Get an item from the queue and decrement the size counter."""
         item = super().get(*args, **kwargs)
         self.size.increment(-1)
         return item
 
-    def qsize(self) -> Any:
+    def qsize(self) -> int:
         """Get the current size of the queue.
 
         Returns:

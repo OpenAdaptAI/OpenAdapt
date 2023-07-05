@@ -144,7 +144,9 @@ def indicate_missing(some: list, every: list, indicator: Any) -> list:
 
 
 def dict2html(
-    obj: dict, max_children: int = MAX_TABLE_CHILDREN, max_len: int = MAX_TABLE_STR_LEN
+    obj: dict,
+    max_children: int = MAX_TABLE_CHILDREN,
+    max_len: int = MAX_TABLE_STR_LEN,
 ) -> str:
     """Convert a dictionary to an HTML representation.
 

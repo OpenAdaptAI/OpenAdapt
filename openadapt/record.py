@@ -130,7 +130,11 @@ def trace(logger: Any) -> Any:
 
 
 def process_event(
-    event: Any, write_q: Any, write_fn: Any, recording_timestamp: int, perf_q: Any
+    event: Any,
+    write_q: Any,
+    write_fn: Any,
+    recording_timestamp: int,
+    perf_q: Any,
 ) -> None:
     """Process an event and take appropriate action based on its type.
 
@@ -185,7 +189,10 @@ def process_events(
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         if prev_event is not None:
-            assert event.timestamp > prev_event.timestamp, (event, prev_event)
+            assert event.timestamp > prev_event.timestamp, (
+                event,
+                prev_event,
+            )
         if event.type == "screen":
             prev_screen_event = event
         elif event.type == "window":
@@ -594,7 +601,9 @@ def performance_stats_writer(
 
 
 def memory_writer(
-    recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+    record_pid: int,
 ) -> None:
     """Writes memory usage statistics to the database.
 
@@ -689,7 +698,9 @@ def read_keyboard_events(
     stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
 
     def on_press(
-        event_q: queue.Queue, key: keyboard.KeyboardEvent, injected: bool
+        event_q: queue.Queue,
+        key: keyboard.KeyboardEvent,
+        injected: bool,
     ) -> None:
         """Event handler for key press events.
 
@@ -737,7 +748,9 @@ def read_keyboard_events(
                 stop_sequence_detected = True
 
     def on_release(
-        event_q: queue.Queue, key: keyboard.KeyboardEvent, injected: bool
+        event_q: queue.Queue,
+        key: keyboard.KeyboardEvent,
+        injected: bool,
     ) -> None:
         """Event handler for key release events.
 
@@ -813,9 +826,18 @@ def record(
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
 
-    term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
-    term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
-    term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
+    (
+        term_pipe_parent_window,
+        term_pipe_child_window,
+    ) = multiprocessing.Pipe()
+    (
+        term_pipe_parent_screen,
+        term_pipe_child_screen,
+    ) = multiprocessing.Pipe()
+    (
+        term_pipe_parent_action,
+        term_pipe_child_action,
+    ) = multiprocessing.Pipe()
 
     window_event_reader = threading.Thread(
         target=read_window_events,
@@ -912,7 +934,11 @@ def record(
         record_pid = os.getpid()
         mem_plotter = multiprocessing.Process(
             target=memory_writer,
-            args=(recording_timestamp, terminate_perf_event, record_pid),
+            args=(
+                recording_timestamp,
+                terminate_perf_event,
+                record_pid,
+            ),
         )
         mem_plotter.start()
 

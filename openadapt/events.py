@@ -1,7 +1,10 @@
-"""This module provides functionality for importing necessary modules and packages."""
+"""This module provides functionality for aggregating events."""
+
+# TODO: rename this file to folds.py as per
+# https://drive.google.com/file/d/1_fYoFncuI0TKghKWiMvP13hHEnIqAHI_/view?usp=drive_link
 
 import time
-from typing import Any
+from typing import Any, Callable, List
 
 from loguru import logger
 from pprint import pformat
@@ -12,10 +15,15 @@ from openadapt import common, crud, models, utils
 
 
 MAX_PROCESS_ITERS = 1
+MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD = 1
+MOUSE_MOVE_EVENT_MERGE_MIN_IDX_DELTA = 5
+KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS = True
 
 
 def get_events(
-    recording: models.Recording, process: bool = True, meta: bool = None
+    recording: models.Recording,
+    process: bool = True,
+    meta: dict = None,
 ) -> list[models.ActionEvent]:
     """Retrieve events for a recording.
 
@@ -28,7 +36,6 @@ def get_events(
 
     Returns:
         list: A list of action events.
-
     """
     start_time = time.time()
     action_events = crud.get_action_events(recording)
@@ -56,7 +63,11 @@ def get_events(
                 f"{num_window_events=} "
                 f"{num_screenshots=}"
             )
-            action_events, window_events, screenshots = process_events(
+            (
+                action_events,
+                window_events,
+                screenshots,
+            ) = process_events(
                 action_events,
                 window_events,
                 screenshots,
@@ -77,7 +88,7 @@ def get_events(
     if meta is not None:
         format_num = (
             lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"
-        )  # noqa
+        )  # noqa: E731
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
             num_action_events,
@@ -105,7 +116,7 @@ def get_events(
 
 
 def make_parent_event(
-    child: models.ActionEvent, extra: dict = None
+    child: models.ActionEvent, extra: dict[str, Any] = None
 ) -> models.ActionEvent:
     """Create a parent event from a child event.
 
@@ -135,8 +146,8 @@ def make_parent_event(
 
 
 def merge_consecutive_mouse_move_events(
-    events: list, by_diff_distance: bool = False
-) -> list:
+    events: list[models.ActionEvent], by_diff_distance: bool = False
+) -> list[models.ActionEvent]:
     """Merge consecutive mouse move events into a single move event.
 
     Args:
@@ -151,21 +162,21 @@ def merge_consecutive_mouse_move_events(
     """
     _all_slowdowns = []
 
-    def is_target_event(event: Any, state: Any) -> bool:
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
         return event.name == "move"
 
     def get_merged_events(
-        to_merge: Any,
-        state: Any,
-        distance_threshold: int = 1,
+        to_merge: list[models.ActionEvent],
+        state: dict[str, Any],
+        distance_threshold: int = MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD,
         # Minimum number of consecutive events (in which the distance between
         # the cursor and the nearest non-zero diff pixel is greater than
         # distance_threshold) in order to result in a separate parent event.
         # Larger values merge more events under a single parent.
         # TODO: verify logic is correct (test)
         # TODO: compute, e.g. as a function of diff and/or cursor velocity?
-        min_idx_delta: int = 5,  # 100
-    ) -> list:
+        min_idx_delta: int = MOUSE_MOVE_EVENT_MERGE_MIN_IDX_DELTA,  # 100
+    ) -> list[models.ActionEvent]:
         N = len(to_merge)
         # (inclusive, exclusive)
         group_idx_tups = [(0, N)]
@@ -273,7 +284,9 @@ def merge_consecutive_mouse_move_events(
     )
 
 
-def merge_consecutive_mouse_scroll_events(events: list) -> list:
+def merge_consecutive_mouse_scroll_events(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
     """Merge consecutive mouse scroll events into a single scroll event.
 
     Args:
@@ -284,10 +297,12 @@ def merge_consecutive_mouse_scroll_events(events: list) -> list:
 
     """
 
-    def is_target_event(event: Any, state: Any) -> bool:
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
         return event.name == "scroll"
 
-    def get_merged_events(to_merge: Any, state: Any) -> list:
+    def get_merged_events(
+        to_merge: list[models.ActionEvent], state: dict[str, Any]
+    ) -> list[models.ActionEvent]:
         state["dt"] += to_merge[-1].timestamp - to_merge[0].timestamp
         mouse_dx = sum(event.mouse_dx for event in to_merge)
         mouse_dy = sum(event.mouse_dy for event in to_merge)
@@ -305,7 +320,9 @@ def merge_consecutive_mouse_scroll_events(events: list) -> list:
     )
 
 
-def merge_consecutive_mouse_click_events(events: list) -> list:
+def merge_consecutive_mouse_click_events(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
     """Merge consecutive mouse click events into a single doubleclick event.
 
     Args:
@@ -316,7 +333,9 @@ def merge_consecutive_mouse_click_events(events: list) -> list:
 
     """
 
-    def get_recording_attr(event: Any, attr_name: Any, fallback: Any) -> Any:
+    def get_recording_attr(
+        event: models.ActionEvent, attr_name: str, fallback: Any
+    ) -> Any:
         attr = getattr(event.recording, attr_name) if event.recording else None
         if attr is None:
             fallback_value = fallback()
@@ -324,11 +343,13 @@ def merge_consecutive_mouse_click_events(events: list) -> list:
             attr = fallback_value
         return attr
 
-    def is_target_event(event: Any, state: Any) -> Any:
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
         # TODO: parametrize button name
         return event.name == "click" and event.mouse_button_name == "left"
 
-    def get_timestamp_mappings(to_merge: Any) -> tuple[dict, dict]:
+    def get_timestamp_mappings(
+        to_merge: list[models.ActionEvent],
+    ) -> tuple[dict[float, float], dict[float, float]]:
         double_click_distance = get_recording_attr(
             to_merge[0],
             "double_click_distance_pixels",
@@ -364,7 +385,9 @@ def merge_consecutive_mouse_click_events(events: list) -> list:
                 press_to_release_t[prev_pressed_event.timestamp] = event.timestamp
         return press_to_press_t, press_to_release_t
 
-    def get_merged_events(to_merge: Any, state: Any) -> list:
+    def get_merged_events(
+        to_merge: list[models.ActionEvent], state: dict[str, Any]
+    ) -> list[models.ActionEvent]:
         press_to_press_t, press_to_release_t = get_timestamp_mappings(to_merge)
         t_to_event = {event.timestamp: event for event in to_merge}
         merged = []
@@ -427,7 +450,8 @@ def merge_consecutive_mouse_click_events(events: list) -> list:
 
 
 def merge_consecutive_keyboard_events(
-    events: Any, group_named_keys: bool = True
+    events: list[models.ActionEvent],
+    group_named_keys: bool = KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS,
 ) -> list:
     """Merge consecutive keyboard char press events into a single press event."""
 
@@ -513,10 +537,10 @@ def merge_consecutive_keyboard_events(
 def remove_redundant_mouse_move_events(events: Any) -> list:
     """Remove mouse move events that don't change the mouse position."""
 
-    def is_target_event(event: Any, state: Any) -> bool:
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
         return event.name in ("move", "click")
 
-    def is_same_pos(e0: Any, e1: Any) -> bool:
+    def is_same_pos(e0: models.ActionEvent, e1: models.ActionEvent) -> bool:
         if not all([e0, e1]):
             return False
         for attr in ("mouse_x", "mouse_y"):
@@ -526,7 +550,11 @@ def remove_redundant_mouse_move_events(events: Any) -> list:
                 return False
         return True
 
-    def should_discard(event: Any, prev_event: Any, next_event: Any) -> bool:
+    def should_discard(
+        event: models.ActionEvent,
+        prev_event: models.ActionEvent | None,
+        next_event: models.ActionEvent | None,
+    ) -> bool:
         return event.name == "move" and (
             is_same_pos(prev_event, event) or is_same_pos(event, next_event)
         )
@@ -558,7 +586,10 @@ def remove_redundant_mouse_move_events(events: Any) -> list:
                 merged_events.append(event)
 
         # update timestamps (doing this in the previous loop double counts)
-        assert len(dts) == len(merged_events), (len(dts), len(merged_events))
+        assert len(dts) == len(merged_events), (
+            len(dts),
+            len(merged_events),
+        )
         for event, dt in zip(merged_events, dts):
             event.timestamp -= dt
 
@@ -573,18 +604,20 @@ def remove_redundant_mouse_move_events(events: Any) -> list:
 
 
 def merge_consecutive_action_events(
-    name: Any,
-    events: Any,
-    is_target_event: Any,
-    get_merged_events: Any,
-) -> list:
-    """Merge consecutive action events into a single event."""
+    name: str,
+    events: list[models.ActionEvent],
+    is_target_event: Callable[..., bool],
+    get_merged_events: Callable[..., List[models.ActionEvent]],
+) -> list[models.ActionEvent]:
+    """Merge consecutive action events into one or more parent events."""
     num_events_before = len(events)
     state = {"dt": 0}
     rval = []
     to_merge = []
 
-    def include_merged_events(to_merge: Any) -> None:
+    def include_merged_events(
+        to_merge: list[models.ActionEvent],
+    ) -> None:
         merged_events = get_merged_events(to_merge, state)
         rval.extend(merged_events)
         to_merge.clear()
@@ -610,10 +643,10 @@ def merge_consecutive_action_events(
 
 
 def discard_unused_events(
-    referred_events: list,
-    action_events: list,
+    referred_events: list[models.ActionEvent],
+    action_events: list[models.ActionEvent],
     referred_timestamp_key: str,
-) -> list:
+) -> list[models.ActionEvent]:
     """Discard unused events based on the referred timestamp key.
 
     Args:
@@ -643,8 +676,14 @@ def discard_unused_events(
 
 
 def process_events(
-    action_events: list, window_events: list, screenshots: list
-) -> tuple[list, list, list]:
+    action_events: list[models.ActionEvent],
+    window_events: list[models.WindowEvent],
+    screenshots: list[models.Screenshot],
+) -> tuple[
+    list[models.ActionEvent],
+    list[models.WindowEvent],
+    list[models.Screenshot],
+]:
     """Process action events, window events, and screenshots.
 
     Args:

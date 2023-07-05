@@ -81,7 +81,10 @@ def get_active_window(window_meta: dict) -> Any:
     """
     pid = window_meta["kCGWindowOwnerPID"]
     app_ref = ApplicationServices.AXUIElementCreateApplication(pid)
-    error_code, window = ApplicationServices.AXUIElementCopyAttributeValue(
+    (
+        error_code,
+        window,
+    ) = ApplicationServices.AXUIElementCopyAttributeValue(
         app_ref, "AXFocusedWindow", None
     )
     if error_code:
@@ -134,9 +137,10 @@ def dump_state(element: Any, elements: set = None) -> dict | list:
                 state[k] = _state
         return state
     else:
-        error_code, attr_names = ApplicationServices.AXUIElementCopyAttributeNames(
-            element, None
-        )
+        (
+            error_code,
+            attr_names,
+        ) = ApplicationServices.AXUIElementCopyAttributeNames(element, None)
         if attr_names:
             state = {}
             for attr_name in attr_names:

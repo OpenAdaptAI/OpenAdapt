@@ -3,8 +3,6 @@
 Module: db.py
 """
 
-from typing import Any
-
 import sqlalchemy as sa
 from dictalchemy import DictableModel
 from sqlalchemy.orm import sessionmaker
@@ -39,7 +37,7 @@ class BaseModel(DictableModel):
         return f"{self.__class__.__name__}({params})"
 
 
-def get_engine() -> Any:
+def get_engine() -> sa.engine:
     """Create and return a database engine."""
     engine = sa.create_engine(
         DB_URL,
@@ -48,7 +46,7 @@ def get_engine() -> Any:
     return engine
 
 
-def get_base(engine: Any) -> Any:
+def get_base(engine: sa.engine) -> sa.engine:
     """Create and return the base model with the provided engine.
 
     Args:

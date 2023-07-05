@@ -10,7 +10,11 @@ Usage:
 
 from typing import Any, List
 
-from segment_anything import SamPredictor, sam_model_registry, SamAutomaticMaskGenerator
+from segment_anything import (
+    SamPredictor,
+    sam_model_registry,
+    SamAutomaticMaskGenerator,
+)
 from PIL import Image
 from loguru import logger
 from openadapt.models import Recording, Screenshot
@@ -124,15 +128,30 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 resized_mouse_y = int(action_event.mouse_y * RESIZE_RATIO)
                 # Add additional points around the clicked point
                 additional_points = [
-                    [resized_mouse_x - 1, resized_mouse_y - 1],  # Top-left
+                    [
+                        resized_mouse_x - 1,
+                        resized_mouse_y - 1,
+                    ],  # Top-left
                     [resized_mouse_x - 1, resized_mouse_y],  # Left
-                    [resized_mouse_x - 1, resized_mouse_y + 1],  # Bottom-left
+                    [
+                        resized_mouse_x - 1,
+                        resized_mouse_y + 1,
+                    ],  # Bottom-left
                     [resized_mouse_x, resized_mouse_y - 1],  # Top
-                    [resized_mouse_x, resized_mouse_y],  # Center (clicked point)
+                    [
+                        resized_mouse_x,
+                        resized_mouse_y,
+                    ],  # Center (clicked point)
                     [resized_mouse_x, resized_mouse_y + 1],  # Bottom
-                    [resized_mouse_x + 1, resized_mouse_y - 1],  # Top-right
+                    [
+                        resized_mouse_x + 1,
+                        resized_mouse_y - 1,
+                    ],  # Top-right
                     [resized_mouse_x + 1, resized_mouse_y],  # Right
-                    [resized_mouse_x + 1, resized_mouse_y + 1],  # Bottom-right
+                    [
+                        resized_mouse_x + 1,
+                        resized_mouse_y + 1,
+                    ],  # Bottom-right
                 ]
                 input_point = np.array(additional_points)
                 self.sam_predictor.set_image(array_resized)
@@ -202,7 +221,10 @@ def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
 
 
 def show_points(
-    coords: np.ndarray, labels: np.ndarray, ax: Any, marker_size: int = 120
+    coords: np.ndarray,
+    labels: np.ndarray,
+    ax: Any,
+    marker_size: int = 120,
 ) -> None:
     """Display the points on the plot.
 
@@ -244,7 +266,14 @@ def show_box(box: List[int], ax: Any) -> None:
     x0, y0 = box[0], box[1]
     w, h = box[2], box[3]
     ax.add_patch(
-        plt.Rectangle((x0, y0), w, h, edgecolor="green", facecolor=(0, 0, 0, 0), lw=2)
+        plt.Rectangle(
+            (x0, y0),
+            w,
+            h,
+            edgecolor="green",
+            facecolor=(0, 0, 0, 0),
+            lw=2,
+        )
     )
 
 

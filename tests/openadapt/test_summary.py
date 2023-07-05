@@ -1,6 +1,7 @@
 """Tests the summarization function in summary.py."""
 
 from fuzzywuzzy import fuzz
+
 from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
 from openadapt.models import Recording
 

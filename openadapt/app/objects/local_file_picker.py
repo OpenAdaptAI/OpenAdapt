@@ -1,6 +1,7 @@
 """openadapt.app.objects.local_file_picker module.
 
 This module provides the LocalFilePicker class for selecting a file from the local filesystem.
+# retrieved from https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
 
 Example usage:
     from openadapt.app.objects.local_file_picker import LocalFilePicker
@@ -89,7 +90,10 @@ class LocalFilePicker(ui.dialog):
         ):
             self.grid.options["rowData"].insert(
                 0,
-                {"name": "📁 <strong>..</strong>", "path": str(self.path.parent)},
+                {
+                    "name": "📁 <strong>..</strong>",
+                    "path": str(self.path.parent),
+                },
             )
 
         self.grid.update()

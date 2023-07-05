@@ -3,9 +3,12 @@
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
 
+from typing import Any
 import signal
+
 from nicegui import ui
 from subprocess import Popen
+
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import set_dark, sync_switch
 
@@ -19,7 +22,10 @@ def settings(dark_mode: bool) -> None:
         dark_mode (bool): Current dark mode setting.
     """
     with ui.dialog() as settings, ui.card():
-        s = ui.switch("Dark mode", on_change=lambda: set_dark(dark_mode, s.value))
+        s = ui.switch(
+            "Dark mode",
+            on_change=lambda: set_dark(dark_mode, s.value),
+        )
         sync_switch(s, dark_mode)
         ui.button("Close", on_click=lambda: settings.close())
 
@@ -45,7 +51,8 @@ def select_import(f: callable) -> None:
             selected_file = ui.label("")
             selected_file.visible = False
             import_button = ui.button(
-                "Import", on_click=lambda: f(selected_file.text, delete.value)
+                "Import",
+                on_click=lambda: f(selected_file.text, delete.value),
             )
             import_button.enabled = False
             delete = ui.checkbox("Delete file after import")
@@ -53,7 +60,7 @@ def select_import(f: callable) -> None:
     import_dialog.open()
 
 
-def recording_prompt(options: list, record_button: ui.widgets.Button) -> None:
+def recording_prompt(options: list[Any], record_button: ui.widgets.Button) -> None:
     """Display the recording prompt dialog.
 
     Args:
@@ -78,16 +85,16 @@ def recording_prompt(options: list, record_button: ui.widgets.Button) -> None:
             dialog.open()
 
     def terminate() -> None:
-        global PROC
-        PROC.send_signal(signal.SIGINT)
+        global process
+        process.send_signal(signal.SIGINT)
 
-        # wait for process to terminate
-        PROC.wait()
+        # Wait for process to terminate
+        process.wait()
         ui.notify("Stopped recording")
         record_button._props["name"] = "radio_button_checked"
         record_button.on("click", lambda: recording_prompt(options, record_button))
 
-        PROC = None
+        process = None
 
     def begin() -> None:
         name = result.text.__getattribute__("value")

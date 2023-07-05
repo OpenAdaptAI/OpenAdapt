@@ -75,4 +75,4 @@ def cache(
 
         return wrapper
 
-    return decorator  # TODO: Implement the caching logic
+    return decorator

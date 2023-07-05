@@ -15,7 +15,11 @@ import os
 from nicegui import app, ui
 
 from openadapt import replay, visualize
-from openadapt.app.cards import recording_prompt, select_import, settings
+from openadapt.app.cards import (
+    recording_prompt,
+    select_import,
+    settings,
+)
 from openadapt.app.util import clear_db, on_export, on_import
 from openadapt.app.objects.console import Console
 
@@ -51,7 +55,8 @@ def run_app() -> None:
             "click", lambda: select_import(on_import)
         )
         ui.icon("share").tooltip("Share").on(
-            "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
+            "click",
+            lambda: (_ for _ in ()).throw(Exception(NotImplementedError)),
         )
 
     # Recording description autocomplete
@@ -63,15 +68,20 @@ def run_app() -> None:
             with ui.column().classes("w-full h-full"):
                 record_button = (
                     ui.icon("radio_button_checked", size="64px")
-                    .on("click", lambda: recording_prompt(options, record_button))
+                    .on(
+                        "click",
+                        lambda: recording_prompt(options, record_button),
+                    )
                     .tooltip("Record a new replay / Stop recording")
                 )
                 ui.icon("visibility", size="64px").on(
-                    "click", lambda: threading.Thread(target=visualize.main).start()
+                    "click",
+                    lambda: threading.Thread(target=visualize.main).start(),
                 ).tooltip("Visualize the latest replay")
 
                 ui.icon("play_arrow", size="64px").on(
-                    "click", lambda: replay.replay("NaiveReplayStrategy")
+                    "click",
+                    lambda: replay.replay("NaiveReplayStrategy"),
                 ).tooltip("Play the latest replay")
         with splitter.after:
             logger = Console()

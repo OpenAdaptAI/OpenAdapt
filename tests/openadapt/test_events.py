@@ -217,7 +217,9 @@ def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
 
 
 def make_click_events(
-    dt_released: float, dt_pressed: float = None, button_name: str = "left"
+    dt_released: float,
+    dt_pressed: float = None,
+    button_name: str = "left",
 ) -> tuple[ActionEvent, ActionEvent]:
     """Create a pair of click events with the given time differences and button name.
 
@@ -356,11 +358,17 @@ def test_merge_consecutive_mouse_click_events() -> None:
             *make_click_events(dt_long, button_name="right"),
             make_doubleclick_event(
                 dt_long,
-                lambda: [*make_click_events(dt_short), *make_click_events(dt_long)],
+                lambda: [
+                    *make_click_events(dt_short),
+                    *make_click_events(dt_long),
+                ],
             ),
             make_doubleclick_event(
                 dt_long,
-                lambda: [*make_click_events(dt_short), *make_click_events(dt_long)],
+                lambda: [
+                    *make_click_events(dt_short),
+                    *make_click_events(dt_long),
+                ],
             ),
             *make_click_events(dt_long, button_name="right"),
             make_singleclick_event(dt_long, lambda: [*make_click_events(dt_long)]),
@@ -403,7 +411,10 @@ def test_merge_consecutive_mouse_move_events() -> None:
             make_scroll_event(),
             make_move_event(
                 4,
-                get_pre_children=lambda: [make_move_event(3), make_move_event(4)],
+                get_pre_children=lambda: [
+                    make_move_event(3),
+                    make_move_event(4),
+                ],
             ),
         ]
     )
@@ -498,14 +509,21 @@ def test_remove_redundant_mouse_move_events() -> None:
             make_click_event(
                 True,
                 1,
-                get_post_children=lambda: [make_move_event(3), make_move_event(1)],
+                get_post_children=lambda: [
+                    make_move_event(3),
+                    make_move_event(1),
+                ],
             ),
             make_click_event(
                 False,
                 1,
                 get_post_children=lambda: [make_move_event(1)],
             ),
-            make_click_event(True, 2, get_post_children=lambda: [make_move_event(2)]),
+            make_click_event(
+                True,
+                2,
+                get_post_children=lambda: [make_move_event(2)],
+            ),
             make_click_event(
                 False,
                 3,
@@ -713,7 +731,10 @@ def test_discard_unused_events() -> None:
         make_action_event({"window_event_timestamp": 2}),
     ]
     expected_filtered_window_events = rows2dicts(
-        [make_window_event({"timestamp": 0}), make_window_event({"timestamp": 2})]
+        [
+            make_window_event({"timestamp": 0}),
+            make_window_event({"timestamp": 2}),
+        ]
     )
     actual_filtered_window_events = rows2dicts(
         discard_unused_events(

@@ -104,7 +104,10 @@ def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Imag
 
 
 def _should_scrub_text(
-    key: Any, value: Any, list_keys: List[str], scrub_all: bool = False
+    key: Any,
+    value: Any,
+    list_keys: List[str],
+    scrub_all: bool = False,
 ) -> bool:
     """Check if the key and value should be scrubbed and are of correct instance.
 

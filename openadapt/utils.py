@@ -155,7 +155,9 @@ def rows2dicts(
     return row_dicts
 
 
-def override_double_click_interval_seconds(override_value: float) -> None:
+def override_double_click_interval_seconds(
+    override_value: float,
+) -> None:
     """Override the double click interval in seconds.
 
     Args:
@@ -397,7 +399,10 @@ def draw_rectangle(
     """
     if invert:
         bg_color, fg_color = fg_color, bg_color
-        bg_transparency, fg_transparency = fg_transparency, bg_transparency
+        bg_transparency, fg_transparency = (
+            fg_transparency,
+            bg_transparency,
+        )
     bg_opacity = int(255 * bg_transparency)
     overlay = Image.new("RGBA", image.size, bg_color + (bg_opacity,))
     draw = ImageDraw.Draw(overlay)

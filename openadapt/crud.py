@@ -29,7 +29,9 @@ performance_stats = []
 memory_stats = []
 
 
-def _insert(event_data: dict, table: sa.Table, buffer: list = None) -> Any | None:
+def _insert(
+    event_data: dict, table: sa.Table, buffer: list[Any] | None = None
+) -> Any | None:
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
@@ -98,7 +100,9 @@ def insert_screenshot(
 
 
 def insert_window_event(
-    recording_timestamp: int, event_timestamp: int, event_data: dict
+    recording_timestamp: int,
+    event_timestamp: int,
+    event_data: dict[str, Any],
 ) -> None:
     """Insert a window event into the database.
 
@@ -116,7 +120,10 @@ def insert_window_event(
 
 
 def insert_perf_stat(
-    recording_timestamp: int, event_type: str, start_time: float, end_time: float
+    recording_timestamp: int,
+    event_type: str,
+    start_time: float,
+    end_time: float,
 ) -> None:
     """Insert an event performance stat into the database.
 

@@ -38,7 +38,9 @@ def clear_db(log: Any = None) -> None:
 
 
 def on_import(
-    selected_file: str, delete: bool = False, src: str = "openadapt.db"
+    selected_file: str,
+    delete: bool = False,
+    src: str = "openadapt.db",
 ) -> None:
     """Import data from a selected file.
 
