@@ -182,11 +182,15 @@ def deepconvert_objc(object):
         value = str(object.string())
         return value
     elif isinstance(object, Foundation.__NSCFData):
-        value = str(plistlib.loads(object))
-        return value
+        value = {
+            deepconvert_objc(k): deepconvert_objc(v)
+            for k, v in plistlib.loads(object).items()
+        }
+    elif isinstance(object, plistlib.UID):
+        value = object.data
     else:
         # we can ignore bools since atomacos converts them
-        if not isinstance(object, bool):
+        if not (isinstance(object, bool) or isinstance(object, int)):
             logger.warning(
                 f"Unknown type: {type(object)} - "
                 f"Please report this on GitHub: "
