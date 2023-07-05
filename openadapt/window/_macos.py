@@ -182,7 +182,7 @@ def deepconvert_objc(object):
         value = str(object.string())
         return value
     elif isinstance(object, Foundation.__NSCFData):
-        value = plistlib.loads(object)
+        value = str(plistlib.loads(object))
         return value
     else:
         # we can ignore bools since atomacos converts them
