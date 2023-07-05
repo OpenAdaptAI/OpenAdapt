@@ -99,6 +99,15 @@ def export_sql(recording_id: int) -> tuple:
 
 
 def update_db_fname_in_env_file(db_fname: str) -> None:
+    """
+    Update the database filename in the environment file.
+
+    Args:
+        db_fname (str): The new filename for the database.
+
+    Returns:
+        None
+    """
     with open(config.ENV_FILE_PATH, "r") as env_file:
         env_file_lines = [
             f"DB_FNAME={db_fname}\n"
