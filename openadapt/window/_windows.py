@@ -6,7 +6,7 @@ from pywinauto import Desktop
 import time
 from pprint import pprint
 import pickle
-
+import comtypes
 
 def get_active_window_state() -> dict:
     """
@@ -120,7 +120,11 @@ def get_element_properties(element):
                   'children': []}]}
     """
 
-    properties = element.get_properties()
+    try:
+        properties = element.get_properties()
+    except comtypes.COMError:
+        logger.warning(f"COMError occurred: {com_err}")
+        return {}
     children = element.children()
 
     if children:
