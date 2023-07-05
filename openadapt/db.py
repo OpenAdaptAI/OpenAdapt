@@ -130,7 +130,8 @@ def create_db(recording_id: int, sql: str, values) -> tuple[float, str]:
     Returns:
         tuple: A tuple containing the timestamp and the file path of the new database.
     """
-    db_file_path = None  # Initialize with a default value
+    db_file_path = None
+    target_file_path = None
     try:
         db_fname = f"recording_{recording_id}.db"
         original_db_fname = config.DB_FNAME  # Store the original value
@@ -160,6 +161,8 @@ def create_db(recording_id: int, sql: str, values) -> tuple[float, str]:
         # Perform cleanup if Ctrl+C is pressed during execution
         if db_file_path and os.path.exists(db_file_path):
             os.remove(db_file_path)
+        if target_file_path and os.path.exists(target_file_path):
+            os.remove(target_file_path)
         update_db_fname_in_env_file(original_db_fname)
         raise
 
