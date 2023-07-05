@@ -8,6 +8,7 @@ import ApplicationServices
 import Quartz
 import Foundation
 import re
+import plistlib
 
 
 def get_active_window_state():
@@ -180,6 +181,8 @@ def deepconvert_objc(object):
     elif isinstance(object, Foundation.__NSCFAttributedString):
         value = str(object.string())
         return value
+    elif isinstance(object, Foundation.__NSCFData):
+        value = plistlib.loads(object)
     else:
         # we can ignore bools since atomacos converts them
         if not isinstance(object, bool):
@@ -188,6 +191,8 @@ def deepconvert_objc(object):
                 f"Please report this on GitHub: "
                 f"https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
             )
+            logger.warning(f"{object=}")
+
     value = atomacos._converter.Converter().convert_value(value)
     return value
 
