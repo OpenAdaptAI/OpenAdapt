@@ -99,19 +99,34 @@ def create_action_dict(
     mouse_y: Union[int, float],
     mouse_button_name: str,
     mouse_pressed: bool,
+    key_name: str,
     element_state: dict = {},
 ):
-    output_dict = [
-        {
-            "name": name,
-            "mouse_x": mouse_x,
-            "mouse_y": mouse_y,
-            "mouse_button_name": mouse_button_name,
-            "mouse_pressed": mouse_pressed,
-            "element_state": element_state,
-        }
-    ]
+    if name == "click":
+        output_dict = [
+            {
+                "name": name,
+                "mouse_x": mouse_x,
+                "mouse_y": mouse_y,
+                "mouse_button_name": mouse_button_name,
+                "mouse_pressed": mouse_pressed,
+                "element_state": element_state,
+            }
+        ]
+    if name == "press" or name == "release":
+        output_dict = [{"name": name, "key_name": key_name}]
+
+    if name == "move":
+        output_dict = [
+            {
+                "name": name,
+                "mouse_x": mouse_x,
+                "mouse_y": mouse_y,
+                "element_state": element_state,
+            }
+        ]
     return output_dict
+
 
 def test_single_mouse_diff():
     win_dict = create_win_dict(
