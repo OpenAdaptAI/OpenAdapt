@@ -142,13 +142,22 @@ def dump_state(element, elements=None):
 def deepconvert_objc(object):
     """Convert all contents of an ObjC object to Python primitives."""
     value = object
+    strings = (
+        str,
+        AppKit.NSString,
+        ApplicationServices.AXTextMarkerRangeRef,
+        ApplicationServices.AXUIElementRef,
+        ApplicationServices.AXTextMarkerRef,
+        Quartz.CGPathRef,
+    )
+
     if isinstance(object, AppKit.NSNumber):
         value = int(object)
     elif isinstance(object, AppKit.NSArray) or isinstance(object, list):
         value = [deepconvert_objc(x) for x in object]
     elif isinstance(object, AppKit.NSDictionary) or isinstance(object, dict):
         value = {deepconvert_objc(k): deepconvert_objc(v) for k, v in object.items()}
-    elif isinstance(object, AppKit.NSString) or isinstance(object, str):
+    elif isinstance(object, strings):
         value = str(object)
     # handle core-foundation class AXValueRef
     elif isinstance(object, ApplicationServices.AXValueRef):
@@ -166,21 +175,10 @@ def deepconvert_objc(object):
             "h": float(h_value.group(1)) if h_value else None,
             "type": type_value.group(1) if type_value else None,
         }
-        return value
     elif isinstance(object, Foundation.NSURL):
         value = str(object.absoluteString())
-        return value
-    elif (
-        isinstance(object, ApplicationServices.AXTextMarkerRangeRef)
-        or isinstance(object, ApplicationServices.AXUIElementRef)
-        or isinstance(object, ApplicationServices.AXTextMarkerRef)
-        or isinstance(object, Quartz.CGPathRef)
-    ):
-        value = str(object)
-        return value
     elif isinstance(object, Foundation.__NSCFAttributedString):
         value = str(object.string())
-        return value
     elif isinstance(object, Foundation.__NSCFData):
         value = {
             deepconvert_objc(k): deepconvert_objc(v)
@@ -189,7 +187,6 @@ def deepconvert_objc(object):
     elif isinstance(object, plistlib.UID):
         value = object.data
     else:
-        # we can ignore bools since atomacos converts them
         if not (isinstance(object, bool) or isinstance(object, int)):
             logger.warning(
                 f"Unknown type: {type(object)} - "
