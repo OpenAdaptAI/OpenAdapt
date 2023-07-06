@@ -34,9 +34,7 @@ def replay(
             if not name.lower().endswith("mixin")
         ]
         available_strategies = ", ".join(strategy_names)
-        raise ValueError(
-            f"Invalid {strategy_name=}; {available_strategies=}"
-        )
+        raise ValueError(f"Invalid {strategy_name=}; {available_strategies=}")
 
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")
@@ -45,6 +43,11 @@ def replay(
     logger.info(f"{strategy=}")
 
     strategy.run()
+
+
+# entry point
+def start():
+    fire.Fire(replay)
 
 
 if __name__ == "__main__":

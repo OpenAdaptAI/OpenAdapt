@@ -37,7 +37,7 @@ def get_active_window_state():
     }
     rval = deepconvert_objc(rval)
     try:
-        pickle.dumps(rval)
+        pickle.dumps(rval, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logger.warning(f"{exc=}")
         rval.pop("data")
@@ -143,7 +143,8 @@ def deepconvert_objc(object):
         value = dict(object)
         for k, v in value.items():
             value[k] = deepconvert_objc(v)
-    value = atomacos._converter.Converter().convert_value(value)
+    if value:
+        value = atomacos._converter.Converter().convert_value(value)
     return value
 
 
@@ -155,7 +156,7 @@ def get_active_element_state(x, y):
     state = dump_state(el.ref)
     state = deepconvert_objc(state)
     try:
-        pickle.dumps(state)
+        pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logger.warning(f"{exc=}")
         state = {}
@@ -168,7 +169,7 @@ def main():
 
     state = get_active_window_state()
     pprint(state)
-    pickle.dumps(state)
+    pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
     import ipdb; ipdb.set_trace()
 
 
