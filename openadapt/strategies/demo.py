@@ -71,7 +71,8 @@ class DemoReplayStrategy(
             self.screenshots[self.screenshot_idx]
         )
         logger.info(
-            f"self.screenshots[self.screenshot_idx].action_event=\n{screenshot_click_event_bbox}"
+            "self.screenshots[self.screenshot_idx].action_event=\n"
+            f"{screenshot_click_event_bbox}"
         )
         event_strs = [f"<{event}>" for event in self.recording.action_events]
         history_strs = [f"<{completion}>" for completion in self.result_history]

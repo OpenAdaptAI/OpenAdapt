@@ -32,8 +32,10 @@ class HuggingFaceReplayStrategyMixin(BaseReplayStrategy):
 
         Args:
             recording (Recording): The recording to replay.
-            model_name (str): The name of the HuggingFace model to use (default: "gpt2").
-            max_input_size (int): The maximum input size for the model (default: 1024).
+            model_name (str): The name of the HuggingFace model to use
+              (default: "gpt2").
+            max_input_size (int): The maximum input size for the model
+              (default: 1024).
         """
         super().__init__(recording)
 

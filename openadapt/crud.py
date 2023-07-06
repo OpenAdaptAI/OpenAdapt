@@ -1,4 +1,4 @@
-"""Implements basic CRUD (Create, Read, Update, Delete) operations for interacting with a database.
+"""Implements basic CRUD operations for interacting with a database.
 
 Module: crud.py
 """
@@ -37,8 +37,8 @@ def _insert(
     Args:
         event_data (dict): The event data to be inserted.
         table (sa.Table): The SQLAlchemy table to insert the data into.
-        buffer (list, optional): A buffer list to store the inserted objects before committing.
-          Defaults to None.
+        buffer (list, optional): A buffer list to store the inserted objects
+            before committing. Defaults to None.
     """
     db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
@@ -219,7 +219,8 @@ def _get(table: Any, recording_timestamp: int) -> list[Any]:
         recording_timestamp (int): The recording timestamp to filter the records.
 
     Returns:
-        List[Any]: A list of records retrieved from the database table, ordered by timestamp.
+        List[Any]: A list of records retrieved from the database table,
+          ordered by timestamp.
     """
     return (
         db.query(table)
@@ -294,7 +295,8 @@ def filter_stop_sequences(action_events: List[ActionEvent]) -> None:
                 action_events[j].canonical_key_char in STOP_SEQUENCES[i]
                 or action_events[j].canonical_key_name in STOP_SEQUENCES[i]
             ):
-                # can consider any release event with any sequence char as part of the sequence
+                # can consider any release event with any sequence char as
+                # part of the sequence
                 num_to_remove += 1
             else:
                 # not part of the sequence, so exit inner loop

@@ -126,7 +126,8 @@ class StatefulReplayStrategy(
             f"{reference_window_dict=}\n"
             f"{reference_action_dicts=}\n"
             f"{active_window_dict=}\n"
-            "Provide valid Python3 code containing the action dicts by completing the following,"
+            "Provide valid Python3 code containing the action dicts"
+            " by completing the following,"
             " and nothing else:\n"
             "active_action_dicts="
         )
@@ -176,10 +177,11 @@ def get_window_state_diffs(
 
     Args:
         action_events (List[models.ActionEvent]): The list of action events.
-        ignore_boundary_windows (bool): Flag indicating whether to ignore boundary windows. Defaults to True.
+        ignore_boundary_windows (bool): Flag to ignore boundary windows.
+          Defaults to True.
 
     Returns:
-        List[deepdiff.DeepDiff]: The list of deep diffs representing the differences in window state.
+        List[deepdiff.DeepDiff]: List of deep diffs for window state differences.
     """
     ignore_window_ids = set()
     if ignore_boundary_windows:

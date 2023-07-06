@@ -27,7 +27,8 @@ spec = [
 
 subprocess.call(spec)
 
-# add import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5) to line 2 of OpenAdapt.spec
+# add import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
+#  to line 2 of OpenAdapt.spec
 with open("OpenAdapt.spec", "r+") as f:
     lines = f.readlines()
     lines[1] = "import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)\n"

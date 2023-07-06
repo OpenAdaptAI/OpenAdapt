@@ -86,7 +86,8 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
 }
 
-# each string in STOP_STRS should only contain strings that don't contain special characters
+# each string in STOP_STRS should only contain strings
+# that don't contain special characters
 STOP_STRS = [
     "oa.stop",
     # TODO:
@@ -183,7 +184,8 @@ def filter_log_messages(data: dict) -> bool:
     Returns:
         bool: True if the message should not be ignored, False if it should be ignored.
     """
-    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
+    # TODO: ultimately, we want to fix the underlying issues, but for now,
+    # we can ignore these messages
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]

@@ -74,8 +74,10 @@ def make_action_event(
     Args:
         event_dict (dict): Dictionary containing the event attributes.
         dt (float, optional): Time difference in seconds from the previous event.
-        get_pre_children (function, optional): returns the list of pre-children events.
-        get_post_children (function, optional): returns the list of post-children events.
+        get_pre_children (function, optional): returns the list of
+          pre-children events.
+        get_post_children (function, optional): returns the list of
+          post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class.
@@ -118,7 +120,8 @@ def get_children_with_timestamps(get_children: Callable[[], List[Any]]) -> List[
     """Get the list of children events with timestamps.
 
     Args:
-        get_children (Callable[[], List[Any]]): Function that returns the list of children events.
+        get_children (Callable[[], List[Any]]): Function that returns
+          the list of children events.
 
     Returns:
         List[Any]: List of children events with timestamps.
@@ -153,8 +156,10 @@ def make_move_event(
     Args:
         x (int, optional): X-coordinate of the mouse.
         y (int, optional): Y-coordinate of the mouse.
-        get_pre_children (function, optional): returns list of pre-children events.
-        get_post_children (function, optional): returns the list of post-children events.
+        get_pre_children (function, optional): returns list of
+          pre-children events.
+        get_post_children (function, optional): returns the list of
+          post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the move event.
@@ -183,8 +188,10 @@ def make_click_event(
         mouse_y (int, optional): Y-coordinate of the mouse.
         dt (float, optional): Time difference in seconds from the previous event.
         button_name (str, optional): Name of the mouse button. Defaults to "left".
-        get_pre_children (function, optional): Function that returns the list of pre-children events.
-        get_post_children (function, optional): Function that returns the list of post-children events.
+        get_pre_children (function, optional): Function that returns the list
+          of pre-children events.
+        get_post_children (function, optional): Function that returns the list
+          of post-children events.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the click event.
@@ -224,8 +231,10 @@ def make_click_events(
     """Create a pair of click events with the given time differences and button name.
 
     Args:
-        dt_released (float): Time difference in seconds between the press and release events.
-        dt_pressed (float, optional): Time difference in seconds from the previous event for the press event.
+        dt_released (float): Time difference in seconds between the press
+          and release events.
+        dt_pressed (float, optional): Time difference in seconds from the previous
+          event for the press event.
         button_name (str, optional): Name of the mouse button. Defaults to "left".
 
     Returns:
@@ -256,7 +265,8 @@ def make_processed_click_event(
         button_name (str, optional): Name of the mouse button. Defaults to "left".
 
     Returns:
-        ActionEvent: An instance of the ActionEvent class representing the processed click event.
+        ActionEvent: An instance of the ActionEvent class representing
+          the processed click event.
     """
     return make_action_event(
         {
@@ -287,7 +297,8 @@ def make_singleclick_event(
         button_name (str, optional): Name of the mouse button. Defaults to "left".
 
     Returns:
-        ActionEvent: An instance of the ActionEvent class representing the single click event.
+        ActionEvent: An instance of the ActionEvent class representing
+          the single click event.
     """
     return make_processed_click_event(
         "singleclick",
@@ -316,7 +327,8 @@ def make_doubleclick_event(
         button_name (str, optional): Name of the mouse button. Defaults to "left".
 
     Returns:
-        ActionEvent: An instance of the ActionEvent class representing the double click event.
+        ActionEvent: An instance of the ActionEvent class representing
+          the double click event.
     """
     return make_processed_click_event(
         "doubleclick",
@@ -543,7 +555,8 @@ def make_press_event(char: str = None, name: str = None) -> ActionEvent:
     """Create a press event with the given character or key name.
 
     Args:
-        char (str, optional): Character corresponding to the pressed key. Defaults to None.
+        char (str, optional): Character corresponding to the pressed key.
+          Defaults to None.
         name (str, optional): Name of the pressed key. Defaults to None.
 
     Returns:
@@ -557,11 +570,13 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
     """Create a release event with the given character or key name.
 
     Args:
-        char (str, optional): Character corresponding to the released key. Defaults to None.
+        char (str, optional): Character corresponding to the released key.
+          Defaults to None.
         name (str, optional): Name of the released key. Defaults to None.
 
     Returns:
-        ActionEvent: An instance of the ActionEvent class representing the release event.
+        ActionEvent: An instance of the ActionEvent class representing
+          the release event.
     """
     assert (char or name) and not (char and name), (char, name)
     return make_action_event({"name": "release", "key_char": char, "key_name": name})
@@ -716,7 +731,8 @@ def make_window_event(event_dict: dict) -> WindowEvent:
 def test_discard_unused_events() -> None:
     """Test case for discarding unused events.
 
-    Tests that the discard_unused_events function discards unused events based on specified timestamp.
+    Tests that the discard_unused_events function discards unused events based
+      on specified timestamp.
 
     Returns:
         None

@@ -31,8 +31,8 @@ def get_events(
         recording (models.Recording): The recording object.
         process (bool): Whether to process the events by merging and discarding certain
           types of events. Default is True.
-        meta (dict): Metadata dictionary to populate with information about the processing.
-          Default is None.
+        meta (dict): Metadata dictionary to populate with information
+          about the processing. Default is None.
 
     Returns:
         list: A list of action events.
@@ -652,7 +652,8 @@ def discard_unused_events(
     Args:
         referred_events (list): The list of referred events.
         action_events (list): The list of action events.
-        referred_timestamp_key (str): The key representing the timestamp in referred events.
+        referred_timestamp_key (str): The key representing the timestamp
+          in referred events.
 
     Returns:
         list: The filtered list of referred events.
@@ -692,7 +693,8 @@ def process_events(
         screenshots (list): The list of screenshots.
 
     Returns:
-        tuple: A tuple containing the processed action events, window events, and screenshots.
+        tuple: A tuple containing the processed action events, window events,
+          and screenshots.
     """
     # For debugging
     # _action_events = action_events

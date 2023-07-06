@@ -1,4 +1,4 @@
-"""Module for customizing multiprocessing.Queue to avoid NotImplementedError in MacOS."""
+"""Module for customizing multiprocessing.Queue to avoid NotImplementedError."""
 
 
 from multiprocessing.queues import Queue
@@ -59,8 +59,9 @@ class SynchronizedQueue(Queue):
     qsize() and empty().
     Note the implementation of __getstate__ and __setstate__ which help to
     serialize SynchronizedQueue when it is passed between processes. If these functions
-    are not defined, SynchronizedQueue cannot be serialized, which will lead to the error
-    of "AttributeError: 'SynchronizedQueue' object has no attribute 'size'".
+    are not defined, SynchronizedQueue cannot be serialized,
+    which will lead to the error of "AttributeError: 'SynchronizedQueue' object
+    has no attribute 'size'".
     See the answer provided here: https://stackoverflow.com/a/65513291/9723036
 
     For documentation of using __getstate__ and __setstate__
@@ -77,8 +78,9 @@ class SynchronizedQueue(Queue):
         """Help to make SynchronizedQueue instance serializable.
 
         Note that we record the parent class state, which is the state of the
-        actual queue, and the size of the queue, which is the state of SynchronizedQueue.
-        self.size is a SharedCounter instance. It is itself serializable.
+        actual queue, and the size of the queue, which is the
+        state of SynchronizedQueue. self.size is a SharedCounter instance.
+        It is itself serializable.
         """
         return {
             "parent_state": super().__getstate__(),

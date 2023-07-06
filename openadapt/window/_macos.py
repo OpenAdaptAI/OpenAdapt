@@ -115,7 +115,7 @@ def dump_state(element: Any, elements: set = None) -> dict | list:
         elements (set): Set to track elements to prevent circular traversal.
 
     Returns:
-        dict or list: The state of the element and its descendants as a dictionary or list.
+        dict or list: State of element and descendants as dict or list
     """
     elements = elements or set()
     if element in elements:

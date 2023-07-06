@@ -1,7 +1,9 @@
 """openadapt.app.objects.local_file_picker module.
 
-This module provides the LocalFilePicker class for selecting a file from the local filesystem.
-# retrieved from https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
+This module provides the LocalFilePicker class for selecting
+ a file from the local filesystem.
+# retrieved from
+https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
 
 Example usage:
     from openadapt.app.objects.local_file_picker import LocalFilePicker

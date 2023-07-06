@@ -60,14 +60,14 @@ def test_scrub_image() -> None:
     scrubbed_image.close()
     os.remove(scrubbed_image_path)
 
-    # Assert that the number of mask pixels is approximately 1.5% the total number of pixels
+    # Assert ~1.5% mask pixels compared to total pixels.
     assert (
         round((mask_pixels / total_pixels), 3) == 0.015
     )  # Change this value as necessary
 
 
 def test_empty_string() -> None:
-    """Test that an empty string is returned if an empty string is passed to the scrub function."""
+    """Test empty string input for scrub function returns empty string."""
     text = ""
     expected_output = ""
     assert scrub.scrub_text(text) == expected_output

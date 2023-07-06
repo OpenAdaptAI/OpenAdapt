@@ -105,7 +105,8 @@ def get_element_properties(element: Any) -> dict:
                  that has the `.get_properties()` and `.children()` methods.
 
     Returns:
-        dict: A nested dictionary containing the properties of each element and its children.
+        dict: A nested dictionary containing the properties of each element
+          and its children.
         The dictionary includes a "children" key for each element,
         which holds the properties of its children.
 

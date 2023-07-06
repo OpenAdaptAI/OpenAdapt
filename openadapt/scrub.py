@@ -204,8 +204,10 @@ def scrub_dict(
     Args:
         input_dict (dict): A dict to be scrubbed
         list_keys (list): List of keys to be scrubbed
-        scrub_all (bool): Whether to scrub all sub-fields/keys/values of that particular key
-        force_scrub_children (bool): Whether to force scrub children even if key is not present
+        scrub_all (bool): Whether to scrub all sub-fields/keys/values
+          of that particular key
+        force_scrub_children (bool): Whether to force scrub children
+          even if key is not present
 
     Returns:
         dict: The scrubbed dict with PII and PHI removed.
@@ -241,7 +243,7 @@ def scrub_dict(
 
 
 def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dict]:
-    """Scrub the list of dicts of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
+    """Scrub list of dicts to remove PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
         input_list (list[dict]): A list of dicts to be scrubbed

@@ -51,7 +51,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         Args:
             recording (Recording): The recording object.
             model_name (str): The name of the SAM model to use. Defaults to MODEL_NAME.
-            checkpoint_dir_path (str): The directory path to store the SAM model checkpoint.
+            checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
         """
         super().__init__(recording)
         self.sam_model = self._initialize_model(model_name, checkpoint_dir_path)
@@ -63,7 +63,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
 
         Args:
             model_name (str): The name of the SAM model.
-            checkpoint_dir_path (str): The directory path to store the SAM model checkpoint.
+            checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
 
         Returns:
             SamModel: The initialized SAM model.
@@ -80,14 +80,14 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     def get_screenshot_bbox(
         self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
     ) -> str:
-        """Get the bounding boxes of objects in a screenshot image with RESIZE_RATIO in XYWH format.
+        """Retrieve object bounding boxes of screenshot image(XYWH) with RESIZE_RATIO.
 
         Args:
             screenshot (Screenshot): The screenshot object containing the image.
             show_plots (bool): Flag indicating whether to display the plots or not.
 
         Returns:
-            str: A string representation of a list containing the bounding boxes of objects.
+            str: String representation of list containing the bounding boxes of objects.
         """
         image_resized = resize_image(screenshot.image)
         array_resized = np.array(image_resized)
@@ -106,15 +106,17 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
     def get_click_event_bbox(
         self, screenshot: Any, show_plots: bool = SHOW_PLOTS
     ) -> str:
-        """Get bounding box of the clicked object in a resized image with RESIZE_RATIO(XYWH format).
+        """Get bounding box of a clicked object in resized image w/ RESIZE_RATIO(XYWH).
 
         Args:
             screenshot: The screenshot object containing the image.
             show_plots: Flag indicating whether to display the plots or not.
 
         Returns:
-            str: A string representation of a list containing the bounding box of clicked object.
-            None: If the screenshot does not represent a click event with the mouse pressed.
+            str: A string representation of a list containing the bounding box
+              of clicked object.
+            None: If the screenshot does not represent a click event with
+              the mouse pressed.
 
         """
         for action_event in screenshot.action_event:
@@ -209,7 +211,8 @@ def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
     Args:
         mask (np.ndarray): The mask array.
         ax: The plot axes.
-        random_color (bool): Flag indicating whether to use a random color. Defaults to False.
+        random_color (bool): Flag indicating whether to use a random color.
+          Defaults to False.
     """
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)

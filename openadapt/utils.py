@@ -33,7 +33,8 @@ def configure_logging(logger: Any, log_level: str) -> None:
         logger (loguru.logger): The logger object.
         log_level (str): The desired log level.
     """
-    # TODO: redact log messages (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
+    # TODO: redact log messages
+    #  (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
     logger.remove()
@@ -113,7 +114,8 @@ def rows2dicts(
     Args:
         rows (list): The list of rows.
         drop_empty (bool): Flag indicating whether to drop empty rows. Defaults to True.
-        drop_constant (bool): Flag indicating whether to drop rows with constant values. Defaults to True.
+        drop_constant (bool): Flag indicating whether to drop rows with constant values.
+          Defaults to True.
         num_digits (int): The number of digits to round timestamps to. Defaults to None.
 
     Returns:
@@ -245,8 +247,10 @@ def draw_ellipse(
         x (float): The x-coordinate of the center of the ellipse.
         y (float): The y-coordinate of the center of the ellipse.
         image (Image.Image): The image to draw on.
-        width_pct (float): The percentage of the image width for the width of the ellipse.
-        height_pct (float): The percentage of the image height for the height of the ellipse.
+        width_pct (float): The percentage of the image width
+          for the width of the ellipse.
+        height_pct (float): The percentage of the image height
+          for the height of the ellipse.
         fill_transparency (float): The transparency of the ellipse fill.
         outline_transparency (float): The transparency of the ellipse outline.
         outline_width (int): The width of the ellipse outline.
@@ -318,12 +322,15 @@ def draw_text(
         y (float): The y-coordinate of the text anchor point.
         text (str): The text to draw.
         image (PIL.Image.Image): The image to draw on.
-        font_size_pct (float): The percentage of the image size for the font size. Defaults to 0.01.
+        font_size_pct (float): The percentage of the image size
+          for the font size. Defaults to 0.01.
         font_name (str): The name of the font. Defaults to "Arial.ttf".
         fill (tuple): The color of the text. Defaults to (255, 0, 0) (red).
-        stroke_fill (tuple): The color of the text stroke. Defaults to (255, 255, 255) (white).
+        stroke_fill (tuple): The color of the text stroke.
+          Defaults to (255, 255, 255) (white).
         stroke_width (int): The width of the text stroke. Defaults to 3.
-        outline (bool): Flag indicating whether to draw an outline around the text. Defaults to False.
+        outline (bool): Flag indicating whether to draw an outline
+          around the text. Defaults to False.
         outline_padding (int): The padding size for the outline. Defaults to 10.
 
     Returns:
@@ -385,14 +392,22 @@ def draw_rectangle(
         x1 (float): The x-coordinate of the bottom-right corner of the rectangle.
         y1 (float): The y-coordinate of the bottom-right corner of the rectangle.
         image (PIL.Image.Image): The image to draw on.
-        bg_color (tuple): The background color of the rectangle. Defaults to (0, 0, 0) (black).
-        fg_color (tuple): The foreground color of the rectangle. Defaults to (255, 255, 255) (white).
-        outline_color (tuple): The color of the rectangle outline. Defaults to (255, 0, 0) (red).
-        bg_transparency (float): The transparency of the rectangle background. Defaults to 0.25.
-        fg_transparency (float): The transparency of the rectangle foreground. Defaults to 0.
-        outline_transparency (float): The transparency of the rectangle outline. Defaults to 0.5.
-        outline_width (int): The width of the rectangle outline. Defaults to 2.
-        invert (bool): Flag indicating whether to invert the colors. Defaults to False.
+        bg_color (tuple): The background color of the rectangle.
+          Defaults to (0, 0, 0) (black).
+        fg_color (tuple): The foreground color of the rectangle.
+          Defaults to (255, 255, 255) (white).
+        outline_color (tuple): The color of the rectangle outline.
+          Defaults to (255, 0, 0) (red).
+        bg_transparency (float): The transparency of the rectangle
+          background. Defaults to 0.25.
+        fg_transparency (float): The transparency of the rectangle
+          foreground. Defaults to 0.
+        outline_transparency (float): The transparency of the rectangle
+          outline. Defaults to 0.5.
+        outline_width (int): The width of the rectangle outline.
+          Defaults to 2.
+        invert (bool): Flag indicating whether to invert the colors.
+          Defaults to False.
 
     Returns:
         PIL.Image.Image: The image with the rectangle drawn on it.
@@ -445,11 +460,16 @@ def display_event(
 
     Args:
         action_event (ActionEvent): The action event to display.
-        marker_width_pct (float): The percentage of the image width for the marker width. Defaults to 0.03.
-        marker_height_pct (float): The percentage of the image height for the marker height. Defaults to 0.03.
-        marker_fill_transparency (float): The transparency of the marker fill. Defaults to 0.25.
-        marker_outline_transparency (float): The transparency of the marker outline. Defaults to 0.5.
-        diff (bool): Flag indicating whether to display the diff image. Defaults to False.
+        marker_width_pct (float): The percentage of the image width
+          for the marker width. Defaults to 0.03.
+        marker_height_pct (float): The percentage of the image height
+          for the marker height. Defaults to 0.03.
+        marker_fill_transparency (float): The transparency of the
+          marker fill. Defaults to 0.25.
+        marker_outline_transparency (float): The transparency of the
+          marker outline. Defaults to 0.5.
+        diff (bool): Flag indicating whether to display the diff image.
+          Defaults to False.
 
     Returns:
         PIL.Image.Image: The image with the action event displayed on it.
@@ -555,7 +575,8 @@ def get_timestamp(is_global: bool = False) -> float:
     """Get the current timestamp.
 
     Args:
-        is_global (bool): Flag indicating whether to use the global start time. Defaults to False.
+        is_global (bool): Flag indicating whether to use the global
+          start time. Defaults to False.
 
     Returns:
         float: The current timestamp.
@@ -612,7 +633,8 @@ def plot_performance(recording_timestamp: float = None) -> None:
     """Plot the performance of the event processing and writing.
 
     Args:
-        recording_timestamp (float): The timestamp of the recording (defaults to latest).
+        recording_timestamp (float): The timestamp of the recording
+          (defaults to latest).
     """
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)

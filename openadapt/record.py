@@ -92,7 +92,8 @@ def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
         **kwargs: Keyword arguments.
 
     Returns:
-        str: Comma-separated string representation of keyword arguments in form "key=value".
+        str: Comma-separated string representation of keyword arguments
+          in form "key=value".
     """
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
@@ -164,7 +165,7 @@ def process_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
-    """Process events from the event queue and write them to the respective write queues.
+    """Process events from the event queue and write them to write queues.
 
     Args:
         event_q: A queue with events to be processed.
@@ -609,7 +610,8 @@ def memory_writer(
 
     Args:
         recording_timestamp (float): The timestamp of the recording.
-        terminate_event (multiprocessing.Event): The event used to terminate the process.
+        terminate_event (multiprocessing.Event): The event used to terminate
+          the process.
         record_pid (int): The process ID to monitor memory usage for.
 
     Returns:
@@ -687,7 +689,8 @@ def read_keyboard_events(
 
     Args:
         event_q (queue.Queue): The event queue to add the keyboard events to.
-        terminate_event (multiprocessing.Event): The event to signal termination of event reading.
+        terminate_event (multiprocessing.Event): The event to signal termination
+          of event reading.
         recording_timestamp (float): The timestamp of the recording.
 
     Returns:
@@ -706,7 +709,8 @@ def read_keyboard_events(
 
         Args:
             event_q (queue.Queue): The event queue for processing key events.
-            key (keyboard.KeyboardEvent): The key event object representing the pressed key.
+            key (keyboard.KeyboardEvent): The key event object representing
+              the pressed key.
             injected (bool): A flag indicating whether the key event was injected.
 
         Returns:
@@ -756,7 +760,8 @@ def read_keyboard_events(
 
         Args:
             event_q (queue.Queue): The event queue for processing key events.
-            key (keyboard.KeyboardEvent): The key event object representing the released key.
+            key (keyboard.KeyboardEvent): The key event object representing
+              the released key.
             injected (bool): A flag indicating whether the key event was injected.
 
         Returns:
