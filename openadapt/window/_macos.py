@@ -194,8 +194,8 @@ def deepconvert_objc(object):
                 f"https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
             )
             logger.warning(f"{object=}")
-
-    value = atomacos._converter.Converter().convert_value(value)
+    if value:
+        value = atomacos._converter.Converter().convert_value(value)
     return value
 
 
