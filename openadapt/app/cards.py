@@ -40,19 +40,14 @@ def select_import(f):
     import_dialog.open()
 
 
-def stop_record(tray):
+def stop_record():
     global record_proc
     if record_proc is not None:
-        tray.notify("OpenAdapt", "Stopping recording...")
         record_proc.send_signal(signal.SIGINT)
 
         # wait for process to terminate
         record_proc.wait()
-        tray.remove_notification()
-        tray.notify("OpenAdapt", "Recording finished.")
         record_proc = None
-    else:
-        tray.notify("OpenAdapt", "No recording in progress.")
 
 
 def quick_record():

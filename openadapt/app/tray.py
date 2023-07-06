@@ -3,8 +3,10 @@ import sys
 import threading
 from functools import partial
 
-from PIL import Image
-from pystray import Icon, Menu, MenuItem
+from notifypy import Notify
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from openadapt import visualize
 from openadapt.app.cards import quick_record, stop_record
@@ -18,67 +20,107 @@ if sys.platform == "darwin":
     info = AppKit.NSBundle.mainBundle().infoDictionary()
     info["LSBackgroundOnly"] = "1"
 
-app_thread = None
-g_tray = None
 
+class SystemTrayIcon(QSystemTrayIcon):
+    recording = False
+    app_thread = None
+    recording_actions = []
 
-def get_visualize_menu():
-    def callback(recording, *args, **kwargs):
+    def __init__(self):
+        self.app = QApplication([])
+        self.app.setQuitOnLastWindowClosed(False)
+
+        self.icon = QIcon(f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png")
+
+        self.tray = QSystemTrayIcon()
+        self.tray.setIcon(self.icon)
+        self.tray.setVisible(True)
+
+        super().__init__(self.icon, self.app)
+
+        self.menu = QMenu()
+
+        self.record_action = QAction("Record")
+        self.record_action.triggered.connect(self._quick_record)
+        self.menu.addAction(self.record_action)
+
+        self.visualize_menu = self.menu.addMenu("Visualize")
+
+        self.populate_visualize_menu()
+
+        self.app_action = QAction("Open OpenAdapt")
+        self.app_action.triggered.connect(self.show_app)
+        self.menu.addAction(self.app_action)
+
+        self.quit = QAction("Quit")
+        self.quit.triggered.connect(self.app.quit)
+        self.menu.addAction(self.quit)
+
+        self.tray.setContextMenu(self.menu)
+
+        self.timer = QTimer()
+        self.timer.setInterval(1000)  # update every second
+        self.timer.timeout.connect(self.update_tray_icon)
+        self.timer.start()
+
+        # Variables to track the current icon state
+        # TODO: use this somewhere, maybe? (e.g. to show if recording is active)
+        self.current_icon = f"{FPATH}/assets/logo.png"
+        self.icon_mapping = {
+            f"{FPATH}/assets/logo.png": f"{FPATH}/assets/logo_inverted.png",
+            f"{FPATH}/assets/logo_inverted.png": f"{FPATH}/assets/logo.png",
+        }
+
+        Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
+
+    def cycle_icon(self):
+        new_icon = self.icon_mapping[self.current_icon]
+        self.tray.setIcon(QIcon(new_icon))
+        self.current_icon = new_icon
+        self.populate_visualize_menu()
+
+    def update_tray_icon(self):
+        if self.recording:
+            self.record_action.setText("Stop recording")
+        else:
+            self.record_action.setText("Record")
+
+    def _quick_record(self):
+        if not self.recording:
+            Notify("Status", "Starting recording...", "OpenAdapt").send()
+            self.recording = True
+            try:
+                quick_record()
+            except KeyboardInterrupt:
+                self.recording = False
+        else:
+            Notify("Status", "Stopping recording...", "OpenAdapt").send()
+            self.recording = False
+            stop_record()
+            Notify("Status", "Recording stopped", "OpenAdapt").send()
+
+    def _visualize(self, recording, *args, **kwargs):
+        Notify("Status", "Starting visualization...", "OpenAdapt").send()
         visualize.main(recording)
 
-    recordings = get_all_recordings()
-    menu_items = [MenuItem("latest", lambda: visualize.main())]
-    for recording in recordings[1:]:
-        menu_items.append(
-            MenuItem(
-                f"{recording.task_description}",
-                partial(callback, recording),
+    def populate_visualize_menu(self):
+        self.recordings = get_all_recordings()
+        for idx, recording in enumerate(self.recordings):
+            self.recording_actions.append(QAction(f"{recording.task_description}"))
+            self.recording_actions[idx].triggered.connect(
+                partial(self._visualize, recording)
             )
-        )
-    return Menu(*menu_items)
+            self.visualize_menu.addAction(self.recording_actions[idx])
 
+    def show_app(self):
+        if self.app_thread is None or not self.app_thread.is_alive():
+            self.app_thread = threading.Thread(target=start, daemon=True)
+            self.app_thread.start()
 
-def _quick_record():
-    g_tray.notify("OpenAdapt", "Starting recording...")
-    quick_record()
-
-
-def new_tray():
-    global g_tray
-
-    def on_exit():
-        os._exit(0)
-
-    def show_app():
-        global app_thread
-
-        # check if app is already running
-        if app_thread is None or not app_thread.is_alive():
-            app_thread = threading.Thread(target=start, daemon=True)
-            app_thread.start()
-
-    image = Image.open(f"{FPATH}/assets/logo_inverted.png")
-    menu = Menu(
-        MenuItem("Record", _quick_record),
-        MenuItem("Stop Recording", lambda: stop_record(g_tray)),
-        MenuItem(
-            "Visualize",
-            get_visualize_menu(),
-        ),
-        MenuItem("Show App", show_app),
-        MenuItem("Exit", on_exit),
-    )
-
-    g_tray = Icon("OpenAdapt", icon=image, menu=menu)
-    g_tray.notify("OpenAdapt", "OpenAdapt is running in the background.")
-    return g_tray
-
-
-def run_tray():
-    tray = new_tray()
-    # TODO: get tray.run_detached() working for non-blocking solution
-    tray.run()
+    def run(self):
+        self.app.exec_()
 
 
 if __name__ == "__main__":
-    run_tray()
+    tray = SystemTrayIcon()
+    tray.run()
