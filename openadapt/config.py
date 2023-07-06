@@ -183,7 +183,7 @@ def filter_log_messages(data: dict) -> bool:
     Returns:
         bool: True if the message should not be ignored, False if it should be ignored.
     """
-    # TODO: Implement log message filtering logic
+    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]
