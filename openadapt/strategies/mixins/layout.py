@@ -31,9 +31,9 @@ class LayoutExtractionReplayStrategyMixin(BaseReplayStrategy):
             model="impira/layoutlm-document-qa"
         )
         output = query_pipeline(image, question)
-        if output != []:
-            return query_pipeline(image, question)[0]['answer']
-        raise TypeError("Unsupported document type, please input a text-based document")
+        if not output:
+            raise TypeError("Unsupported document type, please input a text-based document")
+        return query_pipeline(image, question)[0]['answer']
     
     def get_next_action_event(self, screenshot: Screenshot) -> ActionEvent:
         return super().get_next_action_event(screenshot)
