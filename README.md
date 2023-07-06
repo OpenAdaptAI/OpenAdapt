@@ -32,10 +32,50 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
 4. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
 
+
 ## Install
 
+<br/>
 
-Install with [Poetry](https://python-poetry.org/) (recommended):
+| Installation Method  |               [Installation Scripts](https://openadapt.ai/#start)                |                               Manual Setup                                |
+|:--------------------:|:--------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
+|   Recommended for    |                            Non-technical users                             |                              Technical users                              |
+|     Ease of Use      | Streamlines the installation process for users unfamiliar with setup steps | Allows for more control and customization during the installation process |
+
+<br/>
+
+### Installation Scripts
+
+#### Windows
+- Press Windows Key, type "powershell", and press Enter
+- Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
+  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
+   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/MLDSAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
+  </pre>
+
+#### MacOS
+- Download and install Git and Python 3.10
+- Press Command+Space, type "terminal", and press Enter
+- Copy and paste the following command into the terminal, and press Enter:
+  <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
+  </pre>
+
+<br/>
+<br/>
+
+### Manual Setup
+
+Prerequisite:
+- Python 3.10
+- Git
+- Tesseract (for OCR)
+
+For the setup of any/all of the above dependencies, follow the steps [SETUP.md](./SETUP.md).
+
+<br/>
+
+Install with [Poetry](https://python-poetry.org/) :
 ```
 git clone https://github.com/MLDSAI/OpenAdapt.git
 cd OpenAdapt
@@ -46,19 +86,6 @@ alembic upgrade head
 pytest
 ```
 
-Manual:
-```
-git clone https://github.com/MLDSAI/OpenAdapt.git
-cd OpenAdapt
-python3.10 -m venv .venv
-source .venv/bin/activate
-pip install wheel
-pip install -r requirements.txt
-pip install -e .
-python -m spacy download en_core_web_trf
-alembic upgrade head
-pytest
-```
 
 ## Permissions
 
