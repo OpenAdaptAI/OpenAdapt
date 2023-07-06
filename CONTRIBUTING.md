@@ -28,15 +28,15 @@ from openadapt import models
 In order to effectively communicate any bugs or request new features, please select the appropriate form. If none of the options suit your needs, you can click on "Open a blank issue" located at the bottom.
 
 ## Testing
-[GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behaviour and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
+[GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behavior and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
 
-You can run these tests on your own computer by downloading the depencencies in requirements.txt and then running pytest in the root directory. 
+You can run these tests on your own computer by downloading the dependencies using `poetry` (see [here](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md#install)) and then running `pytest` in the root directory. 
 
 ## Pull Request Format
 
 To speed up the review process, please use the provided pull request template and create a draft pull request to get initial feedback. 
 
-The pull request template includes areas to explain the changes, and a checklist with boxes for code style, testing, and documenttation.
+The pull request template includes areas to explain the changes, and a checklist with boxes for code style, testing, and documentation.
 
 ## Commit Message Format
 

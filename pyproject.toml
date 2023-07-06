@@ -78,6 +78,7 @@ flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
 flake8-annotations = "^3.0.1"
+pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
 

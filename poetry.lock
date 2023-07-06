@@ -573,6 +573,17 @@ files = [
 pycparser = "*"
 
 [[package]]
+name = "cfgv"
+version = "3.3.1"
+description = "Validate configuration and produce human readable error messages."
+optional = false
+python-versions = ">=3.6.1"
+files = [
+    {file = "cfgv-3.3.1-py2.py3-none-any.whl", hash = "sha256:c6a0883f3917a037485059700b9e75da2464e6c27051014ad85ba6aaa5884426"},
+    {file = "cfgv-3.3.1.tar.gz", hash = "sha256:f5a830efb9ce7a445376bb66ec94c638a9787422f96264c98edc6bdeed8ab736"},
+]
+
+[[package]]
 name = "chardet"
 version = "5.1.0"
 description = "Universal encoding detector for Python 3"
@@ -926,6 +937,17 @@ files = [
 graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
+name = "distlib"
+version = "0.3.6"
+description = "Distribution utilities"
+optional = false
+python-versions = "*"
+files = [
+    {file = "distlib-0.3.6-py2.py3-none-any.whl", hash = "sha256:f35c4b692542ca110de7ef0bea44d73981caeb34ca0b9b6b2e6d7790dda8f80e"},
+    {file = "distlib-0.3.6.tar.gz", hash = "sha256:14bad2d9b04d3a36127ac97f30b12a19268f211063d8f8ee4f47108896e11b46"},
+]
+
+[[package]]
 name = "docopt"
 version = "0.6.2"
 description = "Pythonic argument parser, that will make you smile"
@@ -1004,13 +1026,13 @@ tests = ["asttokens", "littleutils", "pytest", "rich"]
 
 [[package]]
 name = "fastapi"
-version = "0.99.0"
+version = "0.98.0"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "fastapi-0.99.0-py3-none-any.whl", hash = "sha256:b87fffddf9c761c5618f638b492cfb73bba1d208ab170b89122cce52d1fb044a"},
-    {file = "fastapi-0.99.0.tar.gz", hash = "sha256:eab70f072d6c424d16f02ba635dc0945fecab549210e7961c838f4b467f0b4a7"},
+    {file = "fastapi-0.98.0-py3-none-any.whl", hash = "sha256:f4165fb1fe3610c52cb1b8282c1480de9c34bc270f56a965aa93a884c350d605"},
+    {file = "fastapi-0.98.0.tar.gz", hash = "sha256:0d3c18886f652038262b5898fec6b09f4ca92ee23e9d9b1d1d24e429f84bf27b"},
 ]
 
 [package.dependencies]
@@ -1505,6 +1527,20 @@ files = [
 
 [package.dependencies]
 pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_version >= \"3.8\""}
+
+[[package]]
+name = "identify"
+version = "2.5.24"
+description = "File identification library for Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "identify-2.5.24-py2.py3-none-any.whl", hash = "sha256:986dbfb38b1140e763e413e6feb44cd731faf72d1909543178aa79b0e258265d"},
+    {file = "identify-2.5.24.tar.gz", hash = "sha256:0aac67d5b4812498056d28a9a512a483f5085cc28640b02b258a59dac34301d4"},
+]
+
+[package.extras]
+license = ["ukkonen"]
 
 [[package]]
 name = "idna"
@@ -2534,6 +2570,20 @@ tgrep = ["pyparsing"]
 twitter = ["twython"]
 
 [[package]]
+name = "nodeenv"
+version = "1.8.0"
+description = "Node.js virtual environment builder"
+optional = false
+python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*"
+files = [
+    {file = "nodeenv-1.8.0-py2.py3-none-any.whl", hash = "sha256:df865724bb3c3adc86b3876fa209771517b0cfe596beff01a92700e0e8be4cec"},
+    {file = "nodeenv-1.8.0.tar.gz", hash = "sha256:d51e0c37e64fbf47d017feac3145cdbb58836d7eee8c6f6d3b6880c5456227d2"},
+]
+
+[package.dependencies]
+setuptools = "*"
+
+[[package]]
 name = "numpy"
 version = "1.25.0"
 description = "Fundamental package for array computing in Python"
@@ -3014,6 +3064,24 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "pre-commit"
+version = "3.3.3"
+description = "A framework for managing and maintaining multi-language pre-commit hooks."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pre_commit-3.3.3-py2.py3-none-any.whl", hash = "sha256:10badb65d6a38caff29703362271d7dca483d01da88f9d7e05d0b97171c136cb"},
+    {file = "pre_commit-3.3.3.tar.gz", hash = "sha256:a2256f489cd913d575c145132ae196fe335da32d91a8294b7afe6622335dd023"},
+]
+
+[package.dependencies]
+cfgv = ">=2.0.0"
+identify = ">=1.0.0"
+nodeenv = ">=0.11.1"
+pyyaml = ">=5.1"
+virtualenv = ">=20.10.0"
 
 [[package]]
 name = "preshed"
@@ -5728,6 +5796,26 @@ files = [
 pscript = ">=0.7.0,<0.8.0"
 
 [[package]]
+name = "virtualenv"
+version = "20.23.1"
+description = "Virtual Python Environment builder"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "virtualenv-20.23.1-py3-none-any.whl", hash = "sha256:34da10f14fea9be20e0fd7f04aba9732f84e593dac291b757ce42e3368a39419"},
+    {file = "virtualenv-20.23.1.tar.gz", hash = "sha256:8ff19a38c1021c742148edc4f81cb43d7f8c6816d2ede2ab72af5b84c749ade1"},
+]
+
+[package.dependencies]
+distlib = ">=0.3.6,<1"
+filelock = ">=3.12,<4"
+platformdirs = ">=3.5.1,<4"
+
+[package.extras]
+docs = ["furo (>=2023.5.20)", "proselint (>=0.13)", "sphinx (>=7.0.1)", "sphinx-argparse (>=0.4)", "sphinxcontrib-towncrier (>=0.2.1a0)", "towncrier (>=23.6)"]
+test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess (>=1)", "flaky (>=3.7)", "packaging (>=23.1)", "pytest (>=7.3.1)", "pytest-env (>=0.8.1)", "pytest-freezer (>=0.4.6)", "pytest-mock (>=3.10)", "pytest-randomly (>=3.12)", "pytest-timeout (>=2.1)", "setuptools (>=67.8)", "time-machine (>=2.9)"]
+
+[[package]]
 name = "wasabi"
 version = "1.1.2"
 description = "A lightweight console printing and formatting toolkit"
@@ -6064,4 +6152,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "076f76d3a17b05235b0ae3b16001f0fc223363569f3ef2fedf36742532de981c"
+content-hash = "042fe3e83c940c1b6d1b9c128adc1eedda2e325175d4b5512764be79854146eb"
