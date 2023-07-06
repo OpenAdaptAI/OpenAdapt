@@ -1,9 +1,11 @@
-// System Diagram: https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
+let logged = false;
+let ignoreAttributes = new Set();
+let observer = null; // Reference to the MutationObserver
 
 
 /*
  * Function to send a message to the background script
-*/
+ */
 function sendMessageToBackgroundScript(message) {
   chrome.runtime.sendMessage(message);
 }
@@ -11,58 +13,138 @@ function sendMessageToBackgroundScript(message) {
 
 /*
  * Function to detect DOM changes
-*/
-function detectDOMChanges() {
-  // Create a mutation observer
-  const observer = new MutationObserver(function(mutationsList) {
-    // Send a message to the background script when a DOM change is detected
-    if (mutationsList.length === 0) {
+ */
+function detectDOMChanges(mutationsList) {
+  // Send a message to the background script when a DOM change is detected
+  if (mutationsList.length === 0) {
+    return;
+  }
+  if (!logged) {
+    console.log({ mutationsList });
+    // logged = true;
+    // debugger;
+  }
+  sendMessageToBackgroundScript({
+    action: 'logDOMChange',
+    mutationsList: mutationsList
+  });
+}
+
+
+/*
+ * Mutation observer callback function
+ */
+function handleMutation(mutationsList) {
+  const filteredMutations = [];
+
+  // Filter out mutations related to ignored attributes
+  mutationsList.forEach((mutation) => {
+    if (ignoreAttributes.has(mutation.attributeName)) {
       return;
     }
-    if (!logged) {
-      console.log({ mutationsList })
-      // logged = true;
-      // debugger;
-    }
-    getElementPositions();
-    sendMessageToBackgroundScript({
-      action: 'logDOMChange',
-      documentBody: document.body.outerHTML,
-      documentHead: document.head.outerHTML
-    });
+    filteredMutations.push(mutation);
   });
+
+  detectDOMChanges(filteredMutations);
+}
+
+
+/*
+ * Function to start observing DOM changes
+ */
+function startObservingDOMChanges() {
+  // Create a new mutation observer if it doesn't exist
+  if (!observer) {
+    observer = new MutationObserver(handleMutation);
+  }
 
   // Start observing DOM changes
   observer.observe(document, {
     subtree: true,
     childList: true,
     attributes: true,
-    characterData: true,
+    attributeFilter: Array.from(ignoreAttributes),
+    characterData: true
   });
 }
 
-// Call the function to start detecting DOM changes
-detectDOMChanges();
-let logged = true;
-let ignoreAttributes = new Set()
+
+/*
+ * Function to stop observing DOM changes
+ */
+function stopObservingDOMChanges() {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+}
 
 
+/*
+ * Function to capture initial document state and send it to the background script
+ */
+function captureInitialDocumentState() {
+  const documentBody = document.body.outerHTML;
+  const documentHead = document.head.outerHTML;
+
+  sendMessageToBackgroundScript({
+    action: 'captureInitialDocumentState',
+    documentBody: documentBody,
+    documentHead: documentHead
+  });
+}
+
+
+/*
+ * Function to get element positions
+ */
 function getElementPositions() {
-  // iterate over all elements in the page
   const elements = document.getElementsByTagName("*");
 
   for (const element of elements) {
     const rect = element.getBoundingClientRect();
-    // console.log({ rect });
     const attrs = ['top', 'right', 'bottom', 'left', 'width', 'height'];
     for (const attr of attrs) {
       element.setAttribute(`data-${attr}`, rect[attr]);
-      ignoreAttributes.add(`data-${attr}`)
+      ignoreAttributes.add(`data-${attr}`);
     }
   }
-
-  // later, improve performance:
-  // - ignore elements that are not in the viewport
-  // - on update, use mutations to only update elements that have changed
 }
 
+
+/*
+  * After Tab Event processing
+*/
+function afterTabEvent(message) {
+  // Perform additional actions based on the message received
+  console.log('A Tab Event was occurred and now content script is ready for receiving end');
+
+  // Stop observing DOM changes when switching to another tab or opening a new tab
+  stopObservingDOMChanges();
+
+  // Capture and send the initial document state
+  captureInitialDocumentState();
+
+  // Get element positions
+  getElementPositions();
+
+  // Resume observing DOM changes
+  startObservingDOMChanges();
+}
+
+
+// Message listener for messages from the background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'afterTabEvent') {
+    afterTabEvent(message);
+  }
+});
+
+// Call the function to capture initial document state
+captureInitialDocumentState();
+
+// Call the function to get element positions
+getElementPositions();
+
+// Call the function to start observing DOM changes
+startObservingDOMChanges();
