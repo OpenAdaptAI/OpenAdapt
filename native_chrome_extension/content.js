@@ -16,7 +16,14 @@ function detectDOMChanges() {
   // Create a mutation observer
   const observer = new MutationObserver(function(mutationsList) {
     // Send a message to the background script when a DOM change is detected
-    console.log({ mutationsList })
+    if (mutationsList.length === 0) {
+      return;
+    }
+    if (!logged) {
+      console.log({ mutationsList })
+      // logged = true;
+      // debugger;
+    }
     getElementPositions();
     sendMessageToBackgroundScript({
       action: 'logDOMChange',
@@ -36,6 +43,8 @@ function detectDOMChanges() {
 
 // Call the function to start detecting DOM changes
 detectDOMChanges();
+let logged = true;
+let ignoreAttributes = new Set()
 
 
 function getElementPositions() {
@@ -44,13 +53,14 @@ function getElementPositions() {
 
   for (const element of elements) {
     const rect = element.getBoundingClientRect();
-    console.log({ rect });
+    // console.log({ rect });
     const attrs = ['top', 'right', 'bottom', 'left', 'width', 'height'];
     for (const attr of attrs) {
       element.setAttribute(`data-${attr}`, rect[attr]);
+      ignoreAttributes.add(`data-${attr}`)
     }
-
   }
+
   // later, improve performance:
   // - ignore elements that are not in the viewport
   // - on update, use mutations to only update elements that have changed
