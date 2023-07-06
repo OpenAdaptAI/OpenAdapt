@@ -76,6 +76,7 @@ pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
 accelerate = "^0.20.3"
+pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
 
