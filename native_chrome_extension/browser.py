@@ -38,10 +38,33 @@ def sendMessage(encodedMessage):
     sys.stdout.buffer.flush()
 
 
-reply_num = 0
-while True:
-    receivedMessage = getMessage()
-    # pipe.send(receivedMessage)
-    reply_num += 1
-    sendMessage(encodeMessage(str(reply_num)))
-    sendMessage(encodeMessage(receivedMessage))
+# reply_num = 0
+# while True:
+#     receivedMessage = getMessage()
+#     # pipe.send(receivedMessage)
+#     reply_num += 1
+#     sendMessage(encodeMessage(str(reply_num)))
+#     sendMessage(encodeMessage(receivedMessage))
+
+
+
+# Create a new txt file to show the browser has connected
+with open('browser_connected.txt', 'w') as f:
+    f.write('Browser connected')
+
+with NPopen('wt', name='test') as pipe:  # writable text pipe
+    stream = pipe.wait()
+    sendMessage(encodeMessage("Client connected: " + str(stream)))
+    dom_change_num = 0
+    while True:
+        receivedMessage = getMessage()
+        dom_change_num += 1
+
+        # Check if client (record.py) is still connected
+        if pipe.stream:
+            # Write message to the stream
+            pipe.stream.write(receivedMessage)
+            pipe.stream.flush()
+
+        sendMessage(encodeMessage(str(dom_change_num)))
+        sendMessage(encodeMessage(receivedMessage))
