@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.5.0"
+version = "0.5.1"
 description = "GUI Process Automation with Transformers"
 authors = [
     'Mustafa Abdulrahman <mustafa@openadapt.ai>',
@@ -79,6 +79,9 @@ python-levenshtein = "^0.21.1"
 pyside6 = "^6.5.1.1"
 notify-py = "^0.3.42"
 
+pre-commit = "^3.3.3"
+pympler = "^1.0.1"
+psutil = "^5.9.5"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
