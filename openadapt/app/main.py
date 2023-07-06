@@ -1,3 +1,4 @@
+import sys
 import threading
 import base64
 import os
@@ -32,9 +33,7 @@ with ui.row().classes("w-full justify-right"):
 
     # alignment trick
     with ui.avatar(color="white" if dark else "black", size=128):
-        logo_base64 = base64.b64encode(
-            open(f"{FPATH}/assets/logo.png", "rb").read()
-        )
+        logo_base64 = base64.b64encode(open(f"{FPATH}/assets/logo.png", "rb").read())
         img = bytes(
             f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
             encoding="utf-8",
@@ -70,6 +69,7 @@ with ui.splitter(value=20) as splitter:
             ).tooltip("Play the latest replay")
     with splitter.after:
         logger = Console()
+        sys.stderr = logger
         logger.log.style("height: 250px;, width: 300px;")
     splitter.enabled = False
 

@@ -8,10 +8,10 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from openadapt import visualize
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.main import FPATH, start
 from openadapt.crud import get_all_recordings
+from openadapt.visualize import main as visualize
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -65,10 +65,10 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         # Variables to track the current icon state
         # TODO: use this somewhere, maybe? (e.g. to show if recording is active)
-        self.current_icon = f"{FPATH}/assets/logo.png"
+        self.current_icon = f"{FPATH}{os.sep}assets{os.sep}logo.png"
         self.icon_mapping = {
-            f"{FPATH}/assets/logo.png": f"{FPATH}/assets/logo_inverted.png",
-            f"{FPATH}/assets/logo_inverted.png": f"{FPATH}/assets/logo.png",
+            f"{FPATH}{os.sep}assets{os.sep}logo.png": f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png",
+            f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png": f"{FPATH}{os.sep}assets{os.sep}logo.png",
         }
 
         Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
@@ -77,13 +77,17 @@ class SystemTrayIcon(QSystemTrayIcon):
         new_icon = self.icon_mapping[self.current_icon]
         self.tray.setIcon(QIcon(new_icon))
         self.current_icon = new_icon
-        self.populate_visualize_menu()
 
     def update_tray_icon(self):
-        if self.recording:
-            self.record_action.setText("Stop recording")
-        else:
-            self.record_action.setText("Record")
+        try:
+            if self.recording:
+                self.record_action.setText("Stop recording")
+            else:
+                self.record_action.setText("Record")
+            self.populate_visualize_menu()
+        except KeyboardInterrupt:
+            # the app is probably shutting down, so we can ignore this
+            pass
 
     def _quick_record(self):
         if not self.recording:
@@ -93,6 +97,7 @@ class SystemTrayIcon(QSystemTrayIcon):
                 quick_record()
             except KeyboardInterrupt:
                 self.recording = False
+                stop_record()
         else:
             Notify("Status", "Stopping recording...", "OpenAdapt").send()
             self.recording = False
@@ -101,7 +106,8 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def _visualize(self, recording, *args, **kwargs):
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
-        visualize.main(recording)
+        visualize(recording)
+        Notify("Status", "Visualization finished", "OpenAdapt").send()
 
     def populate_visualize_menu(self):
         self.recordings = get_all_recordings()
