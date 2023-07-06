@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 
 IMAGE_FILE_NAMES = [
-    "test_ladingbill.png",
-    "test_invoice.png",
-    "test_calendar.png",
-    "test_calc.png",
+    "assets/test_ladingbill.png",
+    "assets/test_invoice.png",
+    "assets/test_calendar.png",
+    "assets/test_calc.png",
 ]
 
 LAYOUT_OBJ = LayoutExtractionReplayStrategyMixin(Recording(), IMAGE_FILE_NAMES)
