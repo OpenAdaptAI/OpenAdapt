@@ -61,6 +61,12 @@ def test_generalizable_single_action(
     test_dict = eval(
         test_action_dict[test_action_dict.find("[") : test_action_dict.find("]") + 1]
     )
+    print("Reference Actions")
+    print(reference_action_dicts)
+    print("Generated Actions")
+    print(test_dict)
+    print("Expected Actions")
+    print(expected_action_dict)
     assert test_dict == expected_action_dict
 
 
@@ -95,11 +101,11 @@ def create_win_dict(
 
 def create_action_dict(
     name: str,
-    mouse_x: Union[int, float],
-    mouse_y: Union[int, float],
-    mouse_button_name: str,
-    mouse_pressed: bool,
-    key_name: str,
+    mouse_x: Union[int, float] = None,
+    mouse_y: Union[int, float] = None,
+    mouse_button_name: str = None,
+    mouse_pressed: bool = None,
+    key_name: str = None,
     element_state: dict = {},
 ):
     if name == "click":
@@ -255,5 +261,40 @@ def test_multi_click_diff():
     )
 
 
+def test_simple_multi_action_sequence():
+    """
+    Simple test that on an event where
+    the user moves the cursor down in a straight line and
+    types the word password.
+    """
+    win_dict = create_win_dict("Google Chrome", 20, 25, 1300, 800, 10442, {})
+    ref_act_dicts = []
+
+    for i in range(20):
+        new_act = create_action_dict("move", 400 - i, 500 - i)
+        ref_act_dicts += new_act
+
+    word = "password"
+
+    expected_act_dict = []
+
+    for i in range(20):
+        exp_act = create_action_dict("move", 276.92 - i, 1300 - i)
+        expected_act_dict += exp_act
+
+    for letter in word:
+        press_dict = create_action_dict(name="press", key_name=letter)
+        release_dict = create_action_dict(name="release", key_name=letter)
+        ref_act_dicts = ref_act_dicts + press_dict + release_dict
+        expected_act_dict = expected_act_dict + press_dict + release_dict
+
+    # MODIFY THIS active act dict here to observe the results
+    # discussed in the latest comment ! :)
+    active_win_dict = create_win_dict("Google Chrome", 87, 101, 1300, 800, 991, {})
+    test_generalizable_single_action(
+        win_dict, ref_act_dicts, active_win_dict, expected_act_dict
+    )
+
+
 if __name__ == "__main__":
-    test_multi_click_diff()
+    test_simple_multi_action_sequence()
