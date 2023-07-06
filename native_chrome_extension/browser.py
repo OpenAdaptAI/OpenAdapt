@@ -48,11 +48,8 @@ def sendMessage(encodedMessage):
 
 
 
-# Create a new txt file to show the browser has connected
-with open('browser_connected.txt', 'w') as f:
-    f.write('Browser connected')
-
 with NPopen('wt', name='test') as pipe:  # writable text pipe
+    sendMessage(encodeMessage("Waiting for client..."))
     stream = pipe.wait()
     sendMessage(encodeMessage("Client connected: " + str(stream)))
     dom_change_num = 0
