@@ -10,10 +10,13 @@ from pprint import pformat
 from requests_oauthlib import OAuth1
 import os
 import requests
+from contrib.wordlyworks import ner.ner
 
 from dotenv import load_dotenv
 from loguru import logger
+import ner
 #from TheNounProjectAPI import API
+
 
 load_dotenv()
 
@@ -29,7 +32,6 @@ def main():
 
     response = requests.get(endpoint, auth=auth)
     logger.info(f"response=\n{pformat(response.json())}")
-
 
     if 0:
         api = API(key=key, secret=secret)
