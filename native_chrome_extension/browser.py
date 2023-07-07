@@ -44,6 +44,9 @@ def sendMessage(encodedMessage):
     sys.stdout.buffer.flush()
 
 
+# TODO: send the Javascript memory state to the server
+
+
 SERVER_SENDS = True
 PORT = 6001
 
