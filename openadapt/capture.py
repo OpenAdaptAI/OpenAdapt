@@ -17,7 +17,7 @@ from Quartz import CGMainDisplayID
 from openadapt import config
 
 
-class OpenAdaptCapture:
+class Capture:
     def __init__(self):
         # only on macos
         if platform != "darwin":
@@ -67,7 +67,7 @@ class OpenAdaptCapture:
 
 
 if __name__ == "__main__":
-    capture = OpenAdaptCapture()
+    capture = Capture()
     capture.start(audio=True)
     input("Press enter to stop")
     capture.stop()
