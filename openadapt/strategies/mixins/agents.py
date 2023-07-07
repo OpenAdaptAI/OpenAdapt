@@ -35,6 +35,7 @@ def get_prompt(action_event, diffs=False):
         f"In the image, you are presented with a screenshot of a user's current active window."
         f"The user's current window event is: {action_event.window_event.title}."
         f"What is the user doing, and what text do they see? DO NOT SEGMENT, feel free to use text_classifier and text_qa."
+        f"If you have been given another image previously, please use that image and list the user's next possible actions."
     ) + (
         " A diff of the screenshot may be given after the prompt, if it does not contain useful information, disregard it."
         if diffs
