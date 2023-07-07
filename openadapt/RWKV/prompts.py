@@ -44,6 +44,13 @@ You are {task}. A list of information signals is provided in JSON format. Please
 """
     return prompt
 
+def evaluate():
+    # 1. Pick a random task_id and a random number of random signals
+    # 2. Generate a prompt
+    # 3. Run the model
+    # 4. Get the relevant signals
+    # 5. Check if the model's output is correct
+    return
 
 if __name__ == '__main__':
     print("Tasks:")
