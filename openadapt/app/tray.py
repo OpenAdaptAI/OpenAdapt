@@ -127,6 +127,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.app.exec_()
 
 
-if __name__ == "__main__":
+def run():
     tray = SystemTrayIcon()
     tray.run()
+
+
+if __name__ == "__main__":
+    run()

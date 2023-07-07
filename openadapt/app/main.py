@@ -33,7 +33,9 @@ with ui.row().classes("w-full justify-right"):
 
     # alignment trick
     with ui.avatar(color="white" if dark else "black", size=128):
-        logo_base64 = base64.b64encode(open(f"{FPATH}/assets/logo.png", "rb").read())
+        logo_base64 = base64.b64encode(
+            open(os.path.join(FPATH, "assets/logo.png"), "rb").read()
+        )
         img = bytes(
             f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
             encoding="utf-8",
