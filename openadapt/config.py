@@ -83,11 +83,28 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
+    "PLOT_PERFORMANCE": True,
 }
+
+# each string in STOP_STRS should only contain strings that don't contain special characters
+STOP_STRS = [
+    "oa.stop",
+    # TODO:
+    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
+]
+# each list in SPECIAL_CHAR_STOP_SEQUENCES should contain sequences
+# containing special chars, separated by keys
+SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
+# sequences that when typed, will stop the recording of ActionEvents in record.py
+STOP_SEQUENCES = [
+    list(stop_str) for stop_str in STOP_STRS
+] + SPECIAL_CHAR_STOP_SEQUENCES
 
 
 def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
+    if type(rval) is str and rval.lower() in ("true", "false", "1", "0"):
+        rval = rval.lower() == "true" or rval == "1"
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
@@ -104,9 +121,28 @@ DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 
+
+def obfuscate(val, pct_reveal=0.1, char="*"):
+    num_reveal = int(len(val) * pct_reveal)
+    num_obfuscate = len(val) - num_reveal
+    obfuscated = char * num_obfuscate
+    revealed = val[-num_reveal:]
+    rval = f"{obfuscated}{revealed}"
+    assert len(rval) == len(val), (val, rval)
+    return rval
+
+
+
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
-    for key, val in locals().items():
+    for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
+            parts = key.split("_")
+            if (
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
+                val != _DEFAULTS[key]
+            ):
+                val = obfuscate(val)
             logger.info(f"{key}={val}")
 
 
