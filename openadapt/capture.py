@@ -1,3 +1,10 @@
+"""
+Allows for capturing the screen and audio on macOS.
+
+This is based on: https://gist.github.com/timsutton/0c6439eb6eb1621a5964
+
+usage: see bottom of file
+"""
 import os
 from datetime import datetime
 from sys import platform
@@ -30,7 +37,9 @@ class OpenAdaptCapture:
         if not os.path.exists("captures"):
             os.mkdir("captures")
         self.file_url = NSURL.fileURLWithPath_(
-            os.path.join("captures", datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov")
+            os.path.join(
+                "captures", datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov"
+            )
         )
 
     def start(self, audio=False, fpath=None):
