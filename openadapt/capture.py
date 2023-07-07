@@ -14,6 +14,8 @@ import objc
 from Foundation import NSURL, NSObject
 from Quartz import CGMainDisplayID
 
+from openadapt import config
+
 
 class OpenAdaptCapture:
     def __init__(self):
@@ -23,6 +25,7 @@ class OpenAdaptCapture:
 
         objc.options.structs_indexable = True
 
+    def start(self, audio=False, fpath=None):
         self.display_id = CGMainDisplayID()
         self.session = AVF.AVCaptureSession.alloc().init()
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
@@ -34,15 +37,15 @@ class OpenAdaptCapture:
         self.audio_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
             AVF.AVCaptureDevice.defaultDeviceWithMediaType_(AVF.AVMediaTypeAudio), None
         )
-        if not os.path.exists("captures"):
-            os.mkdir("captures")
+
+        if not os.path.exists(config.CAPTURE_DIR_PATH):
+            os.mkdir(config.CAPTURE_DIR_PATH)
         self.file_url = NSURL.fileURLWithPath_(
             os.path.join(
-                "captures", datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov"
+                config.CAPTURE_DIR_PATH,
+                datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
             )
         )
-
-    def start(self, audio=False, fpath=None):
         if audio and self.session.canAddInput_(self.audio_input[0]):
             self.session.addInput_(self.audio_input[0])
         if self.session.canAddInput_(self.screen_input):
@@ -69,5 +72,8 @@ class OpenAdaptCapture:
 if __name__ == "__main__":
     capture = OpenAdaptCapture()
     capture.start(audio=True)
+    input("Press enter to stop")
+    capture.stop()
+    capture.start()
     input("Press enter to stop")
     capture.stop()

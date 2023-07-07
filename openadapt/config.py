@@ -37,6 +37,10 @@ _DEFAULTS = {
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
+    # PERFORMANCE PLOTTING CONFIGURATION
+    "PLOT_PERFORMANCE": True,
+    # CAPTURE CONFIGURATION
+    "CAPTURE_DIR_PATH": "captures",
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": True,
     "SCRUB_CHAR": "*",
@@ -83,7 +87,6 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
-    "PLOT_PERFORMANCE": True,
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
