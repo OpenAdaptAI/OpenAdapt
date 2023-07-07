@@ -24,9 +24,9 @@ ShortSignals = [
     {"id": 6, "type": "file", "descriptor": "electronic_medical_record_template.xls", "relevant_task_ids": [3]}, # 4 is very loosely relevant
     {"id": 7, "type": "url", "descriptor": "https://www.chess.com", "relevant_task_ids": [1]},
     {"id": 8, "type": "database", "descriptor": "user_info.db", "relevant_task_ids": [3, 6, 7]},
-    {"id": 9, "type": "function", "descriptor": "pandas.DataFrame", "relevant_task_ids": [4, 12]},
-    {"id": 10, "type": "file", "descriptor": "File_Sorting_Script.py", "relevant_task_ids": [0]},
-    {"id": 11, "type": "function", "descriptor": "sklearn.tree.DecisionTreeClassifier", "relevant_task_ids": [0]},
+    {"id": 9, "type": "function", "descriptor": "pandas.DataFrame", "relevant_task_ids": [4]},
+    {"id": 10, "type": "file", "descriptor": "File_Sorting_Script.py", "relevant_task_ids": []},
+    {"id": 11, "type": "function", "descriptor": "sklearn.tree.DecisionTreeClassifier", "relevant_task_ids": []},
     {"id": 12, "type": "url", "descriptor": "https://www.skyscanner.com", "relevant_task_ids": [9]},
     {"id": 13, "type": "database", "descriptor": "social_media_accounts.db", "relevant_task_ids": [10,11]},
     {"id": 14, "type": "url", "descriptor": "https://www.linkedin.com", "relevant_task_ids": [6,10,11,12]},
