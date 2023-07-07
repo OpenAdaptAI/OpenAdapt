@@ -1,41 +1,61 @@
-import time
+from sys import platform
+from datetime import datetime
 
 import AVFoundation as AVF
-import Quartz
+import objc
 from Foundation import NSURL, NSObject
+from Quartz import CGMainDisplayID
 
 
-def main():
-    display_id = Quartz.CGMainDisplayID()
+class OpenAdaptCapture:
+    def __init__(self):
+        # only on macos
+        if platform != "darwin":
+            raise NotImplementedError("Only implemented on macOS")
 
-    session = AVF.AVCaptureSession.alloc().init()
-    screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(display_id)
-    file_output = AVF.AVCaptureMovieFileOutput.alloc().init()
+        objc.options.structs_indexable = True
 
-    # Create an audio device input with the default audio device
-    # create AVCaptureDeviceDiscoverySession
-    
-    audio_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
-        audio_device, None
-    )
+        self.display_id = CGMainDisplayID()
+        self.session = AVF.AVCaptureSession.alloc().init()
+        self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
+            self.display_id
+        )
+        self.file_output = AVF.AVCaptureMovieFileOutput.alloc().init()
 
-    # Add the audio input to the session
-    if session.canAddInput_(audio_input):
-        session.addInput_(audio_input)
+        # Create an audio device input with the default audio device
+        self.audio_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
+            AVF.AVCaptureDevice.defaultDeviceWithMediaType_(AVF.AVMediaTypeAudio), None
+        )
+        self.file_url = NSURL.fileURLWithPath_(
+            datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov"
+        )
 
-    session.addInput_(screen_input)
-    session.addOutput_(file_output)
-    session.startRunning()
+    def start(self, audio=False, fpath=None):
+        if audio and self.session.canAddInput_(self.audio_input[0]):
+            self.session.addInput_(self.audio_input[0])
+        if self.session.canAddInput_(self.screen_input):
+            self.session.addInput_(self.screen_input)
 
-    file_url = NSURL.fileURLWithPath_("foo.mov")
-    # Cheat and pass a dummy delegate object where normally we'd have a
-    # AVCaptureFileOutputRecordingDelegate
-    file_url = file_output.startRecordingToOutputFileURL_recordingDelegate_(
-        file_url, NSObject.alloc().init()
-    )
-    time.sleep(10)
-    session.stopRunning()
+        self.session.addOutput_(self.file_output)
+
+        self.session.startRunning()
+
+        if fpath is not None:
+            self.file_url = NSURL.fileURLWithPath_(fpath)
+
+        # Cheat and pass a dummy delegate object where normally we'd have a AVCaptureFileOutputRecordingDelegate
+        self.file_url = (
+            self.file_output.startRecordingToOutputFileURL_recordingDelegate_(
+                self.file_url, NSObject.alloc().init()
+            )
+        )
+
+    def stop(self):
+        self.session.stopRunning()
 
 
 if __name__ == "__main__":
-    main()
+    capture = OpenAdaptCapture()
+    capture.start(audio=True)
+    input("Press enter to stop")
+    capture.stop()
