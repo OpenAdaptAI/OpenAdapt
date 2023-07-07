@@ -74,6 +74,3 @@ if __name__ == "__main__":
     capture.start(audio=True)
     input("Press enter to stop")
     capture.stop()
-    capture.start()
-    input("Press enter to stop")
-    capture.stop()
