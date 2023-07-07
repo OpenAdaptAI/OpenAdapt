@@ -94,7 +94,7 @@ build-backend = "poetry.core.masonry.api"
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
-app = "openadapt.app.tray:run"
+app = "openadapt.app.tray:_run"
 reset = "openadapt.scripts.reset_db:reset_db"
 
 [tool.semantic_release]

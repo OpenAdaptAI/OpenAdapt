@@ -45,7 +45,6 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.menu.addAction(self.record_action)
 
         self.visualize_menu = self.menu.addMenu("Visualize")
-
         self.populate_visualize_menu()
 
         self.app_action = QAction("Open OpenAdapt")
@@ -127,10 +126,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.app.exec_()
 
 
-def run():
+def _run():
     tray = SystemTrayIcon()
     tray.run()
 
 
 if __name__ == "__main__":
-    run()
+    _run()
