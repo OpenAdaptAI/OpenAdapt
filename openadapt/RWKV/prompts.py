@@ -7,7 +7,11 @@ Tasks = {
     5: "emailing an agent about house requirements",
     6: "filling out a job application",
     7: "signing into and powering on a virtual machine",
-    8: "advertising a new restaurant"
+    8: "advertising a new restaurant",
+    9: "booking a flight",
+    10: "posting on social media platforms",
+    11: "editing photos for an online portfolio",
+    12: "updating a LinkedIn profile"
 }
 
 ShortSignals = [
@@ -20,6 +24,12 @@ ShortSignals = [
     {"id": 6, "type": "file", "descriptor": "electronic_medical_record_template.xls", "relevant_task_ids": [3]}, # 4 is very loosely relevant
     {"id": 7, "type": "url", "descriptor": "https://www.chess.com", "relevant_task_ids": [1]},
     {"id": 8, "type": "database", "descriptor": "user_info.db", "relevant_task_ids": [3, 6, 7]},
+    {"id": 9, "type": "function", "descriptor": "pandas.DataFrame", "relevant_task_ids": [4, 12]},
+    {"id": 10, "type": "file", "descriptor": "File_Sorting_Script.py", "relevant_task_ids": [0]},
+    {"id": 11, "type": "function", "descriptor": "sklearn.tree.DecisionTreeClassifier", "relevant_task_ids": [0]},
+    {"id": 12, "type": "url", "descriptor": "https://www.skyscanner.com", "relevant_task_ids": [9]},
+    {"id": 13, "type": "database", "descriptor": "social_media_accounts.db", "relevant_task_ids": [10,11]},
+    {"id": 14, "type": "url", "descriptor": "https://www.linkedin.com", "relevant_task_ids": [6,10,11,12]},
 ]
 
 def get_relevant_signal_ids(task_id):
@@ -37,7 +47,7 @@ def get_prompt(task_id, signal_ids):
     
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 # Instruction:
-You are {task}. A list of information signals is provided in JSON format. Please respond with only the ids of the signals that are most relevant to the task formatted as a list.
+You are {task}. A list of information signals is provided in JSON format. Please respond with only the id of the signal that is most relevant to the task formatted as a list.
 # Input:
 {str(test_signals)}
 # Response: 
