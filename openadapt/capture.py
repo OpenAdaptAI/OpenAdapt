@@ -25,7 +25,7 @@ class OpenAdaptCapture:
 
         objc.options.structs_indexable = True
 
-    def start(self, audio=False, fpath=None):
+    def start(self, audio=False):
         self.display_id = CGMainDisplayID()
         self.session = AVF.AVCaptureSession.alloc().init()
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
@@ -54,9 +54,6 @@ class OpenAdaptCapture:
         self.session.addOutput_(self.file_output)
 
         self.session.startRunning()
-
-        if fpath is not None:
-            self.file_url = NSURL.fileURLWithPath_(fpath)
 
         # Cheat and pass a dummy delegate object where normally we'd have a AVCaptureFileOutputRecordingDelegate
         self.file_url = (
