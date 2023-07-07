@@ -1,3 +1,5 @@
+import random
+
 Tasks = {
     0: "making a website about cats",
     1: "playing chess",
@@ -60,6 +62,29 @@ def evaluate():
     # 3. Run the model
     # 4. Get the relevant signals
     # 5. Check if the model's output is correct
+
+    task_id = random.randint(0, len(Tasks)-1)
+    signal_count = random.randint(3, 7)
+
+    # Select signal_count random signals (avoid duplicates)
+    signal_ids = []
+    for i in range(signal_count):
+        signal_id = random.randint(0, len(ShortSignals)-1)
+        while signal_id in signal_ids:
+            signal_id = random.randint(0, len(ShortSignals)-1)
+        signal_ids.append(signal_id)
+
+    prompt = get_prompt(task_id, signal_ids)
+    print("\n")
+    print(prompt)
+
+    full_relevant_signals = get_relevant_signal_ids(task_id)
+    # Remove any signals that are not in the prompt
+    relevant_signals = [signal_id for signal_id in full_relevant_signals if signal_id in signal_ids]
+
+    #RUN MODEL
+    print("Desired Output: ", relevant_signals)
+
     return
 
 if __name__ == '__main__':
@@ -74,19 +99,20 @@ if __name__ == '__main__':
         print(f"Task {task_id} has {len(relevant_signals)} relevant signals: {relevant_signals}")
 
 
-    # Test prompt generation:
-    print()
-    signal_ids = [0,2,4,6,8]
-    task_id = 3
-    prompt = get_prompt(task_id, signal_ids)
-    print(prompt)
-    print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
+    # # Test prompt generation:
+    # print()
+    # signal_ids = [0,2,4,6,8]
+    # task_id = 3
+    # prompt = get_prompt(task_id, signal_ids)
+    # print(prompt)
+    # print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
     
-    # Test prompt generation:
-    print()
-    signal_ids = [0,1,2,3,4,5]
-    task_id = 0
-    prompt = get_prompt(task_id, signal_ids)
-    print(prompt)
-    print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
+    # # Test prompt generation:
+    # print()
+    # signal_ids = [0,1,2,3,4,5]
+    # task_id = 0
+    # prompt = get_prompt(task_id, signal_ids)
+    # print(prompt)
+    # print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
     
+    evaluate()
