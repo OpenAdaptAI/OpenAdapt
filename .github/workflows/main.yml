@@ -7,7 +7,14 @@ on:
 
 jobs:
   run-ci:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Checkout code
@@ -35,13 +42,19 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Install Tesseract
-        run: brew install tesseract
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install tesseract
+          else
+            powershell -ExecutionPolicy Bypass -File .\install\install_openadapt.ps1
+          fi
 
       - name: Run tests
-        run: poetry run python -m pytest
+        run: |
+          poetry run python -m pytest
 
       - name: Check formatting with Black
-        run: poetry run black --check --exclude "(alembic|venv)/" .
+        run: poetry run python -m black --check .
 
       - name: Run Flake8
-        run: poetry run flake8
+        run: poetry run python -m flake8
