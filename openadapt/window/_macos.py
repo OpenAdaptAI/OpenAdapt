@@ -53,7 +53,8 @@ def get_active_window_meta():
         Quartz.kCGNullWindowID,
     )
     active_windows_info = [
-        win for win in windows if win['kCGWindowLayer'] == 0
+        win for win in windows
+        if (win['kCGWindowLayer'] == 0 and win['kCGWindowOwnerName'] != 'Window Server')
     ]
     active_window_info = active_windows_info[0]
     return active_window_info
