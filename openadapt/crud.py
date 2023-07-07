@@ -227,7 +227,8 @@ def get_screenshots(recording, precompute_diffs=False):
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
-    screenshots[0].prev = screenshots[0]
+    if screenshots:
+        screenshots[0].prev = screenshots[0]
 
     # TODO: store diffs
     if precompute_diffs:
