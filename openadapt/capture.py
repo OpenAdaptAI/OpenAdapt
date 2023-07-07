@@ -1,5 +1,6 @@
-from sys import platform
+import os
 from datetime import datetime
+from sys import platform
 
 import AVFoundation as AVF
 import objc
@@ -26,8 +27,10 @@ class OpenAdaptCapture:
         self.audio_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
             AVF.AVCaptureDevice.defaultDeviceWithMediaType_(AVF.AVMediaTypeAudio), None
         )
+        if not os.path.exists("captures"):
+            os.mkdir("captures")
         self.file_url = NSURL.fileURLWithPath_(
-            datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov"
+            os.path.join("captures", datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov")
         )
 
     def start(self, audio=False, fpath=None):
