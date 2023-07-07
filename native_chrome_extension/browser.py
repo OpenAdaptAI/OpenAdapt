@@ -45,6 +45,8 @@ def sendMessage(encodedMessage):
 
 
 # TODO: send the Javascript memory state to the server
+# TODO: also send the window.location.href to the server
+
 
 
 SERVER_SENDS = True
