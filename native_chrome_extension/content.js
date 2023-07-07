@@ -12,6 +12,21 @@ function sendMessageToBackgroundScript(message) {
 
 
 /*
+ * Function to capture initial document state and send it to the background script
+ */
+function captureDocumentState() {
+  const documentBody = document.body.outerHTML;
+  const documentHead = document.head.outerHTML;
+
+  sendMessageToBackgroundScript({
+    action: 'captureDocumentState',
+    documentBody: documentBody,
+    documentHead: documentHead
+  });
+}
+
+
+/*
  * Function to detect DOM changes
  */
 function detectDOMChanges(mutationsList) {
@@ -24,10 +39,7 @@ function detectDOMChanges(mutationsList) {
     // logged = true;
     // debugger;
   }
-  sendMessageToBackgroundScript({
-    action: 'logDOMChange',
-    mutationsList: mutationsList
-  });
+  captureDocumentState();
 }
 
 
@@ -81,21 +93,6 @@ function stopObservingDOMChanges() {
 
 
 /*
- * Function to capture initial document state and send it to the background script
- */
-function captureInitialDocumentState() {
-  const documentBody = document.body.outerHTML;
-  const documentHead = document.head.outerHTML;
-
-  sendMessageToBackgroundScript({
-    action: 'captureInitialDocumentState',
-    documentBody: documentBody,
-    documentHead: documentHead
-  });
-}
-
-
-/*
  * Function to get element positions
  */
 function getElementPositions() {
@@ -112,39 +109,12 @@ function getElementPositions() {
 }
 
 
-/*
-  * After Tab Event processing
-*/
-function afterTabEvent(message) {
-  // Perform additional actions based on the message received
-  console.log('A Tab Event was occurred and now content script is ready for receiving end');
-
-  // Stop observing DOM changes when switching to another tab or opening a new tab
-  stopObservingDOMChanges();
-
-  // Capture and send the initial document state
-  captureInitialDocumentState();
-
-  // Get element positions
-  getElementPositions();
-
-  // Resume observing DOM changes
-  startObservingDOMChanges();
-}
-
-
-// Message listener for messages from the background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'afterTabEvent') {
-    afterTabEvent(message);
-  }
-});
-
-// Call the function to capture initial document state
-captureInitialDocumentState();
 
 // Call the function to get element positions
 getElementPositions();
+
+// Call the function to capture initial document state
+captureDocumentState();
 
 // Call the function to start observing DOM changes
 startObservingDOMChanges();

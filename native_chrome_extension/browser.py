@@ -4,10 +4,16 @@
 # in order to ensure that stdin and stdout are opened in binary, rather
 # than text, mode.
 
+from loguru import logger
+from multiprocessing.connection import Listener
 import sys
 import json
 import struct
 
+import os
+import subprocess as sp
+
+from namedpipe import NPopen
 
 # Read a message from stdin and decode it.
 def getMessage():
@@ -38,30 +44,19 @@ def sendMessage(encodedMessage):
     sys.stdout.buffer.flush()
 
 
-# reply_num = 0
-# while True:
-#     receivedMessage = getMessage()
-#     # pipe.send(receivedMessage)
-#     reply_num += 1
-#     sendMessage(encodeMessage(str(reply_num)))
-#     sendMessage(encodeMessage(receivedMessage))
+SERVER_SENDS = True
+PORT = 6001
 
+if __name__ == '__main__':
+    address = ('localhost', PORT)     # family is deduced to be 'AF_INET'
+    listener = Listener(address, authkey=b'secret password')
+    conn = listener.accept()
+    logger.info(f'connection accepted from {listener.last_accepted=}')
 
-
-with NPopen('wt', name='test') as pipe:  # writable text pipe
-    sendMessage(encodeMessage("Waiting for client..."))
-    stream = pipe.wait()
-    sendMessage(encodeMessage("Client connected: " + str(stream)))
-    dom_change_num = 0
+    reply_num = 0
     while True:
         receivedMessage = getMessage()
-        dom_change_num += 1
-
-        # Check if client (record.py) is still connected
-        if pipe.stream:
-            # Write message to the stream
-            pipe.stream.write(receivedMessage)
-            pipe.stream.flush()
-
-        sendMessage(encodeMessage(str(dom_change_num)))
+        reply_num += 1
+        conn.send(receivedMessage)
+        sendMessage(encodeMessage(str(reply_num)))
         sendMessage(encodeMessage(receivedMessage))
