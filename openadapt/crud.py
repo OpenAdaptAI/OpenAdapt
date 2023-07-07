@@ -159,7 +159,7 @@ def _get(table, recording_timestamp):
 @logger.catch(reraise=True, onerror=lambda _: sys.exit(1))
 def get_action_events(recording):
     if recording is None:
-        raise ValueError("Invalid recording")
+        raise ValueError("Invalid recording.")
     action_events = _get(ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
