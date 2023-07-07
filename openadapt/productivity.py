@@ -231,6 +231,18 @@ def floyds_algo(action_events):
     return slow_index, length
 
 
+def rec_lrs(action_events):
+    len_orig = len(action_events)
+    while True:
+        task, start, length = longest_repeated_substring(action_events)
+        if length < MIN_TASK_LENGTH:
+            if len(action_events) != len_orig:
+                return action_events, start, length
+            else:
+                return [], None, length
+        action_events = task
+
+
 def longest_repeated_substring(action_events):
     n = len(action_events)
     # TODO: rename LCSRe
@@ -320,7 +332,7 @@ def calculate_productivity():
     duration = action_events[-1].timestamp - action_events[0].timestamp
 
     logger.info("searching for tasks")
-    task, start, length = longest_repeated_substring(filtered_action_events)
+    task, start, length = rec_lrs(filtered_action_events)
     _, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length, task)
     logger.info("finished searching for tasks")
     if num_tasks != 0:
