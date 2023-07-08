@@ -1,4 +1,9 @@
-// System Diagram: https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
+/**
+ * @file background.js
+ * @description This file is responsible for communicating with the native
+ * messaging host and the content script.
+ * @see https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
+ */
 
 
 // Native Messaging port

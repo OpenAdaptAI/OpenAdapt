@@ -1,11 +1,17 @@
+/**
+ * @file content.js
+ * @description This file is injected into the web page and is responsible for
+ * capturing DOM changes and sending them to the background script.
+*/
+
 let logged = false;
 let ignoreAttributes = new Set();
-let observer = null; // Reference to the MutationObserver
+let observer = null;
 
 
 /*
  * Function to send a message to the background script
- */
+*/
 function sendMessageToBackgroundScript(message) {
   chrome.runtime.sendMessage(message);
 }
@@ -13,7 +19,7 @@ function sendMessageToBackgroundScript(message) {
 
 /*
  * Function to capture initial document state and send it to the background script
- */
+*/
 function captureDocumentState() {
   const documentBody = document.body.outerHTML;
   const documentHead = document.head.outerHTML;
@@ -30,7 +36,7 @@ function captureDocumentState() {
 
 /*
  * Function to detect DOM changes
- */
+*/
 function detectDOMChanges(mutationsList) {
   // Send a message to the background script when a DOM change is detected
   if (mutationsList.length === 0) {
@@ -47,7 +53,7 @@ function detectDOMChanges(mutationsList) {
 
 /*
  * Mutation observer callback function
- */
+*/
 function handleMutation(mutationsList) {
   const filteredMutations = [];
 
@@ -65,7 +71,7 @@ function handleMutation(mutationsList) {
 
 /*
  * Function to start observing DOM changes
- */
+*/
 function startObservingDOMChanges() {
   // Create a new mutation observer if it doesn't exist
   if (!observer) {
@@ -85,7 +91,7 @@ function startObservingDOMChanges() {
 
 /*
  * Function to stop observing DOM changes
- */
+*/
 function stopObservingDOMChanges() {
   if (observer) {
     observer.disconnect();
@@ -96,7 +102,7 @@ function stopObservingDOMChanges() {
 
 /*
  * Function to get element positions
- */
+*/
 function getElementPositions() {
   const elements = document.getElementsByTagName("*");
 
@@ -111,11 +117,8 @@ function getElementPositions() {
 }
 
 
-// Call the function to get element positions
 getElementPositions();
 
-// Call the function to capture initial document state
 captureDocumentState();
 
-// Call the function to start observing DOM changes
 startObservingDOMChanges();
