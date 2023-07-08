@@ -17,11 +17,13 @@ function sendMessageToBackgroundScript(message) {
 function captureDocumentState() {
   const documentBody = document.body.outerHTML;
   const documentHead = document.head.outerHTML;
+  const page_url = window.location.href;
 
   sendMessageToBackgroundScript({
     action: 'captureDocumentState',
     documentBody: documentBody,
-    documentHead: documentHead
+    documentHead: documentHead,
+    url: page_url
   });
 }
 
@@ -107,7 +109,6 @@ function getElementPositions() {
     }
   }
 }
-
 
 
 // Call the function to get element positions
