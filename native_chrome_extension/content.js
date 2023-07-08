@@ -18,7 +18,8 @@ function sendMessageToBackgroundScript(message) {
 
 
 /*
- * Function to capture initial document state and send it to the background script
+ * Function to capture initial document state and 
+ * send it to the background script
 */
 function captureDocumentState() {
   const documentBody = document.body.outerHTML;

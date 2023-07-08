@@ -84,6 +84,8 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    "SOCKET_PORT": 6001,
+    "SERVER_AUTHKEY": b"openadapt",
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
