@@ -6,8 +6,7 @@
  */
 
 
-// Native Messaging port
-let port = null;
+let port = null; // Native Messaging port
 const hostName = 'openadapt';
 
 
@@ -29,5 +28,6 @@ function messageListener(message, sender, sendResponse) {
 
 
 port = chrome.runtime.connectNative(hostName);
+
 port.onMessage.addListener(onReceived);
 chrome.runtime.onMessage.addListener(messageListener);
