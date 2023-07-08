@@ -10,7 +10,7 @@
 
 **Checklist**
 * [ ] My code follows the style guidelines of OpenAdapt
-* [ ] I have perfomed a self-review of my code
+* [ ] I have performed a self-review of my code
 * [ ] If applicable, I have added tests to prove my fix is functional/effective
 * [ ] I have linted my code locally prior to submission
 * [ ] I have commented my code, particularly in hard-to-understand areas
