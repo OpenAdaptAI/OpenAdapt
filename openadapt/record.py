@@ -153,6 +153,7 @@ def process_events(
             prev_screen_event = event
         elif event.type == "window":
             prev_window_event = event
+        # TODO: elif event.type == "browser"
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("discarding action that came before screen")
@@ -162,6 +163,7 @@ def process_events(
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
+            # TODO: save browser_event_timestamp to event.data
             process_event(
                 event,
                 action_write_q,
@@ -713,6 +715,8 @@ def record(
     )
     window_event_reader.start()
 
+    # TODO: browser_event_reader
+
     screen_event_reader = threading.Thread(
         target=read_screen_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -758,6 +762,8 @@ def record(
         ),
     )
     screen_event_writer.start()
+
+    # TODO: browser_event_writer
 
     action_event_writer = multiprocessing.Process(
         target=write_events,

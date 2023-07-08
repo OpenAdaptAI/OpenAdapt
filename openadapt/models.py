@@ -323,3 +323,11 @@ class MemoryStat(db.Base):
     recording_timestamp = sa.Column(sa.Integer)
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+class BrowserEvent(db.Base):
+
+    bodyHTML = sa.Column(sa.String)
+    headHTML = sa.Column(sa.String)
+    url = sa.Column(sa.String)
+    timestamp = sa.Column(ForceFloat)
