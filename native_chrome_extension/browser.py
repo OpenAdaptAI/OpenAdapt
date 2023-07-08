@@ -15,12 +15,10 @@ Usage:
 from multiprocessing.connection import Listener
 from typing import Any
 import json
-import os
 import struct
 import sys
 
 from loguru import logger
-import subprocess as sp
 
 from openadapt import config
 
@@ -28,7 +26,7 @@ from openadapt import config
 SERVER_SENDS = True
 
 
-def getMessage() -> Any:
+def get_message() -> Any:
     """Read a message from stdin and decode it.
 
     Args:
@@ -37,19 +35,19 @@ def getMessage() -> Any:
     Returns:
         A Python object representing the message.
     """
-    rawLength = sys.stdin.buffer.read(4)
-    if len(rawLength) == 0:
+    raw_length = sys.stdin.buffer.read(4)
+    if len(raw_length) == 0:
         sys.exit(0)
-    messageLength = struct.unpack("@I", rawLength)[0]
-    message = sys.stdin.buffer.read(messageLength).decode("utf-8")
+    message_length = struct.unpack("@I", raw_length)[0]
+    message = sys.stdin.buffer.read(message_length).decode("utf-8")
     return json.loads(message)
 
 
-def encodeMessage(messageContent: Any) -> dict[bytes, str]:
+def encode_message(message_content: Any) -> dict[bytes, str]:
     """Encode a message for transmission, given its content.
 
     Args:
-        messageContent: The content of the message to be encoded.
+        message_content: The content of the message to be encoded.
 
     Returns:
         A dictionary containing the encoded message.
@@ -57,30 +55,30 @@ def encodeMessage(messageContent: Any) -> dict[bytes, str]:
     # https://docs.python.org/3/library/json.html#basic-usage
     # To get the most compact JSON representation, you should specify
     # (',', ':') to eliminate whitespace.
-    # We want the most compact representation because the browser rejects # messages that exceed 1 MB.
-    encodedContent = json.dumps(messageContent, separators=(",", ":")).encode(
+    # We want the most compact representation because the browser rejects
+    # messages that exceed 1 MB.
+    encoded_content = json.dumps(message_content, separators=(",", ":")).encode(
         "utf-8"
     )
-    encodedLength = struct.pack("@I", len(encodedContent))
-    return {"length": encodedLength, "content": encodedContent}
+    encoded_length = struct.pack("@I", len(encoded_content))
+    return {"length": encoded_length, "content": encoded_content}
 
 
-def sendMessage(encodedMessage: dict[bytes, str]) -> None:
+def send_message(encoded_message: dict[bytes, str]) -> None:
     """Send an encoded message to stdout
 
     Args:
-        encodedMessage: The encoded message to be sent.
+        encoded_message: The encoded message to be sent.
 
     Returns:
         None
     """
-    sys.stdout.buffer.write(encodedMessage["length"])
-    sys.stdout.buffer.write(encodedMessage["content"])
+    sys.stdout.buffer.write(encoded_message["length"])
+    sys.stdout.buffer.write(encoded_message["content"])
     sys.stdout.buffer.flush()
 
 
 # TODO: send the Javascript memory state to the server
-# TODO: also send the window.location.href to the server
 
 
 if __name__ == "__main__":
@@ -92,10 +90,10 @@ if __name__ == "__main__":
     conn = listener.accept()
     logger.info(f"connection accepted from {listener.last_accepted=}")
 
-    reply_num = 0
+    DOM_CHANGE_NUM = 0
     while True:
-        receivedMessage = getMessage()
-        reply_num += 1
+        receivedMessage = get_message()
+        DOM_CHANGE_NUM += 1
         conn.send(receivedMessage)
-        sendMessage(encodeMessage(str(reply_num)))
-        sendMessage(encodeMessage(receivedMessage))
+        send_message(encode_message(str(DOM_CHANGE_NUM)))
+        send_message(encode_message(receivedMessage))
