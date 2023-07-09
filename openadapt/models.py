@@ -1,10 +1,11 @@
 import io
 
-from loguru import logger
-from pynput import keyboard
-from PIL import Image, ImageChops
+import mss.tools
 import numpy as np
 import sqlalchemy as sa
+from loguru import logger
+from PIL import Image, ImageChops
+from pynput import keyboard
 
 from openadapt import config, db, utils, window
 
@@ -217,6 +218,8 @@ class Screenshot(db.Base):
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
+    png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
+    png_diff_mask_data = sa.Column(sa.LargeBinary, nullable=True)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
@@ -242,22 +245,25 @@ class Screenshot(db.Base):
                     "BGRX",
                 )
             else:
-                buffer = io.BytesIO(self.png_data)
-                self._image = Image.open(buffer)
+                self._image = self.convert_binary_to_png(self.png_data)
         return self._image
 
     @property
     def diff(self):
-        if not self._diff:
-            assert self.prev, "Attempted to compute diff before setting prev"
-            self._diff = ImageChops.difference(self.image, self.prev.image)
+        if self.png_diff_data:
+            return self.convert_binary_to_png(self.png_diff_data)
+
+        assert self.prev, "Attempted to compute diff before setting prev"
+        self._diff = ImageChops.difference(self.image, self.prev.image)
         return self._diff
 
     @property
     def diff_mask(self):
-        if not self._diff_mask:
-            if self.diff:
-                self._diff_mask = self.diff.convert("1")
+        if self.png_diff_mask_data:
+            return self.convert_binary_to_png(self.png_diff_mask_data)
+
+        if self.diff:
+            self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property
@@ -281,6 +287,16 @@ class Screenshot(db.Base):
 
         box = (x0, y0, x1, y1)
         self._image = self._image.crop(box)
+
+    def convert_binary_to_png(self, image_binary):
+        buffer = io.BytesIO(image_binary)
+        return Image.open(buffer)
+
+    def convert_png_to_binary(self, image):
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
 
 
 class WindowEvent(db.Base):

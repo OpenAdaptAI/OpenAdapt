@@ -1,16 +1,13 @@
-from loguru import logger
-import sqlalchemy as sa
+import io
 
-from openadapt.db import Session
-from openadapt.models import (
-    ActionEvent,
-    Screenshot,
-    Recording,
-    WindowEvent,
-    PerformanceStat,
-    MemoryStat
-)
+import mss.tools
+import sqlalchemy as sa
+from loguru import logger
+
 from openadapt.config import STOP_SEQUENCES
+from openadapt.db import Session
+from openadapt.models import (ActionEvent, MemoryStat, PerformanceStat,
+                              Recording, Screenshot, WindowEvent)
 
 BATCH_SIZE = 1
 
@@ -221,6 +218,27 @@ def filter_stop_sequences(action_events):
         for _ in range(0, num_to_remove):
             action_events.pop()
 
+def save_screenshot_diff(screenshots):
+    data_updated = False
+    logger.info("precomputing diffs for screenshots...")
+
+    for screenshot in screenshots:
+        if not screenshot.prev:
+            continue
+        if not screenshot.png_diff_data:
+            screenshot.png_diff_data = screenshot.convert_png_to_binary(screenshot.diff)
+            data_updated = True
+        if not screenshot.png_diff_mask_data:
+            screenshot.png_diff_mask_data = screenshot.convert_png_to_binary(screenshot.diff_mask)
+            data_updated = True
+
+    if data_updated:
+        logger.info("saving screenshot diff data to db...")
+        db.bulk_save_objects(screenshots)
+        db.commit()
+
+    return screenshots
+
 
 def get_screenshots(recording, precompute_diffs=False):
     screenshots = _get(Screenshot, recording.timestamp)
@@ -229,11 +247,8 @@ def get_screenshots(recording, precompute_diffs=False):
         cur.prev = prev
     screenshots[0].prev = screenshots[0]
 
-    # TODO: store diffs
     if precompute_diffs:
-        logger.info(f"precomputing diffs...")
-        [(screenshot.diff, screenshot.diff_mask) for screenshot in screenshots]
-
+        screenshots = save_screenshot_diff(screenshots)
     return screenshots
 
 
