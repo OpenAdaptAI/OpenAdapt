@@ -82,11 +82,9 @@ def send_message(encoded_message: dict[bytes, str]) -> None:
 
 
 if __name__ == "__main__":
-    address = (
-        "localhost",
-        config.SERVER_PORT,
-    )  # family is deduced to be 'AF_INET'
-    listener = Listener(address, authkey=config.SERVER_AUTHKEY)
+    address = ("localhost", 6001)
+    # family is deduced to be 'AF_INET'
+    listener = Listener(address, authkey=config.SOCKET_AUTHKEY)
     conn = listener.accept()
     logger.info(f"connection accepted from {listener.last_accepted=}")
 

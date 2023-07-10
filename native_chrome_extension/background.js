@@ -22,7 +22,7 @@ function onReceived(response) {
  * Message listener for content script
 */
 function messageListener(message, sender, sendResponse) {
-  // console.log({ message, sender, sendResponse });
+  console.log({ message, sender, sendResponse });
   port.postMessage(message); // send to browser.py (native messaging host)
 }
 

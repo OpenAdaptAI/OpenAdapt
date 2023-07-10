@@ -8,8 +8,8 @@ SERVER_SENDS = True
 PORT = 6001
 
 if __name__ == "__main__":
-    address = ('localhost', PORT)
-    conn = Client(address, authkey=b'secret password')
+    address = ('localhost', config.PORT)
+    conn = Client(address, authkey=b'openadapt')
     while True:
         if SERVER_SENDS:
             logger.info(f"waiting for message...")
