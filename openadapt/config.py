@@ -16,7 +16,6 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 
-
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
@@ -100,6 +99,14 @@ STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+env_file = ".env"
+
+# Create .env file if it doesn't exist
+if not os.path.isfile(env_file):
+    with open(env_file, "w") as f:
+        f.write("OPENAI_API_KEY=<set your api key>\n")
+        f.write("DB_FNAME=openadapt.db\n")
+
 
 def getenv_fallback(var_name):
     """Get the value of an environment variable with fallback to default.
@@ -146,15 +153,14 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
