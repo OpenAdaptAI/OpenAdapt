@@ -9,4 +9,10 @@ def mpt7b_smoke_test():
 
     completion_response = mpt7b_test_instance.get_completion(test_str)
 
-    assert len(completion_response) > 0
+    assert(len(completion_response) > 0)
+
+
+
+if __name__ == "__main__":
+    mpt7b_smoke_test()
+
