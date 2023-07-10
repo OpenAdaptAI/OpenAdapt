@@ -499,6 +499,42 @@ def read_window_events(
         prev_window_data = window_data
 
 
+def read_browser_events(
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
+) -> None:
+    """
+    Read browser events and add them to the event queue.
+
+    Args:
+        event_q: A queue for adding window events.
+        terminate_event: An event to signal the termination of the process.
+        recording_timestamp: The timestamp of the recording.
+    """
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info(f"starting")
+    prev_browser_data = {}
+    
+    while not terminate_event.is_set():
+        browser_data = # TODO (if the current window is Chrome then, get the DOM change data from the extension)
+        if not browser_data:
+            continue
+
+        if browser_data != prev_browser_data:
+            # logger.info(f"{browser_data=}")
+            logger.debug("queuing browser event for writing")
+            event_q.put(
+                Event(
+                    utils.get_timestamp(),
+                    "browser",
+                    browser_data,
+                )
+            )
+        prev_browser_data = browser_data
+    
+
 @trace(logger)
 def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
@@ -701,6 +737,7 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    browser_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
@@ -708,6 +745,7 @@ def record(
     term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
     term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
     term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
+    term_pipe_parent_browser, term_pipe_child_browser = multiprocessing.Pipe()
     
     window_event_reader = threading.Thread(
         target=read_window_events,
@@ -715,7 +753,11 @@ def record(
     )
     window_event_reader.start()
 
-    # TODO: browser_event_reader
+    browser_event_reader = threading.Thread(
+        target=read_browser_events,
+        args(event_q, terminate_event, recording_timestamp),
+    )
+    browser_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -742,6 +784,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            browser_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
@@ -763,7 +806,19 @@ def record(
     )
     screen_event_writer.start()
 
-    # TODO: browser_event_writer
+    browser_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "browser",
+            write_browser_event,
+            browser_event_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+            term_pipe_child_action
+        ),
+    )
+    browser_event_writer.start()
 
     action_event_writer = multiprocessing.Process(
         target=write_events,
@@ -832,16 +887,19 @@ def record(
     term_pipe_parent_window.send(window_write_q.qsize())
     term_pipe_parent_action.send(action_write_q.qsize())
     term_pipe_parent_screen.send(screen_write_q.qsize())
+    term_pipe_parent_browser.send(browser_write_q.qsize())
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
+    browser_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    browser_event_writer.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:

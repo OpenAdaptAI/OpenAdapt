@@ -135,7 +135,7 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
 
 
 
-_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
