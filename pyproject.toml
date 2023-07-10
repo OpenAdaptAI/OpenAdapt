@@ -96,7 +96,12 @@ replay = "openadapt.replay:start"
 app = "openadapt.app.main:run_app"
 
 [tool.black]
-extend-exclude = 'alembic'
+extend-exclude = '''
+/(
+  | venv
+  | alembic
+)/
+'''
 
 [tool.semantic_release]
 version_variable = [

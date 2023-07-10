@@ -30,6 +30,9 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
 
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Install poetry
         uses: snok/install-poetry@v1
         with:
@@ -48,7 +51,7 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Check formatting with Black
-        run: poetry run python -m black --check .
+        run: poetry run black --check .
 
       - name: Run Flake8
-        run: poetry run python -m flake8
+        run: poetry run flake8
