@@ -95,6 +95,9 @@ record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.main:run_app"
 
+[tool.black]
+extend-exclude = 'alembic'
+
 [tool.semantic_release]
 version_variable = [
     "openadapt/__init__.py:__version__"
