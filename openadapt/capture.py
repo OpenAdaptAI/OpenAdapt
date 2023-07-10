@@ -100,6 +100,6 @@ class Capture:
 
 if __name__ == "__main__":
     capture = Capture()
-    capture.start(audio=True, camera=True)
+    capture.start(audio=True, camera=False)
     input("Press enter to stop")
     capture.stop()
