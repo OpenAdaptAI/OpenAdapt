@@ -102,7 +102,7 @@ if ! CheckCMDExists "brew"; then
             echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
-    
+
     brewExists=$(CheckCMDExists "brew")
     if ! CheckCMDExists "brew"; then
         echo "Failed to download brew"
@@ -130,5 +130,5 @@ RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
 RunAndCheck "poetry run pytest" "Run tests"
-RunAndCheck "poetry shell" "Activate virtual environment"
+# RunAndCheck "poetry shell" "Activate virtual environment"
 echo OpenAdapt installed successfully!
