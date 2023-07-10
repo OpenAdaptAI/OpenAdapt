@@ -256,6 +256,25 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
+def write_browser_event(
+    recording_timestamp: float,
+    event: Event,
+    perf_q: sq.SynchronizedQueue,
+):
+    """
+    Write a browser event to the database and update the performance queue.
+
+    Args:
+        recording_timestamp: The timestamp of the recording.
+        event: A browser event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+
+    assert event.type == "browser", event
+    crud.insert_browser_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
 @trace(logger)
 def write_events(
     event_type: str,
@@ -518,7 +537,7 @@ def read_browser_events(
     prev_browser_data = {}
     
     while not terminate_event.is_set():
-        browser_data = # TODO (if the current window is Chrome then, get the DOM change data from the extension)
+      #  browser_data = # TODO (if the current window is Chrome then, get the DOM change data from the extension)
         if not browser_data:
             continue
 
