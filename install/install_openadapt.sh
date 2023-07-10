@@ -22,7 +22,6 @@ Cleanup() {
 
 # Run a command and ensure it did not fail
 RunAndCheck() {
-
     if $1 ; then
         echo "Success: $2"
     else
@@ -97,11 +96,11 @@ if ! CheckCMDExists "brew"; then
 
     # Check the type of chip
     cpu=$(sysctl machdep.cpu.brand_string)
-        if [[ $cpu == *"Apple"* ]]; then
-            # Add brew to PATH
-            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
-            eval "$(/opt/homebrew/bin/brew shellenv)"
-        fi
+    if [[ $cpu == *"Apple"* ]]; then
+        # Add brew to PATH
+        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    fi
 
     brewExists=$(CheckCMDExists "brew")
     if ! CheckCMDExists "brew"; then
@@ -130,5 +129,7 @@ RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
 RunAndCheck "poetry run pytest" "Run tests"
-# RunAndCheck "poetry shell" "Activate virtual environment"
+if [ -z "$SKIP_POETRY_SHELL" ]; then
+    RunAndCheck "poetry shell" "Activate virtual environment"
+fi
 echo OpenAdapt installed successfully!

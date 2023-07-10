@@ -28,7 +28,7 @@ jobs:
 
       - name: Run tests using the shell script (macOS compatible).
         if: matrix.os == 'macos-latest'
-        run: sh install/install_openadapt.sh
+        run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
 
       - name: Install poetry
         uses: snok/install-poetry@v1
