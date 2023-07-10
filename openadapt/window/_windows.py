@@ -28,6 +28,7 @@ def get_active_window_state() -> dict:
     try:
         active_window = get_active_window()
     except RuntimeError as e:
+        logger.warning(e)
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
@@ -122,7 +123,7 @@ def get_element_properties(element):
 
     try:
         properties = element.get_properties()
-    except comtypes.COMError:
+    except comtypes.COMError as com_err:
         logger.warning(f"COMError occurred: {com_err}")
         return {}
     children = element.children()
