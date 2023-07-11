@@ -1,13 +1,12 @@
-import threading
 import base64
 import os
 
 from nicegui import app, ui
 
-from openadapt import replay, visualize
+from openadapt import config, replay, visualize
 from openadapt.app.cards import recording_prompt, select_import, settings
-from openadapt.app.util import clear_db, on_export, on_import
 from openadapt.app.objects.console import Console
+from openadapt.app.util import clear_db, on_export, on_import
 
 SERVER = "127.0.0.1:8000/upload"
 
@@ -18,6 +17,8 @@ def run_app():
     app.native.start_args["debug"] = False
 
     dark = ui.dark_mode()
+    dark.value = config.DARK_MODE
+
     logger = None
 
     # Add logo
@@ -57,9 +58,9 @@ def run_app():
                     .on("click", lambda: recording_prompt(options, record_button))
                     .tooltip("Record a new replay / Stop recording")
                 )
-                ui.icon("visibility", size="64px").on(
-                    "click", lambda: threading.Thread(target=visualize.main).start()
-                ).tooltip("Visualize the latest replay")
+                ui.icon("visibility", size="64px").on("click", visualize.main).tooltip(
+                    "Visualize the latest replay"
+                )
 
                 ui.icon("play_arrow", size="64px").on(
                     "click", lambda: replay.replay("NaiveReplayStrategy")

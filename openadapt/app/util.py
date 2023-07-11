@@ -4,6 +4,7 @@ import sys
 from shutil import copyfileobj
 from nicegui import ui
 from openadapt.scripts.reset_db import reset_db
+from openadapt import config
 
 
 def clear_db(log=None):
@@ -51,8 +52,22 @@ def on_export(dest):
 
 
 def sync_switch(switch, prop):
-    switch.value = prop.value
+    switch.value = prop.value if hasattr(prop, "value") else prop
+
+
+def set_scrub(value):
+    if config.SCRUB_ENABLED != value:
+        config.set_env("SCRUB_ENABLED", value)
+        config.SCRUB_ENABLED = value
+        ui.notify("Scrubbing enabled." if value else "Scrubbing disabled.")
+        ui.notify("You may need to restart the app for this to take effect.")
+
+
+def get_scrub():
+    return config.SCRUB_ENABLED
 
 
 def set_dark(dark_mode, value):
-    dark_mode.value = value
+    if dark_mode.value != value:
+        dark_mode.value = value
+        config.set_env("DARK_MODE", value)
