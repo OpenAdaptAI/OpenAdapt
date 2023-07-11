@@ -47,6 +47,11 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    file_signals = sa.orm.relationship(
+        "FileSignal",
+        back_populates="recording",
+        order_by="FileSignal.recording_timestamp",
+    )
 
     _processed_action_events = None
 
@@ -295,6 +300,17 @@ class WindowEvent(db.Base):
     @classmethod
     def get_active_window_event(cls):
         return WindowEvent(**window.get_active_window_data())
+
+
+class FileSignal(db.Base):
+    __tablename__ = "file_signal"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    file_path = sa.Column(sa.String)
+    pid = sa.Column(sa.Integer)
+
+    recording = sa.orm.relationship("Recording", back_populates="file_signals")
 
 
 class PerformanceStat(db.Base):

@@ -44,6 +44,8 @@ def replay(
     strategy = strategy_class(recording)
     logger.info(f"{strategy=}")
 
+    # If signals were found in the recording, initialize them as defaults during the replay
+
     strategy.run()
 
 

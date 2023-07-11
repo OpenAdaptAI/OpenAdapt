@@ -7,6 +7,7 @@ from openadapt.models import (
     Screenshot,
     Recording,
     WindowEvent,
+    FileSignal,
     PerformanceStat,
 )
 
@@ -17,6 +18,7 @@ db = Session()
 action_events = []
 screenshots = []
 window_events = []
+file_signals = []
 performance_stats = []
 
 def _insert(event_data, table, buffer=None):
@@ -73,6 +75,16 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
         "recording_timestamp": recording_timestamp,
     }
     _insert(event_data, WindowEvent, window_events)
+
+
+def insert_file_signal(recording_timestamp, event_timestamp, event_data):
+    event_data = {
+        **event_data,
+        "timestamp": event_timestamp,
+        "recording_timestamp": recording_timestamp,
+    }
+    _insert(event_data, FileSignal, file_signals)
+
 
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     """
@@ -158,3 +170,7 @@ def get_screenshots(recording, precompute_diffs=False):
 
 def get_window_events(recording):
     return _get(WindowEvent, recording.timestamp)
+
+
+def get_file_signals(recording):
+    return _get(FileSignal, recording.timestamp)
