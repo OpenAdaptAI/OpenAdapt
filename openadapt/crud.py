@@ -1,3 +1,5 @@
+from typing import Any, List
+
 from loguru import logger
 import sqlalchemy as sa
 
@@ -74,6 +76,26 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
         "recording_timestamp": recording_timestamp,
     }
     _insert(event_data, WindowEvent, window_events)
+
+
+def insert_browser_event(
+    recording_timestamp,
+    event_timestamp,
+    event_data
+) -> None:
+    """Insert a browser event into the database.
+    
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
+    event_data = {
+        **event_data,
+        "timestamp": event_timestamp,
+        "recording_timestamp": recording_timestamp,
+    }
+    _insert(event_data, BrowserEvent, browser_events)
 
 
 def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
@@ -239,3 +261,15 @@ def get_screenshots(recording, precompute_diffs=False):
 
 def get_window_events(recording):
     return _get(WindowEvent, recording.timestamp)
+
+
+def get_browser_events(recording) -> list[BrowserEvent]:
+    """Get browser events for a given recording
+    
+    Args:
+        recording (Recording): recording object
+    
+    Returns:
+        List[BrowserEvent]: list of browser events
+    """
+    return _get(BrowserEvent, recording.timestamp)

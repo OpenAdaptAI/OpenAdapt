@@ -141,8 +141,10 @@ def process_events(
     prev_event = None
     prev_screen_event = None
     prev_window_event = None
+    prev_browser_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+    prev_saved_browser_timestamp = 0
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
         logger.trace(f"{event=}")
@@ -153,7 +155,8 @@ def process_events(
             prev_screen_event = event
         elif event.type == "window":
             prev_window_event = event
-        # TODO: elif event.type == "browser"
+        elif event.type == "browser":
+            prev_browser_event = event
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("discarding action that came before screen")
@@ -163,7 +166,7 @@ def process_events(
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            # TODO: save browser_event_timestamp to event.data
+            event.data["browser_event_timestamp"] = prev_browser_event.timestamp
             process_event(
                 event,
                 action_write_q,
@@ -189,6 +192,15 @@ def process_events(
                     perf_q,
                 )
                 prev_saved_window_timestamp = prev_window_event.timestamp
+            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
+                process_event(
+                    prev_browser_event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording_timestamp,
+                    perf_q,
+                )
+                prev_saved_browser_timestamp = prev_browser_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -774,7 +786,7 @@ def record(
 
     browser_event_reader = threading.Thread(
         target=read_browser_events,
-        args(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_event, recording_timestamp),
     )
     browser_event_reader.start()
 
