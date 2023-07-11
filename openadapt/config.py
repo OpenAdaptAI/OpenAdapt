@@ -125,6 +125,7 @@ def set_env(var_name, val):
                 lines[i] = f"{var_name}={val}\n"
                 break
         else:
+            # case where "\n" is missing at end of file
             if lines[-1][-1] != "\n":
                 lines.append(f"\n{var_name}={val}")
             else:
