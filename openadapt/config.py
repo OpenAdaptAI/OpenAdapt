@@ -40,7 +40,7 @@ _DEFAULTS = {
     # APP CONFIGURATIONS
     "DARK_MODE": True,
     # SCRUBBING CONFIGURATIONS
-    "SCRUB_ENABLED": True,
+    "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
