@@ -120,12 +120,7 @@ def get_element_properties(element):
                   'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
                   'children': []}]}
     """
-
-    try:
-        properties = element.get_properties()
-    except comtypes.COMError as com_err:
-        logger.warning(f"COMError occurred: {com_err}")
-        return {}
+    properties = get_properties(element)
     children = element.children()
 
     if children:
@@ -164,6 +159,20 @@ def main():
 
     ipdb.set_trace()
 
+def get_properties(element):
+        """Return the properties of the control as a dictionary."""
+        #import ipdb; ipdb.set_trace()
+        props = {}
+
+        # for each of the properties that can be written out
+        for propname in element.writable_props:
+            # set the item in the props dictionary keyed on the propname
+            try :
+                props[propname] = getattr(element, propname)()
+            except :
+                continue
+
+        return props
 
 if __name__ == "__main__":
     main()
