@@ -8,7 +8,7 @@ Usage:
 
 from collections import namedtuple
 from functools import partial, wraps
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Union
 import multiprocessing
 import os
 import queue
@@ -702,7 +702,7 @@ def read_keyboard_events(
 
     def on_press(
         event_q: queue.Queue,
-        key: keyboard.KeyboardEvent,
+        key: Union[keyboard.Key, keyboard.KeyCode],
         injected: bool,
     ) -> None:
         """Event handler for key press events.
@@ -753,7 +753,7 @@ def read_keyboard_events(
 
     def on_release(
         event_q: queue.Queue,
-        key: keyboard.KeyboardEvent,
+        key: Union[keyboard.Key, keyboard.KeyCode],
         injected: bool,
     ) -> None:
         """Event handler for key release events.
