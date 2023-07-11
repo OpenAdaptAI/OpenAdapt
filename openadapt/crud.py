@@ -1,10 +1,7 @@
-import io
-
-import mss.tools
 import sqlalchemy as sa
 from loguru import logger
 
-from openadapt.config import STOP_SEQUENCES
+from openadapt import config
 from openadapt.db import Session
 from openadapt.models import (ActionEvent, MemoryStat, PerformanceStat,
                               Recording, Screenshot, WindowEvent)
@@ -17,7 +14,6 @@ screenshots = []
 window_events = []
 performance_stats = []
 memory_stats = []
-
 
 
 def _insert(event_data, table, buffer=None):
@@ -176,30 +172,30 @@ def filter_stop_sequences(action_events):
     # create list of indices for sequence detection
     # one index for each stop sequence in STOP_SEQUENCES
     # start from the back of the sequence
-    stop_sequence_indices = [len(sequence) - 1 for sequence in STOP_SEQUENCES]
+    stop_sequence_indices = [len(sequence) - 1 for sequence in config.STOP_SEQUENCES]
 
     # index of sequence to remove, -1 if none found
     sequence_to_remove = -1
     # number of events to remove
     num_to_remove = 0
 
-    for i in range(0, len(STOP_SEQUENCES)):
+    for i in range(0, len(config.STOP_SEQUENCES)):
         # iterate backwards through list of action events
         for j in range(len(action_events) - 1, -1, -1):
             # never go past 1st action event, so if a sequence is longer than
             # len(action_events), it can't have been in the recording
             if (
                 action_events[j].canonical_key_char
-                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+                == config.STOP_SEQUENCES[i][stop_sequence_indices[i]]
                 or action_events[j].canonical_key_name
-                == STOP_SEQUENCES[i][stop_sequence_indices[i]]
+                == config.STOP_SEQUENCES[i][stop_sequence_indices[i]]
             ) and action_events[j].name == "press":
                 # for press events, compare the characters
                 stop_sequence_indices[i] -= 1
                 num_to_remove += 1
             elif action_events[j].name == "release" and (
-                action_events[j].canonical_key_char in STOP_SEQUENCES[i]
-                or action_events[j].canonical_key_name in STOP_SEQUENCES[i]
+                action_events[j].canonical_key_char in config.STOP_SEQUENCES[i]
+                or action_events[j].canonical_key_name in config.STOP_SEQUENCES[i]
             ):
                 # can consider any release event with any sequence char as part of the sequence
                 num_to_remove += 1
@@ -220,7 +216,7 @@ def filter_stop_sequences(action_events):
 
 def save_screenshot_diff(screenshots):
     data_updated = False
-    logger.info("precomputing diffs for screenshots...")
+    logger.info("verifying diffs for screenshots...")
 
     for screenshot in screenshots:
         if not screenshot.prev:
@@ -240,14 +236,14 @@ def save_screenshot_diff(screenshots):
     return screenshots
 
 
-def get_screenshots(recording, precompute_diffs=False):
+def get_screenshots(recording):
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
     screenshots[0].prev = screenshots[0]
 
-    if precompute_diffs:
+    if config.SAVE_SCREENSHOT_DIFF:
         screenshots = save_screenshot_diff(screenshots)
     return screenshots
 
