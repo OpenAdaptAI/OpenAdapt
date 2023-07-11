@@ -9,6 +9,7 @@ from openadapt.models import (
     Screenshot,
     Recording,
     WindowEvent,
+    BrowserEvent,
     PerformanceStat,
     MemoryStat
 )
@@ -20,6 +21,7 @@ db = Session()
 action_events = []
 screenshots = []
 window_events = []
+browser_events = []
 performance_stats = []
 memory_stats = []
 

@@ -330,7 +330,7 @@ class BrowserEvent(db.Base):
 
     # TODO: implement for extension
     # @classmethod
-    # def get_active_window_event(cls: Any) -> Any:
+    # def get_active_browser_event(cls: Any) -> Any:
     #     """Get the active chrome tab window's DOM"""
     #     return BrowserEvent(**get_active_chrome_data())
 
