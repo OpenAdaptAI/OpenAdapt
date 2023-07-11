@@ -2,9 +2,11 @@ import bz2
 import os
 import sys
 from shutil import copyfileobj
+
 from nicegui import ui
-from openadapt.scripts.reset_db import reset_db
+
 from openadapt import config
+from openadapt.scripts.reset_db import reset_db
 
 
 def clear_db(log=None):
