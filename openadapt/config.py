@@ -42,7 +42,7 @@ _DEFAULTS = {
     # CAPTURE CONFIGURATION
     "CAPTURE_DIR_PATH": "captures",
     # SCRUBBING CONFIGURATIONS
-    "SCRUB_ENABLED": True,
+    "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
