@@ -157,6 +157,12 @@ def main():
 
 
 def get_properties(element):
+    #monkey patching
+    _get_properties = element.get_properties
+    element.get_properties = pywinauto.base_wrapper.BaseWrapper.get_properties
+    properties = element.get_properties()
+    element.get_properties = _get_properties
+    return properties
     """Return the properties of the control as a dictionary."""
     # import ipdb; ipdb.set_trace()
     props = {}
