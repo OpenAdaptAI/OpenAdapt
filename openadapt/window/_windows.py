@@ -1,11 +1,9 @@
-from typing import Any
+from pprint import pprint
+import pickle
+import time
 
 from loguru import logger
 import pywinauto
-from pywinauto import Desktop
-import time
-from pprint import pprint
-import pickle
 
 
 def get_active_window_state() -> dict:
@@ -50,7 +48,9 @@ def get_active_window_state() -> dict:
     return state
 
 
-def get_active_window_meta(active_window: Any) -> dict:
+def get_active_window_meta(
+    active_window: pywinauto.application.WindowSpecification,
+) -> dict:
     """Get the meta information of the active window.
 
     Args:
@@ -86,18 +86,18 @@ def get_active_element_state(x: int, y: int) -> dict:
 
 def get_active_window(
     depth: int = 10, max_width: int = 10, filename: str = None
-) -> Desktop:
+) -> pywinauto.application.WindowSpecification:
     """Get the active window object.
 
     Returns:
-        Desktop: The active window object.
+        pywinauto.application.WindowSpecification: The active window object.
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
     window = app.active()
     return window
 
 
-def get_element_properties(element: Any) -> dict:
+def get_element_properties(element: pywinauto.application.WindowSpecification) -> dict:
     """Recursively retrieves the properties of each element and its children.
 
     Args:
@@ -130,7 +130,7 @@ def get_element_properties(element: Any) -> dict:
     return properties
 
 
-def dictify_rect(rect: Any) -> dict:
+def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
     """Convert a rectangle object to a dictionary.
 
     Args:
