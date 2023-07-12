@@ -1,6 +1,5 @@
 from typing import List
-from openadapt.models import Recording
-from openadapt.strategies.mixins.layout import LayoutExtractionReplayStrategyMixin
+from openadapt.tools.layout import LayoutExtractionTool
 from PIL import Image
 from transformers import pipeline
 import numpy as np
@@ -13,8 +12,6 @@ IMAGE_FILE_NAMES = [
     "assets/test_calc.png",
 ]
 
-LAYOUT_OBJ = LayoutExtractionReplayStrategyMixin(Recording(), IMAGE_FILE_NAMES)
-
 
 def test_lading_bill_screenshot():
     questions = [
@@ -26,7 +23,9 @@ def test_lading_bill_screenshot():
 
     output_answers = []
     for q in questions:
-        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.images[0], question=q)
+        output = LayoutExtractionTool.document_query(
+            image=None, image_path=IMAGE_FILE_NAMES[0], question=q
+        )
         output_answers.append(output)
 
     expected_output = [
@@ -51,24 +50,30 @@ def test_invoice_screenshot():
 
     output_answers = []
     for q in questions:
-        output = LAYOUT_OBJ.document_query(image=LAYOUT_OBJ.images[1], question=q)
+        output = LayoutExtractionTool.document_query(
+            image=None, image_path=IMAGE_FILE_NAMES[1], question=q
+        )
         output_answers.append(output)
     assert output_answers == expected_answers
 
 
 def test_calendar_screenshot():
-    output = LAYOUT_OBJ.document_query(
-        image=LAYOUT_OBJ.images[2], question="What month is it?"
+    output = LayoutExtractionTool.document_query(
+        image=None, image_path=IMAGE_FILE_NAMES[2], question="What month is it?"
     )
-    assert output.lower() == "june"
+    expected_output = "june"
+    assert output.lower() == expected_output
 
 
 def test_calc_screenshot():
-    output = LAYOUT_OBJ.document_query(
-        image=LAYOUT_OBJ.images[3],
-        question="What is the current number on the screen?",
-    )
-    assert(output==10 or pytest.raises(TypeError))
+    with pytest.raises(
+        TypeError, match="Unsupported document type, please input a text-based document"
+    ):
+        output = LayoutExtractionTool.document_query(
+            image=None,
+            image_path=IMAGE_FILE_NAMES[3],
+            question="What is the current number on the screen?",
+        )
 
 
 if __name__ == "__main__":
