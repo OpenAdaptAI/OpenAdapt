@@ -140,7 +140,7 @@ def create_action_dict(
     mouse_button_name: str = None,
     mouse_pressed: bool = None,
     key_name: str = None,
-    element_state: dict = None | None,
+    element_state: dict = None,
 ):
     if name == "click":
         output_dict = [
