@@ -25,7 +25,9 @@ if sys.platform == "darwin":
 class SystemTrayIcon(QSystemTrayIcon):
     recording = False
     app_thread = None
-    recording_actions = []
+
+    # the actions need to be separated by type or else they will be triggered multiple times
+    recording_actions = {"visualize": [], "replay": []}
 
     def __init__(self):
         self.app = QApplication([])
@@ -46,10 +48,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.menu.addAction(self.record_action)
 
         self.visualize_menu = self.menu.addMenu("Visualize")
-        self.populate_menu(self.visualize_menu, self._visualize)
+        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
 
         self.replay_menu = self.menu.addMenu("Replay")
-        self.populate_menu(self.replay_menu, self._replay)
+        self.populate_menu(self.replay_menu, self._replay, "replay")
 
         self.app_action = QAction("Open OpenAdapt")
         self.app_action.triggered.connect(self.show_app)
@@ -87,6 +89,9 @@ class SystemTrayIcon(QSystemTrayIcon):
                 self.record_action.setText("Stop recording")
             else:
                 self.record_action.setText("Record")
+
+            self.populate_menu(self.visualize_menu, self._visualize, "visualize")
+            self.populate_menu(self.replay_menu, self._replay, "replay")
         except KeyboardInterrupt:
             # the app is probably shutting down, so we can ignore this
             pass
@@ -108,7 +113,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def _visualize(self, recording):
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
-        visualize(recording)
+        visualize(recording=recording)
         Notify("Status", "Visualization finished", "OpenAdapt").send()
 
     def _replay(self, recording):
@@ -116,12 +121,20 @@ class SystemTrayIcon(QSystemTrayIcon):
         replay("NaiveReplayStrategy", recording=recording)
         Notify("Status", "Replay finished", "OpenAdapt").send()
 
-    def populate_menu(self, menu, action):
-        self.recordings = get_all_recordings()
-        for idx, recording in enumerate(self.recordings):
-            self.recording_actions.append(QAction(f"{recording.task_description}"))
-            self.recording_actions[idx].triggered.connect(partial(action, recording))
-            menu.addAction(self.recording_actions[idx])
+    def populate_menu(self, menu, action, action_type):
+        recordings = get_all_recordings()
+        if len(recordings) == len((self.recording_actions[action_type])):
+            return
+        else:
+            self.recording_actions[action_type] = []
+        for idx, recording in enumerate(recordings):
+            self.recording_actions[action_type].append(
+                QAction(f"{recording.task_description}")
+            )
+            self.recording_actions[action_type][idx].triggered.connect(
+                partial(action, recording)
+            )
+            menu.addAction(self.recording_actions[action_type][idx])
 
     def show_app(self):
         if self.app_thread is None or not self.app_thread.is_alive():

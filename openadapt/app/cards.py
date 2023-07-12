@@ -54,7 +54,7 @@ def quick_record():
     global record_proc
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc = Popen(
-        f"python3 -m openadapt.record '{now}'",
+        f"python -m openadapt.record '{now}'",
         shell=True,
     )
 
