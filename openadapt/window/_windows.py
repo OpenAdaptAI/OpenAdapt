@@ -1,12 +1,8 @@
-import collections
-import sys
 from loguru import logger
 import pywinauto
-from pywinauto import Desktop
-import time
 from pprint import pprint
 import pickle
-import comtypes
+
 
 def get_active_window_state() -> dict:
     """
@@ -87,7 +83,7 @@ def get_active_element_state(x: int, y: int):
     return properties
 
 
-def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
+def get_active_window() -> Desktop:
     """
     Get the active window object.
 
@@ -159,20 +155,22 @@ def main():
 
     ipdb.set_trace()
 
+
 def get_properties(element):
-        """Return the properties of the control as a dictionary."""
-        #import ipdb; ipdb.set_trace()
-        props = {}
+    """Return the properties of the control as a dictionary."""
+    # import ipdb; ipdb.set_trace()
+    props = {}
 
-        # for each of the properties that can be written out
-        for propname in element.writable_props:
-            # set the item in the props dictionary keyed on the propname
-            try :
-                props[propname] = getattr(element, propname)()
-            except :
-                continue
+    # for each of the properties that can be written out
+    for propname in element.writable_props:
+        # set the item in the props dictionary keyed on the propname
+        try:
+            props[propname] = getattr(element, propname)()
+        except:
+            continue
 
-        return props
+    return props
+
 
 if __name__ == "__main__":
     main()
