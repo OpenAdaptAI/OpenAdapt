@@ -6,6 +6,7 @@ from loguru import logger
 import fire
 
 from openadapt import crud, utils
+from openadapt.models import Recording
 
 
 LOG_LEVEL = "INFO"
@@ -14,13 +15,13 @@ LOG_LEVEL = "INFO"
 def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
+    recording: Recording = None,
 ):
     utils.configure_logging(logger, LOG_LEVEL)
 
     if timestamp:
         recording = crud.get_recording(timestamp)
-    else:
-        recording = crud.get_latest_recording()
+
     logger.debug(f"{recording=}")
     assert recording, "No recording found"
 
