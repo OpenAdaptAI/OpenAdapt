@@ -1,5 +1,6 @@
 from typing import List, Union
 import openai
+from loguru import logger
 
 SYSTEM_CONTENT = (
     "You are a keyboard/mouse controller. You are shown a reference "
@@ -61,12 +62,9 @@ def test_generalizable_single_action(
     test_dict = eval(
         test_action_dict[test_action_dict.find("[") : test_action_dict.find("]") + 1]
     )
-    print("Reference Actions")
-    print(reference_action_dicts)
-    print("Generated Actions")
-    print(test_dict)
-    print("Expected Actions")
-    print(expected_action_dict)
+    logger.debug(f"{reference_action_dicts=}")
+    logger.debug(f"{test_dict=}")
+    logger.debug(f"{expected_action_dict}")
     assert test_dict == expected_action_dict
 
 
