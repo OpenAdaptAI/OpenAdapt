@@ -8,7 +8,6 @@ Usage:
     class MyReplayStrategy(MPT7BReplayStrategy):
         ...
 """
-
 from ctransformers import AutoModelForCausalLM
 from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
@@ -24,7 +23,7 @@ class MPT7BReplayStrategy(BaseReplayStrategy):
     """
 
     def __init__(self, recording: Recording):
-        super.__init__(recording)
+        super().__init__(recording)
         self.model_path = MPT_MODEL_PATH
         self.model_file = MPT_MODEL_FILE
 

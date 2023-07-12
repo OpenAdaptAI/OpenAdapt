@@ -832,6 +832,23 @@ test = ["Pillow", "contourpy[test-no-images]", "matplotlib"]
 test-no-images = ["pytest", "pytest-cov", "wurlitzer"]
 
 [[package]]
+name = "ctransformers"
+version = "0.2.11"
+description = "Python bindings for the Transformer models implemented in C/C++ using GGML library."
+optional = false
+python-versions = "*"
+files = [
+    {file = "ctransformers-0.2.11-py3-none-any.whl", hash = "sha256:06aa3b2a42112fb688b0d9a54b9958501af7db8557bda067ffbc43645590c522"},
+    {file = "ctransformers-0.2.11.tar.gz", hash = "sha256:993a3ba05d37822d0111393ab214856b9fe40d28b48af1306ee63e94e716a4e2"},
+]
+
+[package.dependencies]
+huggingface-hub = "*"
+
+[package.extras]
+tests = ["pytest"]
+
+[[package]]
 name = "cycler"
 version = "0.11.0"
 description = "Composable style cycles"
@@ -2642,6 +2659,8 @@ python-versions = ">=3.6"
 files = [
     {file = "opencv-python-4.8.0.74.tar.gz", hash = "sha256:009e3ce356a0cd2d7423723e00a32fd3d3cc5bb5970ed27a9a1f8a8f221d1db5"},
     {file = "opencv_python-4.8.0.74-cp37-abi3-macosx_10_16_x86_64.whl", hash = "sha256:31d0d59fc8fdf703de4cec46c79b9f8d026fdde9d23d6e2e6a66809feeebbda9"},
+    {file = "opencv_python-4.8.0.74-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:66eadb5882ee56848b67f9fb57aadcaca2f4c9d9d00a0ef11043041925b51291"},
+    {file = "opencv_python-4.8.0.74-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:038ba7075e55cb8e2846663ae970f0fb776a45b48ee69a887bf4ee15e2570083"},
     {file = "opencv_python-4.8.0.74-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:43dd0dfe331fb95767af581bf3b2781d7a72cf6560ddf2f55949fe547f3e5c9f"},
     {file = "opencv_python-4.8.0.74-cp37-abi3-win32.whl", hash = "sha256:458e5dc377f15fcf769d80314f3d885bd95457b1a2891bee67df2eb24a1d3a52"},
     {file = "opencv_python-4.8.0.74-cp37-abi3-win_amd64.whl", hash = "sha256:8fe0018d0056a5187c57120b6b3f6c3e706c13b45c48e54e86d245a9a16fac84"},
@@ -6066,4 +6085,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "042fe3e83c940c1b6d1b9c128adc1eedda2e325175d4b5512764be79854146eb"
+content-hash = "94c6c2c36d4a78f5fa24eff42498297abeaf89129ec0d5b49f5179431be90387"
