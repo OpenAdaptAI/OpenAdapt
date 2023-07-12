@@ -28,7 +28,7 @@ VALID_MODEL_NAMES = {"MPT7B": 0, "GPT-4": 2, "GPT-3.5-TURBO": 2, "Davinci-003": 
 
 
 def check_availability(model_name: str) -> bool:
-    if VALID_MODEL_NAMES[model_name] == -1:
+    if model_name not in VALID_MODEL_NAMES:
         raise NotImplementedError("This model is not supported")
     else:
         logger.debug(
