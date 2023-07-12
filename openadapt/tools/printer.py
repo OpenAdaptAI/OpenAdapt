@@ -1,10 +1,12 @@
-from PyQt5.QtPrintSupport import QPrinter
+from PyQt6.QtPrintSupport import QPrinter, QPrinterInfo
+from PyQt6.QtWidgets import QApplication
 import PyPDF2
+import sys
 
 
 def get_available_printers():
-    printer_info = QPrinter()
-    printer_names = printer_info.supportedPrinterNames()
+    printer_info_list = QPrinterInfo.availablePrinters()
+    printer_names = [printer.printerName() for printer in printer_info_list]
     return printer_names
 
 
@@ -39,6 +41,8 @@ def print_pdf(pdf_file_path, printer):
 
 
 if __name__ == "__main__":
+    app = QApplication(sys.argv)
+
     document_path = 'path/to/your/document'
 
     if document_path:
@@ -51,3 +55,5 @@ if __name__ == "__main__":
             print("No printers available.")
     else:
         print("No document selected.")
+
+    sys.exit(app.exec())
