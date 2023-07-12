@@ -28,6 +28,9 @@ def export_recording_to_folder(recording_id: int) -> None:
     Returns:
         str: The path of the created zip file.
     """
+    # TODO: replace with alternative, e.g.:
+    # - https://stackoverflow.com/questions/28238785/sqlalchemy-python-multiple-databases
+    # - https://github.com/bigbag/sqlalchemy-multiple-db
     recording_db_path = db.export_recording(recording_id)
 
     if recording_db_path:
@@ -45,11 +48,11 @@ def export_recording_to_folder(recording_id: int) -> None:
         with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
             zip_file.write(recording_db_path, arcname=db_filename)
 
-        logger.info(f"Created zip file of the recording: {zip_path}")
+        logger.info(f"created {zip_path=}")
 
         # delete db file
         os.remove(recording_db_path)
-        logger.info(f"Deleted db file of the recording: {recording_db_path}")
+        logger.info(f"deleted {recording_db_path=}")
 
         return zip_path
 
@@ -82,13 +85,13 @@ def send_recording(recording_id: int) -> None:
         try:
             send_file(zip_file_path)
             # File sent successfully
-        except Exception as e:
-            logger.error(str(e))
+        except Exception as exc:
+            logger.exception(exc)
         finally:
             # Delete the zip file after sending or in case of exception
             if os.path.exists(zip_file_path):
                 os.remove(zip_file_path)
-                logger.info(f"Deleted zip file of the recording: {zip_file_path}")
+                logger.info(f"deleted {zip_file_path=}")
 
 
 def receive_recording(wormhole_code: str) -> None:
@@ -103,10 +106,8 @@ def receive_recording(wormhole_code: str) -> None:
     # Execute the command
     try:
         subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as e:
-        logger.warning(
-            f"Error occurred while running 'wormhole receive {wormhole_code}': {e}"
-        )
+    except subprocess.CalledProcessError as exc:
+        logger.exception(exc)
 
 
 # Create a command-line interface using python-fire and utils.get_functions

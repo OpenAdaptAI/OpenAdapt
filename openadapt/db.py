@@ -1,17 +1,15 @@
 import os
-import time
 import shutil
+import time
 
-import sqlalchemy as sa
-
-from loguru import logger
 from dictalchemy import DictableModel
+from loguru import logger
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
-from sqlalchemy.ext.declarative import declarative_base
+import sqlalchemy as sa
 
 from openadapt import config, utils
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -157,19 +155,14 @@ def create_db(recording_id: int, sql: str, values) -> tuple[float, str]:
 
         return timestamp, db_file_path
 
-    except KeyboardInterrupt:
-        # Perform cleanup if Ctrl+C is pressed during execution
+    except Exception as exc:
+        # Perform cleanup
         if db_file_path and os.path.exists(db_file_path):
             os.remove(db_file_path)
         if target_file_path and os.path.exists(target_file_path):
             os.remove(target_file_path)
         update_db_fname_in_env_file(original_db_fname)
-        raise
-
-    except Exception as e:
-        # Handle other exceptions
-        logger.error(f"Error occurred in create_db: {e}")
-        # Perform necessary cleanup or error handling actions
+        logger.exception(exc)
         raise
 
 

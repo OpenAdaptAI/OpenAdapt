@@ -12,6 +12,7 @@ Usage:
 import multiprocessing
 import os
 import pathlib
+import shutil
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -99,13 +100,12 @@ STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
-env_file = ".env"
+ENV_FILE_PATH = ".env"
+ENV_EXAMPLE_PATH = ".env.example"
 
 # Create .env file if it doesn't exist
-if not os.path.isfile(env_file):
-    with open(env_file, "w") as f:
-        f.write("OPENAI_API_KEY=<set your api key>\n")
-        f.write("DB_FNAME=openadapt.db\n")
+if not os.path.isfile(ENV_FILE_PATH):
+    shutil.copy(ENV_EXAMPLE_PATH, ENV_FILE_PATH)
 
 
 def getenv_fallback(var_name):
@@ -140,7 +140,6 @@ DB_URL = f"sqlite:///{DB_FPATH}"
 DT_FMT = "%Y-%m-%d_%H-%M-%S"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
-ENV_FILE_PATH = (ROOT_DIRPATH / ".env").resolve()
 
 
 def obfuscate(val, pct_reveal=0.1, char="*"):
