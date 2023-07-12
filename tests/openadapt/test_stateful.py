@@ -13,6 +13,42 @@ SYSTEM_CONTENT = (
     "valid Python3 code. Do not respond with any other text. "
 )
 
+REF_X = 25
+REF_Y = 55
+
+NEW_X = 138
+NEW_Y = 89
+
+WIN_LEFT = 0
+WIN_TOP = 30
+WIN_WIDTH = 1123
+WIN_HEIGHT = 749
+WINDOW_ID = 107079
+
+NEW_WIN_LEFT = 113
+NEW_WIN_TOP = 64
+
+SINGLE_ACTION_LOOP_GUARD = 12
+
+
+MULTI_ACTION_REF_X = 400
+MULTI_ACTION_REF_Y = 500
+
+MULTI_ACTION_NEW_X = 467
+MULTI_ACTION_NEW_Y = 576
+
+
+MULTI_ACTION_WIN_LEFT = 20
+MULTI_ACTION_WIN_TOP = 25
+MULTI_ACTION_WIN_WIDTH = 1300
+MULTI_ACTION_WIN_HEIGHT = 800
+MULTI_ACTION_WINDOW_ID = 10442
+
+NEW_MULTI_ACTION_WIN_LEFT = 87
+NEW_MULTI_ACTION_WIN_TOP = 101
+
+MULTI_ACTION_LOOP_GUARD = 20
+
 
 def gpt_completion(
     ref_win_dict: dict,
@@ -24,7 +60,7 @@ def gpt_completion(
         f"{ref_win_dict=}\n"
         f"{ref_act_dicts=}\n"
         f"{active_win_dict=}\n"
-        "Provide valid Python3 code containing the action dicts by completing the \
+        "# Provide valid Python3 code containing the action dicts by completing the \
         following, and nothing else:\n"
         "active_action_dicts="
     )
@@ -104,7 +140,7 @@ def create_action_dict(
     mouse_button_name: str = None,
     mouse_pressed: bool = None,
     key_name: str = None,
-    element_state: dict = {},
+    element_state: dict = None | None,
 ):
     if name == "click":
         output_dict = [
@@ -135,18 +171,18 @@ def create_action_dict(
 def test_single_mouse_diff():
     win_dict = create_win_dict(
         title="Calculator",
-        left=0,
-        top=30,
-        width=1123,
-        height=749,
-        window_id=107079,
+        left=WIN_LEFT,
+        top=WIN_TOP,
+        width=WIN_WIDTH,
+        height=WIN_HEIGHT,
+        window_id=WINDOW_ID,
         meta={},
     )
 
     act_dict = create_action_dict(
         name="click",
-        mouse_x=25,
-        mouse_y=55,
+        mouse_x=REF_X,
+        mouse_y=REF_Y,
         mouse_button_name="left",
         mouse_pressed=True,
         element_state={},
@@ -154,18 +190,18 @@ def test_single_mouse_diff():
 
     active_win_dict = create_win_dict(
         title="Calculator",
-        left=113,
-        top=64,
-        width=1123,
-        height=749,
-        window_id=107079,
+        left=NEW_WIN_LEFT,
+        top=NEW_WIN_TOP,
+        width=WIN_WIDTH,
+        height=WIN_HEIGHT,
+        window_id=WINDOW_ID,
         meta={},
     )
 
     expected_dict = create_action_dict(
         name="click",
-        mouse_x=138,
-        mouse_y=89,
+        mouse_x=NEW_X,
+        mouse_y=NEW_Y,
         mouse_button_name="left",
         mouse_pressed=True,
         element_state={},
@@ -177,37 +213,37 @@ def test_single_mouse_diff():
 def test_multi_click_diff():
     win_dict = create_win_dict(
         title="Calculator",
-        left=0,
-        top=30,
-        width=1123,
-        height=749,
-        window_id=107079,
+        left=WIN_LEFT,
+        top=WIN_TOP,
+        width=WIN_WIDTH,
+        height=WIN_HEIGHT,
+        window_id=WINDOW_ID,
         meta={},
     )
 
     total_actions = []
 
-    for i in range(12):
+    for i in range(SINGLE_ACTION_LOOP_GUARD):
         act_dict_1 = create_action_dict(
             name="click",
-            mouse_x=25 + i,
-            mouse_y=55,
+            mouse_x=REF_X + i,
+            mouse_y=REF_Y,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
         )
         act_dict_2 = create_action_dict(
             name="click",
-            mouse_x=25,
-            mouse_y=55 + i,
+            mouse_x=REF_X,
+            mouse_y=REF_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
         )
         act_dict_3 = create_action_dict(
             name="click",
-            mouse_x=25 + i,
-            mouse_y=55 + i,
+            mouse_x=REF_X + i,
+            mouse_y=REF_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
@@ -217,36 +253,36 @@ def test_multi_click_diff():
 
     active_win_dict = create_win_dict(
         title="Calculator",
-        left=113,
-        top=64,
-        width=1123,
-        height=749,
-        window_id=107079,
+        left=NEW_WIN_LEFT,
+        top=NEW_WIN_TOP,
+        width=WIN_WIDTH,
+        height=WIN_HEIGHT,
+        window_id=WINDOW_ID,
         meta={},
     )
 
     expected_actions = []
-    for i in range(12):
+    for i in range(SINGLE_ACTION_LOOP_GUARD):
         act_dict_1 = create_action_dict(
             name="click",
-            mouse_x=138 + i,
-            mouse_y=89,
+            mouse_x=NEW_X + i,
+            mouse_y=NEW_Y,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
         )
         act_dict_2 = create_action_dict(
             name="click",
-            mouse_x=138,
-            mouse_y=89 + i,
+            mouse_x=NEW_X,
+            mouse_y=NEW_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
         )
         act_dict_3 = create_action_dict(
             name="click",
-            mouse_x=138 + i,
-            mouse_y=89 + i,
+            mouse_x=NEW_X + i,
+            mouse_y=NEW_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
             element_state={},
@@ -265,22 +301,34 @@ def test_simple_multi_action_sequence():
     the user moves the cursor down in a straight line and
     types the word password.
     """
-    win_dict = create_win_dict("Google Chrome", 20, 25, 1300, 800, 10442, {})
+    win_dict = create_win_dict(
+        "Google Chrome",
+        MULTI_ACTION_WIN_LEFT,
+        MULTI_ACTION_WIN_TOP,
+        MULTI_ACTION_WIN_WIDTH,
+        MULTI_ACTION_WIN_HEIGHT,
+        MULTI_ACTION_WINDOW_ID,
+        {},
+    )
     ref_act_dicts = []
 
-    for i in range(20):
-        new_act = create_action_dict("move", 400 - i, 500 - i)
+    for i in range(MULTI_ACTION_LOOP_GUARD):
+        new_act = create_action_dict(
+            "move", MULTI_ACTION_REF_X - i, MULTI_ACTION_REF_Y - i
+        )
         ref_act_dicts += new_act
 
-    word = "password"
+    multi_action_test_word = "password"
 
     expected_act_dict = []
 
-    for i in range(20):
-        exp_act = create_action_dict("move", 276.92 - i, 1300 - i)
+    for i in range(MULTI_ACTION_LOOP_GUARD):
+        exp_act = create_action_dict(
+            "move", MULTI_ACTION_NEW_X - i, MULTI_ACTION_NEW_Y - i
+        )
         expected_act_dict += exp_act
 
-    for letter in word:
+    for letter in multi_action_test_word:
         press_dict = create_action_dict(name="press", key_name=letter)
         release_dict = create_action_dict(name="release", key_name=letter)
         ref_act_dicts = ref_act_dicts + press_dict + release_dict
@@ -288,7 +336,15 @@ def test_simple_multi_action_sequence():
 
     # MODIFY THIS active act dict here to observe the results
     # discussed in the latest comment ! :)
-    active_win_dict = create_win_dict("Google Chrome", 87, 101, 1300, 800, 991, {})
+    active_win_dict = create_win_dict(
+        "Google Chrome",
+        NEW_MULTI_ACTION_WIN_LEFT,
+        NEW_MULTI_ACTION_WIN_TOP,
+        MULTI_ACTION_WIN_WIDTH,
+        MULTI_ACTION_WIN_HEIGHT,
+        MULTI_ACTION_WINDOW_ID,
+        {},
+    )
     test_generalizable_single_action(
         win_dict, ref_act_dicts, active_win_dict, expected_act_dict
     )
