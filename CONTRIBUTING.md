@@ -4,22 +4,39 @@ We would love to implement your contributions to this project! We simply ask tha
 
 ## Code Style
 
-This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
+This project follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html),
+with the following modifications:
+- imports are ordered first by group (in order of built-in, external, local), then lexicographically
+- import groups are separated by newlines
 
+For example:
 
-## Creating Issue
+```
+# built-in
+from functools import partial
+from pprint import pformat
+import json
+
+# external
+from loguru import logger
+import numpy as np
+
+# local
+from openadapt import models
+```
+## Creating Issues
 In order to effectively communicate any bugs or request new features, please select the appropriate form. If none of the options suit your needs, you can click on "Open a blank issue" located at the bottom.
 
 ## Testing
-[GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behaviour and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
+[GitHub Actions](https://github.com/MLDSAI/OpenAdapt/actions/new) are automatically run on each pull request to ensure consistent behavior and style. The Actions are composed of PyTest, [black](https://github.com/psf/black) and [flake8](https://flake8.pycqa.org/en/latest/user/index.html).
 
-You can run these tests on your own computer by downloading the depencencies in requirements.txt and then running pytest in the root directory. 
+You can run these tests on your own computer by downloading the dependencies using `poetry` (see [here](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md#install)) and then running `pytest` in the root directory. 
 
 ## Pull Request Format
 
 To speed up the review process, please use the provided pull request template and create a draft pull request to get initial feedback. 
 
-The pull request template includes areas to explain the changes, and a checklist with boxes for code style, testing, and documenttation.
+The pull request template includes areas to explain the changes, and a checklist with boxes for code style, testing, and documentation.
 
 ## Commit Message Format
 
@@ -87,6 +104,14 @@ The body or footer can begin with **BREAKING CHANGE:** followed by a short descr
 3. Push desired changes onto the branch in step 2
 4. Submit a pull request with the branch in step 2 as the head ref and the MLDSAI/OpenAdapt main as the base ref
      - Note: may need to click "compare across forks"
-5. Update pull request using feedback
+5. Update pull request by resolving merge conflicts and responding to feedback
      - this step may not be necessary, or may need to be repeated
+     - see instructions on how to resolve poetry.lock and pyproject.toml conflicts below
 6. Celebrate contributing to OpenAdapt!
+
+### How to resolve poetry.lock and pyproject.toml conflicts:
+How to fix conflicts with poetry.lock and poetry.toml:
+1. Edit the poetry.toml file to include the correct dependencies
+2. Run ```poetry lock``` to update the poetry.lock file
+3. Run ```poetry install``` to ensure the dependencies are installed
+4. Commit updated poetry.lock and poetry.toml files
