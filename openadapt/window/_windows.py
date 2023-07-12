@@ -83,7 +83,7 @@ def get_active_element_state(x: int, y: int):
     return properties
 
 
-def get_active_window() -> Desktop:
+def get_active_window():
     """
     Get the active window object.
 
@@ -167,6 +167,7 @@ def get_properties(element):
         try:
             props[propname] = getattr(element, propname)()
         except:
+            import ipdb; ipdb.set_trace()
             continue
 
     return props
