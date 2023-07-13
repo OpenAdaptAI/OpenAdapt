@@ -8,7 +8,7 @@ from openadapt.models import (
     Recording,
     WindowEvent,
     PerformanceStat,
-    MemoryStat
+    MemoryStat,
 )
 from openadapt.config import STOP_SEQUENCES
 
@@ -20,7 +20,6 @@ screenshots = []
 window_events = []
 performance_stats = []
 memory_stats = []
-
 
 
 def _insert(event_data, table, buffer=None):
@@ -122,11 +121,10 @@ def get_memory_stats(recording_timestamp):
     """
 
     return (
-        db
-            .query(MemoryStat)
-            .filter(MemoryStat.recording_timestamp == recording_timestamp)
-            .order_by(MemoryStat.timestamp)
-            .all()
+        db.query(MemoryStat)
+        .filter(MemoryStat.recording_timestamp == recording_timestamp)
+        .order_by(MemoryStat.timestamp)
+        .all()
     )
 
 
@@ -144,6 +142,10 @@ def get_latest_recording():
 
 def get_recording(timestamp):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
+
+
+def get_recording_by_id(id: int):
+    return db.query(Recording).filter(Recording.id == id).first()
 
 
 def _get(table, recording_timestamp):
