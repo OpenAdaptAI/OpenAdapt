@@ -12,11 +12,11 @@ Example usage:
     set_dark(dark_mode, value)
 """
 
-from typing import Any
+from shutil import copyfileobj
 import bz2
 import os
 import sys
-from shutil import copyfileobj
+
 from nicegui import elements, ui
 
 from openadapt.app import objects
@@ -88,7 +88,9 @@ def on_export(dest: str) -> None:
     ui.notify("Exported data.")
 
 
-def sync_switch(switch: elements.switch.Switch, prop: Any) -> None:
+def sync_switch(
+    switch: elements.switch.Switch, prop: elements.mixins.value_element.ValueElement
+) -> None:
     """Synchronize the value of a switch with a property.
 
     Args:
@@ -98,7 +100,7 @@ def sync_switch(switch: elements.switch.Switch, prop: Any) -> None:
     switch.value = prop.value
 
 
-def set_dark(dark_mode: Any, value: Any) -> None:
+def set_dark(dark_mode: ui.DarkMode, value: bool) -> None:
     """Set the dark mode.
 
     Args:
