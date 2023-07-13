@@ -30,8 +30,8 @@ memory_stats = []
 
 
 def _insert(
-    event_data: dict, table: sa.Table, buffer: list[Any] | None = None
-) -> Any | None:
+    event_data: dict, table: sa.Table, buffer: list[dict[str, Any]] | None = None
+) -> sa.engine.Result | None:
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
@@ -39,6 +39,10 @@ def _insert(
         table (sa.Table): The SQLAlchemy table to insert the data into.
         buffer (list, optional): A buffer list to store the inserted objects
             before committing. Defaults to None.
+
+    Returns:
+        sa.engine.Result | None: The SQLAlchemy Result object if a buffer is
+          not provided. None if a buffer is provided.
     """
     db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:

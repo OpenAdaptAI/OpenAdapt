@@ -17,11 +17,13 @@ import bz2
 import os
 import sys
 from shutil import copyfileobj
-from nicegui import ui
+from nicegui import elements, ui
+
+from openadapt.app import objects
 from openadapt.scripts.reset_db import reset_db
 
 
-def clear_db(log: Any = None) -> None:
+def clear_db(log: objects.console.Console) -> None:
     """Clear the database.
 
     Args:
@@ -86,7 +88,7 @@ def on_export(dest: str) -> None:
     ui.notify("Exported data.")
 
 
-def sync_switch(switch: Any, prop: Any) -> None:
+def sync_switch(switch: elements.switch.Switch, prop: Any) -> None:
     """Synchronize the value of a switch with a property.
 
     Args:

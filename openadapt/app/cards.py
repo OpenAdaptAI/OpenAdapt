@@ -3,11 +3,10 @@
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
 
-from typing import Any
 import signal
+from subprocess import Popen
 
 from nicegui import ui
-from subprocess import Popen
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import set_dark, sync_switch
@@ -60,7 +59,7 @@ def select_import(f: callable) -> None:
     import_dialog.open()
 
 
-def recording_prompt(options: list[Any], record_button: ui.widgets.Button) -> None:
+def recording_prompt(options: list[str], record_button: ui.widgets.Button) -> None:
     """Display the recording prompt dialog.
 
     Args:
