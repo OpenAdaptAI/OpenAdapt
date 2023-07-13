@@ -92,7 +92,7 @@ def get_active_window():
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
     window = app.top_window()
-    return window
+    return window.wrapper_object()
 
 
 def get_element_properties(element):
@@ -142,38 +142,25 @@ def get_properties(element):
     """
     Retrieves specific writable properties of an element.
 
-    This function is used to obtain a dictionary of writable properties for
-    a given element.
-    The reason we are using this function instead of directly using the
-    `get_properties()` function is because the writable properties vary
-    for each element and we only want the default properties.
+    This function retrieves a dictionary of writable properties for a given element.
+    It achieves this by temporarily modifying the class of the element object using
+    monkey patching.This approach is necessary because in some cases, the original 
+    class of the element may have a `get_properties()` function that raises errors.
 
     Args:
         element: The element for which to retrieve writable properties.
 
     Returns:
         A dictionary containing the writable properties of the element, 
-        with property names as keys and their corresponding values.
+        with property names as keys and their corres
+        ponding values.
 
     """
-    writable_props = [
-        "class_name",
-        "friendly_class_name",
-        "texts",
-        "control_id",
-        "rectangle",
-        "is_visible",
-        "is_enabled",
-        "control_count",
-    ]
-    props = {}
-
-    # for each of the properties that can be written out
-    for propname in writable_props:
-        # set the item in the props dictionary keyed on the propname
-        props[propname] = getattr(element, propname)()
-
-    return props
+    _element_class = element.__class__
+    element.__class__ = pywinauto.base_wrapper.BaseWrapper
+    properties = element.get_properties()
+    element.__class__ = _element_class
+    return properties
 
 
 def main():
