@@ -187,7 +187,7 @@ def deepconvert_objc(object):
     elif isinstance(object, plistlib.UID):
         value = object.data
     else:
-        if not (isinstance(object, bool) or isinstance(object, int)):
+        if object and not (isinstance(object, bool) or isinstance(object, int)):
             logger.warning(
                 f"Unknown type: {type(object)} - "
                 f"Please report this on GitHub: "
