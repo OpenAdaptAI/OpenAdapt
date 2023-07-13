@@ -157,10 +157,16 @@ def get_properties(element):
 
     """
     _element_class = element.__class__
-    element.__class__ = pywinauto.base_wrapper.BaseWrapper
+    class TempElement(element.__class__):
+            writable_props = pywinauto.base_wrapper.BaseWrapper.writable_props
+
+    # Instantiate the subclass
+    element.__class__ = TempElement
+    # Retrieve properties using get_properties()
     properties = element.get_properties()
     element.__class__ = _element_class
     return properties
+
 
 
 def main():
