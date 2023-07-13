@@ -20,7 +20,7 @@ import sys
 
 from loguru import logger
 
-from openadapt import config
+from openadapt import config, sockets
 
 
 SERVER_SENDS = True
@@ -82,16 +82,21 @@ def send_message(encoded_message: dict[bytes, str]) -> None:
 
 
 if __name__ == "__main__":
-    address = ("localhost", config.SOCKET_PORT)
-    # family is deduced to be 'AF_INET'
-    listener = Listener(address, authkey=b"openadapt")
-    conn = listener.accept()
+
+    # Establish a server connection
+    listener = sockets.create_server_connection(6001)
+
     logger.info(f"connection accepted from {listener.last_accepted=}")
 
-    DOM_CHANGE_NUM = 0
+    # Start the event loop
     while True:
-        receivedMessage = get_message()
-        DOM_CHANGE_NUM += 1
-        conn.send(receivedMessage)
-        send_message(encode_message(str(DOM_CHANGE_NUM)))
-        send_message(encode_message(receivedMessage))
+        received_message = get_message()
+
+        # Sending message to Client
+        sockets.client_send_message(6001, received_message)
+
+        # # Receiving message from Server
+        # response = sockets.server_receive_message(config.SOCKET_PORT)
+
+        # Sending the received message back to background.js
+        send_message(encode_message(received_message))

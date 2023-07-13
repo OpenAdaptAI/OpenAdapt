@@ -5,6 +5,7 @@ import base64
 import fire
 import inspect
 import os
+import socket
 import sys
 import time
 
@@ -501,6 +502,24 @@ def strip_element_state(action_event):
     for child in action_event.children:
         strip_element_state(child)
     return action_event
+
+
+def get_free_port() -> int:
+    """
+    Get a free port number on the local machine.
+
+    Returns:
+        An available free port number.
+
+    Raises:
+        OSError: If a free port number cannot be obtained.
+    """
+    # Create a temporary socket to find a free port
+    temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    temp_socket.bind(('localhost', 0))
+    _, port = temp_socket.getsockname()
+    temp_socket.close()
+    return port
 
 
 def get_functions(name) -> dict:

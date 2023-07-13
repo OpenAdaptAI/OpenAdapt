@@ -86,6 +86,8 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
     "SOCKET_PORT": 6001,
     "SOCKET_AUTHKEY": b"openadapt",
+    "SOCKET_ADDRESS": "localhost",
+    "SOCKET_RETRY_INTERVAL": 5,  # seconds
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
@@ -135,7 +137,7 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
 
 
 
-_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY")
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():

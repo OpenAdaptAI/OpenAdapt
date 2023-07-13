@@ -546,25 +546,20 @@ def read_browser_events(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
-    prev_browser_data = {}
-    
-    while not terminate_event.is_set():
-      #  browser_data = # TODO (if the current window is Chrome then, get the DOM change data from the extension)
-        if not browser_data:
-            continue
 
-        if browser_data != prev_browser_data:
-            # logger.info(f"{browser_data=}")
-            logger.debug("queuing browser event for writing")
-            event_q.put(
-                Event(
-                    utils.get_timestamp(),
-                    "browser",
-                    browser_data,
-                )
+    while not terminate_event.is_set():
+      #  browser_data = get_message()
+
+        # logger.info(f"{browser_data=}")
+        logger.debug("queuing browser event for writing")
+        event_q.put(
+            Event(
+                utils.get_timestamp(),
+                "browser",
+                browser_data,
             )
-        prev_browser_data = browser_data
-    
+        )
+
 
 @trace(logger)
 def performance_stats_writer(
