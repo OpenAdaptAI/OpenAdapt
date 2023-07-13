@@ -78,7 +78,7 @@ def get_active_element_state(x: int, y: int):
     """
     active_window = get_active_window()
     active_element = active_window.from_point(x, y)
-    properties = active_element.get_properties()
+    properties = get_properties(active_element)
     properties["rectangle"] = dictify_rect(properties["rectangle"])
     return properties
 
@@ -138,6 +138,44 @@ def dictify_rect(rect):
     return rect_dict
 
 
+def get_properties(element):
+    """
+    Retrieves specific writable properties of an element.
+
+    This function is used to obtain a dictionary of writable properties for
+    a given element.
+    The reason we are using this function instead of directly using the
+    `get_properties()` function is because the writable properties vary
+    for each element and we only want the default properties.
+
+    Args:
+        element: The element for which to retrieve writable properties.
+
+    Returns:
+        A dictionary containing the writable properties of the element, 
+        with property names as keys and their corresponding values.
+
+    """
+    writable_props = [
+        "class_name",
+        "friendly_class_name",
+        "texts",
+        "control_id",
+        "rectangle",
+        "is_visible",
+        "is_enabled",
+        "control_count",
+    ]
+    props = {}
+
+    # for each of the properties that can be written out
+    for propname in writable_props:
+        # set the item in the props dictionary keyed on the propname
+        props[propname] = getattr(element, propname)()
+
+    return props
+
+
 def main():
     """
     Test function for retrieving and inspecting the state of the active window.
@@ -154,29 +192,6 @@ def main():
     import ipdb
 
     ipdb.set_trace()
-
-
-def get_properties(element):
-    #monkey patching
-    _get_properties = element.get_properties
-    element.get_properties = pywinauto.base_wrapper.BaseWrapper.get_properties
-    properties = element.get_properties()
-    element.get_properties = _get_properties
-    return properties
-    """Return the properties of the control as a dictionary."""
-    # import ipdb; ipdb.set_trace()
-    props = {}
-
-    # for each of the properties that can be written out
-    for propname in element.writable_props:
-        # set the item in the props dictionary keyed on the propname
-        try:
-            props[propname] = getattr(element, propname)()
-        except:
-            import ipdb; ipdb.set_trace()
-            continue
-
-    return props
 
 
 if __name__ == "__main__":
