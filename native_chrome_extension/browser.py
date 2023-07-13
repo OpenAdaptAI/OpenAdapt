@@ -23,9 +23,6 @@ from loguru import logger
 from openadapt import config, sockets
 
 
-SERVER_SENDS = True
-
-
 def get_message() -> Any:
     """Read a message from stdin and decode it.
 
@@ -84,16 +81,16 @@ def send_message(encoded_message: dict[bytes, str]) -> None:
 if __name__ == "__main__":
 
     # Establish a server connection
-    listener = sockets.create_server_connection(6001)
+    listener = sockets.create_server_connection(config.SOCKET_PORT)
 
-    logger.info(f"connection accepted from {listener.last_accepted=}")
+    # logger.info(f"connection accepted from {listener.last_accepted=}")
 
     # Start the event loop
     while True:
         received_message = get_message()
 
         # Sending message to Client
-        sockets.client_send_message(6001, received_message)
+        sockets.client_send_message(config.SOCKET_PORT, received_message)
 
         # # Receiving message from Server
         # response = sockets.server_receive_message(config.SOCKET_PORT)
