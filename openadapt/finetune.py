@@ -39,6 +39,7 @@ def davinci_get_next_action_event_pipeline():
     # ask the model to generate "next event" completions
     
     # TODO
+    pass
 
 
 if __name__ == "__main__":
