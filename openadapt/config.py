@@ -13,9 +13,9 @@ import multiprocessing
 import os
 import pathlib
 
+import sentry_sdk
 from dotenv import load_dotenv
 from loguru import logger
-
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -42,7 +42,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -84,7 +84,9 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    "REPORT_ERRORS": True,
 }
+
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
 STOP_STRS = [
@@ -132,15 +134,14 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
@@ -164,3 +165,13 @@ def filter_log_messages(data):
         "Cannot pickle Objective-C objects",
     ]
     return not any(msg in data["message"] for msg in messages_to_ignore)
+
+
+if REPORT_ERRORS:  # type: ignore # noqa
+    sentry_sdk.init(
+        dsn=os.getenv("SENTRY_DSN"),
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        # We recommend adjusting this value in production.
+        traces_sample_rate=1.0,
+    )
