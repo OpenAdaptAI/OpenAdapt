@@ -59,7 +59,7 @@ def sync_switch(switch, prop):
 
 def set_scrub(value):
     if config.SCRUB_ENABLED != value:
-        config.set_env("SCRUB_ENABLED", value)
+        config.persist_env("SCRUB_ENABLED", value)
         config.SCRUB_ENABLED = value
         ui.notify("Scrubbing enabled." if value else "Scrubbing disabled.")
         ui.notify("You may need to restart the app for this to take effect.")
@@ -72,4 +72,4 @@ def get_scrub():
 def set_dark(dark_mode, value):
     if dark_mode.value != value:
         dark_mode.value = value
-        config.set_env("DARK_MODE", value)
+        config.persist_env("APP_DARK_MODE", value)

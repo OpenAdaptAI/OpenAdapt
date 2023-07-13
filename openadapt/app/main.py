@@ -17,7 +17,7 @@ def run_app():
     app.native.start_args["debug"] = False
 
     dark = ui.dark_mode()
-    dark.value = config.DARK_MODE
+    dark.value = config.APP_DARK_MODE
 
     logger = None
 

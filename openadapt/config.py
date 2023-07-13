@@ -38,7 +38,7 @@ _DEFAULTS = {
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
     # APP CONFIGURATIONS
-    "DARK_MODE": True,
+    "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
@@ -102,6 +102,8 @@ STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+ENV_FILE_PATH = ".env"
+
 
 def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
@@ -112,9 +114,18 @@ def getenv_fallback(var_name):
     return rval
 
 
-def set_env(var_name, val):
-    if not os.path.exists(".env"):
-        with open(".env", "w") as f:
+def persist_env(var_name, val):
+    """
+    The `persist_env` function is used to persist environment variables by writing them to a `.env`
+    file.
+
+    :param var_name: The `var_name` parameter is a string that represents the name of the environment
+    variable you want to persist or update in the `.env` file
+    :param val: The `val` parameter in the `persist_env` function is the value that you want to assign
+    to the environment variable specified by `var_name`
+    """
+    if not os.path.exists(ENV_FILE_PATH):
+        with open(ENV_FILE_PATH, "w") as f:
             f.write(f"{var_name}={val}")
     else:
         # find and replace
