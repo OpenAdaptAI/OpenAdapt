@@ -4,7 +4,7 @@ Tests whether the lmql mixin can return valid action events
 from loguru import logger
 from lmql.runtime.bopenai import get_stats
 
-from openadapt.strategies.mixins.m_lmql import LMQLReplayStrategyMixin
+from openadapt.strategies.mixins.lmql_action import LMQLReplayStrategyMixin
 from openadapt.models import Recording, ActionEvent
 
 RECORDING = Recording()
@@ -37,7 +37,7 @@ def test_scroll():
     assert actual == expected
 
 def test_click():
-    prompt = "The user played a youtube video in the middle of the screeen of a macbook with 1440 width and 900 height"
+    prompt = "The user opened a file in the middle of the screeen of a macbook with 1440 width and 900 height"
     actual = REPLAY.get_valid_action_event(prompt)
     expected = ActionEvent(name="singleclick", mouse_x="720", mouse_y="450", mouse_button_name="left")
     logger.info(get_stats()) # log OpenAI API Stats
@@ -46,6 +46,6 @@ def test_click():
 def test_move():
     prompt = "Theodore displaced her mouse from the top right of the 1440 width and 900 height screen to the middle of the screen"
     actual = REPLAY.get_valid_action_event(prompt)
-    expected = ActionEvent(name="move", mouse_x="720", mouse_y="450", mouse_button_name="left")
+    expected = ActionEvent(name="move", mouse_x="720", mouse_y="450")
     logger.info(get_stats()) # log OpenAI API Stats
     assert actual == expected
