@@ -162,6 +162,7 @@ def deepconvert_objc(object):
     # handle core-foundation class AXValueRef
     elif isinstance(object, ApplicationServices.AXValueRef):
         # convert to dict - note: this object is not iterable
+        # TODO: access directly, e.g. via ApplicationServices.AXUIElementCopyAttributeValue
         rep = repr(object)
         x_value = re.search(r"x:([\d.]+)", rep)
         y_value = re.search(r"y:([\d.]+)", rep)
