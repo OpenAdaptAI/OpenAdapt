@@ -1,4 +1,5 @@
 import random
+import json
 
 Tasks = {
     0: "making a website about cats",
@@ -31,7 +32,7 @@ ShortSignals = [
     {"id": 11, "type": "function", "descriptor": "sklearn.tree.DecisionTreeClassifier", "relevant_task_ids": []},
     {"id": 12, "type": "url", "descriptor": "https://www.skyscanner.com", "relevant_task_ids": [9]},
     {"id": 13, "type": "database", "descriptor": "social_media_accounts.db", "relevant_task_ids": [10,11]},
-    {"id": 14, "type": "url", "descriptor": "https://www.linkedin.com", "relevant_task_ids": [6,10,11,12]},
+    {"id": 14, "type": "url", "descriptor": "https://www.linkedin.com", "relevant_task_ids": [6,10,12]},
 ]
 
 def get_relevant_signal_ids(task_id):
@@ -56,7 +57,7 @@ You are {task}. A list of information signals is provided in JSON format. Please
 """
     return prompt
 
-def evaluate():
+def evaluate(for_dataset=False):
     # 1. Pick a random task_id and a random number of random signals
     # 2. Generate a prompt
     # 3. Run the model
@@ -64,7 +65,8 @@ def evaluate():
     # 5. Check if the model's output is correct
 
     task_id = random.randint(0, len(Tasks)-1)
-    signal_count = random.randint(3, 7)
+    #signal_count = random.randint(3, 7)
+    signal_count = len(ShortSignals)
 
     # Select signal_count random signals (avoid duplicates)
     signal_ids = []
@@ -75,44 +77,48 @@ def evaluate():
         signal_ids.append(signal_id)
 
     prompt = get_prompt(task_id, signal_ids)
-    print("\n")
-    print(prompt)
+    
+    
 
     full_relevant_signals = get_relevant_signal_ids(task_id)
     # Remove any signals that are not in the prompt
     relevant_signals = [signal_id for signal_id in full_relevant_signals if signal_id in signal_ids]
 
-    #RUN MODEL
-    print("Desired Output: ", relevant_signals)
+    if not for_dataset:
+        print("\n",prompt)
+        print("Desired Output: ", relevant_signals)
 
-    return
+    if for_dataset:
+        return prompt, relevant_signals
+
+def generate_dataset():
+    # Run evaluate() several times and save the results to a file
+    # Each line of jsonl file should be a dictionary as follows: {"text": "{prompt} {target_response}"}
+    # Create jsonl file
+    # Run evaluate() 1000x times and save the result to the file
+    with open("dataset.jsonl", "w") as file:
+        for i in range(10):
+            value = evaluate(for_dataset=True)
+            file.write(json.dumps({"text": value[0] + str(value[1])}) + "\n")
+
+    print("\n###### Dataset generated successfully ######")
+    pass
+
 
 if __name__ == '__main__':
     print("Tasks:")
     for task_id, task in Tasks.items():
         print(f"{task_id}: {task}")
-    print("Signals:")
+    print("\nSignals:")
     for signal in ShortSignals:
         print(f"{signal['id']}: {signal['descriptor']} ({signal['type']})")
+    print()
     for task_id in Tasks.keys():
         relevant_signals = get_relevant_signal_ids(task_id)
         print(f"Task {task_id} has {len(relevant_signals)} relevant signals: {relevant_signals}")
 
-
-    # # Test prompt generation:
-    # print()
-    # signal_ids = [0,2,4,6,8]
-    # task_id = 3
-    # prompt = get_prompt(task_id, signal_ids)
-    # print(prompt)
-    # print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
-    
-    # # Test prompt generation:
-    # print()
-    # signal_ids = [0,1,2,3,4,5]
-    # task_id = 0
-    # prompt = get_prompt(task_id, signal_ids)
-    # print(prompt)
-    # print(f"\n **MOST RELEVANT SIGNALS**: {get_relevant_signal_ids(task_id)}")
     
     evaluate()
+
+    print("\n###### Generating Dataset ######")
+    generate_dataset()
