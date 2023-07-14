@@ -113,6 +113,7 @@ def create_win_dict(
     window_id: int,
     meta: dict[str, Any] | None = None,
 ):
+    meta = meta or {}
     win_dict = {
         "state": {
             "title": title,
@@ -142,6 +143,7 @@ def create_action_dict(
     key_name: str = None,
     element_state: dict[Any, Any] = None,
 ):
+    element_state = element_state or {}
     if name == "click":
         output_dict = [
             {
