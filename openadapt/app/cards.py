@@ -1,5 +1,5 @@
-import signal
 from subprocess import Popen
+import signal
 
 from nicegui import ui
 

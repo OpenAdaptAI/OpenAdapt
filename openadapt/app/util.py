@@ -1,7 +1,7 @@
+from shutil import copyfileobj
 import bz2
 import os
 import sys
-from shutil import copyfileobj
 
 from nicegui import ui
 
