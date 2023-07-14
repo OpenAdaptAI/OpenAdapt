@@ -41,12 +41,17 @@ def get_relevant_signal_ids(task_id):
 def get_signal_data_without_task_ids(signal_id):
     return {k: v for k, v in ShortSignals[signal_id].items() if k != "relevant_task_ids"}
 
-def get_prompt(task_id, signal_ids):
+def get_prompt(task_id, signal_ids, rearranged_indices=None):
     task = Tasks[task_id]
     test_signals = []
+
     for signal_id in signal_ids:
         signal = get_signal_data_without_task_ids(signal_id)
         test_signals.append(signal)
+
+    if rearranged_indices is not None:
+        for signal in test_signals:
+            signal["id"] = rearranged_indices[signal["id"]]
     
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 # Instruction:
@@ -69,20 +74,27 @@ def evaluate(for_dataset=False):
     signal_count = len(ShortSignals)
 
     # Select signal_count random signals (avoid duplicates)
+    # Have signal indexes start at 0 despite pre-existing signal ids
+    # Store the signal ids in a list to determine the desired response
     signal_ids = []
+    id_swaps = {}
     for i in range(signal_count):
         signal_id = random.randint(0, len(ShortSignals)-1)
         while signal_id in signal_ids:
             signal_id = random.randint(0, len(ShortSignals)-1)
         signal_ids.append(signal_id)
 
-    prompt = get_prompt(task_id, signal_ids)
+        id_swaps[signal_id] = i
+
+    prompt = get_prompt(task_id, signal_ids, rearranged_indices=id_swaps)
     
     
 
     full_relevant_signals = get_relevant_signal_ids(task_id)
     # Remove any signals that are not in the prompt
     relevant_signals = [signal_id for signal_id in full_relevant_signals if signal_id in signal_ids]
+    # Swap the signal ids to match the prompt
+    relevant_signals = [id_swaps[signal_id] for signal_id in relevant_signals]
 
     if not for_dataset:
         print("\n",prompt)
