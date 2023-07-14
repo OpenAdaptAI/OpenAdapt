@@ -146,7 +146,7 @@ def insert_perf_stat(
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp: int) -> list[Any]:
+def get_perf_stats(recording_timestamp: int) -> list[PerformanceStat]:
     """Get performance stats for a given recording.
 
     Args:
