@@ -90,7 +90,7 @@ if __name__ == "__main__":
         received_message = get_message()
 
         # Sending message to Client
-        sockets.client_send_message(config.SOCKET_PORT, received_message)
+        sockets.server_send_message(config.SOCKET_PORT, received_message)
 
         # # Receiving message from Server
         # response = sockets.server_receive_message(config.SOCKET_PORT)
