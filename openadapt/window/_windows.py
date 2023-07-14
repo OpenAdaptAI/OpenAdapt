@@ -144,21 +144,22 @@ def get_properties(element):
 
     This function retrieves a dictionary of writable properties for a given element.
     It achieves this by temporarily modifying the class of the element object using
-    monkey patching.This approach is necessary because in some cases, the original 
+    monkey patching.This approach is necessary because in some cases, the original
     class of the element may have a `get_properties()` function that raises errors.
 
     Args:
         element: The element for which to retrieve writable properties.
 
     Returns:
-        A dictionary containing the writable properties of the element, 
+        A dictionary containing the writable properties of the element,
         with property names as keys and their corres
         ponding values.
 
     """
     _element_class = element.__class__
+
     class TempElement(element.__class__):
-            writable_props = pywinauto.base_wrapper.BaseWrapper.writable_props
+        writable_props = pywinauto.base_wrapper.BaseWrapper.writable_props
 
     # Instantiate the subclass
     element.__class__ = TempElement
@@ -166,7 +167,6 @@ def get_properties(element):
     properties = element.get_properties()
     element.__class__ = _element_class
     return properties
-
 
 
 def main():
