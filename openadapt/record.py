@@ -655,6 +655,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            file_signal_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
