@@ -6,8 +6,9 @@ running a database migration using Alembic.
 Module: reset_db.py
 """
 
+from subprocess import PIPE, run
 import os
-from subprocess import run, PIPE
+
 from openadapt import config
 
 

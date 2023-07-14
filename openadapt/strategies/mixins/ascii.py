@@ -14,7 +14,6 @@ from loguru import logger
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
-
 COLUMNS = 120
 WIDTH_RATIO = 2.2
 MONOCHROME = True

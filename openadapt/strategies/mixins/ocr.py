@@ -18,7 +18,6 @@ import pandas as pd
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
-
 # TODO: group into sections via layout analysis; see:
 # github.com/RapidAI/RapidOCR/blob/main/python/rapid_structure/docs/README_Layout.md
 

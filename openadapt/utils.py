@@ -3,11 +3,11 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from io import BytesIO
 from collections import defaultdict
+from io import BytesIO
+from logging import StreamHandler
 from typing import Any
 import base64
-import fire
 import inspect
 import os
 import sys
@@ -15,11 +15,11 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
+import fire
 import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
-from logging import StreamHandler
 
 from openadapt import common, config
 

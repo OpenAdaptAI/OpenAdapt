@@ -2,8 +2,8 @@
 
 from fuzzywuzzy import fuzz
 
-from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
 from openadapt.models import Recording
+from openadapt.strategies.mixins.summary import SummaryReplayStrategyMixin
 
 RECORDING = Recording()
 

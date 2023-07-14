@@ -13,9 +13,8 @@ from loguru import logger
 import openai
 import tiktoken
 
-from openadapt.strategies.base import BaseReplayStrategy
 from openadapt import cache, config, models
-
+from openadapt.strategies.base import BaseReplayStrategy
 
 # https://github.com/nalgeon/pokitoki/blob/0b6b921d367f693738e7b9bab44e6926171b48d6/bot/ai/chatgpt.py#L78
 # OpenAI counts length in tokens, not characters.

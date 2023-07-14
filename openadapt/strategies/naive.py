@@ -1,8 +1,10 @@
 """Implements a naive playback strategy, replaying ActionEvents without screenshots."""
 
 import time
+
 from loguru import logger
-from openadapt import config, utils, models, strategies
+
+from openadapt import config, models, strategies, utils
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True

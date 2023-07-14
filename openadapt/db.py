@@ -3,15 +3,14 @@
 Module: db.py
 """
 
-import sqlalchemy as sa
 from dictalchemy import DictableModel
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
-from sqlalchemy.ext.declarative import declarative_base
+import sqlalchemy as sa
 
 from openadapt.config import DB_ECHO, DB_URL
 from openadapt.utils import EMPTY, row2dict
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",

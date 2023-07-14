@@ -3,9 +3,9 @@ from typing import Any
 import pickle
 
 from loguru import logger
-import atomacos
 import AppKit
 import ApplicationServices
+import atomacos
 import Quartz
 
 

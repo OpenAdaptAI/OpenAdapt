@@ -8,21 +8,17 @@ Usage:
         ...
 """
 
-from typing import Any, List
-
-from segment_anything import (
-    SamPredictor,
-    sam_model_registry,
-    SamAutomaticMaskGenerator,
-)
-from PIL import Image
-from loguru import logger
-from openadapt.models import Recording, Screenshot
 from pathlib import Path
+from typing import Any, List
 import urllib
-import numpy as np
-import matplotlib.pyplot as plt
 
+from loguru import logger
+from PIL import Image
+from segment_anything import SamAutomaticMaskGenerator, SamPredictor, sam_model_registry
+import matplotlib.pyplot as plt
+import numpy as np
+
+from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
 CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"

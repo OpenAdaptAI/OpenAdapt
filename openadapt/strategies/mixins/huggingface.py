@@ -14,7 +14,6 @@ import transformers as tf  # RIP TensorFlow
 from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
 
-
 MODEL_NAME = "gpt2"  # gpt2-xl is bigger and slower
 MAX_INPUT_SIZE = 1024
 

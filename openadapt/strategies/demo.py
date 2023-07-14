@@ -12,8 +12,8 @@ from openadapt.models import Recording, Screenshot, WindowEvent
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 from openadapt.strategies.mixins.huggingface import (
-    HuggingFaceReplayStrategyMixin,
     MAX_INPUT_SIZE,
+    HuggingFaceReplayStrategyMixin,
 )
 from openadapt.strategies.mixins.ocr import OCRReplayStrategyMixin
 from openadapt.strategies.mixins.sam import SAMReplayStrategyMixin

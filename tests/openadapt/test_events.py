@@ -4,17 +4,11 @@ from functools import partial
 from pprint import pformat
 from typing import Any, Callable, List, Optional
 import itertools
-import pytest
 
 from deepdiff import DeepDiff
 from loguru import logger
+import pytest
 
-from openadapt.models import ActionEvent, WindowEvent
-from openadapt.utils import (
-    get_double_click_interval_seconds,
-    rows2dicts,
-    override_double_click_interval_seconds,
-)
 from openadapt.events import (
     discard_unused_events,
     merge_consecutive_keyboard_events,
@@ -23,7 +17,12 @@ from openadapt.events import (
     merge_consecutive_mouse_scroll_events,
     remove_redundant_mouse_move_events,
 )
-
+from openadapt.models import ActionEvent, WindowEvent
+from openadapt.utils import (
+    get_double_click_interval_seconds,
+    override_double_click_interval_seconds,
+    rows2dicts,
+)
 
 # default duration between consecutive events
 # this needs to be small enough such that dt_short + DEFAULT < x,

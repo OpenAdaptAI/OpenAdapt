@@ -3,8 +3,9 @@
 Usage:
     python3 -m openadapt.start
 """
-from loguru import logger
 import subprocess
+
+from loguru import logger
 
 from openadapt.app.main import run_app
 

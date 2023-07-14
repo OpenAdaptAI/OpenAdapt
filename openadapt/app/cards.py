@@ -3,8 +3,8 @@
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
 
-import signal
 from subprocess import Popen
+import signal
 
 from nicegui import ui
 

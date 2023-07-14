@@ -6,9 +6,9 @@ Example usage:
     python build.py
 """
 
+from pathlib import Path
 import os
 import subprocess
-from pathlib import Path
 
 import nicegui
 

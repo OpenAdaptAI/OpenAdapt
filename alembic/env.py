@@ -4,7 +4,9 @@ This module provides the environment configuration for Alembic.
 """
 
 from logging.config import fileConfig
+
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from openadapt.config import DB_URL
 from openadapt.db import Base

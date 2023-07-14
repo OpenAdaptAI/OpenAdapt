@@ -16,7 +16,6 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 
-
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,

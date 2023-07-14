@@ -10,19 +10,16 @@ Usage:
 Module: scrub.py
 """
 
-from typing import List, Dict, Union, Any
+from typing import Any, Dict, List, Union
+
 from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import (
-    ImageRedactorEngine,
-    ImageAnalyzerEngine,
-)
+from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import fire
 
 from openadapt import config, utils
-
 
 SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()

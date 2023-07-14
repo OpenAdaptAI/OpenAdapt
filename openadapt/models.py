@@ -1,11 +1,11 @@
 """This module defines the models used in the OpenAdapt system."""
 
-import io
 from typing import Any
+import io
 
 from loguru import logger
-from pynput import keyboard
 from PIL import Image, ImageChops
+from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 

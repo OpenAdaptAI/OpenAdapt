@@ -8,20 +8,16 @@ Example usage:
     run_app()
 """
 
-import threading
 import base64
 import os
+import threading
 
 from nicegui import app, ui
 
 from openadapt import replay, visualize
-from openadapt.app.cards import (
-    recording_prompt,
-    select_import,
-    settings,
-)
-from openadapt.app.util import clear_db, on_export, on_import
+from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.objects.console import Console
+from openadapt.app.util import clear_db, on_export, on_import
 
 SERVER = "127.0.0.1:8000/upload"
 

@@ -8,16 +8,16 @@ from typing import Any, List
 from loguru import logger
 import sqlalchemy as sa
 
+from openadapt.config import STOP_SEQUENCES
 from openadapt.db import Session
 from openadapt.models import (
     ActionEvent,
-    Screenshot,
-    Recording,
-    WindowEvent,
-    PerformanceStat,
     MemoryStat,
+    PerformanceStat,
+    Recording,
+    Screenshot,
+    WindowEvent,
 )
-from openadapt.config import STOP_SEQUENCES
 
 BATCH_SIZE = 1
 

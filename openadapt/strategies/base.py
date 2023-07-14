@@ -13,7 +13,6 @@ import numpy as np
 
 from openadapt import models, playback, utils
 
-
 MAX_FRAME_TIMES = 1000
 
 

@@ -23,8 +23,8 @@ from typing import Optional
 import math
 
 from loguru import logger
+from moviepy.editor import VideoClip, VideoFileClip
 from PIL import Image
-from moviepy.editor import VideoFileClip, VideoClip
 from tqdm import tqdm
 import fire
 import numpy as np

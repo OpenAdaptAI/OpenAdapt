@@ -8,7 +8,6 @@ import sys
 
 from loguru import logger
 
-
 if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform in ("win32", "linux"):

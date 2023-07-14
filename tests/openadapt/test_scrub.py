@@ -6,7 +6,7 @@ import warnings
 
 from PIL import Image
 
-from openadapt import scrub, config
+from openadapt import config, scrub
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:

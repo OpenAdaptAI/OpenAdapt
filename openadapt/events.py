@@ -3,16 +3,15 @@
 # TODO: rename this file to folds.py as per
 # https://drive.google.com/file/d/1_fYoFncuI0TKghKWiMvP13hHEnIqAHI_/view?usp=drive_link
 
-import time
+from pprint import pformat
 from typing import Any, Callable, List
+import time
 
 from loguru import logger
-from pprint import pformat
 from scipy.spatial import distance
 import numpy as np
 
 from openadapt import common, crud, models, utils
-
 
 MAX_PROCESS_ITERS = 1
 MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD = 1

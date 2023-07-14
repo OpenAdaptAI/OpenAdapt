@@ -12,9 +12,8 @@ Example usage:
 """
 
 from functools import wraps
-import time
 from typing import Any, Callable, Optional, Union
-
+import time
 
 from joblib import Memory
 from loguru import logger

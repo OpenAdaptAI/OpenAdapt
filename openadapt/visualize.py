@@ -13,19 +13,18 @@ from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
 
+from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.utils import (
+    EMPTY,
     configure_logging,
     display_event,
     evenly_spaced,
     image2utf8,
-    EMPTY,
     row2dict,
     rows2dicts,
 )
-
-from openadapt import config
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:

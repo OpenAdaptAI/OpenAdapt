@@ -1,9 +1,11 @@
 """Module to test cropping functionality."""
 
 
-from unittest.mock import Mock
 from unittest import mock
+from unittest.mock import Mock
+
 from PIL import Image
+
 from openadapt.models import Screenshot
 
 
