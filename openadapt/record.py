@@ -16,6 +16,7 @@ import signal
 import sys
 import threading
 import time
+import psutil
 
 from loguru import logger
 from pynput import keyboard, mouse
@@ -50,6 +51,7 @@ def process_events(
     screen_write_q: multiprocessing.Queue,
     action_write_q: multiprocessing.Queue,
     window_write_q: multiprocessing.Queue,
+    file_signal_write_q: multiprocessing.Queue,
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -183,6 +185,25 @@ def write_window_event(
 
     assert event.type == "window", event
     crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
+def write_file_signal_event(
+    recording_timestamp: float,
+    event: Event,
+    perf_q: multiprocessing.Queue,
+):
+    """
+    Write a file signal event to the database and update the performance queue.
+
+    Args:
+        recording_timestamp: The timestamp of the recording.
+        event: A file signal event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+
+    assert event.type == "file_signal", event
+    crud.insert_file_signal(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -402,6 +423,56 @@ def read_window_events(
         prev_window_data = window_data
 
 
+def read_file_signals_events(
+    event_q: queue.Queue,
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
+) -> None:
+    """
+    Read file signal events and add them to the event queue.
+
+    Args:
+        event_q: A queue for adding file signal events.
+        terminate_event: An event to signal the termination of the process.
+        recording_timestamp: The timestamp of the recording.
+    """
+
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+    logger.info(f"starting")
+    prev_file_signal_data = {}
+    while not terminate_event.is_set():
+        file_signal_data = get_file_signal_data()
+        if not file_signal_data:
+            continue
+        if file_signal_data != prev_file_signal_data:
+            logger.debug("queuing file signal event for writing")
+            event_q.put(Event(
+                utils.get_timestamp(),
+                "file_signal",
+                file_signal_data,
+            ))
+        prev_file_signal_data = file_signal_data
+
+def get_file_signal_data():
+    """
+    Retrieve open file signals by PID.
+    """
+
+    file_signal_data = {}
+    for proc in psutil.process_iter(['pid', 'open_files']):
+        try:
+            pinfo = proc.info
+            pid = pinfo['pid']
+            open_files = pinfo['open_files']
+            if open_files is not None:
+                file_signal_data[pid] = [f.path for f in open_files]
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    return file_signal_data
+
+
+
 def performance_stats_writer (
     perf_q: multiprocessing.Queue,
     recording_timestamp: float,
@@ -534,6 +605,7 @@ def record(
     screen_write_q = multiprocessing.Queue()
     action_write_q = multiprocessing.Queue()
     window_write_q = multiprocessing.Queue()
+    file_signal_write_q = multiprocessing.Queue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = multiprocessing.Queue()
     terminate_event = multiprocessing.Event()
@@ -561,6 +633,12 @@ def record(
         args=(event_q, terminate_event, recording_timestamp),
     )
     mouse_event_reader.start()
+
+    file_signal_event_reader = threading.Thread(
+        target=read_file_signals_events,
+        args=(event_q, terminate_event, recording_timestamp),
+    )
+    file_signal_event_reader.start()
 
     event_processor = threading.Thread(
         target=process_events,
@@ -615,6 +693,21 @@ def record(
     )
     window_event_writer.start()
 
+    file_signal_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "file_signal",
+            write_file_signal_event,
+            file_signal_write_q,
+            perf_q,
+            recording_timestamp,
+            terminate_event,
+        ),
+    )
+    file_signal_event_writer.start()
+
+
+
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
@@ -639,10 +732,12 @@ def record(
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
+    file_signal_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    file_signal_event_writer.join()
 
     terminate_perf_event.set()
 

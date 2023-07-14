@@ -306,11 +306,13 @@ class FileSignal(db.Base):
     __tablename__ = "file_signal"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(sa.Float) # This is the new timestamp attribute
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    file_path = sa.Column(sa.String)
     pid = sa.Column(sa.Integer)
+    file_path = sa.Column(sa.String)
 
     recording = sa.orm.relationship("Recording", back_populates="file_signals")
+
 
 
 class PerformanceStat(db.Base):

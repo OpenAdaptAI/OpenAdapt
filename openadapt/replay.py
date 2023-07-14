@@ -24,6 +24,10 @@ def replay(
     logger.debug(f"{recording=}")
     assert recording, "No recording found"
 
+    file_signals = crud.get_file_signals(recording)
+    for file_signal in file_signals:
+        print(file_signal)
+
     logger.info(f"{strategy_name=}")
 
     strategy_class_by_name = utils.get_strategy_class_by_name()
