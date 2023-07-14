@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Any
 import openai
 from loguru import logger
 
@@ -60,8 +60,8 @@ def gpt_completion(
         f"{ref_win_dict=}\n"
         f"{ref_act_dicts=}\n"
         f"{active_win_dict=}\n"
-        "# Provide valid Python3 code containing the action dicts by completing the \
-        following, and nothing else:\n"
+        "# Provide valid Python3 code containing the action dicts by completing the "
+        "following, and nothing else:\n"
         "active_action_dicts="
     )
 
@@ -111,7 +111,7 @@ def create_win_dict(
     width: int,
     height: int,
     window_id: int,
-    meta: dict[str],
+    meta: dict[str, Any] | None = None,
 ):
     win_dict = {
         "state": {
@@ -135,12 +135,12 @@ def create_win_dict(
 
 def create_action_dict(
     name: str,
-    mouse_x: Union[int, float] = None,
-    mouse_y: Union[int, float] = None,
+    mouse_x: int | float | None = None,
+    mouse_y: int | float | None = None,
     mouse_button_name: str = None,
     mouse_pressed: bool = None,
     key_name: str = None,
-    element_state: dict = None,
+    element_state: dict[Any, Any] = None,
 ):
     if name == "click":
         output_dict = [
@@ -348,7 +348,3 @@ def test_simple_multi_action_sequence():
     test_generalizable_single_action(
         win_dict, ref_act_dicts, active_win_dict, expected_act_dict
     )
-
-
-if __name__ == "__main__":
-    test_simple_multi_action_sequence()
