@@ -57,8 +57,3 @@ def mpt7b_test_action_event():
     logger.debug(f"{action_completion=}")
 
     assert len(action_completion) > 0
-
-
-if __name__ == "__main__":
-    mpt7b_smoke_test()
-    mpt7b_test_action_event()
