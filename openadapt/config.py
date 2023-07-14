@@ -114,18 +114,19 @@ def getenv_fallback(var_name):
     return rval
 
 
-def persist_env(var_name, val):
+def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
     """
-    The `persist_env` function is used to persist environment variables by writing them to a `.env`
-    file.
+    The `persist_env` function is used to persist environment variables by writing them to a file or
+    updating their values if they already exist in the file.
 
-    :param var_name: The `var_name` parameter is a string that represents the name of the environment
-    variable you want to persist or update in the `.env` file
-    :param val: The `val` parameter in the `persist_env` function is the value that you want to assign
-    to the environment variable specified by `var_name`
+    Args:
+      var_name: The `var_name` parameter is a string that represents the name of the environment
+    variable you want to persist or update.
+      val: The `val` parameter in the `persist_env` function is the value that you want to assign to the
+    environment variable specified by `var_name`.
     """
-    if not os.path.exists(ENV_FILE_PATH):
-        with open(ENV_FILE_PATH, "w") as f:
+    if not os.path.exists(env_file_path):
+        with open(env_file_path, "w") as f:
             f.write(f"{var_name}={val}")
     else:
         # find and replace
