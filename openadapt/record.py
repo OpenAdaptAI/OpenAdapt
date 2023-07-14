@@ -34,7 +34,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
 }
 PLOT_PERFORMANCE = False
-
+DIRECTORIES_TO_AVOID = config.DIRECTORIES_TO_AVOID
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -466,7 +466,15 @@ def get_file_signal_data():
             pid = pinfo['pid']
             open_files = pinfo['open_files']
             if open_files is not None:
-                file_signal_data[pid] = [f.path for f in open_files]
+                for file in open_files:
+                    for dirs in DIRECTORIES_TO_AVOID:
+                        # If none of the directories to avoid are in the path
+                        # then we can add the file to the list of open files
+                        if dirs in file.path:
+                            break
+                    else:
+                        file_signal_data[pid] = file.path
+                        logger.info(f"{pid=} {file_signal_data[pid]=}")
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     return file_signal_data

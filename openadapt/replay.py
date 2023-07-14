@@ -25,6 +25,7 @@ def replay(
     assert recording, "No recording found"
 
     file_signals = crud.get_file_signals(recording)
+    logger.info(f"{len(file_signals)} file signals found")
     for file_signal in file_signals:
         print(file_signal)
 
