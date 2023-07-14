@@ -1,15 +1,15 @@
 from typing import List
-from openadapt.tools.layout import LayoutExtractionTool
+from openadapt.tools.layout import document_query
 from PIL import Image
 from transformers import pipeline
 import numpy as np
 import pytest
 
 IMAGE_FILE_NAMES = [
-    "assets/test_ladingbill.png",
-    "assets/test_invoice.png",
-    "assets/test_calendar.png",
-    "assets/test_calc.png",
+    "tests/openadapt/assets/test_ladingbill.png",
+    "tests/openadapt/assets/test_invoice.png",
+    "tests/openadapt/assets/test_calendar.png",
+    "tests/openadapt/assets/test_calc.png",
 ]
 
 
@@ -23,9 +23,7 @@ def test_lading_bill_screenshot():
 
     output_answers = []
     for q in questions:
-        output = LayoutExtractionTool.document_query(
-            image=None, image_path=IMAGE_FILE_NAMES[0], question=q
-        )
+        output = document_query(image=None, image_path=IMAGE_FILE_NAMES[0], question=q)
         output_answers.append(output)
 
     expected_output = [
@@ -50,15 +48,13 @@ def test_invoice_screenshot():
 
     output_answers = []
     for q in questions:
-        output = LayoutExtractionTool.document_query(
-            image=None, image_path=IMAGE_FILE_NAMES[1], question=q
-        )
+        output = document_query(image=None, image_path=IMAGE_FILE_NAMES[1], question=q)
         output_answers.append(output)
     assert output_answers == expected_answers
 
 
 def test_calendar_screenshot():
-    output = LayoutExtractionTool.document_query(
+    output = document_query(
         image=None, image_path=IMAGE_FILE_NAMES[2], question="What month is it?"
     )
     expected_output = "june"
@@ -66,18 +62,10 @@ def test_calendar_screenshot():
 
 
 def test_calc_screenshot():
-    with pytest.raises(
-        TypeError, match="Unsupported document type, please input a text-based document"
-    ):
-        output = LayoutExtractionTool.document_query(
-            image=None,
-            image_path=IMAGE_FILE_NAMES[3],
-            question="What is the current number on the screen?",
-        )
-
-
-if __name__ == "__main__":
-    test_calc_screenshot()
-    test_calendar_screenshot()
-    test_invoice_screenshot()
-    test_lading_bill_screenshot()
+    output = document_query(
+        image=None,
+        image_path=IMAGE_FILE_NAMES[3],
+        question="What is the current number on the screen?",
+    )
+    expected_output = []
+    assert output == expected_output

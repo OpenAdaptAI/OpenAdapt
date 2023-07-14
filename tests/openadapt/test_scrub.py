@@ -29,7 +29,7 @@ def test_scrub_image() -> None:
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     # Read test image data from file
-    test_image_path = "assets/test_scrub_image.png"
+    test_image_path = "tests/openadapt/assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
