@@ -6,12 +6,12 @@ import time
 RETRY_INTERVAL=5
 
 def main():
-    conn = Client((config.SOCKET_ADDRESS,config.SOCKET_PORT) , authkey=config.SOCKET_AUTHKEY)
+    conn = sockets.create_client_connection(config.SOCKET_PORT)
     while True:
         try:
             if SERVER_SENDS:
                 logger.info("Waiting for message...")
-                msg = conn.recv()
+                msg = sockets.client_receive_message(config.SOCKET_PORT)
                 logger.info(f"{msg=}")
             else:
                 t = time.time()
