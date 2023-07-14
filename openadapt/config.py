@@ -13,9 +13,11 @@ import multiprocessing
 import os
 import pathlib
 
-import sentry_sdk
+
 from dotenv import load_dotenv
 from loguru import logger
+import sentry_sdk
+import git
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -167,11 +169,8 @@ def filter_log_messages(data):
     return not any(msg in data["message"] for msg in messages_to_ignore)
 
 
-if REPORT_ERRORS:  # type: ignore # noqa
+if REPORT_ERRORS and git.Repo(os.getcwd()).active_branch.name == "main":  # type: ignore # noqa
     sentry_sdk.init(
         dsn=os.getenv("SENTRY_DSN"),
-        # Set traces_sample_rate to 1.0 to capture 100%
-        # of transactions for performance monitoring.
-        # We recommend adjusting this value in production.
         traces_sample_rate=1.0,
     )

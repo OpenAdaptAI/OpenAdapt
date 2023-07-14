@@ -79,6 +79,7 @@ pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
 sentry-sdk = "^1.28.1"
+gitpython = "^3.1.32"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
