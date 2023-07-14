@@ -30,6 +30,10 @@ def davinci_learn_recording_summary_pipeline(
     logger.debug(f"{prompt=}")
     logger.debug(f"{completion=}")
 
+    
+    sanitized_window_states = event_sanitizer(summary_window_states, "window")
+    sanitized_ref_action_events = event_sanitizer(summary_ref_action_events, "action")
+    
     # TODO
 
 
@@ -41,6 +45,8 @@ def davinci_get_next_action_event_pipeline():
     # TODO
     pass
 
+def event_sanitizer(event, type: str = "window" | "action"):
+    pass
 
 if __name__ == "__main__":
     fire.Fire(main)
