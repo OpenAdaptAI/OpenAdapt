@@ -190,12 +190,14 @@ def generate_dataset():
     # Create jsonl file
     # Run evaluate() 1000x times and save the result to the file
     with open("dataset.jsonl", "w") as file:
-        for i in range(10):
+        for i in range(5000):
             value = evaluate(for_dataset=True)
-            file.write(json.dumps({"text": value[0] + str(value[1])}) + "\n")
+            if i != 4999:
+                file.write(json.dumps({"text": value[0] + str(value[1])}) + ",\n")
+            else:
+                file.write(json.dumps({"text": value[0] + str(value[1])}))
 
     print("\n###### Dataset generated successfully ######")
-    pass
 
 
 if __name__ == "__main__":
