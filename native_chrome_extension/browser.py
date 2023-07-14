@@ -81,7 +81,11 @@ def send_message(encoded_message: dict[bytes, str]) -> None:
 if __name__ == "__main__":
 
     # Establish a server connection
-    listener = sockets.create_server_connection(config.SOCKET_PORT)
+    # listener = sockets.create_server_connection(config.SOCKET_PORT)
+    
+    address = (config.SOCKET_ADDRESS, 6001)
+    conn = Listener(address, authkey=config.SOCKET_AUTHKEY)
+    conn = conn.accept()
 
     # logger.info(f"connection accepted from {listener.last_accepted=}")
 
@@ -90,7 +94,7 @@ if __name__ == "__main__":
         received_message = get_message()
 
         # Sending message to Client
-        sockets.server_send_message(config.SOCKET_PORT, received_message)
+        conn.send(received_message)
 
         # # Receiving message from Server
         # response = sockets.server_receive_message(config.SOCKET_PORT)

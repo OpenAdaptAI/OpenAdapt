@@ -4,6 +4,7 @@ from openadapt import config, sockets
 import time
 
 RETRY_INTERVAL=5
+SERVER_SENDS = True
 
 def main():
     conn = sockets.create_client_connection(config.SOCKET_PORT)
