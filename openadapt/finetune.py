@@ -34,6 +34,10 @@ def davinci_learn_recording_summary_pipeline(
     sanitized_window_states = event_sanitizer(summary_window_states, "window")
     sanitized_ref_action_events = event_sanitizer(summary_ref_action_events, "action")
     
+    # write to a json file in the format
+    # {prompt: finetune_prompt, completion: incomplete_recording}
+    # where finetune_prompt is the same as in get_next_action_event in stateful
+    
     # TODO
 
 
