@@ -8,7 +8,7 @@ Usage:
         ...
 """
 
-from typing import List, Union
+from typing import Union
 
 from loguru import logger
 from rapidocr_onnxruntime import RapidOCR
@@ -59,7 +59,7 @@ class OCRReplayStrategyMixin(BaseReplayStrategy):
         return text
 
 
-def get_text_df(result: List[List[Union[List[float], str, float]]]) -> pd.DataFrame:
+def get_text_df(result: list[list[Union[list[float], str, float]]]) -> pd.DataFrame:
     """Convert RapidOCR result to DataFrame.
 
     Args:

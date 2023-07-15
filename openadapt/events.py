@@ -4,7 +4,7 @@
 # https://drive.google.com/file/d/1_fYoFncuI0TKghKWiMvP13hHEnIqAHI_/view?usp=drive_link
 
 from pprint import pformat
-from typing import Any, Callable, List
+from typing import Any, Callable, Optional
 import time
 
 from loguru import logger
@@ -333,8 +333,8 @@ def merge_consecutive_mouse_click_events(
     """
 
     def get_recording_attr(
-        event: models.ActionEvent, attr_name: str, fallback: Any
-    ) -> Any:
+        event: models.ActionEvent, attr_name: str, fallback: Callable[[], Any]
+    ) -> Optional[Any]:
         attr = getattr(event.recording, attr_name) if event.recording else None
         if attr is None:
             fallback_value = fallback()
@@ -451,15 +451,15 @@ def merge_consecutive_mouse_click_events(
 def merge_consecutive_keyboard_events(
     events: list[models.ActionEvent],
     group_named_keys: bool = KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS,
-) -> list:
+) -> list[models.ActionEvent]:
     """Merge consecutive keyboard char press events into a single press event."""
 
-    def is_target_event(event: Any, state: Any) -> bool:
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
         is_target_event = bool(event.key)
         logger.debug(f"{is_target_event=} {event=}")
         return is_target_event
 
-    def get_group_idx_tups(to_merge: Any) -> list:
+    def get_group_idx_tups(to_merge: list[models.ActionEvent]) -> list[tuple[int, int]]:
         pressed_keys = set()
         was_pressed = False
         start_idx = 0
@@ -497,7 +497,9 @@ def merge_consecutive_keyboard_events(
         logger.info(f"{len(to_merge)=} {group_idx_tups=}")
         return group_idx_tups
 
-    def get_merged_events(to_merge: Any, state: Any) -> list:
+    def get_merged_events(
+        to_merge: list[models.ActionEvent], state: dict[str, Any]
+    ) -> list[models.ActionEvent]:
         if group_named_keys:
             group_idx_tups = get_group_idx_tups(to_merge)
         else:
@@ -533,7 +535,9 @@ def merge_consecutive_keyboard_events(
     )
 
 
-def remove_redundant_mouse_move_events(events: Any) -> list:
+def remove_redundant_mouse_move_events(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
     """Remove mouse move events that don't change the mouse position."""
 
     def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
@@ -558,7 +562,9 @@ def remove_redundant_mouse_move_events(events: Any) -> list:
             is_same_pos(prev_event, event) or is_same_pos(event, next_event)
         )
 
-    def get_merged_events(to_merge: Any, state: Any) -> list:
+    def get_merged_events(
+        to_merge: list[models.ActionEvent], state: dict[str, Any]
+    ) -> list[models.ActionEvent]:
         to_merge = [None, *to_merge, None]
         merged_events = []
         dts = []
@@ -606,7 +612,7 @@ def merge_consecutive_action_events(
     name: str,
     events: list[models.ActionEvent],
     is_target_event: Callable[..., bool],
-    get_merged_events: Callable[..., List[models.ActionEvent]],
+    get_merged_events: Callable[..., list[models.ActionEvent]],
 ) -> list[models.ActionEvent]:
     """Merge consecutive action events into one or more parent events."""
     num_events_before = len(events)

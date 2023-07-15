@@ -7,7 +7,6 @@ Usage:
 
 from copy import deepcopy
 from pprint import pformat
-from typing import List
 
 from loguru import logger
 import deepdiff
@@ -154,7 +153,7 @@ class StatefulReplayStrategy(
         return active_action
 
 
-def get_action_dict_from_completion(completion: str) -> dict:
+def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
     """Convert the completion to a dictionary containing action information.
 
     Args:
@@ -172,18 +171,18 @@ def get_action_dict_from_completion(completion: str) -> dict:
 
 
 def get_window_state_diffs(
-    action_events: List[models.ActionEvent],
+    action_events: list[models.ActionEvent],
     ignore_boundary_windows: bool = IGNORE_BOUNDARY_WINDOWS,
-) -> list:
+) -> list[deepdiff.DeepDiff]:
     """Get the differences in window state between consecutive action events.
 
     Args:
-        action_events (List[models.ActionEvent]): The list of action events.
+        action_events (list[models.ActionEvent]): The list of action events.
         ignore_boundary_windows (bool): Flag to ignore boundary windows.
           Defaults to True.
 
     Returns:
-        List[deepdiff.DeepDiff]: List of deep diffs for window state differences.
+        list[deepdiff.DeepDiff]: list of deep diffs for window state differences.
     """
     ignore_window_ids = set()
     if ignore_boundary_windows:

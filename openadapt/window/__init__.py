@@ -17,7 +17,7 @@ else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 
 
-def get_active_window_data() -> Any:
+def get_active_window_data() -> dict[str, Any] | None:
     """Get data of the active window.
 
     Returns:
@@ -45,12 +45,12 @@ def get_active_window_data() -> Any:
     return window_data
 
 
-def get_active_window_state() -> dict:
+def get_active_window_state() -> dict | None:
     """Get the state of the active window.
 
     Returns:
         dict or None: A dictionary containing the state of the active window,
-        or None if the state is not available.
+          or None if the state is not available.
     """
     # TODO: save window identifier (a window's title can change, or
     try:
@@ -60,7 +60,7 @@ def get_active_window_state() -> dict:
         return None
 
 
-def get_active_element_state(x: int, y: int) -> dict:
+def get_active_element_state(x: int, y: int) -> dict | None:
     """Get the state of the active element at the specified coordinates.
 
     Args:

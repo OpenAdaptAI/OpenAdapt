@@ -1,5 +1,5 @@
 from pprint import pprint
-from typing import Any
+from typing import Any, Literal, Union
 import pickle
 
 from loguru import logger
@@ -69,7 +69,7 @@ def get_active_window_meta() -> dict:
     return active_window_info
 
 
-def get_active_window(window_meta: dict) -> Any:
+def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElement | None:
     """Get the active window from the given metadata.
 
     Args:
@@ -107,7 +107,10 @@ def get_window_data(window_meta: dict) -> dict:
     return state
 
 
-def dump_state(element: Any, elements: set = None) -> dict | list:
+def dump_state(
+    element: Union[AppKit.NSArray, list, AppKit.NSDictionary, dict, Any],
+    elements: set = None,
+) -> Union[dict, list]:
     """Dump the state of the given element and its descendants.
 
     Args:
@@ -173,7 +176,7 @@ def dump_state(element: Any, elements: set = None) -> dict | list:
 
 
 # https://github.com/autopkg/autopkg/commit/1aff762d8ea658b3fca8ac693f3bf13e8baf8778
-def deepconvert_objc(object: Any) -> Any:
+def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
     """Convert all contents of an ObjC object to Python primitives.
 
     Args:

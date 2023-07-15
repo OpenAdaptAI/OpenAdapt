@@ -1,6 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Any
+from typing import Union
 import io
 
 from loguru import logger
@@ -19,7 +19,7 @@ class ForceFloat(sa.TypeDecorator):
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value: Any, dialect: Any) -> float | None:
+    def process_result_value(self, value: Union[int, float, str, None]) -> float | None:
         """Convert the result value to float."""
         if value is not None:
             value = float(value)
@@ -110,7 +110,9 @@ class ActionEvent(db.Base):
 
     # TODO: playback_timestamp / original_timestamp
 
-    def _key(self, key_name: Any, key_char: Any, key_vk: Any) -> Any:
+    def _key(
+        self, key_name: str, key_char: str, key_vk: str
+    ) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
         """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
@@ -124,7 +126,7 @@ class ActionEvent(db.Base):
         return key
 
     @property
-    def key(self) -> Any:
+    def key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
         """Get the key associated with the action event."""
         logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
@@ -134,7 +136,7 @@ class ActionEvent(db.Base):
         )
 
     @property
-    def canonical_key(self) -> Any:
+    def canonical_key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
         """Get the canonical key associated with the action event."""
         logger.trace(
             f"{self.name=} "
@@ -215,7 +217,7 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls: Any, children_dicts: list) -> Any:
+    def from_children(cls: list, children_dicts: list) -> "ActionEvent":
         """Create an ActionEvent instance from a list of child event dictionaries.
 
         Args:
@@ -277,7 +279,7 @@ class Screenshot(db.Base):
         return self._diff
 
     @property
-    def diff_mask(self) -> Any:
+    def diff_mask(self) -> Image:
         """Get the difference mask of the screenshot."""
         if not self._diff_mask:
             if self.diff:
@@ -290,13 +292,13 @@ class Screenshot(db.Base):
         return np.array(self.image)
 
     @classmethod
-    def take_screenshot(cls: Any) -> Any:
+    def take_screenshot(cls: "Screenshot") -> "Screenshot":
         """Capture a screenshot."""
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event: Any) -> None:
+    def crop_active_window(self, action_event: ActionEvent) -> None:
         """Crop the screenshot to the active window defined by the action event."""
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
@@ -330,7 +332,7 @@ class WindowEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_event(cls: Any) -> Any:
+    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 

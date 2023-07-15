@@ -1,19 +1,18 @@
 """Utilities for playing back ActionEvents."""
 
-from typing import Any
-
 from loguru import logger
-from pynput import mouse
+from pynput import mouse, keyboard
 
 from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
+from openadapt.models import ActionEvent
 
 
-def play_mouse_event(event: Any, mouse_controller: Any) -> None:
+def play_mouse_event(event: ActionEvent, mouse_controller: mouse.Controller) -> None:
     """Play a mouse event.
 
     Args:
         event (ActionEvent): The mouse event to be played.
-        mouse_controller (pynput.mouse.Controller): The mouse controller.
+        mouse_controller (mouse.Controller): The mouse controller.
 
     Raises:
         Exception: If the event name is not handled.
@@ -50,13 +49,13 @@ def play_mouse_event(event: Any, mouse_controller: Any) -> None:
 
 
 def play_key_event(
-    event: Any, keyboard_controller: Any, canonical: bool = True
+    event: ActionEvent, keyboard_controller: keyboard.Controller, canonical: bool = True
 ) -> None:
     """Play a key event.
 
     Args:
         event (ActionEvent): The key event to be played.
-        keyboard_controller (pynput.keyboard.Controller): The keyboard controller.
+        keyboard_controller (keyboard.Controller): The keyboard controller.
         canonical (bool): Whether to use the canonical key or the key.
 
     Raises:
@@ -77,14 +76,16 @@ def play_key_event(
 
 
 def play_action_event(
-    event: Any, mouse_controller: Any, keyboard_controller: Any
+    event: ActionEvent,
+    mouse_controller: mouse.Controller,
+    keyboard_controller: keyboard.Controller,
 ) -> None:
     """Play an action event.
 
     Args:
         event (ActionEvent): The action event to be played.
-        mouse_controller (pynput.mouse.Controller): The mouse controller.
-        keyboard_controller (pynput.keyboard.Controller): The keyboard controller.
+        mouse_controller (mouse.Controller): The mouse controller.
+        keyboard_controller (keyboard.Controller): The keyboard controller.
 
     Raises:
         Exception: If the event name is not handled.

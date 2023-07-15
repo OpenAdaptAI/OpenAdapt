@@ -6,8 +6,6 @@ Usage:
         ...
 """
 
-from typing import Any
-
 from ascii_magic import AsciiArt
 from loguru import logger
 
@@ -39,7 +37,7 @@ class ASCIIReplayStrategyMixin(BaseReplayStrategy):
         monochrome: bool = MONOCHROME,
         columns: int = COLUMNS,
         width_ratio: float = WIDTH_RATIO,
-    ) -> Any:
+    ) -> str:
         """Convert the screenshot image to ASCII text.
 
         Args:

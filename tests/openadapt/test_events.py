@@ -2,7 +2,7 @@
 
 from functools import partial
 from pprint import pformat
-from typing import Any, Callable, List, Optional
+from typing import Callable, Optional
 import itertools
 
 from deepdiff import DeepDiff
@@ -65,8 +65,8 @@ def _reset_timestamp() -> None:
 def make_action_event(
     event_dict: dict,
     dt: float = None,
-    get_pre_children: Callable[[], List[ActionEvent]] = None,
-    get_post_children: Callable[[], List[ActionEvent]] = None,
+    get_pre_children: Callable[[], list[ActionEvent]] = None,
+    get_post_children: Callable[[], list[ActionEvent]] = None,
 ) -> ActionEvent:
     """Create an ActionEvent instance with the given attributes.
 
@@ -115,15 +115,17 @@ def make_action_event(
     return event
 
 
-def get_children_with_timestamps(get_children: Callable[[], List[Any]]) -> List[Any]:
+def get_children_with_timestamps(
+    get_children: Callable[[], list[ActionEvent]]
+) -> list[ActionEvent]:
     """Get the list of children events with timestamps.
 
     Args:
-        get_children (Callable[[], List[Any]]): Function that returns
+        get_children (Callable[[], list[ActionEvent]]): Function that returns
           the list of children events.
 
     Returns:
-        List[Any]: List of children events with timestamps.
+        list[ActionEvent]: list of children events with timestamps.
     """
     if not get_children:
         return []
@@ -147,8 +149,8 @@ def get_children_with_timestamps(get_children: Callable[[], List[Any]]) -> List[
 def make_move_event(
     x: int = 0,
     y: int = 0,
-    get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
-    get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
+    get_pre_children: Optional[Callable[[], list[ActionEvent]]] = None,
+    get_post_children: Optional[Callable[[], list[ActionEvent]]] = None,
 ) -> ActionEvent:
     """Create a move event with the given attributes.
 
@@ -176,8 +178,8 @@ def make_click_event(
     mouse_y: int = 0,
     dt: float = None,
     button_name: str = "left",
-    get_pre_children: Optional[Callable[[], List[ActionEvent]]] = None,
-    get_post_children: Optional[Callable[[], List[ActionEvent]]] = None,
+    get_pre_children: Optional[Callable[[], list[ActionEvent]]] = None,
+    get_post_children: Optional[Callable[[], list[ActionEvent]]] = None,
 ) -> ActionEvent:
     """Create a click event with the given attributes.
 
@@ -248,7 +250,7 @@ def make_click_events(
 def make_processed_click_event(
     name: str,
     dt: float,
-    get_children: Optional[Callable[[], List[ActionEvent]]],
+    get_children: Optional[Callable[[], list[ActionEvent]]],
     mouse_x: int = 0,
     mouse_y: int = 0,
     button_name: str = "left",
@@ -281,7 +283,7 @@ def make_processed_click_event(
 
 def make_singleclick_event(
     dt: float,
-    get_children: Optional[Callable[[], List[ActionEvent]]],
+    get_children: Optional[Callable[[], list[ActionEvent]]],
     mouse_x: int = 0,
     mouse_y: int = 0,
     button_name: str = "left",
@@ -311,7 +313,7 @@ def make_singleclick_event(
 
 def make_doubleclick_event(
     dt: float,
-    get_children: Optional[Callable[[], List[ActionEvent]]],
+    get_children: Optional[Callable[[], list[ActionEvent]]],
     mouse_x: int = 0,
     mouse_y: int = 0,
     button_name: str = "left",
@@ -582,7 +584,7 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
 
 
 def make_type_event(
-    get_children: Optional[Callable[[], List[ActionEvent]]]
+    get_children: Optional[Callable[[], list[ActionEvent]]]
 ) -> ActionEvent:
     """Create a type event with the given children events.
 

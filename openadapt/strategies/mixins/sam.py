@@ -9,12 +9,17 @@ Usage:
 """
 
 from pathlib import Path
-from typing import Any, List
 import urllib
 
 from loguru import logger
 from PIL import Image
-from segment_anything import SamAutomaticMaskGenerator, SamPredictor, sam_model_registry
+from segment_anything import (
+    modeling,
+    SamAutomaticMaskGenerator,
+    SamPredictor,
+    sam_model_registry,
+)
+import matplotlib.axes as axes
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -54,7 +59,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         self.sam_predictor = SamPredictor(self.sam_model)
         self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
 
-    def _initialize_model(self, model_name: str, checkpoint_dir_path: str) -> Any:
+    def _initialize_model(
+        self, model_name: str, checkpoint_dir_path: str
+    ) -> modeling.Sam:
         """Initialize the SAM model.
 
         Args:
@@ -62,7 +69,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
 
         Returns:
-            SamModel: The initialized SAM model.
+            modeling.Sam: The initialized SAM model.
         """
         checkpoint_url = CHECKPOINT_URL_BY_NAME[model_name]
         checkpoint_file_name = checkpoint_url.split("/")[-1]
@@ -100,7 +107,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         return str(bbox_list)
 
     def get_click_event_bbox(
-        self, screenshot: Any, show_plots: bool = SHOW_PLOTS
+        self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
     ) -> str:
         """Get bounding box of a clicked object in resized image w/ RESIZE_RATIO(XYWH).
 
@@ -201,7 +208,7 @@ def resize_image(image: Image) -> Image:
     return image_resized
 
 
-def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
+def show_mask(mask: np.ndarray, ax: axes.Axes, random_color: bool = False) -> None:
     """Display the mask on the plot.
 
     Args:
@@ -222,7 +229,7 @@ def show_mask(mask: np.ndarray, ax: Any, random_color: bool = False) -> None:
 def show_points(
     coords: np.ndarray,
     labels: np.ndarray,
-    ax: Any,
+    ax: axes.Axes,
     marker_size: int = 120,
 ) -> None:
     """Display the points on the plot.
@@ -255,11 +262,11 @@ def show_points(
     )
 
 
-def show_box(box: List[int], ax: Any) -> None:
+def show_box(box: list[int], ax: axes.Axes) -> None:
     """Display the bounding box on the plot.
 
     Args:
-        box (List[int]): The bounding box coordinates in XYWH format.
+        box (list[int]): The bounding box coordinates in XYWH format.
         ax: The plot axes.
     """
     x0, y0 = box[0], box[1]
@@ -276,7 +283,7 @@ def show_box(box: List[int], ax: Any) -> None:
     )
 
 
-def show_anns(anns: Any) -> None:
+def show_anns(anns: axes.Axes) -> None:
     """Display the annotations on the plot.
 
     Args:

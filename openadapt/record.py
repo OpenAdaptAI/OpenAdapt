@@ -8,7 +8,7 @@ Usage:
 
 from collections import namedtuple
 from functools import partial, wraps
-from typing import Any, Callable, Dict, Union
+from typing import Any, Callable, Union
 import multiprocessing
 import os
 import queue
@@ -28,6 +28,7 @@ import psutil
 
 from openadapt import config, crud, utils, window
 from openadapt.extensions import synchronized_queue as sq
+from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -98,7 +99,7 @@ def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
 
-def trace(logger: Any) -> Any:
+def trace(logger: logger) -> Any:
     """Decorator that logs the function entry and exit using the provided logger.
 
     Args:
@@ -108,9 +109,9 @@ def trace(logger: Any) -> Any:
         A decorator that can be used to wrap functions and log their entry and exit.
     """
 
-    def decorator(func: Any) -> Any:
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper_logging(*args: Any, **kwargs: dict[str, Any]) -> Any:
+        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
@@ -131,11 +132,11 @@ def trace(logger: Any) -> Any:
 
 
 def process_event(
-    event: Any,
-    write_q: Any,
-    write_fn: Any,
+    event: ActionEvent,
+    write_q: sq.SynchronizedQueue,
+    write_fn: Callable,
     recording_timestamp: int,
-    perf_q: Any,
+    perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Process an event and take appropriate action based on its type.
 
@@ -162,7 +163,7 @@ def process_events(
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: float,
+    recording_timestamp: int,
     terminate_event: multiprocessing.Event,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -350,7 +351,7 @@ def write_events(
 
 
 def trigger_action_event(
-    event_q: queue.Queue, action_event_args: Dict[str, Any]
+    event_q: queue.Queue, action_event_args: dict[str, Any]
 ) -> None:
     """Triggers an action event and adds it to the event queue.
 
@@ -652,7 +653,7 @@ def memory_writer(
 @trace(logger)
 def create_recording(
     task_description: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a new recording entry in the database.
 
     Args:

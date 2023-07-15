@@ -128,7 +128,7 @@ def get_completion(
     messages: list,
     prompt: str,
     model: str = "gpt-4",
-) -> list:
+) -> list[str]:
     """Gets the LLM completion.
 
     Args:

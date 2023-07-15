@@ -6,7 +6,7 @@ This module provides various utility functions used throughout OpenAdapt.
 from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
-from typing import Any
+from typing import Any, Union
 import base64
 import inspect
 import os
@@ -26,11 +26,11 @@ from openadapt import common, config
 EMPTY = (None, [], {}, "")
 
 
-def configure_logging(logger: Any, log_level: str) -> None:
+def configure_logging(logger: logger, log_level: str) -> None:
     """Configure the logging settings for OpenAdapt.
 
     Args:
-        logger (loguru.logger): The logger object.
+        logger (logger): The logger object.
         log_level (str): The desired log level.
     """
     # TODO: redact log messages
@@ -55,7 +55,7 @@ def configure_logging(logger: Any, log_level: str) -> None:
     logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Any, follow: bool = True) -> dict:
+def row2dict(row: Union[dict, Any], follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
@@ -240,7 +240,7 @@ def draw_ellipse(
     fill_transparency: float = 0.25,
     outline_transparency: float = 0.5,
     outline_width: int = 2,
-) -> tuple[Image.Image, Any, Any]:
+) -> tuple[Image.Image, float, float]:
     """Draw an ellipse on the image.
 
     Args:

@@ -2,7 +2,6 @@
 
 from pprint import pformat
 from threading import Timer
-from typing import Any
 import html
 import os
 import string
@@ -77,7 +76,7 @@ CSS = string.Template(
 )
 
 
-def recursive_len(lst: list, key: Any) -> int:
+def recursive_len(lst: list, key: str) -> int:
     """Calculate the recursive length of a list based on a key.
 
     Args:
@@ -99,7 +98,7 @@ def recursive_len(lst: list, key: Any) -> int:
     return _len
 
 
-def format_key(key: Any, value: Any) -> str:
+def format_key(key: str, value: list) -> str:
     """Format a key and value for display.
 
     Args:
@@ -115,13 +114,13 @@ def format_key(key: Any, value: Any) -> str:
         return key
 
 
-def indicate_missing(some: list, every: list, indicator: Any) -> list:
+def indicate_missing(some: list, every: list, indicator: str) -> list:
     """Indicate missing elements in a list.
 
     Args:
         some (list): The list with potentially missing elements.
         every (list): The reference list with all elements.
-        indicator: The indicator to use for missing elements.
+        indicator (str): The indicator to use for missing elements.
 
     Returns:
         list: The list with indicators for missing elements.

@@ -87,11 +87,11 @@ class SynchronizedQueue(Queue):
             "size": self.size,
         }
 
-    def __setstate__(self, state: Any) -> None:
+    def __setstate__(self, state: dict[str, Any]) -> None:
         """Set the state of the object.
 
         Args:
-            state (Any): The state of the object.
+            state: The state of the object.
 
         Returns:
             None
@@ -99,12 +99,12 @@ class SynchronizedQueue(Queue):
         super().__setstate__(state["parent_state"])
         self.size = state["size"]
 
-    def put(self, *args: tuple, **kwargs: dict[str, Any]) -> None:
+    def put(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]) -> None:
         """Put an item into the queue and increment the size counter."""
         super().put(*args, **kwargs)
         self.size.increment(1)
 
-    def get(self, *args: tuple, **kwargs: dict[str, Any]) -> Any:
+    def get(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]) -> Any:
         """Get an item from the queue and decrement the size counter."""
         item = super().get(*args, **kwargs)
         self.size.increment(-1)
@@ -114,7 +114,7 @@ class SynchronizedQueue(Queue):
         """Get the current size of the queue.
 
         Returns:
-            Any: The current size of the queue.
+            int: The current size of the queue.
         """
         return self.size.value
 

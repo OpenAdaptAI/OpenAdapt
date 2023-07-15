@@ -3,7 +3,7 @@
 Module: crud.py
 """
 
-from typing import Any, List
+from typing import Any
 
 from loguru import logger
 import sqlalchemy as sa
@@ -30,7 +30,9 @@ memory_stats = []
 
 
 def _insert(
-    event_data: dict, table: sa.Table, buffer: list[dict[str, Any]] | None = None
+    event_data: dict[str, Any],
+    table: sa.Table,
+    buffer: list[dict[str, Any]] | None = None,
 ) -> sa.engine.Result | None:
     """Insert using Core API for improved performance (no rows are returned).
 
@@ -68,7 +70,7 @@ def _insert(
 
 
 def insert_action_event(
-    recording_timestamp: int, event_timestamp: int, event_data: dict
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any]
 ) -> None:
     """Insert an action event into the database.
 
@@ -86,7 +88,7 @@ def insert_action_event(
 
 
 def insert_screenshot(
-    recording_timestamp: int, event_timestamp: int, event_data: dict
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any]
 ) -> None:
     """Insert a screenshot into the database.
 
@@ -146,14 +148,14 @@ def insert_perf_stat(
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp: int) -> list[Any]:
+def get_perf_stats(recording_timestamp: int) -> list[PerformanceStat]:
     """Get performance stats for a given recording.
 
     Args:
         recording_timestamp (int): The timestamp of the recording.
 
     Returns:
-        List[PerformanceStat]: A list of performance stats for the recording.
+        list[PerformanceStat]: A list of performance stats for the recording.
     """
     return (
         db.query(PerformanceStat)
@@ -185,7 +187,7 @@ def get_memory_stats(recording_timestamp: int) -> None:
     )
 
 
-def insert_recording(recording_data: Any) -> Recording:
+def insert_recording(recording_data: Recording) -> Recording:
     """Insert the recording into to the db."""
     db_obj = Recording(**recording_data)
     db.add(db_obj)
@@ -223,7 +225,7 @@ def _get(table: Any, recording_timestamp: int) -> list[Any]:
         recording_timestamp (int): The recording timestamp to filter the records.
 
     Returns:
-        List[Any]: A list of records retrieved from the database table,
+        list[Any]: A list of records retrieved from the database table,
           ordered by timestamp.
     """
     return (
@@ -234,14 +236,14 @@ def _get(table: Any, recording_timestamp: int) -> list[Any]:
     )
 
 
-def get_action_events(recording: Recording) -> list[Any]:
+def get_action_events(recording: Recording) -> list[ActionEvent]:
     """Get action events for a given recording.
 
     Args:
         recording (Recording): The recording object.
 
     Returns:
-        List[ActionEvent]: A list of action events for the recording.
+        list[ActionEvent]: A list of action events for the recording.
     """
     action_events = _get(ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
@@ -249,7 +251,7 @@ def get_action_events(recording: Recording) -> list[Any]:
     return action_events
 
 
-def filter_stop_sequences(action_events: List[ActionEvent]) -> None:
+def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
     """Filter stop sequences.
 
     Args:
@@ -318,7 +320,9 @@ def filter_stop_sequences(action_events: List[ActionEvent]) -> None:
             action_events.pop()
 
 
-def get_screenshots(recording: Recording, precompute_diffs: bool = False) -> list[Any]:
+def get_screenshots(
+    recording: Recording, precompute_diffs: bool = False
+) -> list[Screenshot]:
     """Get screenshots for a given recording.
 
     Args:
@@ -327,7 +331,7 @@ def get_screenshots(recording: Recording, precompute_diffs: bool = False) -> lis
             Defaults to False.
 
     Returns:
-        List[Screenshot]: A list of screenshots for the recording.
+        list[Screenshot]: A list of screenshots for the recording.
     """
     screenshots = _get(Screenshot, recording.timestamp)
 
@@ -343,13 +347,13 @@ def get_screenshots(recording: Recording, precompute_diffs: bool = False) -> lis
     return screenshots
 
 
-def get_window_events(recording: Recording) -> list[Any]:
+def get_window_events(recording: Recording) -> list[WindowEvent]:
     """Get window events for a given recording.
 
     Args:
         recording (Recording): The recording object.
 
     Returns:
-        List[WindowEvent]: A list of window events for the recording.
+        list[WindowEvent]: A list of window events for the recording.
     """
     return _get(WindowEvent, recording.timestamp)

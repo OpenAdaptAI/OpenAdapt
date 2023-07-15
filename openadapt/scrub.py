@@ -10,7 +10,7 @@ Usage:
 Module: scrub.py
 """
 
-from typing import Any, Dict, List, Union
+from typing import Union
 
 from PIL import Image
 from presidio_analyzer import AnalyzerEngine
@@ -84,14 +84,15 @@ def scrub_text_all(text: str) -> str:
     return config.SCRUB_CHAR * len(text)
 
 
-def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Image:
+def scrub_image(image: Image, fill_color: int = config.SCRUB_FILL_COLOR) -> Image:
     """Scrub the image of all PII/PHI using Presidio Image Redactor.
 
     Args:
-        image (PIL.Image): A PIL.Image object to be scrubbed
+        image (Image): A PIL.Image object to be scrubbed
+        fill_color (int): The color used to fill the redacted regions(BGR).
 
     Returns:
-        PIL.Image: The scrubbed image with PII and PHI removed.
+        Image: The scrubbed image with PII and PHI removed.
     """
     redacted_image = IMAGE_REDACTOR.redact(
         image, fill=fill_color, entities=SCRUBBING_ENTITIES
@@ -101,22 +102,22 @@ def scrub_image(image: Image, fill_color: Any = config.SCRUB_FILL_COLOR) -> Imag
 
 
 def _should_scrub_text(
-    key: Any,
-    value: Any,
-    list_keys: List[str],
+    key: str,
+    value: str,
+    list_keys: list[str],
     scrub_all: bool = False,
 ) -> bool:
     """Check if the key and value should be scrubbed and are of correct instance.
 
     Args:
-        key (Any): The key of the dict item
-        value (Any): The value of the dict item
-        list_keys (list): A list of keys that are needed to be scrubbed
-        scrub_all (bool): Whether to scrub
-            all sub-field/keys/values of that particular key
+        key (str): The key of the item.
+        value (str): The value of the item.
+        list_keys (list[str]): A list of keys that need to be scrubbed.
+        scrub_all (bool): Whether to scrub all sub-fields/keys/values
+          of that particular key.
 
     Returns:
-        bool: True if the key and value should be scrubbed, False otherwise
+        bool: True if the key and value should be scrubbed, False otherwise.
     """
     return (
         isinstance(value, str)
@@ -138,12 +139,12 @@ def _is_scrubbed(old_text: str, new_text: str) -> bool:
     return old_text != new_text
 
 
-def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -> str:
-    """Scrubs the value of a dict item.
+def _scrub_text_item(value: str, key: str, force_scrub_children: bool = False) -> str:
+    """Scrubs the value of a text item.
 
     Args:
-        value (str): The value of the dict item
-        key (Any): The key of the dict item
+        value (str): The value of the item
+        key (str): The key of the item
 
     Returns:
         str: The scrubbed value
@@ -155,26 +156,26 @@ def _scrub_text_item(value: str, key: Any, force_scrub_children: bool = False) -
     return scrub_text(value)
 
 
-def _should_scrub_list_item(item: Any, key: Any, list_keys: List[str]) -> bool:
+def _should_scrub_list_item(item: str, key: str, list_keys: list[str]) -> bool:
     """Check if the key and item should be scrubbed and are of correct instance.
 
     Args:
-        item (str/dict/other): The value of the dict item
-        key (str): The key of the dict item
+        item (str): The value of the item
+        key (str): The key of the item
         list_keys (list): A list of keys that are needed to be scrubbed
 
     Returns:
         bool: True if the key and value should be scrubbed, False otherwise
     """
-    return isinstance(item, (str, dict)) and isinstance(key, str) and key in list_keys
+    return isinstance(item, (str)) and isinstance(key, str) and key in list_keys
 
 
 def _scrub_list_item(
-    item: Union[str, Dict],
+    item: Union[str, dict],
     key: str,
-    list_keys: List[str],
+    list_keys: list[str],
     force_scrub_children: bool = False,
-) -> Union[str, Dict]:
+) -> Union[str, dict]:
     """Scrubs the value of a dict item.
 
     Args:
@@ -239,7 +240,7 @@ def scrub_dict(
     return scrubbed_dict
 
 
-def scrub_list_dicts(input_list: List[Dict], list_keys: List = None) -> List[Dict]:
+def scrub_list_dicts(input_list: list[dict], list_keys: list = None) -> list[dict]:
     """Scrub list of dicts to remove PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
     Args:
