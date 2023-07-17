@@ -9,6 +9,7 @@ Usage:
 from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Dict
+from multiprocessing.connection import Client
 import multiprocessing
 import os
 import queue
@@ -26,7 +27,7 @@ import fire
 import mss.tools
 import psutil
 
-from openadapt import config, crud, utils, window
+from openadapt import config, crud, utils, window, sockets
 from openadapt.extensions import synchronized_queue as sq
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
@@ -47,6 +48,8 @@ performance_snapshots = []
 tracker = tracker.SummaryTracker()
 tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
+
+SERVER_SENDS = True
 
 
 def collect_stats():
@@ -117,6 +120,7 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    browser_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -555,6 +559,15 @@ def read_browser_events(
                     logger.info("Waiting for message...")
                     msg = sockets.client_receive_message(config.SOCKET_PORT)
                     logger.info(f"{msg=}")
+                    browser_data = msg
+                    logger.debug("queuing browser event for writing")
+                    event_q.put(
+                        Event(
+                            utils.get_timestamp(),
+                            "browser",
+                            browser_data,
+                        )
+                    )
                 else:
                     t = time.time()
                     logger.info(f"Sending {t=}")
@@ -568,20 +581,11 @@ def read_browser_events(
                         break
                     except Exception as exc:
                         logger.warning(f"Failed to reconnect: {exc}")
-                        time.sleep(RETRY_INTERVAL)
+                        time.sleep(config.SOCKET_RETRY_INTERVAL)
             except Exception as exc:
                 logger.warning(f"Error during communication: {exc}")
-                time.sleep(RETRY_INTERVAL)
+                time.sleep(config.SOCKET_RETRY_INTERVAL)
         conn.close()
-
-        logger.debug("queuing browser event for writing")
-        event_q.put(
-            Event(
-                utils.get_timestamp(),
-                "browser",
-                browser_data,
-            )
-        )
 
 
 @trace(logger)
@@ -860,7 +864,7 @@ def record(
         args=(
             "browser",
             write_browser_event,
-            browser_event_q,
+            browser_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
