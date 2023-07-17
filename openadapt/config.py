@@ -129,7 +129,7 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
             f.write(f"{var_name}={val}")
     else:
         # find and replace
-        with open(".env", "r") as f:
+        with open(env_file_path, "r") as f:
             lines = f.readlines()
         for i, line in enumerate(lines):
             if line.startswith(f"{var_name}="):
