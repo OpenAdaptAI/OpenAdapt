@@ -22,6 +22,5 @@ def document_query(
 
     output = query_pipeline(document_image, question)
     if not output:
-        logger.warning("Answer may be inaccurate as a non text-based file has been used")
-        return output
-    return output[0]["answer"]
+        logger.warning(f"{output=}")
+    return output
