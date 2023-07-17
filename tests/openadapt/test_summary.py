@@ -36,3 +36,4 @@ def test_summary_sentence():
         she very soon finished it off."
     actual = REPLAY.get_summary(story, 1)
     assert fuzz.WRatio(actual, story) > 50
+    

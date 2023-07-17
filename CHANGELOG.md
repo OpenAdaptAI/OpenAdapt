@@ -2,6 +2,104 @@
 
 
 
+## v0.5.5 (2023-07-17)
+
+### Fix
+
+* fix: loguru exception handling for invalid recordings (#361)
+
+* raise ValueError
+
+* improve exception handling
+
+* Update crud.py
+
+* use assert
+
+* reorganize catch
+
+* Update openadapt/replay.py
+
+* Update openadapt/visualize.py
+
+* Update openadapt/events.py
+
+* Update openadapt/crud.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7aba45b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7aba45be73cb3cc4807f08ebc7bf36a9e9e5c2fb))
+
+
+## v0.5.4 (2023-07-17)
+
+### Fix
+
+* fix(utils): prevent duplicate log messages (#339)  (#366)
+
+* fix(utils): prevent duplicate log messages (#339)
+
+Acquire a lock in utils.configure_logging. Otherwise this function has
+a race where two threads can both call logger.remove(), and then both
+call logger.add(), creating two identical sinks.
+
+* refactor(record): remove redundant configure_logging calls
+
+configure_logging is already called at the module level so there&#39;s no
+need to call it with identical arguments in various functions.
+
+* fixup! fix(utils): prevent duplicate log messages (#339) ([`cf1a782`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf1a7825692b787e72eb4459c302371dab31e952))
+
+* fix: add test fixtures (#356)
+
+* fix: add test fixtures
+
+* revert test_summary.py ([`0ee5397`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ee5397ea1ab4b324e5fd699b858fe30892a3491))
+
+
+## v0.5.3 (2023-07-17)
+
+### Fix
+
+* fix: support more objective-c objects (#323)
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* add bug report option
+
+* Update _macos.py
+
+* undo formatting
+
+* refactor
+
+* split
+
+* remove debug line
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* reorganize
+
+* Update _macos.py
+
+* Update _macos.py
+
+* nonetype
+
+* Update _macos.py ([`be0774f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be0774fc8e5004830c7b0a578432f04b849ff68b))
+
+
 ## v0.5.2 (2023-07-17)
 
 ### Chore
