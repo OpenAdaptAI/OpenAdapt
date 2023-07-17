@@ -9,13 +9,13 @@ Usage:
 
 """
 
+from collections import defaultdict
 import multiprocessing
 import os
 import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
-
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -42,7 +42,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -132,35 +132,45 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
 
-def filter_log_messages(data):
-    """
-    This function filters log messages by ignoring any message that contains a specific string.
+def filter_log_messages(data, max_count=1):
+    """This function filters log messages by ignoring any message that contains a specific string, up to a maximum count.
 
     Args:
       data: The input parameter "data" is expected to be data from a loguru logger.
+      max_count: The maximum number of times an identical warning can be logged
+        before it is suppressed.
 
     Returns:
-      a boolean value indicating whether the message in the input data should be ignored or not. If the
-    message contains any of the messages in the `messages_to_ignore` list, the function returns `False`
-    indicating that the message should be ignored. Otherwise, it returns `True` indicating that the
-    message should not be ignored.
+      A boolean value indicating whether the message in the input data should be ignored or not. If the
+      message contains any of the messages in the `messages_to_ignore` list and has been logged more than
+      `max_count` times, the function returns `False`, indicating that the message should be ignored.
+      Otherwise, it returns `True`, indicating that the message should not be ignored.
     """
-    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
+    # TODO: Ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]
-    return not any(msg in data["message"] for msg in messages_to_ignore)
+
+    # Track the count of each message
+    message_counts = defaultdict(int)
+
+    for msg in messages_to_ignore:
+        if msg in data["message"]:
+            message_counts[msg] += 1
+            if message_counts[msg] > max_count:
+                return False
+
+    return True
