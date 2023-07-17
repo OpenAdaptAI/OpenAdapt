@@ -2,6 +2,32 @@
 
 
 
+## v0.5.4 (2023-07-17)
+
+### Fix
+
+* fix(utils): prevent duplicate log messages (#339)  (#366)
+
+* fix(utils): prevent duplicate log messages (#339)
+
+Acquire a lock in utils.configure_logging. Otherwise this function has
+a race where two threads can both call logger.remove(), and then both
+call logger.add(), creating two identical sinks.
+
+* refactor(record): remove redundant configure_logging calls
+
+configure_logging is already called at the module level so there&#39;s no
+need to call it with identical arguments in various functions.
+
+* fixup! fix(utils): prevent duplicate log messages (#339) ([`cf1a782`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf1a7825692b787e72eb4459c302371dab31e952))
+
+* fix: add test fixtures (#356)
+
+* fix: add test fixtures
+
+* revert test_summary.py ([`0ee5397`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ee5397ea1ab4b324e5fd699b858fe30892a3491))
+
+
 ## v0.5.3 (2023-07-17)
 
 ### Fix
