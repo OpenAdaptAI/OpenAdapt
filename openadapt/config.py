@@ -123,7 +123,6 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
       var_name: A string that represents the name of the environment
           variable to persist or update.
       val: The value to assign to the environment variable.
-    environment variable specified by `var_name`.
     """
     if not os.path.exists(env_file_path):
         with open(env_file_path, "w") as f:
