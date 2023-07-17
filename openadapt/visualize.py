@@ -149,7 +149,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
             html_str = head + middle + tail
     return html_str
 
-@logger.catch()
+@logger.catch
 def main():
     configure_logging(logger, LOG_LEVEL)
 
