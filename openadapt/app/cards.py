@@ -99,7 +99,7 @@ def recording_prompt(options, record_button):
         )
         newSession()
         proc = Popen(
-            "python3 -m openadapt.record " + name,
+            "python -m openadapt.record " + name,
             shell=True,
         )
         record_button._props["name"] = "stop"
