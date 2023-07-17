@@ -4,7 +4,7 @@ import signal
 from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
-from openadapt.app.util import set_dark, sync_switch, set_scrub, get_scrub
+from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
 
 PROC = None
 
