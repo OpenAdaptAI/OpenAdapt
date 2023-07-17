@@ -141,7 +141,7 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
                 lines.append(f"\n{var_name}={val}")
             else:
                 lines.append(f"{var_name}={val}")
-        with open(".env", "w") as f:
+        with open(env_file_path, "w") as f:
             f.writelines(lines)
 
 

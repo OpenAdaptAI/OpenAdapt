@@ -4,17 +4,24 @@ import signal
 from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
-from openadapt.app.util import set_dark, sync_switch
+from openadapt.app.util import set_dark, sync_switch, set_scrub, get_scrub
 
 PROC = None
 
 
 def settings(dark_mode):
     with ui.dialog() as settings, ui.card():
-        s = ui.switch("Dark mode", on_change=lambda: set_dark(dark_mode, s.value))
-        sync_switch(s, dark_mode)
-        ui.button("Close", on_click=lambda: settings.close())
+        dark_switch = ui.switch(
+            "Dark mode", on_change=lambda: set_dark(dark_mode, dark_switch.value)
+        )
+        sync_switch(dark_switch, dark_mode)
 
+        scrub_switch = ui.switch(
+            "Scrubbing", on_change=lambda: set_scrub(scrub_switch.value)
+        )
+        sync_switch(scrub_switch, get_scrub())
+
+        ui.button("Close", on_click=lambda: settings.close())
     settings.open()
 
 
