@@ -2,6 +2,49 @@
 
 
 
+## v0.5.3 (2023-07-17)
+
+### Fix
+
+* fix: support more objective-c objects (#323)
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* add bug report option
+
+* Update _macos.py
+
+* undo formatting
+
+* refactor
+
+* split
+
+* remove debug line
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* reorganize
+
+* Update _macos.py
+
+* Update _macos.py
+
+* nonetype
+
+* Update _macos.py ([`be0774f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be0774fc8e5004830c7b0a578432f04b849ff68b))
+
+
 ## v0.5.2 (2023-07-17)
 
 ### Chore
