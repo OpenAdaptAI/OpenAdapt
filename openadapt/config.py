@@ -136,7 +136,7 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
                 lines[i] = f"{var_name}={val}\n"
                 break
         else:
-            # case where "\n" is missing at end of file
+            # we didn't find the variable in the file, so append it
             if lines[-1][-1] != "\n":
                 lines.append("\n")
             lines.append(f"{var_name}={val}")
