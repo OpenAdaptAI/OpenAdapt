@@ -1,4 +1,5 @@
 import chromadb
+import json
 
 chroma_client = chromadb.Client()
 
@@ -11,6 +12,35 @@ collection = chroma_client.create_collection(name="my_collection")
 #   Extract the desired response (if any) and use the number of results to determine the number of query results
 #   Query the collection
 #   Compare results to desired response
+
+with open("./dataset.jsonl") as data_file:
+    for line in data_file:
+        data = json.loads(line)
+
+        text = data['text'].split('\n')
+        instruction = text[text.index('# Instruction:') + 1]
+        # Task description follows the word you, and ends with before a period
+        task_description = text[text.index("You are") + 7: text.index('.')]     #TODO: double check this
+        input_signals = json.loads(text[text.index('# Input:') + 1])
+        response = json.loads(text[text.index('# Response:') + 1])
+
+        print(f"Instruction: {instruction}")
+        print(f"Input Signals: {input_signals}")
+        print(f"Response: {response}")
+        #assert results["ids"] == data["desired_response"]
+
+        signals = json.loads(text[text.index('# Input:') + 1])
+        for i, signal in enumerate(signals):
+            collection.add(
+                documents=[str(signal)],
+                ids=[f"{i}"]
+            )
+
+        results = collection.query(
+            query_texts=[task_description],
+            n_results=len(response)
+        )
+
 
 signals = [{'id': 0, 'type': 'file', 'descriptor': 'restaurant_menu_data.txt'},
            {'id': 1, 'type': 'url', 'descriptor': 'https://en.wikipedia.org/wiki/Web_development'},
