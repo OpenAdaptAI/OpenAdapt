@@ -299,21 +299,18 @@ def main(recording=None):
                 ]
             )
 
-            def list_to_dict(lst):
-                return {str(idx): value for idx, value in enumerate(lst)}
-
             def create_tree(tree_dict):
                 tree_data = []
                 for key, value in tree_dict.items():
                     node = {
-                        "id": str(key) + f" {str(type(value))}"
+                        "id": str(key)
                         + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
                     }
                     if isinstance(value, dict):
                         node["children"] = create_tree(value)
                     elif isinstance(value, list):
-                        node["children"] = create_tree(list_to_dict(value))
-                        
+                        # convert list of dicts, to dict of dicts
+                        node["children"] = create_tree({k : v for k, v in enumerate(value)})
                     tree_data.append(node)
                 return tree_data
 
@@ -324,14 +321,6 @@ def main(recording=None):
                         cross=True,
                     ).classes("w-3/5 drop-shadow-md rounded")
                     with ui.column():
-                        ui.button(
-                            "Toggle diff", on_click=lambda: img.set_source(diff_utf8)
-                        )
-                        ui.button(
-                            "Toggle mask", on_click=lambda: img.set_source(mask_utf8)
-                        )
-                        ui.button("Reset", on_click=lambda: img.set_source(image_utf8))
-
                         action_event_tree = create_tree(action_event_dict)
                         ui.tree(
                             action_event_tree,
@@ -341,11 +330,14 @@ def main(recording=None):
 
                 window_event_tree = create_tree(window_event_dict)
 
-                ui.tree(
+                tr = ui.tree(
                     window_event_tree,
                     label_key="id",
                     on_select=lambda e: ui.notify(e.value),
                 )
+
+                # tr._props["default-expand-all"] = True
+                # tr._props["dense"] = True
 
             progress.update()
 
