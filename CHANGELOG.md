@@ -2,6 +2,35 @@
 
 
 
+## v0.5.5 (2023-07-17)
+
+### Fix
+
+* fix: loguru exception handling for invalid recordings (#361)
+
+* raise ValueError
+
+* improve exception handling
+
+* Update crud.py
+
+* use assert
+
+* reorganize catch
+
+* Update openadapt/replay.py
+
+* Update openadapt/visualize.py
+
+* Update openadapt/events.py
+
+* Update openadapt/crud.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7aba45b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7aba45be73cb3cc4807f08ebc7bf36a9e9e5c2fb))
+
+
 ## v0.5.4 (2023-07-17)
 
 ### Fix
