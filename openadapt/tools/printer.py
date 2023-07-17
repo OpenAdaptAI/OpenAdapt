@@ -28,5 +28,3 @@ def print_document(printer_name, file_path):
         win32api.ShellExecute(0, "print", file_path, f'/d:"{printer_name}"', ".", 0)
     else:
         subprocess.run(["lp", "-d", printer_name, file_path], capture_output=True)
-
-
