@@ -120,7 +120,7 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
     updating their values if they already exist in the file.
 
     Args:
-      var_name: The `var_name` parameter is a string that represents the name of the environment
+      var_name: A string that represents the name of the environment
     variable you want to persist or update.
       val: The `val` parameter in the `persist_env` function is the value that you want to assign to the
     environment variable specified by `var_name`.
