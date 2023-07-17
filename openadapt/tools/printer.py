@@ -30,13 +30,3 @@ def print_document(printer_name, file_path):
         subprocess.run(["lp", "-d", printer_name, file_path], capture_output=True)
 
 
-# Get available printers
-available_printers = get_available_printers()
-print("Available Printers:")
-for printer in available_printers:
-    print(printer)
-
-# Example usage: Print a document
-printer_name = "OneNote (Desktop)"
-file_path = "C:/Users/jesic/Documents/test1.pdf"
-print_document(printer_name, file_path)
