@@ -12,7 +12,6 @@ from openadapt import common, config, crud, models, utils
 MAX_PROCESS_ITERS = 1
 
 
-@logger.catch(reraise=True, onerror=lambda _: sys.exit(1))
 def get_events(
     recording,
     process=True,

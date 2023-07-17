@@ -677,7 +677,7 @@ def read_mouse_events(
     terminate_event.wait()
     mouse_listener.stop()
 
-
+@logger.catch
 @trace(logger)
 def record(
     task_description: str,

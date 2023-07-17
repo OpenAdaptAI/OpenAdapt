@@ -156,7 +156,6 @@ def _get(table, recording_timestamp):
     )
 
 
-@logger.catch(reraise=True, onerror=lambda _: sys.exit(1))
 def get_action_events(recording):
     assert recording, "Invalid recording."
     action_events = _get(ActionEvent, recording.timestamp)
