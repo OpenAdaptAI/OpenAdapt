@@ -138,9 +138,8 @@ def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
         else:
             # case where "\n" is missing at end of file
             if lines[-1][-1] != "\n":
-                lines.append(f"\n{var_name}={val}")
-            else:
-                lines.append(f"{var_name}={val}")
+                lines.append("\n")
+            lines.append(f"{var_name}={val}")
         with open(env_file_path, "w") as f:
             f.writelines(lines)
 
