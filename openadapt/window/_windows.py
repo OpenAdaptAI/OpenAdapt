@@ -85,8 +85,7 @@ def get_active_element_state(x: int, y: int) -> dict:
 
 
 def get_active_window() -> pywinauto.application.WindowSpecification:
-    """
-    Get the active window object.
+    """Get the active window object.
 
     Returns:
         pywinauto.application.WindowSpecification: The active window object.
@@ -147,9 +146,8 @@ def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
     return rect_dict
 
 
-def get_properties(element):
-    """
-    Retrieves specific writable properties of an element.
+def get_properties(element: pywinauto.application.WindowSpecification) -> dict:
+    """Retrieves specific writable properties of an element.
 
     This function retrieves a dictionary of writable properties for a given element.
     It achieves this by temporarily modifying the class of the element object using
@@ -178,9 +176,8 @@ def get_properties(element):
     return properties
 
 
-def main():
-    """
-    Test function for retrieving and inspecting the state of the active window.
+def main() -> None:
+    """Test function for retrieving and inspecting the state of the active window.
 
     This function is primarily used for testing and debugging purposes.
     """

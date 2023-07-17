@@ -67,7 +67,11 @@ def get_active_window_meta() -> dict:
         ),
         Quartz.kCGNullWindowID,
     )
-    active_windows_info = [win for win in windows if win["kCGWindowLayer"] == 0 and win["kCGWindowOwnerName"] != "Window Server"]
+    active_windows_info = [
+        win
+        for win in windows
+        if win["kCGWindowLayer"] == 0 and win["kCGWindowOwnerName"] != "Window Server"
+    ]
     active_window_info = active_windows_info[0]
     return active_window_info
 
@@ -210,7 +214,8 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
     # handle core-foundation class AXValueRef
     elif isinstance(object, ApplicationServices.AXValueRef):
         # convert to dict - note: this object is not iterable
-        # TODO: access directly, e.g. via ApplicationServices.AXUIElementCopyAttributeValue
+        # TODO: access directly, e.g. via
+        # ApplicationServices.AXUIElementCopyAttributeValue
         rep = repr(object)
         x_value = re.search(r"x:([\d.]+)", rep)
         y_value = re.search(r"y:([\d.]+)", rep)
@@ -240,7 +245,9 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
             logger.warning(
                 f"Unknown type: {type(object)} - "
                 f"Please report this on GitHub: "
-                f"https://github.com/MLDSAI/OpenAdapt/issues/new?assignees=&labels=bug&projects=&template=bug_form.yml&title=%5BBug%5D%3A+"
+                f"github.com/MLDSAI/OpenAdapt/issues/new?"
+                f"assignees=&labels=bug&projects=&template=bug_form.yml&"
+                f"title=%5BBug%5D%3A+"
             )
             logger.warning(f"{object=}")
     if value:
