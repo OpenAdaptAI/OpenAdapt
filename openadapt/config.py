@@ -116,7 +116,7 @@ def getenv_fallback(var_name):
 
 def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
     """
-    The `persist_env` function is used to persist environment variables by writing them to a file or
+    Persist environment variables by writing them to a file or
     updating their values if they already exist in the file.
 
     Args:
