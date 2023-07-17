@@ -24,7 +24,7 @@ def test_lading_bill_screenshot():
     output_answers = []
     for q in questions:
         output = document_query(image=None, image_path=IMAGE_FILE_NAMES[0], question=q)
-        output_answers.append(output)
+        output_answers.append(output[0]['answer'])
 
     expected_output = [
         "21099992723",
@@ -49,14 +49,14 @@ def test_invoice_screenshot():
     output_answers = []
     for q in questions:
         output = document_query(image=None, image_path=IMAGE_FILE_NAMES[1], question=q)
-        output_answers.append(output)
+        output_answers.append(output[0]['answer'])
     assert output_answers == expected_answers
 
 
 def test_calendar_screenshot():
     output = document_query(
         image=None, image_path=IMAGE_FILE_NAMES[2], question="What month is it?"
-    )
+    )[0]['answer']
     expected_output = "june"
     assert output.lower() == expected_output
 
