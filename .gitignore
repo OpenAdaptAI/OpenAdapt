@@ -6,7 +6,6 @@ __pycache__
 cache
 *.egg-info
 .venv
-.venv10
 *~
 
 # Vim
@@ -20,7 +19,7 @@ cache
 .VSCode
 .vsCode
 
-#Idea
+# Idea
 .idea
 
 # Generated performance charts
