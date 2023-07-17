@@ -177,7 +177,6 @@ def process_events(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Starting")
 
@@ -316,7 +315,6 @@ def write_events(
         term_pipe: A pipe for communicating \
             the number of events left to be written.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -509,7 +507,6 @@ def read_screen_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Starting")
     while not terminate_event.is_set():
@@ -534,7 +531,6 @@ def read_window_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Starting")
     prev_window_data = {}
@@ -583,7 +579,6 @@ def performance_stats_writer(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -618,7 +613,6 @@ def memory_writer(
     Returns:
         None
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -818,7 +812,6 @@ def record(
     Args:
         task_description: A text description of the task to be recorded.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)

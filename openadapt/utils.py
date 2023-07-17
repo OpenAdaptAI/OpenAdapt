@@ -11,6 +11,7 @@ import base64
 import inspect
 import os
 import sys
+import threading
 import time
 
 from loguru import logger
@@ -25,6 +26,8 @@ from openadapt import common, config
 
 EMPTY = (None, [], {}, "")
 
+_logger_lock = threading.Lock()
+
 
 def configure_logging(logger: logger, log_level: str) -> None:
     """Configure the logging settings for OpenAdapt.
@@ -37,22 +40,24 @@ def configure_logging(logger: logger, log_level: str) -> None:
     #  (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
-    logger.remove()
-    logger_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
-        "- <level>{message}</level>"
-    )
-    logger.add(
-        StreamHandler(sys.stderr),
-        colorize=True,
-        level=log_level,
-        enqueue=True,
-        format=logger_format,
-        filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
-    )
-    logger.debug(f"{log_level=}")
+
+    with _logger_lock:
+        logger.remove()
+        logger_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
+            "- <level>{message}</level>"
+        )
+        logger.add(
+            StreamHandler(sys.stderr),
+            colorize=True,
+            level=log_level,
+            enqueue=True,
+            format=logger_format,
+            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+        )
+        logger.debug(f"{log_level=}")
 
 
 def row2dict(row: Union[dict, Any], follow: bool = True) -> dict:
