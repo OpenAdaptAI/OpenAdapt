@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.main import FPATH, start
 from openadapt.crud import get_all_recordings
+from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
 from openadapt.extensions.thread import Thread as oaThread
@@ -79,12 +80,12 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
 
-    def cycle_icon(self):
+    def cycle_icon(self) -> None:
         new_icon = self.icon_mapping[self.current_icon]
         self.tray.setIcon(QIcon(new_icon))
         self.current_icon = new_icon
 
-    def update_tray_icon(self):
+    def update_tray_icon(self) -> None:
         try:
             if self.recording:
                 self.record_action.setText("Stop recording")
@@ -97,7 +98,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             # the app is probably shutting down, so we can ignore this
             pass
 
-    def _quick_record(self):
+    def _quick_record(self) -> None:
         if not self.recording:
             Notify("Status", "Starting recording...", "OpenAdapt").send()
             self.recording = True
@@ -112,7 +113,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             stop_record()
             Notify("Status", "Recording stopped", "OpenAdapt").send()
 
-    def _visualize(self, recording):
+    def _visualize(self, recording: Recording) -> None:
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
         vthread = oaThread(target=visualize, args=(recording,))
         vthread.run()
@@ -121,7 +122,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         else:
             Notify("Status", "Visualization failed", "OpenAdapt").send()
 
-    def _replay(self, recording):
+    def _replay(self, recording: Recording) -> None:
         Notify("Status", "Starting replay...", "OpenAdapt").send()
         rthread = oaThread(target=replay, args=("NaiveReplayStrategy", None, recording))
         rthread.run()
@@ -130,7 +131,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         else:
             Notify("Status", "Replay failed", "OpenAdapt").send()
 
-    def populate_menu(self, menu, action, action_type):
+    def populate_menu(self, menu: QMenu, action: QAction, action_type: str -> None):
         recordings = get_all_recordings()
         if len(recordings) == len((self.recording_actions[action_type])):
             return
@@ -145,12 +146,12 @@ class SystemTrayIcon(QSystemTrayIcon):
             )
             menu.addAction(self.recording_actions[action_type][idx])
 
-    def show_app(self):
+    def show_app(self) -> None:
         if self.app_thread is None or not self.app_thread.is_alive():
             self.app_thread = Thread(target=start, daemon=True)
             self.app_thread.start()
 
-    def run(self):
+    def run(self) -> None:
         self.app.exec_()
 
 
