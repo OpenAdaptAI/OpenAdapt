@@ -82,7 +82,6 @@ if __name__ == "__main__":
 
     # Establish a server connection
     conn = sockets.create_server_connection(config.SOCKET_PORT)
-    conn = conn.accept()
 
     # Start the event loop
     while True:

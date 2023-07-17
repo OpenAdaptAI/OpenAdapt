@@ -1,7 +1,7 @@
 """Module for managing socket connections and communication."""
 
 from multiprocessing import Queue
-from multiprocessing.connection import Client, Listener
+from multiprocessing.connection import Client, Listener, Connection
 import time
 from typing import Optional
 
@@ -175,7 +175,7 @@ def create_client_connection(port: int) -> Client:
     return conn
 
 
-def create_server_connection(port: int) -> Listener:
+def create_server_connection(port: int) -> Connection:
     """
     Create a server connection and start listening for connections on the specified port.
 
@@ -187,6 +187,7 @@ def create_server_connection(port: int) -> Listener:
     """
     address = (config.SOCKET_ADDRESS, port)
     conn = Listener(address, authkey=config.SOCKET_AUTHKEY)
+    conn = conn.accept()
     server_by_port[port] = conn
     logger.info("Connected to the Server.")
     return conn
