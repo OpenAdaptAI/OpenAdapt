@@ -249,3 +249,9 @@ def get_screenshots(recording, precompute_diffs=False):
 
 def get_window_events(recording):
     return _get(WindowEvent, recording.timestamp)
+
+def newSession():
+    global db
+    if db:
+        db.close()
+    db = Session()

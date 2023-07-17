@@ -19,8 +19,10 @@ def replay(
 ):
     utils.configure_logging(logger, LOG_LEVEL)
 
-    if timestamp:
+    if timestamp and recording is None:
         recording = crud.get_recording(timestamp)
+    elif recording is None:
+        recording = crud.get_latest_recording()
 
     logger.debug(f"{recording=}")
     assert recording, "No recording found"

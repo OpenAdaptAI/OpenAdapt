@@ -1,4 +1,4 @@
-""" 
+"""
     Module for customizing multiprocessing.Queue to avoid NotImplementedError in MacOS
 """
 

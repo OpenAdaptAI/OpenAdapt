@@ -1,6 +1,6 @@
 import os
 import sys
-import threading
+from threading import Thread
 from functools import partial
 
 from notifypy import Notify
@@ -13,6 +13,7 @@ from openadapt.app.main import FPATH, start
 from openadapt.crud import get_all_recordings
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
+from openadapt.extensions.thread import Thread as oaThread
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -113,13 +114,21 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def _visualize(self, recording):
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
-        visualize(recording=recording)
-        Notify("Status", "Visualization finished", "OpenAdapt").send()
+        vthread = oaThread(target=visualize, args=(recording,))
+        vthread.run()
+        if vthread.join() in [True, None]:
+            Notify("Status", "Visualization finished", "OpenAdapt").send()
+        else:
+            Notify("Status", "Visualization failed", "OpenAdapt").send()
 
     def _replay(self, recording):
         Notify("Status", "Starting replay...", "OpenAdapt").send()
-        replay("NaiveReplayStrategy", recording=recording)
-        Notify("Status", "Replay finished", "OpenAdapt").send()
+        rthread = oaThread(target=replay, args=("NaiveReplayStrategy", None, recording))
+        rthread.run()
+        if rthread.join() in [True, None]:
+            Notify("Status", "Replay finished", "OpenAdapt").send()
+        else:
+            Notify("Status", "Replay failed", "OpenAdapt").send()
 
     def populate_menu(self, menu, action, action_type):
         recordings = get_all_recordings()
@@ -138,7 +147,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def show_app(self):
         if self.app_thread is None or not self.app_thread.is_alive():
-            self.app_thread = threading.Thread(target=start, daemon=True)
+            self.app_thread = Thread(target=start, daemon=True)
             self.app_thread.start()
 
     def run(self):
