@@ -551,8 +551,8 @@ def read_browser_events(
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
+    conn = sockets.create_client_connection(config.SOCKET_PORT)
     while not terminate_event.is_set():
-        conn = sockets.create_client_connection(config.SOCKET_PORT)
         while True:
             try:
                 if SERVER_SENDS:
@@ -585,7 +585,8 @@ def read_browser_events(
             except Exception as exc:
                 logger.warning(f"Error during communication: {exc}")
                 time.sleep(config.SOCKET_RETRY_INTERVAL)
-        conn.close()
+            conn.close()
+    conn.close()
 
 
 @trace(logger)
