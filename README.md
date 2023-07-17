@@ -280,7 +280,7 @@ Now, the pre-commit hooks are installed and will run automatically before each c
 
 # Submitting an Issue
 
-Please submit any issues to https://github.com/MLDSAI/openadapt/issues with the
+Please submit any issues to https://github.com/OpenAdaptAI/OpenAdapt/issues with the
 following information:
 
 - Problem description (please include any relevant console output and/or screenshots)
