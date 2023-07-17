@@ -86,6 +86,11 @@ url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_t
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.isort]
+profile = "black"
+group_by_package = true
+from_first = true
+
 [tool.poetry.scripts]
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
