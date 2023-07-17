@@ -1,12 +1,16 @@
+import re
+import string
+
 import lmql
 from loguru import logger
 from pynput.keyboard import Key
 
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.models import Recording, ActionEvent
-from config import ACTION_TEXT_NAME_PREFIX, ACTION_TEXT_NAME_SUFFIX
+from openadapt.config import ACTION_TEXT_NAME_PREFIX, ACTION_TEXT_NAME_SUFFIX
 
 DEFAULT_MODEL = "openai/text-davinci-003"
+REGEX = re.compile('[%s]' % re.escape(string.punctuation))
 
 class LMQLReplayStrategyMixin(BaseReplayStrategy):
 
@@ -33,28 +37,30 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
 def lmql_call(description: str, model: str) -> list:
     '''lmql
     argmax
-        "Summarize {description} as a json: {{ "
+        "Summarize the following description as a json: {description} {{ "
         "'action': [ACTION], "
-        if ACTION == "type":
+        if ACTION == "press" or ACTION == "release":
             "'key': [KEY] }}"
-            if type_of_key(KEY) == "invalid":
+            output_key = KEY.strip()
+            if type_of_key(output_key) == "invalid":
                 "The previously entered key is incorrect, the correct key is [KEY2]"
-                if type_of_key(KEY) == "invalid":
-                    raise ValueError(f"invalid {key_name=}")
+                output_key2 = KEY2.strip()
+                if type_of_key(output_key2) == "invalid":
+                    raise ValueError(f"invalid {output_key=}, invalid {output_key2=}")
         if ACTION == "move":
             "'x': [X], 'y': [Y] }}"
         if ACTION == "scroll":
             "'change in x': [X], 'change in y': [Y] }}"
         if ACTION == "click":
-            "'x': [X], 'y': [Y], 'click': [CLICK], 'num clicks': [NUM] }}"
+            "'x': [X], 'y': [Y], 'click': [CLICK] }}"
     from
         model
     where
-        ACTION in set(["move", "scroll", "type", "click"]) 
+        ACTION in set(["move", "scroll", "press", "release", "click"]) 
         and len(TOKENS(KEY)) < 5 and STOPS_BEFORE(KEY, " }") 
         and len(TOKENS(KEY2)) < 5 and STOPS_BEFORE(KEY2, " }") 
         and INT(X) and INT(Y) and len(TOKENS(X)) < 5 and len(TOKENS(Y)) < 5 
-        and CLICK in set(["left", "right"]) and NUM in set(["doubleclick", "singleclick"])
+        and CLICK in set(["left", "right"])
     '''
 
 def parse_action(result_dict: dict) -> ActionEvent:
@@ -62,9 +68,12 @@ def parse_action(result_dict: dict) -> ActionEvent:
     logger.info(f"The action is: {name}")
     action_event = ActionEvent(name=name)
 
-    if name == "type":
-        key_with_whitespace = result_dict["KEY"]
-        key = key_with_whitespace.strip()
+    if name == "press" or name == "release":
+        output = result_dict["KEY"]
+        key = clean_output(output)
+        if type_of_key(key) == "invalid":
+            output2 = result_dict["KEY2"]
+            key = clean_output(output2)
         if key[0] == ACTION_TEXT_NAME_PREFIX and key [-1] == ACTION_TEXT_NAME_SUFFIX:
             key_name = key[1:-1]
             action_event.key_name = key_name
@@ -85,7 +94,6 @@ def parse_action(result_dict: dict) -> ActionEvent:
         action_event.mouse_dx = result_dict["X"]
         action_event.mouse_dy = result_dict["Y"]
     elif name == "click":
-        action_event.name = result_dict["NUM"]
         action_event.mouse_x = result_dict["X"]
         action_event.mouse_y = result_dict["Y"]
         action_event.mouse_button_name = result_dict["CLICK"]
@@ -95,7 +103,7 @@ def parse_action(result_dict: dict) -> ActionEvent:
 def type_of_key(key: str) -> str:
     """Return a string representing what type of key the input is.
     
-    Types of key:
+    Types of keys:
         - char: a single character
         - key_name: a multicharacter key
         - vk: a virtual key
@@ -114,3 +122,9 @@ def type_of_key(key: str) -> str:
         except:
             return "invalid"
         return "vk"
+
+def clean_output(output: str) -> str:
+    """Remove the whitespace and punctuation."""
+    output_without_whitespace = output.strip()
+    clean_output = REGEX.sub('', output_without_whitespace)
+    return clean_output
