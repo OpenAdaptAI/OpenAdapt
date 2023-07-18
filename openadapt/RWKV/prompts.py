@@ -193,7 +193,7 @@ def generate_dataset():
         for i in range(5000):
             value = evaluate(for_dataset=True)
             if i != 4999:
-                file.write(json.dumps({"text": value[0] + str(value[1])}) + ",\n")
+                file.write(json.dumps({"text": value[0] + str(value[1])}) + "\n")
             else:
                 file.write(json.dumps({"text": value[0] + str(value[1])}))
 
