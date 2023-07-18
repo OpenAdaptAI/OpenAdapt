@@ -1,14 +1,10 @@
-import collections
-import sys
 from loguru import logger
 import pywinauto
-from pywinauto import Desktop
-import time
 from pprint import pprint
 import pickle
 
 
-def get_active_window_state(show_data) -> dict:
+def get_active_window_state() -> dict:
     """
     Get the state of the active window.
 
@@ -32,10 +28,7 @@ def get_active_window_state(show_data) -> dict:
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
-    if show_data:
-        data = get_element_properties(active_window)
-    else:
-        data = None
+    data = get_element_properties(active_window)
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,
@@ -85,12 +78,12 @@ def get_active_element_state(x: int, y: int):
     """
     active_window = get_active_window()
     active_element = active_window.from_point(x, y)
-    properties = active_element.get_properties()
+    properties = get_properties(active_element)
     properties["rectangle"] = dictify_rect(properties["rectangle"])
     return properties
 
 
-def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
+def get_active_window():
     """
     Get the active window object.
 
@@ -99,7 +92,7 @@ def get_active_window(depth=10, max_width=10, filename=None) -> Desktop:
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
     window = app.top_window()
-    return window
+    return window.wrapper_object()
 
 
 def get_element_properties(element):
@@ -123,8 +116,7 @@ def get_element_properties(element):
                   'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
                   'children': []}]}
     """
-
-    properties = element.get_properties()
+    properties = get_properties(element)
     children = element.children()
 
     if children:
@@ -144,6 +136,37 @@ def dictify_rect(rect):
         "bottom": rect.bottom,
     }
     return rect_dict
+
+
+def get_properties(element):
+    """
+    Retrieves specific writable properties of an element.
+
+    This function retrieves a dictionary of writable properties for a given element.
+    It achieves this by temporarily modifying the class of the element object using
+    monkey patching.This approach is necessary because in some cases, the original
+    class of the element may have a `get_properties()` function that raises errors.
+
+    Args:
+        element: The element for which to retrieve writable properties.
+
+    Returns:
+        A dictionary containing the writable properties of the element,
+        with property names as keys and their corres
+        ponding values.
+
+    """
+    _element_class = element.__class__
+
+    class TempElement(element.__class__):
+        writable_props = pywinauto.base_wrapper.BaseWrapper.writable_props
+
+    # Instantiate the subclass
+    element.__class__ = TempElement
+    # Retrieve properties using get_properties()
+    properties = element.get_properties()
+    element.__class__ = _element_class
+    return properties
 
 
 def main():
