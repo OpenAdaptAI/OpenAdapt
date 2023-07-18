@@ -138,7 +138,6 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
@@ -315,7 +314,6 @@ def write_events(
             the number of events left to be written.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -473,7 +471,6 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
@@ -500,7 +497,6 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     prev_window_data = {}
@@ -607,7 +603,6 @@ def performance_stats_writer(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -629,7 +624,6 @@ def performance_stats_writer(
 def memory_writer(
     recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
 ):
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -771,7 +765,7 @@ def read_mouse_events(
     terminate_event.wait()
     mouse_listener.stop()
 
-
+@logger.catch
 @trace(logger)
 def record(
     task_description: str,
@@ -783,7 +777,6 @@ def record(
         task_description: a text description of the task that will be recorded
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)
