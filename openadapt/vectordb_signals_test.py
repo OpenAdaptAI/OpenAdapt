@@ -40,21 +40,22 @@ with open("./dataset.jsonl") as data_file:
                 ids=[f"{i}"]
             )
 
-        results = collection.query(
-            query_texts=[task_description],
-            n_results=len(response)
-        )
+        if len(response) != 0:
+            results = collection.query(
+                query_texts=[task_description],
+                n_results=len(response)
+            )
 
         # evaluate results, ignoring order #
-        score_sum = len(response)
-        print(score_sum)
+        score_sum = 1
 
         for id in response:
-            print(id)
             if str(id) not in results['ids'][0]:
                 score_sum -= 1/len(response)
 
-        print(score_sum)
         total_score += score_sum
+        print("Total Score: ", total_score, "Line: ", num_lines)
+        print("Accuracy: ", total_score / num_lines)
+
     total_score /= num_lines
     print(f"Total Score: {total_score}")
