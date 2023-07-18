@@ -45,6 +45,7 @@ def get_events(
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 
     num_action_events = len(action_events)
+    assert num_action_events > 0, "No action events found."
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
 
