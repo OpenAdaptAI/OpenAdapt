@@ -43,6 +43,7 @@ DIRECTORIES_TO_AVOID = config.DIRECTORIES_TO_AVOID
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
+ACTIVE_PID = multiprocessing.Value("i", 0)
 
 stop_sequence_detected = False
 performance_snapshots = []
@@ -190,6 +191,7 @@ def process_events(
                     perf_q,
                 )
                 prev_saved_window_timestamp = prev_window_event.timestamp
+                ACTIVE_PID = multiprocessing.Value(prev_window_event.data["pid"])
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -532,6 +534,9 @@ def read_file_signals_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
+    
+    # GET ACTIVE PID FROM WINDOW DATA
+    # GET OPEN FILES FROM THAT PID
 
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
@@ -555,25 +560,37 @@ def get_file_signal_data():
     Retrieve open file signals by PID.
     """
 
-    file_signal_data = {}
-    for proc in psutil.process_iter(['pid', 'open_files']):
-        try:
-            pinfo = proc.info
-            pid = pinfo['pid']
-            open_files = pinfo['open_files']
-            if open_files is not None:
-                for file in open_files:
-                    for dirs in DIRECTORIES_TO_AVOID:
-                        # If none of the directories to avoid are in the path
-                        # then we can add the file to the list of open files
-                        if dirs in file.path:
-                            break
-                    else:
-                        file_signal_data[pid] = file.path
-                        logger.info(f"{pid=} {file_signal_data[pid]=}")
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-    return file_signal_data
+    file_signal_addresses = []
+    # for proc in psutil.process_iter(['pid', 'open_files']):
+    #     try:
+    #         pinfo = proc.info
+    #         pid = pinfo['pid']
+    #         open_files = pinfo['open_files']
+    #         if open_files is not None:
+    #             for file in open_files:
+    #                 for dirs in DIRECTORIES_TO_AVOID:
+    #                     # If none of the directories to avoid are in the path
+    #                     # then we can add the file to the list of open files
+    #                     if dirs in file.path:
+    #                         break
+    #                 else:
+    #                     file_signal_data[pid] = file.path
+    #                     logger.info(f"{pid=} {file_signal_data[pid]=}")
+    #     except (psutil.NoSuchProcess, psutil.AccessDenied):
+    #         pass
+
+    try:
+        process = psutil.Process(ACTIVE_PID)
+        open_files = process.open_files()
+        for file in open_files:
+            fpath = file.path
+            if not any(directory in str(fpath) for directory in DIRECTORIES_TO_AVOID):
+                logger.info(f"Open file: {fpath}")
+                file_signal_addresses.append(fpath)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        print("No such process or access denied")
+
+    return file_signal_addresses
 
 
 
