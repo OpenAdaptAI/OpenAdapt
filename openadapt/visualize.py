@@ -188,7 +188,7 @@ def dict2html(
             html_str = head + middle + tail
     return html_str
 
-  
+
 @logger.catch
 def main() -> None:
     """Main function to generate an HTML report for a recording."""
