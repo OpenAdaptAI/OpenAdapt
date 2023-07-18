@@ -6,7 +6,7 @@ Tasks = {
     1: "playing chess",
     2: "making a website about shoes",
     3: "filling out medical forms",
-    4: "parse and analyze data from spreadsheets",
+    4: "parsing and analyzing data from spreadsheets",
     5: "emailing an agent about house requirements",
     6: "filling out a job application",
     7: "signing into and powering on a virtual machine",
