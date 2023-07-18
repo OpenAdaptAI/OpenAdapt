@@ -34,6 +34,7 @@ def get_active_window_state():
         "window_id": window_id,
         "meta": meta,
         "data": data,
+        "pid" : atomacos.PAXUIElementGetPid(meta["kCGWindowOwnerPID"])   #TODO: check if this is correct
     }
     rval = deepconvert_objc(rval)
     try:

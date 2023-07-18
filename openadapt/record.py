@@ -32,12 +32,13 @@ from openadapt.extensions import synchronized_queue as sq
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window")
+EVENT_TYPES = ("screen", "action", "window", "file")
 LOG_LEVEL = "INFO"
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
     "action": True,
     "window": True,
+    "file": True,
 }
 DIRECTORIES_TO_AVOID = config.DIRECTORIES_TO_AVOID
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
@@ -120,7 +121,7 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
-    file_signal_write_q: sq.SynchronizedQueue,
+    #file_signal_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
@@ -138,25 +139,29 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
     prev_event = None
     prev_screen_event = None
     prev_window_event = None
+    prev_file_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+    prev_saved_file_timestamp = 0
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
+        print(f"{event=}")
         if prev_event is not None:
             assert event.timestamp > prev_event.timestamp, (event, prev_event)
         if event.type == "screen":
             prev_screen_event = event
         elif event.type == "window":
             prev_window_event = event
+        elif event.type == "file":
+            prev_file_event = event
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("discarding action that came before screen")
@@ -191,7 +196,9 @@ def process_events(
                     perf_q,
                 )
                 prev_saved_window_timestamp = prev_window_event.timestamp
-                ACTIVE_PID = multiprocessing.Value(prev_window_event.data["pid"])
+                if 'state' in prev_window_event.data:
+                    ACTIVE_PID.value = prev_window_event.data["state"]["pid"]
+                logger.info(f"ACTIVE_PID={ACTIVE_PID.value}")
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -541,19 +548,20 @@ def read_file_signals_events(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
-    prev_file_signal_data = {}
+    prev_file_signal_data = []
     while not terminate_event.is_set():
-        file_signal_data = get_file_signal_data()
-        if not file_signal_data:
-            continue
-        if file_signal_data != prev_file_signal_data:
-            logger.debug("queuing file signal event for writing")
-            event_q.put(Event(
-                utils.get_timestamp(),
-                "file_signal",
-                file_signal_data,
-            ))
-        prev_file_signal_data = file_signal_data
+        if ACTIVE_PID not in prev_file_signal_data:
+            file_signal_data = get_file_signal_data()
+            if not file_signal_data:
+                continue
+            if file_signal_data != prev_file_signal_data:
+                logger.debug("queuing file signal event for writing")
+                event_q.put(Event(
+                    utils.get_timestamp(),
+                    "file_signal",
+                    file_signal_data,
+                ))
+            prev_file_signal_data = file_signal_data
 
 def get_file_signal_data():
     """
@@ -580,13 +588,14 @@ def get_file_signal_data():
     #         pass
 
     try:
+        ACTIVE_PID = 0
         process = psutil.Process(ACTIVE_PID)
         open_files = process.open_files()
         for file in open_files:
             fpath = file.path
             if not any(directory in str(fpath) for directory in DIRECTORIES_TO_AVOID):
                 logger.info(f"Open file: {fpath}")
-                file_signal_addresses.append(fpath)
+                file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         print("No such process or access denied")
 
@@ -796,7 +805,7 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
-    file_signal_write_q = sq.SynchronizedQueue()()
+    #file_signal_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
@@ -804,7 +813,8 @@ def record(
     term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
     term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
     term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
-    
+    #term_pipe_parent_file, term_pipe_child_file = multiprocessing.Pipe()
+
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -829,11 +839,11 @@ def record(
     )
     mouse_event_reader.start()
 
-    file_signal_event_reader = threading.Thread(
-        target=read_file_signals_events,
-        args=(event_q, terminate_event, recording_timestamp),
-    )
-    file_signal_event_reader.start()
+    # file_signal_event_reader = threading.Thread(
+    #     target=read_file_signals_events,
+    #     args=(event_q, terminate_event, recording_timestamp),
+    # )
+    # file_signal_event_reader.start()
 
     event_processor = threading.Thread(
         target=process_events,
@@ -842,7 +852,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
-            file_signal_write_q,
+            #file_signal_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
@@ -892,18 +902,19 @@ def record(
     )
     window_event_writer.start()
 
-    file_signal_event_writer = multiprocessing.Process(
-        target=write_events,
-        args=(
-            "file_signal",
-            write_file_signal_event,
-            file_signal_write_q,
-            perf_q,
-            recording_timestamp,
-            terminate_event,
-        ),
-    )
-    file_signal_event_writer.start()
+    # file_signal_event_writer = multiprocessing.Process(
+    #     target=write_events,
+    #     args=(
+    #         "file_signal",
+    #         write_file_signal_event,
+    #         file_signal_write_q,
+    #         perf_q,
+    #         recording_timestamp,
+    #         terminate_event,
+    #         term_pipe_child_file,
+    #     ),
+    # )
+    # file_signal_event_writer.start()
 
 
 
@@ -946,18 +957,19 @@ def record(
     term_pipe_parent_window.send(window_write_q.qsize())
     term_pipe_parent_action.send(action_write_q.qsize())
     term_pipe_parent_screen.send(screen_write_q.qsize())
+    #term_pipe_parent_file.send(file_signal_write_q.qsize())
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
-    file_signal_event_reader.join()
+    #file_signal_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    file_signal_event_writer.join()
+    #file_signal_event_writer.join()
 
     terminate_perf_event.set()
 

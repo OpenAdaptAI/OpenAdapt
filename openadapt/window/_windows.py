@@ -2,7 +2,15 @@ from loguru import logger
 import pywinauto
 from pprint import pprint
 import pickle
+import win32gui, win32process
 
+def get_window_pid(title):
+    hwnd = win32gui.FindWindow(None, title)
+    if not hwnd:
+        logger.info(f"Window not found: {title}")
+        return None
+    threadid,pid = win32process.GetWindowThreadProcessId(hwnd)
+    return pid
 
 def get_active_window_state() -> dict:
     """
@@ -19,6 +27,7 @@ def get_active_window_state() -> dict:
                 - "meta": Meta information of the active window.
                 - "data": None (to be filled with window data).
                 - "window_id": ID of the active window.
+                - "pid": Process ID of the active window.
     """
     # catch specific exceptions, when except happens do log.warning
     try:
@@ -29,6 +38,7 @@ def get_active_window_state() -> dict:
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
     data = get_element_properties(active_window)
+    pid = get_window_pid(title=meta["texts"][0])
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,
@@ -38,6 +48,7 @@ def get_active_window_state() -> dict:
         "meta": {**meta, "rectangle": rectangle_dict},
         "data": data,
         "window_id": meta["control_id"],
+        "pid" :pid
     }
     try:
         pickle.dumps(state)
@@ -56,7 +67,7 @@ def get_active_window_meta(active_window) -> dict:
 
     Returns:
         dict: A dictionary containing the meta information of the
-              active window.
+            active window.
     """
     if not active_window:
         logger.warning(f"{active_window=}")
@@ -101,7 +112,7 @@ def get_element_properties(element):
 
     Args:
         element: An instance of a custom element class
-                 that has the `.get_properties()` and `.children()` methods.
+                that has the `.get_properties()` and `.children()` methods.
 
     Returns:
         A nested dictionary containing the properties of each element and its children.
@@ -113,8 +124,8 @@ def get_element_properties(element):
         properties = get_element_properties(element)
         print(properties)
         # Output: {'prop1': 'value1', 'prop2': 'value2',
-                  'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
-                  'children': []}]}
+                'children': [{'prop1': 'child_value1', 'prop2': 'child_value2',
+                'children': []}]}
     """
     properties = get_properties(element)
     children = element.children()
