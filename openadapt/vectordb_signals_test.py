@@ -14,23 +14,27 @@ collection = chroma_client.create_collection(name="my_collection")
 #   Compare results to desired response
 
 with open("./dataset.jsonl") as data_file:
+    total_score = 0
+    num_lines = 0
     for line in data_file:
+        num_lines += 1
         data = json.loads(line)
 
-        text = data['text'].split('\n')
-        instruction = text[text.index('# Instruction:') + 1]
-        # Task description follows the word you, and ends with before a period
-        task_description = text[text.index("You are") + 7: text.index('.')]     #TODO: double check this
-        input_signals = json.loads(text[text.index('# Input:') + 1])
-        response = json.loads(text[text.index('# Response:') + 1])
+        # Use Python splitlines to create a list of lines
+        text = data['text']
 
-        print(f"Instruction: {instruction}")
-        print(f"Input Signals: {input_signals}")
-        print(f"Response: {response}")
-        #assert results["ids"] == data["desired_response"]
+        task_description = text[text.index('Instruction:') + 21:text.index('. A list')]
 
-        signals = json.loads(text[text.index('# Input:') + 1])
-        for i, signal in enumerate(signals):
+        input_signals = text[text.index('['):text.index(']') + 1]
+        input_signals = json.loads(input_signals.replace("'", '"'))
+
+        response = json.loads(text[text.index('Response: ') + 11:len(text)])
+
+        # print(f"task_description: {task_description}")
+        # print(f"Input Signals: {input_signals}")
+        # print(f"Response: {response}")
+        
+        for i, signal in enumerate(input_signals):
             collection.add(
                 documents=[str(signal)],
                 ids=[f"{i}"]
@@ -41,23 +45,16 @@ with open("./dataset.jsonl") as data_file:
             n_results=len(response)
         )
 
+        # evaluate results, ignoring order #
+        score_sum = len(response)
+        print(score_sum)
 
-signals = [{'id': 0, 'type': 'file', 'descriptor': 'restaurant_menu_data.txt'},
-           {'id': 1, 'type': 'url', 'descriptor': 'https://en.wikipedia.org/wiki/Web_development'},
-           {'id': 2, 'type': 'function', 'descriptor': 'math.sqrt'},
-           {'id': 3, 'type': 'url', 'descriptor': 'https://www.accuweather.com'},
-           {'id': 4, 'type': 'database', 'descriptor': 'footwear.db'},
-           {'id': 5, 'type': 'function', 'descriptor': 'openai.Completion.create'},
-           {'id': 6, 'type': 'file', 'descriptor': 'anatomy_data.csv'}]
+        for id in response:
+            print(id)
+            if str(id) not in results['ids'][0]:
+                score_sum -= 1/len(response)
 
-collection.add(
-    documents=[str(signals[0]),str(signals[1]),str(signals[2]),str(signals[3]),str(signals[4]),str(signals[5]),str(signals[6])],
-    ids=["signal 0","signal 1","signal 2","signal 3","signal 4","signal 5","signal 6"]
-)
-
-results = collection.query(
-    query_texts=["Creating a website about shoes."],
-    n_results=2
-)
-
-print(results["ids"])
+        print(score_sum)
+        total_score += score_sum
+    total_score /= num_lines
+    print(f"Total Score: {total_score}")
