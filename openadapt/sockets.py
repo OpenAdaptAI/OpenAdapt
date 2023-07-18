@@ -65,13 +65,14 @@ def client_receive_message(port: int) -> Optional[str]:
                 return message
             except EOFError:
                 logger.warning("Connection closed. Reconnecting...")
-                while True:
-                    try:
-                        server_conn = create_server_connection(port)
-                        break
-                    except Exception as exc:
-                        logger.warning(f"Failed to reconnect: {exc}")
-                        time.sleep(config.SOCKET_RETRY_INTERVAL)
+                break
+                # while True:
+                #     try:
+                #         server_conn = create_server_connection(port)
+                #         break
+                #     except Exception as exc:
+                #         logger.warning(f"Failed to reconnect: {exc}")
+                #         time.sleep(config.SOCKET_RETRY_INTERVAL)
     return None
 
 

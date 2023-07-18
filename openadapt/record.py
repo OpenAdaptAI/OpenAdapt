@@ -573,20 +573,22 @@ def read_browser_events(
                     logger.info(f"Sending {t=}")
                     conn.send(t)
                     time.sleep(1)
-            except EOFError:
-                logger.warning("Connection closed. Reconnecting...")
-                while True:
-                    try:
-                        conn = establish_connection()
-                        break
-                    except Exception as exc:
-                        logger.warning(f"Failed to reconnect: {exc}")
-                        time.sleep(config.SOCKET_RETRY_INTERVAL)
             except Exception as exc:
-                logger.warning(f"Error during communication: {exc}")
-                time.sleep(config.SOCKET_RETRY_INTERVAL)
-            conn.close()
-    conn.close()
+                logger.warning("Connection closed. Reconnecting...")
+                break
+            #     while True:
+            #         try:
+            #             conn = establish_connection()
+            #             break
+            #         except Exception as exc:
+            #             logger.warning(f"Failed to reconnect: {exc}")
+            #             time.sleep(config.SOCKET_RETRY_INTERVAL)
+            # except Exception as exc:
+            #     logger.warning(f"Error during communication: {exc}")
+            #     time.sleep(config.SOCKET_RETRY_INTERVAL)
+        conn.close()
+        break
+    # conn.close()
 
 
 @trace(logger)
