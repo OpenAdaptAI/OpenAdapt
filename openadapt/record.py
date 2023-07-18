@@ -21,11 +21,13 @@ import tracemalloc
 from loguru import logger
 from pympler import tracker
 from pynput import keyboard, mouse
+from tqdm import tqdm
 import fire
 import mss.tools
 import psutil
 
 from openadapt import config, crud, utils, window
+from openadapt.extensions import synchronized_queue as sq
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -86,7 +88,9 @@ def trace(logger):
             func_kwargs = kwargs_to_str(**kwargs)
 
             if func_kwargs != "":
-                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+                logger.info(
+                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
+                )
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
 
@@ -110,10 +114,10 @@ def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
 @trace(logger)
 def process_events(
     event_q: queue.Queue,
-    screen_write_q: multiprocessing.Queue,
-    action_write_q: multiprocessing.Queue,
-    window_write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    screen_write_q: sq.SynchronizedQueue,
+    action_write_q: sq.SynchronizedQueue,
+    window_write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -130,7 +134,6 @@ def process_events(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
 
@@ -193,7 +196,7 @@ def process_events(
 def write_action_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write an action event to the database and update the performance queue.
@@ -212,7 +215,7 @@ def write_action_event(
 def write_screen_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a screen event to the database and update the performance queue.
@@ -234,7 +237,7 @@ def write_screen_event(
 def write_window_event(
     recording_timestamp: float,
     event: Event,
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
 ):
     """
     Write a window event to the database and update the performance queue.
@@ -254,10 +257,11 @@ def write_window_event(
 def write_events(
     event_type: str,
     write_fn: Callable,
-    write_q: multiprocessing.Queue,
-    perf_q: multiprocessing.Queue,
+    write_q: sq.SynchronizedQueue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    term_pipe: multiprocessing.Pipe,
 ):
     """
     Write events of a specific type to the db using the provided write function.
@@ -269,13 +273,36 @@ def write_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        term_pipe: A pipe for communicating \
+            the number of events left to be written.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    while not terminate_event.is_set() or not write_q.empty():
+
+    num_left = 0
+    progress = None
+    while (
+        not terminate_event.is_set() or
+        not write_q.empty()
+    ):
+        if term_pipe.poll():
+            num_left = term_pipe.recv()
+            if num_left != 0 and progress is None:
+                progress = tqdm(
+                    total=num_left,
+                    desc="Writing to Database",
+                    unit="event",
+                    colour="green",
+                    dynamic_ncols=True,
+                )
+        if (
+            terminate_event.is_set() and
+            num_left != 0 and 
+            progress is not None
+        ):
+            progress.update()
         try:
             event = write_q.get_nowait()
         except queue.Empty:
@@ -283,6 +310,10 @@ def write_events(
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
         logger.debug(f"{event_type=} written")
+
+    if progress is not None:
+        progress.close()
+
     logger.info(f"{event_type=} done")
 
 
@@ -375,7 +406,8 @@ def handle_key(
         "vk",
     ]
     attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
+        f"key_{attr_name}": getattr(key, attr_name, None)
+        for attr_name in attr_names
     }
     logger.debug(f"{attrs=}")
     canonical_attrs = {
@@ -383,7 +415,9 @@ def handle_key(
         for attr_name in attr_names
     }
     logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
+    trigger_action_event(
+        event_q, {"name": event_name, **attrs, **canonical_attrs}
+    )
 
 
 def read_screen_events(
@@ -400,7 +434,6 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     while not terminate_event.is_set():
@@ -427,7 +460,6 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
     prev_window_data = {}
@@ -463,7 +495,7 @@ def read_window_events(
 
 @trace(logger)
 def performance_stats_writer(
-    perf_q: multiprocessing.Queue,
+    perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ):
@@ -477,7 +509,6 @@ def performance_stats_writer(
         terminate_event: An event to signal the termination of the process.
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -499,7 +530,6 @@ def performance_stats_writer(
 def memory_writer(
     recording_timestamp: float, terminate_event: multiprocessing.Event, record_pid: int
 ):
-    utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -641,7 +671,7 @@ def read_mouse_events(
     terminate_event.wait()
     mouse_listener.stop()
 
-
+@logger.catch
 @trace(logger)
 def record(
     task_description: str,
@@ -653,20 +683,23 @@ def record(
         task_description: a text description of the task that will be recorded
     """
 
-    utils.configure_logging(logger, LOG_LEVEL)
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
-    screen_write_q = multiprocessing.Queue()
-    action_write_q = multiprocessing.Queue()
-    window_write_q = multiprocessing.Queue()
+    screen_write_q = sq.SynchronizedQueue()
+    action_write_q = sq.SynchronizedQueue()
+    window_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
-    perf_q = multiprocessing.Queue()
+    perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
-
+    
+    term_pipe_parent_window, term_pipe_child_window = multiprocessing.Pipe()
+    term_pipe_parent_screen, term_pipe_child_screen = multiprocessing.Pipe()
+    term_pipe_parent_action, term_pipe_child_action = multiprocessing.Pipe()
+    
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -714,6 +747,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_screen,
         ),
     )
     screen_event_writer.start()
@@ -727,6 +761,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_action,
         ),
     )
     action_event_writer.start()
@@ -740,6 +775,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            term_pipe_child_window,
         ),
     )
     window_event_writer.start()
@@ -776,8 +812,13 @@ def record(
     except KeyboardInterrupt:
         terminate_event.set()
 
+
     collect_stats()
     log_memory_usage()
+
+    term_pipe_parent_window.send(window_write_q.qsize())
+    term_pipe_parent_action.send(action_write_q.qsize())
+    term_pipe_parent_screen.send(screen_write_q.qsize())
 
     logger.info(f"joining...")
     keyboard_event_reader.join()
@@ -788,7 +829,6 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
