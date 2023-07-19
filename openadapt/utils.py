@@ -6,6 +6,7 @@ import fire
 import inspect
 import os
 import sys
+import threading
 import time
 
 from loguru import logger
@@ -19,6 +20,8 @@ from logging import StreamHandler
 from openadapt import common, config
 
 EMPTY = (None, [], {}, "")
+
+_logger_lock = threading.Lock()
 
 
 def get_now_dt_str(dt_format=config.DT_FMT):
@@ -42,22 +45,24 @@ def configure_logging(logger, log_level):
     # TODO: redact log messages (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
-    logger.remove()
-    logger_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
-        "- <level>{message}</level>"
-    )
-    logger.add(
-        StreamHandler(sys.stderr),
-        colorize=True,
-        level=log_level,
-        enqueue=True,
-        format=logger_format,
-        filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
-    )
-    logger.debug(f"{log_level=}")
+
+    with _logger_lock:
+        logger.remove()
+        logger_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
+            "- <level>{message}</level>"
+        )
+        logger.add(
+            StreamHandler(sys.stderr),
+            colorize=True,
+            level=log_level,
+            enqueue=True,
+            format=logger_format,
+            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+        )
+        logger.debug(f"{log_level=}")
 
 
 def row2dict(row, follow=True):
