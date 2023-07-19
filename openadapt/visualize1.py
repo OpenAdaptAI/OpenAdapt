@@ -32,7 +32,10 @@ from openadapt import config
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
+    # too many warnings form scrubbing
+    __import__("warnings").filterwarnings("ignore", category=DeprecationWarning)
     from openadapt import scrub
+
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -40,119 +43,42 @@ MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template(
-    """
-    table {
-        outline: 1px solid black;
-    }
-    table th {
-        vertical-align: top;
-    }
-    .screenshot img {
-        display: none;
-        width: ${IMG_WIDTH_PCT}vw;
-    }
-    .screenshot img:nth-child(1) {
-        display: block;
-    }
-
-    .screenshot:hover img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:hover img:nth-child(2) {
-        display: block;
-    }
-    .screenshot:hover img:nth-child(3) {
-        display: none;
-    }
-
-    .screenshot:active img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(2) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(3) {
-        display: block;
-    }
-"""
-).substitute(
-    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
-)
 
 
-def recursive_len(lst, key):
-    try:
-        _len = len(lst)
-    except TypeError:
-        return 0
-    for obj in lst:
-        try:
-            _len += recursive_len(obj.get(key), key)
-        except AttributeError:
+def create_tree(tree_dict, max_children=MAX_TABLE_CHILDREN):
+    tree_data = []
+    for key, value in tree_dict.items():
+        if value in EMPTY:
             continue
-    return _len
+        node = {
+            "id": str(key)
+            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
+        }
+        if isinstance(value, dict):
+            node["children"] = create_tree(value)
+        elif isinstance(value, list):
+            if max_children is not None and len(value) > max_children:
+                node["children"] = create_tree(
+                    {i: v for i, v in enumerate(value[:max_children])}
+                )
+                node["children"].append({"id": "..."})
+            else:
+                node["children"] = create_tree({i: v for i, v in enumerate(value)})
+        tree_data.append(node)
+    return tree_data
 
 
-def format_key(key, value):
-    if isinstance(value, list):
-        return f"{key} ({len(value)}; {recursive_len(value, key)})"
-    else:
-        return key
+def set_tree_props(tree):
+    tree._props["dense"] = True
+    tree._props["no-transition"] = True
+    # tree._props["default-expand-all"] = True
 
 
-def indicate_missing(some, every, indicator):
-    rval = []
-    some_idx = 0
-    every_idx = 0
-    while some_idx < len(some):
-        skipped = False
-        while some[some_idx] != every[every_idx]:
-            every_idx += 1
-            skipped = True
-        if skipped:
-            rval.append(indicator)
-        rval.append(some[some_idx])
-        some_idx += 1
-        every_idx += 1
-    return rval
-
-
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
-    if isinstance(obj, list):
-        children = [dict2html(value, max_children) for value in obj]
-        if max_children is not None and len(children) > max_children:
-            all_children = children
-            children = evenly_spaced(children, max_children)
-            children = indicate_missing(children, all_children, "...")
-        html_str = "\n".join(children)
-    elif isinstance(obj, dict):
-        rows_html = "\n".join(
-            [
-                f"""
-                <tr>
-                    <th>{format_key(key, value)}</th>
-                    <td>{dict2html(value, max_children)}</td>
-                </tr>
-            """
-                for key, value in obj.items()
-                if value not in EMPTY
-            ]
-        )
-        html_str = f"<table>{rows_html}</table>"
-    else:
-        html_str = html.escape(str(obj))
-        if len(html_str) > max_len:
-            n = max_len // 2
-            head = html_str[:n]
-            tail = html_str[-n:]
-            snipped = html_str[n:-n]
-            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
-            html_str = head + middle + tail
-    return html_str
-
-
+@logger.catch
 def main(recording=None):
+    ui.switch(
+        text="Dark Mode", value=ui.dark_mode().value, on_change=ui.dark_mode().toggle
+    )
     configure_logging(logger, LOG_LEVEL)
 
     if recording is None:
@@ -185,8 +111,6 @@ def main(recording=None):
                 "align": "left",
             }
         )
-    rrows = [recording_dict]
-    rtable = ui.table(rows=rrows, columns=rcolumns)
 
     meta_col = [
         {
@@ -199,27 +123,14 @@ def main(recording=None):
         }
         for key in meta.keys()
     ]
-    meta_row = [meta]
-    meta_table = ui.table(rows=meta_row, columns=meta_col)
 
-    rows = [
-        row(
-            Div(
-                text=f"<style>{CSS}</style>",
-            ),
-        ),
-        row(
-            Div(
-                text=f"{dict2html(recording_dict)}",
-            ),
-        ),
-        row(
-            Div(
-                text=f"{dict2html(meta)}",
-                width_policy="max",
-            ),
-        ),
-    ]
+    ui.table(rows=[meta], columns=meta_col)
+    ui.table(rows=[recording_dict], columns=rcolumns)
+
+    interactive_images = []
+    action_event_trees = []
+    window_event_trees = []
+
     logger.info(f"{len(action_events)=}")
 
     num_events = (
@@ -258,109 +169,42 @@ def main(recording=None):
                 action_event_dict = scrub.scrub_dict(action_event_dict)
                 window_event_dict = scrub.scrub_dict(window_event_dict)
 
-            rows.append(
-                [
-                    row(
-                        Div(
-                            text=f"""
-                            <div class="screenshot">
-                                <img
-                                    src="{image_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                                <img
-                                    src="{diff_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                                <img
-                                    src="{mask_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                            </div>
-                            <table>
-                                {dict2html(window_event_dict , None)}
-                            </table>
-                        """,
-                        ),
-                        Div(
-                            text=f"""
-                            <table>
-                                {dict2html(action_event_dict)}
-                            </table>
-                        """
-                        ),
-                    ),
-                ]
-            )
-
-            def create_tree(tree_dict):
-                tree_data = []
-                for key, value in tree_dict.items():
-                    node = {
-                        "id": str(key)
-                        + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
-                    }
-                    if isinstance(value, dict):
-                        node["children"] = create_tree(value)
-                    elif isinstance(value, list):
-                        # convert list of dicts, to dict of dicts
-                        node["children"] = create_tree({k : v for k, v in enumerate(value)})
-                    tree_data.append(node)
-                return tree_data
-
             with ui.column():
                 with ui.row():
-                    img = ui.interactive_image(
-                        source=image_utf8,
-                        cross=True,
-                    ).classes("w-3/5 drop-shadow-md rounded")
+                    interactive_images.append(
+                        ui.interactive_image(
+                            source=image_utf8,
+                            cross=True,
+                        ).classes("w-3/5 drop-shadow-md rounded")
+                    )
                     with ui.column():
                         action_event_tree = create_tree(action_event_dict)
-                        ui.tree(
-                            action_event_tree,
-                            label_key="id",
-                            on_select=lambda e: ui.notify(e.value),
+                        action_event_trees.append(
+                            ui.tree(
+                                action_event_tree,
+                                label_key="id",
+                                on_select=lambda e: ui.notify(e.value),
+                            )
                         )
+                        set_tree_props(action_event_trees[idx])
 
-                window_event_tree = create_tree(window_event_dict)
+                window_event_tree = create_tree(window_event_dict, None)
 
-                tr = ui.tree(
-                    window_event_tree,
-                    label_key="id",
-                    on_select=lambda e: ui.notify(e.value),
+                window_event_trees.append(
+                    ui.tree(
+                        window_event_tree,
+                        label_key="id",
+                        on_select=lambda e: ui.notify(e.value),
+                    )
                 )
 
-                # tr._props["default-expand-all"] = True
-                # tr._props["dense"] = True
+                set_tree_props(window_event_trees[idx])
 
             progress.update()
 
         progress.close()
 
-    title = f"recording-{recording.id}"
-    fname_out = f"recording-{recording.id}.html"
-    logger.info(f"{fname_out=}")
-    output_file(fname_out, title=title)
-    ui.run(reload=False)
-
-    result = show(
-        layout(
-            rows,
-        )
-    )
-
-    def cleanup():
-        os.remove(fname_out)
-        removed = not os.path.exists(fname_out)
-        logger.info(f"{removed=}")
-
-    Timer(1, cleanup).start()
+    ui.run(reload=False, title=f"recording-{recording.id}", favicon="📊")
 
 
 if __name__ == "__main__":
