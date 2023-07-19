@@ -15,7 +15,7 @@ server_by_port = {}
 queue_by_port = {}
 
 
-def client_send_message(port: int, msg: str) -> None:
+def client_send_message(port: int, msg: Any) -> None:
     """
     Send a message to the client connection associated with the given port.
 
@@ -31,7 +31,7 @@ def client_send_message(port: int, msg: str) -> None:
         client_conn.send(msg)
 
 
-def server_send_message(port: int, msg: str) -> None:
+def server_send_message(port: int, msg: Any) -> None:
     """
     Send a message to the server connection associated with the given port.
 
@@ -58,22 +58,13 @@ def client_receive_message(port: int) -> Optional[str]:
         The received message as a string, or None if no message is available.
     """
     client_conn = client_by_port.get(port)
-    while True:
-        if client_conn:
-            try:
-                message = client_conn.recv()
-                return message
-            except EOFError:
-                logger.warning("Connection closed. Reconnecting...")
-                break
-                # while True:
-                #     try:
-                #         server_conn = create_server_connection(port)
-                #         break
-                #     except Exception as exc:
-                #         logger.warning(f"Failed to reconnect: {exc}")
-                #         time.sleep(config.SOCKET_RETRY_INTERVAL)
-    return None
+    if client_conn:
+        try:
+            message = client_conn.recv()
+            return message
+        except Exception as exc:
+            logger.warning("Connection was closed.")
+            del client_by_port[port]
 
 
 def server_receive_message(port: int) -> Optional[str]:
@@ -159,7 +150,7 @@ def set_terminate_event(terminate_event) -> None:
     _terminate_event = terminate_event
 
 
-def create_client_connection(port: int) -> Client:
+def create_client_connection(port: int) -> Connection:
     """
     Create a client connection and establish a connection to the specified port.
 
@@ -171,6 +162,7 @@ def create_client_connection(port: int) -> Client:
     """
     address = (config.SOCKET_ADDRESS, port)
     conn = Client(address, authkey=config.SOCKET_AUTHKEY)
+    conn = conn.accept()
     client_by_port[port] = conn
     logger.info("Connected to the Client.")
     return conn
@@ -209,23 +201,37 @@ def event_loop() -> None:
         for port, client_conn in client_by_port.items():
             try:
                 message = client_conn.recv()
-                if message:
-                    queue = queue_by_port.get(port)
-                    if queue:
-                        queue.put(message)
+                # if message:
+                    # TODO: Handle message
+
             except EOFError:
                 # Handle connection closed or error
                 del client_by_port[port]
                 del queue_by_port[port]
 
-        for port, server_conn in server_by_port.items():
-            try:
-                message = server_conn.recv()
-                if message:
-                    queue = queue_by_port.get(port)
-                    if queue:
-                        queue.put(message)
-            except EOFError:
-                # Handle connection closed or error
-                del server_by_port[port]
-                del queue_by_port[port]
+        # for port, server_conn in server_by_port.items():
+        #     try:
+        #         message = server_conn.recv()
+        #         if message:
+        #             queue = queue_by_port.get(port)
+        #             if queue:
+        #                 queue.put(message)
+        #     except EOFError:
+        #         # Handle connection closed or error
+        #         del server_by_port[port]
+        #         del queue_by_port[port]
+
+
+
+def server_sends(conn: Connection, message: Any) -> None:
+    if conn:
+        conn.send(message)
+
+def client_receive(conn: Connection) -> Any:
+    if conn:
+        try:
+            message = conn.recv()
+            return message
+        except EOFError:
+            logger.warning("Connection was closed.")
+            return None

@@ -49,8 +49,6 @@ tracker = tracker.SummaryTracker()
 tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
 
-SERVER_SENDS = True
-
 
 def collect_stats():
     performance_snapshots.append(tracemalloc.take_snapshot())
@@ -546,32 +544,29 @@ def read_browser_events(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
     logger.info(f"starting")
-
     conn = sockets.create_client_connection(config.SOCKET_PORT)
-    while not terminate_event.is_set():
-        while True:
-            try:
-                if SERVER_SENDS:
-                    logger.info("Waiting for message...")
-                    msg = sockets.client_receive_message(config.SOCKET_PORT)
-                    logger.info(f"{msg=}")
-                    browser_data = msg
-                    logger.debug("queuing browser event for writing")
-                    event_q.put(
-                        Event(
-                            utils.get_timestamp(),
-                            "browser",
-                            browser_data,
-                        )
+    while not terminate_event.is_set() and conn is not None:
+        try:
+            logger.info("Waiting for message...")
+            # msg = sockets.client_receive_message(config.SOCKET_PORT)
+            msg = sockets.client_receive(conn)
+            # logger.info(f"{msg=}")
+            if msg is not None:
+                logger.info("Received DOM message.")
+                browser_data = msg 
+                logger.debug("queuing browser event for writing")
+                event_q.put(
+                    Event(
+                        utils.get_timestamp(),
+                        "browser",
+                        browser_data,
                     )
-                else:
-                    t = time.time()
-                    logger.info(f"Sending {t=}")
-                    conn.send(t)
-                    time.sleep(1)
-            except Exception as exc:
-                logger.warning("Connection closed. Reconnecting...")
-                break
+                )
+            else:
+                logger.info("No message received or received None Type Message.")
+        except Exception as exc:
+            logger.warning("Connection closed.")
+            break
             #     while True:
             #         try:
             #             conn = establish_connection()
@@ -582,9 +577,8 @@ def read_browser_events(
             # except Exception as exc:
             #     logger.warning(f"Error during communication: {exc}")
             #     time.sleep(config.SOCKET_RETRY_INTERVAL)
+    if conn:
         conn.close()
-        break
-    # conn.close()
 
 
 @trace(logger)

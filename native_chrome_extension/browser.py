@@ -88,7 +88,8 @@ if __name__ == "__main__":
         received_message = get_message()
 
         # Sending message to Client
-        sockets.server_send_message(config.SOCKET_PORT, received_message)
+        # sockets.server_send_message(config.SOCKET_PORT, received_message)
+        sockets.server_sends(conn, received_message)
 
         # Sending the received message back to background.js
         send_message(encode_message(received_message))
