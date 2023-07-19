@@ -125,7 +125,7 @@ DIRNAME_PERFORMANCE_PLOTS = "performance"
 with open(ROOT_DIRPATH / "pyproject.toml", "r") as f:
     content = f.read()
     document = tomlkit.parse(content)
-option = ["ignore::DeprecationWarning"] if SILENCE_DEPRECATION else "" # type: ignore # noqa
+option = ["ignore::DeprecationWarning"] if SILENCE_DEPRECATION else ""  # type: ignore # noqa
 document["tool"]["pytest"]["ini_options"]["filterwarnings"] = option
 with open(ROOT_DIRPATH / "pyproject.toml", "w") as f:
     f.write(tomlkit.dumps(document))
