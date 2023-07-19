@@ -67,11 +67,11 @@ function CheckCMDExists {
         [Parameter(Mandatory = $true)] [string] $command
     )
 
-    Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
-    if ($getErr -eq $null) {
-        return $true
+    $result = Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
+    if ($null -eq $result) {
+        return $false
     }
-    return $false
+    return $true
 }
 
 
