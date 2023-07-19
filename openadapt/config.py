@@ -15,7 +15,7 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
-
+import tomlkit
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -42,7 +42,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -84,6 +84,7 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    "SILENCE_DEPRECATION": True,
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
@@ -121,6 +122,14 @@ DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 
+with open(ROOT_DIRPATH / "pyproject.toml", "r") as f:
+    content = f.read()
+    document = tomlkit.parse(content)
+option = ["ignore::DeprecationWarning"] if SILENCE_DEPRECATION else "" # type: ignore # noqa
+document["tool"]["pytest"]["ini_options"]["filterwarnings"] = option
+with open(ROOT_DIRPATH / "pyproject.toml", "w") as f:
+    f.write(tomlkit.dumps(document))
+
 
 def obfuscate(val, pct_reveal=0.1, char="*"):
     num_reveal = int(len(val) * pct_reveal)
@@ -132,15 +141,14 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
