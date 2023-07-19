@@ -28,6 +28,7 @@ import psutil
 
 from openadapt import config, crud, utils, window
 from openadapt.extensions import synchronized_queue as sq
+from openadapt.trace import trace
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -69,39 +70,6 @@ def log_memory_usage():
 
     trace_str = "\n".join(list(tracker.format_diff()))
     logger.info(f"trace_str=\n{trace_str}")
-
-
-def args_to_str(*args):
-    return ", ".join(map(str, args))
-
-
-def kwargs_to_str(**kwargs):
-    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
-
-
-def trace(logger):
-    def decorator(func):
-        @wraps(func)
-        def wrapper_logging(*args, **kwargs):
-            func_name = func.__qualname__
-            func_args = args_to_str(*args)
-            func_kwargs = kwargs_to_str(**kwargs)
-
-            if func_kwargs != "":
-                logger.info(
-                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
-                )
-            else:
-                logger.info(f" -> Enter: {func_name}({func_args})")
-
-            result = func(*args, **kwargs)
-
-            logger.info(f" <- Leave: {func_name}({result})")
-            return result
-
-        return wrapper_logging
-
-    return decorator
 
 
 def process_event(event, write_q, write_fn, recording_timestamp, perf_q):
