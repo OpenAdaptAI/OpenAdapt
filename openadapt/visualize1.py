@@ -1,48 +1,31 @@
 from pprint import pformat
-from threading import Timer
-import html
-import os
-import string
 
-from bokeh.io import output_file, show
-from bokeh.layouts import layout, row
-from bokeh.models.widgets import Div
 from loguru import logger
+from nicegui import ui
 from tqdm import tqdm
 
-from nicegui import ui
-
-from openadapt.crud import (
-    get_latest_recording,
-)
-from openadapt.events import (
-    get_events,
-)
+from openadapt import config
+from openadapt.crud import get_latest_recording
+from openadapt.events import get_events
 from openadapt.utils import (
+    EMPTY,
     configure_logging,
     display_event,
-    evenly_spaced,
     image2utf8,
-    EMPTY,
     row2dict,
     rows2dicts,
 )
 
-from openadapt import config
-
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
-    # too many warnings form scrubbing
+    # too many warnings from scrubbing
     __import__("warnings").filterwarnings("ignore", category=DeprecationWarning)
     from openadapt import scrub
 
 
 LOG_LEVEL = "INFO"
-MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
-MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
-IMG_WIDTH_PCT = 60
 
 
 def create_tree(tree_dict, max_children=MAX_TABLE_CHILDREN):
@@ -204,7 +187,13 @@ def main(recording=None):
 
         progress.close()
 
-    ui.run(reload=False, title=f"recording-{recording.id}", favicon="📊")
+    ui.run(
+        reload=False,
+        title=f"OpenAdapt: recording-{recording.id}",
+        favicon="📊",
+        native=True,
+        fullscreen=True,
+    )
 
 
 if __name__ == "__main__":
