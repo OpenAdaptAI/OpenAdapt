@@ -11,7 +11,7 @@ from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
 
-
+@logger.catch
 def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,

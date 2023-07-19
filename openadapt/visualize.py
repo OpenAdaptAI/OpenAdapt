@@ -150,6 +150,7 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     return html_str
 
 
+@logger.catch
 def main(recording=None):
     configure_logging(logger, LOG_LEVEL)
 
@@ -197,12 +198,12 @@ def main(recording=None):
         else len(action_events)
     )
     with tqdm(
-            total=num_events,
-            desc="Preparing HTML",
-            unit="event",
-            colour="green",
-            dynamic_ncols=True,
-        ) as progress:
+        total=num_events,
+        desc="Preparing HTML",
+        unit="event",
+        colour="green",
+        dynamic_ncols=True,
+    ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break

@@ -166,6 +166,7 @@ def _get(table, recording_timestamp):
 
 
 def get_action_events(recording):
+    assert recording, "Invalid recording."
     action_events = _get(ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
@@ -237,11 +238,12 @@ def get_screenshots(recording, precompute_diffs=False):
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
-    screenshots[0].prev = screenshots[0]
+    if screenshots:
+        screenshots[0].prev = screenshots[0]
 
     # TODO: store diffs
     if precompute_diffs:
-        logger.info(f"precomputing diffs...")
+        logger.info("precomputing diffs...")
         [(screenshot.diff, screenshot.diff_mask) for screenshot in screenshots]
 
     return screenshots
