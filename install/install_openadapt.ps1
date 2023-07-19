@@ -11,7 +11,8 @@ $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-o
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
 
 $pythonCmd = "python"
-$pythonVerStr = "Python 3.10*"
+$pythonMinVersion = "3.10.0" # Change this if a different Lower version are supported by OpenAdapt
+$pythonMaxVersion = "3.10.12" # Change this if a different HIgher version are supported by OpenAdapt
 $pythonInstaller = "python-3.10.11-amd64.exe"
 $pythonInstallerLoc = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
 
@@ -164,12 +165,23 @@ function GetTesseractCMD {
 }
 
 
+function ComparePythonVersion($version) {
+    $v = [version]::new($version)
+    $min = [version]::new($pythonMinVersion)
+    $max = [version]::new($pythonMaxVersion)
+
+    return $v -ge $min -and $v -le $max
+}
+
+
 # Check and Istall Python and return the python command
 function GetPythonCMD {
-    # Use python exe if it exists and is the required version
+    # Use python exe if it exists and is within the required version range
     if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
+        $versionString = $res.Split(' ')[-1]
+
+        if (ComparePythonVersion $versionString  $pythonMaxVersion) {
             return $pythonCmd
         }
     }
@@ -179,6 +191,7 @@ function GetPythonCMD {
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
+
     if (!$exists) {
         Write-Host "Failed to download python installer" -ForegroundColor Red
         Cleanup
@@ -190,10 +203,12 @@ function GetPythonCMD {
 
     RefreshPathVariables
 
-    # Make sure python is now available and the right version
+    # Make sure python is now available and within the required version range
     if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
+        $versionString = $res.Split(' ')[-1]
+
+        if (ComparePythonVersion $versionString $pythonMinVersion $pythonMaxVersion) {
             Remove-Item $pythonInstaller
             return $pythonCmd
         }
