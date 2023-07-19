@@ -248,6 +248,7 @@ function GetGitCMD {
 # Create a new directory and run the setup from there
 New-Item -ItemType Directory -Path $setupdir -Force
 Set-Location -Path $setupdir
+Set-ExecutionPolicy RemoteSigned -Scope Process -Force
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
@@ -267,6 +268,6 @@ RunAndCheck "poetry install" "Run ``poetry install``"
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
-Start-Process powershell -ArgumentList "-Command poetry shell"
+Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass", "-NoExit", "-Command", "poetry shell"
 
 ################################   SCRIPT    ################################
