@@ -121,6 +121,7 @@ def main(recording=get_latest_recording()):
         if MAX_EVENTS is not None
         else len(action_events)
     )
+
     with tqdm(
         total=num_events,
         desc="Preparing HTML",
@@ -157,31 +158,34 @@ def main(recording=get_latest_recording()):
                     interactive_images.append(
                         ui.interactive_image(
                             source=image_utf8,
-                            cross=True,
-                        ).classes("w-3/5 drop-shadow-md rounded")
+                        ).classes("drop-shadow-md rounded")
                     )
-                    with ui.column():
-                        action_event_tree = create_tree(action_event_dict)
-                        action_event_trees.append(
-                            ui.tree(
-                                action_event_tree,
-                                label_key="id",
-                                on_select=lambda e: ui.notify(e.value),
-                            )
+            with ui.splitter(value=60) as splitter:
+                splitter.classes("w-full h-full")
+                with splitter.after:
+                    action_event_tree = create_tree(action_event_dict)
+                    action_event_trees.append(
+                        ui.tree(
+                            action_event_tree,
+                            label_key="id",
+                            on_select=lambda e: ui.notify(e.value),
                         )
-                        set_tree_props(action_event_trees[idx])
-
-                window_event_tree = create_tree(window_event_dict, None)
-
-                window_event_trees.append(
-                    ui.tree(
-                        window_event_tree,
-                        label_key="id",
-                        on_select=lambda e: ui.notify(e.value),
                     )
-                )
+                    set_tree_props(action_event_trees[idx])
+                with splitter.before:
+                    ui.label("window_event_dict | action_event_dict:").style("font-weight: bold;")
+                    ui.html("<br/>")
+                    window_event_tree = create_tree(window_event_dict, None)
 
-                set_tree_props(window_event_trees[idx])
+                    window_event_trees.append(
+                        ui.tree(
+                            window_event_tree,
+                            label_key="id",
+                            on_select=lambda e: ui.notify(e.value),
+                        )
+                    )
+
+                    set_tree_props(window_event_trees[idx])
 
             progress.update()
 
@@ -192,7 +196,7 @@ def main(recording=get_latest_recording()):
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
         native=True,
-        fullscreen=True,
+        fullscreen=False,
     )
 
 
