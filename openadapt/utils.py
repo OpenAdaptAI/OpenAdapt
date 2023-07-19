@@ -5,6 +5,8 @@ import base64
 import fire
 import inspect
 import os
+import psutil
+import signal
 import socket
 import sys
 import threading
@@ -525,6 +527,22 @@ def get_free_port() -> int:
     _, port = temp_socket.getsockname()
     temp_socket.close()
     return port
+
+
+def send_kill_signal(pid):
+    try:
+        # Send the kill signal (SIGTERM) to the process identified by the PID
+        os.kill(pid, signal.SIGTERM)
+        logger.info("Kill signal sent successfully.")
+    except OSError as e:
+        logger.info(f"Failed to send kill signal: {e}")
+
+
+def get_pid_by_name(process_name):
+    for process in psutil.process_iter(['pid', 'name']):
+        if process.info['name'] == process_name:
+            return process.info['pid']
+    return None
 
 
 def get_functions(name) -> dict:

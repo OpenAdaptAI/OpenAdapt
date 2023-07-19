@@ -82,6 +82,10 @@ if __name__ == "__main__":
 
     # Establish a server connection
     conn = sockets.create_server_connection(config.SOCKET_PORT)
+    
+    # address = (config.SOCKET_ADDRESS, config.SOCKET_PORT)
+    # conn = Listener(address, authkey=config.SOCKET_AUTHKEY)
+    # conn = conn.accept()
 
     # Start the event loop
     while True:
@@ -90,6 +94,7 @@ if __name__ == "__main__":
         # Sending message to Client
         # sockets.server_send_message(config.SOCKET_PORT, received_message)
         sockets.server_sends(conn, received_message)
+        # conn.send(received_message)
 
         # Sending the received message back to background.js
         send_message(encode_message(received_message))

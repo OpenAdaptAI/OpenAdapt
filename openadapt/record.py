@@ -167,7 +167,7 @@ def process_events(
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+            event.data["browser_event_timestamp"] = prev_browser_event.timestamp if not prev_browser_event is None else None
             process_event(
                 event,
                 action_write_q,
@@ -579,6 +579,10 @@ def read_browser_events(
             #     time.sleep(config.SOCKET_RETRY_INTERVAL)
     if conn:
         conn.close()
+
+    pid = utils.get_pid_by_name("browser.py")
+    utils.send_kill_signal(pid)
+    logger.info("done")
 
 
 @trace(logger)

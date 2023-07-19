@@ -3,7 +3,7 @@
 from multiprocessing import Queue
 from multiprocessing.connection import Client, Listener, Connection
 import time
-from typing import Optional
+from typing import Optional, Any
 
 from loguru import logger
 
@@ -162,7 +162,6 @@ def create_client_connection(port: int) -> Connection:
     """
     address = (config.SOCKET_ADDRESS, port)
     conn = Client(address, authkey=config.SOCKET_AUTHKEY)
-    conn = conn.accept()
     client_by_port[port] = conn
     logger.info("Connected to the Client.")
     return conn
