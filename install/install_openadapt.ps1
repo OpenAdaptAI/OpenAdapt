@@ -260,6 +260,8 @@ function GetGitCMD {
 
 ################################   SCRIPT    ################################
 
+Write-Host "Install Script Started..." -ForegroundColor Yellow
+
 # Create a new directory and run the setup from there
 New-Item -ItemType Directory -Path $setupdir -Force
 Set-Location -Path $setupdir
