@@ -24,6 +24,7 @@ if SCRUB:
 
 
 LOG_LEVEL = "INFO"
+MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 
@@ -58,14 +59,13 @@ def set_tree_props(tree):
 
 
 @logger.catch
-def main(recording=None):
+def main(recording=get_latest_recording()):
+    configure_logging(logger, LOG_LEVEL)
+
     ui.switch(
         text="Dark Mode", value=ui.dark_mode().value, on_change=ui.dark_mode().toggle
     )
-    configure_logging(logger, LOG_LEVEL)
 
-    if recording is None:
-        recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
@@ -192,7 +192,7 @@ def main(recording=None):
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
         native=True,
-        fullscreen=True,
+        fullscreen=False,
     )
 
 
