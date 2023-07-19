@@ -192,7 +192,7 @@ def main(recording=get_latest_recording()):
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
         native=True,
-        fullscreen=False,
+        fullscreen=True,
     )
 
 
