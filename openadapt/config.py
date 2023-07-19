@@ -183,17 +183,3 @@ def filter_log_messages(data):
         "Cannot pickle Objective-C objects",
     ]
     return not any(msg in data["message"] for msg in messages_to_ignore)
-
-
-def set_db_url(db_fname):
-    """Set the database URL based on the given database file name.
-
-    Args:
-        db_fname (str): The database file name.
-    """
-    global DB_FNAME, DB_FPATH, DB_URL
-    DB_FNAME = db_fname
-    DB_FPATH = ROOT_DIRPATH / DB_FNAME
-    DB_URL = f"sqlite:///{DB_FPATH}"
-    logger.info(f"{DB_URL=}")
-    os.environ["DB_FNAME"] = db_fname
