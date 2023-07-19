@@ -82,6 +82,9 @@ psutil = "^5.9.5"
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
 
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
