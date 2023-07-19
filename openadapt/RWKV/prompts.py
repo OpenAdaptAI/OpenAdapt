@@ -175,7 +175,8 @@ def evaluate(for_dataset=False):
     ]
     # Swap the signal ids to match the prompt
     relevant_signals = [id_swaps[signal_id] for signal_id in relevant_signals]
-
+    relevant_signals.sort()
+    
     if not for_dataset:
         print("\n", prompt)
         print("Desired Output: ", relevant_signals)
@@ -190,14 +191,30 @@ def generate_dataset():
     # Create jsonl file
     # Run evaluate() 1000x times and save the result to the file
     with open("dataset.jsonl", "w") as file:
-        for i in range(5000):
+        for i in range(1000):
             value = evaluate(for_dataset=True)
             if i != 4999:
                 file.write(json.dumps({"text": value[0] + str(value[1])}) + "\n")
             else:
                 file.write(json.dumps({"text": value[0] + str(value[1])}))
 
-    print("\n###### Dataset generated successfully ######")
+    print("\n###### Dataset Generated Successfully ######")
+
+def generate_labelled_dataset():
+    # Run evaluate() several times and save the results to a file
+    # Each line of jsonl file should be a dictionary as follows: {"prompt": "{prompt}, "output" {target_output}"}
+    # Create jsonl file
+    # Run evaluate() 1000x times and save the result to the file
+    with open("labelled_dataset.jsonl", "w") as file:
+        for i in range(5000):
+            value = evaluate(for_dataset=True)
+            if i != 4999:
+                file.write(json.dumps({"prompt": value[0], "output": str(value[1])}) + "\n")
+            else:
+                file.write(json.dumps({"prompt": value[0], "output": str(value[1])}))
+
+
+    print("\n###### Labelled Dataset Generated Successfully ######")
 
 
 if __name__ == "__main__":
@@ -218,3 +235,4 @@ if __name__ == "__main__":
 
     print("\n###### Generating Dataset ######")
     generate_dataset()
+    generate_labelled_dataset()
