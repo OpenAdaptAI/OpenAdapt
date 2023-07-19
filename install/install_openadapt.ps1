@@ -240,8 +240,7 @@ function GetGitCMD {
     return $gitCmd
 }
 ################################   FUNCTIONS    ################################
-RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
-################################   FUNCTIONS    ################################
+
 
 ################################   SCRIPT    ################################
 

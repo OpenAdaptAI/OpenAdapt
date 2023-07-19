@@ -8,7 +8,8 @@ import cairosvg as cairo
 import numpy as np
 from loguru import logger
 
-from openadapt.strategies.mixins.svg import SVGReplayStrategyMixin, is_dependency_installed
+from openadapt.dependencies import ensure_executable
+from openadapt.strategies.mixins.svg import SVGReplayStrategyMixin
 from openadapt.models import Recording, Screenshot
 
 
@@ -17,17 +18,8 @@ RECORDING = Recording()
 
 class SVGReplayStrategy(SVGReplayStrategyMixin):
     """Custom Replay Strategy to solely test the SVG Mixin."""
-    def __init__(self, recording: Recording, cairo_executable_path: str = "cairosvg"):
-        if platform.system() == "Darwin" and not is_dependency_installed(cairo_executable_path):
-            cpu = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"])
-            if "Apple" in cpu:
-                subprocess.run(["arch", "-arm64", "brew", "install", "cairo"])
-            else:
-                subprocess.run(["brew", "install", "cairo"])
-            root_directory = os.path.expanduser('~')
-            self.path_to_cairosvg = os.path.join(root_directory, ".cargo/bin")
-        else:
-            self.path_to_cairosvg = cairo_executable_path
+    def __init__(self, recording: Recording):
+        ensure_executable("cairo")
         super().__init__(recording)
 
     def get_next_action_event(self):

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 
 ################################    PARAMETERS   ################################
 
@@ -114,7 +115,6 @@ if ! CheckCMDExists "git"; then
     BrewInstall "git"
 fi
 
-# for scrubbing
 if ! CheckCMDExists "tesseract"; then
     BrewInstall "tesseract"
 fi
