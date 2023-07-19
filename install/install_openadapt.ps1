@@ -55,6 +55,7 @@ function Cleanup {
     $exists = Test-Path -Path $setupdir
     if ($exists) {
         Set-Location $setupdir
+        Set-Location ../
         Remove-Item -LiteralPath $setupdir -Force -Recurse
     }
 }
