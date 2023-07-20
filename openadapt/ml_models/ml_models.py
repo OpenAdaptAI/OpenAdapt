@@ -1,6 +1,6 @@
 from openadapt import models
 from openadapt import ml_models
-from ml_models.openai import gpt4
+from ml_models.openai import gpt3_davinci
 from openadapt.crud import get_recording_by_id
 
 
@@ -17,11 +17,11 @@ MODALITY_BY_DB_MODEL = {
 
 ML_MODELS = [
     {
-        "name": "gpt-4",
-        "provider": gpt4,
-        "finetune": gpt4.finetune,
-        "infer": gpt4.infer,
-        "modalities": gpt4.MODALITIES,
+        "name": "gpt3_davinci",
+        "provider": gpt3_davinci,
+        "finetune": gpt3_davinci.finetune,
+        "infer": gpt3_davinci.infer,
+        "modalities": gpt3_davinci.MODALITIES,
     }
 ]
 
