@@ -117,6 +117,27 @@ def copy_recording_data(
         tgt_insert = tgt_recording_table.insert().values(src_recording)
         tgt_conn.execute(tgt_insert)
 
+        # Get the timestamp from the source recording
+        src_timestamp = src_recording["timestamp"]
+
+        # Copy data from tables with the same timestamp
+        for table in src_metadata.sorted_tables:
+            if (
+                table.name not in exclude_tables
+                and "recording_timestamp" in table.columns.keys()
+            ):
+                # Select data from source table with the same timestamp
+                src_select = table.select().where(
+                    table.c.recording_timestamp == src_timestamp
+                )
+                src_rows = src_conn.execute(src_select).fetchall()
+
+                # Insert data into target table
+                tgt_table = tgt_metadata.tables[table.name]
+                for row in src_rows:
+                    tgt_insert = tgt_table.insert().values(**row._asdict())
+                    tgt_conn.execute(tgt_insert)
+
         # Copy data from alembic_version table
         src_alembic_version_table = src_metadata.tables["alembic_version"]
         tgt_alembic_version_table = tgt_metadata.tables["alembic_version"]
@@ -131,7 +152,6 @@ def copy_recording_data(
         tgt_conn.commit()
         src_conn.close()
         tgt_conn.close()
-
     except Exception as exc:
         # Perform cleanup
         tgt_conn.close()
