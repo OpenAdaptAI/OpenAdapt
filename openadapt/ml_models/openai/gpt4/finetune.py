@@ -1,4 +1,5 @@
 import fire
+import openai
 def main():
     pass
 

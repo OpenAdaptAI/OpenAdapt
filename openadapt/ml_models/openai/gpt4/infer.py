@@ -1,5 +1,6 @@
 import fire
-def main():
+import openai
+def main(prompt: str):
     pass
 
 if __name__ == "__main__":
