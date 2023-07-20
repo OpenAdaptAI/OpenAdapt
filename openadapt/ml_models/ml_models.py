@@ -29,3 +29,6 @@ ML_MODELS = [
 def select_ml_model(recording_id):
     recording_data = get_recording_by_id(recording_id)
     assert recording_data, "No such recording exists"
+    # TODO:
+    # for model in ML_MODELS:
+    #    # use wandb for metrics on different ml models. 
