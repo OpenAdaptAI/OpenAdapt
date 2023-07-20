@@ -9,7 +9,7 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt.config import STOP_SEQUENCES
-from openadapt.db import Session
+from openadapt.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
     MemoryStat,
@@ -217,15 +217,15 @@ def get_recording(timestamp: int) -> Recording:
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table: Any, recording_timestamp: int) -> list[Any]:
+def _get(table: BaseModel, recording_timestamp: int) -> list[BaseModel]:
     """Retrieve records from the database table based on the recording timestamp.
 
     Args:
-        table (Any): The database table to query.
+        table (BaseModel): The database table to query.
         recording_timestamp (int): The recording timestamp to filter the records.
 
     Returns:
-        list[Any]: A list of records retrieved from the database table,
+        list[BaseModel]: A list of records retrieved from the database table,
           ordered by timestamp.
     """
     return (

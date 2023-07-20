@@ -10,7 +10,6 @@ from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
 from openadapt.config import DB_ECHO, DB_URL
-from openadapt.utils import EMPTY, row2dict
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -28,6 +27,9 @@ class BaseModel(DictableModel):
 
     def __repr__(self) -> str:
         """Return a string representation of the model object."""
+        # avoid circular import
+        from openadapt.utils import EMPTY, row2dict
+
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in row2dict(self, follow=False).items()
@@ -49,10 +51,10 @@ def get_base(engine: sa.engine) -> sa.engine:
     """Create and return the base model with the provided engine.
 
     Args:
-        engine (Any): The database engine to bind to the base model.
+        engine (sa.engine): The database engine to bind to the base model.
 
     Returns:
-        Any: The base model object.
+        sa.engine: The base model object.
     """
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(

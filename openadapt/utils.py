@@ -6,7 +6,7 @@ This module provides various utility functions used throughout OpenAdapt.
 from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
-from typing import Any, Union
+from typing import Union
 import base64
 import inspect
 import os
@@ -23,6 +23,8 @@ import mss.base
 import numpy as np
 
 from openadapt import common, config
+from openadapt.db import BaseModel
+from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
 
@@ -60,7 +62,7 @@ def configure_logging(logger: logger, log_level: str) -> None:
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Union[dict, Any], follow: bool = True) -> dict:
+def row2dict(row: Union[dict, BaseModel], follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
@@ -91,7 +93,7 @@ def row2dict(row: Union[dict, Any], follow: bool = True) -> dict:
     return row_dict
 
 
-def round_timestamps(events: list, num_digits: int) -> None:
+def round_timestamps(events: list[ActionEvent], num_digits: int) -> None:
     """Round timestamps in a list of events.
 
     Args:
@@ -109,7 +111,7 @@ def round_timestamps(events: list, num_digits: int) -> None:
 
 
 def rows2dicts(
-    rows: list,
+    rows: list[ActionEvent],
     drop_empty: bool = True,
     drop_constant: bool = True,
     num_digits: int = None,
@@ -311,7 +313,7 @@ def draw_text(
     x: float,
     y: float,
     text: str,
-    image: Image,
+    image: Image.Image,
     font_size_pct: float = 0.01,
     font_name: str = "Arial.ttf",
     fill: tuple = (255, 0, 0),
@@ -319,7 +321,7 @@ def draw_text(
     stroke_width: int = 3,
     outline: bool = False,
     outline_padding: int = 10,
-) -> Image:
+) -> Image.Image:
     """Draw text on the image.
 
     Args:
@@ -379,7 +381,7 @@ def draw_rectangle(
     y0: float,
     x1: float,
     y1: float,
-    image: Image,
+    image: Image.Image,
     bg_color: tuple = (0, 0, 0),
     fg_color: tuple = (255, 255, 255),
     outline_color: tuple = (255, 0, 0),
@@ -388,7 +390,7 @@ def draw_rectangle(
     outline_transparency: float = 0.5,
     outline_width: int = 2,
     invert: bool = False,
-) -> Image:
+) -> Image.Image:
     """Draw a rectangle on the image.
 
     Args:
@@ -436,7 +438,7 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(action_event: Any) -> tuple[float, float]:
+def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
     Args:
@@ -454,13 +456,13 @@ def get_scale_ratios(action_event: Any) -> tuple[float, float]:
 
 
 def display_event(
-    action_event: Any,
+    action_event: ActionEvent,
     marker_width_pct: float = 0.03,
     marker_height_pct: float = 0.03,
     marker_fill_transparency: float = 0.25,
     marker_outline_transparency: float = 0.5,
     diff: bool = False,
-) -> Image:
+) -> Image.Image:
     """Display an action event on the image.
 
     Args:
@@ -538,7 +540,7 @@ def display_event(
     return image
 
 
-def image2utf8(image: Image) -> str:
+def image2utf8(image: Image.Image) -> str:
     """Convert an image to UTF-8 format.
 
     Args:
@@ -706,7 +708,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
     os.system(f"open {fpath}")
 
 
-def strip_element_state(action_event: Any) -> Any:
+def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     """Strip the element state from the action event and its children.
 
     Args:

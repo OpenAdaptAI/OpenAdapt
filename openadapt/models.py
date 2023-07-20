@@ -9,7 +9,7 @@ from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import config, db, utils, window
+from openadapt import config, db, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -294,12 +294,18 @@ class Screenshot(db.Base):
     @classmethod
     def take_screenshot(cls: "Screenshot") -> "Screenshot":
         """Capture a screenshot."""
+        # avoid circular import
+        from openadapt import utils
+
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
     def crop_active_window(self, action_event: ActionEvent) -> None:
         """Crop the screenshot to the active window defined by the action event."""
+        # avoid circular import
+        from openadapt import utils
+
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
