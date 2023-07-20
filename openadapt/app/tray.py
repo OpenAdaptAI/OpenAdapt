@@ -131,7 +131,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         else:
             Notify("Status", "Replay failed", "OpenAdapt").send()
 
-    def populate_menu(self, menu: QMenu, action: QAction, action_type: str -> None):
+    def populate_menu(self, menu: QMenu, action: QAction, action_type: str) -> None:
         recordings = get_all_recordings()
         if len(recordings) == len((self.recording_actions[action_type])):
             return
