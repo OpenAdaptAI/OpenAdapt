@@ -34,6 +34,7 @@ _DEFAULTS = {
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
+    "MAX_NUM_WARNINGS_PER_SECOND": 5,
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
@@ -146,46 +147,33 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
-MAX_NUM_REPEAT_WARNINGS = 3
-MAX_NUM_WARNINGS_PER_SECOND = 5
-
-
 def filter_log_messages(
     data: logger,
-    max_count: int = MAX_NUM_REPEAT_WARNINGS,
-    max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,
+    max_num_warnings_per_second: int = _DEFAULTS["MAX_NUM_WARNINGS_PER_SECOND"],
 ) -> bool:
-    """This function filters log messages by ignoring any message that contains a specific string, up to a maximum count
-    and a maximum number of warnings per second.
+    """This function filters log messages by ignoring any message that contains a specific string,
+      up to a maximum number of warnings per second.
 
     Args:
-      data: The input parameter "data" is expected to be data from a loguru logger.
-      max_count: The maximum number of times an identical warning can be logged
-        before it is suppressed.
-      max_num_warnings_per_second: The maximum number of warnings allowed per second. Set to 0 to disable.
+        data: The input parameter "data" is expected to be data from a loguru logger.
+        max_num_warnings_per_second: The maximum number of warnings allowed per second.
+          Set to 0 to disable.
 
     Returns:
-      A boolean value indicating whether the message in the input data should be ignored or not. If the
-      message contains any of the messages in the `messages_to_ignore` list and has been logged more than
-      `max_count` times, or if the maximum number of warnings per second is exceeded, the function returns
-      `False`, indicating that the message should be ignored. Otherwise, it returns `True`, indicating
-      that the message should not be ignored.
+        A boolean value indicating whether the message in the input data should be ignored or not.
+        If the maximum number of warnings per second is exceeded, the function returns False,
+        indicating that the message should be ignored. Otherwise, it returns True,
+        indicating that the message should not be ignored.
     """
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]
 
-    # Track the count and timestamps of each message
-    message_counts = defaultdict(int)
+    # Track the timestamps of each message
     message_timestamps = defaultdict(list)
 
     for msg in messages_to_ignore:
         if msg in data["message"]:
-            message_counts[msg] += 1
-
-            if max_count > 0 and message_counts[msg] > max_count:
-                return False
-
             if max_num_warnings_per_second > 0:
                 current_timestamp = time.time()
                 message_timestamps[msg].append(current_timestamp)

@@ -1,8 +1,8 @@
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
-from collections import Counter, defaultdict
+from logging import StreamHandler
 import base64
-import fire
 import inspect
 import os
 import sys
@@ -11,11 +11,11 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
+import fire
 import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
-from logging import StreamHandler
 
 from openadapt import common, config
 
@@ -43,7 +43,9 @@ def configure_logging(logger, log_level):
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+            filter=config.filter_log_messages
+            if config.MAX_NUM_WARNINGS_PER_SECOND > 0
+            else None,
         )
         logger.debug(f"{log_level=}")
 
@@ -451,9 +453,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
         end_time = perf_stat.end_time
-        type_to_proc_times[event_type].append(
-            end_time - start_time
-        )
+        type_to_proc_times[event_type].append(end_time - start_time)
         event_types.add(event_type)
         type_to_timestamps[event_type].append(start_time)
 
@@ -474,7 +474,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     memory_ax = ax.twinx()
     memory_ax.plot(
-        timestamps, mem_usages, label="memory usage", color="red",
+        timestamps,
+        mem_usages,
+        label="memory usage",
+        color="red",
     )
     memory_ax.set_ylabel("Memory Usage (bytes)")
 
