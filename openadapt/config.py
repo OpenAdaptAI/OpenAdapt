@@ -101,11 +101,11 @@ STOP_SEQUENCES = [
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
 ENV_FILE_PATH = ".env"
-ENV_EXAMPLE_PATH = ".env.example"
+ENV_EXAMPLE_FILE_PATH = ".env.example"
 
 # Create .env file if it doesn't exist
 if not os.path.isfile(ENV_FILE_PATH):
-    shutil.copy(ENV_EXAMPLE_PATH, ENV_FILE_PATH)
+    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
 
 
 def getenv_fallback(var_name):
@@ -128,7 +128,7 @@ def getenv_fallback(var_name):
     return rval
 
 
-load_dotenv()
+load_dotenv(ENV_FILE_PATH)
 
 for key in _DEFAULTS:
     val = getenv_fallback(key)
@@ -139,7 +139,8 @@ DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DT_FMT = "%Y-%m-%d_%H-%M-%S"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
-ZIPPED_RECORDING_FOLDER_PATH = ROOT_DIRPATH / "data" / "zipped"
+DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
+RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
 
 
 def obfuscate(val, pct_reveal=0.1, char="*"):

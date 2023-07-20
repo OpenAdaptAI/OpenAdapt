@@ -87,7 +87,7 @@ def copy_recording_data(
         # Drop all tables in target database
         for table in reversed(tgt_metadata.sorted_tables):
             if table.name not in exclude_tables:
-                print("Dropping table =", table.name)
+                logger.info("Dropping table =", table.name)
                 table.drop(bind=target_engine)
 
         tgt_metadata.clear()
