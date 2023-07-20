@@ -428,18 +428,28 @@ def get_strategy_class_by_name():
     return class_by_name
 
 
-def plot_performance(recording_timestamp: float = None) -> None:
+def plot_performance(
+    recording_timestamp: float = None, save_file: bool = True, dark_mode: bool = True
+) -> str:
     """
     Plot the performance of the event processing and writing.
 
     Args:
         recording_timestamp: The timestamp of the recording (defaults to latest)
         perf_q: A queue with performance data.
+        view_file: Whether to view the file after saving it.
+        dark_mode: Whether to use dark mode.
+
+    Returns:
+        str: a base64-encoded image of the plot, if not viewing the file
     """
 
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
     event_types = set()
+
+    if dark_mode:
+        plt.style.use("dark_background")
 
     # avoid circular import
     from openadapt import crud
@@ -451,9 +461,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
         end_time = perf_stat.end_time
-        type_to_proc_times[event_type].append(
-            end_time - start_time
-        )
+        type_to_proc_times[event_type].append(end_time - start_time)
         event_types.add(event_type)
         type_to_timestamps[event_type].append(start_time)
 
@@ -474,7 +482,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     memory_ax = ax.twinx()
     memory_ax.plot(
-        timestamps, mem_usages, label="memory usage", color="red",
+        timestamps,
+        mem_usages,
+        label="memory usage",
+        color="red",
     )
     memory_ax.set_ylabel("Memory Usage (bytes)")
 
@@ -492,13 +503,21 @@ def plot_performance(recording_timestamp: float = None) -> None:
     ax.set_title(f"{recording_timestamp=}")
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", str(recording_timestamp)]
-    fname = "-".join(fname_parts) + ".png"
-    os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
-    logger.info(f"{fpath=}")
-    plt.savefig(fpath)
-    os.system(f"open {fpath}")
+    if save_file:
+        fname_parts = ["performance", str(recording_timestamp)]
+        fname = "-".join(fname_parts) + ".png"
+        os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+        fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
+        logger.info(f"{fpath=}")
+        plt.savefig(fpath)
+        os.system(f"open {fpath}")
+    else:
+        plt.savefig(BytesIO(), format="png")  # save fig to void
+        return image2utf8(
+            Image.frombytes(
+                "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
+            )
+        )
 
 
 def strip_element_state(action_event):

@@ -14,6 +14,7 @@ from openadapt.utils import (
     image2utf8,
     row2dict,
     rows2dicts,
+    plot_performance,
 )
 
 SCRUB = config.SCRUB_ENABLED
@@ -106,8 +107,10 @@ def main(recording=get_latest_recording()):
         }
         for key in meta.keys()
     ]
+    with ui.row():
+        ui.table(rows=[meta], columns=meta_col)._props["grid"] = True
+        ui.interactive_image(plot_performance(recording.timestamp, save_file=False))
 
-    ui.table(rows=[meta], columns=meta_col)
     ui.table(rows=[recording_dict], columns=rcolumns)
 
     interactive_images = []
@@ -173,7 +176,9 @@ def main(recording=get_latest_recording()):
                     )
                     set_tree_props(action_event_trees[idx])
                 with splitter.before:
-                    ui.label("window_event_dict | action_event_dict:").style("font-weight: bold;")
+                    ui.label("window_event_dict | action_event_dict:").style(
+                        "font-weight: bold;"
+                    )
                     ui.html("<br/>")
                     window_event_tree = create_tree(window_event_dict, None)
 
