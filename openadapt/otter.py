@@ -118,7 +118,7 @@ class Otter_Model:
 
         lang_x = self.model.text_tokenizer(
             [
-                get_formatted_prompt(prompt),
+                self.get_formatted_prompt(prompt),
             ],
             return_tensors="pt",
         )
