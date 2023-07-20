@@ -1,38 +1,22 @@
-PRIORITY = ["CPU", "GPU", "HOSTED"]
-from loguru import logger
+from openadapt import models
+from openadapt import ml_models
+from openadapt.crud import get_recording_by_id
+class Modality:
+    TEXT = "TEXT"
+    IMAGE= "IMAGE"
 
-# This is just a rough design on how we'll interact
-# with different models that we end up fine tuning/supporting
+MODALITY_BY_DB_MODEL = {
+    models.ActionEvent: Modality.TEXT,
+    models.Screenshot: Modality.IMAGE,
+    models.WindowEvent:  Modality.IMAGE,
+}
 
+ML_MODELS = [
 
-# Perhaps we should have the option of being able to fine tune
-# arbitrary models using a staple dataset of recordings?
-
-
-# dictionary just because of fast lookup,
-# also we could have its key encode availability and current status
-# i.e. if VALID_MODEL_NAMES[model] == -1: raise AvailabilityError(..) <- Custom Exception
-# -1 for not supported as yet
-# 0 for CPU, 1 and 2 for GPU and HOSTED respectively.
-VALID_MODEL_NAMES = {"MPT7B": 0, "GPT-4": 2, "GPT-3.5-TURBO": 2, "Davinci-003": 2}
-# these are just the ones I've interacted with so far ..
-
-# what do we want to be able to do with models?
-# 1) use to generate next action events and assist the user
-#    by prompting behind the scenes.
-
-# One option could be to create individual mixins for EVERY model
-# .. the reason we cant have one global mixin class is because different
-# models have different arguments, syntax, might use another library thats not
-# Transformers, etc.
+]
 
 
-def check_availability(model_name: str) -> bool:
-    if model_name not in VALID_MODEL_NAMES:
-        raise NotImplementedError("This model is not supported")
-    else:
-        logger.debug(
-            f"The model {model_name} is available through: {PRIORITY[VALID_MODEL_NAMES[model_name]]}"
-        )
-
-        return True
+def select_ml_model(recording_id):
+    recording_data = get_recording_by_id(recording_id)
+    assert recording_data, "No such recording exists"
+    
