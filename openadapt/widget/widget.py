@@ -3,6 +3,7 @@ from subprocess import Popen
 import signal
 import threading
 import time
+
 from PySide6 import QtWidgets, QtCore, QtGui
 
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
@@ -48,6 +49,7 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
                 self.resume_replay()
 
     def start_recording(self):
+        #poetry run?
         self.record_proc = Popen(
             "python -m openadapt.record " + "test",
             shell=True,
