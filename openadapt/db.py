@@ -94,12 +94,12 @@ def copy_recording_data(
         tgt_metadata.reflect(bind=target_engine)
         src_metadata.reflect(bind=source_engine)
 
-        # create all tables in target database
+        # Create all tables in target database
         for table in src_metadata.sorted_tables:
             if table.name not in exclude_tables:
                 table.create(bind=target_engine)
 
-        # refresh metadata before you can copy data
+        # Refresh metadata before copying data
         tgt_metadata.clear()
         tgt_metadata.reflect(bind=target_engine)
 
@@ -117,6 +117,17 @@ def copy_recording_data(
         tgt_insert = tgt_recording_table.insert().values(src_recording)
         tgt_conn.execute(tgt_insert)
 
+        # Copy data from alembic_version table
+        src_alembic_version_table = src_metadata.tables["alembic_version"]
+        tgt_alembic_version_table = tgt_metadata.tables["alembic_version"]
+        src_alembic_version_select = src_alembic_version_table.select()
+        src_alembic_version_data = src_conn.execute(
+            src_alembic_version_select
+        ).fetchall()
+        for row in src_alembic_version_data:
+            tgt_alembic_version_insert = tgt_alembic_version_table.insert().values(row)
+            tgt_conn.execute(tgt_alembic_version_insert)
+
         tgt_conn.commit()
         src_conn.close()
         tgt_conn.close()
@@ -128,7 +139,7 @@ def copy_recording_data(
         if db_file_path and os.path.exists(db_file_path):
             os.remove(db_file_path)
         logger.exception(exc)
-        raise
+        return ""
 
     return target_engine.url.database
 
