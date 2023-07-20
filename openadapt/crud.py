@@ -146,6 +146,10 @@ def get_recording(timestamp):
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
+def get_recording_by_id(id: int):
+    return db.query(Recording).filter(Recording.id == id).first()
+    
+
 def _get(table, recording_timestamp):
     return (
         db.query(table)
