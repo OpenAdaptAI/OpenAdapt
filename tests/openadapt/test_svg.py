@@ -8,7 +8,7 @@ import cairosvg as cairo
 import numpy as np
 from loguru import logger
 
-from openadapt.dependencies import ensure_executable
+from openadapt.dependencies import ensure_dependency
 from openadapt.strategies.mixins.svg import SVGReplayStrategyMixin
 from openadapt.models import Recording, Screenshot
 
@@ -19,7 +19,9 @@ RECORDING = Recording()
 class SVGReplayStrategy(SVGReplayStrategyMixin):
     """Custom Replay Strategy to solely test the SVG Mixin."""
     def __init__(self, recording: Recording):
-        ensure_executable("cairo")
+        ensure_dependency("cairo")
+        # need to export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
+            # export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
         super().__init__(recording)
 
     def get_next_action_event(self):

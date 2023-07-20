@@ -11,7 +11,7 @@ import platform
 import subprocess
 import tempfile
 
-from openadapt.dependencies import ensure_executable, is_dependency_installed
+from openadapt.dependencies import ensure_dependency, is_dependency_installed
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
@@ -24,7 +24,7 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
         path_to_vtracer: the absolute path to the cargo command
     """
     def __init__(self, recording: Recording, vtracer_executable_path: str = "vtracer"):
-        if not is_dependency_installed(vtracer_executable_path):
+        if not is_executable_installed(vtracer_executable_path):
             path_to_cargo = ensure_executable("cargo")
             subprocess.run(["cargo", "install", "vtracer"])
             self.path_to_vtracer = os.path.join(path_to_cargo, "vtracer")
