@@ -1,10 +1,16 @@
-import sqlalchemy as sa
 from loguru import logger
+import sqlalchemy as sa
 
 from openadapt import config
 from openadapt.db import Session
-from openadapt.models import (ActionEvent, MemoryStat, PerformanceStat,
-                              Recording, Screenshot, WindowEvent)
+from openadapt.models import (
+    ActionEvent,
+    MemoryStat,
+    PerformanceStat,
+    Recording,
+    Screenshot,
+    WindowEvent,
+)
 
 BATCH_SIZE = 1
 
@@ -115,11 +121,10 @@ def get_memory_stats(recording_timestamp):
     """
 
     return (
-        db
-            .query(MemoryStat)
-            .filter(MemoryStat.recording_timestamp == recording_timestamp)
-            .order_by(MemoryStat.timestamp)
-            .all()
+        db.query(MemoryStat)
+        .filter(MemoryStat.recording_timestamp == recording_timestamp)
+        .order_by(MemoryStat.timestamp)
+        .all()
     )
 
 
@@ -149,6 +154,7 @@ def _get(table, recording_timestamp):
 
 
 def get_action_events(recording):
+    assert recording, "Invalid recording."
     action_events = _get(ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
@@ -214,6 +220,7 @@ def filter_stop_sequences(action_events):
         for _ in range(0, num_to_remove):
             action_events.pop()
 
+
 def save_screenshot_diff(screenshots):
     data_updated = False
     logger.info("verifying diffs for screenshots...")
@@ -225,7 +232,9 @@ def save_screenshot_diff(screenshots):
             screenshot.png_diff_data = screenshot.convert_png_to_binary(screenshot.diff)
             data_updated = True
         if not screenshot.png_diff_mask_data:
-            screenshot.png_diff_mask_data = screenshot.convert_png_to_binary(screenshot.diff_mask)
+            screenshot.png_diff_mask_data = screenshot.convert_png_to_binary(
+                screenshot.diff_mask
+            )
             data_updated = True
 
     if data_updated:
@@ -241,7 +250,8 @@ def get_screenshots(recording):
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
-    screenshots[0].prev = screenshots[0]
+    if screenshots:
+        screenshots[0].prev = screenshots[0]
 
     if config.SAVE_SCREENSHOT_DIFF:
         screenshots = save_screenshot_diff(screenshots)
