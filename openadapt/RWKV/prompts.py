@@ -190,10 +190,11 @@ def generate_dataset():
     # Each line of jsonl file should be a dictionary as follows: {"text": "{prompt} {target_response}"}
     # Create jsonl file
     # Run evaluate() 1000x times and save the result to the file
+    num_samples = 10
     with open("dataset.jsonl", "w") as file:
-        for i in range(1000):
+        for i in range(num_samples):
             value = evaluate(for_dataset=True)
-            if i != 4999:
+            if i != num_samples-1:
                 file.write(json.dumps({"text": value[0] + str(value[1])}) + "\n")
             else:
                 file.write(json.dumps({"text": value[0] + str(value[1])}))
