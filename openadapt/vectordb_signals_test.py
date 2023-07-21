@@ -1,10 +1,6 @@
 import chromadb
 import json
 
-chroma_client = chromadb.Client()
-
-collection = chroma_client.create_collection(name="my_collection",metadata={"hnsw:space": "cosine"})
-
 # Using jsonl file
 # For each line:
 #   Extract and add each signal to the collection
@@ -17,6 +13,11 @@ with open("./dataset.jsonl") as data_file:
     total_score = 0
     num_lines = 0
     for line in data_file:
+
+        chroma_client = chromadb.Client()
+
+        collection = chroma_client.create_collection(name="SignalTest",metadata={"hnsw:space": "cosine"})
+
         num_lines += 1
         data = json.loads(line)
 
@@ -56,6 +57,8 @@ with open("./dataset.jsonl") as data_file:
         total_score += score_sum
         print("Total Score: ", total_score, "Line: ", num_lines)
         print("Accuracy: ", total_score / num_lines)
+
+        chroma_client.reset()
 
     total_score /= num_lines
     print(f"Total Score: {total_score}")
