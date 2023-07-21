@@ -25,6 +25,7 @@ def get_events(
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 
     num_action_events = len(action_events)
+    assert num_action_events > 0, "No action events found."
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
 
@@ -444,8 +445,8 @@ def merge_consecutive_keyboard_events(events, group_named_keys=True):
             # TODO: consolidate pattern with merge_consecutive_mouse_move_events
             if len(children) == 1:
                 # TODO: test
-                event = children[0]
-                event.timestamp -= state["dt"]
+                merged_event = children[0]
+                merged_event.timestamp -= state["dt"]
             else:
                 first_child = children[0]
                 last_child = children[-1]
