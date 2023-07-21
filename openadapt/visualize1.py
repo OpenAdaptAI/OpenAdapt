@@ -62,7 +62,7 @@ def create_tree(tree_dict: dict, max_children: str = MAX_TABLE_CHILDREN) -> list
 
 def set_tree_props(tree: ui.tree) -> None:
     """
-    The function sets properties for a UI tree based on values from config.
+    Sets properties for a UI tree based on values from config.
 
     Args:
       tree (ui.tree): A Quasar Tree.
@@ -75,19 +75,33 @@ def set_tree_props(tree: ui.tree) -> None:
 
 def set_filter(
     text: str,
-    window_event_trees: list[ui.tree],
-    action_event_trees: list[ui.tree],
-    idx: int,
+    window_tree: ui.tree,
+    action_tree: ui.tree,
 ) -> None:
-    window_event_trees[idx]._props["filter"] = text
-    action_event_trees[idx]._props["filter"] = text
-    window_event_trees[idx].update()
-    action_event_trees[idx].update()
+    """
+    Sets filter for UI trees.
+
+    Args:
+        text (str): The text to filter by.
+    """
+    window_tree._props["filter"] = text
+    action_tree._props["filter"] = text
+    window_tree.update()
+    action_tree.update()
 
 
 def toggle_dark_mode(
     ui_dark: ui.dark_mode, plots: tuple[str], curr_logo: ui.image, images: tuple[str]
 ) -> None:
+    """
+    Handles dark mode toggle.
+
+    Args:
+        ui_dark (ui.dark_mode): The dark mode switch.
+        plots (tuple[str]): The performance plots.
+        curr_logo (ui.image): The current logo.
+        images (tuple[str]): The light and dark mode logos (decoded)
+    """
     global performance_plot_img
     ui_dark.toggle()
     ui_dark.update()
@@ -99,6 +113,12 @@ def toggle_dark_mode(
 
 @logger.catch
 def main(recording: Recording = get_latest_recording()) -> None:
+    """
+    Visualize a recording.
+
+    Args:
+        recording (Recording, optional): The recording to visualize. Defaults to get_latest_recording().
+    """
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
@@ -156,26 +176,21 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
     with ui.row():
         with ui.avatar(color="auto", size=128):
-            logo_base64 = b64encode(
-                open(
-                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo.png", "rb"
-                ).read()
-            )
-            logo_base64_inverted = b64encode(
-                open(
-                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo_inverted.png",
-                    "rb",
-                ).read()
-            )
-            img = bytes(
-                f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
-                encoding="utf-8",
-            )
-            img_inverted = bytes(
-                f"data:image/png;base64,{(logo_base64_inverted.decode('utf-8'))}",
-                encoding="utf-8",
-            )
-            images = (img.decode("utf-8"), img_inverted.decode("utf-8"))
+            images = ()
+            # generate base64 encoded images for light and dark mode
+            for i in range(2):
+                logo_base64 = b64encode(
+                    open(
+                        f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo{'_inverted' if i > 0 else ''}.png",
+                        "rb",
+                    ).read()
+                )
+                images += (
+                    bytes(
+                        f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
+                        encoding="utf-8",
+                    ).decode("utf-8"),
+                )
             curr_logo = ui.image(images[int(ui_dark.value)])
         ui.switch(
             text="Dark Mode",
@@ -285,7 +300,9 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
                     def on_change_closure(e, idx):
                         return set_filter(
-                            e.value, window_event_trees, action_event_trees, idx
+                            e.value,
+                            window_event_trees[idx],
+                            action_event_trees[idx],
                         )
 
                     text_inputs.append(
