@@ -1,7 +1,7 @@
 from base64 import b64encode
+from functools import partial
 from os import path, sep
 from pprint import pformat
-from functools import partial
 
 from loguru import logger
 from nicegui import ui
