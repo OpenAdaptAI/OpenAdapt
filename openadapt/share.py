@@ -99,14 +99,34 @@ def receive_recording(wormhole_code: str) -> None:
     Args:
         wormhole_code (str): The wormhole code to receive the recording.
     """
-    # Construct the command
-    command = ["wormhole", "receive", wormhole_code]
+    # Set the output directory path
+    output_directory = config.RECORDING_DIRECTORY_PATH / "zip"
+
+    # Create the output directory if it doesn't exist
+    os.makedirs(output_directory, exist_ok=True)
+
+    zip_filename = "recording.zip"
+    zip_path = os.path.join(output_directory, zip_filename)
+
+    # Construct the command with the output directory option
+    command = ["wormhole", "receive", "-o", zip_path, wormhole_code]
 
     # Execute the command
     try:
         subprocess.run(command, check=True)
+
+        # Now, extract the database file from the zip file
+        with ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(output_directory)
+
     except subprocess.CalledProcessError as exc:
         logger.exception(exc)
+        return
+    finally:
+        # Delete the zip file after sending or in case of exception
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+            logger.info(f"deleted {zip_path=}")
 
 
 # Create a command-line interface using python-fire and utils.get_functions
