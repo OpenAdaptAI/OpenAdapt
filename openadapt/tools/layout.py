@@ -22,5 +22,5 @@ def document_query(
 
     output = query_pipeline(document_image, question)
     if not output:
-        logger.warning(f"{output=}")
+        logger.warning(f"empty {output=}")
     return output
