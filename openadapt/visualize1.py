@@ -38,6 +38,16 @@ performance_plot_img: ui.interactive_image = None
 
 
 def create_tree(tree_dict: dict, max_children: str = MAX_TABLE_CHILDREN) -> list[dict]:
+    """
+    Recursively creates a tree from a dictionary.
+
+    Args:
+        tree_dict (dict): The dictionary to create a tree from.
+        max_children (str, optional): The maximum number of children to display. Defaults to MAX_TABLE_CHILDREN.
+
+    Returns:
+        list[dict]: Data for a Quasar Tree.
+    """
     tree_data = []
     for key, value in tree_dict.items():
         if value in EMPTY:
