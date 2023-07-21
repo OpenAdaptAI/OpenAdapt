@@ -1,15 +1,22 @@
-from loguru import logger
+"""The file contains the code which traces through the """
+
 from functools import wraps
+from loguru import logger
 
 
 def args_to_str(*args):
+    """Converts args to a string."""
     return ", ".join(map(str, args))
 
 
 def kwargs_to_str(**kwargs):
+    """Converts keyword arguments to a string representation."""
     return ",".join([f"{k}={v}" for k, v in kwargs.items()])
 
+
 def trace(logger):
+    """Decorator that adds logging for function entry and exit."""
+
     def decorator(func):
         @wraps(func)
         def wrapper_logging(*args, **kwargs):
@@ -18,9 +25,7 @@ def trace(logger):
             func_kwargs = kwargs_to_str(**kwargs)
 
             if func_kwargs != "":
-                logger.info(
-                    f" -> Enter: {func_name}({func_args}, {func_kwargs})"
-                )
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
 
@@ -32,4 +37,3 @@ def trace(logger):
         return wrapper_logging
 
     return decorator
-
