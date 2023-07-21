@@ -187,6 +187,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
     with ui.row():
         with ui.avatar(color="auto", size=128):
             images = ()
+
             # generate base64 encoded images for light and dark mode
             for i in range(2):
                 logo_base64 = b64encode(

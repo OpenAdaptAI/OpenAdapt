@@ -519,6 +519,8 @@ def plot_performance(
         plt.savefig(BytesIO(), format="png")  # save fig to void
         if show:
             plt.show()
+        else:
+            plt.close()
         return image2utf8(
             Image.frombytes(
                 "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
