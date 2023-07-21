@@ -68,6 +68,7 @@ trainer = SFTTrainer(
 trainer.train()
 # model = prepare_model_for_int8_training(model)
 # lora_model.train()
+model.config.save_pretrained("./RWKV-1b5-finetuned-overfit")
 trainer.push_to_hub("RWKV-1b5-finetuned-overfit")
 
 
