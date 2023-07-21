@@ -34,6 +34,8 @@ MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 
+performance_plot_img = None
+
 
 def create_tree(tree_dict: dict, max_children: str = MAX_TABLE_CHILDREN) -> list[dict]:
     tree_data = []
@@ -83,29 +85,19 @@ def set_filter(
     action_event_trees[idx].update()
 
 
+def toggle_dark_mode(ui_dark: ui.dark_mode, plots: tuple[str]) -> None:
+    global performance_plot_img
+    ui_dark.toggle()
+    ui_dark.update()
+    performance_plot_img.source = plots[int(ui_dark.value)]
+    performance_plot_img.update()
+
+
 @logger.catch
 def main(recording: Recording = get_latest_recording()) -> None:
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
-
-    with ui.row():
-        with ui.avatar(color="auto", size=128):
-            logo_base64 = b64encode(
-                open(
-                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo.png", "rb"
-                ).read()
-            )
-            img = bytes(
-                f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
-                encoding="utf-8",
-            )
-            ui.image(img.decode("utf-8"))
-        ui.switch(
-            text="Dark Mode",
-            value=ui_dark.value,
-            on_change=ui_dark.toggle,
-        )
 
     if SCRUB:
         scrub.scrub_text(recording.task_description)
@@ -151,6 +143,31 @@ def main(recording: Recording = get_latest_recording()) -> None:
         for key in meta.keys()
     ]
 
+    plots = (
+        plot_performance(recording.timestamp, save_file=False, show=False),
+        plot_performance(
+            recording.timestamp, save_file=False, show=False, dark_mode=True
+        ),
+    )
+
+    with ui.row():
+        with ui.avatar(color="auto", size=128):
+            logo_base64 = b64encode(
+                open(
+                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo.png", "rb"
+                ).read()
+            )
+            img = bytes(
+                f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
+                encoding="utf-8",
+            )
+            ui.image(img.decode("utf-8"))
+        ui.switch(
+            text="Dark Mode",
+            value=ui_dark.value,
+            on_change=partial(toggle_dark_mode, ui_dark, plots),
+        )
+
     # create splitter with recording info on left and performance plot on right
     with ui.splitter(value=20).style("flex-wrap: nowrap;") as splitter:
         splitter._props["limits"] = [20, 80]
@@ -161,13 +178,9 @@ def main(recording: Recording = get_latest_recording()) -> None:
                 "grid"
             ] = True
         with splitter.after:
-            img = plot_performance(
-                recording.timestamp,
-                save_file=False,
-                show=False,
-                dark_mode=ui_dark.value,
-            )
-            with ui.interactive_image(img):
+            global performance_plot_img
+            performance_plot_img = ui.interactive_image(source=plots[int(ui_dark.value)])
+            with performance_plot_img:
                 ui.button(
                     on_click=lambda: plot_performance(
                         recording.timestamp, show=True, save_file=False
@@ -181,13 +194,6 @@ def main(recording: Recording = get_latest_recording()) -> None:
                     ),
                     icon="save",
                 ).props("flat fab").tooltip("Save as PNG")
-
-            # this is not needed when running in browser (since users can just right click and save image)
-            if config.RUN_NATIVELY:
-                ui.button(
-                    on_click=lambda: ui.notify("This feature is not implemented yet"),
-                    icon="content_copy",
-                ).props("flat fab").tooltip("Copy to clipboard")
 
     ui.table(rows=[recording_dict], columns=recording_column)
 
