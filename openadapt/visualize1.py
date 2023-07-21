@@ -72,7 +72,10 @@ def set_tree_props(tree: ui.tree) -> None:
 
 
 def set_filter(
-    text: str, window_event_trees: list[ui.tree], action_event_trees: list[ui.tree], idx: int
+    text: str,
+    window_event_trees: list[ui.tree],
+    action_event_trees: list[ui.tree],
+    idx: int,
 ) -> None:
     window_event_trees[idx]._props["filter"] = text
     action_event_trees[idx]._props["filter"] = text
