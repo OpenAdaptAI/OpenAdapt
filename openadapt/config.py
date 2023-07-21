@@ -88,7 +88,7 @@ _DEFAULTS = {
     "VISUALIZE_DARK_MODE": False,
     "RUN_NATIVELY": False,
     "DENSE_TREES": True,
-    "NO_ANIMATIONS": True,
+    "NO_ANIMATIONS": False,
     "EXPAND_ALL": False,
     "MAX_TABLE_CHILDREN": 10,
 }
@@ -112,6 +112,8 @@ def getenv_fallback(var_name):
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
     if type(rval) is str and rval.lower() in ("true", "false", "1", "0"):
         rval = rval.lower() == "true" or rval == "1"
+    if type(rval) is str and rval.isnumeric():
+        rval = int(rval)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
