@@ -1,8 +1,8 @@
-from transformers import pipeline
 from loguru import logger
-from PIL import Image
-from typing import Optional
 import numpy as np
+from PIL import Image
+from transformers import pipeline
+from typing import Optional
 
 
 def document_query(
