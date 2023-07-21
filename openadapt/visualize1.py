@@ -34,7 +34,7 @@ MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 
-performance_plot_img = None
+performance_plot_img: ui.interactive_image = None
 
 
 def create_tree(tree_dict: dict, max_children: str = MAX_TABLE_CHILDREN) -> list[dict]:
@@ -179,7 +179,9 @@ def main(recording: Recording = get_latest_recording()) -> None:
             ] = True
         with splitter.after:
             global performance_plot_img
-            performance_plot_img = ui.interactive_image(source=plots[int(ui_dark.value)])
+            performance_plot_img = ui.interactive_image(
+                source=plots[int(ui_dark.value)]
+            )
             with performance_plot_img:
                 ui.button(
                     on_click=lambda: plot_performance(
