@@ -429,7 +429,10 @@ def get_strategy_class_by_name():
 
 
 def plot_performance(
-    recording_timestamp: float = None, save_file: bool = True, dark_mode: bool = True
+    recording_timestamp: float = None,
+    show: bool = True,
+    save_file: bool = True,
+    dark_mode: bool = False,
 ) -> str:
     """
     Plot the performance of the event processing and writing.
@@ -510,9 +513,12 @@ def plot_performance(
         fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
-        os.system(f"open {fpath}")
+        if show:
+            os.system(f"open {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
+        if show:
+            plt.show()
         return image2utf8(
             Image.frombytes(
                 "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()

@@ -1,3 +1,5 @@
+from base64 import b64encode
+from os import path, sep
 from pprint import pformat
 
 from loguru import logger
@@ -7,17 +9,19 @@ from tqdm import tqdm
 from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
+from openadapt.models import Recording
 from openadapt.utils import (
     EMPTY,
     configure_logging,
     display_event,
     image2utf8,
+    plot_performance,
     row2dict,
     rows2dicts,
-    plot_performance,
 )
 
 SCRUB = config.SCRUB_ENABLED
+
 if SCRUB:
     # too many warnings from scrubbing
     __import__("warnings").filterwarnings("ignore", category=DeprecationWarning)
@@ -30,14 +34,14 @@ MAX_TABLE_CHILDREN = 5
 PROCESS_EVENTS = True
 
 
-def create_tree(tree_dict, max_children=MAX_TABLE_CHILDREN):
+def create_tree(tree_dict: dict, max_children: str = MAX_TABLE_CHILDREN) -> list[dict]:
     tree_data = []
     for key, value in tree_dict.items():
         if value in EMPTY:
             continue
         node = {
             "id": str(key)
-            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
+            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"  # dynamic f-string
         }
         if isinstance(value, dict):
             node["children"] = create_tree(value)
@@ -53,19 +57,41 @@ def create_tree(tree_dict, max_children=MAX_TABLE_CHILDREN):
     return tree_data
 
 
-def set_tree_props(tree):
-    tree._props["dense"] = True
-    tree._props["no-transition"] = True
-    # tree._props["default-expand-all"] = True
+def set_tree_props(tree: ui.tree) -> None:
+    """
+    The function sets properties for a UI tree based on values from config.
+
+    Args:
+      tree (ui.tree): A Quasar Tree.
+    """
+    tree._props["dense"] = config.DENSE_TREES
+    tree._props["no-transition"] = config.NO_ANIMATIONS
+    tree._props["default-expand-all"] = config.EXPAND_ALL
 
 
 @logger.catch
-def main(recording=get_latest_recording()):
+def main(recording: Recording = get_latest_recording()) -> None:
     configure_logging(logger, LOG_LEVEL)
 
-    ui.switch(
-        text="Dark Mode", value=ui.dark_mode().value, on_change=ui.dark_mode().toggle
-    )
+    ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
+
+    with ui.row():
+        with ui.avatar(color="auto", size=128):
+            logo_base64 = b64encode(
+                open(
+                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo.png", "rb"
+                ).read()
+            )
+            img = bytes(
+                f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
+                encoding="utf-8",
+            )
+            ui.image(img.decode("utf-8"))
+        ui.switch(
+            text="Dark Mode",
+            value=ui_dark.value,
+            on_change=ui_dark.toggle,
+        )
 
     if SCRUB:
         scrub.scrub_text(recording.task_description)
@@ -80,12 +106,13 @@ def main(recording=get_latest_recording()):
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
 
     recording_dict = row2dict(recording)
+
     if SCRUB:
         recording_dict = scrub.scrub_dict(recording_dict)
 
-    rcolumns = []
-    for key in recording_dict.keys():
-        rcolumns.append(
+    # setup tables for recording / metadata
+    recording_column = [
+        (
             {
                 "name": key,
                 "field": key,
@@ -95,6 +122,8 @@ def main(recording=get_latest_recording()):
                 "align": "left",
             }
         )
+        for key in recording_dict.keys()
+    ]
 
     meta_col = [
         {
@@ -107,11 +136,46 @@ def main(recording=get_latest_recording()):
         }
         for key in meta.keys()
     ]
-    with ui.row():
-        ui.table(rows=[meta], columns=meta_col)._props["grid"] = True
-        ui.interactive_image(plot_performance(recording.timestamp, save_file=False))
 
-    ui.table(rows=[recording_dict], columns=rcolumns)
+    # create splitter with recording info on left and performance plot on right
+    with ui.splitter(value=20).style("flex-wrap: nowrap;") as splitter:
+        splitter._props["limits"] = [20, 80]
+
+        # TODO: find a way to set "overflow: hidden;" for the splitter
+        with splitter.before:
+            ui.table(rows=[meta], columns=meta_col).style("min-width: 50em;")._props[
+                "grid"
+            ] = True
+        with splitter.after:
+            img = plot_performance(
+                recording.timestamp,
+                save_file=False,
+                show=False,
+                dark_mode=ui_dark.value,
+            )
+            with ui.interactive_image(img):
+                ui.button(
+                    on_click=lambda: plot_performance(
+                        recording.timestamp, show=True, save_file=False
+                    ),
+                    icon="visibility",
+                ).props("flat fab").tooltip("View")
+
+                ui.button(
+                    on_click=lambda: plot_performance(
+                        recording.timestamp, save_file=True, show=False
+                    ),
+                    icon="save",
+                ).props("flat fab").tooltip("Save as PNG")
+
+            # this is not needed when running in browser (since users can just right click and save image)
+            if config.RUN_NATIVELY:
+                ui.button(
+                    on_click=lambda: ui.notify("This feature is not implemented yet"),
+                    icon="content_copy",
+                ).props("flat fab").tooltip("Copy to clipboard")
+
+    ui.table(rows=[recording_dict], columns=recording_column)
 
     interactive_images = []
     action_event_trees = []
@@ -135,6 +199,7 @@ def main(recording=get_latest_recording()):
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
+
             image = display_event(action_event)
             diff = display_event(action_event, diff=True)
             mask = action_event.screenshot.diff_mask
@@ -200,7 +265,7 @@ def main(recording=get_latest_recording()):
         reload=False,
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
-        native=True,
+        native=config.RUN_NATIVELY,
         fullscreen=False,
     )
 
