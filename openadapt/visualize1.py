@@ -1,6 +1,7 @@
 from base64 import b64encode
 from os import path, sep
 from pprint import pformat
+from functools import partial
 
 from loguru import logger
 from nicegui import ui
@@ -67,6 +68,16 @@ def set_tree_props(tree: ui.tree) -> None:
     tree._props["dense"] = config.DENSE_TREES
     tree._props["no-transition"] = config.NO_ANIMATIONS
     tree._props["default-expand-all"] = config.EXPAND_ALL
+    tree._props["filter"] = ""
+
+
+def set_filter(
+    text: str, window_event_trees: list[ui.tree], action_event_trees: list[ui.tree], idx: int
+) -> None:
+    window_event_trees[idx]._props["filter"] = text
+    action_event_trees[idx]._props["filter"] = text
+    window_event_trees[idx].update()
+    action_event_trees[idx].update()
 
 
 @logger.catch
@@ -180,6 +191,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
     interactive_images = []
     action_event_trees = []
     window_event_trees = []
+    text_inputs = []
 
     logger.info(f"{len(action_events)=}")
 
@@ -243,6 +255,22 @@ def main(recording: Recording = get_latest_recording()) -> None:
                 with splitter.before:
                     ui.label("window_event_dict | action_event_dict:").style(
                         "font-weight: bold;"
+                    )
+
+                    def on_change_closure(e, idx):
+                        return set_filter(
+                            e.value, window_event_trees, action_event_trees, idx
+                        )
+
+                    text_inputs.append(
+                        ui.input(
+                            label="search",
+                            placeholder="filter",
+                            on_change=partial(
+                                on_change_closure,
+                                idx=idx,
+                            ),
+                        )
                     )
                     ui.html("<br/>")
                     window_event_tree = create_tree(window_event_dict, None)
