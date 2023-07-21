@@ -85,10 +85,14 @@ def set_filter(
     action_event_trees[idx].update()
 
 
-def toggle_dark_mode(ui_dark: ui.dark_mode, plots: tuple[str]) -> None:
+def toggle_dark_mode(
+    ui_dark: ui.dark_mode, plots: tuple[str], curr_logo: ui.image, images: tuple[str]
+) -> None:
     global performance_plot_img
     ui_dark.toggle()
     ui_dark.update()
+    curr_logo.source = images[int(ui_dark.value)]
+    curr_logo.update()
     performance_plot_img.source = plots[int(ui_dark.value)]
     performance_plot_img.update()
 
@@ -157,15 +161,26 @@ def main(recording: Recording = get_latest_recording()) -> None:
                     f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo.png", "rb"
                 ).read()
             )
+            logo_base64_inverted = b64encode(
+                open(
+                    f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo_inverted.png",
+                    "rb",
+                ).read()
+            )
             img = bytes(
                 f"data:image/png;base64,{(logo_base64.decode('utf-8'))}",
                 encoding="utf-8",
             )
-            ui.image(img.decode("utf-8"))
+            img_inverted = bytes(
+                f"data:image/png;base64,{(logo_base64_inverted.decode('utf-8'))}",
+                encoding="utf-8",
+            )
+            images = (img.decode("utf-8"), img_inverted.decode("utf-8"))
+            curr_logo = ui.image(images[int(ui_dark.value)])
         ui.switch(
             text="Dark Mode",
             value=ui_dark.value,
-            on_change=partial(toggle_dark_mode, ui_dark, plots),
+            on_change=partial(toggle_dark_mode, ui_dark, plots, curr_logo, images),
         )
 
     # create splitter with recording info on left and performance plot on right
