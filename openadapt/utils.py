@@ -430,7 +430,7 @@ def get_strategy_class_by_name():
 
 def plot_performance(
     recording_timestamp: float = None,
-    show: bool = True,
+    view_file: bool = True,
     save_file: bool = True,
     dark_mode: bool = False,
 ) -> str:
@@ -439,8 +439,8 @@ def plot_performance(
 
     Args:
         recording_timestamp: The timestamp of the recording (defaults to latest)
-        perf_q: A queue with performance data.
         view_file: Whether to view the file after saving it.
+        save_file: Whether to save the file.
         dark_mode: Whether to use dark mode.
 
     Returns:
@@ -513,11 +513,11 @@ def plot_performance(
         fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
-        if show:
+        if view_file:
             os.system(f"open {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
-        if show:
+        if view_file:
             plt.show()
         else:
             plt.close()

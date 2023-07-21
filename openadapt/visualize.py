@@ -177,9 +177,9 @@ def main(recording: Recording = get_latest_recording()) -> None:
     ]
 
     plots = (
-        plot_performance(recording.timestamp, save_file=False, show=False),
+        plot_performance(recording.timestamp, save_file=False, view_file=False),
         plot_performance(
-            recording.timestamp, save_file=False, show=False, dark_mode=True
+            recording.timestamp, save_file=False, view_file=False, dark_mode=True
         ),
     )
 
@@ -225,14 +225,14 @@ def main(recording: Recording = get_latest_recording()) -> None:
             with performance_plot_img:
                 ui.button(
                     on_click=lambda: plot_performance(
-                        recording.timestamp, show=True, save_file=False
+                        recording.timestamp, view_file=True, save_file=False
                     ),
                     icon="visibility",
                 ).props("flat fab").tooltip("View")
 
                 ui.button(
                     on_click=lambda: plot_performance(
-                        recording.timestamp, save_file=True, show=False
+                        recording.timestamp, save_file=True, view_file=False
                     ),
                     icon="save",
                 ).props("flat fab").tooltip("Save as PNG")
