@@ -55,6 +55,7 @@ with open("./dataset.jsonl") as data_file:
                 score_sum -= 1/len(response)
 
         total_score += score_sum
+        print("Desired Response: ", response, "Query Results: ", results['ids'][0])
         print("Total Score: ", total_score, "Line: ", num_lines)
         print("Accuracy: ", total_score / num_lines)
 
