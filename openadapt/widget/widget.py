@@ -6,10 +6,11 @@ import time
 
 from PySide6 import QtWidgets, QtCore, QtGui
 
+
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, parent=None):
         QtWidgets.QSystemTrayIcon.__init__(self, icon, parent)
-        self.setToolTip('OpenAdapt')
+        self.setToolTip("OpenAdapt")
         self.menu = QtWidgets.QMenu()
         self.action = self.menu.addAction("Exit")
         self.action.triggered.connect(parent.quit)
@@ -24,8 +25,8 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         self.setIcon(self.icon_default)
         self.current_state = "default"
 
-    def update_icon(self,reason):
-        if reason == QtWidgets.QSystemTrayIcon.Trigger :
+    def update_icon(self, reason):
+        if reason == QtWidgets.QSystemTrayIcon.Trigger:
             if self.current_state == "default":
                 self.setIcon(self.icon_recording)
                 self.current_state = "recording_in_progress"
@@ -34,7 +35,7 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
                 self.setIcon(self.icon_replay_available)
                 self.current_state = "replay_available"
                 self.stop_recording()
-                #self.action.setText("Stop Recording")
+                # self.action.setText("Stop Recording")
             elif self.current_state == "replay_available":
                 self.setIcon(self.icon_replaying)
                 self.current_state = "replaying_in_progress"
@@ -49,17 +50,17 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
                 self.resume_replay()
 
     def start_recording(self):
-        #poetry run?
+        # poetry run?
         self.record_proc = Popen(
             "python -m openadapt.record " + "test",
             shell=True,
         )
 
     def stop_recording(self):
-        if self.record_proc is not None :
-            if sys.platform == "win32" :
+        if self.record_proc is not None:
+            if sys.platform == "win32":
                 self.record_proc.send_signal(signal.CTRL_BREAK_EVENT)
-            else :
+            else:
                 self.record_proc.send_signal(signal.SIGINT)
             self.record_proc.wait()
             self.record_proc = None
@@ -76,14 +77,16 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def resume_replay(self):
         self.replay_proc.send_signal(signal.SIGCONT)
 
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
 
-    #w = QtWidgets.QWidget()
+    # w = QtWidgets.QWidget()
     tray_icon = SystemTrayIcon(QtGui.QIcon("assets/logo.png"), app)
     tray_icon.show()
 
     sys.exit(app.exec())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
