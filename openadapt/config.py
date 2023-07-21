@@ -89,7 +89,7 @@ _DEFAULTS = {
     "RUN_NATIVELY": False,
     "DENSE_TREES": True,
     "NO_ANIMATIONS": False,
-    "EXPAND_ALL": False, # not recommended for large trees
+    "EXPAND_ALL": False,  # not recommended for large trees
     "MAX_TABLE_CHILDREN": 10,
 }
 
