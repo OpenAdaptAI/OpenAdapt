@@ -2,6 +2,37 @@
 
 
 
+## v0.5.6 (2023-07-20)
+
+### Chore
+
+* chore: add preview option to black pre-commit hook and update README (#405) ([`6a42eb7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6a42eb762b39b70313ecbe5014377c376ccc26e9))
+
+* chore: configure isort with black profile and add black precommit hook (#384)
+
+* chore: configure isort with black profile and add black precommit hook
+
+* update black version
+
+* add advanced isort settings to match CONTRIBUTING.md ([`2e7496b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2e7496b64445de965d6274e83987edb83f73772e))
+
+### Documentation
+
+* docs: replace MLDSAI with OpenAdaptAI in README.md (#402) ([`750cf1d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/750cf1d327bf22453da1d2f0cc1505bbc52765f4))
+
+* docs: update README (installation table) (#398) ([`1212198`](https://github.com/OpenAdaptAI/OpenAdapt/commit/121219866942df82ab8624e4580b254ca5b9c2b0))
+
+* docs: update readme (take transpose of installation table) (#397) ([`fe39c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fe39c73999b7221524442a11e0814b02faca78ce))
+
+* docs: Update README.md (#390) ([`8745969`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8745969ec9481348932146a46e91153f333c948d))
+
+### Fix
+
+* fix(merge_consecutive_keyboard_events): Fix reference before assignment (#411)
+
+Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-Pro.local&gt; ([`e136b28`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e136b28731d09745a23adb11cc5309ec86b7fdd9))
+
+
 ## v0.5.5 (2023-07-17)
 
 ### Fix
