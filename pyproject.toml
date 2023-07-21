@@ -97,6 +97,7 @@ visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.main:run_app"
+widget = "openadapt.widget.widget:run_widget"
 
 [tool.semantic_release]
 version_variable = [

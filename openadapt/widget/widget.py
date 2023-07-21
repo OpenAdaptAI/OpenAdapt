@@ -35,7 +35,7 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
                 self.current_state = "replay_available"
                 self.stop_recording()
                 #self.action.setText("Stop Recording")
-            elif self.current_state == "replay_available" and self.record_proc is None:
+            elif self.current_state == "replay_available":
                 self.setIcon(self.icon_replaying)
                 self.current_state = "replaying_in_progress"
                 self.replay_recording()
@@ -57,7 +57,10 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
 
     def stop_recording(self):
         if self.record_proc is not None :
-            self.record_proc.send_signal(signal.SIGINT)
+            if sys.platform == "win32" :
+                self.record_proc.send_signal(signal.CTRL_BREAK_EVENT)
+            else :
+                self.record_proc.send_signal(signal.SIGINT)
             self.record_proc.wait()
             self.record_proc = None
 
@@ -73,14 +76,14 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def resume_replay(self):
         self.replay_proc.send_signal(signal.SIGCONT)
 
-def main(image):
+def main():
     app = QtWidgets.QApplication(sys.argv)
 
     #w = QtWidgets.QWidget()
-    tray_icon = SystemTrayIcon(QtGui.QIcon(image), app)
+    tray_icon = SystemTrayIcon(QtGui.QIcon("assets/logo.png"), app)
     tray_icon.show()
 
     sys.exit(app.exec())
 
 if __name__ == '__main__':
-    main("assets/logo.png")
+    main()
