@@ -63,6 +63,13 @@ class VectorDB:
         """
         results = self.database.query(query_texts=[search_text], n_results=n_results)
         return results["documents"][0]
+    
+    def query_database(self, search_text, n_results=1):
+        """
+        Queries the database for the most similar document to the search text.
+        """
+        results = self.database.query(query_texts=[search_text], n_results=n_results)
+        return results
 
     def create_collection(self, name):
         """
@@ -100,7 +107,8 @@ if "__main__" == __name__:
     print(VDB.query_database_id("What did Aria eat?"))  # Prints "2"
 
     VDB.delete_collection("SimilaritySearch")
-    VDB.create_collection("ParagraphTest")
+    try:VDB.create_collection("ParagraphTest")
+    except:pass
     VDB.target_collection("ParagraphTest")
 
     VDB.add_paragraph(
@@ -111,5 +119,10 @@ if "__main__" == __name__:
 
     print(
         VDB.query_database_text("Aria often amazed people.", n_results=1)[0]
-    )  # Prints "Astronauts were amazed by Richard."
+    )  # Prints "Astronauts were amazed by Aria."
+
+    print(
+        VDB.query_database("Aria often amazed people.", n_results=VDB.database.count())
+    )
+
     VDB.reset_database()
