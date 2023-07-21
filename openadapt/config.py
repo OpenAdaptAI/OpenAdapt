@@ -90,6 +90,7 @@ _DEFAULTS = {
     "DENSE_TREES": True,
     "NO_ANIMATIONS": True,
     "EXPAND_ALL": False,
+    "MAX_TABLE_CHILDREN": 10,
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
