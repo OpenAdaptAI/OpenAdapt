@@ -16,9 +16,9 @@ class VectorDB:
         )
 
         try:
-            self.database = self.client.create_collection(name="SimilaritySearch")
+            self.database = self.client.create_collection(name="SimilaritySearch",metadata={"hnsw:space": "cosine"})
         except:
-            self.database = self.client.get_collection(name="SimilaritySearch")
+            self.database = self.client.get_collection(name="SimilaritySearch",metadata={"hnsw:space": "cosine"})
 
     def add_individual_document(self, doc_text):
         """
@@ -91,25 +91,25 @@ class VectorDB:
 
 if "__main__" == __name__:
     VDB = VectorDB()
-    VDB.add_individual_document("The engineers name was Richard.")
+    VDB.add_individual_document("The engineers name was Aria.")
     VDB.add_individual_document("Alex was an artist.")
-    VDB.add_individual_document("Richard eats apples often.")
-    VDB.add_individual_document("Astronauts were amazed by Richard.")
+    VDB.add_individual_document("Aria eats apples often.")
+    VDB.add_individual_document("Astronauts were amazed by Aria.")
 
-    print(VDB.query_database_id("What was Richard?"))  # Prints "0"
-    print(VDB.query_database_id("What did Richard eat?"))  # Prints "2"
+    print(VDB.query_database_id("What was Aria?"))  # Prints "0"
+    print(VDB.query_database_id("What did Aria eat?"))  # Prints "2"
 
     VDB.delete_collection("SimilaritySearch")
     VDB.create_collection("ParagraphTest")
     VDB.target_collection("ParagraphTest")
 
     VDB.add_paragraph(
-        "The engineers name was Richard. Alex was an artist. Richard eats apples often. Astronauts were amazed by Richard."
+        "The engineers name was Aria. Alex was an artist. Aria eats apples often. Astronauts were amazed by Aria."
     )
-    print(VDB.query_database_id("What was Richard?", n_results=1))  # Prints "0"
+    print(VDB.query_database_id("What was Aria?", n_results=1))  # Prints "0"
     print(VDB.query_database_id("He was a famous painter", n_results=1))  # Prints "1"
 
     print(
-        VDB.query_database_text("Richard often amazed people.", n_results=1)[0]
+        VDB.query_database_text("Aria often amazed people.", n_results=1)[0]
     )  # Prints "Astronauts were amazed by Richard."
     VDB.reset_database()
