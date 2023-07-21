@@ -254,7 +254,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
     with tqdm(
         total=num_events,
-        desc="Generating Visualization",
+        desc="Generating Visualization" if not SCRUB else "Scrubbing Visualization",
         unit="event",
         colour="green",
         dynamic_ncols=True,
