@@ -122,7 +122,6 @@ def receive_recording(wormhole_code: str) -> None:
 
     except subprocess.CalledProcessError as exc:
         logger.exception(exc)
-        return
     finally:
         # Delete the zip file after sending or in case of exception
         if os.path.exists(zip_path):
@@ -131,10 +130,21 @@ def receive_recording(wormhole_code: str) -> None:
 
 
 def visualize_recording(db_name: str) -> None:
+    """Visualize a recording from a SQLite database.
+
+    This function loads the specified db file containing a recording and
+    visualizes the data using the 'visualize.main' function.
+
+    Args:
+        db_name (str): The name of the SQLite database containing the recording.
+
+    Raises:
+        sqlalchemy.exc.OperationalError: If there is an error accessing the database.
+    """
     if db_name == "openadapt.db":
-        recording_path = config.ROOT_DIRPATH / db_name
+        recording_path = os.path.join(config.ROOT_DIRPATH, db_name)
     else:
-        recording_path = config.RECORDING_DIRECTORY_PATH / db_name
+        recording_path = os.path.join(config.RECORDING_DIRECTORY_PATH, db_name)
     recording_url = f"sqlite:///{recording_path}"
 
     engine = create_engine(recording_url, future=True)
