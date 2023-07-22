@@ -1,28 +1,32 @@
 import os
-import pytest
 
 from sqlalchemy import create_engine, text
+import pytest
 
-from openadapt.config import ROOT_DIRPATH
+from openadapt.config import RECORDING_DIRECTORY_PATH, ROOT_DIRPATH
 from openadapt.models import db
+
 
 @pytest.fixture(scope="session")
 def setup_database(request):
     # Create a new database or connect to an existing one
-    db_url = ROOT_DIRPATH / "temp.db"
-    engine = create_engine(
-        f"sqlite:///{db_url}"
-    )
+    db_url = RECORDING_DIRECTORY_PATH / "recording.db"
+    engine = create_engine(f"sqlite:///{db_url}")
 
     # Create the database tables (if necessary)
     db.Base.metadata.create_all(bind=engine)
 
-    # Read the SQL file and execute the statements to seed the database
-    with open(ROOT_DIRPATH / 'assets/fixtures.sql', 'r') as file:
-        statements = file.read()
+    # Read the SQL file and split the content into individual statements
+    with open(ROOT_DIRPATH / "assets/fixtures.sql", "r") as file:
+        statements = file.read().split(";")
 
+    # Remove any empty statements from the list
+    statements = [stmt.strip() for stmt in statements if stmt.strip()]
+
+    # Execute each statement one at a time
     with engine.connect() as connection:
-        connection.execute(text(statements))
+        for statement in statements:
+            connection.execute(text(statement))
 
     # Define the teardown function
     def teardown():
