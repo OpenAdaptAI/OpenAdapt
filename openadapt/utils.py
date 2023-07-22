@@ -1,8 +1,8 @@
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
-from collections import Counter, defaultdict
+from logging import StreamHandler
 import base64
-import fire
 import inspect
 import os
 import sys
@@ -11,34 +11,17 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
+import fire
 import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
-from logging import StreamHandler
 
 from openadapt import common, config
 
 EMPTY = (None, [], {}, "")
 
 _logger_lock = threading.Lock()
-
-
-def get_now_dt_str(dt_format=config.DT_FMT):
-    """
-    Get the current date and time as a formatted string.
-    Args:
-        dt_format (str): The format to use for the date and time string.
-    Returns:
-        str: The current date and time formatted as a string.
-    """
-    # Get the current date and time
-    now = datetime.datetime.now()
-
-    # Format the date and time according to the specified format
-    dt_str = now.strftime(dt_format)
-
-    return dt_str
 
 
 def configure_logging(logger, log_level):
@@ -468,9 +451,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
         end_time = perf_stat.end_time
-        type_to_proc_times[event_type].append(
-            end_time - start_time
-        )
+        type_to_proc_times[event_type].append(end_time - start_time)
         event_types.add(event_type)
         type_to_timestamps[event_type].append(start_time)
 
@@ -491,7 +472,10 @@ def plot_performance(recording_timestamp: float = None) -> None:
 
     memory_ax = ax.twinx()
     memory_ax.plot(
-        timestamps, mem_usages, label="memory usage", color="red",
+        timestamps,
+        mem_usages,
+        label="memory usage",
+        color="red",
     )
     memory_ax.set_ylabel("Memory Usage (bytes)")
 

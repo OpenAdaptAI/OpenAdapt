@@ -137,7 +137,6 @@ for key in _DEFAULTS:
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
-DT_FMT = "%Y-%m-%d_%H-%M-%S"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
 RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"

@@ -31,9 +31,6 @@ def export_recording_to_folder(recording_id: int) -> None:
     Returns:
         str: The path of the created zip file.
     """
-    # TODO: replace with alternative, e.g.:
-    # - https://stackoverflow.com/questions/28238785/sqlalchemy-python-multiple-databases
-    # - https://github.com/bigbag/sqlalchemy-multiple-db
     recording_db_path = db.export_recording(recording_id)
 
     assert recording_db_path, recording_db_path
