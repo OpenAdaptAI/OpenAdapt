@@ -10,23 +10,18 @@ from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
 
-from openadapt.crud import (
-    get_latest_recording,
-)
-from openadapt.events import (
-    get_events,
-)
+from openadapt import config, models
+from openadapt.crud import get_latest_recording
+from openadapt.events import get_events
 from openadapt.utils import (
+    EMPTY,
     configure_logging,
     display_event,
     evenly_spaced,
     image2utf8,
-    EMPTY,
     row2dict,
     rows2dicts,
 )
-
-from openadapt import config
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
@@ -149,14 +144,16 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
             html_str = head + middle + tail
     return html_str
 
+
 @logger.catch
-def main():
+def main(recording: models.Recording = None):
     configure_logging(logger, LOG_LEVEL)
 
-    recording = get_latest_recording()
-    if SCRUB:
-        scrub.scrub_text(recording.task_description)
-    logger.debug(f"{recording=}")
+    if recording is None:
+        recording = get_latest_recording()
+        if SCRUB:
+            scrub.scrub_text(recording.task_description)
+        logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
@@ -196,12 +193,12 @@ def main():
         else len(action_events)
     )
     with tqdm(
-            total=num_events,
-            desc="Preparing HTML",
-            unit="event",
-            colour="green",
-            dynamic_ncols=True,
-        ) as progress:
+        total=num_events,
+        desc="Preparing HTML",
+        unit="event",
+        colour="green",
+        dynamic_ncols=True,
+    ) as progress:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break

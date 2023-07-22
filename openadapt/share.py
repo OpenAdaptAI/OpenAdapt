@@ -3,6 +3,7 @@
 Usage:
     python -m openadapt.share send --recording_id=1
     python -m openadapt.share receive <wormhole_code>
+    python -m openadapt.share visualize <db_name>
 """
 
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -10,9 +11,12 @@ import os
 import subprocess
 
 from loguru import logger
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 import fire
+import sqlalchemy as sa
 
-from openadapt import config, db, utils
+from openadapt import config, db, models, utils, visualize
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
@@ -100,7 +104,7 @@ def receive_recording(wormhole_code: str) -> None:
         wormhole_code (str): The wormhole code to receive the recording.
     """
     # Set the output directory path
-    output_directory = config.RECORDING_DIRECTORY_PATH / "zip"
+    output_directory = config.RECORDING_DIRECTORY_PATH
 
     # Create the output directory if it doesn't exist
     os.makedirs(output_directory, exist_ok=True)
@@ -129,11 +133,37 @@ def receive_recording(wormhole_code: str) -> None:
             logger.info(f"deleted {zip_path=}")
 
 
+def visualize_recording(db_name: str) -> None:
+    if db_name == "openadapt.db":
+        recording_path = config.ROOT_DIRPATH / db_name
+    else:
+        recording_path = config.RECORDING_DIRECTORY_PATH / db_name
+    recording_url = f"sqlite:///{recording_path}"
+
+    engine = create_engine(recording_url, future=True)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # Call visualize.main() passing the recording object
+    recording = (
+        session.query(models.Recording)
+        .order_by(sa.desc(models.Recording.timestamp))
+        .limit(1)
+        .first()
+    )
+
+    # Call the main function from visualize.py and pass the recording object
+    visualize.main(recording)
+
+    session.close()
+
+
 # Create a command-line interface using python-fire and utils.get_functions
 if __name__ == "__main__":
     fire.Fire(
         {
             "send": send_recording,
             "receive": receive_recording,
+            "visualize": visualize_recording,
         }
     )
