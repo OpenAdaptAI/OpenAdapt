@@ -1,12 +1,13 @@
-"""The file contains the code which traces through the """
+"""This file adds logging for function entry and exit with 2 utility functions and a decorator.
+"""
 
 from functools import wraps
 from loguru import logger
 
 
 def args_to_str(*args):
-    """Converts args to a string."""
-    return ", ".join(map(str, args))
+     """Converts arguments to a string representation."""
+     return ", ".join(map(str, args))
 
 
 def kwargs_to_str(**kwargs):
