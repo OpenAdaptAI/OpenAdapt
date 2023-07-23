@@ -7,6 +7,7 @@ Typical usage example:
 import re
 import string
 
+import json
 import lmql
 from loguru import logger
 from pynput.keyboard import Key
@@ -45,13 +46,22 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
 
     def get_valid_action_event(self, prompt: str) -> ActionEvent:
         """Return the ActionEvent the model returns from the prompt."""
-        list_of_results = lmql_call(description=prompt, model=self.model_name)
+        list_of_results = lmql_call(prompt=prompt, model=self.model_name)
         result = list_of_results[0]
         logger.info(f"The filled in prompt is: {result.prompt}")
         result_dict = result.variables
 
         action = parse_action(result_dict)
         return action
+
+    def get_valid_half(self, prompt: str) -> int:
+        """Return the ActionEvent the model returns from the prompt."""
+        list_of_results = lmql_test(prompt=prompt)
+        result = list_of_results[0]
+        logger.info(f"The filled in prompt is: {result.prompt}")
+        result_dict = result.variables
+
+        return result_dict["X"]
 
 
 @lmql.query
@@ -69,7 +79,7 @@ def lmql_call(prompt: str, model: str) -> list:
                 if type_of_key(output_key2) == "invalid":
                     raise ValueError(f"invalid {output_key=}, invalid {output_key2=}")
         if ACTION == "move":
-            "'x': [X], 'y': [Y] }}"
+            "'mouse_x': [X], 'mouse_y': [Y] }}"
         if ACTION == "scroll":
             "'change in x': [X], 'change in y': [Y] }}"
         if ACTION == "click":
@@ -159,3 +169,37 @@ def clean_output(output: str) -> str:
     output_without_whitespace = output.strip()
     clean_output = REGEX.sub("", output_without_whitespace)
     return clean_output
+
+
+
+@lmql.query
+def lmql_test(prompt: str) -> list:
+    '''lmql
+    argmax
+         "{prompt}\nA: [X]"
+    from
+        "openai/text-davinci-003"
+    where
+        INT(X)
+    '''
+
+@lmql.query()
+def lmql_json(description: str): '''lmql
+    """
+    Provide a summary of {description} as a json:
+    {{
+    "name": "[ACTION]",
+    "mouse_x": [INT_VALUE],
+    "mouse_y": [INT_VALUE],
+    "mouse_dx": [INT_VALUE],
+    "mouse_dy": [INT_VALUE],
+    "mouse_button_name": [INT_VALUE],
+    "mouse_pressed": [INT_VALUE],
+    "key_name": [STRING_VALUE],
+    "key_char": [STRING_VALUE],
+    "key_vk": [STRING_VALUE]
+    }}
+    """ where ACTION in set(["move", "scroll", "press", "release", "click"]) and STOPS_BEFORE(STRING_VALUE, '"') and INT(INT_VALUE) and len(TOKENS(INT_VALUE)) < 4
+
+    return json.loads(context.prompt.split(description,1)[1])
+    '''
