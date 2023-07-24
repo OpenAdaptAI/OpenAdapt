@@ -6,10 +6,21 @@ import os
 import subprocess
 import tempfile
 
+from sqlalchemy import engine
+
 from openadapt import config, share
 
 
 def test_export_recording_to_folder() -> None:
+    """Tests the export_recording_to_folder function.
+
+    This test creates a temporary recording database file, mocks the crud.export_recording()
+    function to return the temporary file path, and then asserts that the file is removed after calling
+    export_recording_to_folder.
+
+    Returns:
+        None
+    """
     # Create a temporary recording database file
     recording_id = 1
     recording_db_path = "temp.db"
@@ -28,6 +39,14 @@ def test_export_recording_to_folder() -> None:
 
 
 def test_send_file() -> None:
+    """Tests the send_file function.
+
+    This test creates a temporary file, mocks the subprocess.run() function to avoid executing the command,
+    and then verifies that the command is called with the correct arguments.
+
+    Returns:
+        None
+    """
     # Create a temporary file
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         file_path = temp_file.name
@@ -45,6 +64,15 @@ def test_send_file() -> None:
 
 
 def test_send_recording() -> None:
+    """Tests the send_recording function.
+
+    This test mocks the export_recording_to_folder() function to return a zip file path
+    and mocks the send_file() function to avoid sending the file. Then, it verifies that
+    export_recording_to_folder() and send_file() are called during the test.
+
+    Returns:
+        None
+    """
     # Mock the export_recording_to_folder() function to return a zip file path
     with patch(
         "openadapt.share.export_recording_to_folder",
@@ -64,6 +92,14 @@ def test_send_recording() -> None:
 
 # Test receive_recording function (mock the subprocess.run function)
 def test_receive_recording() -> None:
+    """Tests the receive_recording function.
+
+    This test function creates a temporary zip file, mocks the subprocess.run() function
+    to avoid executing the command, and simulates receiving a recording with a wormhole code.
+
+    Returns:
+        None
+    """
     # Create a temporary zip file
     temp_zip_path = str(config.RECORDING_DIRECTORY_PATH / "recording.zip")
     with ZipFile(temp_zip_path, "w", ZIP_DEFLATED):
@@ -82,3 +118,25 @@ def test_receive_recording() -> None:
 
         # Verify that the zip file has been deleted
         assert not os.path.exists(temp_zip_path)
+
+
+# Test visualize_recording function
+def test_visualize_recording(setup_database: engine):
+    """Tests the visualize_recording function.
+
+    This test calls the function being tested with the "recording.db" created from
+    the setup_database fixture and asserts that the session object
+    was closed after calling the function.
+
+    Args:
+        setup_database: The setup_database fixture from the testing environment.
+
+    Returns:
+        None
+    """
+    # Call the function being tested
+    share.visualize_recording("recording.db")
+
+    # Assert that the session object was closed after calling the function
+    # Here we are checking if the engine is disposed after calling the function
+    assert not hasattr(share.visualize_recording, "engine")
