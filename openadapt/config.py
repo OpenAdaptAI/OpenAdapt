@@ -16,7 +16,6 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 
-
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
@@ -42,7 +41,7 @@ _DEFAULTS = {
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -84,6 +83,7 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    "CAPE_API_KEY": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings that don't contain special characters
@@ -132,15 +132,14 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")

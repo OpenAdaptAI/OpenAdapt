@@ -1,12 +1,18 @@
 import os
+
 import requests
 
-CAPE_API_KEY = "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiY2FwZS1hcGkiXSwiaHR0cHM6Ly9jYXBlcHJpdmFjeS5jb20vZW1haWwiOiJrcmlzaEBvcGVuYWRhcHQuYWkiLCJodHRwczovL2NhcGVwcml2YWN5LmNvbS91c2VybmFtZSI6Imdvb2dsZS1vYXV0aDItMTEyOTI3NTQzNTA2ODg4MDU2MTM2IiwiaWF0IjoxNjg5OTUyODk5LCJpc3MiOiJjYXBlLXByaXZhY3kiLCJqdGkiOiJQd3lnNFZCd3lia1g5M2t0enlRVWNtIiwibmJmIjoxNjg5OTUyODk5LCJzdWIiOiJnb29nbGUtb2F1dGgyfDExMjkyNzU0MzUwNjg4ODA1NjEzNiJ9.BHEM2Olu95rT2hwppXgTncvbyeSjUNDIHGLh_Jrx-g2iEFFXKt5kt6NLVFK0BewivM5dFuDnWHQUEM5qqugWZWKIq6Zt5dzM-mB0uXbE_Vf_caoJQTUwG4Skoinw2kQOgTOgttPICQMUEOmpyQkbU1wzoPhxD9yvQvYw0t6JaXJB_B5p23eAP3dgMikO0mGsKOV-8HaI5M0lmyRRIcORhuFoM61_pvxaGY56GJfxfpzN-WfF9FEgKIkLRUa41t6BKR9OTx_oupWbh3Cr1RvUMHBUXa8BVRfp-C5UnLWdPoF7WlTMSvEsVoZBCGQPYq-YRfHW9TOLjhpYAH2QcH3dyA"
+from openadapt import config
 
 resp = requests.post(
     "https://api.capeprivacy.com/v1/privacy/deidentify/text",
-    headers={"Authorization": f"Bearer {CAPE_API_KEY}"},
-    json={"content": "Hello, Bob!"},
+    headers={"Authorization": f"Bearer {config.CAPE_API_KEY}"},
+    json={
+        "content": (
+            "There were three bids for the painting: David bid 30.000€, Larissa bid"
+            " 35.000€, and Mark bid 37.000€."
+        )
+    },
 )
 
 print(resp.json())
