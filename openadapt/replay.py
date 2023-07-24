@@ -10,7 +10,7 @@ from openadapt import crud, utils
 
 LOG_LEVEL = "INFO"
 
-
+@logger.catch
 def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
