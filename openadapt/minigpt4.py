@@ -48,17 +48,16 @@ def change_paths():
         file.write(modified_contents)
 
 
-"""
+image = (
     Image.from_dockerhub("pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel",
                          setup_dockerfile_commands=[
                              "RUN apt-get update",
-                             "RUN apt-get install -y python3.9 python3-pip",
+                             "RUN apt-get install -y python3-pip",
                          ],
                          )
-"""
-image = (
-    Image.debian_slim(python_version="3.9")
-        .apt_install("git", "gcc", "build-essential", "cmake")
+        .run_commands("python -V")
+        .apt_install("git", "gcc", "build-essential", "cmake", "libsm6", "libxext6",
+                     "libxrender-dev", "libgl1-mesa-glx", "libglib2.0-0")
         .pip_install(
         "accelerate==0.16.0",
         "aiohttp==3.8.4",
@@ -75,6 +74,7 @@ image = (
         "frozenlist==1.3.3",
         "huggingface-hub==0.13.4",
         "importlib-resources==5.12.0",
+        "jinja2 == 3.1.2",
         "kiwisolver==1.4.4",
         "matplotlib==3.7.0",
         "multidict==6.0.4",
@@ -116,23 +116,27 @@ image = (
         .run_commands(
         "git clone https://github.com/Vision-CAIR/MiniGPT-4.git /root/MiniGPT-4",
     )
-    #     .pip_install(
-    #     "fschat==0.1.10"
-    # )
-    #     .run_function(
-    #     download_model
-    # )
-    #     .run_function(
-    #     apply_delta,
-    #     memory=70000
-    # )
-    #     .run_function(
-    #     download_checkpoint
-    # )
-    #     .run_function(
-    #     change_paths
-    # )
-        .run_commands("pip show opencv-python")
+        .pip_install(
+        "fschat==0.1.10"
+    )
+        .run_function(
+        download_model
+    )
+        .run_function(
+        apply_delta,
+        memory=70000
+    )
+        .run_function(
+        download_checkpoint
+    )
+        .run_commands(
+        "sed -i 's@/path/to/pretrained/ckpt/@/root/weights/checkpoint/pretrained_minigpt4.pth@g' "
+        "/root/MiniGPT-4/eval_configs/minigpt4_eval.yaml",
+        "sed -i 's@/path/to/vicuna/weights/@/root/weights/vicuna/@g' "
+        "/root/MiniGPT-4/minigpt4/configs/models/minigpt4.yaml",
+        "sed -i 's@prompts/alignment.txt@/root/MiniGPT-4/prompts/alignment.txt@g' "
+        "/root/MiniGPT-4/eval_configs/minigpt4_eval.yaml"
+    )
 )
 
 stub = Stub(name="minigpt4", image=image)
