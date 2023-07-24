@@ -17,3 +17,13 @@ outputs = model.generate(inputs, max_length=500, do_sample=True, temperature=0.7
 
 # Decode the output and print it
 print(tokenizer.decode(outputs[0]))
+
+model = AutoModelForCausalLM.from_pretrained("RWKV/rwkv-raven-1b5")
+tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-raven-1b5")
+
+prompt = "Once upon a time"
+
+inputs = tokenizer.encode(prompt, return_tensors="pt")
+outputs = model.generate(inputs, max_length=500, do_sample=True, temperature=0.7)
+
+print(tokenizer.decode(outputs[0]))
