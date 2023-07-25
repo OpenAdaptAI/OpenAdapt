@@ -1,6 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from typing import Any, Union
 import io
 
 from loguru import logger
@@ -19,7 +19,7 @@ class ForceFloat(sa.TypeDecorator):
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value: Union[int, float, str, None]) -> float | None:
+    def process_result_value(self, value: Union[int, float, str, None], dialict: Any) -> float | None:
         """Convert the result value to float."""
         if value is not None:
             value = float(value)
