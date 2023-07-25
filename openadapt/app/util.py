@@ -19,9 +19,9 @@ import sys
 
 from nicegui import elements, ui
 
+from openadapt import config
 from openadapt.app import objects
 from openadapt.scripts.reset_db import reset_db
-from openadapt import config
 
 
 def clear_db(log: objects.console.Console) -> None:
@@ -89,11 +89,19 @@ def on_export(dest: str) -> None:
     ui.notify("Exported data.")
 
 
-def sync_switch(switch, prop):
+def sync_switch(
+    switch: elements.switch.Switch, prop: elements.mixins.value_element.ValueElement
+) -> None:
+    """Synchronize the value of a switch with a property.
+
+    Args:
+        switch: The switch object.
+        prop: The property object.
+    """
     switch.value = prop.value if hasattr(prop, "value") else prop
 
 
-def set_scrub(value):
+def set_scrub(value: bool) -> None:
     if config.SCRUB_ENABLED != value:
         config.persist_env("SCRUB_ENABLED", value)
         config.SCRUB_ENABLED = value
@@ -101,11 +109,17 @@ def set_scrub(value):
         ui.notify("You may need to restart the app for this to take effect.")
 
 
-def get_scrub():
+def get_scrub() -> bool:
     return config.SCRUB_ENABLED
 
 
-def set_dark(dark_mode, value):
+def set_dark(dark_mode: ui.DarkMode, value: bool) -> None:
+    """Set the dark mode.
+
+    Args:
+        dark_mode: The dark mode object.
+        value: The value to set.
+    """
     if dark_mode.value != value:
         dark_mode.value = value
         config.persist_env("APP_DARK_MODE", value)
