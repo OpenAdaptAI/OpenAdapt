@@ -7,7 +7,15 @@ on:
 
 jobs:
   run-ci:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        # TODO: add windows matrix
+        os: [macos-latest]
 
     steps:
       - name: Checkout code
@@ -18,25 +26,32 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install wheel
-          pip install -r requirements.txt
-          pip install -e .
+      - name: Run tests using the shell script (macOS compatible).
+        if: matrix.os == 'macos-latest'
+        run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.5.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache deps
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: .venv
+          key: pydeps-${{ hashFiles('**/poetry.lock') }}
+
+      - run: poetry install --no-interaction --no-root
+        if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Check formatting with Black
-        run: |
-          black --check --exclude "(src|alembic)/" .
+        run: poetry run black --check .
 
-      - name: Run headless tests
-        uses: coactions/setup-xvfb@v1
-        with:
-          run: python -m pytest
-          working-directory: ./  # Optional: Specify the working directory if needed
-          options:  # Optional: Add any additional options or arguments for pytest
-
-      - name: flake8 Lint
-        uses: py-actions/flake8@v2
-        with:
-          plugins: "flake8-docstrings"
-          extra-args: "--docstring-convention=google --exclude=alembic/versions"
+      - name: Run Flake8
+        run: poetry run flake8
