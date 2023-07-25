@@ -76,7 +76,7 @@ def get_active_window_meta() -> dict:
     return active_window_info
 
 
-def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElement | None:
+def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElementRef | None:
     """Get the active window from the given metadata.
 
     Args:

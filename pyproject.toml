@@ -81,6 +81,7 @@ flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
+fastapi = "0.98.0"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
