@@ -149,7 +149,7 @@ if multiprocessing.current_process().name == "MainProcess":
 
 def filter_log_messages(
     data: logger,
-    max_num_warnings_per_second: int = _DEFAULTS["MAX_NUM_WARNINGS_PER_SECOND"],
+    max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,
 ) -> bool:
     """This function filters log messages by ignoring any message that contains a specific string,
       up to a maximum number of warnings per second.
