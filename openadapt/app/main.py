@@ -10,7 +10,6 @@ Example usage:
 
 import base64
 import os
-import threading
 
 from nicegui import app, ui
 

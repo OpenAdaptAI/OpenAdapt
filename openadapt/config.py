@@ -130,15 +130,13 @@ def getenv_fallback(var_name: str) -> str:
     return rval
 
 
-def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH):
-    """
-    Persist environment variables by writing them to a file or
-    updating their values if they already exist in the file.
+def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH) -> None:
+    """Persist an environment variable to a .env file.
 
     Args:
-      var_name: A string that represents the name of the environment
-          variable to persist or update.
-      val: The value to assign to the environment variable.
+        var_name (str): The name of the environment variable.
+        val (str): The value of the environment variable.
+        env_file_path (str, optional): The path to the .env file (default: ".env").
     """
     if not os.path.exists(env_file_path):
         with open(env_file_path, "w") as f:

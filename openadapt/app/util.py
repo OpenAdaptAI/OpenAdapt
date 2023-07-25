@@ -102,6 +102,11 @@ def sync_switch(
 
 
 def set_scrub(value: bool) -> None:
+    """Set the scrubbing value.
+
+    Args:
+        value: The value to set.
+    """
     if config.SCRUB_ENABLED != value:
         config.persist_env("SCRUB_ENABLED", value)
         config.SCRUB_ENABLED = value
@@ -110,6 +115,11 @@ def set_scrub(value: bool) -> None:
 
 
 def get_scrub() -> bool:
+    """Get the scrubbing value.
+
+    Returns:
+        bool: The scrubbing value.
+    """
     return config.SCRUB_ENABLED
 
 
