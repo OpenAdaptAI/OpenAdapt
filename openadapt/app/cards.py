@@ -1,6 +1,11 @@
-import signal
+"""openadapt.app.cards module.
+
+This module provides functions for managing UI cards in the OpenAdapt application.
+"""
+
 from datetime import datetime
 from subprocess import Popen
+import signal
 
 from nicegui import ui
 
@@ -11,17 +16,31 @@ from openadapt.crud import newSession
 record_proc = None
 
 
-def settings(dark_mode):
+def settings(dark_mode: bool) -> None:
+    """Display the settings dialog.
+
+    Args:
+        dark_mode (bool): Current dark mode setting.
+    """
     with ui.dialog() as settings, ui.card():
-        s = ui.switch("Dark mode", on_change=lambda: set_dark(dark_mode, s.value))
+        s = ui.switch(
+            "Dark mode",
+            on_change=lambda: set_dark(dark_mode, s.value),
+        )
         sync_switch(s, dark_mode)
         ui.button("Close", on_click=lambda: settings.close())
 
     settings.open()
 
 
-def select_import(f):
-    async def pick_file():
+def select_import(f: callable) -> None:
+    """Display the import file selection dialog.
+
+    Args:
+        f (callable): Function to call when import button is clicked.
+    """
+
+    async def pick_file() -> None:
         result = await LocalFilePicker(".")
         ui.notify(f"Selected {result[0]}" if result else "No file selected.")
         selected_file.text = result[0] if result else ""
@@ -33,7 +52,8 @@ def select_import(f):
             selected_file = ui.label("")
             selected_file.visible = False
             import_button = ui.button(
-                "Import", on_click=lambda: f(selected_file.text, delete.value)
+                "Import",
+                on_click=lambda: f(selected_file.text, delete.value),
             )
             import_button.enabled = False
             delete = ui.checkbox("Delete file after import")
@@ -41,7 +61,7 @@ def select_import(f):
     import_dialog.open()
 
 
-def stop_record():
+def stop_record() -> None:
     global record_proc
     if record_proc is not None:
         record_proc.send_signal(signal.SIGINT)
@@ -51,7 +71,7 @@ def stop_record():
         record_proc = None
 
 
-def quick_record():
+def quick_record() -> None:
     global record_proc
     newSession()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -61,7 +81,13 @@ def quick_record():
     )
 
 
-def recording_prompt(options, record_button):
+def recording_prompt(options: list[str], record_button: ui.widgets.Button) -> None:
+    """Display the recording prompt dialog.
+
+    Args:
+        options (list): List of autocomplete options.
+        record_button (nicegui.widgets.Button): Record button widget.
+    """
     if record_proc is None:
         with ui.dialog() as dialog, ui.card():
             ui.label("Enter a name for the recording: ")
@@ -91,7 +117,7 @@ def recording_prompt(options, record_button):
 
         record_proc = None
 
-    def begin():
+    def begin() -> None:
         name = result.text.__getattribute__("value")
 
         ui.notify(
@@ -107,7 +133,7 @@ def recording_prompt(options, record_button):
         record_button.update()
         return proc
 
-    def on_record():
+    def on_record() -> None:
         global record_proc
         dialog.close()
         record_proc = begin()

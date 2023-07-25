@@ -1,18 +1,25 @@
-import sys
-import threading
+
+"""openadapt.app.main module.
+
+This module provides the main entry point for running the OpenAdapt application.
+
+Example usage:
+    from openadapt.app import run_app
+
+    run_app()
+"""
+
 import base64
 import os
+import sys
+import threading
 
 from nicegui import app, ui
 
 from openadapt import replay, visualize
-from openadapt.app.cards import (
-    recording_prompt,
-    select_import,
-    settings,
-)
-from openadapt.app.util import clear_db, on_export, on_import
+from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.objects.console import Console
+from openadapt.app.util import clear_db, on_export, on_import
 
 SERVER = "127.0.0.1:8000/upload"
 FPATH = os.path.dirname(__file__)
@@ -76,7 +83,7 @@ with ui.splitter(value=20) as splitter:
     splitter.enabled = False
 
 
-def start():
+def start() -> None:
     ui.run(
         title="OpenAdapt Client",
         native=True,

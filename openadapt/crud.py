@@ -1,16 +1,23 @@
+"""Implements basic CRUD operations for interacting with a database.
+
+Module: crud.py
+"""
+
+from typing import Any
+
 from loguru import logger
 import sqlalchemy as sa
 
-from openadapt.db import Session
+from openadapt.config import STOP_SEQUENCES
+from openadapt.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
-    Screenshot,
-    Recording,
-    WindowEvent,
+    MemoryStat,
     PerformanceStat,
-    MemoryStat
+    Recording,
+    Screenshot,
+    WindowEvent,
 )
-from openadapt.config import STOP_SEQUENCES
 
 BATCH_SIZE = 1
 
@@ -22,11 +29,23 @@ performance_stats = []
 memory_stats = []
 
 
+def _insert(
+    event_data: dict[str, Any],
+    table: sa.Table,
+    buffer: list[dict[str, Any]] | None = None,
+) -> sa.engine.Result | None:
+    """Insert using Core API for improved performance (no rows are returned).
 
+    Args:
+        event_data (dict): The event data to be inserted.
+        table (sa.Table): The SQLAlchemy table to insert the data into.
+        buffer (list, optional): A buffer list to store the inserted objects
+            before committing. Defaults to None.
 
-def _insert(event_data, table, buffer=None):
-    """Insert using Core API for improved performance (no rows are returned)"""
-
+    Returns:
+        sa.engine.Result | None: The SQLAlchemy Result object if a buffer is
+          not provided. None if a buffer is provided.
+    """
     db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
         if key in event_data:
@@ -50,7 +69,16 @@ def _insert(event_data, table, buffer=None):
         return result
 
 
-def insert_action_event(recording_timestamp, event_timestamp, event_data):
+def insert_action_event(
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any]
+) -> None:
+    """Insert an action event into the database.
+
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -59,7 +87,16 @@ def insert_action_event(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, ActionEvent, action_events)
 
 
-def insert_screenshot(recording_timestamp, event_timestamp, event_data):
+def insert_screenshot(
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any]
+) -> None:
+    """Insert a screenshot into the database.
+
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -68,7 +105,18 @@ def insert_screenshot(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, Screenshot, screenshots)
 
 
-def insert_window_event(recording_timestamp, event_timestamp, event_data):
+def insert_window_event(
+    recording_timestamp: int,
+    event_timestamp: int,
+    event_data: dict[str, Any],
+) -> None:
+    """Insert a window event into the database.
+
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
@@ -77,11 +125,20 @@ def insert_window_event(recording_timestamp, event_timestamp, event_data):
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
-    """
-    Insert event performance stat into db
-    """
+def insert_perf_stat(
+    recording_timestamp: int,
+    event_type: str,
+    start_time: float,
+    end_time: float,
+) -> None:
+    """Insert an event performance stat into the database.
 
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_type (str): The type of the event.
+        start_time (float): The start time of the event.
+        end_time (float): The end time of the event.
+    """
     event_perf_stat = {
         "recording_timestamp": recording_timestamp,
         "event_type": event_type,
@@ -91,11 +148,15 @@ def insert_perf_stat(recording_timestamp, event_type, start_time, end_time):
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp):
-    """
-    return performance stats for a given recording
-    """
+def get_perf_stats(recording_timestamp: int) -> list[PerformanceStat]:
+    """Get performance stats for a given recording.
 
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+
+    Returns:
+        list[PerformanceStat]: A list of performance stats for the recording.
+    """
     return (
         db.query(PerformanceStat)
         .filter(PerformanceStat.recording_timestamp == recording_timestamp)
@@ -104,11 +165,10 @@ def get_perf_stats(recording_timestamp):
     )
 
 
-def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
-    """
-    Insert memory stat into db
-    """
-
+def insert_memory_stat(
+    recording_timestamp: int, memory_usage_bytes: int, timestamp: int
+) -> None:
+    """Insert memory stat into db."""
     memory_stat = {
         "recording_timestamp": recording_timestamp,
         "memory_usage_bytes": memory_usage_bytes,
@@ -117,21 +177,18 @@ def insert_memory_stat(recording_timestamp, memory_usage_bytes, timestamp):
     _insert(memory_stat, MemoryStat, memory_stats)
 
 
-def get_memory_stats(recording_timestamp):
-    """
-    return memory stats for a given recording
-    """
-
+def get_memory_stats(recording_timestamp: int) -> None:
+    """Return memory stats for a given recording."""
     return (
-        db
-            .query(MemoryStat)
-            .filter(MemoryStat.recording_timestamp == recording_timestamp)
-            .order_by(MemoryStat.timestamp)
-            .all()
+        db.query(MemoryStat)
+        .filter(MemoryStat.recording_timestamp == recording_timestamp)
+        .order_by(MemoryStat.timestamp)
+        .all()
     )
 
 
-def insert_recording(recording_data):
+def insert_recording(recording_data: Recording) -> Recording:
+    """Insert the recording into to the db."""
     db_obj = Recording(**recording_data)
     db.add(db_obj)
     db.commit()
@@ -139,7 +196,12 @@ def insert_recording(recording_data):
     return db_obj
 
 
-def get_all_recordings():
+def get_all_recordings() -> list[Recording]:
+    """Get all recordings.
+    
+    Returns:
+        list[Recording]: A list of all recordings.
+    """
     return (
         db
         .query(Recording)
@@ -148,15 +210,38 @@ def get_all_recordings():
     )
 
 
-def get_latest_recording():
+def get_latest_recording() -> Recording:
+    """Get the latest recording.
+
+    Returns:
+        Recording: The latest recording object.
+    """
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording(timestamp):
+def get_recording(timestamp: int) -> Recording:
+    """Get a recording by timestamp.
+
+    Args:
+        timestamp (int): The timestamp of the recording.
+
+    Returns:
+        Recording: The recording object.
+    """
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table, recording_timestamp):
+def _get(table: BaseModel, recording_timestamp: int) -> list[BaseModel]:
+    """Retrieve records from the database table based on the recording timestamp.
+
+    Args:
+        table (BaseModel): The database table to query.
+        recording_timestamp (int): The recording timestamp to filter the records.
+
+    Returns:
+        list[BaseModel]: A list of records retrieved from the database table,
+          ordered by timestamp.
+    """
     return (
         db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
@@ -165,7 +250,15 @@ def _get(table, recording_timestamp):
     )
 
 
-def get_action_events(recording):
+def get_action_events(recording: Recording) -> list[ActionEvent]:
+    """Get action events for a given recording.
+
+    Args:
+        recording (Recording): The recording object.
+
+    Returns:
+        list[ActionEvent]: A list of action events for the recording.
+    """
     assert recording, "Invalid recording."
     action_events = _get(ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
@@ -173,7 +266,15 @@ def get_action_events(recording):
     return action_events
 
 
-def filter_stop_sequences(action_events):
+def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
+    """Filter stop sequences.
+
+    Args:
+        List[ActionEvent]: A list of action events for the recording.
+
+    Returns:
+        None
+    """
     # check for ctrl c first
     # TODO: want to handle sequences like ctrl c the same way as normal sequences
     if len(action_events) >= 2:
@@ -215,7 +316,8 @@ def filter_stop_sequences(action_events):
                 action_events[j].canonical_key_char in STOP_SEQUENCES[i]
                 or action_events[j].canonical_key_name in STOP_SEQUENCES[i]
             ):
-                # can consider any release event with any sequence char as part of the sequence
+                # can consider any release event with any sequence char as
+                # part of the sequence
                 num_to_remove += 1
             else:
                 # not part of the sequence, so exit inner loop
@@ -233,7 +335,19 @@ def filter_stop_sequences(action_events):
             action_events.pop()
 
 
-def get_screenshots(recording, precompute_diffs=False):
+def get_screenshots(
+    recording: Recording, precompute_diffs: bool = False
+) -> list[Screenshot]:
+    """Get screenshots for a given recording.
+
+    Args:
+        recording (Recording): The recording object.
+        precompute_diffs (bool, optional): Whether to precompute screenshot diffs.
+            Defaults to False.
+
+    Returns:
+        list[Screenshot]: A list of screenshots for the recording.
+    """
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
@@ -249,7 +363,15 @@ def get_screenshots(recording, precompute_diffs=False):
     return screenshots
 
 
-def get_window_events(recording):
+def get_window_events(recording: Recording) -> list[WindowEvent]:
+    """Get window events for a given recording.
+
+    Args:
+        recording (Recording): The recording object.
+
+    Returns:
+        list[WindowEvent]: A list of window events for the recording.
+    """
     return _get(WindowEvent, recording.timestamp)
 
 def newSession():
