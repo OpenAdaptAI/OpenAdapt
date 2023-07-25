@@ -2,7 +2,7 @@
 
 import os
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, engine, text
 import pytest
 
 from openadapt.config import RECORDING_DIRECTORY_PATH, ROOT_DIRPATH
@@ -17,7 +17,7 @@ def setup_database(request: pytest.FixtureRequest) -> engine:
     engine = create_engine(f"sqlite:///{db_url}")
 
     # Create the database tables (if necessary)
-    Base.metadata.create_all(bind=engine)
+    db.Base.metadata.create_all(bind=engine)
 
     # Read the SQL file and split the content into individual statements
     with open(ROOT_DIRPATH / "assets/fixtures.sql", "r") as file:

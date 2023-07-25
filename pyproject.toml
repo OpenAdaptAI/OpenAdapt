@@ -82,7 +82,7 @@ flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
-pyobjc-framework-avfoundation = "^9.2"
+pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
 fastapi = "0.98.0"
 
 [tool.poetry.dependencies.en_core_web_trf]

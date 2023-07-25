@@ -145,10 +145,7 @@ def insert_perf_stat(
         "start_time": start_time,
         "end_time": end_time,
     }
-    _insert(
-        event_perf_stat, PerformanceStat, performance_stats
-    )
-
+    _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
 def get_perf_stats(recording_timestamp: int) -> list[PerformanceStat]:
@@ -209,11 +206,7 @@ def get_latest_recording() -> Recording:
 
 
 def get_recording_by_id(recording_id):
-    return (
-        db.query(Recording)
-        .filter_by(id=recording_id)
-        .first()
-    )
+    return db.query(Recording).filter_by(id=recording_id).first()
 
 
 def get_recording(timestamp: int) -> Recording:

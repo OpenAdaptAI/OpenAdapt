@@ -8,13 +8,12 @@ import os
 from dictalchemy import DictableModel
 from loguru import logger
 from sqlalchemy import create_engine, event
-
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
-from openadapt import config, utils
+from openadapt import config
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -37,8 +36,8 @@ class BaseModel(DictableModel):
 
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
-            for k, v in utils.row2dict(self, follow=False).items()
-            if v not in utils.EMPTY
+            for k, v in row2dict(self, follow=False).items()
+            if v not in EMPTY
         )
         return f"{self.__class__.__name__}({params})"
 
