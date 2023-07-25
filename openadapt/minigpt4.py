@@ -142,7 +142,7 @@ image = (
 stub = Stub(name="minigpt4", image=image)
 
 
-@stub.cls(gpu="a10g", )
+@stub.cls(gpu="a10g", timeout=18000)
 class MiniGPT4_Model:
     def __enter__(self):
         import sys
@@ -192,7 +192,9 @@ class MiniGPT4_Model:
     def generate(
             self,
             question,
+            image
     ):
+        llm_message = self.chat.upload_img(image, self.chat_state, self.img_list)
         self.chat.ask(question, self.chat_state)
         return self.chat.answer(conv=self.chat_state,
                                 img_list=self.img_list,
@@ -201,27 +203,22 @@ class MiniGPT4_Model:
                                 max_new_tokens=300,
                                 max_length=2000)[0]
 
-    @method()
-    def upload_img(self, image):
-        return self.chat.upload_img(image, self.chat_state, self.img_list)
-
 
 @stub.local_entrypoint()
 def main():
     minigpt4 = MiniGPT4_Model()
 
     from PIL import Image
-    okcancel_image = Image.open("C:/Users/Angel/Desktop/OpenAdapt/okcancel.jpg").convert('RGB')
+    image = Image.open("C:/Users/Angel/Desktop/OpenAdapt/desktop.png").convert('RGB')
     questions = [
-        "How many buttons are there?",
-        "What do the buttons say?",
-        "What button would you click to leave?",
-        "What is the position of the OK button?",
+        "Describe the picture",
+        "What icons are there on the desktop?",
+        "What button would you click to make a search on the Internet?",
+        "What button would you click to text a friend?",
+        "What is the position of the Safari button?",
     ]
 
-    llm_message = minigpt4.upload_img.call(okcancel_image)
-
     for question in questions:
+        llm_message = minigpt4.generate.call(question, image)
         print(f"\nPrompt: {question}")
-        llm_message = minigpt4.generate.call(question)
         print(f"Response: {llm_message}")
