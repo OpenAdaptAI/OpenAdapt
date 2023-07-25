@@ -2,6 +2,135 @@
 
 
 
+## v0.5.6 (2023-07-20)
+
+### Chore
+
+* chore: add preview option to black pre-commit hook and update README (#405) ([`6a42eb7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6a42eb762b39b70313ecbe5014377c376ccc26e9))
+
+* chore: configure isort with black profile and add black precommit hook (#384)
+
+* chore: configure isort with black profile and add black precommit hook
+
+* update black version
+
+* add advanced isort settings to match CONTRIBUTING.md ([`2e7496b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2e7496b64445de965d6274e83987edb83f73772e))
+
+### Documentation
+
+* docs: replace MLDSAI with OpenAdaptAI in README.md (#402) ([`750cf1d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/750cf1d327bf22453da1d2f0cc1505bbc52765f4))
+
+* docs: update README (installation table) (#398) ([`1212198`](https://github.com/OpenAdaptAI/OpenAdapt/commit/121219866942df82ab8624e4580b254ca5b9c2b0))
+
+* docs: update readme (take transpose of installation table) (#397) ([`fe39c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fe39c73999b7221524442a11e0814b02faca78ce))
+
+* docs: Update README.md (#390) ([`8745969`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8745969ec9481348932146a46e91153f333c948d))
+
+### Fix
+
+* fix(merge_consecutive_keyboard_events): Fix reference before assignment (#411)
+
+Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-Pro.local&gt; ([`e136b28`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e136b28731d09745a23adb11cc5309ec86b7fdd9))
+
+
+## v0.5.5 (2023-07-17)
+
+### Fix
+
+* fix: loguru exception handling for invalid recordings (#361)
+
+* raise ValueError
+
+* improve exception handling
+
+* Update crud.py
+
+* use assert
+
+* reorganize catch
+
+* Update openadapt/replay.py
+
+* Update openadapt/visualize.py
+
+* Update openadapt/events.py
+
+* Update openadapt/crud.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7aba45b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7aba45be73cb3cc4807f08ebc7bf36a9e9e5c2fb))
+
+
+## v0.5.4 (2023-07-17)
+
+### Fix
+
+* fix(utils): prevent duplicate log messages (#339)  (#366)
+
+* fix(utils): prevent duplicate log messages (#339)
+
+Acquire a lock in utils.configure_logging. Otherwise this function has
+a race where two threads can both call logger.remove(), and then both
+call logger.add(), creating two identical sinks.
+
+* refactor(record): remove redundant configure_logging calls
+
+configure_logging is already called at the module level so there&#39;s no
+need to call it with identical arguments in various functions.
+
+* fixup! fix(utils): prevent duplicate log messages (#339) ([`cf1a782`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf1a7825692b787e72eb4459c302371dab31e952))
+
+* fix: add test fixtures (#356)
+
+* fix: add test fixtures
+
+* revert test_summary.py ([`0ee5397`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ee5397ea1ab4b324e5fd699b858fe30892a3491))
+
+
+## v0.5.3 (2023-07-17)
+
+### Fix
+
+* fix: support more objective-c objects (#323)
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* add bug report option
+
+* Update _macos.py
+
+* undo formatting
+
+* refactor
+
+* split
+
+* remove debug line
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* Update _macos.py
+
+* reorganize
+
+* Update _macos.py
+
+* Update _macos.py
+
+* nonetype
+
+* Update _macos.py ([`be0774f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be0774fc8e5004830c7b0a578432f04b849ff68b))
+
+
 ## v0.5.2 (2023-07-17)
 
 ### Chore
