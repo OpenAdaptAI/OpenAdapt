@@ -30,7 +30,6 @@ def get_prompt(action_event: ActionEvent, diffs: bool = False) -> str:
     Returns:
         str: The prompt for the agent.
     """
-
     return (
         f"In the image, you are presented with a "
         f"screenshot of a user's current active window."
