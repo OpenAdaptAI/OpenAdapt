@@ -2,6 +2,45 @@
 
 
 
+## v0.5.8 (2023-07-25)
+
+### Fix
+
+* fix(install): improve powershell script (Issue #372) (#409)
+
+* fix: git reinstallation even if it si present
+
+* fix: Error Message:
+
+Remove-Item : Cannot remove the item at &#39;C:\Users\Krish Patel\hi&#39; because it is in
+use.
+At line:1 char:9
++         Remove-Item -LiteralPath $setupdir -Force -Recurse
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [Remove-Item], PSInvalidOperation
+   Exception
+    + FullyQualifiedErrorId : InvalidOperation,Microsoft.PowerShell.Commands.RemoveIt
+   emCommand
+
+* fix: issue that poetry shell gives
+&#34;..runnning scripts is disabled on the command line&#34;
+
+* fix: bug #4 issue
+ to support multiple version of python (acc. to OpenAdapt standards)
+
+* add start mesage to know
+ why sometimes the installtion command exits
+
+* fix the edge case where the new terminal PWD
+ is not set to the OpenAdapt folder that was installed
+
+* Update install/install_openadapt.ps1
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`fb3ae1e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fb3ae1e4b4991776f9c89791636e20c9c7a689a5))
+
+
 ## v0.5.7 (2023-07-25)
 
 ### Chore
