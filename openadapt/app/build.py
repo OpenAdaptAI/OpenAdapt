@@ -1,6 +1,14 @@
+"""openadapt.app.build module.
+
+This module provides functionality for building the OpenAdapt application.
+
+Example usage:
+    python build.py
+"""
+
+from pathlib import Path
 import os
 import subprocess
-from pathlib import Path
 
 import nicegui
 
@@ -19,7 +27,8 @@ spec = [
 
 subprocess.call(spec)
 
-# add import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5) to line 2 of OpenAdapt.spec
+# add import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
+#  to line 2 of OpenAdapt.spec
 with open("OpenAdapt.spec", "r+") as f:
     lines = f.readlines()
     lines[1] = "import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)\n"
