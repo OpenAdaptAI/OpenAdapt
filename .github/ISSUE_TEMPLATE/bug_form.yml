@@ -21,9 +21,9 @@ body:
       label: To Reproduce
       description: What Operating System did you use and steps would we take to reproduce the behaviour?
       placeholder: "I use [macOS/Microsoft Windows].
-        Steps: 
-        1. Go to '...' 
-        2. Click on '....' 
+        Steps:
+        1. Go to '...'
+        2. Click on '....'
         3. Scroll down to '....' "
     validations:
       required: true
