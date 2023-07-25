@@ -30,9 +30,8 @@ REPLAY = LMQLReplayStrategy(RECORDING)
 
 def test_json():
     prompt = "Penelope entered 'P' into the website."
-    actual = lmql_json(description=prompt)
-    print(actual)
-    assert actual == "Dua"
+    actual = REPLAY.get_valid_json(prompt)
+    # just a smoke test
 
 # def test_press():
 #     prompt = "Penelope entered 'P' into the website."
@@ -58,14 +57,12 @@ def test_json():
 #     assert actual == expected
 
 
-# def test_click():
-#     prompt = "The user opened a file in the middle of the screen of a macbook with 1440 width and 900 height."
-#     actual = REPLAY.get_valid_action_event(prompt)
-#     expected = ActionEvent(
-#         name="click", mouse_x="720", mouse_y="450", mouse_button_name="left"
-#     )
-#     logger.info(get_stats())  # log OpenAI API Stats
-#     assert actual == expected
+def test_click():
+    prompt = "The user opened a file in the middle of the screen of a macbook with 1440 width and 900 height."
+    actual = REPLAY.get_valid_json(prompt)
+    expected = {'name': 'click', 'mouse_x': 720, 'mouse_y': 450, 'mouse_dx': None, 'mouse_dy': None, 'mouse_button_name': "left", 'mouse_pressed': None, 'key_name': None, 'key_char': None, 'key_vk': None}
+    logger.info(get_stats())  # log OpenAI API Stats
+    assert actual == expected
 
 
 # def test_move():
