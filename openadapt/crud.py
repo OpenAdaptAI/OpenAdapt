@@ -9,7 +9,7 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt import config
-from openadapt.db import Session
+from openadapt.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
     MemoryStat,
