@@ -20,7 +20,9 @@ class ForceFloat(sa.TypeDecorator):
     cache_ok = True
 
     def process_result_value(
-        self, value: Union[int, float, str, None], dialict: str
+        self,
+        value: int | float | str | None,
+        dialect: str,
     ) -> float | None:
         """Convert the result value to float."""
         if value is not None:
