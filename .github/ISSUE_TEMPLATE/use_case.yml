@@ -36,7 +36,7 @@ body:
     attributes:
       label: Workflow
       description: How is the task accomplished? Please place each step on a new line.
-      placeholder: | 
+      placeholder: |
         1. Open Chrome
         2. Navigate to Google Flights
         3. Set the departure city
