@@ -196,7 +196,7 @@ def insert_recording(recording_data: Recording) -> Recording:
     return db_obj
 
 
-def get_all_recordings() -> list[Recording]:
+def get_all_recordings() -> list[Recording] | None:
     """Get all recordings.
     
     Returns:
