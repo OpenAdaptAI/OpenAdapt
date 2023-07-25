@@ -1,15 +1,35 @@
+"""openadapt.app.util module.
+
+This module provides utility functions for the OpenAdapt application.
+
+Example usage:
+    from openadapt.app.util import clear_db, on_import, on_export, sync_switch, set_dark
+
+    clear_db()
+    on_import(selected_file, delete=False, src="openadapt.db")
+    on_export(dest)
+    sync_switch(switch, prop)
+    set_dark(dark_mode, value)
+"""
+
 from shutil import copyfileobj
 import bz2
 import os
 import sys
 
-from nicegui import ui
+from nicegui import elements, ui
 
-from openadapt import config
+from openadapt.app import objects
 from openadapt.scripts.reset_db import reset_db
+from openadapt import config
 
 
-def clear_db(log=None):
+def clear_db(log: objects.console.Console) -> None:
+    """Clear the database.
+
+    Args:
+        log: Optional NiceGUI log object.
+    """
     if log:
         log.log.clear()
         o = sys.stdout
@@ -20,7 +40,18 @@ def clear_db(log=None):
     sys.stdout = o
 
 
-def on_import(selected_file, delete=False, src="openadapt.db"):
+def on_import(
+    selected_file: str,
+    delete: bool = False,
+    src: str = "openadapt.db",
+) -> None:
+    """Import data from a selected file.
+
+    Args:
+        selected_file (str): The path of the selected file.
+        delete (bool): Whether to delete the selected file after import.
+        src (str): The source file name to save the imported data.
+    """
     with open(src, "wb") as f:
         with bz2.BZ2File(selected_file, "rb") as f2:
             copyfileobj(f2, f)
@@ -31,7 +62,12 @@ def on_import(selected_file, delete=False, src="openadapt.db"):
     ui.notify("Imported data.")
 
 
-def on_export(dest):
+def on_export(dest: str) -> None:
+    """Export data to a destination.
+
+    Args:
+        dest (str): The destination to export the data to.
+    """
     # TODO: add ui card for configuration
     ui.notify("Exporting data...")
 
