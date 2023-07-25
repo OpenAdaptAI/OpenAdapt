@@ -1,8 +1,13 @@
-from datetime import datetime, timedelta
+"""Utility functions for OpenAdapt.
+
+This module provides various utility functions used throughout OpenAdapt.
+"""
+
+from collections import defaultdict
 from io import BytesIO
-from collections import Counter, defaultdict
+from logging import StreamHandler
+from typing import Union
 import base64
-import fire
 import inspect
 import os
 import sys
@@ -11,21 +16,30 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
+import fire
 import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
-from logging import StreamHandler
 
 from openadapt import common, config
+from openadapt.db import BaseModel
+from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
 
 _logger_lock = threading.Lock()
 
 
-def configure_logging(logger, log_level):
-    # TODO: redact log messages (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
+def configure_logging(logger: logger, log_level: str) -> None:
+    """Configure the logging settings for OpenAdapt.
+
+    Args:
+        logger (logger): The logger object.
+        log_level (str): The desired log level.
+    """
+    # TODO: redact log messages
+    #  (https://github.com/Delgan/loguru/issues/17#issuecomment-717526130)
     log_level_override = os.getenv("LOG_LEVEL")
     log_level = log_level_override or log_level
 
@@ -48,16 +62,19 @@ def configure_logging(logger, log_level):
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row, follow=True):
+def row2dict(row: Union[dict, BaseModel], follow: bool = True) -> dict:
+    """Convert a row object to a dictionary.
+
+    Args:
+        row: The row object.
+        follow (bool): Flag indicating whether to follow children. Defaults to True.
+
+    Returns:
+        dict: The row object converted to a dictionary.
+    """
     if isinstance(row, dict):
         return row
-    try_follow = (
-        [
-            "children",
-        ]
-        if follow
-        else []
-    )
+    try_follow = ["children"] if follow else []
     to_follow = [key for key in try_follow if hasattr(row, key)]
 
     # follow children recursively
@@ -76,7 +93,13 @@ def row2dict(row, follow=True):
     return row_dict
 
 
-def round_timestamps(events, num_digits):
+def round_timestamps(events: list[ActionEvent], num_digits: int) -> None:
+    """Round timestamps in a list of events.
+
+    Args:
+        events (list): The list of events.
+        num_digits (int): The number of digits to round to.
+    """
     for event in events:
         if isinstance(event, dict):
             continue
@@ -88,11 +111,23 @@ def round_timestamps(events, num_digits):
 
 
 def rows2dicts(
-    rows,
-    drop_empty=True,
-    drop_constant=True,
-    num_digits=None,
-):
+    rows: list[ActionEvent],
+    drop_empty: bool = True,
+    drop_constant: bool = True,
+    num_digits: int = None,
+) -> list[dict]:
+    """Convert a list of rows to a list of dictionaries.
+
+    Args:
+        rows (list): The list of rows.
+        drop_empty (bool): Flag indicating whether to drop empty rows. Defaults to True.
+        drop_constant (bool): Flag indicating whether to drop rows with constant values.
+          Defaults to True.
+        num_digits (int): The number of digits to round timestamps to. Defaults to None.
+
+    Returns:
+        list: The list of dictionaries representing the rows.
+    """
     if num_digits:
         round_timestamps(rows, num_digits)
     row_dicts = [row2dict(row) for row in rows]
@@ -129,11 +164,23 @@ def rows2dicts(
     return row_dicts
 
 
-def override_double_click_interval_seconds(override_value):
+def override_double_click_interval_seconds(
+    override_value: float,
+) -> None:
+    """Override the double click interval in seconds.
+
+    Args:
+        override_value (float): The new value for the double click interval.
+    """
     get_double_click_interval_seconds.override_value = override_value
 
 
-def get_double_click_interval_seconds():
+def get_double_click_interval_seconds() -> float:
+    """Get the double click interval in seconds.
+
+    Returns:
+        float: The double click interval in seconds.
+    """
     if hasattr(get_double_click_interval_seconds, "override_value"):
         return get_double_click_interval_seconds.override_value
     if sys.platform == "darwin":
@@ -149,9 +196,14 @@ def get_double_click_interval_seconds():
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_double_click_distance_pixels():
+def get_double_click_distance_pixels() -> int:
+    """Get the double click distance in pixels.
+
+    Returns:
+        int: The double click distance in pixels.
+    """
     if sys.platform == "darwin":
-        # From https://developer.apple.com/documentation/appkit/nspressgesturerecognizer/1527495-allowablemovement:
+        # From https://developer.apple.com/documentation/appkit/nspressgesturerecognizer/1527495-allowablemovement:  # noqa: E501
         #     The default value of this property is the same as the
         #     double-click distance.
         # TODO: do this more robustly; see:
@@ -172,7 +224,12 @@ def get_double_click_distance_pixels():
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_monitor_dims():
+def get_monitor_dims() -> tuple:
+    """Get the dimensions of the monitor.
+
+    Returns:
+        tuple: The width and height of the monitor.
+    """
     sct = mss.mss()
     monitor = sct.monitors[0]
     monitor_width = monitor["width"]
@@ -182,15 +239,34 @@ def get_monitor_dims():
 
 # TODO: move parameters to config
 def draw_ellipse(
-    x,
-    y,
-    image,
-    width_pct=0.03,
-    height_pct=0.03,
-    fill_transparency=0.25,
-    outline_transparency=0.5,
-    outline_width=2,
-):
+    x: float,
+    y: float,
+    image: Image.Image,
+    width_pct: float = 0.03,
+    height_pct: float = 0.03,
+    fill_transparency: float = 0.25,
+    outline_transparency: float = 0.5,
+    outline_width: int = 2,
+) -> tuple[Image.Image, float, float]:
+    """Draw an ellipse on the image.
+
+    Args:
+        x (float): The x-coordinate of the center of the ellipse.
+        y (float): The y-coordinate of the center of the ellipse.
+        image (Image.Image): The image to draw on.
+        width_pct (float): The percentage of the image width
+          for the width of the ellipse.
+        height_pct (float): The percentage of the image height
+          for the height of the ellipse.
+        fill_transparency (float): The transparency of the ellipse fill.
+        outline_transparency (float): The transparency of the ellipse outline.
+        outline_width (int): The width of the ellipse outline.
+
+    Returns:
+        Image.Image: The image with the ellipse drawn on it.
+        float: The width of the ellipse.
+        float: The height of the ellipse.
+    """
     overlay = Image.new("RGBA", image.size)
     draw = ImageDraw.Draw(overlay)
     max_dim = max(image.size)
@@ -210,7 +286,16 @@ def draw_ellipse(
     return image, width, height
 
 
-def get_font(original_font_name, font_size):
+def get_font(original_font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
+    """Get a font object.
+
+    Args:
+        original_font_name (str): The original font name.
+        font_size (int): The font size.
+
+    Returns:
+        PIL.ImageFont.FreeTypeFont: The font object.
+    """
     font_names = [
         original_font_name,
         original_font_name.lower(),
@@ -225,18 +310,39 @@ def get_font(original_font_name, font_size):
 
 
 def draw_text(
-    x,
-    y,
-    text,
-    image,
-    font_size_pct=0.01,
-    font_name="Arial.ttf",
-    fill=(255, 0, 0),
-    stroke_fill=(255, 255, 255),
-    stroke_width=3,
-    outline=False,
-    outline_padding=10,
-):
+    x: float,
+    y: float,
+    text: str,
+    image: Image.Image,
+    font_size_pct: float = 0.01,
+    font_name: str = "Arial.ttf",
+    fill: tuple = (255, 0, 0),
+    stroke_fill: tuple = (255, 255, 255),
+    stroke_width: int = 3,
+    outline: bool = False,
+    outline_padding: int = 10,
+) -> Image.Image:
+    """Draw text on the image.
+
+    Args:
+        x (float): The x-coordinate of the text anchor point.
+        y (float): The y-coordinate of the text anchor point.
+        text (str): The text to draw.
+        image (PIL.Image.Image): The image to draw on.
+        font_size_pct (float): The percentage of the image size
+          for the font size. Defaults to 0.01.
+        font_name (str): The name of the font. Defaults to "Arial.ttf".
+        fill (tuple): The color of the text. Defaults to (255, 0, 0) (red).
+        stroke_fill (tuple): The color of the text stroke.
+          Defaults to (255, 255, 255) (white).
+        stroke_width (int): The width of the text stroke. Defaults to 3.
+        outline (bool): Flag indicating whether to draw an outline
+          around the text. Defaults to False.
+        outline_padding (int): The padding size for the outline. Defaults to 10.
+
+    Returns:
+        PIL.Image.Image: The image with the text drawn on it.
+    """
     overlay = Image.new("RGBA", image.size)
     draw = ImageDraw.Draw(overlay)
     max_dim = max(image.size)
@@ -271,23 +377,54 @@ def draw_text(
 
 
 def draw_rectangle(
-    x0,
-    y0,
-    x1,
-    y1,
-    image,
-    bg_color=(0, 0, 0),
-    fg_color=(255, 255, 255),
-    outline_color=(255, 0, 0),
-    bg_transparency=0.25,
-    fg_transparency=0,
-    outline_transparency=0.5,
-    outline_width=2,
-    invert=False,
-):
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    image: Image.Image,
+    bg_color: tuple = (0, 0, 0),
+    fg_color: tuple = (255, 255, 255),
+    outline_color: tuple = (255, 0, 0),
+    bg_transparency: float = 0.25,
+    fg_transparency: float = 0,
+    outline_transparency: float = 0.5,
+    outline_width: int = 2,
+    invert: bool = False,
+) -> Image.Image:
+    """Draw a rectangle on the image.
+
+    Args:
+        x0 (float): The x-coordinate of the top-left corner of the rectangle.
+        y0 (float): The y-coordinate of the top-left corner of the rectangle.
+        x1 (float): The x-coordinate of the bottom-right corner of the rectangle.
+        y1 (float): The y-coordinate of the bottom-right corner of the rectangle.
+        image (PIL.Image.Image): The image to draw on.
+        bg_color (tuple): The background color of the rectangle.
+          Defaults to (0, 0, 0) (black).
+        fg_color (tuple): The foreground color of the rectangle.
+          Defaults to (255, 255, 255) (white).
+        outline_color (tuple): The color of the rectangle outline.
+          Defaults to (255, 0, 0) (red).
+        bg_transparency (float): The transparency of the rectangle
+          background. Defaults to 0.25.
+        fg_transparency (float): The transparency of the rectangle
+          foreground. Defaults to 0.
+        outline_transparency (float): The transparency of the rectangle
+          outline. Defaults to 0.5.
+        outline_width (int): The width of the rectangle outline.
+          Defaults to 2.
+        invert (bool): Flag indicating whether to invert the colors.
+          Defaults to False.
+
+    Returns:
+        PIL.Image.Image: The image with the rectangle drawn on it.
+    """
     if invert:
         bg_color, fg_color = fg_color, bg_color
-        bg_transparency, fg_transparency = fg_transparency, bg_transparency
+        bg_transparency, fg_transparency = (
+            fg_transparency,
+            bg_transparency,
+        )
     bg_opacity = int(255 * bg_transparency)
     overlay = Image.new("RGBA", image.size, bg_color + (bg_opacity,))
     draw = ImageDraw.Draw(overlay)
@@ -301,7 +438,16 @@ def draw_rectangle(
     return image
 
 
-def get_scale_ratios(action_event):
+def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
+    """Get the scale ratios for the action event.
+
+    Args:
+        action_event (ActionEvent): The action event.
+
+    Returns:
+        float: The width ratio.
+        float: The height ratio.
+    """
     recording = action_event.recording
     image = action_event.screenshot.image
     width_ratio = image.width / recording.monitor_width
@@ -310,13 +456,31 @@ def get_scale_ratios(action_event):
 
 
 def display_event(
-    action_event,
-    marker_width_pct=0.03,
-    marker_height_pct=0.03,
-    marker_fill_transparency=0.25,
-    marker_outline_transparency=0.5,
-    diff=False,
-):
+    action_event: ActionEvent,
+    marker_width_pct: float = 0.03,
+    marker_height_pct: float = 0.03,
+    marker_fill_transparency: float = 0.25,
+    marker_outline_transparency: float = 0.5,
+    diff: bool = False,
+) -> Image.Image:
+    """Display an action event on the image.
+
+    Args:
+        action_event (ActionEvent): The action event to display.
+        marker_width_pct (float): The percentage of the image width
+          for the marker width. Defaults to 0.03.
+        marker_height_pct (float): The percentage of the image height
+          for the marker height. Defaults to 0.03.
+        marker_fill_transparency (float): The transparency of the
+          marker fill. Defaults to 0.25.
+        marker_outline_transparency (float): The transparency of the
+          marker outline. Defaults to 0.5.
+        diff (bool): Flag indicating whether to display the diff image.
+          Defaults to False.
+
+    Returns:
+        PIL.Image.Image: The image with the action event displayed on it.
+    """
     recording = action_event.recording
     window_event = action_event.window_event
     screenshot = action_event.screenshot
@@ -376,7 +540,15 @@ def display_event(
     return image
 
 
-def image2utf8(image):
+def image2utf8(image: Image.Image) -> str:
+    """Convert an image to UTF-8 format.
+
+    Args:
+        image (PIL.Image.Image): The image to convert.
+
+    Returns:
+        str: The UTF-8 encoded image.
+    """
     image = image.convert("RGB")
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
@@ -391,20 +563,46 @@ _start_time = None
 _start_perf_counter = None
 
 
-def set_start_time(value=None):
+def set_start_time(value: float = None) -> float:
+    """Set the start time for performance measurements.
+
+    Args:
+        value (float): The start time value. Defaults to the current time.
+
+    Returns:
+        float: The start time.
+    """
     global _start_time
     _start_time = value or time.time()
     logger.debug(f"{_start_time=}")
     return _start_time
 
 
-def get_timestamp(is_global=False):
+def get_timestamp(is_global: bool = False) -> float:
+    """Get the current timestamp.
+
+    Args:
+        is_global (bool): Flag indicating whether to use the global
+          start time. Defaults to False.
+
+    Returns:
+        float: The current timestamp.
+    """
     global _start_time
     return _start_time + time.perf_counter()
 
 
 # https://stackoverflow.com/a/50685454
-def evenly_spaced(arr, N):
+def evenly_spaced(arr: list, N: list) -> list:
+    """Get evenly spaced elements from the array.
+
+    Args:
+        arr (list): The input array.
+        N (int): The number of elements to get.
+
+    Returns:
+        list: The evenly spaced elements.
+    """
     if N >= len(arr):
         return arr
     idxs = set(np.round(np.linspace(0, len(arr) - 1, N)).astype(int))
@@ -412,6 +610,11 @@ def evenly_spaced(arr, N):
 
 
 def take_screenshot() -> mss.base.ScreenShot:
+    """Take a screenshot.
+
+    Returns:
+        mss.base.ScreenShot: The screenshot.
+    """
     with mss.mss() as sct:
         # monitor 0 is all in one
         monitor = sct.monitors[0]
@@ -419,7 +622,12 @@ def take_screenshot() -> mss.base.ScreenShot:
     return sct_img
 
 
-def get_strategy_class_by_name():
+def get_strategy_class_by_name() -> dict:
+    """Get a dictionary of strategy classes by their names.
+
+    Returns:
+        dict: A dictionary of strategy classes.
+    """
     from openadapt.strategies import BaseReplayStrategy
 
     strategy_classes = BaseReplayStrategy.__subclasses__()
@@ -446,7 +654,6 @@ def plot_performance(
     Returns:
         str: a base64-encoded image of the plot, if not viewing the file
     """
-
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
     event_types = set()
@@ -528,16 +735,23 @@ def plot_performance(
         )
 
 
-def strip_element_state(action_event):
+def strip_element_state(action_event: ActionEvent) -> ActionEvent:
+    """Strip the element state from the action event and its children.
+
+    Args:
+        action_event (ActionEvent): The action event to strip.
+
+    Returns:
+        ActionEvent: The action event without element state.
+    """
     action_event.element_state = None
     for child in action_event.children:
         strip_element_state(child)
     return action_event
 
 
-def get_functions(name) -> dict:
-    """
-    Get a dictionary of function names to functions for all non-private functions
+def get_functions(name: str) -> dict:
+    """Get a dictionary of function names to functions for all non-private functions.
 
     Usage:
 
@@ -545,12 +759,11 @@ def get_functions(name) -> dict:
             fire.Fire(utils.get_functions(__name__))
 
     Args:
-        name: The name of the module to get functions from.
+        name (str): The name of the module to get functions from.
 
     Returns:
         dict: A dictionary of function names to functions.
     """
-
     functions = {}
     for name, obj in inspect.getmembers(sys.modules[name]):
         if inspect.isfunction(obj) and not name.startswith("_"):

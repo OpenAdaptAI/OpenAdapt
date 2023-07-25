@@ -1,5 +1,6 @@
-"""
-Implements the base class for implementing replay strategies.
+"""Implements the base class for implementing replay strategies.
+
+Module: base.py
 """
 
 from abc import ABC, abstractmethod
@@ -8,22 +9,27 @@ import time
 
 from loguru import logger
 from pynput import keyboard, mouse
-import mss.base
 import numpy as np
 
-from openadapt import models, playback, utils, window
-
+from openadapt import models, playback, utils
 
 MAX_FRAME_TIMES = 1000
 
 
 class BaseReplayStrategy(ABC):
+    """Base class for implementing replay strategies."""
 
     def __init__(
         self,
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
-    ):
+    ) -> None:
+        """Initialize the BaseReplayStrategy.
+
+        Args:
+            recording (models.Recording): The recording to replay.
+            max_frame_times (int): The maximum number of frame times to track.
+        """
         self.recording = recording
         self.max_frame_times = max_frame_times
         self.action_events = []
@@ -36,9 +42,18 @@ class BaseReplayStrategy(ABC):
         self,
         screenshot: models.Screenshot,
     ) -> models.ActionEvent:
+        """Get the next action event based on the current screenshot.
+
+        Args:
+            screenshot (models.Screenshot): The current screenshot.
+
+        Returns:
+            models.ActionEvent: The next action event.
+        """
         pass
 
-    def run(self):
+    def run(self) -> None:
+        """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
         while True:
@@ -48,14 +63,16 @@ class BaseReplayStrategy(ABC):
             self.window_events.append(window_event)
             try:
                 action_event = self.get_next_action_event(
-                    screenshot, window_event,
+                    screenshot,
+                    window_event,
                 )
             except StopIteration:
                 break
             if self.action_events:
                 prev_action_event = self.action_events[-1]
                 assert prev_action_event.timestamp <= action_event.timestamp, (
-                    prev_action_event, action_event
+                    prev_action_event,
+                    action_event,
                 )
             self.log_fps()
             if action_event:
@@ -64,10 +81,7 @@ class BaseReplayStrategy(ABC):
                     [action_event],
                     drop_constant=False,
                 )[0]
-                logger.info(
-                    f"action_event=\n"
-                    f"{pformat(action_event_dict)}"
-                )
+                logger.info(f"action_event=\n" f"{pformat(action_event_dict)}")
                 try:
                     playback.play_action_event(
                         action_event,
@@ -76,9 +90,12 @@ class BaseReplayStrategy(ABC):
                     )
                 except Exception as exc:
                     logger.exception(exc)
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
 
-    def log_fps(self):
+                    ipdb.set_trace()
+
+    def log_fps(self) -> None:
+        """Log the frames per second (FPS) rate."""
         t = time.time()
         self.frame_times.append(t)
         dts = np.diff(self.frame_times)
