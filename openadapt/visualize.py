@@ -6,8 +6,8 @@ import html
 import os
 import string
 
-from bokeh.io import output_file
-from bokeh.layouts import row
+from bokeh.io import output_file, show
+from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
@@ -318,7 +318,11 @@ def main(recording: Recording = None):
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
-    # result = show(layout(rows,))
+    result = show(  # noqa: F841
+        layout(
+            rows,
+        )
+    )
 
     def cleanup() -> None:
         os.remove(fname_out)

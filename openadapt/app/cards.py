@@ -62,6 +62,7 @@ def select_import(f: callable) -> None:
 
 
 def stop_record() -> None:
+    """Stop the current recording session."""
     global record_proc
     if record_proc is not None:
         record_proc.send_signal(signal.SIGINT)
@@ -72,6 +73,7 @@ def stop_record() -> None:
 
 
 def quick_record() -> None:
+    """Run a recording session with no option for recording name (uses date instead)."""
     global record_proc
     newSession()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -81,7 +83,7 @@ def quick_record() -> None:
     )
 
 
-def recording_prompt(options: list[str], record_button: ui.widgets.Button) -> None:
+def recording_prompt(options: list[str], record_button: ui.button) -> None:
     """Display the recording prompt dialog.
 
     Args:
