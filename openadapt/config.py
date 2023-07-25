@@ -87,7 +87,8 @@ _DEFAULTS = {
     "SILENCE_DEPRECATION": True,
 }
 
-# each string in STOP_STRS should only contain strings that don't contain special characters
+# each string in STOP_STRS should only contain strings
+# that don't contain special characters
 STOP_STRS = [
     "oa.stop",
     # TODO:
@@ -102,9 +103,25 @@ STOP_SEQUENCES = [
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
 
-def getenv_fallback(var_name):
+def getenv_fallback(var_name: str) -> str:
+    """Get the value of an environment variable or fallback to the default value.
+
+    Args:
+        var_name (str): The name of the environment variable.
+
+    Returns:
+        The value of the environment variable or the fallback default value.
+
+    Raises:
+        ValueError: If the environment variable is not defined.
+    """
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
-    if type(rval) is str and rval.lower() in ("true", "false", "1", "0"):
+    if type(rval) is str and rval.lower() in (
+        "true",
+        "false",
+        "1",
+        "0",
+    ):
         rval = rval.lower() == "true" or rval == "1"
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
@@ -131,7 +148,20 @@ with open(ROOT_DIRPATH / "pyproject.toml", "w") as f:
     f.write(tomlkit.dumps(document))
 
 
-def obfuscate(val, pct_reveal=0.1, char="*"):
+def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
+    """Obfuscates a value by replacing a portion of characters.
+
+    Args:
+        val (str): The value to obfuscate.
+        pct_reveal (float, optional): Percentage of characters to reveal (default: 0.1).
+        char (str, optional): Obfuscation character (default: "*").
+
+    Returns:
+        str: Obfuscated value with a portion of characters replaced.
+
+    Raises:
+        AssertionError: If length of obfuscated value does not match original value.
+    """
     num_reveal = int(len(val) * pct_reveal)
     num_obfuscate = len(val) - num_reveal
     obfuscated = char * num_obfuscate
@@ -154,20 +184,17 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
-def filter_log_messages(data):
-    """
-    This function filters log messages by ignoring any message that contains a specific string.
+def filter_log_messages(data: dict) -> bool:
+    """Filter log messages by ignoring specific strings.
 
     Args:
-      data: The input parameter "data" is expected to be data from a loguru logger.
+        data (dict): Data from a loguru logger.
 
     Returns:
-      a boolean value indicating whether the message in the input data should be ignored or not. If the
-    message contains any of the messages in the `messages_to_ignore` list, the function returns `False`
-    indicating that the message should be ignored. Otherwise, it returns `True` indicating that the
-    message should not be ignored.
+        bool: True if the message should not be ignored, False if it should be ignored.
     """
-    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
+    # TODO: ultimately, we want to fix the underlying issues, but for now,
+    # we can ignore these messages
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]
