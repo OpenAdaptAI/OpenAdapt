@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 
-readme = ["README.md"]
+readme = "README.md"
 
 repository = "https://github.com/mldsai/openadapt"
 homepage = "https://openadapt.ai/"
@@ -73,9 +73,12 @@ torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
 pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+flake8 = "^6.0.0"
+flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
 accelerate = "^0.20.3"
+flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
@@ -98,6 +101,14 @@ visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.main:run_app"
+
+[tool.black]
+extend-exclude = '''
+/(
+  | venv
+  | alembic
+)/
+'''
 
 [tool.semantic_release]
 version_variable = [
