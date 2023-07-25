@@ -9,9 +9,9 @@ repos:
     rev: 23.7.0
     hooks:
     -   id: black
+        args: [--preview]
 -   repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
       - id: isort
         name: isort (python)
-        args: ["--profile", "black"]

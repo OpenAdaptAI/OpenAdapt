@@ -1,8 +1,14 @@
+"""Implements functionality for connecting to and interacting with the database.
+
+Module: db.py
+"""
+
 import os
 
 from dictalchemy import DictableModel
 from loguru import logger
 from sqlalchemy import create_engine, event
+
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
@@ -20,9 +26,15 @@ NAMING_CONVENTION = {
 
 
 class BaseModel(DictableModel):
+    """The base model for database tables."""
+
     __abstract__ = True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Return a string representation of the model object."""
+        # avoid circular import
+        from openadapt.utils import EMPTY, row2dict
+
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in utils.row2dict(self, follow=False).items()
@@ -31,7 +43,8 @@ class BaseModel(DictableModel):
         return f"{self.__class__.__name__}({params})"
 
 
-def get_engine():
+def get_engine() -> sa.engine:
+    """Create and return a database engine."""
     engine = sa.create_engine(
         config.DB_URL,
         echo=config.DB_ECHO,
@@ -39,7 +52,15 @@ def get_engine():
     return engine
 
 
-def get_base(engine):
+def get_base(engine: sa.engine) -> sa.engine:
+    """Create and return the base model with the provided engine.
+
+    Args:
+        engine (sa.engine): The database engine to bind to the base model.
+
+    Returns:
+        sa.engine: The base model object.
+    """
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(
         cls=BaseModel,

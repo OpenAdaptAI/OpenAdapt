@@ -1,3 +1,5 @@
+"""This module contains fixtures and setup for testing."""
+
 import os
 
 from sqlalchemy import create_engine, text
@@ -8,13 +10,14 @@ from openadapt.models import db
 
 
 @pytest.fixture(scope="session")
-def setup_database(request):
+def setup_database(request: pytest.FixtureRequest) -> engine:
+    """Set up a database for testing."""
     # Create a new database or connect to an existing one
     db_url = RECORDING_DIRECTORY_PATH / "recording.db"
     engine = create_engine(f"sqlite:///{db_url}")
 
     # Create the database tables (if necessary)
-    db.Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
 
     # Read the SQL file and split the content into individual statements
     with open(ROOT_DIRPATH / "assets/fixtures.sql", "r") as file:
@@ -28,8 +31,8 @@ def setup_database(request):
         for statement in statements:
             connection.execute(text(statement))
 
-    # Define the teardown function
-    def teardown():
+    def teardown() -> None:
+        """Teardown function to clean up resources after testing."""
         # Add code here to drop tables, clean up resources, etc.
         # This code will be executed after the tests complete (whether or not they pass)
         # Replace it with the appropriate cleanup operations for your project
