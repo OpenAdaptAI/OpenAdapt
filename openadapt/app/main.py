@@ -1,18 +1,29 @@
-import threading
+"""openadapt.app.main module.
+
+This module provides the main entry point for running the OpenAdapt application.
+
+Example usage:
+    from openadapt.app import run_app
+
+    run_app()
+"""
+
 import base64
 import os
+import threading
 
 from nicegui import app, ui
 
 from openadapt import replay, visualize
 from openadapt.app.cards import recording_prompt, select_import, settings
-from openadapt.app.util import clear_db, on_export, on_import
 from openadapt.app.objects.console import Console
+from openadapt.app.util import clear_db, on_export, on_import
 
 SERVER = "127.0.0.1:8000/upload"
 
 
-def run_app():
+def run_app() -> None:
+    """Run the OpenAdapt application."""
     file = os.path.dirname(__file__)
     app.native.window_args["resizable"] = False  # too many issues with resizing
     app.native.start_args["debug"] = False
@@ -21,11 +32,9 @@ def run_app():
     logger = None
 
     # Add logo
-    # right align icon
+    # Right-align icon
     with ui.row().classes("w-full justify-right"):
         # settings
-
-        # alignment trick
         with ui.avatar(color="white" if dark else "black", size=128):
             logo_base64 = base64.b64encode(open(f"{file}/assets/logo.png", "rb").read())
             img = bytes(
@@ -42,7 +51,8 @@ def run_app():
             "click", lambda: select_import(on_import)
         )
         ui.icon("share").tooltip("Share").on(
-            "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
+            "click",
+            lambda: (_ for _ in ()).throw(Exception(NotImplementedError)),
         )
 
     # Recording description autocomplete
@@ -54,15 +64,20 @@ def run_app():
             with ui.column().classes("w-full h-full"):
                 record_button = (
                     ui.icon("radio_button_checked", size="64px")
-                    .on("click", lambda: recording_prompt(options, record_button))
+                    .on(
+                        "click",
+                        lambda: recording_prompt(options, record_button),
+                    )
                     .tooltip("Record a new replay / Stop recording")
                 )
                 ui.icon("visibility", size="64px").on(
-                    "click", lambda: threading.Thread(target=visualize.main).start()
+                    "click",
+                    lambda: threading.Thread(target=visualize.main).start(),
                 ).tooltip("Visualize the latest replay")
 
                 ui.icon("play_arrow", size="64px").on(
-                    "click", lambda: replay.replay("NaiveReplayStrategy")
+                    "click",
+                    lambda: replay.replay("NaiveReplayStrategy"),
                 ).tooltip("Play the latest replay")
         with splitter.after:
             logger = Console()
