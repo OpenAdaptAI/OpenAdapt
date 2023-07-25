@@ -19,11 +19,11 @@ import sys
 
 from nicegui import elements, ui
 
-from openadapt.app import objects
+from openadapt.app.objects import console
 from openadapt.scripts.reset_db import reset_db
 
 
-def clear_db(log: objects.console.Console) -> None:
+def clear_db(log: console.Console) -> None:
     """Clear the database.
 
     Args:
@@ -100,7 +100,7 @@ def sync_switch(
     switch.value = prop.value
 
 
-def set_dark(dark_mode: ui.DarkMode, value: bool) -> None:
+def set_dark(dark_mode: ui.dark_mode, value: bool) -> None:
     """Set the dark mode.
 
     Args:

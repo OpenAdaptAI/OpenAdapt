@@ -59,7 +59,7 @@ def select_import(f: callable) -> None:
     import_dialog.open()
 
 
-def recording_prompt(options: list[str], record_button: ui.widgets.Button) -> None:
+def recording_prompt(options: list[str], record_button: ui.button) -> None:
     """Display the recording prompt dialog.
 
     Args:
