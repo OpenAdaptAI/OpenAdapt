@@ -1,6 +1,5 @@
 import pytest
 import os
-import platform
 from openadapt.tools import printer
 import subprocess
 
@@ -8,23 +7,28 @@ import subprocess
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
+# Skip this test if there are no available printers
 @pytest.mark.skipif(
     not printer.get_available_printers(), reason="No printers available"
 )
 def test_print_document():
+    # Get the name of the first available printer
     printer_name = printer.get_available_printers()[0]
-    file_path = os.path.join(current_dir, "resources", "test_print_document.pdf")
-    printer.print_document(printer_name, file_path)
-    printer_jobs = printer.get_printer_jobs(printer_name)
-    if platform == "Windows" :
-        pass
-    else :
-        # Split the output into lines
-        lines = printer_jobs.strip().split('\n')
 
-        # Extract job files and store them in a list
-        job_files = [line.split()[3] for line in lines[1:]]
-        assert file_path in job_files
-        subprocess.run(
-            ["cancel", printer_name]
-        )
+    # Get the file path of the test document to be printed
+    file_path = os.path.join(current_dir, "resources", "test_print_document.pdf")
+
+    # Print the document and get the job ID
+    job_id = printer.print_document(printer_name, file_path)
+
+    # Get the list of job IDs for the specified printer
+    job_ids = printer.get_printer_jobs(printer_name)
+
+    # Assert that the job ID returned by print_document is in the list of printer jobs
+    assert job_id in job_ids
+
+    # Cancel the print job to clean up after the test
+    subprocess.run(
+        ["cancel", job_id],
+        capture_output=True,
+    )
