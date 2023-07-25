@@ -1,31 +1,39 @@
-"""
-Allows for capturing the screen and audio on macOS.
+"""Allows for capturing the screen and audio on macOS.
 
 This is based on: https://gist.github.com/timsutton/0c6439eb6eb1621a5964
 
 usage: see bottom of file
 """
-import os
 from datetime import datetime
 from sys import platform
+import os
 
-import AVFoundation as AVF
-import objc
 from Foundation import NSURL, NSObject
 from Quartz import CGMainDisplayID
+import AVFoundation as AVF
+import objc
 
 from openadapt import config
 
 
 class Capture:
-    def __init__(self):
+    """Capture the screen, audio, and camera on macOS."""
+
+    def __init__(self) -> None:
+        """Initialize the capture object."""
         # only on macos
         if platform != "darwin":
             raise NotImplementedError("Only implemented on macOS")
 
         objc.options.structs_indexable = True
 
-    def start(self, audio=False, camera=False):
+    def start(self, audio: bool = False, camera: bool = False) -> None:
+        """Start capturing the screen, audio, and camera.
+
+        Args:
+            audio (bool, optional): Whether to capture audio (default: False).
+            camera (bool, optional): Whether to capture the camera (default: False).
+        """
         self.display_id = CGMainDisplayID()
         self.session = AVF.AVCaptureSession.alloc().init()
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
@@ -57,7 +65,8 @@ class Capture:
 
         self.session.startRunning()
 
-        # Cheat and pass a dummy delegate object where normally we'd have a AVCaptureFileOutputRecordingDelegate
+        # Cheat and pass a dummy delegate object where
+        # normally we'd have a AVCaptureFileOutputRecordingDelegate
         self.file_url = (
             self.file_output.startRecordingToOutputFileURL_recordingDelegate_(
                 self.file_url, NSObject.alloc().init()
@@ -67,7 +76,8 @@ class Capture:
         if camera:
             self._use_camera()
 
-    def _use_camera(self):
+    def _use_camera(self) -> None:
+        """Start capturing the camera."""
         self.camera_session = AVF.AVCaptureSession.alloc().init()
         self.camera_file_output = AVF.AVCaptureMovieFileOutput.alloc().init()
         self.camera_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
@@ -92,7 +102,8 @@ class Capture:
             )
         )
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop capturing the screen, audio, and camera."""
         self.session.stopRunning()
         if self.camera_session:
             self.camera_session.stopRunning()
