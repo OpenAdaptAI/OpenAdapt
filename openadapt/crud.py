@@ -205,7 +205,12 @@ def get_latest_recording() -> Recording:
     return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording_by_id(recording_id):
+def get_recording_by_id(recording_id: int) -> Recording:
+    """Get the recording by an id.
+
+    Returns:
+        Recording: The latest recording object.
+    """
     return db.query(Recording).filter_by(id=recording_id).first()
 
 

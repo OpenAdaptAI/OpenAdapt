@@ -1,4 +1,4 @@
-"""Module to test scrub.py"""
+"""Module to test share.py."""
 
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -14,8 +14,9 @@ from openadapt import config, share
 def test_export_recording_to_folder() -> None:
     """Tests the export_recording_to_folder function.
 
-    This test creates a temporary recording database file, mocks the crud.export_recording()
-    function to return the temporary file path, and then asserts that the file is removed after calling
+    This test creates a temporary recording database file, mocks the
+    crud.export_recording() function to return the temporary file path,
+    and then asserts that the file is removed after calling
     export_recording_to_folder.
 
     Returns:
@@ -41,8 +42,9 @@ def test_export_recording_to_folder() -> None:
 def test_send_file() -> None:
     """Tests the send_file function.
 
-    This test creates a temporary file, mocks the subprocess.run() function to avoid executing the command,
-    and then verifies that the command is called with the correct arguments.
+    This test creates a temporary file, mocks the subprocess.run() function
+    to avoid executing the command, and then verifies that the command is called
+    with the correct arguments.
 
     Returns:
         None
@@ -94,8 +96,9 @@ def test_send_recording() -> None:
 def test_receive_recording() -> None:
     """Tests the receive_recording function.
 
-    This test function creates a temporary zip file, mocks the subprocess.run() function
-    to avoid executing the command, and simulates receiving a recording with a wormhole code.
+    This test function creates a temporary zip file, mocks the subprocess.run()
+    function to avoid executing the command, and simulates receiving a recording
+    with a wormhole code.
 
     Returns:
         None
@@ -121,7 +124,7 @@ def test_receive_recording() -> None:
 
 
 # Test visualize_recording function
-def test_visualize_recording(setup_database: engine):
+def test_visualize_recording(setup_database: engine) -> None:
     """Tests the visualize_recording function.
 
     This test calls the function being tested with the "recording.db" created from

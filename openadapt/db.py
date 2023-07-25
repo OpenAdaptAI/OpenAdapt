@@ -3,11 +3,13 @@
 Module: db.py
 """
 
+from typing import Any
 import os
 
 from dictalchemy import DictableModel
 from loguru import logger
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import reflection
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
@@ -97,7 +99,11 @@ def copy_recording_data(
             tgt_metadata = MetaData()
 
             @event.listens_for(src_metadata, "column_reflect")
-            def genericize_datatypes(inspector, tablename, column_dict):
+            def genericize_datatypes(
+                inspector: reflection.Inspector,
+                tablename: str,
+                column_dict: dict[str, Any],
+            ) -> None:
                 column_dict["type"] = column_dict["type"].as_generic(
                     allow_nulltype=True
                 )
@@ -186,7 +192,7 @@ def copy_recording_data(
 
 
 def export_recording(recording_id: int) -> str:
-    """Export a recording by creating a new database, importing the recording, and then restoring the previous state.
+    """Export a recording by its ID to a new SQLite database.
 
     Args:
         recording_id (int): The ID of the recording to export.

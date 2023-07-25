@@ -3,8 +3,7 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
 from typing import Union
