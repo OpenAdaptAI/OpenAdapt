@@ -2,6 +2,199 @@
 
 
 
+## v0.5.7 (2023-07-25)
+
+### Chore
+
+* chore: format changes with black, and google python docstring, install script testing (#289)
+
+* ran black
+
+* use poetry for install
+
+* Add caching to main.yml for faster github action checks
+
+* Add missing job to main.yml
+
+* try ubuntu latest instead
+
+* change readme type to string instead of array in pyproject.toml
+
+* Update poetry version in main.yml
+
+* try macos
+
+* commented out tests
+
+* see if black command works
+
+* see if black command runs properly
+
+* use black github action
+
+* fix parsing
+
+* use supported black github action
+
+* ignore venv as well
+
+* change args for flake8 action
+
+* try flake8 exclude
+
+* manually add and use flake8
+
+* change docstring keyword
+
+* Chain commands for installing flake8
+
+* exclude .venv
+
+* merged latest changes and add download instruction
+
+* remove import comment
+
+* try python command with ubuntu
+
+* add tesseract-ocr
+
+* add homebrew option
+
+* add cache for tesseract
+
+* add ntlk command with poetry
+
+* ran black
+
+* Add .flake8 and add flake8 to poetry
+
+* Add max length to flake8, add windows job with new install script, and address linting errors
+
+* add some ignore errors in flake8
+
+* Adress more flake8 lint errors
+
+* Change max line length
+
+* ran black
+
+* resolve new changes and ran black
+
+* remove &#34;import nltk; nltk.download(&#39;punkt&#39;)&#34; command
+
+* resolve lint errors in record.py
+
+* remove unnecessary commas
+
+* Address D415, sentence/comma missing on first line error
+
+* Resolve F403
+
+* Address D200, single line doctstrings
+
+* Addressed E731, F841, D205 errors
+
+* resolve F401, unused imports
+
+* Address return type annotations
+
+* Add type annotations for function arguments
+
+* ran black
+
+* Address &#39;Multi-line docstring summaries should start at the first line&#39;
+
+* Revert main.yml to test if all checks pass
+
+* fix syntax issue in main.yml
+
+* Use cache for install poetry dependencies
+
+* Revert main.yml and convert black action to oneliner with poetry
+
+* Address lint errors for newly merged changes
+
+* Try caching tesseract install
+
+* test if tesseract is cached
+
+* try cache brew package
+
+* try cache brew again
+
+* Remove failing tesseract cache
+
+* Address lint errors from recent merge
+
+* replace test command
+
+* address comments on annotations and ran black
+
+* change todo
+
+* Shorten word line max length to 88 for comments
+
+* try executing script
+
+* keep windows runner as todo
+
+* comment poetry shell in install_opendapt.sh
+
+* add error flag in mac install script to avoid poetry shell in github actions
+
+* try to see if this will pass
+
+* update main.yml
+
+* Address incorrect function annotations in record.py
+
+* Address annotation errors in _windows.py
+
+* Addressed more general annotations
+
+* Address incomplete annotations in util.py
+
+* run isort and other precommit hooks with custom black config on all files
+
+* Update openadapt/crud.py
+
+* replaced more &#39;Any&#39; type annotations
+
+* resolve lint errors from recent merge
+
+* ran black
+
+* resolve circular imports, and address Any annotations
+
+---------
+
+Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`c815924`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c81592425b4efefdb48b818508f7debfc3ac95c3))
+
+### Fix
+
+* fix: issues after latest merge (#424)
+
+* merge
+
+* hotfix
+
+* fix: resolve annotation errors and restore incorrectly removed code in lint PR
+
+* fix
+
+* Update models.py
+
+* run black
+
+* Update openadapt/models.py
+
+---------
+
+Co-authored-by: Mustafa Abdulrahman &lt;mus2003.abdul@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`2d4e8c6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2d4e8c6fee245bfdc4726f113b27367a36ae96c7))
+
+
 ## v0.5.6 (2023-07-20)
 
 ### Chore
