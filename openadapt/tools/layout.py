@@ -21,6 +21,8 @@ def document_query(
     )
 
     output = query_pipeline(document_image, question)
+
+    # TODO: output on GUI may not always be correct (empty or just wrong) how do we handle this?
     if not output:
         logger.warning(f"empty {output=}")
     return output
