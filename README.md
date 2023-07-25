@@ -8,7 +8,7 @@
 
 ### OpenAdapt connects Foundation Models to GUIs:
 
-<img width="1473" alt="image" src="https://github.com/MLDSAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
+<img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
 
 
 ([Slides](https://t.ly/7RGr))
@@ -30,17 +30,17 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 1. OpenAdapt is model agnostic
 2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
-4. OpenAdapt is open source! (license TBD, please see https://github.com/MLDSAI/OpenAdapt/issues/246)
+4. OpenAdapt is open source! (license TBD, please see https://github.com/OpenAdaptAI/OpenAdapt/issues/246)
 
 
 ## Install
 
 <br/>
 
-| Installation Method  |               [Installation Scripts](https://openadapt.ai/#start)                |                               Manual Setup                                |
-|:--------------------:|:--------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
-|   Recommended for    |                            Non-technical users                             |                              Technical users                              |
-|     Ease of Use      | Streamlines the installation process for users unfamiliar with setup steps | Allows for more control and customization during the installation process |
+|                 Installation Method                 |   Recommended for   |                                Ease of Use                                 |
+|:---------------------------------------------------:|:-------------------:|:--------------------------------------------------------------------------:|
+| [Scripted](https://openadapt.ai/#start) | Non-technical users | Streamlines the installation process for users unfamiliar with setup steps |
+|                    [Manual](https://github.com/OpenAdaptAI/OpenAdapt#manual-setup)                     |   Technical Users   | Allows for more control and customization during the installation process  |
 
 <br/>
 
@@ -50,7 +50,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 - Press Windows Key, type "powershell", and press Enter
 - Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
   <pre className="whitespace-pre-wrap code text-slate-600 bg-slate-100 p-3 m-2">
-   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/MLDSAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
+   Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"
   </pre>
 
 #### MacOS
@@ -77,7 +77,7 @@ For the setup of any/all of the above dependencies, follow the steps [SETUP.md](
 
 Install with [Poetry](https://python-poetry.org/) :
 ```
-git clone https://github.com/MLDSAI/OpenAdapt.git
+git clone https://github.com/OpenAdaptAI/OpenAdapt.git
 cd OpenAdapt
 pip3 install poetry
 poetry install
@@ -114,11 +114,11 @@ to generate some events, then stop the recording by pressing CTRL+C.
 Current limitations:
 - recording should be short (i.e. under a minute), as they are
 somewhat memory intensive, and there is currently an
-[open issue](https://github.com/MLDSAI/OpenAdapt/issues/5) describing a
+[open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/5) describing a
 possible memory leak
 - the only touchpad and trackpad gestures currently supported are
 pointing the cursor and left or right clicking, as described in this
-[open issue](https://github.com/MLDSAI/OpenAdapt/issues/145)
+[open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
 
 ### Visualize
@@ -131,7 +131,7 @@ python -m openadapt.visualize
 
 This will open your browser. It will look something like this:
 
-![image](https://github.com/MLDSAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -186,7 +186,7 @@ You can assume that you have access to the following functions:
 
 1. Fork this repository and clone it to your local machine.
 2. Get OpenAdapt up and running by following the instructions under [Setup](#Setup).
-3. Look through the list of open issues at https://github.com/MLDSAI/OpenAdapt/issues
+3. Look through the list of open issues at https://github.com/OpenAdaptAI/OpenAdapt/issues
 and once you find one you would like to address, indicate your interest with a comment.
 4. Implement a solution to the issue you selected. Write unit tests for your
 implementation.
@@ -234,7 +234,7 @@ If you're interested in getting paid for your work, please mention it in your Pu
 
 MacOS: if you encounter system alert messages or find issues when making and replaying recordings, make sure to [set up permissions accordingly](./permissions_in_macOS.md).
 
-![MacOS System Alerts](https://github.com/MLDSAI/OpenAdapt/assets/43456930/dd96ab17-7cd6-4762-9c4f-5131b224a118)
+![MacOS System Alerts](https://github.com/OpenAdaptAI/OpenAdapt/assets/43456930/dd96ab17-7cd6-4762-9c4f-5131b224a118)
 
 In summary (from https://stackoverflow.com/a/69673312):
 
@@ -255,7 +255,7 @@ alembic revision --autogenerate -m "<msg>"
 
 ### Pre-commit Hooks
 
-To ensure code quality and consistency, OpenAdapt uses pre-commit hooks. These hooks 
+To ensure code quality and consistency, OpenAdapt uses pre-commit hooks. These hooks
 will be executed automatically before each commit to perform various checks and
 validations on your codebase.
 
@@ -264,12 +264,13 @@ The following pre-commit hooks are used in OpenAdapt:
 - [check-yaml](https://github.com/pre-commit/pre-commit-hooks#check-yaml): Validates the syntax and structure of YAML files.
 - [end-of-file-fixer](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer): Ensures that files end with a newline character.
 - [trailing-whitespace](https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace): Detects and removes trailing whitespace at the end of lines.
+- [black](https://github.com/psf/black): Formats Python code to adhere to the Black code style.
 - [isort](https://github.com/PyCQA/isort): Sorts Python import statements in a consistent and standardized manner.
 
 To set up the pre-commit hooks, follow these steps:
 
 1. Navigate to the root directory of your OpenAdapt repository.
- 
+
 2. Run the following command to install the hooks:
 
 ```

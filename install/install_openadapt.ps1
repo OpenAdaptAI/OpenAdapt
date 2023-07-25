@@ -11,7 +11,8 @@ $tesseractInstallerLoc = "https://digi.bib.uni-mannheim.de/tesseract/tesseract-o
 $tesseractPath = "C:\Program Files\Tesseract-OCR"
 
 $pythonCmd = "python"
-$pythonVerStr = "Python 3.10*"
+$pythonMinVersion = "3.10.0" # Change this if a different Lower version are supported by OpenAdapt
+$pythonMaxVersion = "3.10.12" # Change this if a different Higher version are supported by OpenAdapt
 $pythonInstaller = "python-3.10.11-amd64.exe"
 $pythonInstallerLoc = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
 
@@ -55,6 +56,7 @@ function Cleanup {
     $exists = Test-Path -Path $setupdir
     if ($exists) {
         Set-Location $setupdir
+        Set-Location ../
         Remove-Item -LiteralPath $setupdir -Force -Recurse
     }
 }
@@ -67,11 +69,11 @@ function CheckCMDExists {
         [Parameter(Mandatory = $true)] [string] $command
     )
 
-    Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
-    if ($getErr -eq $null) {
-        return $true
+    $result = Get-Command $command -errorvariable getErr -erroraction 'silentlycontinue'
+    if ($null -eq $result) {
+        return $false
     }
-    return $false
+    return $true
 }
 
 
@@ -163,12 +165,23 @@ function GetTesseractCMD {
 }
 
 
+function ComparePythonVersion($version) {
+    $v = [version]::new($version)
+    $min = [version]::new($pythonMinVersion)
+    $max = [version]::new($pythonMaxVersion)
+
+    return $v -ge $min -and $v -le $max
+}
+
+
 # Check and Istall Python and return the python command
 function GetPythonCMD {
-    # Use python exe if it exists and is the required version
+    # Use python exe if it exists and is within the required version range
     if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
+        $versionString = $res.Split(' ')[-1]
+
+        if (ComparePythonVersion $versionString  $pythonMaxVersion) {
             return $pythonCmd
         }
     }
@@ -178,6 +191,7 @@ function GetPythonCMD {
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $pythonInstallerLoc -OutFile $pythonInstaller
     $exists = Test-Path -Path $pythonInstaller -PathType Leaf
+
     if (!$exists) {
         Write-Host "Failed to download python installer" -ForegroundColor Red
         Cleanup
@@ -189,10 +203,12 @@ function GetPythonCMD {
 
     RefreshPathVariables
 
-    # Make sure python is now available and the right version
+    # Make sure python is now available and within the required version range
     if (CheckCMDExists $pythonCmd) {
         $res = Invoke-Expression "python -V"
-        if ($res -like $pythonVerStr) {
+        $versionString = $res.Split(' ')[-1]
+
+        if (ComparePythonVersion $versionString $pythonMinVersion $pythonMaxVersion) {
             Remove-Item $pythonInstaller
             return $pythonCmd
         }
@@ -244,9 +260,12 @@ function GetGitCMD {
 
 ################################   SCRIPT    ################################
 
+Write-Host "Install Script Started..." -ForegroundColor Yellow
+
 # Create a new directory and run the setup from there
 New-Item -ItemType Directory -Path $setupdir -Force
 Set-Location -Path $setupdir
+Set-ExecutionPolicy RemoteSigned -Scope Process -Force
 
 # Check and Install the required softwares for OpenAdapt
 $tesseract = GetTesseractCMD
@@ -266,6 +285,6 @@ RunAndCheck "poetry install" "Run ``poetry install``"
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
-Start-Process powershell -ArgumentList "-Command poetry shell"
+Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd'; poetry shell"
 
 ################################   SCRIPT    ################################
