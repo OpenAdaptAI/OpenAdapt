@@ -1,7 +1,6 @@
 """A ML model `llama2.c` provider module.
 
     Usage: `openadapt.ml.karpathy.llama2c`
-
 """
 
 
