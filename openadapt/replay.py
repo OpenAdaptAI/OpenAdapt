@@ -28,6 +28,13 @@ def replay(
     timestamp: Union[str, None] = None,
     recording: Recording = None,
 ) -> None:
+    """Replay recorded events.
+
+    Args:
+        strategy_name (str): Name of the replay strategy to use.
+        timestamp (str, optional): Timestamp of the recording to replay.
+        recording (Recording, optional): Recording to replay.
+    """
     utils.configure_logging(logger, LOG_LEVEL)
 
     if timestamp and recording is None:

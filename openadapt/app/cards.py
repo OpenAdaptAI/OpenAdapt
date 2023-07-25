@@ -107,7 +107,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
 
             dialog.open()
 
-    def terminate():
+    def terminate() -> None:
         global record_proc
         record_proc.send_signal(signal.SIGINT)
 

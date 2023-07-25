@@ -40,6 +40,3 @@ class Console(object):
         """Reset the log and restore stderr."""
         self.log.clear()
         sys.stderr = self.old_stderr
-
-    def copy_output(self):
-        return self.buffer

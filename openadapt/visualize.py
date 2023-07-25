@@ -191,7 +191,12 @@ def dict2html(
 
 
 @logger.catch
-def main(recording: Recording = None):
+def main(recording: Recording = None) -> None:
+    """Visualize a recording.
+
+    Args:
+        recording (Recording, optional): The recording to visualize.
+    """
     configure_logging(logger, LOG_LEVEL)
 
     if recording is None:

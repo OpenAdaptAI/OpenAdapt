@@ -198,16 +198,11 @@ def insert_recording(recording_data: Recording) -> Recording:
 
 def get_all_recordings() -> list[Recording]:
     """Get all recordings.
-    
+
     Returns:
         list[Recording]: A list of all recordings.
     """
-    return (
-        db
-        .query(Recording)
-        .order_by(sa.desc(Recording.timestamp))
-        .all()
-    )
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
 
 
 def get_latest_recording() -> Recording:
@@ -374,7 +369,9 @@ def get_window_events(recording: Recording) -> list[WindowEvent]:
     """
     return _get(WindowEvent, recording.timestamp)
 
-def newSession():
+
+def newSession() -> None:
+    """Create a new database session."""
     global db
     if db:
         db.close()

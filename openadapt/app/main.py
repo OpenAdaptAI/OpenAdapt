@@ -1,4 +1,3 @@
-
 """openadapt.app.main module.
 
 This module provides the main entry point for running the OpenAdapt application.
@@ -84,6 +83,7 @@ with ui.splitter(value=20) as splitter:
 
 
 def start() -> None:
+    """Start the OpenAdapt application."""
     ui.run(
         title="OpenAdapt Client",
         native=True,

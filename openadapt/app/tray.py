@@ -1,7 +1,11 @@
+"""Implementation of the system tray icon for OpenAdapt.
+
+usage: `python -m openadapt.app.tray` or `poetry run app`
+"""
+from functools import partial
+from threading import Thread
 import os
 import sys
-from threading import Thread
-from functools import partial
 
 from notifypy import Notify
 from PySide6.QtCore import QTimer
@@ -11,10 +15,10 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.main import FPATH, start
 from openadapt.crud import get_all_recordings
+from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
-from openadapt.extensions.thread import Thread as oaThread
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -25,13 +29,17 @@ if sys.platform == "darwin":
 
 
 class SystemTrayIcon(QSystemTrayIcon):
+    """System tray icon for OpenAdapt."""
+
     recording = False
     app_thread = None
 
-    # the actions need to be separated by type or else they will be triggered multiple times
+    # the actions need to be separated by type
+    # or else they will be triggered multiple times
     recording_actions = {"visualize": [], "replay": []}
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the system tray icon."""
         self.app = QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
 
@@ -70,22 +78,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.timer.timeout.connect(self.update_tray_icon)
         self.timer.start()
 
-        # Variables to track the current icon state
-        # TODO: use this somewhere, maybe? (e.g. to show if recording is active)
-        self.current_icon = f"{FPATH}{os.sep}assets{os.sep}logo.png"
-        self.icon_mapping = {
-            f"{FPATH}{os.sep}assets{os.sep}logo.png": f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png",
-            f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png": f"{FPATH}{os.sep}assets{os.sep}logo.png",
-        }
-
         Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
 
-    def cycle_icon(self) -> None:
-        new_icon = self.icon_mapping[self.current_icon]
-        self.tray.setIcon(QIcon(new_icon))
-        self.current_icon = new_icon
-
     def update_tray_icon(self) -> None:
+        """Update the tray icon."""
         try:
             if self.recording:
                 self.record_action.setText("Stop recording")
@@ -99,6 +95,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             pass
 
     def _quick_record(self) -> None:
+        """Wrapper for the quick_record function."""
         if not self.recording:
             Notify("Status", "Starting recording...", "OpenAdapt").send()
             self.recording = True
@@ -114,6 +111,11 @@ class SystemTrayIcon(QSystemTrayIcon):
             Notify("Status", "Recording stopped", "OpenAdapt").send()
 
     def _visualize(self, recording: Recording) -> None:
+        """Visualize a recording.
+
+        Args:
+            recording (Recording): The recording to visualize.
+        """
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
         vthread = oaThread(target=visualize, args=(recording,))
         vthread.run()
@@ -123,6 +125,11 @@ class SystemTrayIcon(QSystemTrayIcon):
             Notify("Status", "Visualization failed", "OpenAdapt").send()
 
     def _replay(self, recording: Recording) -> None:
+        """Replay a recording.
+
+        Args:
+            recording (Recording): The recording to replay.
+        """
         Notify("Status", "Starting replay...", "OpenAdapt").send()
         rthread = oaThread(target=replay, args=("NaiveReplayStrategy", None, recording))
         rthread.run()
@@ -132,6 +139,13 @@ class SystemTrayIcon(QSystemTrayIcon):
             Notify("Status", "Replay failed", "OpenAdapt").send()
 
     def populate_menu(self, menu: QMenu, action: QAction, action_type: str) -> None:
+        """Populate a menu.
+
+        Args:
+            menu (QMenu): The menu to populate.
+            action (QAction): The action to perform when the menu item is clicked.
+            action_type (str): The type of action to perform ["visualize", "replay"]
+        """
         recordings = get_all_recordings()
         if len(recordings) == len((self.recording_actions[action_type])):
             return
@@ -147,15 +161,17 @@ class SystemTrayIcon(QSystemTrayIcon):
             menu.addAction(self.recording_actions[action_type][idx])
 
     def show_app(self) -> None:
+        """Show the main application window."""
         if self.app_thread is None or not self.app_thread.is_alive():
             self.app_thread = Thread(target=start, daemon=True)
             self.app_thread.start()
 
     def run(self) -> None:
+        """Run the system tray icon."""
         self.app.exec_()
 
 
-def _run():
+def _run() -> None:
     tray = SystemTrayIcon()
     tray.run()
 
