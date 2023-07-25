@@ -1,26 +1,29 @@
 import subprocess
 import platform
-import win32print
-import win32api
 
 
 def get_available_printers():
     printers = []
     if platform.system() == "Windows":
+        import win32print
         printers = [
             printer[2]
             for printer in win32print.EnumPrinters(
                 win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
             )
         ]
+        return printers
     else:
-        result = subprocess.run(["lpstat", "-p"], capture_output=True, text=True)
-        output = result.stdout.strip().split("\n")
-        printers = [
-            line.split(" ")[1] for line in output if line.startswith("printer ")
-        ]
-
-    return printers
+        # Display only those printers that are currently accepting print requests.
+        result = subprocess.run(["lpstat", "-a"], capture_output=True, text=True)
+        # Split the output into lines
+        lines = result.stdout.strip().split('\n')
+        # Extract printer names and store them in a list
+        if result.stderr == "lpstat: No destinations added.\n":
+            return None
+        else :
+            printer_names = [line.split()[0] for line in lines]
+            return printer_names
 
 
 def print_document(printer_name, file_path):
@@ -33,6 +36,7 @@ def print_document(printer_name, file_path):
 def get_printer_jobs(printer_name):
     if platform.system() == "Windows":
         # Get printer jobs on Windows (Same as the previous implementation)
+        import win32api
         phandle = win32print.OpenPrinter(printer_name)
         print_jobs = win32print.EnumJobs(phandle, 0, -1, 1)
         win32print.ClosePrinter(phandle)
@@ -40,28 +44,11 @@ def get_printer_jobs(printer_name):
     else:
         # Get printer jobs on non-Windows platforms using lpstat
         result = subprocess.run(
-            ["lpstat", "-W", "completed", "-o", printer_name],
+            ["lpstat", "-o", printer_name],
             capture_output=True,
-            text=True,
         )
-        output = result.stdout.strip().split("\n")
-        jobs = []
-        for line in output:
-            job_info = line.split()
-            job = {
-                "job_id": int(job_info[0]),
-                "username": job_info[1],
-                "total_pages": int(job_info[2]),
-                "pages_printed": int(job_info[3]),
-                "status": job_info[4],
-            }
-            jobs.append(job)
-        return jobs
+        return result
 
 
 if __name__ == "__main__":
-    import ipdb
-
-    ipdb.set_trace()
-    printer_name = get_available_printers()[0]
-    get_printer_jobs(printer_name)
+    get_available_printers()
