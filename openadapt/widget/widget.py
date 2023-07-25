@@ -35,7 +35,6 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
                 self.setIcon(self.icon_replay_available)
                 self.current_state = "replay_available"
                 self.stop_recording()
-                # self.action.setText("Stop Recording")
             elif self.current_state == "replay_available":
                 self.setIcon(self.icon_replaying)
                 self.current_state = "replaying_in_progress"
@@ -78,7 +77,7 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         self.replay_proc.send_signal(signal.SIGCONT)
 
 
-def main():
+def run_widget():
     app = QtWidgets.QApplication(sys.argv)
 
     # w = QtWidgets.QWidget()
@@ -86,7 +85,3 @@ def main():
     tray_icon.show()
 
     sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
