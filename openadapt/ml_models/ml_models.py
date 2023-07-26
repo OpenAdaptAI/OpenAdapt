@@ -1,7 +1,13 @@
 from openadapt import models
-from openadapt import ml_models
-from ml_models.openai import gpt3_davinci
-from openadapt.crud import get_recording_by_id
+import openai_module
+from openai_module.gpt3_davinci import infer, finetune, MODALITIES
+from openadapt.crud import (
+    get_recording_by_id,
+    get_latest_recording,
+    get_window_events,
+    get_action_events,
+)
+from loguru import logger 
 
 
 class Modality:
@@ -18,10 +24,10 @@ MODALITY_BY_DB_MODEL = {
 ML_MODELS = [
     {
         "name": "gpt3_davinci",
-        "provider": gpt3_davinci,
-        "finetune": gpt3_davinci.finetune,
-        "infer": gpt3_davinci.infer,
-        "modalities": gpt3_davinci.MODALITIES,
+        "provider": openai_module.gpt3_davinci,
+        "finetune": finetune,
+        "infer": infer,
+        "modalities": MODALITIES,
     }
 ]
 
@@ -31,4 +37,5 @@ def select_ml_model(recording_id):
     assert recording_data, "No such recording exists"
     # TODO:
     # for model in ML_MODELS:
-    #    # use wandb for metrics on different ml models. 
+    #    # use wandb for metrics on different ml models.
+
