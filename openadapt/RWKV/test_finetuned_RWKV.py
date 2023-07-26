@@ -1,14 +1,21 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel, PeftConfig
 
 # Replace these two lines with your model and tokenizer names, if different
 model_path = "./RWKV-1b5-finetuned-overfit"
+repo_path = "avidoavid/RWKV-1b5-finetuned-overfit"
 tokenizer_name = "RWKV/rwkv-raven-1b5"
 
 # Load the model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+tokenizer = AutoTokenizer.from_pretrained(repo_path)
 tokenizer.pad_token = tokenizer.eos_token
-model = AutoModelForCausalLM.from_pretrained(model_path)
 
+#model = AutoModelForCausalLM.from_pretrained(repo_path, return_dict=True)
+
+config = PeftConfig.from_pretrained(repo_path)
+model = AutoModelForCausalLM.from_pretrained(config.base_model_name_or_path, return_dict=True)
+model = PeftModel.from_pretrained(model, repo_path)
+model = model.merge_and_unload()
 # Prepare a prompt for your model
 prompt = "Once upon a time"
 
