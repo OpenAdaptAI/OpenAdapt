@@ -14,6 +14,15 @@ class Modality:
     TEXT = "TEXT"
     IMAGE = "IMAGE"
 
+class License:
+    COMMERCIAL_USE = "COMMERCIAL_USE"
+    NON_COMMERCIAL_USE = "NON_COMMERCIAL_USE"
+
+class Capability:
+    TRAINING = "TRAINING"
+    TUNING = "TUNING"
+    USABLE_OUTPUT = "USABLE_OUTPUT"
+    INFERENCE = "INFERENCE"
 
 MODALITY_BY_DB_MODEL = {
     models.ActionEvent: Modality.TEXT,
@@ -28,6 +37,9 @@ ML_MODELS = [
         "finetune": finetune,
         "infer": infer,
         "modalities": MODALITIES,
+        "context_length": 4096,
+        "license": License.COMMERCIAL_USE,
+        "capability": [Capability.TRAINING, Capability.TUNING, Capability.USABLE_OUTPUT, Capability.INFERENCE]
     }
 ]
 
