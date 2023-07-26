@@ -29,6 +29,5 @@ def test_print_document():
 
     # Cancel the print job to clean up after the test
     subprocess.run(
-        ["cancel", job_id],
-        capture_output=True,
+        ["cancel", job_id]
     )
