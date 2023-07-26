@@ -1,7 +1,4 @@
 from io import BytesIO, StringIO
-import os
-import platform
-import subprocess
 
 from PIL import Image
 import cairosvg as cairo
@@ -18,10 +15,11 @@ RECORDING = Recording()
 
 class SVGReplayStrategy(SVGReplayStrategyMixin):
     """Custom Replay Strategy to solely test the SVG Mixin."""
+
     def __init__(self, recording: Recording):
         ensure_dependency("cairo")
         # need to export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
-            # export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
+        # export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
         super().__init__(recording)
 
     def get_next_action_event(self):
@@ -32,12 +30,11 @@ REPLAY = SVGReplayStrategy(RECORDING)
 
 
 def mse(image1, image2):
-    """Calculate the Mean Squared Error (MSE) between two images
-    """
+    """Calculate the Mean Squared Error (MSE) between two images"""
     array1 = np.array(image1)
     array2 = np.array(image2)
 
-    err = np.sum((array1.astype('float') - array2.astype('float')) ** 2)
+    err = np.sum((array1.astype("float") - array2.astype("float")) ** 2)
     err /= float(array1.shape[0] * array1.shape[1])
     return err
 
@@ -60,4 +57,3 @@ def test_one_button():
     difference = mse(expected, actual)
     logger.info(f"{difference=}")
     assert difference < 100
-
