@@ -21,7 +21,6 @@ def gpt_davinci_finetune(recording: models.Recording):
     # TODO: create JSON in the format {prompt: ref_win, ref_act completion: target_win, target_act} as per GPT finetune docs.
 
 
-
 def get_finetune_pairs(recording: models.Recording):
 
     processed_acx = get_action_events(recording)
@@ -74,5 +73,7 @@ def sanitize_dicts(reference_action):
                 #and not isinstance(getattr(models.ActionEvent, key), property)
             })
         ]
+
+    # TODO: find way to condense data inside state key, as it eats up context length
     
     return reference_action_dicts, reference_window_dict
