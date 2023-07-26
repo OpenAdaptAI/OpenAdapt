@@ -6,6 +6,7 @@ tokenizer_name = "RWKV/rwkv-raven-1b5"
 
 # Load the model and tokenizer
 tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+tokenizer.pad_token = tokenizer.eos_token
 model = AutoModelForCausalLM.from_pretrained(model_path)
 
 # Prepare a prompt for your model
