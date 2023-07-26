@@ -2,6 +2,29 @@
 
 
 
+## v0.6.0 (2023-07-26)
+
+### Feature
+
+* feat(crud): compute and save screenshot diff (#367)
+
+* feat(crud): Compute and save screenshot diff
+
+* Add 2 columns in screenshot table to store png_diff_data and png_mask_diff_data.
+
+* CRUD now supports calculation and save screenshots diff data on the flight.
+
+* feat(config): Add SAVE_SCREENSHOT_DIFF environment variable
+
+* SAVE_SCREENSHOT_DIFF indicates that 2 neighbors screenshot will be compared and the difference will be saved to db
+
+* feat(crud): add missing import after merge
+
+* refactor(crud): add missing type annotations
+
+* refactor(crud): add missing type annotations ([`9189bca`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9189bca7aef05ef7801545cc0a55bca54898820a))
+
+
 ## v0.5.8 (2023-07-25)
 
 ### Fix
