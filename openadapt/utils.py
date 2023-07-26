@@ -3,8 +3,7 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
 from typing import Union
@@ -58,9 +57,11 @@ def configure_logging(logger: logger, log_level: str) -> None:
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages
-            if config.MAX_NUM_WARNINGS_PER_SECOND > 0
-            else None,
+            filter=(
+                config.filter_log_messages
+                if config.MAX_NUM_WARNINGS_PER_SECOND > 0
+                else None
+            ),
         )
         logger.debug(f"{log_level=}")
 

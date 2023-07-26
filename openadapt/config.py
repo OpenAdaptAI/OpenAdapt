@@ -35,6 +35,7 @@ _DEFAULTS = {
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
     "MAX_NUM_WARNINGS_PER_SECOND": 5,
+    "WARNING_SUPPRESSION_PERIOD": 1,
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
@@ -179,10 +180,9 @@ if multiprocessing.current_process().name == "MainProcess":
 
 def filter_log_messages(
     data: logger,
-    max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,
+    max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,  # noqa: F821
 ) -> bool:
-    """This function filters log messages by ignoring any message that contains a specific string,
-      up to a maximum number of warnings per second.
+    """Filter log messages, excluding specific strings and limiting warnings per second.
 
     Args:
         data: The input parameter "data" is expected to be data from a loguru logger.
@@ -190,10 +190,10 @@ def filter_log_messages(
           Set to 0 to disable.
 
     Returns:
-        A boolean value indicating whether the message in the input data should be ignored or not.
-        If the maximum number of warnings per second is exceeded, the function returns False,
-        indicating that the message should be ignored. Otherwise, it returns True,
-        indicating that the message should not be ignored.
+        A boolean value indicating whether the message in the input data should be
+        ignored or not. If the maximum number of warnings per second is exceeded,
+        the function returns False, indicating that the message should be ignored.
+        Otherwise, it returns True, indicating that the message should not be ignored.
     """
     # TODO: ultimately, we want to fix the underlying issues, but for now,
     # we can ignore these messages
@@ -212,7 +212,12 @@ def filter_log_messages(
                 timestamps = message_timestamps[msg]
 
                 # Remove timestamps older than 1 second
-                timestamps = [ts for ts in timestamps if current_timestamp - ts <= 1]
+                timestamps = [
+                    ts
+                    for ts in timestamps
+                    if current_timestamp - ts
+                    <= WARNING_SUPPRESSION_PERIOD  # noqa: F821
+                ]
 
                 if len(timestamps) > max_num_warnings_per_second:
                     return False
