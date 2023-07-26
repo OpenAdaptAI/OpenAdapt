@@ -14,6 +14,8 @@ import deepdiff
 from openadapt import models, strategies, utils
 from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
+from griptape.utils.j2 import J2
+
 # import datetime
 
 
@@ -123,14 +125,11 @@ class StatefulReplayStrategy(
         reference_window_dict["state"].pop("data")
         active_window_dict["state"].pop("data")
 
-        prompt = (
-            f"{reference_window_dict=}\n"
-            f"{reference_action_dicts=}\n"
-            f"{active_window_dict=}\n"
-            "Provide valid Python3 code containing the action dicts"
-            " by completing the following,"
-            " and nothing else:\n"
-            "active_action_dicts="
+        prompt_template = J2(template_name="stateful.j2",templates_dir="openadapt/prompts")
+        prompt = prompt_template.render(
+            reference_window_dict=reference_window_dict,
+            reference_action_dicts=reference_action_dicts,
+            active_window_dict=active_window_dict,
         )
         system_message = (
             "You are a keyboard/mouse controller. "
