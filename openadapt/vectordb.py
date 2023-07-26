@@ -16,9 +16,13 @@ class VectorDB:
         )
 
         try:
-            self.database = self.client.create_collection(name="SimilaritySearch",metadata={"hnsw:space": "cosine"})
+            self.database = self.client.create_collection(
+                name="SimilaritySearch", metadata={"hnsw:space": "cosine"}
+            )
         except:
-            self.database = self.client.get_collection(name="SimilaritySearch",metadata={"hnsw:space": "cosine"})
+            self.database = self.client.get_collection(
+                name="SimilaritySearch", metadata={"hnsw:space": "cosine"}
+            )
 
     def add_individual_document(self, doc_text):
         """
@@ -30,6 +34,13 @@ class VectorDB:
         else:
             id = 0
         self.database.add(documents=[doc_text], ids=[str(id)])
+
+    def delete_cocuments(self, ids):
+        """
+        Deletes documents from the collection.
+        """
+        for id in ids:
+            self.database.delete(ids=[str(id)])
 
     def add_paragraph(self, paragraph_text):
         """
@@ -63,7 +74,7 @@ class VectorDB:
         """
         results = self.database.query(query_texts=[search_text], n_results=n_results)
         return results["documents"][0]
-    
+
     def query_database(self, search_text, n_results=1):
         """
         Queries the database for the most similar document to the search text.
@@ -107,8 +118,11 @@ if "__main__" == __name__:
     print(VDB.query_database_id("What did Aria eat?"))  # Prints "2"
 
     VDB.delete_collection("SimilaritySearch")
-    try:VDB.create_collection("ParagraphTest")
-    except:pass
+    
+    try:
+        VDB.create_collection("ParagraphTest")
+    except:
+        pass
     VDB.target_collection("ParagraphTest")
 
     VDB.add_paragraph(
