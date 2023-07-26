@@ -11,26 +11,20 @@ from modal import (
 
 def download_model():
     import sys
+
     sys.path.append("/root/Otter")
 
     from otter.modeling_otter import OtterForConditionalGeneration
 
-    OtterForConditionalGeneration.from_pretrained("luodian/OTTER-9B-LA-InContext",
-                                                  device_map="auto")
+    OtterForConditionalGeneration.from_pretrained(
+        "luodian/OTTER-9B-LA-InContext", device_map="auto"
+    )
 
 
-"""
-    Image.from_dockerhub("pytorch/pytorch:2.0.0-cuda11.7-cudnn8-devel",
-                         setup_dockerfile_commands=[
-                             "RUN apt-get update",
-                             "RUN apt-get install -y python3.9 python3-pip",
-                         ],
-                         )
-"""
 image = (
     Image.debian_slim(python_version="3.9")
-        .apt_install("git", "gcc", "build-essential", "cmake")
-        .pip_install(
+    .apt_install("git", "gcc", "build-essential", "cmake")
+    .pip_install(
         "accelerate>=0.19.0",
         "braceexpand>=0.1.7",
         "einops>=0.6.1",
@@ -55,17 +49,16 @@ image = (
         "scipy>=1.10.1",
         "timm>=0.9.2",
         "tqdm>=4.65.0",
-        "transformers>=4.29.0",
+        "transformers==4.29.0",
         "uvicorn>=0.22.0",
         "webdataset>=0.2.48",
         "xformers>=0.0.20",
-        "natsort>=8.4.0"
+        "natsort>=8.4.0",
     )
-        .run_commands(
+    .run_commands(
         "git clone https://github.com/Luodian/Otter.git /root/Otter",
     )
-        .run_function(download_model
-                      )
+    .run_function(download_model)
 )
 
 stub = Stub(name="otter_llama7b", image=image)
@@ -82,7 +75,9 @@ if stub.is_inside():
     import sys
 
 
-@stub.cls(gpu="a100",)
+@stub.cls(
+    gpu="a100",
+)
 class Otter_Model:
     def __enter__(self):
         sys.path.append("/root/Otter")
@@ -98,9 +93,9 @@ class Otter_Model:
             precision["torch_dtype"] = torch.float16
         elif load_bit == "fp32":
             precision["torch_dtype"] = torch.float32
-        self.model = OtterForConditionalGeneration.from_pretrained("luodian/OTTER-9B-LA-InContext",
-                                                                   device_map="sequential",
-                                                                   **precision)
+        self.model = OtterForConditionalGeneration.from_pretrained(
+            "luodian/OTTER-9B-LA-InContext", device_map="sequential", **precision
+        )
         self.model.text_tokenizer.padding_side = "left"
         self.tokenizer = self.model.text_tokenizer
         self.image_processor = transformers.CLIPImageProcessor()
@@ -113,8 +108,13 @@ class Otter_Model:
     def get_response(self, image, prompt: str) -> str:
         input_data = image
 
-        vision_x = self.image_processor.preprocess([input_data], return_tensors="pt")[
-            "pixel_values"].unsqueeze(1).unsqueeze(0)
+        vision_x = (
+            self.image_processor.preprocess([input_data], return_tensors="pt")[
+                "pixel_values"
+            ]
+            .unsqueeze(1)
+            .unsqueeze(0)
+        )
 
         lang_x = self.model.text_tokenizer(
             [
@@ -129,8 +129,9 @@ class Otter_Model:
         lang_x_input_ids = lang_x["input_ids"]
         lang_x_attention_mask = lang_x["attention_mask"]
 
-        bad_words_id = self.model.text_tokenizer(["User:", "GPT1:", "GFT:", "GPT:"],
-                                            add_special_tokens=False).input_ids
+        bad_words_id = self.model.text_tokenizer(
+            ["User:", "GPT1:", "GFT:", "GPT:"], add_special_tokens=False
+        ).input_ids
         generated_text = self.model.generate(
             vision_x=vision_x.to(self.model.device),
             lang_x=lang_x_input_ids.to(self.model.device),
@@ -142,14 +143,14 @@ class Otter_Model:
         )
         parsed_output = (
             self.model.text_tokenizer.decode(generated_text[0])
-                .split("<answer>")[-1]
-                .lstrip()
-                .rstrip()
-                .split("<|endofchunk|>")[0]
-                .lstrip()
-                .rstrip()
-                .lstrip('"')
-                .rstrip('"')
+            .split("<answer>")[-1]
+            .lstrip()
+            .rstrip()
+            .split("<|endofchunk|>")[0]
+            .lstrip()
+            .rstrip()
+            .lstrip('"')
+            .rstrip('"')
         )
         return parsed_output
 
@@ -158,7 +159,10 @@ class Otter_Model:
 def main():
     otter = Otter_Model()
     from PIL import Image
-    okcancel_image = Image.open("C:/Users/Angel/Desktop/OpenAdapt/okcancel.jpg").convert('RGB')
+
+    okcancel_image = Image.open(
+        "C:/Users/Angel/Desktop/OpenAdapt/okcancel.jpg"
+    ).convert("RGB")
     questions = [
         "How many buttons are there?",
         "What do the buttons say?",
