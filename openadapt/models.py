@@ -326,11 +326,28 @@ class Screenshot(db.Base):
         box = (x0, y0, x1, y1)
         self._image = self._image.crop(box)
 
-    def convert_binary_to_png(self, image_binary):
+    def convert_binary_to_png(self, image_binary: bytes) -> Image:
+        """Convert a binary image to a PNG image.
+
+        Args:
+            image_binary (bytes): The binary image data.
+
+        Returns:
+            Image: The PNG image.
+        """
         buffer = io.BytesIO(image_binary)
         return Image.open(buffer)
 
-    def convert_png_to_binary(self, image):
+    def convert_png_to_binary(self, image: Image) -> bytes:
+        """Convert a PNG image to binary image data.
+
+        Args:
+            image (Image): The PNG image.
+
+        Returns:
+            bytes: The binary image data.
+        """
+
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
