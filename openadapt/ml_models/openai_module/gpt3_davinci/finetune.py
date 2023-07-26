@@ -18,7 +18,7 @@ def gpt_davinci_finetune(recording: models.Recording):
     for ref_win, ref_act, target_win, target_act in get_finetune_pairs(recording):
         pass
 
-    # TODO: create JSON in the format {prompt: ref_win, ref_act completion: target_win, target_act}
+    # TODO: create JSON in the format {prompt: ref_win, ref_act completion: target_win, target_act} as per GPT finetune docs.
 
 
 
