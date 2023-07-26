@@ -51,3 +51,8 @@ def select_ml_model(recording_id):
     # for model in ML_MODELS:
     #    # use wandb for metrics on different ml models.
 
+
+def add_model(name: str, provider: str):
+    """
+    High level function to add a new model to the list of ML modes
+    """
