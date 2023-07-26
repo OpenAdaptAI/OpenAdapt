@@ -7,8 +7,7 @@ Typical usage example:
     $ pip install -e .
 """
 
-from setuptools import setup, find_packages
-
+from setuptools import find_packages, setup
 
 MODULE_NAME = "openadapt"
 MODULE_VERSION = "0.1.0"
