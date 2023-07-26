@@ -321,7 +321,15 @@ def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
             action_events.pop()
 
 
-def save_screenshot_diff(screenshots):
+def save_screenshot_diff(screenshots: list[Screenshot]) -> list[Screenshot]:
+    """Save screenshot diff data to the database. The diff data is the difference
+    between two consecutive screenshots.
+
+    Args:
+        screenshots (list[Screenshot]): A list of screenshots.
+
+    Returns:
+        list[Screenshot]: A list of screenshots with diff data saved to the db."""
     data_updated = False
     logger.info("verifying diffs for screenshots...")
 
@@ -345,7 +353,15 @@ def save_screenshot_diff(screenshots):
     return screenshots
 
 
-def get_screenshots(recording):
+def get_screenshots(recording: Recording) -> list[Screenshot]:
+    """Get screenshots for a given recording.
+
+    Args:
+        recording (Recording): The recording object.
+
+    Returns:
+        list[Screenshot]: A list of screenshots for the recording.
+    """
     screenshots = _get(Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):

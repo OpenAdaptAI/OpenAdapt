@@ -276,7 +276,8 @@ class Screenshot(db.Base):
         return self._image
 
     @property
-    def diff(self):
+    def diff(self) -> Image:
+        """Get the difference between the current screenshot and the previous screenshot."""
         if self.png_diff_data:
             return self.convert_binary_to_png(self.png_diff_data)
 
@@ -285,7 +286,8 @@ class Screenshot(db.Base):
         return self._diff
 
     @property
-    def diff_mask(self):
+    def diff_mask(self) -> Image:
+        """Get the difference mask between the current screenshot and the previous screenshot."""
         if self.png_diff_mask_data:
             return self.convert_binary_to_png(self.png_diff_mask_data)
 
