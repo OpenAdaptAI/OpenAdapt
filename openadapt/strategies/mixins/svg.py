@@ -25,6 +25,8 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
     """
 
     def __init__(self, recording: Recording, vtracer_executable_path: str = "vtracer"):
+        """Initializes the ReplayStrategy Mixin with an optional attribute for the path to the vtracer executable."""
+        root_directory = os.path.expanduser("~")
         if not is_dependency_installed(vtracer_executable_path):
             path_to_cargo = ensure_dependency("cargo")
             subprocess.run(["cargo", "install", "vtracer"])
@@ -35,6 +37,7 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
         super().__init__(recording)
 
     def get_svg_text(self, screenshot: Screenshot) -> str:
+        """Returns the svg text from the svg version of the screenshot."""
         input_img = screenshot.image
 
         temp_output = tempfile.NamedTemporaryFile(delete=False, suffix=".svg")

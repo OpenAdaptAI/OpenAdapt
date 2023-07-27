@@ -38,8 +38,8 @@ def ensure_dependency(name: str, is_executable: bool = True) -> str:
     """Returns the location of the dependency."""
     system = platform.system()
     root_directory = os.path.expanduser("~")
-    if not is_dependency_installed(name, system, is_executable, root_directory):
-        install_dependency(name, system)
+    if not is_dependency_installed(name, system, is_executable):
+        install_dependency(name, system, root_directory)
     
     path_to_dep = os.path.join(
         root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[name]["Location"]
@@ -48,7 +48,7 @@ def ensure_dependency(name: str, is_executable: bool = True) -> str:
 
 
 def is_dependency_installed(
-    dependency_name: str, system: str = None, is_executable: bool = True
+    dependency_name: str, system: str = None, is_executable: bool = True, 
 ) -> bool:
     """
     Check if the specified dependency is installed on the computer.
