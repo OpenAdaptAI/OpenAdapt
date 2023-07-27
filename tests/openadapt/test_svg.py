@@ -18,7 +18,7 @@ class SVGReplayStrategy(SVGReplayStrategyMixin):
     """Custom Replay Strategy to solely test the SVG Mixin."""
 
     def __init__(self, recording: Recording):
-        if platform.system() == "Windows":
+        if platform.system() == "Apple":
             ensure_dependency("cairo")
         super().__init__(recording)
 
