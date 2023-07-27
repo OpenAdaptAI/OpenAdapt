@@ -10,7 +10,12 @@ from openadapt.privacy.providers import (
 def test_presidio_scrub_text():
     """Test that PresidioScrubbingProvider can scrub text."""
 
-    provider = PresidioScrubbingProvider()
+    data = {
+        "name": "Presidio",
+        "capabilities": [Modality.TEXT],
+    }
+
+    provider = PresidioScrubbingProvider(**data)
 
     text = "My phone number is 123-456-7890."
     expected_result = "My phone number is <PHONE_NUMBER>."

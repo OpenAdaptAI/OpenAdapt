@@ -36,7 +36,7 @@ class ScrubbingProviderFactory:
         return filtered_providers
 
 
-class PresidioScrubbingProvider(ScrubbingProvider, BaseModel):
+class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
 
     SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
@@ -49,12 +49,6 @@ class PresidioScrubbingProvider(ScrubbingProvider, BaseModel):
         for entity in ANALYZER_TRF.get_supported_entities()
         if entity not in config.SCRUB_IGNORE_ENTITIES
     ]
-
-    def __init__(self) -> None:
-        super().__init__(
-            name="Presidio",
-            capabilities=[Modality.TEXT],
-        )
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
@@ -75,15 +69,16 @@ class PresidioScrubbingProvider(ScrubbingProvider, BaseModel):
         ):
             text = "".join(text.split(config.ACTION_TEXT_SEP))
 
-        analyzer_results = ANALYZER_TRF.analyze(
+        # Access ANALYZER_TRF as a class attribute
+        analyzer_results = PresidioScrubbingProvider.ANALYZER_TRF.analyze(
             text=text,
-            entities=SCRUBBING_ENTITIES,
+            entities=PresidioScrubbingProvider.SCRUBBING_ENTITIES,
             language=config.SCRUB_LANGUAGE,
         )
 
         logger.debug(f"analyzer_results: {analyzer_results}")
 
-        anonymized_results = ANONYMIZER.anonymize(
+        anonymized_results = PresidioScrubbingProvider.ANONYMIZER.anonymize(
             text=text,
             analyzer_results=analyzer_results,
         )
