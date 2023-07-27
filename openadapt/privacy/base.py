@@ -18,7 +18,7 @@ class ScrubbingProvider(BaseModel):
     name: str
     capabilities: List[Modality]
 
-    def scrub_text(self):
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
         raise NotImplementedError
 
     def scrub_image(self):

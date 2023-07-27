@@ -1,4 +1,6 @@
-from typing import Union
+""" A Module for Scrubbing Providers """
+
+from typing import List
 
 from loguru import logger
 from PIL import Image
@@ -6,7 +8,6 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
-import fire
 
 from openadapt import config, utils
 from openadapt.privacy.base import Modality, ScrubbingProvider
@@ -16,7 +17,15 @@ class ScrubbingProviderFactory:
     """A Factory Class for Scrubbing Providers"""
 
     @staticmethod
-    def get_for_modality(modality: Modality) -> list[ScrubbingProvider]:
+    def get_for_modality(modality: Modality) -> List[ScrubbingProvider]:
+        """Get Scrubbing Providers for a given Modality
+
+        Args:
+            modality (Modality): Modality Type
+
+        Returns:
+            List[ScrubbingProvider]: Scrubbing Providers
+        """
         scrubbing_providers = ScrubbingProvider.__subclasses__()
         filtered_providers = [
             provider()
@@ -29,8 +38,8 @@ class ScrubbingProviderFactory:
 class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
 
-    self.name = "Presidio"
-    self.capabilities = [Modality.TEXT]
+    name = "Presidio"
+    capabilities = [Modality.TEXT]
 
     SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
     NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
