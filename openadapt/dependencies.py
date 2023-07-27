@@ -2,7 +2,6 @@
 import os
 import platform
 import subprocess
-import sys
 
 from loguru import logger
 
@@ -38,7 +37,7 @@ DEP_NAME_TO_SYS_TO_INSTALL_CMD = {
 def ensure_dependency(name: str, is_executable: bool = True) -> str:
     system = platform.system()
     if not is_dependency_installed(name, system, is_executable):
-        return install_dependency(name, system, is_executable)
+        return install_dependency(name, system)
     else:
         return name
 
@@ -85,7 +84,7 @@ def is_dependency_installed(
             logger.info("Add how to check if a dependency is downloaded on Windows.")
 
 
-def install_dependency(name: str, system: str, is_executable: bool = True) -> str:
+def install_dependency(name: str, system: str) -> str:
     "Installs the specified dependency on the given system and returns the location where the installation is completed."
     logger.info(f"installing dependency {name=}")
     root_directory = os.path.expanduser("~")
@@ -107,8 +106,4 @@ def install_dependency(name: str, system: str, is_executable: bool = True) -> st
     path_to_dep = os.path.join(
         root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[name]["Location"]
     )
-
-    if is_executable:
-        sys.path.append(path_to_dep)
-
     return path_to_dep

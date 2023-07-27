@@ -26,8 +26,12 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
 
     def __init__(self, recording: Recording, vtracer_executable_path: str = "vtracer"):
         if not is_dependency_installed(vtracer_executable_path):
-            ensure_dependency("cargo")
+            path_to_cargo = ensure_dependency("cargo")
             subprocess.run(["cargo", "install", "vtracer"])
+            head, _ = os.path.split(path_to_cargo)
+            self.path_to_vtracer = os.path.join(head, "vtracer")
+        else:
+            self.path_to_vtracer = vtracer_executable_path
 
         super().__init__(recording)
 
@@ -43,7 +47,7 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
             input_img.save(temp_input, "PNG")
             subprocess.run(
                 [
-                    "vtracer",
+                    self.path_to_vtracer,
                     "--input",
                     temp_input.name,
                     "--output",
