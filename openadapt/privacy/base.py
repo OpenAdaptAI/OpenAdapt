@@ -3,7 +3,7 @@ from typing import List
 from pydantic import BaseModel
 
 
-class Modality(BaseModel):
+class Modality:
     """A Base Class for Modality Types"""
 
     TEXT = "TEXT"
@@ -17,6 +17,13 @@ class ScrubbingProvider(BaseModel):
 
     name: str
     capabilities: List[Modality]
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, name: str, capabilities: List[Modality]) -> None:
+        self.name = name
+        self.capabilities = capabilities
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         raise NotImplementedError

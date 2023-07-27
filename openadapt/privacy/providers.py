@@ -8,6 +8,7 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+from pydantic import BaseModel
 
 from openadapt import config, utils
 from openadapt.privacy.base import Modality, ScrubbingProvider
@@ -35,12 +36,8 @@ class ScrubbingProviderFactory:
         return filtered_providers
 
 
-class PresidioScrubbingProvider(ScrubbingProvider):
+class PresidioScrubbingProvider(ScrubbingProvider, BaseModel):
     """A Class for Presidio Scrubbing Provider"""
-
-    def __init__(self) -> None:
-        self.name: str = "Presidio"
-        self.capabilities: List[Modality] = [Modality.TEXT]
 
     SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
     NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
@@ -52,6 +49,12 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         for entity in ANALYZER_TRF.get_supported_entities()
         if entity not in config.SCRUB_IGNORE_ENTITIES
     ]
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="Presidio",
+            capabilities=[Modality.TEXT],
+        )
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
