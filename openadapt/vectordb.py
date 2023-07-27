@@ -6,8 +6,7 @@ class VectorDB:
     """
     A class for storing and querying data by vector similarity.
     """
-
-    def __init__(self):
+    def __init__(self, name="SimilaritySearch", distance="cosine"):
         self.client = chromadb.Client(
             Settings(
                 chroma_db_impl="duckdb+parquet",
@@ -17,11 +16,11 @@ class VectorDB:
 
         try:
             self.database = self.client.create_collection(
-                name="SimilaritySearch", metadata={"hnsw:space": "cosine"}
+                name=name, metadata={"hnsw:space": distance}
             )
         except:
             self.database = self.client.get_collection(
-                name="SimilaritySearch", metadata={"hnsw:space": "cosine"}
+                name=name, metadata={"hnsw:space": distance}
             )
 
     def add_individual_document(self, doc_text):
@@ -35,7 +34,7 @@ class VectorDB:
             id = 0
         self.database.add(documents=[doc_text], ids=[str(id)])
 
-    def delete_cocuments(self, ids):
+    def delete_documents(self, ids):
         """
         Deletes documents from the collection.
         """
@@ -118,7 +117,7 @@ if "__main__" == __name__:
     print(VDB.query_database_id("What did Aria eat?"))  # Prints "2"
 
     VDB.delete_collection("SimilaritySearch")
-    
+
     try:
         VDB.create_collection("ParagraphTest")
     except:
