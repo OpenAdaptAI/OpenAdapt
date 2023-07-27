@@ -18,7 +18,7 @@ class SVGReplayStrategy(SVGReplayStrategyMixin):
 
     def __init__(self, recording: Recording):
         ensure_dependency("cairo")
-        # need to export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
+        # need to export LDFLAGS="-L/opt/homebrew/opt/libffi/lib" ?
         # export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
         super().__init__(recording)
 
