@@ -28,8 +28,7 @@ class SVGReplayStrategyMixin(BaseReplayStrategy):
         if not is_dependency_installed(vtracer_executable_path):
             path_to_cargo = ensure_dependency("cargo")
             subprocess.run(["cargo", "install", "vtracer"])
-            head, _ = os.path.split(path_to_cargo)
-            self.path_to_vtracer = os.path.join(head, "vtracer")
+            self.path_to_vtracer = os.path.join(path_to_cargo, "vtracer")
         else:
             self.path_to_vtracer = vtracer_executable_path
 

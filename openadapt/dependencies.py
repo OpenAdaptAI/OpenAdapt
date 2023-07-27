@@ -35,11 +35,16 @@ DEP_NAME_TO_SYS_TO_INSTALL_CMD = {
 
 
 def ensure_dependency(name: str, is_executable: bool = True) -> str:
+    """Returns the location of the dependency."""
     system = platform.system()
-    if not is_dependency_installed(name, system, is_executable):
-        return install_dependency(name, system)
-    else:
-        return name
+    root_directory = os.path.expanduser("~")
+    if not is_dependency_installed(name, system, is_executable, root_directory):
+        install_dependency(name, system)
+    
+    path_to_dep = os.path.join(
+        root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[name]["Location"]
+    )
+    return path_to_dep
 
 
 def is_dependency_installed(
@@ -84,10 +89,9 @@ def is_dependency_installed(
             logger.info("Add how to check if a dependency is downloaded on Windows.")
 
 
-def install_dependency(name: str, system: str) -> str:
+def install_dependency(name: str, system: str, root_directory: str) -> None:
     "Installs the specified dependency on the given system and returns the location where the installation is completed."
     logger.info(f"installing dependency {name=}")
-    root_directory = os.path.expanduser("~")
 
     if system == "Windows":
         cwd = os.getcwd()
@@ -103,7 +107,3 @@ def install_dependency(name: str, system: str) -> str:
         else:
             subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[name][system]["Intel"])
 
-    path_to_dep = os.path.join(
-        root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[name]["Location"]
-    )
-    return path_to_dep
