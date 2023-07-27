@@ -1,4 +1,5 @@
 from io import BytesIO, StringIO
+import platform
 
 from PIL import Image
 import cairosvg as cairo
@@ -17,9 +18,8 @@ class SVGReplayStrategy(SVGReplayStrategyMixin):
     """Custom Replay Strategy to solely test the SVG Mixin."""
 
     def __init__(self, recording: Recording):
-        ensure_dependency("cairo")
-        # need to export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
-        # export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
+        if platform.system() == "Windows":
+            ensure_dependency("cairo")
         super().__init__(recording)
 
     def get_next_action_event(self):
