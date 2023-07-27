@@ -54,7 +54,8 @@ def finetune():
         logging_steps=1,
         weight_decay=0.01,
         push_to_hub=True,
-        push_to_hub_model_id="RWKV-1b5-finetuned-overfit",
+        #ush_to_hub_model_id="RWKV-1b5-finetuned-overfit",
+        hub_model_id="avidoavid/RWKV-1b5-finetuned-overfit",
         hub_token="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"
     )
 
@@ -87,7 +88,7 @@ def finetune():
     trainer.train()
     # model = prepare_model_for_int8_training(model)
     # lora_model.train()
-    lora_model = lora_model.merge_and_unload()
+    #lora_model = lora_model.merge_and_unload()
 
     ########## AFTER TRAINING ##########
     # prompt = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n# Instruction:\nYou are posting on social media platforms. A list of information signals is provided in JSON format. Please respond with only the id of the signal that is most relevant to the task formatted as a list.\n# Input:\n[{'id': 0, 'type': 'file', 'descriptor': 'File_Sorting_Script.py'}, {'id': 1, 'type': 'url', 'descriptor': 'https://www.linkedin.com'}, {'id': 2, 'type': 'function', 'descriptor': 'openai.Completion.create'}, {'id': 3, 'type': 'database', 'descriptor': 'footwear.db'}, {'id': 4, 'type': 'url', 'descriptor': 'https://www.skyscanner.com'}, {'id': 5, 'type': 'file', 'descriptor': 'restaurant_menu_data.txt'}, {'id': 6, 'type': 'url', 'descriptor': 'https://en.wikipedia.org/wiki/Web_development'}, {'id': 7, 'type': 'function', 'descriptor': 'math.sqrt'}, {'id': 8, 'type': 'url', 'descriptor': 'https://www.acuweather.com'}, {'id': 9, 'type': 'database', 'descriptor': 'user_info.db'}, {'id': 10, 'type': 'function', 'descriptor': 'sklearn.tree.DecisionTreeClassifier'}, {'id': 11, 'type': 'url', 'descriptor': 'https://www.chess.com'}, {'id': 12, 'type': 'database', 'descriptor': 'social_media_accounts.db'}, {'id': 13, 'type': 'file', 'descriptor': 'electronic_medical_record_template.xls'}, {'id': 14, 'type': 'function', 'descriptor': 'pandas.DataFrame'}]\n# Response: \n"
@@ -102,11 +103,16 @@ def finetune():
 
     prompt = "Once upon a time"
 
+    # Encode the prompt and run it through the model
     inputs = tokenizer.encode(prompt, return_tensors="pt")
-    outputs = lora_model.generate(inputs, max_length=500, do_sample=True, temperature=0.7)
+    batch = tokenizer(prompt, return_tensors="pt")
+    output_tokens = model.generate(**batch, max_length=500)
+    #outputs = model.generate(inputs, max_length=500, do_sample=True, temperature=0.7)
 
-    print()
-    print(f"AFTER TRAINING: {tokenizer.decode(outputs[0])}")
+    # Decode the output and print it
+    print(f"AFTER TRAINING:")
+    print(tokenizer.decode(output_tokens[0], skip_special_tokens=True))
+
 
 
     trainer.push_to_hub("RWKV-1b5-finetuned-overfit")
