@@ -38,8 +38,9 @@ class ScrubbingProviderFactory:
 class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
 
-    name = "Presidio"
-    capabilities = [Modality.TEXT]
+    def __init__(self) -> None:
+        self.name: str = "Presidio"
+        self.capabilities: List[Modality] = [Modality.TEXT]
 
     SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
     NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
