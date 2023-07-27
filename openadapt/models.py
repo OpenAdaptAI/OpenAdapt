@@ -1,26 +1,38 @@
+"""This module defines the models used in the OpenAdapt system."""
+
+from typing import Union
 import io
 
 from loguru import logger
-from pynput import keyboard
 from PIL import Image, ImageChops
+from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import config, db, utils, window
+from openadapt import config, db, window
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
 class ForceFloat(sa.TypeDecorator):
+    """Custom SQLAlchemy type decorator for floating-point numbers."""
+
     impl = sa.Numeric(10, 2, asdecimal=False)
     cache_ok = True
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(
+        self,
+        value: int | float | str | None,
+        dialect: str,
+    ) -> float | None:
+        """Convert the result value to float."""
         if value is not None:
             value = float(value)
         return value
 
 
 class Recording(db.Base):
+    """Class representing a recording in the database."""
+
     __tablename__ = "recording"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -51,15 +63,18 @@ class Recording(db.Base):
     _processed_action_events = None
 
     @property
-    def processed_action_events(self):
+    def processed_action_events(self) -> list:
+        """Get the processed action events for the recording."""
         from openadapt import events
+
         if not self._processed_action_events:
             self._processed_action_events = events.get_events(self)
         return self._processed_action_events
 
 
-
 class ActionEvent(db.Base):
+    """Class representing an action event in the database."""
+
     __tablename__ = "action_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -86,8 +101,12 @@ class ActionEvent(db.Base):
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
     #     AttributeError: 'list' object has no attribute '_sa_instance_state'
-    #children = sa.orm.relationship("ActionEvent", remote_side=[id], back_populates="parent")
-    #parent = sa.orm.relationship("ActionEvent", remote_side=[parent_id], back_populates="children")
+    # children = sa.orm.relationship(
+    #     "ActionEvent", remote_side=[id], back_populates="parent"
+    # )
+    # parent = sa.orm.relationship(
+    #     "ActionEvent", remote_side=[parent_id], back_populates="children"
+    # )  # noqa: E501
 
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
@@ -95,7 +114,10 @@ class ActionEvent(db.Base):
 
     # TODO: playback_timestamp / original_timestamp
 
-    def _key(self, key_name, key_char, key_vk):
+    def _key(
+        self, key_name: str, key_char: str, key_vk: str
+    ) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+        """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
         elif key_char:
@@ -108,10 +130,9 @@ class ActionEvent(db.Base):
         return key
 
     @property
-    def key(self):
-        logger.trace(
-            f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}"
-        )
+    def key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+        """Get the key associated with the action event."""
+        logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
             self.key_name,
             self.key_char,
@@ -119,7 +140,8 @@ class ActionEvent(db.Base):
         )
 
     @property
-    def canonical_key(self):
+    def canonical_key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+        """Get the canonical key associated with the action event."""
         logger.trace(
             f"{self.name=} "
             f"{self.canonical_key_name=} "
@@ -132,7 +154,8 @@ class ActionEvent(db.Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, canonical=False):
+    def _text(self, canonical: bool = False) -> str | None:
+        """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
@@ -157,21 +180,25 @@ class ActionEvent(db.Base):
         else:
             if key_name_attr:
                 text = f"{name_prefix}{key_attr}{name_suffix}".replace(
-                    "Key.", "",
+                    "Key.",
+                    "",
                 )
             else:
                 text = key_attr
         return text
 
     @property
-    def text(self):
+    def text(self) -> str:
+        """Get the text representation of the action event."""
         return self._text()
 
     @property
-    def canonical_text(self):
+    def canonical_text(self) -> str:
+        """Get the canonical text representation of the action event."""
         return self._text(canonical=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """Return a string representation of the action event."""
         attr_names = [
             "name",
             "mouse_x",
@@ -183,16 +210,8 @@ class ActionEvent(db.Base):
             "text",
             "element_state",
         ]
-        attrs = [
-            getattr(self, attr_name)
-            for attr_name in attr_names
-        ]
-        attrs = [
-            int(attr)
-            if isinstance(attr, float)
-            else attr
-            for attr in attrs
-        ]
+        attrs = [getattr(self, attr_name) for attr_name in attr_names]
+        attrs = [int(attr) if isinstance(attr, float) else attr for attr in attrs]
         attrs = [
             f"{attr_name}=`{attr}`"
             for attr_name, attr in zip(attr_names, attrs)
@@ -202,21 +221,31 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls, children_dicts):
-        children = [
-            ActionEvent(**child_dict)
-            for child_dict in children_dicts
-        ]
+    def from_children(cls: list, children_dicts: list) -> "ActionEvent":
+        """Create an ActionEvent instance from a list of child event dictionaries.
+
+        Args:
+            children_dicts (list): List of dictionaries representing child events.
+
+        Returns:
+            ActionEvent: An instance of ActionEvent with the specified child events.
+
+        """
+        children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 
 
 class Screenshot(db.Base):
+    """Class representing a screenshot in the database."""
+
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
+    png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
+    png_diff_mask_data = sa.Column(sa.LargeBinary, nullable=True)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
@@ -231,7 +260,8 @@ class Screenshot(db.Base):
     _diff_mask = None
 
     @property
-    def image(self):
+    def image(self) -> Image:
+        """Get the image associated with the screenshot."""
         if not self._image:
             if self.sct_img:
                 self._image = Image.frombytes(
@@ -242,35 +272,49 @@ class Screenshot(db.Base):
                     "BGRX",
                 )
             else:
-                buffer = io.BytesIO(self.png_data)
-                self._image = Image.open(buffer)
+                self._image = self.convert_binary_to_png(self.png_data)
         return self._image
 
     @property
-    def diff(self):
-        if not self._diff:
-            assert self.prev, "Attempted to compute diff before setting prev"
-            self._diff = ImageChops.difference(self.image, self.prev.image)
+    def diff(self) -> Image:
+        """Get the difference between the current screenshot and the previous screenshot."""
+        if self.png_diff_data:
+            return self.convert_binary_to_png(self.png_diff_data)
+
+        assert self.prev, "Attempted to compute diff before setting prev"
+        self._diff = ImageChops.difference(self.image, self.prev.image)
         return self._diff
 
     @property
-    def diff_mask(self):
-        if not self._diff_mask:
-            if self.diff:
-                self._diff_mask = self.diff.convert("1")
+    def diff_mask(self) -> Image:
+        """Get the difference mask between the current screenshot and the previous screenshot."""
+        if self.png_diff_mask_data:
+            return self.convert_binary_to_png(self.png_diff_mask_data)
+
+        if self.diff:
+            self._diff_mask = self.diff.convert("1")
         return self._diff_mask
 
     @property
-    def array(self):
+    def array(self) -> np.ndarray:
+        """Get the NumPy array representation of the image."""
         return np.array(self.image)
 
     @classmethod
-    def take_screenshot(cls):
+    def take_screenshot(cls: "Screenshot") -> "Screenshot":
+        """Capture a screenshot."""
+        # avoid circular import
+        from openadapt import utils
+
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event):
+    def crop_active_window(self, action_event: ActionEvent) -> None:
+        """Crop the screenshot to the active window defined by the action event."""
+        # avoid circular import
+        from openadapt import utils
+
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
@@ -282,8 +326,36 @@ class Screenshot(db.Base):
         box = (x0, y0, x1, y1)
         self._image = self._image.crop(box)
 
+    def convert_binary_to_png(self, image_binary: bytes) -> Image:
+        """Convert a binary image to a PNG image.
+
+        Args:
+            image_binary (bytes): The binary image data.
+
+        Returns:
+            Image: The PNG image.
+        """
+        buffer = io.BytesIO(image_binary)
+        return Image.open(buffer)
+
+    def convert_png_to_binary(self, image: Image) -> bytes:
+        """Convert a PNG image to binary image data.
+
+        Args:
+            image (Image): The PNG image.
+
+        Returns:
+            bytes: The binary image data.
+        """
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
 
 class WindowEvent(db.Base):
+    """Class representing a window event in the database."""
+
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -301,11 +373,14 @@ class WindowEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_event(cls):
+    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
+        """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 
 
 class PerformanceStat(db.Base):
+    """Class representing a performance statistic in the database."""
+
     __tablename__ = "performance_stat"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -317,6 +392,8 @@ class PerformanceStat(db.Base):
 
 
 class MemoryStat(db.Base):
+    """Class representing a memory usage statistic in the database."""
+
     __tablename__ = "memory_stat"
 
     id = sa.Column(sa.Integer, primary_key=True)

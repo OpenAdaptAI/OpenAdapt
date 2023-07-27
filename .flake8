@@ -1,0 +1,5 @@
+[flake8]
+exclude=alembic/versions,.venv, openadapt/strategies/__init__.py
+docstring-convention=google
+max-line-length = 88
+extend-ignore = ANN101
