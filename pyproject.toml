@@ -83,6 +83,8 @@ pympler = "^1.0.1"
 psutil = "^5.9.5"
 pyobjc-framework-avfoundation = "^9.2"
 fastapi = "0.98.0"
+fastavro = ">=1.8.1"
+griptape = "^0.14.7"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"

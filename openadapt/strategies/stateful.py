@@ -7,7 +7,7 @@ Usage:
 
 from copy import deepcopy
 from pprint import pformat
-
+import os
 from loguru import logger
 import deepdiff
 
@@ -124,8 +124,7 @@ class StatefulReplayStrategy(
         )
         reference_window_dict["state"].pop("data")
         active_window_dict["state"].pop("data")
-
-        prompt_template = J2(template_name="stateful.j2",templates_dir="openadapt/prompts")
+        prompt_template = J2(template_name="stateful.j2",templates_dir=os.path.abspath("templates"))
         prompt = prompt_template.render(
             reference_window_dict=reference_window_dict,
             reference_action_dicts=reference_action_dicts,
