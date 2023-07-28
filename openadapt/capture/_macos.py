@@ -8,10 +8,10 @@ from datetime import datetime
 from sys import platform
 import os
 
-from Foundation import NSURL, NSObject
-from Quartz import CGMainDisplayID
-import AVFoundation as AVF
-import objc
+from Foundation import NSURL, NSObject  # type: ignore # noqa
+from Quartz import CGMainDisplayID  # type: ignore # noqa
+import AVFoundation as AVF  # type: ignore # noqa
+import objc  # type: ignore # noqa
 
 from openadapt import config
 

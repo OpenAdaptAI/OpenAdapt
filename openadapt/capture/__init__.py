@@ -21,8 +21,13 @@ def get_capture() -> impl.Capture:
     return impl.Capture()
 
 
-if __name__ in ("__main__", "capture"):
+def start() -> None:
+    """Entry point for the capture module."""
     capture = get_capture()
     capture.start(audio=True, camera=False)
     input("Press enter to stop")
     capture.stop()
+
+
+if __name__ in ("__main__", "capture"):
+    start()

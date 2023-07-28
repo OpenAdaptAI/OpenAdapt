@@ -1,14 +1,18 @@
 """Allows for capturing the screen and audio on Windows."""
 from sys import platform
+import datetime
+import os
 import threading
 import time
 
 import cv2
 import numpy as np
-import win32api
-import win32con
-import win32gui
-import win32ui
+import win32api  # type: ignore # noqa
+import win32con  # type: ignore # noqa
+import win32gui  # type: ignore # noqa
+import win32ui  # type: ignore # noqa
+
+from openadapt import config
 
 
 class Capture:
@@ -23,22 +27,28 @@ class Capture:
         self.hwin = win32gui.GetDesktopWindow()
         self.desktop_handle = win32gui.GetDesktopWindow()
         self.window = {
-            "width": win32api.GetSystemMetrics(win32con.SM_CXSCREEN),
-            "height": win32api.GetSystemMetrics(win32con.SM_CYSCREEN),
             "left": 0,
             "top": 0,
+            "width": win32api.GetSystemMetrics(win32con.SM_CXSCREEN),
+            "height": win32api.GetSystemMetrics(win32con.SM_CYSCREEN),
         }
         self.is_recording = False
         self.video_out = None
-        self.frame_interval = (
-            1 / 20
-        )  # Set the frame interval for video recording (60 fps)
+        self.frame_interval = 1 / 20  # 20 FPS
 
-    def start(self) -> None:
-        """Start capturing the screen video."""
+    def start(self, audio: bool = True) -> None:
+        """Start capturing the screen video.
+
+        TODO: add audio support
+        Args:
+            audio (bool): Whether to capture audio. )
+        """
         self.is_recording = True
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        video_outpath = "video_output.mp4"
+        video_outpath = os.path.join(
+            config.CAPTURE_DIR_PATH,
+            datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
+        )
         self.video_out = cv2.VideoWriter(
             video_outpath,
             fourcc,
