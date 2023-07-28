@@ -28,6 +28,4 @@ def test_print_document():
     assert job_id in job_ids
 
     # Cancel the print job to clean up after the test
-    subprocess.run(
-        ["cancel", job_id]
-    )
+    subprocess.run(["cancel", job_id])
