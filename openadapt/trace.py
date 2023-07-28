@@ -1,4 +1,4 @@
-"""This file adds logging for function entry and exit with 2 utility functions and a decorator.
+"""Implements logging for function entry and exit.
 """
 
 from functools import wraps
