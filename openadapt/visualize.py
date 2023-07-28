@@ -264,17 +264,17 @@ def main(recording: Recording = get_latest_recording()) -> None:
                 break
 
             image = display_event(action_event)
-            diff = display_event(action_event, diff=True)
-            mask = action_event.screenshot.diff_mask
+            # diff = display_event(action_event, diff=True)
+            # mask = action_event.screenshot.diff_mask
 
             if SCRUB:
                 image = scrub.scrub_image(image)
-                diff = scrub.scrub_image(diff)
-                mask = scrub.scrub_image(mask)
+            #    diff = scrub.scrub_image(diff)
+            #    mask = scrub.scrub_image(mask)
 
             image_utf8 = image2utf8(image)
-            diff_utf8 = image2utf8(diff)
-            mask_utf8 = image2utf8(mask)
+            # diff_utf8 = image2utf8(diff)
+            # mask_utf8 = image2utf8(mask)
             width, height = image.size
 
             action_event_dict = row2dict(action_event)

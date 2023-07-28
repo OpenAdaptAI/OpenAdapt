@@ -90,6 +90,8 @@ _DEFAULTS = {
     "NO_ANIMATIONS": False,
     "EXPAND_ALL": False,  # not recommended for large trees
     "MAX_TABLE_CHILDREN": 10,
+    # Calculate and save the difference between 2 neighboring screenshots
+    "SAVE_SCREENSHOT_DIFF": False,
 }
 
 # each string in STOP_STRS should only contain strings

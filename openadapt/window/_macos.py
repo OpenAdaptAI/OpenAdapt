@@ -244,10 +244,10 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
         if object and not (isinstance(object, bool) or isinstance(object, int)):
             logger.warning(
                 f"Unknown type: {type(object)} - "
-                f"Please report this on GitHub: "
-                f"github.com/MLDSAI/OpenAdapt/issues/new?"
-                f"assignees=&labels=bug&projects=&template=bug_form.yml&"
-                f"title=%5BBug%5D%3A+"
+                "Please report this on GitHub: "
+                "github.com/MLDSAI/OpenAdapt/issues/new?"
+                "assignees=&labels=bug&projects=&template=bug_form.yml&"
+                "title=%5BBug%5D%3A+"
             )
             logger.warning(f"{object=}")
     if value:
