@@ -8,6 +8,8 @@ from modal import (
     method,
 )
 
+from openadapt.ml.data.synthesize import questions, get_event_screenshots, write_to_spreadsheet
+
 
 def download_model():
     from huggingface_hub import snapshot_download
@@ -137,6 +139,7 @@ image = (
         "sed -i 's@prompts/alignment.txt@/root/MiniGPT-4/prompts/alignment.txt@g' "
         "/root/MiniGPT-4/eval_configs/minigpt4_eval.yaml"
     )
+        .pip_install("openpyxl")
 )
 
 stub = Stub(name="minigpt4", image=image)
@@ -209,16 +212,24 @@ def main():
     minigpt4 = MiniGPT4_Model()
 
     from PIL import Image
-    image = Image.open("C:/Users/Angel/Desktop/OpenAdapt/desktop.png").convert('RGB')
-    questions = [
-        "Describe the picture",
-        "What icons are there on the desktop?",
-        "What button would you click to make a search on the Internet?",
-        "What button would you click to text a friend?",
-        "What is the position of the Safari button?",
-    ]
+    import io
 
-    for question in questions:
-        llm_message = minigpt4.generate.call(question, image)
-        print(f"\nPrompt: {question}")
-        print(f"Response: {llm_message}")
+    # image = Image.open("C:/Users/Angel/Desktop/OpenAdapt/desktop.png").convert('RGB')
+    # questions = [
+    #     "Describe the picture",
+    #     "What icons are there on the desktop?",
+    #     "What button would you click to make a search on the Internet?",
+    #     "What button would you click to text a friend?",
+    #     "What is the position of the Safari button?",
+    # ]
+    question = questions[0]
+    images = get_event_screenshots()
+    answers = []
+
+    for image in images:
+        image_bytes_io = io.BytesIO(image.png_data)
+        pil_img = Image.open(image_bytes_io)
+
+        llm_message = minigpt4.generate.call(question, pil_img)
+        answers.append(llm_message)
+    write_to_spreadsheet(answers, images)
