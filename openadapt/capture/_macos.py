@@ -21,9 +21,10 @@ class Capture:
 
     def __init__(self) -> None:
         """Initialize the capture object."""
-        # only on macos
         if platform != "darwin":
-            raise NotImplementedError("Only implemented on macOS")
+            raise NotImplementedError(
+                "This is the macOS implementation, please use the Windows version"
+            )
 
         objc.options.structs_indexable = True
 
