@@ -2,6 +2,21 @@
 
 
 
+## v0.6.1 (2023-07-28)
+
+### Fix
+
+* fix: modify flake8 config (#429)
+
+* style: modify flake8 config
+
+* add platform check for macOS in pyobjc-framework-avfoundation version
+
+* remove file exclusion in .flake8 and add ignore comment in openadapt/strategies/__init__.py
+
+* resolve lint errors from recent merge ([`f03be2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f03be2f9cf100b5bc8dfa34cf76fd60b6eef9f62))
+
+
 ## v0.6.0 (2023-07-26)
 
 ### Feature
