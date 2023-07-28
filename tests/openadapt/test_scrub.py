@@ -27,7 +27,7 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
 
 def test_emr_image() -> None:
     """
-    Test to analyze some EMR PII data
+    Test to that a sample EMR image is scrubbed.
     """
 
     test_image_path = "assets/sample_emr_1"
