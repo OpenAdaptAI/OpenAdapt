@@ -25,15 +25,12 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
     return r, g, b
 
 
-def test_analyze_emr() -> None:
+def test_emr_image() -> None:
     """
     Test to analyze some EMR PII data
     """
 
-    # warnings.filterwarnings("ignore", category=DeprecationWarning)
-    i = 1
-    # resources/sample_emr_{i}.png
-    test_image_path = "resources/sample_emr_"
+    test_image_path = "assets/sample_emr_1"
     test_image_path = test_image_path + str(i) + ".png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
@@ -47,16 +44,13 @@ def test_analyze_emr() -> None:
     # Save the scrubbed image data to a file
     scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
     scrubbed_image.save(scrubbed_image_path)
-     
-    # Assert that resources has the scrubbed files
-    assert os.path.exists("resources/sample_emr_1_scrubbed.png")
-        
-    # TODO: Add code to analyze the scrubbed image
-        
+
+    # Use Cape to check if all of the PII has been scrubbed or not
+    # TODO: Add Cape code here
+
 
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
@@ -209,7 +203,8 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert (
-        scrub.scrub_text(text_with_pii_phi) == "<PERSON> email is <EMAIL_ADDRESS> and"
+        scrub.scrub_text(text_with_pii_phi)
+        == "<PERSON> email is <EMAIL_ADDRESS> and"
         " his phone number is <PHONE_NUMBER>."
         "His credit card number is <CREDIT_CARD> and"
         " his social security number is <US_SSN>."
