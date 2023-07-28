@@ -36,6 +36,8 @@ _DEFAULTS = {
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
+    # APP CONFIGURATIONS
+    "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
@@ -83,6 +85,8 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    # Calculate and save the difference between 2 neighboring screenshots
+    "SAVE_SCREENSHOT_DIFF": False,
 }
 
 # each string in STOP_STRS should only contain strings
@@ -99,6 +103,8 @@ SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
+
+ENV_FILE_PATH = ".env"
 
 
 def getenv_fallback(var_name: str) -> str:
@@ -124,6 +130,34 @@ def getenv_fallback(var_name: str) -> str:
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
+
+
+def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH) -> None:
+    """Persist an environment variable to a .env file.
+
+    Args:
+        var_name (str): The name of the environment variable.
+        val (str): The value of the environment variable.
+        env_file_path (str, optional): The path to the .env file (default: ".env").
+    """
+    if not os.path.exists(env_file_path):
+        with open(env_file_path, "w") as f:
+            f.write(f"{var_name}={val}")
+    else:
+        # find and replace
+        with open(env_file_path, "r") as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith(f"{var_name}="):
+                lines[i] = f"{var_name}={val}\n"
+                break
+        else:
+            # we didn't find the variable in the file, so append it
+            if lines[-1][-1] != "\n":
+                lines.append("\n")
+            lines.append(f"{var_name}={val}")
+        with open(env_file_path, "w") as f:
+            f.writelines(lines)
 
 
 load_dotenv()
