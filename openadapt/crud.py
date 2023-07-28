@@ -84,7 +84,7 @@ def insert_action_event(
     event_data = {
         **event_data,
         "timestamp": event_timestamp,
-        "recording_timestamp": recording_timestamp,
+        "recording_timestamp": recording_timestamp
     }
     _insert(event_data, ActionEvent, action_events)
 
