@@ -119,7 +119,7 @@ def test_remove_signal():
     signals.remove_signal(1)
     signals_list = signals.return_signals()
     assert len(signals_list) == 1
-    assert signals_list[0]["number"] == 1
+    assert signals_list[0]["id"] == 1
 
 
 def test_add_signal_with_title():

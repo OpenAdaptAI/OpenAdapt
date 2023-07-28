@@ -6,7 +6,7 @@ import sys
 import sqlite3
 import pandas as pd
 import psutil
-import subprocess
+import openpyxl
 
 from loguru import logger
 
@@ -32,7 +32,7 @@ class Signals:
     signals = [{},{},{}]
 
     {
-        "number": signal number in list,
+        "id": signal id in list,
         "title": given signal title,
         "type": type of signal (file, database, etc.)
         "address": given signal address,
@@ -302,13 +302,13 @@ class Signals:
             # If signal is not a string, raise an error.
             raise ValueError("Signal must be a string.")
 
-        signal_number = len(self.signals) + 1
+        signal_id = len(self.signals) + 1
 
         if (signal_type == "function" and signal_path != None):
             signal_address = (signal_path,signal_address)
 
         signal = {
-            "number": signal_number,
+            "id": signal_id,
             "title": signal_title,
             "type": signal_type,
             "address": signal_address,
@@ -316,20 +316,20 @@ class Signals:
         }
         self.signals.append(signal)
 
-    def remove_signal(self, signal_number):
+    def remove_signal(self, signal_id):
         """
         Remove a signal from the list.
         """
-        self.signals.pop(signal_number - 1)
-        for i in range(signal_number - 1, len(self.signals)):
-            # Decrement the signal numbers of all signals after the removed signal.
-            self.signals[i]["number"] -= 1
+        self.signals.pop(signal_id - 1)
+        for i in range(signal_id - 1, len(self.signals)):
+            # Decrement the signal ids of all signals after the removed signal.
+            self.signals[i]["id"] -= 1
 
-    def return_signal_data(self, signal_number, **kwargs):
+    def return_signal_data(self, signal_id, **kwargs):
         """
         Return the data of a signal.
         """
-        signal = self.signals[signal_number - 1]
+        signal = self.signals[signal_id - 1]
         if len(signal) == 0:
             return None
         elif signal["type"] == "database":
@@ -357,8 +357,8 @@ def initialize_default_signals():
 
 
 class Signal:
-    def __init__(self, number, address, description, type, title="None"):
-        self.number = number
+    def __init__(self, id, address, description, type, title="None"):
+        self.id = id
         self.address = address
         self.title = title
         self.description = description
@@ -366,8 +366,8 @@ class Signal:
 
 
 class DBTableSignal(Signal):
-    def __init__(self, number, address, description, type, title="None"):
-        super().__init__(number, address, title, description, type)
+    def __init__(self, id, address, description, type, title="None"):
+        super().__init__(id, address, title, description, type)
 
 
 # Demonstration test code
