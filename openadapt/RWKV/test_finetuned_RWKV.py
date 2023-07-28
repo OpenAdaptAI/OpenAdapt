@@ -3,7 +3,7 @@ from peft import PeftModel, PeftConfig
 
 # Replace these two lines with your model and tokenizer names, if different
 model_path = "./RWKV-1b5-finetuned-overfit"
-repo_path = "avidoavid/RWKV-1b5-finetuned-overfit"
+repo_path = "avidoavid/RWKV-7b-finetuned"
 tokenizer_name = "RWKV/rwkv-raven-1b5"
 
 # Load the model and tokenizer

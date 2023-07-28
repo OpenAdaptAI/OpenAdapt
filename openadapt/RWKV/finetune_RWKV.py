@@ -18,12 +18,12 @@ torch_image = torch_image.apt_install("git-lfs")
 def finetune():
     target_modules = ["feed_forward.value"]
 
-    URL_OF_HUGGINGFACE = "RWKV/rwkv-raven-1b5"
-    tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-raven-1b5")
+    URL_OF_HUGGINGFACE = "RWKV/rwkv-raven-7b"
+    tokenizer = AutoTokenizer.from_pretrained(URL_OF_HUGGINGFACE)
     tokenizer.pad_token = tokenizer.eos_token
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    model = AutoModelForCausalLM.from_pretrained("RWKV/rwkv-raven-1b5")
+    model = AutoModelForCausalLM.from_pretrained(URL_OF_HUGGINGFACE)
 
     for param in model.parameters():
         param.requires_grad = False # Freeze weights
@@ -46,16 +46,16 @@ def finetune():
 
 
     training_args = TrainingArguments(
-        f"RWKV-1b5-finetuned-overfit",
+        f"RWKV-7b-finetuned",
         evaluation_strategy = "epoch",
-        num_train_epochs=8,
+        num_train_epochs=2,
         warmup_steps=0,
-        learning_rate=0.005,
+        learning_rate=0.001,
         logging_steps=1,
         weight_decay=0.01,
         push_to_hub=True,
         #push_to_hub_model_id="RWKV-1b5-finetuned-overfit",
-        hub_model_id="avidoavid/RWKV-1b5-finetuned-overfit",
+        hub_model_id="avidoavid/RWKV-7b-finetuned",
         hub_token="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"
     )
 
@@ -92,7 +92,7 @@ def finetune():
     print(tokenizer.decode(output_tokens[0], skip_special_tokens=True))
 
 
-    trainer.push_to_hub("RWKV-1b5-finetuned-overfit")
+    trainer.push_to_hub("RWKV-7b-finetuned")
 
 
 

@@ -185,12 +185,11 @@ def evaluate(for_dataset=False):
         return prompt, relevant_signals
 
 
-def generate_dataset():
+def generate_dataset(num_samples=10):
     # Run evaluate() several times and save the results to a file
     # Each line of jsonl file should be a dictionary as follows: {"text": "{prompt} {target_response}"}
     # Create jsonl file
     # Run evaluate() 1000x times and save the result to the file
-    num_samples = 10
     with open("dataset.jsonl", "w") as file:
         for i in range(num_samples):
             value = evaluate(for_dataset=True)
