@@ -23,6 +23,7 @@ import mss.base
 import numpy as np
 
 from openadapt import common, config
+from openadapt.config import LogMessageFilter
 from openadapt.db import BaseModel
 from openadapt.models import ActionEvent
 
@@ -58,7 +59,7 @@ def configure_logging(logger: logger, log_level: str) -> None:
             enqueue=True,
             format=logger_format,
             filter=(
-                config.filter_log_messages
+                LogMessageFilter().filter_log_messages
                 if config.MAX_NUM_WARNINGS_PER_SECOND > 0
                 else None
             ),

@@ -178,50 +178,54 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 
-def filter_log_messages(
-    data: logger,
-    max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,  # noqa: F821
-) -> bool:
-    """Filter log messages, excluding specific strings and limiting warnings per second.
+class LogMessageFilter:
+    """Filter log messages, excluding specific strings and limiting warnings."""
 
-    Args:
-        data: The input parameter "data" is expected to be data from a loguru logger.
-        max_num_warnings_per_second: The maximum number of warnings allowed per second.
-          Set to 0 to disable.
+    def __init__(
+        self,
+        max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,  # noqa: F821
+    ) -> None:
+        """
+        Initialize a new instance of LogMessageFilter.
 
-    Returns:
-        A boolean value indicating whether the message in the input data should be
-        ignored or not. If the maximum number of warnings per second is exceeded,
-        the function returns False, indicating that the message should be ignored.
-        Otherwise, it returns True, indicating that the message should not be ignored.
-    """
-    # TODO: ultimately, we want to fix the underlying issues, but for now,
-    # we can ignore these messages
-    messages_to_ignore = [
-        "Cannot pickle Objective-C objects",
-    ]
+        Args:
+            max_num_warnings_per_second: The maximum number of warnings allowed
+                per second. Defaults to the value of MAX_NUM_WARNINGS_PER_SECOND.
+        """
+        self.max_num_warnings_per_second = max_num_warnings_per_second
+        # TODO: ultimately, we want to fix the underlying issues, but for now,
+        # we can ignore these messages
+        self.messages_to_ignore = ["Cannot pickle Objective-C objects"]
+        self.message_timestamps = defaultdict(list)
 
-    # Track the timestamps of each message
-    message_timestamps = defaultdict(list)
+    def filter_log_messages(self, data: logger) -> bool:
+        """
+        Filter log messages based on the defined criteria.
 
-    for msg in messages_to_ignore:
-        if msg in data["message"]:
-            if max_num_warnings_per_second > 0:
-                current_timestamp = time.time()
-                message_timestamps[msg].append(current_timestamp)
-                timestamps = message_timestamps[msg]
+        Args:
+            data: The log message data from a loguru logger.
 
-                # Remove timestamps older than 1 second
-                timestamps = [
-                    ts
-                    for ts in timestamps
-                    if current_timestamp - ts
-                    <= WARNING_SUPPRESSION_PERIOD  # noqa: F821
-                ]
+        Returns:
+            bool: True if the log message should not be ignored, False otherwise.
+        """
+        for msg in self.messages_to_ignore:
+            if msg in data["message"]:
+                if self.max_num_warnings_per_second > 0:
+                    current_timestamp = time.time()
+                    self.message_timestamps[msg].append(current_timestamp)
+                    timestamps = self.message_timestamps[msg]
 
-                if len(timestamps) > max_num_warnings_per_second:
-                    return False
+                    # Remove timestamps older than 1 second
+                    timestamps = [
+                        ts
+                        for ts in timestamps
+                        if current_timestamp - ts
+                        <= WARNING_SUPPRESSION_PERIOD  # noqa: F821
+                    ]
 
-                message_timestamps[msg] = timestamps
+                    if len(timestamps) > self.max_num_warnings_per_second:
+                        return False
 
-    return True
+                    self.message_timestamps[msg] = timestamps
+
+        return True
