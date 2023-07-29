@@ -1,4 +1,4 @@
-from openadapt.models_evaluation.data_models import (
+from openadapt.evaluators.data_models import (
     ActionEvents,
     KeyAction,
     KeyActionType,
