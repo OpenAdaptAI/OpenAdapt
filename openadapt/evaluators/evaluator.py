@@ -3,7 +3,6 @@ from typing import Tuple
 import math
 
 from loguru import logger
-import fire
 
 from openadapt import utils
 from openadapt.evaluators import fixtures

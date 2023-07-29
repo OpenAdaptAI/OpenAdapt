@@ -1,3 +1,48 @@
+### How does the evaluator work ?
+
+The `BaseEvaluator` class perform the following action:
+
+- For a given model, generate a single action (either mouse action or key press action)
+- Give a single window reference and action reference, run the completion to get the predicted action.
+- Evaluate the predicted action with the refrence action.
+
+
+The `BaseEvaluator` class does NOT implement code related to model prompts and completion. It only peform the evaluation based on a basic single mouse action or key board action.
+
+The score is given as following:
+
+- As long as the completion can be parsed to a valid action, a score is given.
+- A maximum score of 0.9-1 is given to the prediction which predicts the exact same action as the reference.
+- If it is a key action, then compare the type of action : `press` or `release` and the key used.
+- If it is a mouse action, then compare the type of action: `click` or `move`, then calculate the normalized `Euclidean distance` between the reference point and the predicted point.
+
+
+
+### How to use the `evaluator` module
+
+1. For generation of simple action fixtures:
+
+```python
+from openadapt.evaluators import fixtures
+ref_window, action, active_window = fixtures.generate_single_mouse()
+ref_window, action, active_window = fixtures.generate_multi_click()
+ref_window, action, active_window = fixtures.generate_multi_action_sequence()
+```
+
+2. For evaluation of a model
+
+Refer to `examples` for a simple examples. In order to evaluate, for example, a `fine-tuned-model`, we need to add the a class which inherits from `BaseEvaluator`
+and implement the following methods
+
+- `init_model`: how to init model and tokenizer
+- `get_completion`: how to get completion from model
+- `build_prompt`: how to build the prompt
+- `parse_completion`: how to parse a completion to a valid Action
+
+
+As these methods are model specific, it is not implemented inside `BaseEvaluator`
+
+```python
 from typing import Tuple
 
 from loguru import logger
@@ -16,10 +61,10 @@ MAX_TOKENS = 1024
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-class GPT2Evaluator(BaseEvaluation):
+class MyFineTunedModelEvaluator(BaseEvaluation):
     def __init__(
         self,
-        model_name: str = "gpt2",
+        model_name: str = "my-fine-tuned-model",
         max_input_size: int = MAX_INPUT_SIZE,
         max_tokens: int = MAX_TOKENS,
         max_screen_size: Tuple[int, int] = MAX_SCREEN_SIZE,
@@ -84,3 +129,9 @@ def start():
 
 if __name__ == "__main__":
     fire.Fire(main)
+
+
+
+
+
+```
