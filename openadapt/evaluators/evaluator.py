@@ -16,7 +16,7 @@ DEFAULT_MAX_TOKENS = 1024
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-class BaseEvaluation:
+class BaseEvaluator:
     """Base class for all evaluations"""
 
     def __init__(

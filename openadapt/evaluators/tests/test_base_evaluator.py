@@ -1,7 +1,7 @@
 import math
 
 from openadapt.evaluators.data_models import KeyAction, MouseAction, Window
-from openadapt.evaluators.evaluator import BaseEvaluation
+from openadapt.evaluators.evaluator import BaseEvaluator
 
 LOG_LEVEL = "DEBUG"
 MAX_SCREEN_SIZE = (1920, 1080)
@@ -9,7 +9,7 @@ MAX_INPUT_SIZE = 1024
 MAX_TOKENS = 1024
 
 
-base_evaluator = BaseEvaluation(
+base_evaluator = BaseEvaluator(
     model_name="gpt2",
 )
 

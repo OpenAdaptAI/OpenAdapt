@@ -6,7 +6,7 @@ import transformers as tf
 
 from openadapt import utils
 from openadapt.evaluators.data_models import KeyAction, MouseAction, Window
-from openadapt.evaluators.evaluator import BaseEvaluation
+from openadapt.evaluators.evaluator import BaseEvaluator
 
 LOG_LEVEL = "DEBUG"
 MAX_SCREEN_SIZE = (1920, 1080)
@@ -16,7 +16,7 @@ MAX_TOKENS = 1024
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-class GPT2Evaluator(BaseEvaluation):
+class GPT2Evaluator(BaseEvaluator):
     def __init__(
         self,
         model_name: str = "gpt2",

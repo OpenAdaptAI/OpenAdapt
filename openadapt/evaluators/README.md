@@ -61,7 +61,7 @@ MAX_TOKENS = 1024
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-class MyFineTunedModelEvaluator(BaseEvaluation):
+class MyFineTunedModelEvaluator(BaseEvaluator):
     def __init__(
         self,
         model_name: str = "my-fine-tuned-model",
