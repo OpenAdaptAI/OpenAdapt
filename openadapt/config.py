@@ -9,11 +9,9 @@ Usage:
 
 """
 
-from collections import defaultdict
 import multiprocessing
 import os
 import pathlib
-import time
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -36,6 +34,7 @@ _DEFAULTS = {
     "IGNORE_WARNINGS": False,
     "MAX_NUM_WARNINGS_PER_SECOND": 5,
     "WARNING_SUPPRESSION_PERIOD": 1,
+    "MESSAGES_TO_IGNORE": ["Cannot pickle Objective-C objects"],
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
@@ -176,56 +175,3 @@ if multiprocessing.current_process().name == "MainProcess":
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
-
-
-class LogMessageFilter:
-    """Filter log messages, excluding specific strings and limiting warnings."""
-
-    def __init__(
-        self,
-        max_num_warnings_per_second: int = MAX_NUM_WARNINGS_PER_SECOND,  # noqa: F821
-    ) -> None:
-        """
-        Initialize a new instance of LogMessageFilter.
-
-        Args:
-            max_num_warnings_per_second: The maximum number of warnings allowed
-                per second. Defaults to the value of MAX_NUM_WARNINGS_PER_SECOND.
-        """
-        self.max_num_warnings_per_second = max_num_warnings_per_second
-        # TODO: ultimately, we want to fix the underlying issues, but for now,
-        # we can ignore these messages
-        self.messages_to_ignore = ["Cannot pickle Objective-C objects"]
-        self.message_timestamps = defaultdict(list)
-
-    def filter_log_messages(self, data: logger) -> bool:
-        """
-        Filter log messages based on the defined criteria.
-
-        Args:
-            data: The log message data from a loguru logger.
-
-        Returns:
-            bool: True if the log message should not be ignored, False otherwise.
-        """
-        for msg in self.messages_to_ignore:
-            if msg in data["message"]:
-                if self.max_num_warnings_per_second > 0:
-                    current_timestamp = time.time()
-                    self.message_timestamps[msg].append(current_timestamp)
-                    timestamps = self.message_timestamps[msg]
-
-                    # Remove timestamps older than 1 second
-                    timestamps = [
-                        ts
-                        for ts in timestamps
-                        if current_timestamp - ts
-                        <= WARNING_SUPPRESSION_PERIOD  # noqa: F821
-                    ]
-
-                    if len(timestamps) > self.max_num_warnings_per_second:
-                        return False
-
-                    self.message_timestamps[msg] = timestamps
-
-        return True
