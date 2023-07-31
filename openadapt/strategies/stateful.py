@@ -123,8 +123,13 @@ class StatefulReplayStrategy(
         )
         reference_window_dict["state"].pop("data")
         active_window_dict["state"].pop("data")
-        prompt = j2.load_template(template_name="stateful.j2")
-        system_message = j2.load_template(template_name="system_message.j2")
+        prompt = j2.load_template(
+            template_fname="stateful.j2",
+            reference_window_dict=reference_window_dict,
+            reference_action_dicts=reference_action_dicts,
+            active_window_dict=active_window_dict,
+        )
+        system_message = j2.load_template(template_fname="system_message.j2")
         completion = self.get_completion(prompt, system_message)
         active_action_dicts = get_action_dict_from_completion(completion)
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
