@@ -2,6 +2,360 @@
 
 
 
+## v0.7.0 (2023-07-28)
+
+### Feature
+
+* feat: scrub toggle for gui (#375)
+
+* add scrub toggle + write dark_mode to env
+
+* Update config.py
+
+* Update util.py
+
+* Update config.py
+
+* address comments
+
+* Update config.py
+
+* run isort
+
+* from first
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* add env file path (also where did the toggle go??)
+
+* Update config.py
+
+* Update config.py
+
+* Update config.py
+
+* isort
+
+* Update util.py
+
+* linted
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e96a4f599b9790509dad865ea3c7b1b254fb19b))
+
+
+## v0.6.1 (2023-07-28)
+
+### Fix
+
+* fix: modify flake8 config (#429)
+
+* style: modify flake8 config
+
+* add platform check for macOS in pyobjc-framework-avfoundation version
+
+* remove file exclusion in .flake8 and add ignore comment in openadapt/strategies/__init__.py
+
+* resolve lint errors from recent merge ([`f03be2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f03be2f9cf100b5bc8dfa34cf76fd60b6eef9f62))
+
+
+## v0.6.0 (2023-07-26)
+
+### Feature
+
+* feat(crud): compute and save screenshot diff (#367)
+
+* feat(crud): Compute and save screenshot diff
+
+* Add 2 columns in screenshot table to store png_diff_data and png_mask_diff_data.
+
+* CRUD now supports calculation and save screenshots diff data on the flight.
+
+* feat(config): Add SAVE_SCREENSHOT_DIFF environment variable
+
+* SAVE_SCREENSHOT_DIFF indicates that 2 neighbors screenshot will be compared and the difference will be saved to db
+
+* feat(crud): add missing import after merge
+
+* refactor(crud): add missing type annotations
+
+* refactor(crud): add missing type annotations ([`9189bca`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9189bca7aef05ef7801545cc0a55bca54898820a))
+
+
+## v0.5.8 (2023-07-25)
+
+### Fix
+
+* fix(install): improve powershell script (Issue #372) (#409)
+
+* fix: git reinstallation even if it si present
+
+* fix: Error Message:
+
+Remove-Item : Cannot remove the item at &#39;C:\Users\Krish Patel\hi&#39; because it is in
+use.
+At line:1 char:9
++         Remove-Item -LiteralPath $setupdir -Force -Recurse
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [Remove-Item], PSInvalidOperation
+   Exception
+    + FullyQualifiedErrorId : InvalidOperation,Microsoft.PowerShell.Commands.RemoveIt
+   emCommand
+
+* fix: issue that poetry shell gives
+&#34;..runnning scripts is disabled on the command line&#34;
+
+* fix: bug #4 issue
+ to support multiple version of python (acc. to OpenAdapt standards)
+
+* add start mesage to know
+ why sometimes the installtion command exits
+
+* fix the edge case where the new terminal PWD
+ is not set to the OpenAdapt folder that was installed
+
+* Update install/install_openadapt.ps1
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`fb3ae1e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fb3ae1e4b4991776f9c89791636e20c9c7a689a5))
+
+
+## v0.5.7 (2023-07-25)
+
+### Chore
+
+* chore: format changes with black, and google python docstring, install script testing (#289)
+
+* ran black
+
+* use poetry for install
+
+* Add caching to main.yml for faster github action checks
+
+* Add missing job to main.yml
+
+* try ubuntu latest instead
+
+* change readme type to string instead of array in pyproject.toml
+
+* Update poetry version in main.yml
+
+* try macos
+
+* commented out tests
+
+* see if black command works
+
+* see if black command runs properly
+
+* use black github action
+
+* fix parsing
+
+* use supported black github action
+
+* ignore venv as well
+
+* change args for flake8 action
+
+* try flake8 exclude
+
+* manually add and use flake8
+
+* change docstring keyword
+
+* Chain commands for installing flake8
+
+* exclude .venv
+
+* merged latest changes and add download instruction
+
+* remove import comment
+
+* try python command with ubuntu
+
+* add tesseract-ocr
+
+* add homebrew option
+
+* add cache for tesseract
+
+* add ntlk command with poetry
+
+* ran black
+
+* Add .flake8 and add flake8 to poetry
+
+* Add max length to flake8, add windows job with new install script, and address linting errors
+
+* add some ignore errors in flake8
+
+* Adress more flake8 lint errors
+
+* Change max line length
+
+* ran black
+
+* resolve new changes and ran black
+
+* remove &#34;import nltk; nltk.download(&#39;punkt&#39;)&#34; command
+
+* resolve lint errors in record.py
+
+* remove unnecessary commas
+
+* Address D415, sentence/comma missing on first line error
+
+* Resolve F403
+
+* Address D200, single line doctstrings
+
+* Addressed E731, F841, D205 errors
+
+* resolve F401, unused imports
+
+* Address return type annotations
+
+* Add type annotations for function arguments
+
+* ran black
+
+* Address &#39;Multi-line docstring summaries should start at the first line&#39;
+
+* Revert main.yml to test if all checks pass
+
+* fix syntax issue in main.yml
+
+* Use cache for install poetry dependencies
+
+* Revert main.yml and convert black action to oneliner with poetry
+
+* Address lint errors for newly merged changes
+
+* Try caching tesseract install
+
+* test if tesseract is cached
+
+* try cache brew package
+
+* try cache brew again
+
+* Remove failing tesseract cache
+
+* Address lint errors from recent merge
+
+* replace test command
+
+* address comments on annotations and ran black
+
+* change todo
+
+* Shorten word line max length to 88 for comments
+
+* try executing script
+
+* keep windows runner as todo
+
+* comment poetry shell in install_opendapt.sh
+
+* add error flag in mac install script to avoid poetry shell in github actions
+
+* try to see if this will pass
+
+* update main.yml
+
+* Address incorrect function annotations in record.py
+
+* Address annotation errors in _windows.py
+
+* Addressed more general annotations
+
+* Address incomplete annotations in util.py
+
+* run isort and other precommit hooks with custom black config on all files
+
+* Update openadapt/crud.py
+
+* replaced more &#39;Any&#39; type annotations
+
+* resolve lint errors from recent merge
+
+* ran black
+
+* resolve circular imports, and address Any annotations
+
+---------
+
+Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`c815924`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c81592425b4efefdb48b818508f7debfc3ac95c3))
+
+### Fix
+
+* fix: issues after latest merge (#424)
+
+* merge
+
+* hotfix
+
+* fix: resolve annotation errors and restore incorrectly removed code in lint PR
+
+* fix
+
+* Update models.py
+
+* run black
+
+* Update openadapt/models.py
+
+---------
+
+Co-authored-by: Mustafa Abdulrahman &lt;mus2003.abdul@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`2d4e8c6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2d4e8c6fee245bfdc4726f113b27367a36ae96c7))
+
+
+## v0.5.6 (2023-07-20)
+
+### Chore
+
+* chore: add preview option to black pre-commit hook and update README (#405) ([`6a42eb7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6a42eb762b39b70313ecbe5014377c376ccc26e9))
+
+* chore: configure isort with black profile and add black precommit hook (#384)
+
+* chore: configure isort with black profile and add black precommit hook
+
+* update black version
+
+* add advanced isort settings to match CONTRIBUTING.md ([`2e7496b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2e7496b64445de965d6274e83987edb83f73772e))
+
+### Documentation
+
+* docs: replace MLDSAI with OpenAdaptAI in README.md (#402) ([`750cf1d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/750cf1d327bf22453da1d2f0cc1505bbc52765f4))
+
+* docs: update README (installation table) (#398) ([`1212198`](https://github.com/OpenAdaptAI/OpenAdapt/commit/121219866942df82ab8624e4580b254ca5b9c2b0))
+
+* docs: update readme (take transpose of installation table) (#397) ([`fe39c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fe39c73999b7221524442a11e0814b02faca78ce))
+
+* docs: Update README.md (#390) ([`8745969`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8745969ec9481348932146a46e91153f333c948d))
+
+### Fix
+
+* fix(merge_consecutive_keyboard_events): Fix reference before assignment (#411)
+
+Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-Pro.local&gt; ([`e136b28`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e136b28731d09745a23adb11cc5309ec86b7fdd9))
+
+
 ## v0.5.5 (2023-07-17)
 
 ### Fix
