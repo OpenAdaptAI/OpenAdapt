@@ -87,11 +87,11 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
     # VISUALIZATION CONFIGURATIONS
     "VISUALIZE_DARK_MODE": False,
-    "RUN_NATIVELY": False,
-    "DENSE_TREES": True,
-    "NO_ANIMATIONS": False,
-    "EXPAND_ALL": False,  # not recommended for large trees
-    "MAX_TABLE_CHILDREN": 10,
+    "VISUALIZE_RUN_NATIVELY": False,
+    "VISUALIZE_DENSE_TREES": True,
+    "VISUALIZE_ANIMATIONS": True,
+    "VISUALIZE_EXPAND_ALL": False,  # not recommended for large trees
+    "VISUALIZE_MAX_TABLE_CHILDREN": 10,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
 }

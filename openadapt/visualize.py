@@ -36,7 +36,9 @@ PROCESS_EVENTS = True
 performance_plot_img: ui.interactive_image = None
 
 
-def create_tree(tree_dict: dict, max_children: str = config.MAX_TABLE_CHILDREN) -> list[dict]:
+def create_tree(
+    tree_dict: dict, max_children: str = config.VISUALIZE_MAX_TABLE_CHILDREN
+) -> list[dict]:
     """
     Recursively creates a tree from a dictionary.
 
@@ -76,9 +78,9 @@ def set_tree_props(tree: ui.tree) -> None:
     Args:
       tree (ui.tree): A Quasar Tree.
     """
-    tree._props["dense"] = config.DENSE_TREES
-    tree._props["no-transition"] = config.NO_ANIMATIONS
-    tree._props["default-expand-all"] = config.EXPAND_ALL
+    tree._props["dense"] = config.VISUALIZE_DENSE_TREES
+    tree._props["no-transition"] = not config.VISUALIZE_ANIMATIONS
+    tree._props["default-expand-all"] = config.VISUALIZE_EXPAND_ALL
     tree._props["filter"] = ""
 
 
@@ -346,7 +348,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
         reload=False,
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
-        native=config.RUN_NATIVELY,
+        native=config.VISUALIZE_RUN_NATIVELY,
         fullscreen=False,
     )
 
