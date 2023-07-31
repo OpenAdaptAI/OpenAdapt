@@ -8,13 +8,12 @@ Usage:
 from copy import deepcopy
 from pprint import pformat
 import os
+
 from loguru import logger
 import deepdiff
 
-from openadapt import models, strategies, utils
+from openadapt import j2, models, strategies, utils
 from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
-
-from griptape.utils.j2 import J2
 
 # import datetime
 
@@ -124,13 +123,8 @@ class StatefulReplayStrategy(
         )
         reference_window_dict["state"].pop("data")
         active_window_dict["state"].pop("data")
-        prompt_template = J2(template_name="stateful.j2",templates_dir=os.path.abspath("./templates"))
-        prompt = prompt_template.render(
-            reference_window_dict=reference_window_dict,
-            reference_action_dicts=reference_action_dicts,
-            active_window_dict=active_window_dict,
-        )
-        system_message = J2(template_name="system_message.j2",templates_dir=os.path.abspath("./templates"))
+        prompt = j2.load_template(template_name="stateful.j2")
+        system_message = j2.load_template(template_name="system_message.j2")
         completion = self.get_completion(prompt, system_message)
         active_action_dicts = get_action_dict_from_completion(completion)
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
@@ -184,9 +178,11 @@ def get_window_state_diffs(
         ignore_window_ids.add(last_window_id)
         logger.info(f"ignoring {first_window_title=} {last_window_title=}")
     window_event_states = [
-        action_event.window_event.state
-        if action_event.window_event.state["window_id"] not in ignore_window_ids
-        else {}
+        (
+            action_event.window_event.state
+            if action_event.window_event.state["window_id"] not in ignore_window_ids
+            else {}
+        )
         for action_event in action_events
     ]
     diffs = [

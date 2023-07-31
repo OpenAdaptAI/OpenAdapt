@@ -82,6 +82,7 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
+    "TEMPLATES_DIR_NAME": "templates",
     "PLOT_PERFORMANCE": True,
 }
 
@@ -136,6 +137,7 @@ ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
+TEMPLATES_DIRPATH = str((ROOT_DIRPATH / _DEFAULTS["TEMPLATES_DIR_NAME"]).resolve())
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
