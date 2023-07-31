@@ -5,10 +5,10 @@
     "version": "1.0",
     "manifest_version": 3,
     "icons": {
-      "48": "icons/MLDSAI_logo.png"
+      "48": "icons/logo.png"
     },
     "action": {
-      "default_icon": "icons/MLDSAI_logo.png"
+      "default_icon": "icons/logo.png"
     },
     "background": {
       "service_worker": "background.js"

@@ -17,17 +17,31 @@ function onReceived(response) {
   console.log(response);
 }
 
+function onDisconnected() {
+  msg = 'Failed to connect: ' + chrome.runtime.lastError.message; // silence error
+  port = null;
+}
+
+function connect() {
+  port = chrome.runtime.connectNative(hostName);
+  port.onMessage.addListener(onReceived);
+  port.onDisconnect.addListener(onDisconnected);
+}
+
 
 /* 
  * Message listener for content script
 */
 function messageListener(message, sender, sendResponse) {
-  console.log({ message, sender, sendResponse });
-  port.postMessage(message); // send to browser.py (native messaging host)
+  try {
+    console.log({ message, sender, sendResponse });
+    port.postMessage(message); // send to browser.py (native messaging host)
+  }
+  catch (e) {
+    connect();
+  }
 }
 
-
-port = chrome.runtime.connectNative(hostName);
-
-port.onMessage.addListener(onReceived);
 chrome.runtime.onMessage.addListener(messageListener);
+
+connect();
