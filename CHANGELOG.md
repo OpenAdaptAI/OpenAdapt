@@ -2,6 +2,74 @@
 
 
 
+## v0.7.0 (2023-07-28)
+
+### Feature
+
+* feat: scrub toggle for gui (#375)
+
+* add scrub toggle + write dark_mode to env
+
+* Update config.py
+
+* Update util.py
+
+* Update config.py
+
+* address comments
+
+* Update config.py
+
+* run isort
+
+* from first
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* add env file path (also where did the toggle go??)
+
+* Update config.py
+
+* Update config.py
+
+* Update config.py
+
+* isort
+
+* Update util.py
+
+* linted
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e96a4f599b9790509dad865ea3c7b1b254fb19b))
+
+
+## v0.6.1 (2023-07-28)
+
+### Fix
+
+* fix: modify flake8 config (#429)
+
+* style: modify flake8 config
+
+* add platform check for macOS in pyobjc-framework-avfoundation version
+
+* remove file exclusion in .flake8 and add ignore comment in openadapt/strategies/__init__.py
+
+* resolve lint errors from recent merge ([`f03be2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f03be2f9cf100b5bc8dfa34cf76fd60b6eef9f62))
+
+
 ## v0.6.0 (2023-07-26)
 
 ### Feature

@@ -10,12 +10,10 @@ Example usage:
 
 import base64
 import os
-import sys
-import threading
 
 from nicegui import app, ui
 
-from openadapt import replay, visualize
+from openadapt import config, replay, visualize
 from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.objects.console import Console
 from openadapt.app.util import clear_db, on_export, on_import
@@ -26,10 +24,11 @@ FPATH = os.path.dirname(__file__)
 # Recording description autocomplete
 OPTIONS = ["test"]
 
-app.native.window_args["resizable"] = False  # too many issues with resizing
 app.native.start_args["debug"] = False
 
 dark = ui.dark_mode()
+dark.value = config.APP_DARK_MODE
+
 logger = None
 
 # Add logo
@@ -59,27 +58,30 @@ with ui.row().classes("w-full justify-right"):
         "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
     )
 
-with ui.splitter(value=20) as splitter:
-    splitter.classes("w-full h-full")
-    with splitter.before:
-        with ui.column().classes("w-full h-full"):
-            record_button = (
-                ui.icon("radio_button_checked", size="64px")
-                .on("click", lambda: recording_prompt(OPTIONS, record_button))
-                .tooltip("Record a new replay / Stop recording")
-            )
-            ui.icon("visibility", size="64px").on(
-                "click", lambda: threading.Thread(target=visualize.main).start()
-            ).tooltip("Visualize the latest replay")
+    with ui.splitter(value=20) as splitter:
+        splitter.classes("w-full h-full")
+        with splitter.before:
+            with ui.column().classes("w-full h-full"):
+                record_button = (
+                    ui.icon("radio_button_checked", size="64px")
+                    .on(
+                        "click",
+                        lambda: recording_prompt(OPTIONS, record_button),
+                    )
+                    .tooltip("Record a new replay / Stop recording")
+                )
+                ui.icon("visibility", size="64px").on("click", visualize.main).tooltip(
+                    "Visualize the latest replay"
+                )
 
-            ui.icon("play_arrow", size="64px").on(
-                "click", lambda: replay.replay("NaiveReplayStrategy")
-            ).tooltip("Play the latest replay")
-    with splitter.after:
-        logger = Console()
-        sys.stderr = logger
-        logger.log.style("height: 250px;, width: 300px;")
-    splitter.enabled = False
+                ui.icon("play_arrow", size="64px").on(
+                    "click",
+                    lambda: replay.replay("NaiveReplayStrategy"),
+                ).tooltip("Play the latest replay")
+        with splitter.after:
+            logger = Console()
+            logger.log.style("height: 250px;, width: 300px;")
+        splitter.enabled = False
 
 
 def start() -> None:

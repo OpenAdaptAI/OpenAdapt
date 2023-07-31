@@ -331,14 +331,14 @@ def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
 
 
 def save_screenshot_diff(screenshots: list[Screenshot]) -> list[Screenshot]:
-    """Save screenshot diff data to the database. The diff data is the difference
-    between two consecutive screenshots.
+    """Save screenshot diff data to the database.
 
     Args:
         screenshots (list[Screenshot]): A list of screenshots.
 
     Returns:
-        list[Screenshot]: A list of screenshots with diff data saved to the db."""
+        list[Screenshot]: A list of screenshots with diff data saved to the db.
+    """
     data_updated = False
     logger.info("verifying diffs for screenshots...")
 
