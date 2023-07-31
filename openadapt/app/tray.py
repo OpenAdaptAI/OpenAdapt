@@ -119,7 +119,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
         vthread = oaThread(target=visualize, args=(recording,))
         vthread.run()
-        if vthread.join() in [True, None]:
+        if vthread.join():
             Notify("Status", "Visualization finished", "OpenAdapt").send()
         else:
             Notify("Status", "Visualization failed", "OpenAdapt").send()
@@ -133,7 +133,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         Notify("Status", "Starting replay...", "OpenAdapt").send()
         rthread = oaThread(target=replay, args=("NaiveReplayStrategy", None, recording))
         rthread.run()
-        if rthread.join() in [True, None]:
+        if rthread.join():
             Notify("Status", "Replay finished", "OpenAdapt").send()
         else:
             Notify("Status", "Replay failed", "OpenAdapt").send()
