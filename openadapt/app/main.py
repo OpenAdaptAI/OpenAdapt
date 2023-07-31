@@ -10,11 +10,10 @@ Example usage:
 
 import base64
 import os
-import threading
 
 from nicegui import app, ui
 
-from openadapt import replay, visualize
+from openadapt import config, replay, visualize
 from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.objects.console import Console
 from openadapt.app.util import clear_db, on_export, on_import
@@ -29,6 +28,8 @@ def run_app() -> None:
     app.native.start_args["debug"] = False
 
     dark = ui.dark_mode()
+    dark.value = config.APP_DARK_MODE
+
     logger = None
 
     # Add logo
@@ -70,10 +71,9 @@ def run_app() -> None:
                     )
                     .tooltip("Record a new replay / Stop recording")
                 )
-                ui.icon("visibility", size="64px").on(
-                    "click",
-                    lambda: threading.Thread(target=visualize.main).start(),
-                ).tooltip("Visualize the latest replay")
+                ui.icon("visibility", size="64px").on("click", visualize.main).tooltip(
+                    "Visualize the latest replay"
+                )
 
                 ui.icon("play_arrow", size="64px").on(
                     "click",
