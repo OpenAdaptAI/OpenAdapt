@@ -24,7 +24,6 @@ class Capture:
             raise NotImplementedError(
                 "This is the Windows implementation, please use the macOS version"
             )
-        self.hwin = win32gui.GetDesktopWindow()
         self.desktop_handle = win32gui.GetDesktopWindow()
         self.window = {
             "left": 0,
