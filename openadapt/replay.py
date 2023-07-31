@@ -27,13 +27,16 @@ def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
     recording: Recording = None,
-) -> None:
+) -> bool:
     """Replay recorded events.
 
     Args:
         strategy_name (str): Name of the replay strategy to use.
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
+
+    Returns:
+        bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
 
@@ -64,6 +67,7 @@ def replay(
     logger.info(f"{strategy=}")
 
     strategy.run()
+    return True
 
 
 # Entry point

@@ -191,11 +191,14 @@ def dict2html(
 
 
 @logger.catch
-def main(recording: Recording = None) -> None:
+def main(recording: Recording = None) -> bool:
     """Visualize a recording.
 
     Args:
         recording (Recording, optional): The recording to visualize.
+
+    Returns:
+        bool: True if visualization was successful, None otherwise.
     """
     configure_logging(logger, LOG_LEVEL)
 
@@ -335,6 +338,7 @@ def main(recording: Recording = None) -> None:
         logger.info(f"{removed=}")
 
     Timer(1, cleanup).start()
+    return True
 
 
 if __name__ == "__main__":
