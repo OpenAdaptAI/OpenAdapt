@@ -19,6 +19,7 @@ import sys
 
 from nicegui import elements, ui
 
+from openadapt import config
 from openadapt.app.objects import console
 from openadapt.scripts.reset_db import reset_db
 
@@ -97,7 +98,29 @@ def sync_switch(
         switch: The switch object.
         prop: The property object.
     """
-    switch.value = prop.value
+    switch.value = prop.value if hasattr(prop, "value") else prop
+
+
+def set_scrub(value: bool) -> None:
+    """Set the scrubbing value.
+
+    Args:
+        value: The value to set.
+    """
+    if config.SCRUB_ENABLED != value:
+        config.persist_env("SCRUB_ENABLED", value)
+        config.SCRUB_ENABLED = value
+        ui.notify("Scrubbing enabled." if value else "Scrubbing disabled.")
+        ui.notify("You may need to restart the app for this to take effect.")
+
+
+def get_scrub() -> bool:
+    """Get the scrubbing value.
+
+    Returns:
+        bool: The scrubbing value.
+    """
+    return config.SCRUB_ENABLED
 
 
 def set_dark(dark_mode: ui.dark_mode, value: bool) -> None:
@@ -107,4 +130,6 @@ def set_dark(dark_mode: ui.dark_mode, value: bool) -> None:
         dark_mode: The dark mode object.
         value: The value to set.
     """
-    dark_mode.value = value
+    if dark_mode.value != value:
+        dark_mode.value = value
+        config.persist_env("APP_DARK_MODE", value)
