@@ -313,6 +313,24 @@ def find_errors(action_events):
     return errors
 
 
+def find_num_window_tab_changes(window_events):
+    num_window_tab_changes = 0
+
+    if len(window_events) < 2:
+        return 0
+
+    for i in range(0, len(window_events) - 1):
+        curr = window_events[i]
+        next = window_events[i + 1]
+        if curr.title != "" and curr.title != next.title:
+            num_window_tab_changes += 1
+
+    if window_events[-1].title != "":
+        num_window_tab_changes += 1
+
+    return num_window_tab_changes - 1
+
+
 def calculate_productivity():
     configure_logging(logger, LOG_LEVEL)
 
@@ -330,6 +348,7 @@ def calculate_productivity():
     num_clicks = find_clicks(action_events)
     num_key_presses = find_key_presses(action_events)
     duration = action_events[-1].timestamp - action_events[0].timestamp
+    tab_changes = find_num_window_tab_changes(window_events)
 
     logger.info("searching for tasks")
     task, start, length = rec_lrs(filtered_action_events)
@@ -345,7 +364,7 @@ def calculate_productivity():
                  "Total time spent during pauses": time_in_gaps,
                  "Total number of mouse clicks": num_clicks,
                  "Total number of key presses": num_key_presses,
-                 "Number of windows/tabs used": len(window_events),
+                 "Number of window/tab switches": tab_changes,
                  "Recording length": duration,
                  f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
                  "Total time spent on repetitive tasks": total_task_time,
