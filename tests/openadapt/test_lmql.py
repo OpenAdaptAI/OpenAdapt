@@ -1,9 +1,5 @@
-from loguru import logger
-import lmql
-from lmql.runtime.bopenai import get_stats
-
-from openadapt.models import Recording, ActionEvent
-from openadapt.strategies.mixins.lmql_action import LMQLReplayStrategyMixin, lmql_json
+from openadapt.models import Recording
+from openadapt.strategies.mixins.lmql_action import LMQLReplayStrategyMixin
 
 RECORDING = Recording()
 
@@ -24,4 +20,4 @@ REPLAY = LMQLReplayStrategy(RECORDING)
 def test_json():
     """Smoke test."""
     prompt = "Penelope entered 'P' into the website."
-    actual = REPLAY.get_valid_json(prompt)
+    actual = REPLAY.get_valid_json(prompt, "lmql.j2")

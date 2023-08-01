@@ -86,6 +86,7 @@ pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'd
 fastapi = "0.98.0"
 fastavro = "^1.8.1"
 griptape = "^0.14.7"
+numpy = "1.25.1"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
