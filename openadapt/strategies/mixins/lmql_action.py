@@ -12,7 +12,7 @@ import lmql
 from loguru import logger
 from pynput.keyboard import Key
 
-from openadapt.config import ACTION_TEXT_NAME_PREFIX, ACTION_TEXT_NAME_SUFFIX
+from openadapt import j2
 from openadapt.models import Recording, ActionEvent
 from openadapt.strategies.base import BaseReplayStrategy
 
@@ -52,10 +52,11 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
 
         return json_result
 
-
 @lmql.query()
-def lmql_json(description: str): '''lmql
-    """Provide a summary of {description} as a json. Declare entries as empty by setting it to null. {{ "name": [ACTION], "mouse_x": [INT_VALUE], "mouse_y": [INT_VALUE], "mouse_dx": [INT_VALUE], "mouse_dy": [INT_VALUE], "mouse_button_name": [CLICK], "mouse_pressed": [STRING_VALUE], "key_name": [STRING_VALUE], "key_char": [STRING_VALUE], "key_vk": [STRING_VALUE] }}"""where ACTION in set(['"move"', '"scroll"', '"press"', '"release"', '"click"']) and STOPS_BEFORE(STRING_VALUE, ',') and INT(INT_VALUE) and len(TOKENS(INT_VALUE)) < 4 and CLICK in set(['"left"', '"right"', '"null"'])
+def lmql_json(description: str): 
+    '''lmql
+    prompt = j2.load_template(template_fname="lmql.j2", description=description)
+    """{prompt} {{ "name": [ACTION], "mouse_x": [INT_VALUE], "mouse_y": [INT_VALUE], "mouse_dx": [INT_VALUE], "mouse_dy": [INT_VALUE], "mouse_button_name": [CLICK], "mouse_pressed": [STRING_VALUE], "key_name": [STRING_VALUE], "key_char": [STRING_VALUE], "key_vk": [STRING_VALUE] }}""" where ACTION in set(['"move"', '"scroll"', '"press"', '"release"', '"click"']) and STOPS_BEFORE(STRING_VALUE, ',') and INT(INT_VALUE) and len(TOKENS(INT_VALUE)) < 4 and CLICK in set(['"left"', '"right"', '"null"'])
 
-    return json.loads(context.prompt.split("setting it to null. ",1)[1])
+    return json.loads(context.prompt.split(prompt,1)[1])
     '''

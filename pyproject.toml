@@ -84,6 +84,8 @@ psutil = "^5.9.5"
 lmql = { version = "^0.0.6.5", python = "^3.10" }
 pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
 fastapi = "0.98.0"
+fastavro = "^1.8.1"
+griptape = "^0.14.7"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
