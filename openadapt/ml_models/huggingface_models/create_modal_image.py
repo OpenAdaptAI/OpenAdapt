@@ -44,7 +44,7 @@ BASE_PACKAGE_LIST = [
 ]
 
 
-def create_conda_image(package: str = None, packages: list[str] = None):
+def create_conda_image(package: str, packages: list[str]):
     """
     Enables the user to create a conda image
     with packages of their choosing.
