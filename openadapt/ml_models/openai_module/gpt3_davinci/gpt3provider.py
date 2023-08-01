@@ -1,4 +1,4 @@
-from base_provider import CompletionProvider, Modality, Capability
+from base_provider import CompletionProvider, Modality, Capability, Availability
 
 
 class GPT3CompletionProvider(CompletionProvider):
@@ -10,6 +10,7 @@ class GPT3CompletionProvider(CompletionProvider):
         Capability.INFERENCE,
     ]
     Modalities = [Modality.TEXT]
+    Availabilities = [Availability.HOSTED]
 
     def finetune(self, prompt: str, completion: str):
         # TODO

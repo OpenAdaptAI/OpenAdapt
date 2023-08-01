@@ -15,10 +15,16 @@ class Capability:
     USABLE_OUTPUT = "USABLE_OUTPUT"
     INFERENCE = "INFERENCE"
 
+class Availability:
+    LOCAL_CPU = "LOCAL_CPU"
+    LOCAL_GPU = "LOCAL_GPU"
+    HOSTED = "HOSTED"
+    
 class CompletionProvider(BaseModel):
     Name: str
     Capabilities: list[Capability]
     Modalities: list[Modality]
+    Availabilities: list[Availability]
 
     def infer(self, prompt: str):
         raise NotImplementedError
