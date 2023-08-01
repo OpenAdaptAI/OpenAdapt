@@ -9,6 +9,8 @@ def main() -> None:
     for idx, recording in enumerate(get_all_recordings(), start=1):
         print(f"[{idx}]: {recording.task_description} | {recording.timestamp}" + latest)
         latest = ""
+    if latest:
+        print("No recordings found.")
 
 
 if __name__ == "__main__":
