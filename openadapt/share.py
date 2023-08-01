@@ -123,7 +123,7 @@ def receive_recording(wormhole_code: str) -> None:
     except subprocess.CalledProcessError as exc:
         logger.exception(exc)
     finally:
-        # Delete the zip file after sending or in case of exception
+        # Delete the zip file after receiving or in case of exception
         if os.path.exists(zip_path):
             os.remove(zip_path)
             logger.info(f"deleted {zip_path=}")
