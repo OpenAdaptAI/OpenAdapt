@@ -23,7 +23,7 @@ import mss.base
 import numpy as np
 
 from openadapt import common, config
-from openadapt.db import BaseModel
+from openadapt.db.db import BaseModel
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
@@ -648,7 +648,7 @@ def plot_performance(recording_timestamp: float = None) -> None:
     event_types = set()
 
     # avoid circular import
-    from openadapt import crud
+    from openadapt.db import crud
 
     if not recording_timestamp:
         recording_timestamp = crud.get_latest_recording().timestamp

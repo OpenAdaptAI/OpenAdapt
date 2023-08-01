@@ -16,7 +16,8 @@ from typing import Union
 from loguru import logger
 import fire
 
-from openadapt import crud, utils
+from openadapt import utils
+from openadapt.db import crud
 
 LOG_LEVEL = "INFO"
 

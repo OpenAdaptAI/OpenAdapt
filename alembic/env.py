@@ -9,7 +9,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from openadapt.config import DB_URL
-from openadapt.db import Base
+from openadapt.db.db import Base
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
