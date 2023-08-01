@@ -24,8 +24,9 @@ def main() -> int:
             == "y".casefold()
         ):
             for recording in recordings:
+                print(f"Deleting {recording.task_description} | {recording.timestamp}...")
                 delete_recording(recording.timestamp)
-                print("All recordings deleted.")
+            print("All recordings deleted.")
         else:
             print("Aborting.")
             return 0
