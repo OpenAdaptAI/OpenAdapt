@@ -16,7 +16,6 @@ import pathlib
 from dotenv import load_dotenv
 from loguru import logger
 
-
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
@@ -37,12 +36,14 @@ _DEFAULTS = {
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
+    # APP CONFIGURATIONS
+    "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF, # BGR format
+    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
     "SCRUB_CONFIG_TRF": {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
@@ -84,9 +85,12 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    # Calculate and save the difference between 2 neighboring screenshots
+    "SAVE_SCREENSHOT_DIFF": False,
 }
 
-# each string in STOP_STRS should only contain strings that don't contain special characters
+# each string in STOP_STRS should only contain strings
+# that don't contain special characters
 STOP_STRS = [
     "oa.stop",
     # TODO:
@@ -100,14 +104,60 @@ STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+ENV_FILE_PATH = ".env"
 
-def getenv_fallback(var_name):
+
+def getenv_fallback(var_name: str) -> str:
+    """Get the value of an environment variable or fallback to the default value.
+
+    Args:
+        var_name (str): The name of the environment variable.
+
+    Returns:
+        The value of the environment variable or the fallback default value.
+
+    Raises:
+        ValueError: If the environment variable is not defined.
+    """
     rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
-    if type(rval) is str and rval.lower() in ("true", "false", "1", "0"):
+    if type(rval) is str and rval.lower() in (
+        "true",
+        "false",
+        "1",
+        "0",
+    ):
         rval = rval.lower() == "true" or rval == "1"
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
+
+
+def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH) -> None:
+    """Persist an environment variable to a .env file.
+
+    Args:
+        var_name (str): The name of the environment variable.
+        val (str): The value of the environment variable.
+        env_file_path (str, optional): The path to the .env file (default: ".env").
+    """
+    if not os.path.exists(env_file_path):
+        with open(env_file_path, "w") as f:
+            f.write(f"{var_name}={val}")
+    else:
+        # find and replace
+        with open(env_file_path, "r") as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith(f"{var_name}="):
+                lines[i] = f"{var_name}={val}\n"
+                break
+        else:
+            # we didn't find the variable in the file, so append it
+            if lines[-1][-1] != "\n":
+                lines.append("\n")
+            lines.append(f"{var_name}={val}")
+        with open(env_file_path, "w") as f:
+            f.writelines(lines)
 
 
 load_dotenv()
@@ -122,7 +172,20 @@ DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
 
 
-def obfuscate(val, pct_reveal=0.1, char="*"):
+def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
+    """Obfuscates a value by replacing a portion of characters.
+
+    Args:
+        val (str): The value to obfuscate.
+        pct_reveal (float, optional): Percentage of characters to reveal (default: 0.1).
+        char (str, optional): Obfuscation character (default: "*").
+
+    Returns:
+        str: Obfuscated value with a portion of characters replaced.
+
+    Raises:
+        AssertionError: If length of obfuscated value does not match original value.
+    """
     num_reveal = int(len(val) * pct_reveal)
     num_obfuscate = len(val) - num_reveal
     obfuscated = char * num_obfuscate
@@ -132,34 +195,30 @@ def obfuscate(val, pct_reveal=0.1, char="*"):
     return rval
 
 
-
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
             if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS]) and
-                val != _DEFAULTS[key]
+                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
+                and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
 
-def filter_log_messages(data):
-    """
-    This function filters log messages by ignoring any message that contains a specific string.
+def filter_log_messages(data: dict) -> bool:
+    """Filter log messages by ignoring specific strings.
 
     Args:
-      data: The input parameter "data" is expected to be data from a loguru logger.
+        data (dict): Data from a loguru logger.
 
     Returns:
-      a boolean value indicating whether the message in the input data should be ignored or not. If the
-    message contains any of the messages in the `messages_to_ignore` list, the function returns `False`
-    indicating that the message should be ignored. Otherwise, it returns `True` indicating that the
-    message should not be ignored.
+        bool: True if the message should not be ignored, False if it should be ignored.
     """
-    # TODO: ultimately, we want to fix the underlying issues, but for now, we can ignore these messages
+    # TODO: ultimately, we want to fix the underlying issues, but for now,
+    # we can ignore these messages
     messages_to_ignore = [
         "Cannot pickle Objective-C objects",
     ]

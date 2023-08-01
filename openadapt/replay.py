@@ -1,5 +1,16 @@
-from datetime import datetime
-from dateutil import parser
+"""Replay recorded events.
+
+Usage:
+python openadapt/replay.py <strategy_name> [--timestamp=<timestamp>]
+
+Arguments:
+strategy_name Name of the replay strategy to use.
+
+Options:
+--timestamp=<timestamp> Timestamp of the recording to replay.
+
+"""
+
 from typing import Union
 
 from loguru import logger
@@ -7,14 +18,17 @@ import fire
 
 from openadapt import crud, utils
 
-
 LOG_LEVEL = "INFO"
 
 
-def replay(
-    strategy_name: str,
-    timestamp: Union[str, None] = None,
-):
+@logger.catch
+def replay(strategy_name: str, timestamp: Union[str, None] = None) -> None:
+    """Replay recorded events using the specified strategy.
+
+    Args:
+        strategy_name: Name of the replay strategy to use.
+        timestamp: Timestamp of the recording to replay.
+    """
     utils.configure_logging(logger, LOG_LEVEL)
 
     if timestamp:
@@ -45,8 +59,9 @@ def replay(
     strategy.run()
 
 
-# entry point
-def start():
+# Entry point
+def start() -> None:
+    """Starts the replay."""
     fire.Fire(replay)
 
 
