@@ -19,7 +19,7 @@ def filter_log_messages(data: dict) -> bool:
     """
     # TODO: ultimately, we want to fix the underlying issues, but for now,
     # we can ignore these messages
-    for msg in config.MESSAGES_TO_IGNORE:
+    for msg in config.MESSAGES_TO_FILTER:
         if msg in data["message"]:
             if config.MAX_NUM_WARNINGS_PER_SECOND > 0:
                 current_timestamp = time.time()

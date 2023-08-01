@@ -34,7 +34,7 @@ _DEFAULTS = {
     "IGNORE_WARNINGS": False,
     "MAX_NUM_WARNINGS_PER_SECOND": 5,
     "WARNING_SUPPRESSION_PERIOD": 1,
-    "MESSAGES_TO_IGNORE": ["Cannot pickle Objective-C objects"],
+    "MESSAGES_TO_FILTER": ["Cannot pickle Objective-C objects"],
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
