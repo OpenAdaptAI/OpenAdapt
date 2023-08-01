@@ -25,3 +25,6 @@ class CompletionProvider(BaseModel):
 
     def finetune(self, prompt: str, completion: str):
         raise NotImplementedError
+
+    def get_children(self):
+        return CompletionProvider.__subclasses__()
