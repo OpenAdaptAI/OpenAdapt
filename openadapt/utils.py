@@ -642,8 +642,7 @@ def plot_performance(
     save_file: bool = True,
     dark_mode: bool = False,
 ) -> str:
-    """
-    Plot the performance of the event processing and writing.
+    """Plot the performance of the event processing and writing.
 
     Args:
         recording_timestamp: The timestamp of the recording (defaults to latest)

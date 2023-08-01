@@ -1,4 +1,4 @@
-"""Deprecated modules
+"""Deprecated modules.
 
 Module: __init__.py
 """

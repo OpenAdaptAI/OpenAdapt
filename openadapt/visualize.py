@@ -1,10 +1,12 @@
+"""Implements visualization utilities for OpenAdapt."""
+
 from base64 import b64encode
 from functools import partial
 from os import path, sep
 from pprint import pformat
 
 from loguru import logger
-from nicegui import ui
+from nicegui import ui, events
 from tqdm import tqdm
 
 from openadapt import config
@@ -39,12 +41,12 @@ performance_plot_img: ui.interactive_image = None
 def create_tree(
     tree_dict: dict, max_children: str = config.VISUALIZE_MAX_TABLE_CHILDREN
 ) -> list[dict]:
-    """
-    Recursively creates a tree from a dictionary.
+    """Recursively creates a tree from a dictionary.
 
     Args:
         tree_dict (dict): The dictionary to create a tree from.
-        max_children (str, optional): The maximum number of children to display. Defaults to MAX_TABLE_CHILDREN.
+        max_children (str, optional): The maximum number of children to display.
+        Defaults to MAX_TABLE_CHILDREN.
 
     Returns:
         list[dict]: Data for a Quasar Tree.
@@ -55,7 +57,7 @@ def create_tree(
             continue
         node = {
             "id": str(key)
-            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"  # dynamic f-string
+            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
         }
         if isinstance(value, dict):
             node["children"] = create_tree(value)
@@ -72,8 +74,7 @@ def create_tree(
 
 
 def set_tree_props(tree: ui.tree) -> None:
-    """
-    Sets properties for a UI tree based on values from config.
+    """Sets properties for a UI tree based on values from config.
 
     Args:
       tree (ui.tree): A Quasar Tree.
@@ -86,26 +87,22 @@ def set_tree_props(tree: ui.tree) -> None:
 
 def set_filter(
     text: str,
-    window_tree: ui.tree,
-    action_tree: ui.tree,
+    tree: ui.tree,
 ) -> None:
-    """
-    Sets filter for UI trees.
+    """Sets filter for UI trees.
 
     Args:
+        tree (ui.tree): A Quasar Tree.
         text (str): The text to filter by.
     """
-    window_tree._props["filter"] = text
-    action_tree._props["filter"] = text
-    window_tree.update()
-    action_tree.update()
+    tree._props["filter"] = text
+    tree.update()
 
 
 def toggle_dark_mode(
     ui_dark: ui.dark_mode, plots: tuple[str], curr_logo: ui.image, images: tuple[str]
 ) -> None:
-    """
-    Handles dark mode toggle.
+    """Handles dark mode toggle.
 
     Args:
         ui_dark (ui.dark_mode): The dark mode switch.
@@ -116,6 +113,7 @@ def toggle_dark_mode(
     global performance_plot_img
     ui_dark.toggle()
     ui_dark.update()
+    config.persist_env("VISUALIZE_DARK_MODE", ui_dark.value)
     curr_logo.source = images[int(ui_dark.value)]
     curr_logo.update()
     performance_plot_img.source = plots[int(ui_dark.value)]
@@ -124,11 +122,11 @@ def toggle_dark_mode(
 
 @logger.catch
 def main(recording: Recording = get_latest_recording()) -> None:
-    """
-    Visualize a recording.
+    """Visualize a recording.
 
     Args:
-        recording (Recording, optional): The recording to visualize. Defaults to get_latest_recording().
+        recording (Recording, optional): The recording to visualize.
+        Defaults to get_latest_recording().
     """
     configure_logging(logger, LOG_LEVEL)
 
@@ -191,9 +189,10 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
             # generate base64 encoded images for light and dark mode
             for i in range(2):
+                fp = f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo"
                 logo_base64 = b64encode(
                     open(
-                        f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo{'_inverted' if i > 0 else ''}.png",
+                        f"{fp}{'_inverted' if i > 0 else ''}.png",
                         "rb",
                     ).read()
                 )
@@ -225,12 +224,12 @@ def main(recording: Recording = get_latest_recording()) -> None:
                 source=plots[int(ui_dark.value)]
             )
             with performance_plot_img:
-                ui.button(
-                    on_click=lambda: plot_performance(
-                        recording.timestamp, view_file=True, save_file=False
-                    ),
-                    icon="visibility",
-                ).props("flat fab").tooltip("View")
+                # ui.button(
+                #     on_click=lambda: plot_performance(
+                #         recording.timestamp, view_file=True, save_file=False
+                #     ),
+                #     icon="visibility",
+                # ).props("flat fab").tooltip("View")
 
                 ui.button(
                     on_click=lambda: plot_performance(
@@ -252,6 +251,29 @@ def main(recording: Recording = get_latest_recording()) -> None:
         min(MAX_EVENTS, len(action_events))
         if MAX_EVENTS is not None
         else len(action_events)
+    )
+
+    # global search
+    def on_change_closure(e: events.ValueChangeEventArguments) -> None:
+        for tree in range(len(action_event_trees)):
+            print(type(e))
+            set_filter(
+                e.value,
+                action_event_trees[tree],
+            )
+            set_filter(
+                e.value,
+                window_event_trees[tree],
+            )
+
+    text_inputs.append(
+        ui.input(
+            label="search all",
+            placeholder="filter all",
+            on_change=partial(on_change_closure),
+        ).tooltip(
+            "this will search all trees, but can be overridden by individual filters"
+        )
     )
 
     with tqdm(
@@ -296,6 +318,27 @@ def main(recording: Recording = get_latest_recording()) -> None:
             with ui.splitter(value=60) as splitter:
                 splitter.classes("w-full h-full")
                 with splitter.after:
+                    ui.label("action_event_dict").style("font-weight: bold;")
+
+                    def on_change_closure(
+                        e: events.ValueChangeEventArguments, idx: int
+                    ) -> None:
+                        return set_filter(
+                            e.value,
+                            action_event_trees[idx],
+                        )
+
+                    text_inputs.append(
+                        ui.input(
+                            label="search",
+                            placeholder="filter",
+                            on_change=partial(
+                                on_change_closure,
+                                idx=idx,
+                            ),
+                        )
+                    )
+                    ui.html("<br/>")
                     action_event_tree = create_tree(action_event_dict)
                     action_event_trees.append(
                         ui.tree(
@@ -306,15 +349,14 @@ def main(recording: Recording = get_latest_recording()) -> None:
                     )
                     set_tree_props(action_event_trees[idx])
                 with splitter.before:
-                    ui.label("window_event_dict | action_event_dict:").style(
-                        "font-weight: bold;"
-                    )
+                    ui.label("window_event_dict").style("font-weight: bold;")
 
-                    def on_change_closure(e, idx):
+                    def on_change_closure(
+                        e: events.ValueChangeEventArguments, idx: int
+                    ) -> None:
                         return set_filter(
                             e.value,
                             window_event_trees[idx],
-                            action_event_trees[idx],
                         )
 
                     text_inputs.append(
