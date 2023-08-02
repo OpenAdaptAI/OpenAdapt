@@ -1,5 +1,6 @@
-import subprocess
 import platform
+import subprocess
+
 
 def get_available_printers():
     """
@@ -10,16 +11,17 @@ def get_available_printers():
     """
     printers = []
     if platform.system() == "Windows":
-
         # Define the wmic command with findstr to exclude the "Name" header
         command = 'wmic printer where "PrinterState=0" get Name'
 
         # Execute the command and capture the output
         result = subprocess.run(command, capture_output=True, text=True)
         # Get the printer names as a list of strings
-        printer_names = result.stdout.strip().split('\n')
+        printer_names = result.stdout.strip().split("\n")
         # Remove any leading or trailing whitespaces from the printer names
-        printer_names = [name.strip() for name in printer_names[1:] if name.strip() != ""]
+        printer_names = [
+            name.strip() for name in printer_names[1:] if name.strip() != ""
+        ]
         return printer_names
     else:
         # Display only those printers that are currently accepting print requests.
@@ -47,8 +49,10 @@ def print_document(printer_name, file_path):
     """
     if platform.system() == "Windows":
         # Print the document using Windows API
-        job_id = win32api.ShellExecute(0, "print", file_path, f'/d:"{printer_name}"', ".", 0)
-        return job_id 
+        job_id = win32api.ShellExecute(
+            0, "print", file_path, f'/d:"{printer_name}"', ".", 0
+        )
+        return job_id
     else:
         # Print the document using the lp command on non-Windows platforms
         result = subprocess.run(
@@ -73,10 +77,14 @@ def get_printer_jobs(printer_name):
         # Get printer jobs on Windows (Same as the previous implementation)
         # Define the wmic command to get print job IDs for the specified printer
         # Open a handle to the printer
+        import ipdb
         import win32print
-        import ipdb;ipdb.set_trace()
+
+        ipdb.set_trace()
         printer_handle = win32print.OpenPrinter(printer_name)
-        import ipdb;ipdb.set_trace
+        import ipdb
+
+        ipdb.set_trace
         # Enumerate the print jobs for the printer
         job_entries = win32print.EnumJobs(printer_handle, 0, -1, 1)
 
