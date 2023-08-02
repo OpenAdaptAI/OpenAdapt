@@ -86,7 +86,9 @@ class ScrubbingProvider(BaseModel):
         """A Factory Class for Scrubbing Providers"""
 
         @staticmethod
-        def get_for_modality(modality: Modality) -> List[ScrubbingProvider]:
+        def get_for_modality(
+            modality: Modality,
+        ) -> List[ScrubbingProvider]:  # noqa: F821
             """Get Scrubbing Providers for a given Modality
 
             Args:
