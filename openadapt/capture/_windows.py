@@ -3,9 +3,9 @@ from datetime import datetime
 from sys import platform
 import os
 import wave
-import pyaudio
 
 from screen_recorder_sdk import screen_recorder
+import pyaudio
 
 from openadapt import config
 
