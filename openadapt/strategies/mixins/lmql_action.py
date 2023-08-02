@@ -48,6 +48,7 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
     def get_valid_json(self, prompt: str, template_file_path: str) -> dict:
         """Return the ActionEvent the model returns from the prompt."""
         result = lmql_json(prompt, template_file_path)
+        assert len(result) == 1, result  # by default LMQL uses argmax which should return 1 result
         json_result = result[0]
         logger.info(f"The json is {json_result}")
 
