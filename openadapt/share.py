@@ -12,11 +12,10 @@ import subprocess
 
 from loguru import logger
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session
 import fire
-import sqlalchemy as sa
 
-from openadapt import config, db, models, utils, visualize
+from openadapt import config, db, utils, visualize
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
@@ -139,30 +138,40 @@ def visualize_recording(db_name: str) -> None:
         db_name (str): The name of the SQLite database containing the recording.
 
     Raises:
-        sqlalchemy.exc.OperationalError: If there is an error accessing the database.
+        Exception: If there is an error accessing the database.
     """
+    # Determine the recording path based on the database name
     if db_name == "openadapt.db":
         recording_path = os.path.join(config.ROOT_DIRPATH, db_name)
     else:
         recording_path = os.path.join(config.RECORDING_DIRECTORY_PATH, db_name)
+
     recording_url = f"sqlite:///{recording_path}"
 
-    engine = create_engine(recording_url, future=True)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    # Save the old value of DB_FNAME
+    old_val = os.getenv("DB_FNAME")
 
-    # Call visualize.main() passing the recording object
-    recording = (
-        session.query(models.Recording)
-        .order_by(sa.desc(models.Recording.timestamp))
-        .limit(1)
-        .first()
-    )
+    # Update the environment variable DB_FNAME and persist it
+    config.persist_env("DB_FNAME", db_name)
+    os.environ["DB_FNAME"] = db_name
 
-    # Call the main function from visualize.py and pass the recording object
-    visualize.main(recording)
+    # Set the database URL
+    config.set_db_url(db_name)
 
-    session.close()
+    engine = create_engine(recording_url)
+
+    try:
+        with Session(engine) as session:
+            os.system("alembic upgrade head")
+            # Visualize the recording
+            visualize.main(session)
+    except Exception as exc:
+        # Handle any exceptions that may occur during visualization
+        logger.exception(exc)
+    finally:
+        # Restore the old value of DB_FNAME in case of exceptions or at the end
+        os.environ["DB_FNAME"] = old_val
+        config.persist_env("DB_FNAME", old_val)
 
 
 # Create a command-line interface using python-fire and utils.get_functions

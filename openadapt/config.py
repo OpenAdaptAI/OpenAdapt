@@ -173,11 +173,30 @@ for key in _DEFAULTS:
     locals()[key] = val
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
-DB_URL = f"sqlite:///{DB_FPATH}"
-DIRNAME_PERFORMANCE_PLOTS = "performance"
 DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
 RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
+if DB_FNAME == "openadapt.db":  # noqa
+    DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+else:
+    DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
+DB_URL = f"sqlite:///{DB_FPATH}"
+DIRNAME_PERFORMANCE_PLOTS = "performance"
+
+
+def set_db_url(db_fname: str) -> None:
+    """Set the database URL based on the given database file name.
+
+    Args:
+        db_fname (str): The database file name.
+    """
+    global DB_FNAME, DB_FPATH, DB_URL
+    DB_FNAME = db_fname
+    if DB_FNAME == "openadapt.db":  # noqa
+        DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+    else:
+        DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
+    DB_URL = f"sqlite:///{DB_FPATH}"
+    logger.info(f"{DB_URL=}")
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:

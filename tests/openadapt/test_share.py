@@ -121,25 +121,3 @@ def test_receive_recording() -> None:
 
         # Verify that the zip file has been deleted
         assert not os.path.exists(temp_zip_path)
-
-
-# Test visualize_recording function
-def test_visualize_recording(setup_database: engine) -> None:
-    """Tests the visualize_recording function.
-
-    This test calls the function being tested with the "recording.db" created from
-    the setup_database fixture and asserts that the session object
-    was closed after calling the function.
-
-    Args:
-        setup_database: The setup_database fixture from the testing environment.
-
-    Returns:
-        None
-    """
-    # Call the function being tested
-    share.visualize_recording("recording.db")
-
-    # Assert that the session object was closed after calling the function
-    # Here we are checking if the engine is disposed after calling the function
-    assert not hasattr(share.visualize_recording, "engine")

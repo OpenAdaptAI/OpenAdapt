@@ -12,7 +12,7 @@ from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
 
-from openadapt import config, models
+from openadapt import config, crud
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.utils import (
@@ -182,15 +182,16 @@ def dict2html(
 
 
 @logger.catch
-def main(recording: models.Recording = None) -> None:
+def main(session=None) -> None:
     """Main function to generate an HTML report for a recording."""
+    if session is not None:
+        crud.db = session
     configure_logging(logger, LOG_LEVEL)
 
-    if recording is None:
-        recording = get_latest_recording()
-        if SCRUB:
-            scrub.scrub_text(recording.task_description)
-        logger.debug(f"{recording=}")
+    recording = get_latest_recording()
+    if SCRUB:
+        scrub.scrub_text(recording.task_description)
+    logger.debug(f"{recording=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
