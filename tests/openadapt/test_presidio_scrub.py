@@ -9,11 +9,8 @@ from PIL import Image
 import pytest
 
 from openadapt import config, scrub
-from openadapt.privacy.base import Modality
-from openadapt.privacy.providers import (
-    PresidioScrubbingProvider,
-    ScrubbingProviderFactory,
-)
+from openadapt.privacy.base import Modality, ScrubbingProviderFactory
+from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
 scrub = PresidioScrubbingProvider()
 

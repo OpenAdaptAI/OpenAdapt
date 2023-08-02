@@ -12,7 +12,7 @@ class Modality:
     """A Base Class for Modality Types"""
 
     TEXT = "TEXT"
-    IMAGE = "IMAGE"  # PIL_IMAGE
+    PIL_IMAGE = "PIL_IMAGE"
     PDF = "PDF"
     MP4 = "MP4"
 
@@ -81,3 +81,26 @@ class ScrubbingProvider(BaseModel):
             Path to the scrubbed (redacted) mp4 file.
         """
         raise NotImplementedError
+
+    class ScrubbingProviderFactory:
+        """A Factory Class for Scrubbing Providers"""
+
+        @staticmethod
+        def get_for_modality(modality: Modality) -> List[ScrubbingProvider]:
+            """Get Scrubbing Providers for a given Modality
+
+            Args:
+                modality (Modality): Modality Type
+
+            Returns:
+                List[ScrubbingProvider]: Scrubbing Providers
+            """
+            scrubbing_providers = ScrubbingProvider.__subclasses__()
+
+            filtered_providers = [
+                provider
+                for provider in scrubbing_providers
+                if modality in provider.capabilities
+            ]
+
+            return filtered_providers

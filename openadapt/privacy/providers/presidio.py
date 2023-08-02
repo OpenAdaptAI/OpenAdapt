@@ -1,5 +1,4 @@
-""" A Module for Scrubbing Provider Factory Class and
-Other Scrubbing Providers Classes """
+""" A Module for Presidio Scrubbing Provider Class """
 
 from typing import List
 
@@ -14,35 +13,11 @@ from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
 
 
-class ScrubbingProviderFactory:
-    """A Factory Class for Scrubbing Providers"""
-
-    @staticmethod
-    def get_for_modality(modality: Modality) -> List[ScrubbingProvider]:
-        """Get Scrubbing Providers for a given Modality
-
-        Args:
-            modality (Modality): Modality Type
-
-        Returns:
-            List[ScrubbingProvider]: Scrubbing Providers
-        """
-        scrubbing_providers = ScrubbingProvider.__subclasses__()
-
-        filtered_providers = [
-            provider()
-            for provider in scrubbing_providers
-            if modality in provider().capabilities  # instantiate ? TODO
-        ]
-
-        return filtered_providers
-
-
 class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
 
     name: str = config.SCRUB_PROVIDER_NAME[0]
-    capabilities: List[Modality] = [Modality.TEXT, Modality.IMAGE]
+    capabilities: List[Modality] = [Modality.TEXT, Modality.PIL_IMAGE]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
