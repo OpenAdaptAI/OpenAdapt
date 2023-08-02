@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from openadapt import config
 
 
-class Modality:
+class Modality:  # pylint: disable=too-few-public-methods
     """A Base Class for Modality Types"""
 
     TEXT = "TEXT"
@@ -36,7 +36,9 @@ class ScrubbingProvider(BaseModel):
         raise NotImplementedError
 
     def scrub_image(
-        self, image: Image, fill_color: int = config.SCRUB_FILL_COLOR
+        self,
+        image: Image,
+        fill_color: int = config.SCRUB_FILL_COLOR,  # pylint: disable=no-member
     ) -> Image:
         """Scrub the image of all PII/PHI.
 
@@ -60,7 +62,7 @@ class ScrubbingProvider(BaseModel):
         """
         raise NotImplementedError
 
-    def scrub_mp4(
+    def scrub_mp4(  # pylint: disable=too-many-arguments
         self,
         mp4_file: str,
         scrub_all_entities: bool = False,
@@ -82,7 +84,7 @@ class ScrubbingProvider(BaseModel):
         """
         raise NotImplementedError
 
-    class ScrubbingProviderFactory:
+    class ScrubbingProviderFactory:  # pylint: disable=too-few-public-methods
         """A Factory Class for Scrubbing Providers"""
 
         @staticmethod
