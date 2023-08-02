@@ -12,7 +12,7 @@ class Modality:
     """A Base Class for Modality Types"""
 
     TEXT = "TEXT"
-    IMAGE = "IMAGE"
+    IMAGE = "IMAGE"  # PIL_IMAGE
     PDF = "PDF"
     MP4 = "MP4"
 

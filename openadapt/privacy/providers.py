@@ -32,7 +32,7 @@ class ScrubbingProviderFactory:
         filtered_providers = [
             provider()
             for provider in scrubbing_providers
-            if modality in provider().capabilities
+            if modality in provider().capabilities  # instantiate ? TODO
         ]
 
         return filtered_providers
@@ -171,9 +171,9 @@ class PresidioScrubbingProvider(ScrubbingProvider):
 
         scrubbed_dict = {}
         for key, value in input_dict.items():
-            if _should_scrub_text(key, value, list_keys, scrub_all):
-                scrubbed_text = _scrub_text_item(value, key, force_scrub_children)
-                if key in ("text", "canonical_text") and _is_scrubbed(
+            if self._should_scrub_text(key, value, list_keys, scrub_all):
+                scrubbed_text = self._scrub_text_item(value, key, force_scrub_children)
+                if key in ("text", "canonical_text") and self._is_scrubbed(
                     value, scrubbed_text
                 ):
                     force_scrub_children = True
@@ -181,8 +181,10 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             elif isinstance(value, list):
                 scrubbed_list = [
                     (
-                        _scrub_list_item(item, key, list_keys, force_scrub_children)
-                        if _should_scrub_list_item(item, key, list_keys)
+                        self._scrub_list_item(
+                            item, key, list_keys, force_scrub_children
+                        )
+                        if self._should_scrub_list_item(item, key, list_keys)
                         else item
                     )
                     for item in value
@@ -191,9 +193,11 @@ class PresidioScrubbingProvider(ScrubbingProvider):
                 force_scrub_children = False
             elif isinstance(value, dict):
                 if isinstance(key, str) and key == "state":
-                    scrubbed_dict[key] = scrub_dict(value, list_keys, scrub_all=True)
+                    scrubbed_dict[key] = self.scrub_dict(
+                        value, list_keys, scrub_all=True
+                    )
                 else:
-                    scrubbed_dict[key] = scrub_dict(value, list_keys)
+                    scrubbed_dict[key] = self.scrub_dict(value, list_keys)
             else:
                 scrubbed_dict[key] = value
 
@@ -214,7 +218,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         """
         scrubbed_list_dicts = []
         for input_dict in input_list:
-            scrubbed_list_dicts.append(scrub_dict(input_dict, list_keys))
+            scrubbed_list_dicts.append(self.scrub_dict(input_dict, list_keys))
 
         return scrubbed_list_dicts
 
@@ -268,10 +272,10 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             str: The scrubbed value
         """
         if key in ("text", "canonical_text"):
-            return scrub_text(value, is_separated=True)
+            return self.scrub_text(value, is_separated=True)
         if force_scrub_children:
-            return scrub_text_all(value)
-        return scrub_text(value)
+            return self.scrub_text_all(value)
+        return self.scrub_text(value)
 
     def _should_scrub_list_item(
         self, item: str, key: str, list_keys: list[str]
@@ -306,7 +310,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             dict/str: The scrubbed dict/value respectively
         """
         if isinstance(item, dict):
-            return scrub_dict(
+            return self.scrub_dict(
                 item, list_keys, force_scrub_children=force_scrub_children
             )
-        return _scrub_text_item(item, key)
+        return self._scrub_text_item(item, key)
