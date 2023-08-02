@@ -1,5 +1,6 @@
 from typing import List
 
+from PIL import Image
 from pydantic import BaseModel
 
 
@@ -24,7 +25,9 @@ class ScrubbingProvider(BaseModel):
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         raise NotImplementedError
 
-    def scrub_image(self):
+    def scrub_image(
+        self, image: Image, fill_color: int = config.SCRUB_FILL_COLOR
+    ) -> Image:
         raise NotImplementedError
 
     def scrub_pdf(self):
