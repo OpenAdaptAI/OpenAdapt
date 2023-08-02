@@ -1,7 +1,11 @@
+"""The Base (Parent) Class for Privacy Scrubbing Providers"""
+
 from typing import List
 
 from PIL import Image
 from pydantic import BaseModel
+
+from openadapt import config
 
 
 class Modality:

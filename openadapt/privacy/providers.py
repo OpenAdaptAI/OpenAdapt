@@ -1,4 +1,4 @@
-""" A Module for Scrubbing Providers """
+""" A Module for Scrubbing Provider Factory Class and Other Scrubbing Providers Classes """
 
 from typing import List
 
