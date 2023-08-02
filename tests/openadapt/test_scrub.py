@@ -1,12 +1,48 @@
 """Module to test scrub.py."""
 
+
 from io import BytesIO
 import os
 import warnings
 
 from PIL import Image
+import pytest
 
 from openadapt import config, scrub
+from openadapt.privacy.base import Modality
+from openadapt.privacy.providers import (
+    PresidioScrubbingProvider,
+    ScrubbingProviderFactory,
+)
+
+scrub = PresidioScrubbingProvider()
+
+
+def test_scrubbing_provider_factory():
+    """Test the ScrubbingProviderFactory for Modality.TEXT in PresidioScrubbingProvider."""
+
+    providers = ScrubbingProviderFactory.get_for_modality(Modality.TEXT)
+
+    # Ensure that we get at least one provider
+    assert providers
+
+    for provider in providers:
+        # Ensure the provider is an instance of PresidioScrubbingProvider
+        assert isinstance(provider, PresidioScrubbingProvider)
+
+        # Ensure that the provider supports Modality.TEXT
+        assert Modality.TEXT in provider.capabilities
+
+
+def test_presidio_scrub_text():
+    """Test that PresidioScrubbingProvider can scrub text."""
+
+    text = "My phone number is 123-456-7890."
+    expected_result = "My phone number is <PHONE_NUMBER>."
+
+    scrubbed_text = scrub.scrub_text(text)
+
+    assert scrubbed_text == expected_result
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -180,13 +216,10 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert (
-        scrub.scrub_text(text_with_pii_phi) == "<PERSON> email is <EMAIL_ADDRESS> and"
+        scrub.scrub_text(text_with_pii_phi)
+        == "<PERSON> email is <EMAIL_ADDRESS> and"
         " his phone number is <PHONE_NUMBER>."
         "His credit card number is <CREDIT_CARD> and"
         " his social security number is <US_SSN>."
         " He was born on 01/01/1980."
     )
-
-
-if __name__ == "__main__":
-    test_scrub_image()

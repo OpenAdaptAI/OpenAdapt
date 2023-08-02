@@ -30,13 +30,16 @@ class ScrubbingProviderFactory:
         filtered_providers = [
             provider()
             for provider in scrubbing_providers
-            if modality in provider().Capabilities
+            if modality in provider().capabilities
         ]
         return filtered_providers
 
 
 class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
+
+    name: str = "Presidio"
+    capabilities: List[Modality] = [Modality.TEXT, Modality.IMAGE]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub the text of all PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
@@ -276,11 +279,11 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         return isinstance(item, (str)) and isinstance(key, str) and key in list_keys
 
     def _scrub_list_item(
-        item: Union[str, dict],
+        item: str | dict,
         key: str,
         list_keys: list[str],
         force_scrub_children: bool = False,
-    ) -> Union[str, dict]:
+    ) -> str | dict:
         """Scrubs the value of a dict item.
 
         Args:
