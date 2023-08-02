@@ -23,6 +23,11 @@ class ScrubbingProvider(BaseModel):
     name: str
     capabilities: List[str]
 
+    class Config:  # pylint: disable=too-few-public-methods
+        """Pydantic Config Class"""
+
+        arbitrary_types_allowed = True
+
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         """Scrub the text of all PII/PHI.
 
@@ -84,27 +89,28 @@ class ScrubbingProvider(BaseModel):
         """
         raise NotImplementedError
 
-    class ScrubbingProviderFactory:  # pylint: disable=too-few-public-methods
-        """A Factory Class for Scrubbing Providers"""
 
-        @staticmethod
-        def get_for_modality(
-            modality: Modality,
-        ) -> List[ScrubbingProvider]:  # noqa: F821
-            """Get Scrubbing Providers for a given Modality
+class ScrubbingProviderFactory:  # pylint: disable=too-few-public-methods
+    """A Factory Class for Scrubbing Providers"""
 
-            Args:
-                modality (Modality): Modality Type
+    @staticmethod
+    def get_for_modality(
+        modality: Modality,
+    ) -> List[ScrubbingProvider]:
+        """Get Scrubbing Providers for a given Modality
 
-            Returns:
-                List[ScrubbingProvider]: Scrubbing Providers
-            """
-            scrubbing_providers = ScrubbingProvider.__subclasses__()
+        Args:
+            modality (Modality): Modality Type
 
-            filtered_providers = [
-                provider
-                for provider in scrubbing_providers
-                if modality in provider.capabilities
-            ]
+        Returns:
+            List[ScrubbingProvider]: Scrubbing Providers
+        """
+        scrubbing_providers = ScrubbingProvider.__subclasses__()
 
-            return filtered_providers
+        filtered_providers = [
+            provider()
+            for provider in scrubbing_providers
+            if modality in provider().capabilities
+        ]
+
+        return filtered_providers
