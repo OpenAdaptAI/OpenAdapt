@@ -13,10 +13,10 @@ from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
 
 
-class PresidioScrubbingProvider(ScrubbingProvider):
+class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
     """A Class for Presidio Scrubbing Provider"""
 
-    name: str = config.SCRUB_PROVIDER_NAME[0]
+    name: str = config.SCRUB_PROVIDER_NAME[0]  # pylint: disable=E1101
     capabilities: List[Modality] = [Modality.TEXT, Modality.PIL_IMAGE]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
@@ -32,31 +32,31 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         if text is None:
             return None
 
-        SCRUB_PROVIDER_TRF = NlpEngineProvider(
-            nlp_configuration=config.SCRUB_CONFIG_TRF
+        SCRUB_PROVIDER_TRF = NlpEngineProvider(  # pylint: disable=C0103
+            nlp_configuration=config.SCRUB_CONFIG_TRF  # pylint: disable=E1101
         )
-        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-        ANALYZER_TRF = AnalyzerEngine(
+        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()  # pylint: disable=C0103
+        ANALYZER_TRF = AnalyzerEngine(  # pylint: disable=C0103
             nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
         )
-        ANONYMIZER = AnonymizerEngine()
-        SCRUBBING_ENTITIES = [
+        ANONYMIZER = AnonymizerEngine()  # pylint: disable=C0103
+        SCRUBBING_ENTITIES = [  # pylint: disable=C0103
             entity
             for entity in ANALYZER_TRF.get_supported_entities()
-            if entity not in config.SCRUB_IGNORE_ENTITIES
+            if entity not in config.SCRUB_IGNORE_ENTITIES  # pylint: disable=E1101
         ]
 
         if is_separated and not (
-            text.startswith(config.ACTION_TEXT_NAME_PREFIX)
-            or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
+            text.startswith(config.ACTION_TEXT_NAME_PREFIX)  # pylint: disable=E1101
+            or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)  # pylint: disable=E1101
         ):
-            text = "".join(text.split(config.ACTION_TEXT_SEP))
+            text = "".join(text.split(config.ACTION_TEXT_SEP))  # pylint: disable=E1101
 
         # Access ANALYZER_TRF as a class attribute
         analyzer_results = ANALYZER_TRF.analyze(
             text=text,
             entities=SCRUBBING_ENTITIES,
-            language=config.SCRUB_LANGUAGE,
+            language=config.SCRUB_LANGUAGE,  # pylint: disable=E1101
         )
 
         logger.debug(f"analyzer_results: {analyzer_results}")
@@ -69,17 +69,21 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         logger.debug(f"anonymized_results: {anonymized_results}")
 
         if is_separated and not (
-            text.startswith(config.ACTION_TEXT_NAME_PREFIX)
-            or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)
+            text.startswith(config.ACTION_TEXT_NAME_PREFIX)  # pylint: disable=E1101
+            or text.endswith(config.ACTION_TEXT_NAME_SUFFIX)  # pylint: disable=E1101
         ):
-            anonymized_results.text = config.ACTION_TEXT_SEP.join(
-                anonymized_results.text
+            anonymized_results.text = (
+                config.ACTION_TEXT_SEP.join(  # pylint: disable=E1101
+                    anonymized_results.text
+                )
             )
 
         return anonymized_results.text
 
     def scrub_image(
-        self, image: Image, fill_color: int = config.SCRUB_FILL_COLOR
+        self,
+        image: Image,
+        fill_color: int = config.SCRUB_FILL_COLOR,  # pylint: disable=E1101
     ) -> Image:
         """Scrub the image of all PII/PHI using Presidio Image Redactor.
 
@@ -90,18 +94,20 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         Returns:
             Image: The scrubbed image with PII and PHI removed.
         """
-        SCRUB_PROVIDER_TRF = NlpEngineProvider(
-            nlp_configuration=config.SCRUB_CONFIG_TRF
+        SCRUB_PROVIDER_TRF = NlpEngineProvider(  # pylint: disable=C0103
+            nlp_configuration=config.SCRUB_CONFIG_TRF  # pylint: disable=E1101
         )
-        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-        ANALYZER_TRF = AnalyzerEngine(
+        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()  # pylint: disable=C0103
+        ANALYZER_TRF = AnalyzerEngine(  # pylint: disable=C0103
             nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"]
         )
-        IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
-        SCRUBBING_ENTITIES = [
+        IMAGE_REDACTOR = ImageRedactorEngine(  # pylint: disable=C0103
+            ImageAnalyzerEngine(ANALYZER_TRF)
+        )  # pylint: disable=C0103
+        SCRUBBING_ENTITIES = [  # pylint: disable=C0103
             entity
             for entity in ANALYZER_TRF.get_supported_entities()
-            if entity not in config.SCRUB_IGNORE_ENTITIES
+            if entity not in config.SCRUB_IGNORE_ENTITIES  # pylint: disable=E1101
         ]
 
         redacted_image = IMAGE_REDACTOR.redact(
@@ -119,7 +125,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         Returns:
             str: Scrubbed text
         """
-        return config.SCRUB_CHAR * len(text)
+        return config.SCRUB_CHAR * len(text)  # pylint: disable=E1101
 
     def scrub_dict(
         self,
@@ -142,7 +148,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             dict: The scrubbed dict with PII and PHI removed.
         """
         if list_keys is None:
-            list_keys = config.SCRUB_KEYS_HTML
+            list_keys = config.SCRUB_KEYS_HTML  # pylint: disable=E1101
 
         scrubbed_dict = {}
         for key, value in input_dict.items():
