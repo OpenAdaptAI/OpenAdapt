@@ -1,4 +1,5 @@
-""" A Module for Scrubbing Provider Factory Class and Other Scrubbing Providers Classes """
+""" A Module for Scrubbing Provider Factory Class and
+Other Scrubbing Providers Classes """
 
 from typing import List
 
@@ -201,7 +202,8 @@ class PresidioScrubbingProvider(ScrubbingProvider):
     def scrub_list_dicts(
         self, input_list: list[dict], list_keys: list = None
     ) -> list[dict]:
-        """Scrub list of dicts to remove PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
+        """Scrub list of dicts to remove PII/PHI
+        using Presidio ANALYZER.TRF and Anonymizer.
 
         Args:
             input_list (list[dict]): A list of dicts to be scrubbed
@@ -307,4 +309,6 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             return scrub_dict(
                 item, list_keys, force_scrub_children=force_scrub_children
             )
-        return _scrub_text_item(item, key)  # pylint: disable=undefined-variable
+        return _scrub_text_item(
+            item, key
+        )  # noqa: F821 & pylint: disable=undefined-variable
