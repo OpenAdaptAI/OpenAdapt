@@ -85,7 +85,7 @@ class Capture:
                 self.audio.terminate()
                 self.save_audio()
             self.is_recording = False
-        screen_recorder.free_resources()
+            screen_recorder.free_resources()
 
     def save_audio(self) -> None:
         """Save the captured audio to a WAV file."""
