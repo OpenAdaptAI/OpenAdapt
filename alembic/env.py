@@ -9,7 +9,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from openadapt.config import DB_URL
-from openadapt.db.db import Base
+from openadapt.db import db
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -24,7 +24,7 @@ if alembic_config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata
+target_metadata = db.Base.metadata
 
 
 def get_url() -> str:
