@@ -31,7 +31,7 @@ def test_scrubbing_provider_factory():
         assert isinstance(provider, PresidioScrubbingProvider)
 
         # Ensure that the provider supports Modality.TEXT
-        assert Modality.TEXT in provider
+        assert Modality.TEXT in provider.capabilities
 
 
 def test_presidio_scrub_text():
