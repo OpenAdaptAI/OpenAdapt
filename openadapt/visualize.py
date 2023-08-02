@@ -15,6 +15,7 @@ from tqdm import tqdm
 from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
+from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
     configure_logging,
@@ -24,7 +25,6 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
-import openadapt.privacy.providers.presidio
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
