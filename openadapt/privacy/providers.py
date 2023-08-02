@@ -27,18 +27,20 @@ class ScrubbingProviderFactory:
             List[ScrubbingProvider]: Scrubbing Providers
         """
         scrubbing_providers = ScrubbingProvider.__subclasses__()
+
         filtered_providers = [
             provider()
             for provider in scrubbing_providers
             if modality in provider().capabilities
         ]
+
         return filtered_providers
 
 
 class PresidioScrubbingProvider(ScrubbingProvider):
     """A Class for Presidio Scrubbing Provider"""
 
-    name: str = "Presidio"
+    name: str = config.SCRUB_PROVIDER_NAME[0]
     capabilities: List[Modality] = [Modality.TEXT, Modality.IMAGE]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
