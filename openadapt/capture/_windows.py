@@ -1,103 +1,98 @@
 """Allows for capturing the screen and audio on Windows."""
+from datetime import datetime
 from sys import platform
-import datetime
 import os
-import threading
-import time
+import wave
+import pyaudio
 
-import cv2
-import numpy as np
-import win32api  # type: ignore # noqa
-import win32con  # type: ignore # noqa
-import win32gui  # type: ignore # noqa
-import win32ui  # type: ignore # noqa
+from screen_recorder_sdk import screen_recorder
 
 from openadapt import config
 
 
 class Capture:
-    """Capture the screen video on Windows."""
+    """Capture the screen video and audio on Windows."""
 
-    def __init__(self) -> None:
-        """Initialize the capture object."""
+    def __init__(self, pid: int = 0) -> None:
+        """Initialize the capture object.
+
+        Args:
+            pid (int, optional): The process ID of the window to capture.
+            Defaults to 0 (the entire screen)
+        """
         if platform != "win32":
             raise NotImplementedError(
                 "This is the Windows implementation, please use the macOS version"
             )
-        self.desktop_handle = win32gui.GetDesktopWindow()
-        self.window = {
-            "left": 0,
-            "top": 0,
-            "width": win32api.GetSystemMetrics(win32con.SM_CXSCREEN),
-            "height": win32api.GetSystemMetrics(win32con.SM_CYSCREEN),
-        }
         self.is_recording = False
         self.video_out = None
-        self.frame_interval = 1 / 20  # 20 FPS
+        self.audio_out = None
+        self.pid = pid
+
+        screen_recorder.init_resources(screen_recorder.RecorderParams(pid=self.pid))
+
+        # Initialize PyAudio
+        self.audio = pyaudio.PyAudio()
+        self.audio_stream = None
+        self.audio_frames = []
 
     def start(self, audio: bool = True) -> None:
-        """Start capturing the screen video.
+        """Start capturing the screen video and audio.
 
-        TODO: add audio support
         Args:
-            audio (bool): Whether to capture audio. )
+            audio (bool): Whether to capture audio.
         """
+        if self.is_recording:
+            raise RuntimeError("Recording is already in progress")
         self.is_recording = True
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        video_outpath = os.path.join(
-            config.CAPTURE_DIR_PATH,
+
+        # Start video recording
+        self.video_out = os.path.join(
+            config.CAPTURES_DIR,
             datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
         )
-        self.video_out = cv2.VideoWriter(
-            video_outpath,
-            fourcc,
-            20.0,
-            (self.window["width"], self.window["height"]),
-        )
+        screen_recorder.start_video_recording(self.video_out, 30, 8000000, True)
 
-        def record_screen() -> None:
-            """Record the screen and save it to a file."""
-            hwindc = win32gui.GetWindowDC(self.hwin)
-            srcdc = win32ui.CreateDCFromHandle(hwindc)
-            memdc = srcdc.CreateCompatibleDC()
-            bmp = win32ui.CreateBitmap()
-            bmp.CreateCompatibleBitmap(
-                srcdc, self.window["width"], self.window["height"]
+        # Start audio recording
+        if audio:
+            self.audio_out = os.path.join(
+                config.CAPTURES_DIR,
+                datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".wav",
             )
-            memdc.SelectObject(bmp)
-            prev_time = time.time()
-            while self.is_recording:
-                memdc.BitBlt(
-                    (0, 0),
-                    (self.window["width"], self.window["height"]),
-                    srcdc,
-                    (self.window["left"], self.window["top"]),
-                    win32con.SRCCOPY,
-                )
-                signedIntsArray = bmp.GetBitmapBits(True)
-                img = np.frombuffer(signedIntsArray, dtype="uint8")
-                img.shape = (self.window["height"], self.window["width"], 4)
-                # Drop the alpha channel to get RGB format
-                img = img[..., :3]
-                self.video_out.write(img)
-                curr_time = time.time()
-                elapsed_time = curr_time - prev_time
-                prev_time = curr_time
-                time.sleep(max(0, self.frame_interval - elapsed_time))
-            print("Screen recording finished.")
-            srcdc.DeleteDC()
-            memdc.DeleteDC()
-            win32gui.ReleaseDC(self.hwin, hwindc)
-            win32gui.DeleteObject(bmp.GetHandle())
+            self.audio_stream = self.audio.open(
+                format=pyaudio.paInt16,
+                channels=2,
+                rate=44100,
+                input=True,
+                frames_per_buffer=1024,
+                stream_callback=self._audio_callback,
+            )
+            self.audio_frames = []
 
-        screen_thread = threading.Thread(target=record_screen)
-        screen_thread.start()
+    def _audio_callback(
+        self, in_data: bytes, frame_count: int, time_info: dict, status: int
+    ) -> tuple:
+        self.audio_frames.append(in_data)
+        return (None, pyaudio.paContinue)
 
     def stop(self) -> None:
-        """Stop capturing the screen video."""
-        self.is_recording = False
-        if self.video_out:
-            self.video_out.release()
+        """Stop capturing the screen video and audio."""
+        if self.is_recording:
+            screen_recorder.stop_video_recording()
+            if self.audio_stream:
+                self.audio_stream.stop_stream()
+                self.audio_stream.close()
+                self.audio.terminate()
+                self.save_audio()
+            self.is_recording = False
+
+    def save_audio(self) -> None:
+        """Save the captured audio to a WAV file."""
+        with wave.open(self.audio_out, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
+            wf.setframerate(44100)
+            wf.writeframes(b"".join(self.audio_frames))
 
 
 if __name__ == "__main__":
