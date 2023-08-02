@@ -9,7 +9,7 @@ from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 
-from openadapt import config, utils
+from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
 
 
@@ -134,7 +134,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
 
         return redacted_image
 
-    def scrub_text_all(text: str) -> str:
+    def scrub_text_all(self, text: str) -> str:
         """Scrub the text by replacing all characters with config.SCRUB_CHAR.
 
         Args:
@@ -146,6 +146,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         return config.SCRUB_CHAR * len(text)
 
     def scrub_dict(
+        self,
         input_dict: dict,
         list_keys: list = None,
         scrub_all: bool = False,
@@ -197,7 +198,9 @@ class PresidioScrubbingProvider(ScrubbingProvider):
 
         return scrubbed_dict
 
-    def scrub_list_dicts(input_list: list[dict], list_keys: list = None) -> list[dict]:
+    def scrub_list_dicts(
+        self, input_list: list[dict], list_keys: list = None
+    ) -> list[dict]:
         """Scrub list of dicts to remove PII/PHI using Presidio ANALYZER.TRF and Anonymizer.
 
         Args:
@@ -214,6 +217,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         return scrubbed_list_dicts
 
     def _should_scrub_text(
+        self,
         key: str,
         value: str,
         list_keys: list[str],
@@ -237,7 +241,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             and (key in list_keys or scrub_all)
         )
 
-    def _is_scrubbed(old_text: str, new_text: str) -> bool:
+    def _is_scrubbed(self, old_text: str, new_text: str) -> bool:
         """Check if the text has been scrubbed.
 
         Args:
@@ -250,7 +254,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         return old_text != new_text
 
     def _scrub_text_item(
-        value: str, key: str, force_scrub_children: bool = False
+        self, value: str, key: str, force_scrub_children: bool = False
     ) -> str:
         """Scrubs the value of a text item.
 
@@ -267,7 +271,9 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             return scrub_text_all(value)
         return scrub_text(value)
 
-    def _should_scrub_list_item(item: str, key: str, list_keys: list[str]) -> bool:
+    def _should_scrub_list_item(
+        self, item: str, key: str, list_keys: list[str]
+    ) -> bool:
         """Check if the key and item should be scrubbed and are of correct instance.
 
         Args:
@@ -281,6 +287,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):
         return isinstance(item, (str)) and isinstance(key, str) and key in list_keys
 
     def _scrub_list_item(
+        self,
         item: str | dict,
         key: str,
         list_keys: list[str],
@@ -300,4 +307,4 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             return scrub_dict(
                 item, list_keys, force_scrub_children=force_scrub_children
             )
-        return _scrub_text_item(item, key)
+        return _scrub_text_item(item, key)  # pylint: disable=undefined-variable
