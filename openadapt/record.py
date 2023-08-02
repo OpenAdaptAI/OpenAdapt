@@ -42,6 +42,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "file": True,
 }
 DIRECTORIES_TO_AVOID = config.DIRECTORIES_TO_AVOID
+FILE_TYPE_WHITELIST = config.FILE_TYPE_WHITELIST
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
@@ -208,6 +209,13 @@ def process_events(
             prev_window_event = event
         elif event.type == "file":
             prev_file_event = event
+            process_event(
+                prev_file_event,
+                file_signal_write_q,
+                write_file_signal_event,
+                recording_timestamp,
+                perf_q,
+            )
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -215,9 +223,9 @@ def process_events(
             if prev_window_event is None:
                 logger.warning("Discarding input that came before window")
                 continue
-            if prev_file_event is None:
-                logger.warning("Discarding input that came before file signal")
-                continue
+            # if prev_file_event is None:
+            #     logger.warning("Discarding input that came before file signal")
+            #     continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
             #event.data["file_event_timestamp"] = prev_file_event.timestamp
@@ -249,14 +257,15 @@ def process_events(
                 if 'state' in prev_window_event.data:
                     ACTIVE_PID.value = prev_window_event.data["state"]["pid"]
                 logger.info(f"ACTIVE_PID={ACTIVE_PID.value}")
-            if prev_saved_file_timestamp < prev_file_event.timestamp:
-                process_event(
-                    prev_file_event,
-                    file_signal_write_q,
-                    write_file_signal_event,
-                    recording_timestamp,
-                    perf_q,
-                )
+            #if prev_saved_file_timestamp < prev_file_event.timestamp:
+        #elif event.type == "file":
+            # process_event(
+            #     prev_file_event,
+            #     file_signal_write_q,
+            #     write_file_signal_event,
+            #     recording_timestamp,
+            #     perf_q,
+            # )
             
         else:
             raise Exception(f"unhandled {event.type=}")
@@ -636,19 +645,22 @@ def read_file_signals_events(
     logger.info(f"starting")
     prev_file_signal_data = []
     while not terminate_event.is_set():
-        event_q.put(Event(utils.get_timestamp(), "file", get_file_signal_data()))
-        if str(ACTIVE_PID.value) not in str(prev_file_signal_data):
-            file_signal_data = get_file_signal_data()
-            if not file_signal_data:
-                continue
-            if file_signal_data != prev_file_signal_data:
-                logger.debug("queuing file signal event for writing")
-                #event_q.put(Event(
-                #    utils.get_timestamp(),
-                #    "file",
-                #    file_signal_data,
-                #))
-            prev_file_signal_data = file_signal_data
+        file_signal_data = get_file_signal_data()
+        if file_signal_data != {}:
+            logger.info("Writing a file signal event")
+            event_q.put(Event(utils.get_timestamp(), "file", get_file_signal_data()))
+        # if str(ACTIVE_PID.value) not in str(prev_file_signal_data):
+        #     file_signal_data = get_file_signal_data()
+        #     if not file_signal_data:
+        #         continue
+        #     if file_signal_data != prev_file_signal_data:
+        #         logger.debug("queuing file signal event for writing")
+        #         #event_q.put(Event(
+        #         #    utils.get_timestamp(),
+        #         #    "file",
+        #         #    file_signal_data,
+        #         #))
+        #     prev_file_signal_data = file_signal_data
 
 def get_file_signal_data():
     """
@@ -678,13 +690,26 @@ def get_file_signal_data():
     try:
         if ACTIVE_PID.value != 0:
             process = psutil.Process(ACTIVE_PID.value)
+            for proc in psutil.process_iter():
+                try:
+                    pid = proc.pid
+                    open_file = proc.open_files()
+                    logger.info(f"{pid=} {open_file=}")
+                except:
+                    pass
+
+
             open_files = process.open_files()
             for file in open_files:
                 fpath = file.path
-                if not any(directory in str(fpath) for directory in DIRECTORIES_TO_AVOID):
-                    logger.info(f"Open file: {fpath}")
-                    file_signal_addresses[ACTIVE_PID] = fpath
-                    #file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
+                logger.info(f"{fpath=}")
+                for file_type in FILE_TYPE_WHITELIST:
+                    if str(fpath).endswith(file_type) or fpath.endswith("pak"):
+                        if (not any(directory in str(fpath) for directory in DIRECTORIES_TO_AVOID)) or fpath.endswith("pak"):
+                            logger.info(f"Open file: {fpath}")
+                            file_signal_addresses["pid"] = ACTIVE_PID.value
+                            file_signal_addresses["file_path"] = fpath
+                            #file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         print("No such process or access denied")
 
