@@ -309,4 +309,4 @@ class PresidioScrubbingProvider(ScrubbingProvider):
             return scrub_dict(
                 item, list_keys, force_scrub_children=force_scrub_children
             )
-        return _scrub_text_item(item, key)  # noqa: F821
+        return _scrub_text_item(item, key)
