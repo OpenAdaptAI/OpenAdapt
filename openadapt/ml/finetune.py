@@ -1,14 +1,18 @@
 from openadapt.crud import *
-from openadapt import models
+from openadapt import models, utils
 from copy import deepcopy
 from loguru import logger
-import utils
 
+from openadapt.strategies.stateful import get_window_state_diffs
 
 def condense_window_state(recording_id):
-    
+
     grab_recording = get_recording_by_id(recording_id)
     curr_acx = get_action_events(grab_recording)
+
+    diffs = get_window_state_diffs(curr_acx)
+    logger.debug(f"{diffs=}")
+    return
 
     for action in curr_acx:
         processed_acx, processed_wd = sanitize(action)[0], sanitize(action)[1]
@@ -16,16 +20,34 @@ def condense_window_state(recording_id):
         logger.debug(f"{processed_wd=}")
 
         break
-
-        processed_wd_axvalue = grab_ax_value(processed_wd)
         task_description = recording.task_description
         summary_dataset(processed_wd_axvalue, task_description)
 
     # get task description
 
+# What to fine tune on
 
-def grab_ax_value(window_state):
-    return window_state["AXValue"]
+# if we finetune on actions, then the model can perform
+# actions on windows where these actions are meaningless. 
+# => BAD IDEA.
+
+# things that are a problem: length of reference window states.
+
+# right now, we give it reference window and action dict for ONE TASK 
+
+# then we give it an active window state and ask it to replicate these 
+# actions on the current window.
+
+
+# we absolutely NEED the coordinates of the generated action
+# to match the ones in the active window state.
+
+# SINCE the window doesnt change, how about just describing the 
+# translation, and saving up on that length?
+
+# then diffs for the reference window state. 
+########################################################################
+# Goal: we wish to enhance statefulreplaystrat to work properly.
 
 
 def summary_dataset(processed_wd_axvalue, task_desciption: str):
@@ -35,7 +57,7 @@ def summary_dataset(processed_wd_axvalue, task_desciption: str):
 
 
 def finetune_on_summary(prompt: str, completion: str):
-    # prompt is the current ACTION's PAIRED WINDOW STATE's AXValue,
+    # prompt is the current ACTION's PAIRED WINDOW STATE,
     # and completion is the task description of the recording
 
     pass
@@ -83,4 +105,12 @@ def sanitize(action):
             )
         ]
     reference_window_dict["state"].pop("data")
+    reference_window_dict.pop("left")
+    reference_window_dict.pop("top")
+    reference_window_dict.pop("width")
+    reference_window_dict.pop("height")
     return reference_action_dicts, reference_window_dict
+
+
+if __name__ == "__main__":
+    condense_window_state(2)
