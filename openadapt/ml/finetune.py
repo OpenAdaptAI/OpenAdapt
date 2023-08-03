@@ -5,8 +5,10 @@ from loguru import logger
 import utils
 
 
-def condense_window_state(recording):
-    curr_acx = get_action_events(recording)
+def condense_window_state(recording_id):
+    
+    grab_recording = get_recording_by_id(recording_id)
+    curr_acx = get_action_events(grab_recording)
 
     for action in curr_acx:
         processed_acx, processed_wd = sanitize(action)[0], sanitize(action)[1]
