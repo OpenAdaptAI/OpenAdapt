@@ -5,8 +5,8 @@ from loguru import logger
 
 from openadapt.strategies.stateful import get_window_state_diffs
 
-def condense_window_state(recording_id):
 
+def condense_window_state(recording_id):
     grab_recording = get_recording_by_id(recording_id)
     curr_acx = get_action_events(grab_recording)
 
@@ -25,27 +25,28 @@ def condense_window_state(recording_id):
 
     # get task description
 
+
 # What to fine tune on
 
 # if we finetune on actions, then the model can perform
-# actions on windows where these actions are meaningless. 
+# actions on windows where these actions are meaningless.
 # => BAD IDEA.
 
 # things that are a problem: length of reference window states.
 
-# right now, we give it reference window and action dict for ONE TASK 
+# right now, we give it reference window and action dict for ONE TASK
 
-# then we give it an active window state and ask it to replicate these 
+# then we give it an active window state and ask it to replicate these
 # actions on the current window.
 
 
 # we absolutely NEED the coordinates of the generated action
 # to match the ones in the active window state.
 
-# SINCE the window doesnt change, how about just describing the 
+# SINCE the window doesnt change, how about just describing the
 # translation, and saving up on that length?
 
-# then diffs for the reference window state. 
+# then diffs for the reference window state.
 ########################################################################
 # Goal: we wish to enhance statefulreplaystrat to work properly.
 
