@@ -10,6 +10,7 @@ from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
+from sqlalchemy.orm import session
 from tqdm import tqdm
 
 from openadapt import config, crud
@@ -182,7 +183,7 @@ def dict2html(
 
 
 @logger.catch
-def main(session=None) -> None:
+def main(session: session.Session = None) -> None:
     """Main function to generate an HTML report for a recording."""
     if session is not None:
         crud.db = session
