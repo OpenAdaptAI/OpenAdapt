@@ -15,7 +15,6 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
-import tomlkit
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -86,7 +85,6 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
-    "SILENCE_DEPRECATION": True,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
 }
@@ -172,14 +170,6 @@ ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
-
-with open(ROOT_DIRPATH / "pyproject.toml", "r") as f:
-    content = f.read()
-    document = tomlkit.parse(content)
-option = ["ignore::DeprecationWarning"] if SILENCE_DEPRECATION else ""  # type: ignore # noqa
-document["tool"]["pytest"]["ini_options"]["filterwarnings"] = option
-with open(ROOT_DIRPATH / "pyproject.toml", "w") as f:
-    f.write(tomlkit.dumps(document))
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
