@@ -4,8 +4,8 @@ from copy import deepcopy
 from loguru import logger
 import utils
 
-def condense_window_state(recording):
 
+def condense_window_state(recording):
     curr_acx = get_action_events(recording)
 
     for action in curr_acx:
@@ -21,16 +21,19 @@ def condense_window_state(recording):
 
     # get task description
 
+
 def grab_ax_value(window_state):
     return window_state["AXValue"]
 
+
 def summary_dataset(processed_wd_axvalue, task_desciption: str):
-    pass 
+    pass
     # write to a json file with format
     # {prompt: axvalue, completion: task_description}
 
+
 def finetune_on_summary(prompt: str, completion: str):
-    # prompt is the current ACTION's PAIRED WINDOW STATE's AXValue, 
+    # prompt is the current ACTION's PAIRED WINDOW STATE's AXValue,
     # and completion is the task description of the recording
 
     pass
@@ -70,9 +73,7 @@ def sanitize(action):
             deepcopy(
                 {
                     key: val
-                    for key, val in utils.row2dict(
-                        action, follow=False
-                    ).items()
+                    for key, val in utils.row2dict(action, follow=False).items()
                     if val is not None
                     and not key.endswith("timestamp")
                     and not key.endswith("id")
@@ -81,4 +82,3 @@ def sanitize(action):
         ]
     reference_window_dict["state"].pop("data")
     return reference_action_dicts, reference_window_dict
-
