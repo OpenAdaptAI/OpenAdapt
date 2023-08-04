@@ -12,7 +12,7 @@ class GPT3CompletionProvider(CompletionProvider):
     Modalities = [Modality.TEXT]
     Availabilities = [Availability.HOSTED]
 
-    def finetune(self, prompt: str, completion: str):
+    def finetune(self, prompt_completion_pair: list[dict[str]]):
         # TODO
         pass
 
