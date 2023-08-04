@@ -1,16 +1,30 @@
 """Lists all recordings in the database."""
 
+from sys import stdout
+
+from loguru import logger
+
 from openadapt.db.crud import get_all_recordings
 
 
 def main() -> None:
     """Prints all recordings in the database."""
-    latest = " [latest]"
-    for idx, recording in enumerate(get_all_recordings(), start=1):
-        print(f"[{idx}]: {recording.task_description} | {recording.timestamp}" + latest)
-        latest = ""
-    if latest:
-        print("No recordings found.")
+    logger.remove()
+    logger.add(
+        stdout,
+        colorize=True,
+        format="<blue>[DB]          </blue><yellow>{message}</yellow>",
+    )
+    print()  # newline
+
+    if not get_all_recordings():
+        logger.info("No recordings found.")
+
+    for idx, recording in enumerate(get_all_recordings()[::-1], start=1):
+        logger.info(
+            f"[{idx}]: {recording.task_description} | {recording.timestamp}"
+            + (" [latest]" if idx == len(get_all_recordings()) else "")
+        )
 
 
 if __name__ == "__main__":
