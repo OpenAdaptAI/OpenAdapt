@@ -4,10 +4,10 @@ Typical usage example:
     class MyReplayStrategy(SummaryReplayStrategyMixin):
         ...
 """
+import json
 import re
 import string
 
-import json
 import lmql
 from loguru import logger
 from pynput.keyboard import Key
@@ -47,19 +47,21 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
 
     def get_valid_json(self, prompt: str, template_file_path: str) -> dict:
         """Return the ActionEvent the model returns from the prompt."""
-        result = lmql_json(prompt, template_file_path)
-        assert len(result) == 1, result  # by default LMQL uses argmax which should return 1 result
+
+        # NOTE: the model parameter of the lmql_json specifies which model to prompt
+        result = lmql_json(prompt, template_file_path, model=self.model_name)
         json_result = result[0]
         logger.info(f"The json is {json_result}")
 
         return json_result
 
 
-"""The following function uses LMQL to constrain the output to a valid json."""
-
-
 @lmql.query()
 def lmql_json(description: str, template_file_path: str) -> list[lmql.LMQLResult]:
+    # This function uses LMQL to constrain the output to a valid json
+    # NOTE: openai/text-davinci-003 is the default model to prompt, but the model
+    #        can be changed by calling lmql_json with an additional model parameter
+
     '''lmql
     prompt = j2.load_template(template_fname=template_file_path, description=description)
     """{prompt}"""
