@@ -6,8 +6,6 @@ import os
 import subprocess
 import tempfile
 
-from sqlalchemy import engine
-
 from openadapt import config, share
 
 
