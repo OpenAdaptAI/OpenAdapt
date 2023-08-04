@@ -1,3 +1,5 @@
+"""Implements visualization utilities for OpenAdapt."""
+
 from pprint import pformat
 from threading import Timer
 import html
@@ -8,24 +10,20 @@ from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
+from tqdm import tqdm
 
-from openadapt.crud import (
-    get_latest_recording,
-)
-from openadapt.events import (
-    get_events,
-)
+from openadapt import config
+from openadapt.crud import get_latest_recording
+from openadapt.events import get_events
 from openadapt.utils import (
+    EMPTY,
     configure_logging,
     display_event,
     evenly_spaced,
     image2utf8,
-    EMPTY,
     row2dict,
     rows2dicts,
 )
-
-from openadapt import config
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
@@ -78,7 +76,16 @@ CSS = string.Template(
 )
 
 
-def recursive_len(lst, key):
+def recursive_len(lst: list, key: str) -> int:
+    """Calculate the recursive length of a list based on a key.
+
+    Args:
+        lst (list): The list to calculate the length of.
+        key: The key to access the sublists.
+
+    Returns:
+        int: The recursive length of the list.
+    """
     try:
         _len = len(lst)
     except TypeError:
@@ -91,14 +98,33 @@ def recursive_len(lst, key):
     return _len
 
 
-def format_key(key, value):
+def format_key(key: str, value: list) -> str:
+    """Format a key and value for display.
+
+    Args:
+        key: The key to format.
+        value: The value associated with the key.
+
+    Returns:
+        str: The formatted key and value.
+    """
     if isinstance(value, list):
         return f"{key} ({len(value)}; {recursive_len(value, key)})"
     else:
         return key
 
 
-def indicate_missing(some, every, indicator):
+def indicate_missing(some: list, every: list, indicator: str) -> list:
+    """Indicate missing elements in a list.
+
+    Args:
+        some (list): The list with potentially missing elements.
+        every (list): The reference list with all elements.
+        indicator (str): The indicator to use for missing elements.
+
+    Returns:
+        list: The list with indicators for missing elements.
+    """
     rval = []
     some_idx = 0
     every_idx = 0
@@ -115,7 +141,21 @@ def indicate_missing(some, every, indicator):
     return rval
 
 
-def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
+def dict2html(
+    obj: dict,
+    max_children: int = MAX_TABLE_CHILDREN,
+    max_len: int = MAX_TABLE_STR_LEN,
+) -> str:
+    """Convert a dictionary to an HTML representation.
+
+    Args:
+        obj (dict): The dictionary to convert.
+        max_children (int): The maximum number of child elements to display in a table.
+        max_len (int): The maximum length of a string value in the HTML representation.
+
+    Returns:
+        str: The HTML representation of the dictionary.
+    """
     if isinstance(obj, list):
         children = [dict2html(value, max_children) for value in obj]
         if max_children is not None and len(children) > max_children:
@@ -149,7 +189,9 @@ def dict2html(obj, max_children=MAX_TABLE_CHILDREN, max_len=MAX_TABLE_STR_LEN):
     return html_str
 
 
-def main():
+@logger.catch
+def main() -> None:
+    """Main function to generate an HTML report for a recording."""
     configure_logging(logger, LOG_LEVEL)
 
     recording = get_latest_recording()
@@ -188,83 +230,100 @@ def main():
         ),
     ]
     logger.info(f"{len(action_events)=}")
-    for idx, action_event in enumerate(action_events):
-        if idx == MAX_EVENTS:
-            break
-        image = display_event(action_event)
-        diff = display_event(action_event, diff=True)
-        mask = action_event.screenshot.diff_mask
 
-        if SCRUB:
-            image = scrub.scrub_image(image)
-            diff = scrub.scrub_image(diff)
-            mask = scrub.scrub_image(mask)
+    num_events = (
+        min(MAX_EVENTS, len(action_events))
+        if MAX_EVENTS is not None
+        else len(action_events)
+    )
+    with tqdm(
+        total=num_events,
+        desc="Preparing HTML",
+        unit="event",
+        colour="green",
+        dynamic_ncols=True,
+    ) as progress:
+        for idx, action_event in enumerate(action_events):
+            if idx == MAX_EVENTS:
+                break
+            image = display_event(action_event)
+            diff = display_event(action_event, diff=True)
+            mask = action_event.screenshot.diff_mask
 
-        image_utf8 = image2utf8(image)
-        diff_utf8 = image2utf8(diff)
-        mask_utf8 = image2utf8(mask)
-        width, height = image.size
+            if SCRUB:
+                image = scrub.scrub_image(image)
+                diff = scrub.scrub_image(diff)
+                mask = scrub.scrub_image(mask)
 
-        action_event_dict = row2dict(action_event)
-        window_event_dict = row2dict(action_event.window_event)
+            image_utf8 = image2utf8(image)
+            diff_utf8 = image2utf8(diff)
+            mask_utf8 = image2utf8(mask)
+            width, height = image.size
 
-        if SCRUB:
-            action_event_dict = scrub.scrub_dict(action_event_dict)
-            window_event_dict = scrub.scrub_dict(window_event_dict)
+            action_event_dict = row2dict(action_event)
+            window_event_dict = row2dict(action_event.window_event)
 
-        rows.append(
-            [
-                row(
-                    Div(
-                        text=f"""
-                        <div class="screenshot">
-                            <img
-                                src="{image_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{diff_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                            <img
-                                src="{mask_utf8}"
-                                style="
-                                    aspect-ratio: {width}/{height};
-                                "
-                            >
-                        </div>
-                        <table>
-                            {dict2html(window_event_dict , None)}
-                        </table>
-                    """,
+            if SCRUB:
+                action_event_dict = scrub.scrub_dict(action_event_dict)
+                window_event_dict = scrub.scrub_dict(window_event_dict)
+
+            rows.append(
+                [
+                    row(
+                        Div(
+                            text=f"""
+                            <div class="screenshot">
+                                <img
+                                    src="{image_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{diff_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                                <img
+                                    src="{mask_utf8}"
+                                    style="
+                                        aspect-ratio: {width}/{height};
+                                    "
+                                >
+                            </div>
+                            <table>
+                                {dict2html(window_event_dict , None)}
+                            </table>
+                        """,
+                        ),
+                        Div(
+                            text=f"""
+                            <table>
+                                {dict2html(action_event_dict)}
+                            </table>
+                        """
+                        ),
                     ),
-                    Div(
-                        text=f"""
-                        <table>
-                            {dict2html(action_event_dict)}
-                        </table>
-                    """
-                    ),
-                ),
-            ]
-        )
+                ]
+            )
+
+            progress.update()
+
+        progress.close()
 
     title = f"recording-{recording.id}"
     fname_out = f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
-    result = show(
+    result = show(  # noqa: F841
         layout(
             rows,
         )
     )
 
-    def cleanup():
+    def cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")

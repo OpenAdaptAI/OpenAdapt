@@ -23,9 +23,8 @@ from typing import Optional
 import math
 
 from loguru import logger
+from moviepy.editor import VideoClip, VideoFileClip
 from PIL import Image
-from moviepy.editor import VideoFileClip, VideoClip
-from moviepy.video.fx import speedx
 from tqdm import tqdm
 import fire
 import numpy as np
@@ -33,9 +32,13 @@ import numpy as np
 from openadapt import config, scrub, utils
 
 
-def _make_frame(time, final, progress_bar, progress_threshold):
-    """
-    Private function to scrub a frame.
+def _make_frame(
+    time: int,
+    final: VideoFileClip,
+    progress_bar: tqdm.std.tqdm,
+    progress_threshold: int,
+) -> np.ndarray:
+    """Private function to scrub a frame.
 
     Args:
         time: Time (in seconds)
@@ -48,7 +51,6 @@ def _make_frame(time, final, progress_bar, progress_threshold):
     Returns:
         A Redacted frame
     """
-
     frame = final.get_frame(time)
 
     image = Image.fromarray(frame)
@@ -73,8 +75,7 @@ def scrub_mp4(
     crop_start_time: int = 0,
     crop_end_time: Optional[int] = None,
 ) -> str:
-    """
-    Scrub a mp4 file.
+    """Scrub a mp4 file.
 
     Args:
         mp4_file_path: Path to the mp4 file.
@@ -86,7 +87,6 @@ def scrub_mp4(
     Returns:
         Path to the scrubbed (redacted) mp4 file.
     """
-
     logger.info(f"{mp4_file=}")
     logger.info(f"{scrub_all_entities=}")
     logger.info(f"{playback_speed_multiplier=}")
@@ -113,17 +113,13 @@ def scrub_mp4(
         unit="frame",
         bar_format=progress_bar_format,
         colour="green",
+        dynamic_ncols=True,
     )
     progress_interval = 0.1  # Print progress every 10% of frames
     progress_threshold = math.floor(frame_count * progress_interval)
 
     redacted_clip = VideoClip(
-        make_frame=lambda t: _make_frame(
-            t,
-            final,
-            progress_bar,
-            progress_threshold,
-        ),
+        make_frame=lambda t: _make_frame(t, final, progress_bar, progress_threshold),
         duration=final.duration,
     )  # Redact the clip
 
