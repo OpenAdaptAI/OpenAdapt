@@ -256,7 +256,6 @@ def main(recording: Recording = get_latest_recording()) -> None:
     # global search
     def on_change_closure(e: events.ValueChangeEventArguments) -> None:
         for tree in range(len(action_event_trees)):
-            print(type(e))
             set_filter(
                 e.value,
                 action_event_trees[tree],
