@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.6.0"
+version = "0.7.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'Mustafa Abdulrahman <mustafa@openadapt.ai>',
@@ -83,7 +83,7 @@ pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
 cffi = "^1.15.1"
-pyobjc-framework-avfoundation = "^9.2"
+pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
 fastapi = "0.98.0"
 
 [tool.poetry.dependencies.en_core_web_trf]
