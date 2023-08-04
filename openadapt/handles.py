@@ -64,6 +64,9 @@ def time_functions():
     handle_time = timeit.timeit("get_open_files_handle()", setup="from __main__ import get_open_files_handle", number=1)
     print(f"Time taken using handle.exe: {handle_time} seconds")
 
+    handle_time = timeit.timeit("get_open_files_handle()", setup="from __main__ import get_open_files_handle", number=1)
+    print(f"Time taken using handle64.exe: {handle_time} seconds")
+
     psutil_time = timeit.timeit("get_open_files_psutil()", setup="from __main__ import get_open_files_psutil", number=1)
     print(f"Time taken using psutil: {psutil_time} seconds")
 
