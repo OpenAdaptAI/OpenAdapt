@@ -37,6 +37,21 @@ def get_open_files_handle():
 
     return files
 
+def get_open_txt_files_handle():
+    result = subprocess.run(['handle.exe'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        print(f"Error running handle.exe: {result.stderr}")
+        return []
+
+    # Extracting the files from the output
+    files = []
+    for line in result.stdout.split('\n'):
+        if 'File' in line:
+            if ".txt" in line:
+                files.append(line.split(' ')[-1].strip())
+
+    return files
+
 def get_open_files_handle64():
     result = subprocess.run(['handle64.exe'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
@@ -71,4 +86,5 @@ def time_functions():
     print(f"Time taken using psutil: {psutil_time} seconds")
 
 if __name__ == "__main__":
-    time_functions()
+    #time_functions()
+    print(get_open_txt_files_handle())
