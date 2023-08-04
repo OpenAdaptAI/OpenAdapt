@@ -1,29 +1,16 @@
-import requests
 import importlib
-import os
 import mimetypes
-import sys
+import os
 import sqlite3
-import pandas as pd
-import psutil
-import openpyxl
+import sys
 
 from loguru import logger
+import openpyxl
+import pandas as pd
+import psutil
+import requests
 
 from openadapt import config
-
-
-def add_files_from_pid(current_signals, pid):
-    directories_to_avoid = config.DIRECTORIES_TO_AVOID
-    try:
-        process = psutil.Process(pid)
-        open_files = process.open_files()
-        for file in open_files:
-            if not any(directory in str(file.path) for directory in directories_to_avoid):
-                logger.info(f"Open file: {file.path}")
-                current_signals.add_signal(file.path, signal_type="file")
-    except psutil.NoSuchProcess:
-        print(f"No process with pid {pid} exists")
 
 
 class Signals:
@@ -43,13 +30,13 @@ class Signals:
     def __init__(self):
         self.signals = []
 
-    def return_signals(self):
+    def return_signals(self) -> list[dict]:
         """
         Return the list of signals.
         """
         return self.signals
 
-    def __setup_database_signal(self, db_url):
+    def __setup_database_signal(self, db_url) -> str:
         """
         Read a description of a signal from a database.
         """
@@ -73,12 +60,12 @@ class Signals:
 
         for row in rows:
             # The first element is the table name, the second element is the SQL schema
-            table_info.append({"Table": (row[0]), "Schema": (row[1])})
+            table_info.append({"Table": row[0], "Schema": row[1]})
 
         description = table_info
         return description
 
-    def __setup_file_signal(self, file_path):
+    def __setup_file_signal(self, file_path) -> str:
         """
         Read a description of a signal from a file.
         """
@@ -110,11 +97,12 @@ class Signals:
             return None
         except pd.errors.ParserError:
             logger.info(
-                f"Error: Pandas could not parse the excel file, possible formatting issue."
+                f"Error: Pandas could not parse the excel file, possible formatting"
+                f" issue."
             )
         return description
 
-    def __setup_url_signal(self, http_url):
+    def __setup_url_signal(self, http_url) -> str:
         """
         Read a description of a signal from an HTTP URL.
         """
@@ -140,12 +128,12 @@ class Signals:
             type = response.headers.get("Content-Type")
 
             description = {
-                "Length": (length if length else 'Content-Length not provided'), 
-                "Type": (type if type else 'Content-Type not provided')
+                "Length": length if length else "Content-Length not provided",
+                "Type": type if type else "Content-Type not provided",
             }
         return description
 
-    def __setup_function_signal(self, function_address, function_path=None):
+    def __setup_function_signal(self, function_address, function_path=None) -> str:
         """
         Read a description of a signal from a Python function.
         """
@@ -169,25 +157,23 @@ class Signals:
 
         # Describe the function
         description = {
-            "Module": (module_name), 
-            "Class": (class_name),
-           "Function": (func_name), 
-            "Docstring": (docstring)
+            "Module": module_name,
+            "Class": class_name,
+            "Function": func_name,
+            "Docstring": docstring,
         }
 
         return description
 
-    def __access_function_signal(self, function_address, **kwargs):
+    def __access_function_signal(self, function_address, **kwargs) -> any:
         """
         Read signal data from a Python function.
         """
         if isinstance(function_address, tuple):
             assert len(function_address) == 2, function_address
             function_path, function_address = function_address
-            
-            sys.path.append(function_path)
-        
 
+            sys.path.append(function_path)
 
         module_name, class_name, func_name = function_address.rsplit(".", 2)
         module = importlib.import_module(module_name)
@@ -199,7 +185,7 @@ class Signals:
 
         return result
 
-    def __access_database_signal(self, db_url, **kwargs):
+    def __access_database_signal(self, db_url, **kwargs) -> any:
         """
         Read signal data from a database.
         """
@@ -219,7 +205,7 @@ class Signals:
                 conn.close()
         return data
 
-    def __access_file_signal(self, file_path):
+    def __access_file_signal(self, file_path) -> str:
         """
         Read signal data from a file.
         """
@@ -254,7 +240,7 @@ class Signals:
             return None
         return content
 
-    def __access_url_signal(self, http_url):
+    def __access_url_signal(self, http_url) -> str:
         """
         Read signal data from an HTTP URL.
         """
@@ -274,27 +260,40 @@ class Signals:
             signal_data = response.content
         return signal_data
 
-    def add_signal(self, signal_address, signal_path=None, signal_title=None, signal_type=None):
+    def add_signal(
+        self, signal_address, signal_path=None, signal_title=None, signal_type=None
+    ) -> None:
         signal_description = None
         if isinstance(signal_address, str):
             # If signal is a string, it could be a file path, a database URL, an HTTP URL, or a Python function name.
-            if signal_address.startswith("pgsql://") or signal_address.endswith(".db") or signal_type == "database":
+            if (
+                signal_address.startswith("pgsql://")
+                or signal_address.endswith(".db")
+                or signal_type == "database"
+            ):
                 # If the string starts with "pgsql://", treat it as a database URL.
                 signal_description = self.__setup_database_signal(signal_address)
                 signal_type = "database"
-            elif signal_address.startswith("http://") or signal_address.startswith(
-                "https://"
-            ) or signal_type == "web_url":
+            elif (
+                signal_address.startswith("http://")
+                or signal_address.startswith("https://")
+                or signal_type == "web_url"
+            ):
                 # If the string starts with "http://" or "https://", treat it as an HTTP URL.
                 signal_description = self.__setup_url_signal(signal_address)
                 signal_type = "web_url"
-            elif signal_address.endswith((".json", ".csv", ".txt", ".xlsx", ".xls")) or signal_type == "file":
+            elif (
+                signal_address.endswith((".json", ".csv", ".txt", ".xlsx", ".xls"))
+                or signal_type == "file"
+            ):
                 # If the string ends with a known file extension, treat it as a file path.
                 signal_description = self.__setup_file_signal(signal_address)
                 signal_type = "file"
             elif signal_address.count(".") >= 1 or signal_type == "function":
                 # Otherwise, treat it as a Python function name.
-                signal_description = self.__setup_function_signal(signal_address, function_path=signal_path)
+                signal_description = self.__setup_function_signal(
+                    signal_address, function_path=signal_path
+                )
                 signal_type = "function"
             else:
                 raise ValueError("Invalid signal address.")
@@ -304,8 +303,8 @@ class Signals:
 
         signal_id = len(self.signals) + 1
 
-        if (signal_type == "function" and signal_path != None):
-            signal_address = (signal_path,signal_address)
+        if signal_type == "function" and signal_path != None:
+            signal_address = (signal_path, signal_address)
 
         signal = {
             "id": signal_id,
@@ -316,7 +315,7 @@ class Signals:
         }
         self.signals.append(signal)
 
-    def remove_signal(self, signal_id):
+    def remove_signal(self, signal_id) -> None:
         """
         Remove a signal from the list.
         """
@@ -325,7 +324,7 @@ class Signals:
             # Decrement the signal ids of all signals after the removed signal.
             self.signals[i]["id"] -= 1
 
-    def return_signal_data(self, signal_id, **kwargs):
+    def return_signal_data(self, signal_id, **kwargs) -> any:
         """
         Return the data of a signal.
         """
@@ -344,30 +343,54 @@ class Signals:
             return None
 
 
-def initialize_default_signals():
+def initialize_default_signals() -> Signals:
     signals = Signals()
     for signal_address in config.DEFAULT_SIGNALS:
         if isinstance(signal_address, tuple):
             signal_path = signal_address[0]
             signal_address = signal_address[1]
             sys.path.append(signal_path)
-        
-        signals.add_signal(signal_address,signal_path=signal_path)
+
+        signals.add_signal(signal_address, signal_path=signal_path)
     return signals
 
 
-class Signal:
-    def __init__(self, id, address, description, type, title="None"):
-        self.id = id
-        self.address = address
-        self.title = title
-        self.description = description
-        self.type = type
+# class Signal:
+#     def __init__(self, id, address, description, type, title="None"):
+#         self.id = id
+#         self.address = address
+#         self.title = title
+#         self.description = description
+#         self.type = type
 
 
-class DBTableSignal(Signal):
-    def __init__(self, id, address, description, type, title="None"):
-        super().__init__(id, address, title, description, type)
+# class DBTableSignal(Signal):
+#     def __init__(self, id, address, description, type, title="None"):
+#         super().__init__(id, address, title, description, type)
+
+
+def add_files_from_pid(current_signals: Signals, pid: int) -> None:
+    """Add all open files from a process to the current signals.
+
+    Args:
+        current_signals (Signals): The current signals to add to.
+        pid (int): The process id to retrieve open files from.
+
+    Returns:
+        None
+    """
+    directories_to_avoid = config.DIRECTORIES_TO_AVOID
+    try:
+        process = psutil.Process(pid)
+        open_files = process.open_files()
+        for file in open_files:
+            if not any(
+                directory in str(file.path) for directory in directories_to_avoid
+            ):
+                logger.info(f"Open file: {file.path}")
+                current_signals.add_signal(file.path, signal_type="file")
+    except psutil.NoSuchProcess:
+        print(f"No process with pid {pid} exists")
 
 
 # Demonstration test code
