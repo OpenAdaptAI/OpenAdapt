@@ -24,9 +24,12 @@ def condense_window_state(recording_id: int):
         processed_wd.pop("meta")
         # task_description = recording.task_description
 
+        logger.debug(f"{total_acx[i].timestamp=}")
+        logger.debug(f"{total_acx[i].recording_timestamp=}")
+        logger.debug(f"{total_acx[i].screenshot_timestamp=}")
+        logger.debug(f"{total_acx[i].window_event_timestamp=}")
+        # which timestamp to finetune on? 
         total_acx[i] = (processed_acx, processed_wd)
-
-    logger.debug(total_acx)
     return total_acx
 
 
