@@ -50,6 +50,8 @@ class LMQLReplayStrategyMixin(BaseReplayStrategy):
 
         # NOTE: the model parameter of the lmql_json specifies which model to prompt
         result = lmql_json(prompt, template_file_path, model=self.model_name)
+
+        assert len(result) == 1, result  # by default LMQL uses argmax which should return 1 result
         json_result = result[0]
         logger.info(f"The json is {json_result}")
 
