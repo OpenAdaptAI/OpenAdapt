@@ -18,10 +18,7 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from openadapt.crud import (
-    get_latest_recording,
-    get_window_events
-)
+from openadapt.crud import get_latest_recording, get_window_events
 
 from openadapt.events import (
     get_events,
@@ -35,11 +32,7 @@ from openadapt.utils import (
     rows2dicts,
 )
 
-from openadapt.visualize import (
-    IMG_WIDTH_PCT,
-    MAX_EVENTS,
-    dict2html
-)
+from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
 from openadapt.models import (
     ActionEvent,
@@ -47,7 +40,8 @@ from openadapt.models import (
     WindowEvent,
 )
 
-CSS = string.Template("""
+CSS = string.Template(
+    """
     table {
         outline: 1px solid black;
     }
@@ -68,7 +62,8 @@ CSS = string.Template("""
     .screenshot:active img:nth-child(1) {
         display: block;
     }
-""").substitute(
+"""
+).substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -151,8 +146,10 @@ def is_within_margin(event1: ActionEvent, event2: ActionEvent, margin: int) -> b
         bool: True if the distance between the mouse coordinates of the events is within the
         specified margin, False otherwise.
     """
-    return abs(event1.mouse_x - event2.mouse_x) <= margin and \
-           abs(event1.mouse_y - event2.mouse_y) <= margin
+    return (
+        abs(event1.mouse_x - event2.mouse_x) <= margin
+        and abs(event1.mouse_y - event2.mouse_y) <= margin
+    )
 
 
 def compare_events(event1: ActionEvent, event2: ActionEvent) -> bool:
@@ -177,8 +174,12 @@ def compare_events(event1: ActionEvent, event2: ActionEvent) -> bool:
     return False
 
 
-def find_num_tasks(action_events: list[ActionEvent], start: ActionEvent, length: int,
-                   task: Optional[ActionEvent] = None) -> Tuple[list[ActionEvent], int, float]:
+def find_num_tasks(
+    action_events: list[ActionEvent],
+    start: ActionEvent,
+    length: int,
+    task: Optional[ActionEvent] = None,
+) -> Tuple[list[ActionEvent], int, float]:
     """
     Given a list of ActionEvents, the start of a repeating task, the length of the task, and
     optionally the identified task, verify that the task repeats (and if not,
@@ -275,8 +276,9 @@ def find_num_tasks(action_events: list[ActionEvent], start: ActionEvent, length:
     return task, num_repetitions, total_time
 
 
-def rec_lrs(action_events: list[ActionEvent]) \
-        -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
+def rec_lrs(
+    action_events: list[ActionEvent],
+) -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
     """
     Caller function that calls longest_repeated_substring recursively to find the
     longest repeating non-overlapping task of ActionEvents from the original action_events.
@@ -303,8 +305,9 @@ def rec_lrs(action_events: list[ActionEvent]) \
         action_events = task
 
 
-def longest_repeated_substring(action_events: list[ActionEvent])\
-        -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
+def longest_repeated_substring(
+    action_events: list[ActionEvent],
+) -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
     """
     Recursive function to find the longest repeating non-overlapping task of
     ActionEvents from the original action_events. Based on algorithm found at
@@ -322,8 +325,7 @@ def longest_repeated_substring(action_events: list[ActionEvent])\
 
     # table_of_max_lengths[i][j] stores length of the matching and
     # non-overlapping substrings ending with i'th and j'th events
-    table_of_max_lengths = [[0 for _ in range(n + 1)]
-                            for _ in range(n + 1)]
+    table_of_max_lengths = [[0 for _ in range(n + 1)] for _ in range(n + 1)]
 
     result = []  # To store result
     res_length = 0  # To store length of result
@@ -332,9 +334,9 @@ def longest_repeated_substring(action_events: list[ActionEvent])\
     index = 0
     for i in range(1, n + 1):
         for j in range(i + 1, n + 1):
-
-            if (compare_events(action_events[i - 1], action_events[j - 1]) and
-                    table_of_max_lengths[i - 1][j - 1] < (j - i)):
+            if compare_events(
+                action_events[i - 1], action_events[j - 1]
+            ) and table_of_max_lengths[i - 1][j - 1] < (j - i):
                 table_of_max_lengths[i][j] = table_of_max_lengths[i - 1][j - 1] + 1
 
                 # updating maximum length of the
@@ -351,8 +353,7 @@ def longest_repeated_substring(action_events: list[ActionEvent])\
     # all characters from first character to
     # last character of string
     if res_length > 0:
-        for i in range(index - res_length + 1,
-                       index + 1):
+        for i in range(index - res_length + 1, index + 1):
             result.append(action_events[i - 1])
     else:
         return [], None, 0
@@ -390,11 +391,16 @@ def find_errors(action_events: list[ActionEvent]):
     # TODO: how to find click errors
     errors = 0
     for i in range(0, len(action_events)):
-        if action_events[i].canonical_key_name == 'backspace' or \
-                action_events[i].canonical_key_name == 'delete':
+        if (
+            action_events[i].canonical_key_name == "backspace"
+            or action_events[i].canonical_key_name == "delete"
+        ):
             errors += 1
-        elif action_events[i].canonical_key_name == 'ctrl':
-            if i < len(action_events) - 1 and action_events[i + 1].canonical_key_char == 'z':
+        elif action_events[i].canonical_key_name == "ctrl":
+            if (
+                i < len(action_events) - 1
+                and action_events[i + 1].canonical_key_char == "z"
+            ):
                 errors += 1
     return errors
 
@@ -450,26 +456,28 @@ def calculate_productivity():
     tab_changes = find_num_window_tab_changes(window_events)
 
     task, start, length = rec_lrs(filtered_action_events)
-    final_task, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length,
-                                                            task)
+    final_task, num_tasks, total_task_time = find_num_tasks(
+        filtered_action_events, start, length, task
+    )
     if num_tasks != 0:
         ave_task_time = total_task_time / num_tasks
     else:
         ave_task_time = 0
     # errors = find_errors(filtered_action_events)
 
-    prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
-                 "Total time spent during pauses": time_in_gaps,
-                 "Total number of mouse clicks": num_clicks,
-                 "Total number of key presses": num_key_presses,
-                 "Number of window/tab switches": tab_changes,
-                 "Recording length": duration,
-                 f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
-                 "Number of key presses and mouse clicks in identified task": len(final_task),
-                 "Total time spent on repetitive tasks": total_task_time,
-                 "Average time spent per repetitive task": ave_task_time,
-                 # "Number of errors": errors
-                 }
+    prod_info = {
+        f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+        "Total time spent during pauses": time_in_gaps,
+        "Total number of mouse clicks": num_clicks,
+        "Total number of key presses": num_key_presses,
+        "Number of window/tab switches": tab_changes,
+        "Recording length": duration,
+        f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
+        "Number of key presses and mouse clicks in identified task": len(final_task),
+        "Total time spent on repetitive tasks": total_task_time,
+        "Average time spent per repetitive task": ave_task_time,
+        # "Number of errors": errors
+    }
 
     rows = [
         row(
@@ -487,33 +495,24 @@ def calculate_productivity():
                 text=f"{dict2html(row2dict(recording))}",
             ),
         ),
-        row(
-            Div(
-                text=f"{dict2html(prod_info)}"
-            )
-        )
+        row(Div(text=f"{dict2html(prod_info)}")),
     ]
 
     # task screenshots
     if num_tasks > 0:
         if len(task) > 0:
-            rows.append([
-                row(
-                    Div(
-                        text="<hr><h1>Identified Task</h1><hr>"
-                    )
-                )
-            ])
+            rows.append([row(Div(text="<hr><h1>Identified Task</h1><hr>"))])
 
         for event in final_task:
             screenshot = display_event(event)
             screenshot_utf8 = image2utf8(screenshot)
             width, height = screenshot.size
 
-            rows.append([
-                row(
-                    Div(
-                        text=f"""
+            rows.append(
+                [
+                    row(
+                        Div(
+                            text=f"""
                             <div class="screenshot">
                                 <img
                                     src="{screenshot_utf8}"
@@ -523,19 +522,14 @@ def calculate_productivity():
                                 >
                             </div>
                         """,
+                        ),
                     ),
-                ),
-            ])
+                ]
+            )
 
     # window by window
     if len(window_events) > 0:
-        rows.append([
-            row(
-                Div(
-                    text="<hr><h1>Windows/Tabs</h1><hr>"
-                )
-            )
-        ])
+        rows.append([row(Div(text="<hr><h1>Windows/Tabs</h1><hr>"))])
 
         last_event = action_events[0]
         curr_action_events = [last_event]
@@ -544,9 +538,11 @@ def calculate_productivity():
             if i == MAX_EVENTS:
                 break
             curr_event = action_events[i]
-            if curr_event.window_event_timestamp != last_event.window_event_timestamp and \
-                    curr_event.window_event.title != "" and \
-                    curr_event.window_event.title != last_event.window_event.title:
+            if (
+                curr_event.window_event_timestamp != last_event.window_event_timestamp
+                and curr_event.window_event.title != ""
+                and curr_event.window_event.title != last_event.window_event.title
+            ):
                 if len(curr_action_events) > 2:
                     # sometimes the app isn't loaded yet on the first action event
                     event_to_display = curr_action_events[1]
@@ -559,19 +555,24 @@ def calculate_productivity():
                 gaps, time_in_gaps = find_gaps(curr_action_events)
                 num_clicks = find_clicks(curr_action_events)
                 num_key_presses = find_key_presses(curr_action_events)
-                window_duration = curr_event.window_event_timestamp - last_event.window_event_timestamp
+                window_duration = (
+                    curr_event.window_event_timestamp
+                    - last_event.window_event_timestamp
+                )
 
-                window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
-                               "Total time spent during pauses": time_in_gaps,
-                               "Total number of mouse clicks": num_clicks,
-                               "Total number of key presses": num_key_presses,
-                               "Time spent on this window/tab": window_duration,
-                               }
+                window_info = {
+                    f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+                    "Total time spent during pauses": time_in_gaps,
+                    "Total number of mouse clicks": num_clicks,
+                    "Total number of key presses": num_key_presses,
+                    "Time spent on this window/tab": window_duration,
+                }
 
-                rows.append([
-                    row(
-                        Div(
-                            text=f"""
+                rows.append(
+                    [
+                        row(
+                            Div(
+                                text=f"""
                                 <div class="screenshot">
                                     <img
                                         src="{image_utf8}"
@@ -584,16 +585,17 @@ def calculate_productivity():
                                     {dict2html(row2dict(last_event.window_event))}
                                 </table>
                             """,
-                        ),
-                        Div(
-                            text=f"""
+                            ),
+                            Div(
+                                text=f"""
                                 <table>
                                     {dict2html(window_info)}
                                 </table>
                             """
+                            ),
                         ),
-                    ),
-                ])
+                    ]
+                )
                 # flush curr_action_events
                 curr_action_events = []
             last_event = curr_event
@@ -608,18 +610,22 @@ def calculate_productivity():
         gaps, time_in_gaps = find_gaps(last_action_events)
         num_clicks = find_clicks(last_action_events)
         num_key_presses = find_key_presses(last_action_events)
-        window_duration = last_action_events[-1].timestamp - last_action_events[0].timestamp
-        window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
-                       "Total time spent during pauses": time_in_gaps,
-                       "Total number of mouse clicks": num_clicks,
-                       "Total number of key presses": num_key_presses,
-                       "Time spent on this window/tab": window_duration,
-                       }
+        window_duration = (
+            last_action_events[-1].timestamp - last_action_events[0].timestamp
+        )
+        window_info = {
+            f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+            "Total time spent during pauses": time_in_gaps,
+            "Total number of mouse clicks": num_clicks,
+            "Total number of key presses": num_key_presses,
+            "Time spent on this window/tab": window_duration,
+        }
 
-        rows.append([
-            row(
-                Div(
-                    text=f"""
+        rows.append(
+            [
+                row(
+                    Div(
+                        text=f"""
                                     <div class="screenshot">
                                         <img
                                             src="{image_utf8}"
@@ -632,16 +638,17 @@ def calculate_productivity():
                                         {dict2html(row2dict(window_events[-1]))}
                                     </table>
                                 """,
-                ),
-                Div(
-                    text=f"""
+                    ),
+                    Div(
+                        text=f"""
                                     <table>
                                         {dict2html(window_info)}
                                     </table>
                                 """
+                    ),
                 ),
-            ),
-        ])
+            ]
+        )
 
     # display data
     title = f"Productivity metrics for recording-{recording.id}"
