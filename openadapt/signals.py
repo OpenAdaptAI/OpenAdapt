@@ -34,7 +34,7 @@ class Signals:
         """Return the list of signals."""
         return self.signals
 
-    def __setup_database_signal(self, db_url) -> str:
+    def __setup_database_signal(self, db_url: str) -> str:
         """Read a description of a signal from a database.
 
         Args:
@@ -67,7 +67,7 @@ class Signals:
         description = table_info
         return description
 
-    def __setup_file_signal(self, file_path) -> str:
+    def __setup_file_signal(self, file_path: str) -> str:
         """Read a description of a signal from a file.
 
         Args:
@@ -109,7 +109,7 @@ class Signals:
             )
         return description
 
-    def __setup_url_signal(self, http_url) -> str:
+    def __setup_url_signal(self, http_url: str) -> str:
         """Read a description of a signal from an HTTP URL.
 
         Args:
@@ -145,7 +145,9 @@ class Signals:
             }
         return description
 
-    def __setup_function_signal(self, function_address, function_path=None) -> str:
+    def __setup_function_signal(
+        self, function_address: str, function_path: str = None
+    ) -> str:
         """Read a description of a signal from a Python function.
 
         Args:
@@ -183,7 +185,7 @@ class Signals:
 
         return description
 
-    def __access_function_signal(self, function_address, **kwargs) -> any:
+    def __access_function_signal(self, function_address: str, **kwargs: any) -> any:
         """Read signal data from a Python function.
 
         Args:
@@ -208,7 +210,7 @@ class Signals:
 
         return result
 
-    def __access_database_signal(self, db_url, **kwargs) -> any:
+    def __access_database_signal(self, db_url: str, **kwargs: str) -> any:
         """Read signal data from a database.
 
         Args:
@@ -233,7 +235,7 @@ class Signals:
                 conn.close()
         return data
 
-    def __access_file_signal(self, file_path) -> str:
+    def __access_file_signal(self, file_path: str) -> str:
         """Read signal data from a file.
 
         Args:
@@ -273,7 +275,7 @@ class Signals:
             return None
         return content
 
-    def __access_url_signal(self, http_url) -> str:
+    def __access_url_signal(self, http_url: str) -> str:
         """Read signal data from an HTTP URL.
 
         Args:
@@ -299,7 +301,11 @@ class Signals:
         return signal_data
 
     def add_signal(
-        self, signal_address, signal_path=None, signal_title=None, signal_type=None
+        self,
+        signal_address: str,
+        signal_path: str = None,
+        signal_title: str = None,
+        signal_type: str = None,
     ) -> None:
         """Add a signal to the list.
 
@@ -364,7 +370,7 @@ class Signals:
         }
         self.signals.append(signal)
 
-    def remove_signal(self, signal_id) -> None:
+    def remove_signal(self, signal_id: int) -> None:
         """Remove a signal from the list.
 
         Args:
@@ -378,7 +384,7 @@ class Signals:
             # Decrement the signal ids of all signals after the removed signal.
             self.signals[i]["id"] -= 1
 
-    def return_signal_data(self, signal_id, **kwargs) -> any:
+    def return_signal_data(self, signal_id: int, **kwargs: any) -> any:
         """Return the data of a signal.
 
         Args:
