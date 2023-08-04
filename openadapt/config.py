@@ -32,6 +32,9 @@ _DEFAULTS = {
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
+    "MAX_NUM_WARNINGS_PER_SECOND": 5,
+    "WARNING_SUPPRESSION_PERIOD": 1,
+    "MESSAGES_TO_FILTER": ["Cannot pickle Objective-C objects"],
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
@@ -210,20 +213,3 @@ if multiprocessing.current_process().name == "MainProcess":
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
-
-
-def filter_log_messages(data: dict) -> bool:
-    """Filter log messages by ignoring specific strings.
-
-    Args:
-        data (dict): Data from a loguru logger.
-
-    Returns:
-        bool: True if the message should not be ignored, False if it should be ignored.
-    """
-    # TODO: ultimately, we want to fix the underlying issues, but for now,
-    # we can ignore these messages
-    messages_to_ignore = [
-        "Cannot pickle Objective-C objects",
-    ]
-    return not any(msg in data["message"] for msg in messages_to_ignore)
