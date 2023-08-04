@@ -84,7 +84,7 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
-    "PLOT_PERFORMANCE": False,
+    "PLOT_PERFORMANCE": True,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
 }
