@@ -23,7 +23,8 @@ import mss.base
 import numpy as np
 
 from openadapt import common, config
-from openadapt.db.db import BaseModel
+from openadapt.db import db
+from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
@@ -57,12 +58,14 @@ def configure_logging(logger: logger, log_level: str) -> None:
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+            filter=(
+                filter_log_messages if config.MAX_NUM_WARNINGS_PER_SECOND > 0 else None
+            ),
         )
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Union[dict, BaseModel], follow: bool = True) -> dict:
+def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
