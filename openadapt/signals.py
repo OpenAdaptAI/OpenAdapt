@@ -31,18 +31,20 @@ class Signals:
         self.signals = []
 
     def return_signals(self) -> list[dict]:
-        """
-        Return the list of signals.
-        """
+        """Return the list of signals."""
         return self.signals
 
     def __setup_database_signal(self, db_url) -> str:
-        """
-        Read a description of a signal from a database.
-        """
-        # Get the signal from the database.
-        # TODO: implement database signal
+        """Read a description of a signal from a database.
 
+        Args:
+            db_url (str): The path to the database file.
+
+        Returns:
+            str: A description of the signal.
+        """
+
+        # Get the signal from the database.
         conn = sqlite3.connect(db_url)
         cur = conn.cursor()
         cur.execute("SELECT * FROM sqlite_master WHERE type='table';")
@@ -66,8 +68,13 @@ class Signals:
         return description
 
     def __setup_file_signal(self, file_path) -> str:
-        """
-        Read a description of a signal from a file.
+        """Read a description of a signal from a file.
+
+        Args:
+            file_path (str): The path to the file.
+
+        Returns:
+            str: A description of the signal.
         """
         # Get the signal from the file.
         if not os.path.isfile(file_path):
@@ -103,8 +110,13 @@ class Signals:
         return description
 
     def __setup_url_signal(self, http_url) -> str:
-        """
-        Read a description of a signal from an HTTP URL.
+        """Read a description of a signal from an HTTP URL.
+
+        Args:
+            http_url (str): The URL to the signal.
+
+        Returns:
+            str: A description of the signal.
         """
         # Get the signal from the URL.
         HEADERS = {
@@ -134,8 +146,14 @@ class Signals:
         return description
 
     def __setup_function_signal(self, function_address, function_path=None) -> str:
-        """
-        Read a description of a signal from a Python function.
+        """Read a description of a signal from a Python function.
+
+        Args:
+            function_address (str): The address of the function within the package.
+            function_path (str): The path to the package.
+
+        Returns:
+            str: A description of the signal.
         """
         if function_path:
             sys.path.append(function_path)
@@ -166,8 +184,13 @@ class Signals:
         return description
 
     def __access_function_signal(self, function_address, **kwargs) -> any:
-        """
-        Read signal data from a Python function.
+        """Read signal data from a Python function.
+
+        Args:
+            function_address (str): The address of the function within the package.
+
+        Returns:
+            any: The data returned by the function.
         """
         if isinstance(function_address, tuple):
             assert len(function_address) == 2, function_address
@@ -186,8 +209,13 @@ class Signals:
         return result
 
     def __access_database_signal(self, db_url, **kwargs) -> any:
-        """
-        Read signal data from a database.
+        """Read signal data from a database.
+
+        Args:
+            db_url (str): The path to the database file.
+
+        Returns:
+            any: The data returned by the database query.
         """
         # Get the signal from the database.
         query = kwargs.get("query")
@@ -206,8 +234,13 @@ class Signals:
         return data
 
     def __access_file_signal(self, file_path) -> str:
-        """
-        Read signal data from a file.
+        """Read signal data from a file.
+
+        Args:
+            file_path (str): The path to the file.
+
+        Returns:
+            str: The data read from the file.
         """
         # Get the signal from the file.
         pandas_engines = [None, "xlrd", "openpyxl", "odf", "pyxlsb"]
@@ -241,8 +274,13 @@ class Signals:
         return content
 
     def __access_url_signal(self, http_url) -> str:
-        """
-        Read signal data from an HTTP URL.
+        """Read signal data from an HTTP URL.
+
+        Args:
+            http_url (str): The URL to the signal.
+
+        Returns:
+            str: The data read from the URL.
         """
         # Get the signal from the URL.
         HEADERS = {
@@ -263,6 +301,17 @@ class Signals:
     def add_signal(
         self, signal_address, signal_path=None, signal_title=None, signal_type=None
     ) -> None:
+        """Add a signal to the list.
+
+        Args:
+            signal_address (str): The address of the signal.
+            signal_path (str): The path to the signal (only used when dealing with function signals where a path and address are needed).
+            signal_title (str): The title assigned to the signal.
+            signal_type (str): The type of the signal (optional but helps when determining how to process the signal).
+
+        Returns:
+            None
+        """
         signal_description = None
         if isinstance(signal_address, str):
             # If signal is a string, it could be a file path, a database URL, an HTTP URL, or a Python function name.
@@ -316,8 +365,13 @@ class Signals:
         self.signals.append(signal)
 
     def remove_signal(self, signal_id) -> None:
-        """
-        Remove a signal from the list.
+        """Remove a signal from the list.
+
+        Args:
+            signal_id (int): The id of the signal to remove.
+
+        Returns:
+            None
         """
         self.signals.pop(signal_id - 1)
         for i in range(signal_id - 1, len(self.signals)):
@@ -325,8 +379,13 @@ class Signals:
             self.signals[i]["id"] -= 1
 
     def return_signal_data(self, signal_id, **kwargs) -> any:
-        """
-        Return the data of a signal.
+        """Return the data of a signal.
+
+        Args:
+            signal_id (int): The id of the signal to return data for.
+
+        Returns:
+            any: The data of the signal.
         """
         signal = self.signals[signal_id - 1]
         if len(signal) == 0:
@@ -344,6 +403,7 @@ class Signals:
 
 
 def initialize_default_signals() -> Signals:
+    """Initialize the default signals."""
     signals = Signals()
     for signal_address in config.DEFAULT_SIGNALS:
         if isinstance(signal_address, tuple):
