@@ -1,6 +1,7 @@
 from openadapt.crud import *
 from openadapt import models, utils
 from copy import deepcopy
+import json
 from loguru import logger
 
 from openadapt.strategies.stateful import get_window_state_diffs
@@ -32,8 +33,12 @@ def condense_window_state(recording_id: int):
 def finetune(recording_id: int):
     condensed_recording = condense_window_state(recording_id)
 
-    for curr_acx, curr_window in condensed_recording:
-        pass
+    # for curr_acx, curr_window in condensed_recording:
+    #   curr_pair= f'action:{curr_acx}, window: {curr_window}'
+    #   pair_json = json.loads(curr_pair)
+
+    # finetune on action timestamp?
+    # so {prompt: (A,W)_{k}, completion: (A,W)_{k+1}}?
 
 
 def sanitize(action):
