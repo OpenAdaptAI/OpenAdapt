@@ -8,6 +8,7 @@ Usage:
 
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
+import re
 import subprocess
 
 from loguru import logger
@@ -36,11 +37,14 @@ def export_recording_to_folder(recording_id: int) -> None:
     # Create the directory if it doesn't exist
     os.makedirs(config.RECORDING_DIRECTORY_PATH, exist_ok=True)
 
+    # Get the timestamp from the recording_db_path
+    timestamp = extract_timestamp_from_filename(os.path.basename(recording_db_path))
+
     # Path to the source db file
-    db_filename = f"recording_{recording_id}.db"
+    db_filename = f"recording_{recording_id}_{timestamp}.db"
 
     # Path to the compressed file
-    zip_filename = f"recording_{recording_id}.zip"
+    zip_filename = f"recording_{recording_id}_{timestamp}.zip"
     zip_path = os.path.join(config.RECORDING_DIRECTORY_PATH, zip_filename)
 
     # Create an in-memory zip file and add the db file
@@ -54,6 +58,25 @@ def export_recording_to_folder(recording_id: int) -> None:
     logger.info(f"deleted {recording_db_path=}")
 
     return zip_path
+
+
+def extract_timestamp_from_filename(filename: str) -> int:
+    """Extract timestamp from the filename.
+
+    Args:
+        filename (str): The filename containing the timestamp.
+
+    Returns:
+        int: The extracted timestamp.
+    """
+    # Regular expression to match the timestamp in the filename
+    pattern = r"recording_\d+_(\d+)\.db"
+    match = re.match(pattern, filename)
+    if match:
+        timestamp_str = match.group(1)
+        return int(timestamp_str)
+    else:
+        raise ValueError("Invalid filename format.")
 
 
 def send_file(file_path: str) -> None:

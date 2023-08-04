@@ -3,7 +3,6 @@
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
-import subprocess
 import tempfile
 
 from openadapt import config, share
@@ -13,7 +12,7 @@ def test_export_recording_to_folder() -> None:
     """Tests the export_recording_to_folder function.
 
     This test creates a temporary recording database file, mocks the
-    crud.export_recording() function to return the temporary file path,
+    db.export_recording() function to return the temporary file path,
     and then asserts that the file is removed after calling
     export_recording_to_folder.
 
@@ -22,11 +21,11 @@ def test_export_recording_to_folder() -> None:
     """
     # Create a temporary recording database file
     recording_id = 1
-    recording_db_path = "temp.db"
+    recording_db_path = "recording_1_193994394.db"
     with open(recording_db_path, "w") as f:
         f.write("Recording data")
 
-    # Mock the crud.export_recording() function to return the temporary file path
+    # Mock the db.export_recording() function to return the temporary file path
     with patch("openadapt.share.db.export_recording", return_value=recording_db_path):
         zip_file_path = share.export_recording_to_folder(recording_id)
 
@@ -74,9 +73,12 @@ def test_send_recording() -> None:
         None
     """
     # Mock the export_recording_to_folder() function to return a zip file path
+    timestamp = 193994394  # Replace this with the actual timestamp value
     with patch(
         "openadapt.share.export_recording_to_folder",
-        return_value=str(config.RECORDING_DIRECTORY_PATH / "recording_1.zip"),
+        return_value=str(
+            config.RECORDING_DIRECTORY_PATH / f"recording_1_{timestamp}.zip"
+        ),
     ):
         # Mock the send_file() function to avoid sending the file
         with patch("openadapt.share.send_file"):
@@ -87,35 +89,42 @@ def test_send_recording() -> None:
             assert share.send_file.called
 
     # Verify that the temporary zip file is deleted after the test
-    assert not os.path.exists(config.RECORDING_DIRECTORY_PATH / "recording_1.zip")
+    assert not os.path.exists(
+        config.RECORDING_DIRECTORY_PATH / f"recording_1_{timestamp}.zip"
+    )
 
 
-# Test receive_recording function (mock the subprocess.run function)
 def test_receive_recording() -> None:
     """Tests the receive_recording function.
 
-    This test function creates a temporary zip file, mocks the subprocess.run()
-    function to avoid executing the command, and simulates receiving a recording
-    with a wormhole code.
-
-    Returns:
-        None
+    This test function mocks the subprocess.run() function to avoid
+    executing the command and simulates receiving a recording with a
+    wormhole code.
     """
+    # Prepare mock data and simulate receiving a recording with a wormhole code
+    wormhole_code = "test_wormhole_code"
+    temp_zip_path = (
+        config.RECORDING_DIRECTORY_PATH / "recording.zip"
+    )  # Replace with the path where you expect the zip file
+
     # Create a temporary zip file
-    temp_zip_path = str(config.RECORDING_DIRECTORY_PATH / "recording.zip")
     with ZipFile(temp_zip_path, "w", ZIP_DEFLATED):
         pass  # Using the 'pass' statement creates an empty zip file
 
-    # Mock the subprocess.run() function to avoid executing the command
-    with patch("subprocess.run"):
-        # Simulate receiving a recording with a wormhole code
-        wormhole_code = "test_wormhole_code"
+    with patch("subprocess.run") as mock_run:
+        # Simulate the behavior of subprocess.run without executing the command
+        mock_run.return_value.returncode = (
+            0  # Mock the successful completion of Wormhole
+        )
+        # Add other mock behaviors if necessary
+
+        # Call the receive_recording function
         share.receive_recording(wormhole_code)
 
         # Verify that the command is called with the correct arguments
-        subprocess.run.assert_called_once_with(
-            ["wormhole", "receive", "-o", temp_zip_path, wormhole_code], check=True
+        mock_run.assert_called_once_with(
+            ["wormhole", "receive", "-o", str(temp_zip_path), wormhole_code], check=True
         )
 
-        # Verify that the zip file has been deleted
+        # Verify that the zip file has been removed as expected
         assert not os.path.exists(temp_zip_path)
