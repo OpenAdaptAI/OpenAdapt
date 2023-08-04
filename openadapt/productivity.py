@@ -111,47 +111,6 @@ def compare_events(event1, event2):
     return False
 
 
-def brents_algo(action_events):
-    tortoise_index = 0
-    hare_index = 1
-    power = 1
-    length = 1
-
-    # Phase 1: Finding a cycle
-    while hare_index < len(action_events) - 1:
-        if compare_events(action_events[tortoise_index], action_events[hare_index]) and \
-                compare_events(action_events[tortoise_index + 1], action_events[hare_index + 1]):
-            break
-        if length == power:
-            tortoise_index = hare_index
-            power *= 2
-            length = 0
-        hare_index += 1
-        length += 1
-
-    if hare_index >= len(action_events) - 1 and not compare_events(action_events[tortoise_index],
-                                                                   action_events[hare_index]):
-        # No repeating subsequence found
-        return None, 0
-
-    # cycle detected
-    # length = length of cycle
-    # hare = tortoise
-    tortoise_index = 0
-    hare_index = length
-    # Now move both pointers
-    # at same speed so that
-    # they meet at the
-    # beginning of loop.
-    while not compare_events(action_events[tortoise_index], action_events[hare_index]):
-        tortoise_index += 1
-        hare_index += 1
-
-    # tortoise = hare = beginning of cycle
-
-    return tortoise_index, length
-
-
 def find_num_tasks(action_events, start, length, task=None):
     if start is None:
         return [], 0, 0
@@ -232,49 +191,6 @@ def find_num_tasks(action_events, start, length, task=None):
     return task, num_repetitions, total_time
 
 
-def floyds_algo(action_events):
-    slow_index = 0
-    fast_index = 0
-
-    while slow_index < len(action_events) and fast_index < len(action_events) - 1:
-        slow_index += 1
-        fast_index += 2
-        if compare_events(action_events[slow_index], action_events[fast_index]):
-            break
-
-    # if no loop exists
-    if not compare_events(action_events[slow_index], action_events[fast_index]):
-        return None, 0
-
-    # meeting point can't be last event
-    fast_index = slow_index
-
-    # reset slow index to 0
-    # and traverse again
-    slow_index = 0
-    # for i in range(0, meeting_point):
-    #     if compare_events(action_events[i], action_events[meeting_point]):
-    #         if compare_events(action_events[i + 1], action_events[meeting_point + 1]):
-    #             fast_index = i
-
-    while not compare_events(action_events[slow_index], action_events[fast_index]):
-        slow_index += 1
-        fast_index += 1
-
-    # slow_index is start of cycle
-    # find length/overestimate
-    length = 1
-    j = slow_index + 1
-    while j < len(action_events) - 1:
-        if compare_events(action_events[j], action_events[slow_index]) and \
-                compare_events(action_events[j + 1], action_events[slow_index + 1]):
-            break
-        j += 1
-        length += 1
-
-    return slow_index, length
-
-
 def rec_lrs(action_events):
     len_orig = len(action_events)
     while True:
@@ -292,9 +208,11 @@ def rec_lrs(action_events):
 
 def longest_repeated_substring(action_events):
     n = len(action_events)
-    # TODO: rename LCSRe
-    LCSRe = [[0 for _ in range(n + 1)]
-             for _ in range(n + 1)]
+
+    # table_of_max_lengths[i][j] stores length of the matching and
+    # non-overlapping substrings ending with i'th and j'th events
+    table_of_max_lengths = [[0 for _ in range(n + 1)]
+                            for _ in range(n + 1)]
 
     result = []  # To store result
     res_length = 0  # To store length of result
@@ -304,21 +222,19 @@ def longest_repeated_substring(action_events):
     for i in range(1, n + 1):
         for j in range(i + 1, n + 1):
 
-            # (j-i) > LCSRe[i-1][j-1] to remove
-            # overlapping
             if (compare_events(action_events[i - 1], action_events[j - 1]) and
-                    LCSRe[i - 1][j - 1] < (j - i)):
-                LCSRe[i][j] = LCSRe[i - 1][j - 1] + 1
+                    table_of_max_lengths[i - 1][j - 1] < (j - i)):
+                table_of_max_lengths[i][j] = table_of_max_lengths[i - 1][j - 1] + 1
 
                 # updating maximum length of the
                 # substring and updating the finishing
                 # index of the suffix
-                if LCSRe[i][j] > res_length:
-                    res_length = LCSRe[i][j]
+                if table_of_max_lengths[i][j] > res_length:
+                    res_length = table_of_max_lengths[i][j]
                     index = max(i, index)
 
             else:
-                LCSRe[i][j] = 0
+                table_of_max_lengths[i][j] = 0
 
     # If we have non-empty result, then insert
     # all characters from first character to
@@ -397,15 +313,14 @@ def calculate_productivity():
     duration = action_events[-1].timestamp - action_events[0].timestamp
     tab_changes = find_num_window_tab_changes(window_events)
 
-    logger.info("searching for tasks")
     task, start, length = rec_lrs(filtered_action_events)
-    final_task, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length, task)
-    logger.info("finished searching for tasks")
+    final_task, num_tasks, total_task_time = find_num_tasks(filtered_action_events, start, length,
+                                                            task)
     if num_tasks != 0:
         ave_task_time = total_task_time / num_tasks
     else:
         ave_task_time = 0
-    errors = find_errors(filtered_action_events)
+    # errors = find_errors(filtered_action_events)
 
     prod_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                  "Total time spent during pauses": time_in_gaps,
@@ -417,7 +332,7 @@ def calculate_productivity():
                  "Number of key presses and mouse clicks in identified task": len(final_task),
                  "Total time spent on repetitive tasks": total_task_time,
                  "Average time spent per repetitive task": ave_task_time,
-                 "Number of errors": errors
+                 # "Number of errors": errors
                  }
 
     rows = [
@@ -547,7 +462,6 @@ def calculate_productivity():
                 curr_action_events = []
             last_event = curr_event
             curr_action_events.append(curr_event)
-        # TODO: change the one at the bottom
 
         # info for the time between start of last window event and last action event
         image = display_event(action_events[-1])
