@@ -487,30 +487,29 @@ def calculate_productivity():
         ])
 
         last_event = action_events[0]
-        curr_action_events = []
-        window_detected = False
-        for i in range(0, len(action_events) - 1):
+        curr_action_events = [last_event]
+        for i in range(1, len(action_events)):
             # TODO:
             if i == MAX_EVENTS:
                 break
             curr_event = action_events[i]
-            next_event = action_events[i + 1]
-            curr_action_events.append(curr_event)
-            if curr_event.window_event_timestamp != next_event.window_event_timestamp and \
+            if curr_event.window_event_timestamp != last_event.window_event_timestamp and \
                     curr_event.window_event.title != "" and \
-                    curr_event.window_event.title != next_event.window_event.title:
-                window_detected = True
-                image = display_event(last_event)
+                    curr_event.window_event.title != last_event.window_event.title:
+                if len(curr_action_events) > 2:
+                    # sometimes the app isn't loaded yet on the first action event
+                    event_to_display = curr_action_events[1]
+                else:
+                    event_to_display = curr_action_events[0]
+                image = display_event(event_to_display)
                 image_utf8 = image2utf8(image)
                 width, height = image.size
 
                 gaps, time_in_gaps = find_gaps(curr_action_events)
                 num_clicks = find_clicks(curr_action_events)
                 num_key_presses = find_key_presses(curr_action_events)
-                if len(curr_action_events) > 1:
-                    window_duration = curr_action_events[-1].timestamp - curr_action_events[0].timestamp
-                else:
-                    window_duration = curr_action_events[0].timestamp - last_event.timestamp
+                window_duration = curr_event.window_event_timestamp - last_event.window_event_timestamp
+
                 window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
                                "Total time spent during pauses": time_in_gaps,
                                "Total number of mouse clicks": num_clicks,
@@ -531,7 +530,7 @@ def calculate_productivity():
                                     >
                                 </div>
                                 <table>
-                                    {dict2html(row2dict(curr_event.window_event), None)}
+                                    {dict2html(row2dict(last_event.window_event))}
                                 </table>
                             """,
                         ),
@@ -546,52 +545,53 @@ def calculate_productivity():
                 ])
                 # flush curr_action_events
                 curr_action_events = []
-                last_event = curr_event
+            last_event = curr_event
+            curr_action_events.append(curr_event)
         # TODO: change the one at the bottom
 
-        if not window_detected and len(window_events) > 0:
-            # only one window event
-            image = display_event(action_events[-1])
-            image_utf8 = image2utf8(image)
-            width, height = image.size
+        # info for the time between start of last window event and last action event
+        image = display_event(action_events[-1])
+        image_utf8 = image2utf8(image)
+        width, height = image.size
 
-            gaps, time_in_gaps = find_gaps(action_events)
-            num_clicks = find_clicks(action_events)
-            num_key_presses = find_key_presses(action_events)
-            window_duration = duration
-            window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
-                           "Total time spent during pauses": time_in_gaps,
-                           "Total number of mouse clicks": num_clicks,
-                           "Total number of key presses": num_key_presses,
-                           "Time spent on this window/tab": window_duration,
-                           }
+        last_action_events = window_events[-1].action_events
+        gaps, time_in_gaps = find_gaps(last_action_events)
+        num_clicks = find_clicks(last_action_events)
+        num_key_presses = find_key_presses(last_action_events)
+        window_duration = last_action_events[-1].timestamp - last_action_events[0].timestamp
+        window_info = {f"Number of pauses longer than {MAX_GAP_SECONDS} seconds": gaps,
+                       "Total time spent during pauses": time_in_gaps,
+                       "Total number of mouse clicks": num_clicks,
+                       "Total number of key presses": num_key_presses,
+                       "Time spent on this window/tab": window_duration,
+                       }
 
-            rows.append([
-                row(
-                    Div(
-                        text=f"""
-                                        <div class="screenshot">
-                                            <img
-                                                src="{image_utf8}"
-                                                style="
-                                                    aspect-ratio: {width}/{height};
-                                                "
-                                            >
-                                        </div>
-                                        <table>
-                                            {dict2html(row2dict(action_events[-1].window_event), None)}
-                                        </table>
-                                    """,
-                    ),
-                    Div(
-                        text=f"""
-                                        <table>
-                                            {dict2html(window_info)}
-                                        </table>
-                                    """
-                    ),
+        rows.append([
+            row(
+                Div(
+                    text=f"""
+                                    <div class="screenshot">
+                                        <img
+                                            src="{image_utf8}"
+                                            style="
+                                                aspect-ratio: {width}/{height};
+                                            "
+                                        >
+                                    </div>
+                                    <table>
+                                        {dict2html(row2dict(window_events[-1]))}
+                                    </table>
+                                """,
                 ),
-            ])
+                Div(
+                    text=f"""
+                                    <table>
+                                        {dict2html(window_info)}
+                                    </table>
+                                """
+                ),
+            ),
+        ])
 
     # display data
     title = f"Productivity metrics for recording-{recording.id}"
