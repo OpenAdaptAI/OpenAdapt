@@ -367,6 +367,7 @@ def calculate_productivity():
                  "Number of window/tab switches": tab_changes,
                  "Recording length": duration,
                  f"Number of repetitive tasks longer than {MIN_TASK_LENGTH} actions": num_tasks,
+                 "Number of key presses and mouse clicks in identified task": length,
                  "Total time spent on repetitive tasks": total_task_time,
                  "Average time spent per repetitive task": ave_task_time,
                  "Number of errors": errors
