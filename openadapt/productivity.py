@@ -235,10 +235,13 @@ def rec_lrs(action_events):
     len_orig = len(action_events)
     while True:
         task, start, length = longest_repeated_substring(action_events)
+        # length is either 0 or the length of a repeating task
         if length < MIN_TASK_LENGTH:
             if len(action_events) != len_orig:
+                # a task shorter than len_orig was found in the last iteration
                 return action_events, start, length
             else:
+                # no tasks longer than MIN_TASK_LENGTH exist
                 return [], None, length
         action_events = task
 
