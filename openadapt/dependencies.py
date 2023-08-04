@@ -34,15 +34,15 @@ DEP_NAME_TO_SYS_TO_INSTALL_CMD = {
 }
 
 
-def ensure_dependency(name: str, is_executable: bool = True) -> str:
+def ensure_dependency(dependency_name: str, is_executable: bool = True) -> str:
     """Returns the location of the dependency."""
     system = platform.system()
     root_directory = os.path.expanduser("~")
-    if not is_dependency_installed(name, system, is_executable):
-        install_dependency(name, system, root_directory)
+    if not is_dependency_installed(dependency_name, system, is_executable):
+        install_dependency(dependency_name, system, root_directory)
     
     path_to_dep = os.path.join(
-        root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[name]["Location"]
+        root_directory, DEP_NAME_TO_SYS_TO_INSTALL_CMD[dependency_name]["Location"]
     )
     return path_to_dep
 
@@ -54,18 +54,18 @@ def is_dependency_installed(
     Check if the specified dependency is installed on the computer.
 
     Args:
-        - dependency_name (str): The name of the dependency to check
-        - system (str, optional): The target system for which to check the dependency
-            - If not provided, the system will be automatically determined.
-        - is_executable (bool, optional): Whether the dependency is an executable or a package.
-            - Defaults to True.
+        - dependency_name: The name of the dependency to check
+        - system (optional): The target system for which to check the dependency
+            - should be "Windows" or "Darwin"
+            - If not provided, the system will be automatically determined
+        - is_executable (optional): Whether the dependency is an executable or a package
+            - Defaults to True
 
     Returns:
         bool: True if the dependency is installed, False otherwise.
 
     Note:
         On Windows, the function currently does not check for non-executable dependencies.
-        Add implementation to check for non-executable dependencies on Windows in the future.
     """
     if not system:
         system = platform.system()
@@ -78,7 +78,7 @@ def is_dependency_installed(
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
     else:
-        if system == "Apple":
+        if system == "Darwin":
             try:
                 subprocess.check_output(["brew", "list", dependency_name])
                 return True
@@ -89,21 +89,27 @@ def is_dependency_installed(
             logger.info("Add how to check if a dependency is downloaded on Windows.")
 
 
-def install_dependency(name: str, system: str, root_directory: str) -> None:
-    "Installs the specified dependency on the given system and returns the location where the installation is completed."
-    logger.info(f"installing dependency {name=}")
+def install_dependency(dependency_name: str, system: str, root_directory: str) -> None:
+    """Installs the specified dependency on the given system and returns the location where the installation is completed.
+    
+    Args:
+        - dependency_name: The name of the dependency to install
+        - system: Should be "Windows" or "Darwin"
+        - root_directory: The root directory of the computer, where installation should take place
+    """
+    logger.info(f"installing dependency {dependency_name=}")
 
     if system == "Windows":
         cwd = os.getcwd()
         os.chdir(root_directory)
-        subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[name][system])
+        subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[dependency_name][system])
         os.chdir(cwd)
     else:
         cpu = subprocess.check_output(
             ["sysctl", "-n", "machdep.cpu.brand_string"]
         ).decode("utf-8")
         if "Apple" in cpu:
-            subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[name][system]["Apple"])
+            subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[dependency_name][system]["Apple"])
         else:
-            subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[name][system]["Intel"])
+            subprocess.run(DEP_NAME_TO_SYS_TO_INSTALL_CMD[dependency_name][system]["Intel"])
 
