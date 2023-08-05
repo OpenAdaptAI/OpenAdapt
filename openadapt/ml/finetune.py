@@ -31,15 +31,22 @@ def condense_window_state(recording_id: int):
     return total_acx
 
 
-def finetune(recording_id: int):
+def write_to_file(recording_id: int):
     condensed_recording = condense_window_state(recording_id)
-
     # for curr_acx, curr_window in condensed_recording:
     #   curr_pair= f'action:{curr_acx}, window: {curr_window}'
     #   pair_json = json.loads(curr_pair)
+    with open("/Users/owaiszahid/Desktop/ctx/OpenAdapt/openadapt/ml/prompt_completion.json",mode="a") as json_file:
+        for idx in range(len(condensed_recording)-1):
+            curr_acx = condensed_recording[idx][0][0]
+            curr_win = condensed_recording[idx][1]
+            paired_dict = {"prompt":f'{curr_acx}', "completion":f'{curr_win}'}
+            # write this to a file
+            #paired_dict_json = json.loads(str(paired_dict))
+            json_file.write(json.dumps(paired_dict))
+            json_file.write("\n")
 
-    # finetune on action timestamp?
-    # so {prompt: (A,W)_{k}, completion: (A,W)_{k+1}}?
+        json_file.close()
 
 
 def sanitize(action):
@@ -87,4 +94,4 @@ def sanitize(action):
 
 
 if __name__ == "__main__":
-    condense_window_state(2)
+    write_to_file(2)
