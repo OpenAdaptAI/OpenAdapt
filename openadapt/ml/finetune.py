@@ -43,7 +43,10 @@ def write_to_file(recording_id: int):
         for idx in range(len(condensed_recording) - 1):
             curr_acx = condensed_recording[idx][0][0]
             curr_win = condensed_recording[idx][1]
-            paired_dict = {"prompt": f"{curr_acx}", "completion": f"{curr_win}"}
+
+            next_acx = condensed_recording[idx+1][0][0]
+            next_win = condensed_recording[idx+1][1]
+            paired_dict = {"prompt": f"{(curr_acx, curr_win)}", "completion": f"{(next_acx,next_win)}"}
             # write this to a file
             # paired_dict_json = json.loads(str(paired_dict))
             json_file.write(json.dumps(paired_dict))
@@ -51,6 +54,8 @@ def write_to_file(recording_id: int):
 
         json_file.close()
 
+def finetune(recording_id: int):
+    pass
 
 def sanitize(action):
     # taken from statefulreplaystrat
