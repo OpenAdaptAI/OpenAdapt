@@ -48,7 +48,7 @@ def write_to_file(recording_id: int):
             next_win = condensed_recording[idx + 1][1]
             paired_dict = {
                 "prompt": f"{(curr_acx, curr_win)}",
-                "completion": f"{(next_acx,next_win)}",
+                "completion": f" {(next_acx,next_win)}",
             }
             # write this to a file
             # paired_dict_json = json.loads(str(paired_dict))
