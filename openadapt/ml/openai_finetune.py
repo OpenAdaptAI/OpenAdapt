@@ -1,8 +1,10 @@
 from openadapt.crud import *
 from openadapt import models, utils
 from copy import deepcopy
-import json
 from loguru import logger
+import json
+import openai
+
 
 from openadapt.strategies.stateful import get_window_state_diffs
 
@@ -32,13 +34,19 @@ def condense_window_state(recording_id: int):
 
 
 def write_to_file(recording_id: int):
+    """
+    Creates a file for a new recording and writes
+    the prompt, completion pairs to it.
+    """
     condensed_recording = condense_window_state(recording_id)
     # for curr_acx, curr_window in condensed_recording:
     #   curr_pair= f'action:{curr_acx}, window: {curr_window}'
     #   pair_json = json.loads(curr_pair)
+    recording_file = open(f"{recording_id}_processed.json", "x")
+    recording_file.close()
     with open(
-        "/Users/owaiszahid/Desktop/ctx/OpenAdapt/openadapt/ml/prompt_completion.json",
-        mode="a",
+        f"{recording_id}_processed.json",
+        mode="w",
     ) as json_file:
         for idx in range(len(condensed_recording) - 1):
             curr_acx = condensed_recording[idx][0][0]
@@ -58,8 +66,8 @@ def write_to_file(recording_id: int):
         json_file.close()
 
 
-def finetune(recording_id: int):
-    raise NotImplementedError
+def process_for_finetune(recording_id: int):
+    write_to_file(recording_id)
 
 
 def sanitize(action):
