@@ -4,6 +4,7 @@ from copy import deepcopy
 from loguru import logger
 import json
 import openai
+import sys
 
 
 from openadapt.strategies.stateful import get_window_state_diffs
@@ -68,6 +69,11 @@ def write_to_file(recording_id: int):
 
 def process_for_finetune(recording_id: int):
     write_to_file(recording_id)
+
+
+def run_inference(incomplete_recording_id: int, finetuned_model):
+    processed_recording = condense_window_state(incomplete_recording_id)
+    openai.Completion.create(model=finetuned_model, prompt=processed_recording)
 
 
 def sanitize(action):
