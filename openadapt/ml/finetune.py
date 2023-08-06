@@ -59,7 +59,7 @@ def write_to_file(recording_id: int):
 
 
 def finetune(recording_id: int):
-    pass
+    raise NotImplementedError
 
 
 def sanitize(action):
