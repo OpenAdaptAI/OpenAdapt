@@ -82,7 +82,7 @@ def gpt_completion(
     return completion["choices"][0]["message"]["content"]
 
 
-def test_generalizable_single_action(
+def _test_generalizable_single_action(
     reference_window_dict,
     reference_action_dicts,
     active_window_dict,
@@ -100,8 +100,8 @@ def test_generalizable_single_action(
         test_action_dict[test_action_dict.find("[") : test_action_dict.find("]") + 1]
     )
     logger.debug(f"{reference_action_dicts=}")
-    logger.debug(f"{test_dict=}")
-    logger.debug(f"{expected_action_dict}")
+    logger.debug(f"{test_dict=}, {len(test_dict)=}")
+    logger.debug(f"{expected_action_dict}, {len(expected_action_dict)=}")
     assert test_dict == expected_action_dict
 
 
@@ -206,7 +206,7 @@ def test_single_mouse_diff():
         mouse_pressed=True,
     )
 
-    test_generalizable_single_action(win_dict, act_dict, active_win_dict, expected_dict)
+    _test_generalizable_single_action(win_dict, act_dict, active_win_dict, expected_dict)
 
 
 def test_multi_click_diff():
@@ -281,7 +281,7 @@ def test_multi_click_diff():
         new_dict = act_dict_1 + act_dict_2 + act_dict_3
         expected_actions += new_dict
 
-    test_generalizable_single_action(
+    _test_generalizable_single_action(
         win_dict, total_actions, active_win_dict, expected_actions
     )
 
@@ -334,6 +334,6 @@ def test_simple_multi_action_sequence():
         height=MULTI_ACTION_WIN_HEIGHT,
         window_id=MULTI_ACTION_WINDOW_ID,
     )
-    test_generalizable_single_action(
+    _test_generalizable_single_action(
         win_dict, ref_act_dicts, active_win_dict, expected_act_dict
     )
