@@ -4,10 +4,11 @@ from copy import deepcopy
 from loguru import logger
 import json
 import openai
-import sys
+import fire
 
 
-from openadapt.strategies.stateful import get_window_state_diffs
+def main(recording_id: int):
+    write_to_file(recording_id)
 
 
 def condense_window_state(recording_id: int):
@@ -67,10 +68,6 @@ def write_to_file(recording_id: int):
         json_file.close()
 
 
-def process_for_finetune(recording_id: int):
-    write_to_file(recording_id)
-
-
 def run_inference(incomplete_recording_id: int, finetuned_model):
     processed_recording = condense_window_state(incomplete_recording_id)
     openai.Completion.create(model=finetuned_model, prompt=processed_recording)
@@ -121,4 +118,4 @@ def sanitize(action):
 
 
 if __name__ == "__main__":
-    write_to_file(2)
+    fire.Fire(main)
