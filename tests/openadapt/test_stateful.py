@@ -1,6 +1,7 @@
 from typing import List, Any
 import openai
 from loguru import logger
+import pytest
 
 SYSTEM_CONTENT = (
     "You are a keyboard/mouse controller. You are shown a reference "
@@ -292,12 +293,12 @@ def test_simple_multi_action_sequence():
     types the word password.
     """
     win_dict = create_win_dict(
-        "Google Chrome",
-        MULTI_ACTION_WIN_LEFT,
-        MULTI_ACTION_WIN_TOP,
-        MULTI_ACTION_WIN_WIDTH,
-        MULTI_ACTION_WIN_HEIGHT,
-        MULTI_ACTION_WINDOW_ID,
+        title="Google Chrome",
+        left=MULTI_ACTION_WIN_LEFT,
+        top=MULTI_ACTION_WIN_TOP,
+        width=MULTI_ACTION_WIN_WIDTH,
+        height=MULTI_ACTION_WIN_HEIGHT,
+        window_id=MULTI_ACTION_WINDOW_ID,
     )
     ref_act_dicts = []
 
@@ -326,12 +327,12 @@ def test_simple_multi_action_sequence():
     # MODIFY THIS active act dict here to observe the results
     # discussed in the latest comment ! :)
     active_win_dict = create_win_dict(
-        "Google Chrome",
-        NEW_MULTI_ACTION_WIN_LEFT,
-        NEW_MULTI_ACTION_WIN_TOP,
-        MULTI_ACTION_WIN_WIDTH,
-        MULTI_ACTION_WIN_HEIGHT,
-        MULTI_ACTION_WINDOW_ID,
+        title="Google Chrome",
+        left=NEW_MULTI_ACTION_WIN_LEFT,
+        top=NEW_MULTI_ACTION_WIN_TOP,
+        width=MULTI_ACTION_WIN_WIDTH,
+        height=MULTI_ACTION_WIN_HEIGHT,
+        window_id=MULTI_ACTION_WINDOW_ID,
     )
     test_generalizable_single_action(
         win_dict, ref_act_dicts, active_win_dict, expected_act_dict
