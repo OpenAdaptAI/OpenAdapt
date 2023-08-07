@@ -46,7 +46,7 @@ def write_to_file(recording_id: int):
     recording_file = open(f"{recording_id}_processed.jsonl", "x")
     recording_file.close()
     with open(
-        f"{recording_id}_processed.json",
+        f"{recording_id}_processed.jsonl",
         mode="w",
     ) as json_file:
         for idx in range(len(condensed_recording) - 1):
