@@ -43,7 +43,7 @@ def write_to_file(recording_id: int):
     # for curr_acx, curr_window in condensed_recording:
     #   curr_pair= f'action:{curr_acx}, window: {curr_window}'
     #   pair_json = json.loads(curr_pair)
-    recording_file = open(f"{recording_id}_processed.json", "x")
+    recording_file = open(f"{recording_id}_processed.jsonl", "x")
     recording_file.close()
     with open(
         f"{recording_id}_processed.json",
