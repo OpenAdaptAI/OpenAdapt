@@ -141,7 +141,7 @@ def create_action_dict(
     mouse_button_name: str = None,
     mouse_pressed: bool = None,
     key_name: str = None,
-    element_state: dict[Any, Any] = None,
+    element_state: dict[str, Any] = None,
 ):
     element_state = element_state or {}
     if name == "click":
@@ -178,7 +178,6 @@ def test_single_mouse_diff():
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
         window_id=WINDOW_ID,
-        meta={},
     )
 
     act_dict = create_action_dict(
@@ -187,7 +186,6 @@ def test_single_mouse_diff():
         mouse_y=REF_Y,
         mouse_button_name="left",
         mouse_pressed=True,
-        element_state={},
     )
 
     active_win_dict = create_win_dict(
@@ -197,7 +195,6 @@ def test_single_mouse_diff():
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
         window_id=WINDOW_ID,
-        meta={},
     )
 
     expected_dict = create_action_dict(
@@ -206,7 +203,6 @@ def test_single_mouse_diff():
         mouse_y=NEW_Y,
         mouse_button_name="left",
         mouse_pressed=True,
-        element_state={},
     )
 
     test_generalizable_single_action(win_dict, act_dict, active_win_dict, expected_dict)
@@ -220,7 +216,6 @@ def test_multi_click_diff():
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
         window_id=WINDOW_ID,
-        meta={},
     )
 
     total_actions = []
@@ -232,7 +227,6 @@ def test_multi_click_diff():
             mouse_y=REF_Y,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         act_dict_2 = create_action_dict(
             name="click",
@@ -240,7 +234,6 @@ def test_multi_click_diff():
             mouse_y=REF_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         act_dict_3 = create_action_dict(
             name="click",
@@ -248,7 +241,6 @@ def test_multi_click_diff():
             mouse_y=REF_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         new_dict = act_dict_1 + act_dict_2 + act_dict_3
         total_actions += new_dict
@@ -260,7 +252,6 @@ def test_multi_click_diff():
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
         window_id=WINDOW_ID,
-        meta={},
     )
 
     expected_actions = []
@@ -271,7 +262,6 @@ def test_multi_click_diff():
             mouse_y=NEW_Y,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         act_dict_2 = create_action_dict(
             name="click",
@@ -279,7 +269,6 @@ def test_multi_click_diff():
             mouse_y=NEW_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         act_dict_3 = create_action_dict(
             name="click",
@@ -287,7 +276,6 @@ def test_multi_click_diff():
             mouse_y=NEW_Y + i,
             mouse_button_name="left",
             mouse_pressed=True,
-            element_state={},
         )
         new_dict = act_dict_1 + act_dict_2 + act_dict_3
         expected_actions += new_dict
@@ -310,7 +298,6 @@ def test_simple_multi_action_sequence():
         MULTI_ACTION_WIN_WIDTH,
         MULTI_ACTION_WIN_HEIGHT,
         MULTI_ACTION_WINDOW_ID,
-        {},
     )
     ref_act_dicts = []
 
@@ -345,7 +332,6 @@ def test_simple_multi_action_sequence():
         MULTI_ACTION_WIN_WIDTH,
         MULTI_ACTION_WIN_HEIGHT,
         MULTI_ACTION_WINDOW_ID,
-        {},
     )
     test_generalizable_single_action(
         win_dict, ref_act_dicts, active_win_dict, expected_act_dict
