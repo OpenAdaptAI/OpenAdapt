@@ -1,3 +1,14 @@
+"""openadapt.common module.
+
+This module defines common constants and variables used in OpenAdapt.
+
+Example usage:
+    from openadapt.common import ALL_EVENTS
+
+    for event in ALL_EVENTS:
+        print(event)
+"""
+
 MOUSE_EVENTS = (
     # raw
     "move",
