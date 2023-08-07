@@ -101,7 +101,7 @@ def _test_generalizable_single_action(
     )
     logger.debug(f"{reference_action_dicts=}")
     logger.debug(f"{test_dict=}, {len(test_dict)=}")
-    logger.debug(f"{expected_action_dict}, {len(expected_action_dict)=}")
+    logger.debug(f"{expected_action_dict=}, {len(expected_action_dict)=}")
     assert test_dict == expected_action_dict
 
 
@@ -206,7 +206,9 @@ def test_single_mouse_diff():
         mouse_pressed=True,
     )
 
-    _test_generalizable_single_action(win_dict, act_dict, active_win_dict, expected_dict)
+    _test_generalizable_single_action(
+        win_dict, act_dict, active_win_dict, expected_dict
+    )
 
 
 def test_multi_click_diff():
