@@ -68,4 +68,5 @@ def test_calc_screenshot():
         question="What is the current number on the screen?",
     )
     expected_output = 10
+    # TODO: raise exception?
     assert output == expected_output
