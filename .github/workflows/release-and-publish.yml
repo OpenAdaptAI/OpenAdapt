@@ -1,8 +1,10 @@
-name: Semantic Release
+name: Semantic Release and PyPi Publish
+
 on:
   push:
     branches:
       - main
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -22,6 +24,7 @@ jobs:
           repository_password: ${{ secrets.PYPI_TOKEN }}
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
+
   publish:
     needs: release
     runs-on: ubuntu-latest
@@ -31,15 +34,10 @@ jobs:
         with:
           ref: main
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v2
         with:
           python-version: '3.10'
-      - name: Publish
-        run: |
-          pip install poetry
-          poetry install
-          poetry shell
-          poetry build
-          poetry config repositories.openadapt https://test.pypi.org/legacy/
-          poetry config pypi-token.test-pypi $TEST_PYPI_API_TOKEN
-          poetry publish -r test-pypi
+      - name: Build and publish to PyPI
+        uses: JRubics/poetry-publish@v1.17
+        with:
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
