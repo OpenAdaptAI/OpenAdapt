@@ -67,5 +67,5 @@ def test_calc_screenshot():
         image_path=IMAGE_FILE_NAMES[3],
         question="What is the current number on the screen?",
     )
-    expected_output = []
+    expected_output = 10
     assert output == expected_output
