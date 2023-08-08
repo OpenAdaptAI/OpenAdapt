@@ -217,11 +217,6 @@ def get_recording(timestamp: int) -> Recording:
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-
-def get_recording_by_id(id: int):
-    return db.query(Recording).filter(Recording.id == id).first()
-  
-  
 def _get(table: BaseModel, recording_timestamp: int) -> list[BaseModel]:
     """Retrieve records from the database table based on the recording timestamp.
 
