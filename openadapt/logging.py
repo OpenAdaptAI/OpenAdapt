@@ -9,6 +9,7 @@ MESSAGE_TIMESTAMPS = defaultdict(list)
 
 # TODO: move utils.configure_logging to here
 
+
 def filter_log_messages(data: dict) -> bool:
     """Filter log messages based on the defined criteria.
 
