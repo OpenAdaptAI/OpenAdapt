@@ -421,20 +421,6 @@ def initialize_default_signals() -> Signals:
     return signals
 
 
-# class Signal:
-#     def __init__(self, id, address, description, type, title="None"):
-#         self.id = id
-#         self.address = address
-#         self.title = title
-#         self.description = description
-#         self.type = type
-
-
-# class DBTableSignal(Signal):
-#     def __init__(self, id, address, description, type, title="None"):
-#         super().__init__(id, address, title, description, type)
-
-
 def add_files_from_pid(current_signals: Signals, pid: int) -> None:
     """Add all open files from a process to the current signals.
 
