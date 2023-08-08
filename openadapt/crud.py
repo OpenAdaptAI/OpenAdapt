@@ -219,7 +219,7 @@ def get_recording(timestamp: int) -> Recording:
 
 
 def get_recording_by_id(id: int):
-    return db.query(Recording).filter(Recording.id == id).first()
+    return db.query(Recording).get(id)
   
   
 def _get(table: BaseModel, recording_timestamp: int) -> list[BaseModel]:
