@@ -50,7 +50,6 @@ openai = "0.27.5"
 pandas = "2.0.0"
 presidio_analyzer = "2.2.32"
 presidio_anonymizer = "2.2.32"
-presidio-image-redactor = "^0.0.48"
 pytesseract = "0.3.7"
 pytest = "7.1.3"
 rapidocr-onnxruntime = "1.2.3"
@@ -83,6 +82,7 @@ pympler = "^1.0.1"
 psutil = "^5.9.5"
 pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
 fastapi = "0.98.0"
+presidio-image-redactor = "^0.0.48"
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"

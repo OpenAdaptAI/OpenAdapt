@@ -4,7 +4,11 @@ from io import BytesIO
 import os
 import warnings
 
+from loguru import logger
 from PIL import Image
+import cv2
+import numpy
+import pytesseract
 
 from openadapt import config, scrub
 
@@ -25,13 +29,54 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
     return r, g, b
 
 
+def _enhance_image_for_ocr(input_image_path: str, enhanced_image_path: str) -> None:
+    """Enhance the image for better OCR results.
+
+    Args:
+        input_image_path (str): Path to the input image.
+        enhanced_image_path (str): Path to the enhanced image.
+
+    Returns:
+        None
+    """
+    # Covert image to 300 DPI for best OCR results with Tesseract
+    # Reference: https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html#:~:text=Tesseract%20works%20best%20on%20images,of%20capital%20letter%20in%20pixels.
+    im = Image.open(input_image_path)
+    im.save(enhanced_image_path, dpi=(300, 300))
+
+    image_read = cv2.imread(enhanced_image_path)
+    os.remove(enhanced_image_path)
+
+    # Develop contrast for better OCR results with Tesseract
+    # Reference: https://stackoverflow.com/questions/58314275/how-to-make-image-more-contrast-grayscale-then-get-all-characters-exactly-with
+
+    gray_image = cv2.cvtColor(
+        image_read, cv2.COLOR_BGR2GRAY
+    )  # developing contrast for better OCR results with Tesseract
+    thr_image = thr = cv2.adaptiveThreshold(
+        gray_image, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 23, 100
+    )
+    bnt_image = cv2.bitwise_not(thr_image)
+    cv2.imwrite(enhanced_image_path, bnt_image)
+
+
 def test_emr_image() -> None:
     """
     Test to that a sample EMR image is scrubbed.
     """
 
-    test_image_path = "assets/sample_emr_1"
-    test_image_path = test_image_path + str(i) + ".png"
+    test_image_path = "assets/test_emr_image.png"
+    test_image_path_300 = "assets/test_emr_image_300.png"
+    scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
+
+    _enhance_image_for_ocr(test_image_path, test_image_path_300)
+    original_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
+    os.remove(test_image_path_300)
+
+    logger.info(original_image_text)
+
+    logger.info("=" * 31)
+
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
@@ -42,11 +87,15 @@ def test_emr_image() -> None:
     scrubbed_image = scrub.scrub_image(test_image)
 
     # Save the scrubbed image data to a file
-    scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
     scrubbed_image.save(scrubbed_image_path)
 
+    _enhance_image_for_ocr(scrubbed_image_path, test_image_path_300)
+    scrubbed_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
+    os.remove(test_image_path_300)
+
+    logger.info(scrubbed_image_text)
+
     # Use Cape to check if all of the PII has been scrubbed or not
-    # TODO: Add Cape code here
 
 
 def test_scrub_image() -> None:
