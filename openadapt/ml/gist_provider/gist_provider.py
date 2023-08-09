@@ -40,12 +40,12 @@ stub = modal.Stub("incorporate bigger LLMS for generative mixins", image=CONDA_I
 def infer(instruction: str):
     from gisting_test.src import compress
 
-    compress.main(
+    output = compress.main(
         model_name_or_path="jayelm/llama-7b-gist-1",
         base_llama_path="decapoda-research/llama-7b-hf",
         instruction=instruction,
     )
-    return None
+    return output
 
 
 @stub.local_entrypoint()
