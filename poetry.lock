@@ -254,37 +254,6 @@ files = [
 ]
 
 [[package]]
-name = "atomacos"
-version = "3.2.0"
-description = "Automated Testing on macOS"
-optional = false
-python-versions = "*"
-files = []
-develop = false
-
-[package.dependencies]
-future = "*"
-pyautogui = "<0.9.42"
-pygetwindow = "<0.0.5"
-pyobjc-core = ">=3.0.4"
-pyobjc-framework-ApplicationServices = ">=3.0.4"
-pyobjc-framework-Cocoa = ">=3.0.4"
-pyobjc-framework-CoreText = ">=3.0.4"
-pyobjc-framework-Quartz = ">=3.0.4"
-pyscreeze = "<0.1.20"
-
-[package.extras]
-dev = ["black", "pre-commit", "tox"]
-doc = ["m2r2", "sphinx"]
-test = ["pytest", "pytest-cov"]
-
-[package.source]
-type = "git"
-url = "https://github.com/abrichr/atomacos.git"
-reference = "HEAD"
-resolved_reference = "fd858fd827af8aeff1c7aba8d5575c83efb7f0bc"
-
-[[package]]
 name = "attrs"
 version = "23.1.0"
 description = "Classes Without Boilerplate"
@@ -2603,6 +2572,51 @@ files = [
 ]
 
 [[package]]
+name = "oa-atomacos"
+version = "3.2.0"
+description = "Automated Testing on macOS"
+optional = false
+python-versions = "*"
+files = [
+    {file = "oa_atomacos-3.2.0-py2.py3-none-any.whl", hash = "sha256:76b9b78344afd313e8e456ca446f89560eb036342fbb6b68adaa53c4548411ac"},
+    {file = "oa_atomacos-3.2.0.tar.gz", hash = "sha256:6516fa7ad818fa990c2b678966f0821b808696ef2e756a35060b15d1b4e17578"},
+]
+
+[package.dependencies]
+future = "*"
+pyautogui = "<0.9.42"
+pygetwindow = "<0.0.5"
+pyobjc-core = ">=3.0.4"
+pyobjc-framework-ApplicationServices = ">=3.0.4"
+pyobjc-framework-Cocoa = ">=3.0.4"
+pyobjc-framework-CoreText = ">=3.0.4"
+pyobjc-framework-Quartz = ">=3.0.4"
+pyscreeze = "<0.1.20"
+
+[package.extras]
+dev = ["black", "pre-commit", "tox"]
+doc = ["m2r2", "sphinx"]
+test = ["pytest", "pytest-cov"]
+
+[[package]]
+name = "oa-pynput"
+version = "1.7.7"
+description = "Monitor and control user input devices"
+optional = false
+python-versions = "*"
+files = [
+    {file = "oa_pynput-1.7.7-py2.py3-none-any.whl", hash = "sha256:c1ee3d910d108fb216ddcac0ee01ab7b928f9a9307a47afda5b9a69fbb9da5a7"},
+    {file = "oa_pynput-1.7.7.tar.gz", hash = "sha256:d20e2e93fee874dadc634b127e4a6278653fdf9165affe6eaf466e4e4807b9e8"},
+]
+
+[package.dependencies]
+evdev = {version = ">=1.3", markers = "sys_platform in \"linux\""}
+pyobjc-framework-ApplicationServices = {version = ">=8.0", markers = "sys_platform == \"darwin\""}
+pyobjc-framework-Quartz = {version = ">=8.0", markers = "sys_platform == \"darwin\""}
+python-xlib = {version = ">=0.17", markers = "sys_platform in \"linux\""}
+six = "*"
+
+[[package]]
 name = "onnxruntime"
 version = "1.15.1"
 description = "ONNX Runtime is a runtime accelerator for Machine Learning models"
@@ -3616,28 +3630,6 @@ python-versions = "*"
 files = [
     {file = "PyMsgBox-1.0.9.tar.gz", hash = "sha256:2194227de8bff7a3d6da541848705a155dcbb2a06ee120d9f280a1d7f51263ff"},
 ]
-
-[[package]]
-name = "pynput"
-version = "1.7.6"
-description = "Monitor and control user input devices"
-optional = false
-python-versions = "*"
-files = []
-develop = false
-
-[package.dependencies]
-evdev = {version = ">=1.3", markers = "sys_platform in \"linux\""}
-pyobjc-framework-ApplicationServices = {version = ">=8.0", markers = "sys_platform == \"darwin\""}
-pyobjc-framework-Quartz = {version = ">=8.0", markers = "sys_platform == \"darwin\""}
-python-xlib = {version = ">=0.17", markers = "sys_platform in \"linux\""}
-six = "*"
-
-[package.source]
-type = "git"
-url = "https://github.com/abrichr/pynput.git"
-reference = "HEAD"
-resolved_reference = "5d7256761b3cf6f01758c2d7d6a877d8facf79bb"
 
 [[package]]
 name = "pyobjc-core"
@@ -6188,4 +6180,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "42225bfe2d728e817b4df4aeb9e0d6d8da2ff0dbc09630144b6e9d20a9f82732"
+content-hash = "f81dd4adf6e37b8308b771dcf16fb0bc719a78d1ea4a8f2125d9e588d6cf7032"
