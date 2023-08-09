@@ -16,7 +16,6 @@ import signal
 import sys
 import threading
 import time
-import psutil
 import tracemalloc
 
 from loguru import logger
@@ -198,11 +197,12 @@ def process_events(
         event = event_q.get()
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
-        # if prev_event is not None:
-        #     assert event.timestamp > prev_event.timestamp, (
-        #         event,
-        #         prev_event,
-        #     )
+        logger.info(f"{event_q.qsize()=}")
+        if prev_event is not None:
+            assert event.timestamp > prev_event.timestamp, (
+                event,
+                prev_event,
+            )
         if event.type == "screen":
             prev_screen_event = event
         elif event.type == "window":
@@ -228,7 +228,7 @@ def process_events(
             #     continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            #event.data["file_event_timestamp"] = prev_file_event.timestamp
+            # event.data["file_event_timestamp"] = prev_file_event.timestamp
             process_event(
                 event,
                 action_write_q,
@@ -254,19 +254,19 @@ def process_events(
                     perf_q,
                 )
                 prev_saved_window_timestamp = prev_window_event.timestamp
-                if 'state' in prev_window_event.data:
+                if "state" in prev_window_event.data:
                     ACTIVE_PID.value = prev_window_event.data["state"]["pid"]
                 logger.info(f"ACTIVE_PID={ACTIVE_PID.value}")
-            #if prev_saved_file_timestamp < prev_file_event.timestamp:
-        #elif event.type == "file":
-            # process_event(
-            #     prev_file_event,
-            #     file_signal_write_q,
-            #     write_file_signal_event,
-            #     recording_timestamp,
-            #     perf_q,
-            # )
-            
+            # if prev_saved_file_timestamp < prev_file_event.timestamp:
+        # elif event.type == "file":
+        # process_event(
+        #     prev_file_event,
+        #     file_signal_write_q,
+        #     write_file_signal_event,
+        #     recording_timestamp,
+        #     perf_q,
+        # )
+
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -636,7 +636,7 @@ def read_file_signals_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    
+
     # GET ACTIVE PID FROM WINDOW DATA
     # GET OPEN FILES FROM THAT PID
 
@@ -662,13 +662,14 @@ def read_file_signals_events(
         #         #))
         #     prev_file_signal_data = file_signal_data
 
+
 def get_file_signal_data():
     """
     Retrieve open file signals by PID.
     """
 
     file_signal_addresses = {}
-    #file_signal_addresses = []
+    # file_signal_addresses = []
     # for proc in psutil.process_iter(['pid', 'open_files']):
     #     try:
     #         pinfo = proc.info
@@ -690,31 +691,34 @@ def get_file_signal_data():
     try:
         if ACTIVE_PID.value != 0:
             process = psutil.Process(ACTIVE_PID.value)
-            for proc in psutil.process_iter():
-                try:
-                    pid = proc.pid
-                    open_file = proc.open_files()
-                    logger.info(f"{pid=} {open_file=}")
-                except:
-                    pass
-
+            # for proc in psutil.process_iter():
+            #     try:
+            #         pid = proc.pid
+            #         open_file = proc.open_files()
+            #         logger.info(f"{pid=} {open_file=}")
+            #     except:
+            #         pass
 
             open_files = process.open_files()
             for file in open_files:
                 fpath = file.path
-                logger.info(f"{fpath=}")
+                # logger.info(f"{fpath=}")
                 for file_type in FILE_TYPE_WHITELIST:
-                    if str(fpath).endswith(file_type) or fpath.endswith("pak"):
-                        if (not any(directory in str(fpath) for directory in DIRECTORIES_TO_AVOID)) or fpath.endswith("pak"):
+                    if str(fpath).endswith(file_type):
+                        if (
+                            not any(
+                                directory in str(fpath)
+                                for directory in DIRECTORIES_TO_AVOID
+                            )
+                        ) or fpath.endswith("pak"):
                             logger.info(f"Open file: {fpath}")
                             file_signal_addresses["pid"] = ACTIVE_PID.value
                             file_signal_addresses["file_path"] = fpath
-                            #file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
+                            # file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         print("No such process or access denied")
 
     return file_signal_addresses
-
 
 
 @trace(logger)
@@ -993,8 +997,8 @@ def record(
         term_pipe_child_action,
     ) = multiprocessing.Pipe()
     (
-        term_pipe_parent_file, 
-        term_pipe_child_file, 
+        term_pipe_parent_file,
+        term_pipe_child_file,
     ) = multiprocessing.Pipe()
 
     window_event_reader = threading.Thread(
@@ -1098,10 +1102,6 @@ def record(
     )
     window_event_writer.start()
 
-
-
-
-
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
@@ -1157,7 +1157,6 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    
 
     terminate_perf_event.set()
 
