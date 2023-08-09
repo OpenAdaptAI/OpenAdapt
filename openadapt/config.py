@@ -87,6 +87,7 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
+    "CAPE_API_KEY": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings
