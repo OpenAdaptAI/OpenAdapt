@@ -36,25 +36,24 @@ CONDA_IMAGE = (
 stub = modal.Stub("incorporate bigger LLMS for generative mixins", image=CONDA_IMAGE)
 
 
-# TODO: modify gisting_test package to return output instead of None
-# m TODO: convert to mixin
 @stub.function(gpu=modal.gpu.A100(count=1), timeout=1500)
-def complete():
+def infer(instruction: str):
     from gisting_test.src import compress
 
     compress.main(
         model_name_or_path="jayelm/llama-7b-gist-1",
         base_llama_path="decapoda-research/llama-7b-hf",
-        instruction="Complete the following pattern: 1, 4, 9, 16 .. with as many numbers as you can.",
+        instruction=instruction,
     )
-    return 0
+    return None
 
 
 @stub.local_entrypoint()
-def execute():
-    return complete.call()
+def execute(prompt: str):
+    return infer.call(prompt)
 
 
 if __name__ == "__main__":
+    prompt = input()
     with stub.run():
-        execute()
+        execute(prompt)
