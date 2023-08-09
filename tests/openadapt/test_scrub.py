@@ -9,6 +9,7 @@ from PIL import Image
 import cv2
 import numpy
 import pytesseract
+import requests
 
 from openadapt import config, scrub
 
@@ -73,10 +74,9 @@ def test_emr_image() -> None:
     original_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
     os.remove(test_image_path_300)
 
-    logger.info(original_image_text)
+    logger.debug(original_image_text)
 
-    logger.info("=" * 31)
-
+    # Preparing for Scrubbing
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 
@@ -92,10 +92,20 @@ def test_emr_image() -> None:
     _enhance_image_for_ocr(scrubbed_image_path, test_image_path_300)
     scrubbed_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
     os.remove(test_image_path_300)
+    test_image.close()
 
-    logger.info(scrubbed_image_text)
+    # Use Cape to detect PII/PHI in the scrubbed image ocr text
+    resp = requests.post(
+        "https://api.capeprivacy.com/v1/privacy/deidentify/text",
+        headers={"Authorization": f"Bearer {config.CAPE_API_KEY}"},
+        json={
+            "content": scrubbed_image_text,
+        },
+    )
 
-    # Use Cape to check if all of the PII has been scrubbed or not
+    assert (
+        resp.json().get("entities") == []
+    )  # Empty list means no PII or PHI was found by Cape
 
 
 def test_scrub_image() -> None:
