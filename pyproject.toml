@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.5.5"
+version = "0.7.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'Mustafa Abdulrahman <mustafa@openadapt.ai>',
@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 
-readme = ["README.md"]
+readme = "README.md"
 
 repository = "https://github.com/mldsai/openadapt"
 homepage = "https://openadapt.ai/"
@@ -29,8 +29,6 @@ homepage = "https://openadapt.ai/"
 
 [tool.poetry.dependencies]
 python = "3.10.x"
-atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
-pynput = {git = "https://github.com/abrichr/pynput.git"}
 alembic = "1.8.1"
 black = "23.3.0"
 pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
@@ -73,11 +71,18 @@ torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
 pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+flake8 = "^6.0.0"
+flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
+pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
+fastapi = "0.98.0"
+oa-pynput = "^1.7.7"
+oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
 
 [tool.poetry.dependencies.en_core_web_trf]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
@@ -96,6 +101,14 @@ visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.main:run_app"
+
+[tool.black]
+extend-exclude = '''
+/(
+  | venv
+  | alembic
+)/
+'''
 
 [tool.semantic_release]
 version_variable = [
