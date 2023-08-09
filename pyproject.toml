@@ -84,9 +84,6 @@ fastapi = "0.98.0"
 oa-pynput = "^1.7.7"
 oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
 
-[tool.poetry.dependencies.en_core_web_trf]
-url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
