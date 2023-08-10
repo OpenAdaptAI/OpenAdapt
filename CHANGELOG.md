@@ -2,6 +2,47 @@
 
 
 
+## v0.7.1 (2023-08-10)
+
+### Chore
+
+* chore: add pypi action and oa-atomacos and oa-pynput packages (#456) ([`a62d7f3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a62d7f3898438b4716e31695d32120b228f84d21))
+
+* chore: suppress identical warnings (#389)
+
+* chore: suppress identical warnings
+
+* add max_num_warnings_per_second to limit number of allowed warnings per cond
+
+* remove MAX_NUM_REPEAT_WARNINGS and check for max num warnings per second in utils.py
+
+* Update openadapt/config.py
+
+* address linting errors and set new variable
+
+* use class for filter_log_messages and track message_timestamps with instance variable
+
+* create logging.py to replace logging class using namespace
+
+* test github actions with empty commit
+
+* replaced variable name with MESSAGES_TO_FILTER
+
+* Update openadapt/logging.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7648210`](https://github.com/OpenAdaptAI/OpenAdapt/commit/764821039e3a03cb4dc3ec80b744f61a48c71461))
+
+### Fix
+
+* fix: pypi direct dependency failure (#459)
+
+* remove trf from toml and then ran `poetry update`
+
+* update all neccessary files ([`d638469`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d638469e238eb5fb3d386ca2ad8c64542a10c6c9))
+
+
 ## v0.7.0 (2023-07-28)
 
 ### Feature
