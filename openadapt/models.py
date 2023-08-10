@@ -5,7 +5,7 @@ import io
 
 from loguru import logger
 from PIL import Image, ImageChops
-from pynput import keyboard
+from oa_pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 
