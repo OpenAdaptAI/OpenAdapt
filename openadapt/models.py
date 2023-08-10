@@ -4,8 +4,8 @@ from typing import Union
 import io
 
 from loguru import logger
+from oa_pynput import keyboard
 from PIL import Image, ImageChops
-from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 

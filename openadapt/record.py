@@ -19,8 +19,8 @@ import time
 import tracemalloc
 
 from loguru import logger
+from oa_pynput import keyboard, mouse
 from pympler import tracker
-from pynput import keyboard, mouse
 from tqdm import tqdm
 import fire
 import mss.tools

@@ -83,6 +83,7 @@ pip3 install poetry
 poetry install
 poetry shell
 alembic upgrade head
+python -m spacy download en_core_web_trf
 pytest
 ```
 

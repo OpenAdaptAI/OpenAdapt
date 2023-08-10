@@ -222,9 +222,11 @@ def scrub_dict(
             scrubbed_dict[key] = scrubbed_text
         elif isinstance(value, list):
             scrubbed_list = [
-                _scrub_list_item(item, key, list_keys, force_scrub_children)
-                if _should_scrub_list_item(item, key, list_keys)
-                else item
+                (
+                    _scrub_list_item(item, key, list_keys, force_scrub_children)
+                    if _should_scrub_list_item(item, key, list_keys)
+                    else item
+                )
                 for item in value
             ]
             scrubbed_dict[key] = scrubbed_list
