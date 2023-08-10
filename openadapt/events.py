@@ -760,6 +760,6 @@ def process_events(
         f"{num_total=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} " f"{pct_total=}"
+        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
     )
     return action_events, window_events, screenshots

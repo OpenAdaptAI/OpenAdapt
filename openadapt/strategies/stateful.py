@@ -198,9 +198,11 @@ def get_window_state_diffs(
         ignore_window_ids.add(last_window_id)
         logger.info(f"ignoring {first_window_title=} {last_window_title=}")
     window_event_states = [
-        action_event.window_event.state
-        if action_event.window_event.state["window_id"] not in ignore_window_ids
-        else {}
+        (
+            action_event.window_event.state
+            if action_event.window_event.state["window_id"] not in ignore_window_ids
+            else {}
+        )
         for action_event in action_events
     ]
     diffs = [
