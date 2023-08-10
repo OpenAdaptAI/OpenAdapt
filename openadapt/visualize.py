@@ -15,6 +15,7 @@ from tqdm import tqdm
 from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
+from openadapt.models import Recording
 from openadapt.utils import (
     EMPTY,
     configure_logging,
@@ -182,11 +183,19 @@ def dict2html(
 
 
 @logger.catch
-def main() -> None:
-    """Main function to generate an HTML report for a recording."""
+def main(recording: Recording = None) -> bool:
+    """Visualize a recording.
+
+    Args:
+        recording (Recording, optional): The recording to visualize.
+
+    Returns:
+        bool: True if visualization was successful, None otherwise.
+    """
     configure_logging(logger, LOG_LEVEL)
 
-    recording = get_latest_recording()
+    if recording is None:
+        recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
@@ -319,6 +328,7 @@ def main() -> None:
         logger.info(f"{removed=}")
 
     Timer(1, cleanup).start()
+    return True
 
 
 if __name__ == "__main__":
