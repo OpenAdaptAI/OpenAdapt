@@ -34,10 +34,15 @@ _DEFAULTS = {
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,
+    "MAX_NUM_WARNINGS_PER_SECOND": 5,
+    "WARNING_SUPPRESSION_PERIOD": 1,
+    "MESSAGES_TO_FILTER": ["Cannot pickle Objective-C objects"],
     # ACTION EVENT CONFIGURATIONS
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
+    # APP CONFIGURATIONS
+    "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
     "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
@@ -86,6 +91,8 @@ _DEFAULTS = {
     ],
     "PLOT_PERFORMANCE": True,
     "REPORT_ERRORS": True,
+    # Calculate and save the difference between 2 neighboring screenshots
+    "SAVE_SCREENSHOT_DIFF": False,
 }
 
 # each string in STOP_STRS should only contain strings
@@ -102,6 +109,8 @@ SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
+
+ENV_FILE_PATH = ".env"
 
 
 def getenv_fallback(var_name: str) -> str:
@@ -127,6 +136,34 @@ def getenv_fallback(var_name: str) -> str:
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
+
+
+def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH) -> None:
+    """Persist an environment variable to a .env file.
+
+    Args:
+        var_name (str): The name of the environment variable.
+        val (str): The value of the environment variable.
+        env_file_path (str, optional): The path to the .env file (default: ".env").
+    """
+    if not os.path.exists(env_file_path):
+        with open(env_file_path, "w") as f:
+            f.write(f"{var_name}={val}")
+    else:
+        # find and replace
+        with open(env_file_path, "r") as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith(f"{var_name}="):
+                lines[i] = f"{var_name}={val}\n"
+                break
+        else:
+            # we didn't find the variable in the file, so append it
+            if lines[-1][-1] != "\n":
+                lines.append("\n")
+            lines.append(f"{var_name}={val}")
+        with open(env_file_path, "w") as f:
+            f.writelines(lines)
 
 
 load_dotenv()
@@ -176,24 +213,7 @@ if multiprocessing.current_process().name == "MainProcess":
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
-
-def filter_log_messages(data: dict) -> bool:
-    """Filter log messages by ignoring specific strings.
-
-    Args:
-        data (dict): Data from a loguru logger.
-
-    Returns:
-        bool: True if the message should not be ignored, False if it should be ignored.
-    """
-    # TODO: ultimately, we want to fix the underlying issues, but for now,
-    # we can ignore these messages
-    messages_to_ignore = [
-        "Cannot pickle Objective-C objects",
-    ]
-    return not any(msg in data["message"] for msg in messages_to_ignore)
-
-
+# sentry reporting
 if REPORT_ERRORS and git.Repo(os.getcwd()).active_branch.name == "main":  # type: ignore # noqa
     sentry_sdk.init(
         dsn=os.getenv("SENTRY_DSN"),
