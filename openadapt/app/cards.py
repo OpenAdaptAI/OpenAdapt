@@ -11,7 +11,7 @@ from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
-from openadapt.crud import newSession
+from openadapt.crud import new_session
 
 record_proc = None
 
@@ -79,7 +79,7 @@ def stop_record() -> None:
 def quick_record() -> None:
     """Run a recording session with no option for recording name (uses date instead)."""
     global record_proc
-    newSession()
+    new_session()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc = Popen(
         f"python -m openadapt.record '{now}'",
@@ -129,7 +129,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         ui.notify(
             f"Recording {name}... Press CTRL + C in terminal window to cancel",
         )
-        newSession()
+        new_session()
         proc = Popen(
             "python -m openadapt.record " + name,
             shell=True,
