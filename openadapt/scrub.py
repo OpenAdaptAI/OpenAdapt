@@ -22,6 +22,7 @@ import fire
 from openadapt import config, utils
 
 SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
+# TODO Capture the error and handel it gracefully by downloading the required spacy weight
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
 ANALYZER_TRF = AnalyzerEngine(nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"])
 ANONYMIZER = AnonymizerEngine()
