@@ -93,6 +93,7 @@ def test_emr_image() -> None:
     scrubbed_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
     os.remove(test_image_path_300)
     test_image.close()
+    os.remove(scrubbed_image_path)
 
     # Use Cape to detect PII/PHI in the scrubbed image ocr text
     resp = requests.post(
