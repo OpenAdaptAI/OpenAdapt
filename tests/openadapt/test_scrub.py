@@ -3,17 +3,18 @@
 from io import BytesIO
 import os
 
+from PIL import Image
 import pytest
+import spacy
+
+from openadapt import config
 
 pytestmark = pytest.mark.skipif(
     not spacy.util.is_package(config.SPACY_MODEL_NAME),
     reason="spacy model not installed",
 )
-import warnings
 
-from PIL import Image
-
-from openadapt import config, scrub
+from openadapt import scrub
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -34,7 +35,6 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
 
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
