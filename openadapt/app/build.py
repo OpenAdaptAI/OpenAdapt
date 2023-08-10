@@ -7,26 +7,23 @@ Example usage:
 """
 
 from pathlib import Path
-import os
 import subprocess
 
 import nicegui
 
-s = os.path.sep
-
 spec = [
     "pyi-makespec",
-    f"{Path(__file__).parent}{s}tray.py",
-    f"--icon={Path(__file__).parent}{s}assets{s}logo.ico",
+    f"{Path(__file__).parent / 'tray.py'}",
+    f"--icon={Path(__file__).parent / 'assets' / 'logo.ico'}",
     "--name",
     "OpenAdapt",  # name
     # "--onefile", # trade startup speed for smaller file size
     "--onedir",
     "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
     "--add-data",
-    f"{Path(nicegui.__file__).parent}{s}nicegui",
+    f"{Path(nicegui.__file__).parent}:{Path('nicegui')}",
     "--add-data",
-    f"{Path(__file__).parent}{s}assets",
+    f"{Path(__file__).parent}:{Path('assets')}",
 ]
 
 subprocess.call(spec)
