@@ -6,7 +6,7 @@ from os import path, sep
 from pprint import pformat
 
 from loguru import logger
-from nicegui import ui, events
+from nicegui import events, ui
 from tqdm import tqdm
 
 from openadapt import config
@@ -56,8 +56,10 @@ def create_tree(
         if value in EMPTY:
             continue
         node = {
-            "id": str(key)
-            + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
+            "id": (
+                str(key)
+                + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
+            )
         }
         if isinstance(value, dict):
             node["children"] = create_tree(value)
