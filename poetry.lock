@@ -3153,22 +3153,21 @@ pycryptodome = ">=3.10.1"
 
 [[package]]
 name = "presidio-image-redactor"
-version = "0.0.46"
+version = "0.0.48"
 description = "Presidio image redactor package"
 optional = false
 python-versions = ">=3.5"
 files = [
-    {file = "presidio_image_redactor-0.0.46-py3-none-any.whl", hash = "sha256:9a2dc7ff1a63bfccf39830af23a16652ca6b8965917b777ef4f0a96c2c229398"},
+    {file = "presidio_image_redactor-0.0.48-py3-none-any.whl", hash = "sha256:35b8b52067298f6e5dc2c79c400bbd352bbe9cd0c60633fae4346500aa7fa8f1"},
 ]
 
 [package.dependencies]
-matplotlib = "3.6.2"
+matplotlib = ">=3.6"
 pillow = ">=9.0"
 presidio-analyzer = ">=1.9.0"
-pydantic = "1.7.4"
 pydicom = ">=2.3.0"
 pypng = ">=0.20220715.0"
-pytesseract = "0.3.7"
+pytesseract = ">=0.3.7,<0.4"
 
 [[package]]
 name = "proglog"
@@ -6111,4 +6110,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "3b80721140594f07a9ed0be95be1410f059fbf142880d7bd3c4b242e051d3552"
+content-hash = "790f5af49cb392d1a774ac1ecab153e02c4af7ee83f5bce1de11c2aeb175042e"
