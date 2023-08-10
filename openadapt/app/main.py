@@ -81,16 +81,17 @@ with ui.row().classes("w-full justify-right"):
         with splitter.after:
             logger = Console()
             logger.log.style("height: 250px;, width: 300px;")
+
         splitter.enabled = False
 
 
-def start() -> None:
+def start(fullscreen: bool = False) -> None:
     """Start the OpenAdapt application."""
     ui.run(
         title="OpenAdapt Client",
         native=True,
         window_size=(400, 400),
-        fullscreen=False,
+        fullscreen=fullscreen,
         reload=False,
         show=False,
     )

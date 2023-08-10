@@ -63,7 +63,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.replay_menu = self.menu.addMenu("Replay")
         self.populate_menu(self.replay_menu, self._replay, "replay")
 
-        self.app_action = QAction("Open OpenAdapt")
+        self.app_action = QAction("Show App")
         self.app_action.triggered.connect(self.show_app)
         self.menu.addAction(self.app_action)
 
@@ -163,7 +163,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     def show_app(self) -> None:
         """Show the main application window."""
         if self.app_thread is None or not self.app_thread.is_alive():
-            self.app_thread = Thread(target=start, daemon=True)
+            self.app_thread = Thread(target=start, daemon=True, args=(True,))
             self.app_thread.start()
 
     def run(self) -> None:
