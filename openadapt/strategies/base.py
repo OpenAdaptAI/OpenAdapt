@@ -8,7 +8,7 @@ from pprint import pformat
 import time
 
 from loguru import logger
-from pynput import keyboard, mouse
+from oa_pynput import keyboard, mouse
 import numpy as np
 
 from openadapt import models, playback, utils
