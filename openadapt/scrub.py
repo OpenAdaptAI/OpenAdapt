@@ -27,9 +27,9 @@ SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF
 PRESIDIO_NLP_MODEL = config.SPACY_MODEL_NAME
 try:
     NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-except OSError as e:
+except IOError as e:
     # Check if the error message contains the model name
-    if "PRESIDIO_NLP_MODEL" in str(e):
+    if PRESIDIO_NLP_MODEL in str(e):
         logger.info(f"Downloading {PRESIDIO_NLP_MODEL} model...")
         spacy.cli.download(PRESIDIO_NLP_MODEL)
 
