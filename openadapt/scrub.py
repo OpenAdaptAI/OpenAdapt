@@ -23,20 +23,12 @@ import spacy
 
 from openadapt import config, utils
 
-SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
-PRESIDIO_NLP_MODEL = config.SPACY_MODEL_NAME
-try:
-    NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-except IOError as e:
-    # Check if the error message contains the model name
-    if PRESIDIO_NLP_MODEL in str(e):
-        logger.info(f"Downloading {PRESIDIO_NLP_MODEL} model...")
-        spacy.cli.download(PRESIDIO_NLP_MODEL)
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+    spacy.cli.download(config.SPACY_MODEL_NAME)
 
-        # Retry creating the engine
-        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
-    else:
-        raise "Could not create NLP engine."
+SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
+NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
 ANALYZER_TRF = AnalyzerEngine(nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"])
 ANONYMIZER = AnonymizerEngine()
 IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
