@@ -345,7 +345,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
                         ui.tree(
                             action_event_tree,
                             label_key="id",
-                            on_select=lambda e: ui.notify(e.value),
+                            # on_select=lambda e: ui.notify(e.value),
                         )
                     )
                     set_tree_props(action_event_trees[idx])
@@ -377,7 +377,7 @@ def main(recording: Recording = get_latest_recording()) -> None:
                         ui.tree(
                             window_event_tree,
                             label_key="id",
-                            on_select=lambda e: ui.notify(e.value),
+                            # on_select=lambda e: ui.notify(e.value),
                         )
                     )
 
