@@ -12,18 +12,31 @@ Module: scrub.py
 
 from typing import Union
 
+from loguru import logger
 from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import fire
+import spacy
 
 from openadapt import config, utils
 
 SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
-# TODO Capture the error and handel it gracefully by downloading the required spacy weight
-NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+PRESIDIO_NLP_MODEL = config.SPACY_MODEL_NAME
+try:
+    NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+except OSError as e:
+    # Check if the error message contains the model name
+    if "PRESIDIO_NLP_MODEL" in str(e):
+        logger.info(f"Downloading {PRESIDIO_NLP_MODEL} model...")
+        spacy.cli.download(PRESIDIO_NLP_MODEL)
+
+        # Retry creating the engine
+        NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
+    else:
+        raise "Could not create NLP engine."
 ANALYZER_TRF = AnalyzerEngine(nlp_engine=NLP_ENGINE_TRF, supported_languages=["en"])
 ANONYMIZER = AnonymizerEngine()
 IMAGE_REDACTOR = ImageRedactorEngine(ImageAnalyzerEngine(ANALYZER_TRF))
