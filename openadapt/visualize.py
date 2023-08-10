@@ -36,8 +36,7 @@ MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template(
-    """
+CSS = string.Template("""
     table {
         outline: 1px solid black;
     }
@@ -71,8 +70,7 @@ CSS = string.Template(
     .screenshot:active img:nth-child(3) {
         display: block;
     }
-"""
-).substitute(
+""").substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -165,18 +163,12 @@ def dict2html(
             children = indicate_missing(children, all_children, "...")
         html_str = "\n".join(children)
     elif isinstance(obj, dict):
-        rows_html = "\n".join(
-            [
-                f"""
+        rows_html = "\n".join([f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
                     <td>{dict2html(value, max_children)}</td>
                 </tr>
-            """
-                for key, value in obj.items()
-                if value not in EMPTY
-            ]
-        )
+            """ for key, value in obj.items() if value not in EMPTY])
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
@@ -306,13 +298,11 @@ def main(recording: Recording = None) -> bool:
                             </table>
                         """,
                         ),
-                        Div(
-                            text=f"""
+                        Div(text=f"""
                             <table>
                                 {dict2html(action_event_dict)}
                             </table>
-                        """
-                        ),
+                        """),
                     ),
                 ]
             )

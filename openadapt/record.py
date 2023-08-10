@@ -20,7 +20,7 @@ import tracemalloc
 
 from loguru import logger
 from pympler import tracker
-from pynput import keyboard, mouse
+from oa_pynput import keyboard, mouse
 from tqdm import tqdm
 import fire
 import mss.tools
