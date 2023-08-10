@@ -71,7 +71,9 @@ def test_emr_image() -> None:
     scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
 
     _enhance_image_for_ocr(test_image_path, test_image_path_300)
-    original_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
+    # original_image_text = (
+    #     pytesseract.image_to_string(Image.open(test_image_path_300))
+    # )
     os.remove(test_image_path_300)
 
     # Preparing for Scrubbing
