@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.7.1"
+version = "0.8.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'Mustafa Abdulrahman <mustafa@openadapt.ai>',
@@ -62,19 +62,22 @@ python-dotenv = "1.0.0"
 pyinstaller = "^5.12.0"
 setuptools-lint = "^0.6.0"
 sphinx = "7.0.1"
-nicegui = "1.2.16"
+nicegui = "1.2.24"
 spacy = "^3.5.3"
 fuzzywuzzy = "0.18.0"
 segment-anything = "^1.0"
 torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
+pillow = "9.5.0"
 pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
 flake8 = "^6.0.0"
 flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
 magic-wormhole = "0.12.0"
+pyside6 = "^6.5.1.1"
+notify-py = "^0.3.42"
 flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
@@ -98,7 +101,8 @@ from_first = true
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
-app = "openadapt.app.main:run_app"
+app = "openadapt.app.tray:_run"
+reset = "openadapt.scripts.reset_db:reset_db"
 
 [tool.black]
 extend-exclude = '''

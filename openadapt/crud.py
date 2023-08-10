@@ -196,6 +196,15 @@ def insert_recording(recording_data: Recording) -> Recording:
     return db_obj
 
 
+def get_all_recordings() -> list[Recording]:
+    """Get all recordings.
+
+    Returns:
+        list[Recording]: A list of all recordings.
+    """
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
+
+
 def get_latest_recording() -> Recording:
     """Get the latest recording.
 
@@ -393,3 +402,15 @@ def get_window_events(recording: Recording) -> list[WindowEvent]:
         list[WindowEvent]: A list of window events for the recording.
     """
     return _get(WindowEvent, recording.timestamp)
+
+
+def new_session() -> None:
+    """Create a new database session.
+
+    This was necessary because the database session was not being closed
+    properly, and the database would become locked.
+    """
+    global db
+    if db:
+        db.close()
+    db = Session()

@@ -16,6 +16,7 @@ from tqdm import tqdm
 from openadapt import config, crud
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
+from openadapt.models import Recording
 from openadapt.utils import (
     EMPTY,
     configure_logging,
@@ -322,6 +323,7 @@ def main(session: session.Session = None) -> None:
         logger.info(f"{removed=}")
 
     Timer(1, cleanup).start()
+    return True
 
 
 if __name__ == "__main__":
