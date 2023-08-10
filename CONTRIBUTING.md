@@ -109,7 +109,36 @@ The body or footer can begin with **BREAKING CHANGE:** followed by a short descr
      - see instructions on how to resolve poetry.lock and pyproject.toml conflicts below
 6. Celebrate contributing to OpenAdapt!
 
+### Publishing Direct Dependencies to PyPI
+
+1. **Update Package Name**: Use `oa_<package>` format for consistency. Update it in `setup.py` or `pyproject.toml`.
+2. **Update Imports**: Modify import statements to `oa_<package>`.
+3. **Update Version Number**: Increment version in `setup.py` or `pyproject.toml`.
+4. **Create Distribution**: Run to generate distribution files:
+    ```bash
+    python setup.py sdist bdist_wheel
+    ```
+5. **Install Twine**: Install `twine` if needed:
+    ```bash
+    pip install twine
+    ```
+6. **Upload to PyPI**: Use `twine` to upload files:
+    ```bash
+    twine upload dist/*
+    ```
+7. **Verify on PyPI**: Check PyPI for successful update.
+
+After publishing the updated dependency to PyPI, follow these steps in the OpenAdapt repository:
+
+8. **Update OpenAdapt Repository**: In the OpenAdapt repository, use Poetry to remove the old direct dependency and add the newly published dependency:
+    ```bash
+    poetry remove <direct_dependency>
+    poetry add <newly_published_dependency>
+    ```
+Make sure to replace `<direct_dependency>` and `<newly_published_dependency>` with the actual names of the dependencies you're updating.
+
 ### How to resolve poetry.lock and pyproject.toml conflicts:
+
 How to fix conflicts with poetry.lock and poetry.toml:
 1. Edit the poetry.toml file to include the correct dependencies
 2. Run ```poetry lock``` to update the poetry.lock file

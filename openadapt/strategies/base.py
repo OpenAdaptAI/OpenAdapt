@@ -8,7 +8,7 @@ from pprint import pformat
 import time
 
 from loguru import logger
-from pynput import keyboard, mouse
+from oa_pynput import keyboard, mouse
 import numpy as np
 
 from openadapt import models, playback, utils
@@ -81,7 +81,7 @@ class BaseReplayStrategy(ABC):
                     [action_event],
                     drop_constant=False,
                 )[0]
-                logger.info(f"action_event=\n" f"{pformat(action_event_dict)}")
+                logger.info(f"action_event=\n{pformat(action_event_dict)}")
                 try:
                     playback.play_action_event(
                         action_event,
