@@ -9,12 +9,10 @@ import spacy
 
 from openadapt import config
 
-pytestmark = pytest.mark.skipif(
-    not spacy.util.is_package(config.SPACY_MODEL_NAME),
-    reason="spacy model not installed",
-)
-
-from openadapt import scrub
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    pytestmark = pytest.mark.skip(reason="SpaCy model not installed.")
+else:
+    from openadapt import scrub
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -35,7 +33,6 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
 
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
-
     # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
@@ -194,7 +191,3 @@ def test_scrub_all_together() -> None:
         " his social security number is <US_SSN>."
         " He was born on 01/01/1980."
     )
-
-
-if __name__ == "__main__":
-    test_scrub_image()
