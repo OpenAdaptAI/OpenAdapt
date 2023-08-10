@@ -203,7 +203,7 @@ def test_scrub_address() -> None:
     """Test that the address is scrubbed."""
     assert (
         scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
-        == "My address is 123 Main St, <LOCATION>, On, <LOCATION>."
+        == "My address is 123 Main St, <LOCATION>, <LOCATION>, <LOCATION>."
     )
 
 
