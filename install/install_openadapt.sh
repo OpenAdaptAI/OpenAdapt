@@ -128,6 +128,7 @@ cd OpenAdapt
 RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
+RunAndCheck "poetry run python -m spacy download en_core_web_trf" "Download spacy en_core_web_trf model"
 RunAndCheck "poetry run pytest" "Run tests"
 if [ -z "$SKIP_POETRY_SHELL" ]; then
     RunAndCheck "poetry shell" "Activate virtual environment"

@@ -115,7 +115,7 @@ def test_scrub_address() -> None:
     """Test that the address is scrubbed."""
     assert (
         scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
-        == "My address is 123 Main St, <LOCATION>, On, <LOCATION>."
+        == "My address is 123 Main St, <LOCATION>, <LOCATION>, <LOCATION>."
     )
 
 
@@ -180,7 +180,8 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert (
-        scrub.scrub_text(text_with_pii_phi) == "<PERSON> email is <EMAIL_ADDRESS> and"
+        scrub.scrub_text(text_with_pii_phi)
+        == "<PERSON> email is <EMAIL_ADDRESS> and"
         " his phone number is <PHONE_NUMBER>."
         "His credit card number is <CREDIT_CARD> and"
         " his social security number is <US_SSN>."
