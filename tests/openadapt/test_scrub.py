@@ -108,6 +108,8 @@ def test_emr_image() -> None:
         },
     )
 
+    detect_entities = resp.json().get("entities")
+
     assert (
         resp.json().get("entities") == []
     )  # Empty list means no PII or PHI was found by Cape
