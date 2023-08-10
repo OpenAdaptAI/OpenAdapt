@@ -2,6 +2,113 @@
 
 
 
+## v0.8.0 (2023-08-10)
+
+### Chore
+
+* chore: resolve failing publish github actions (#458)
+
+* check if modified flake8 works
+
+* Add release github action
+
+* Add oa-pynput and oa-atomacos and refactor accordingly
+
+* Use simpler publish github action and rename to release-and-publish.yml
+
+* add preview check in main.yml
+
+* add documentation on publishing direct dependencies
+
+* chore: resolve publishing github action errors ([`7b57505`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7b575059d45a2a697fcb2b88f5921a2cc80cf430))
+
+### Feature
+
+* feat: Implement System Tray Icon (#300)
+
+* add tray icon
+
+* move to tray.py
+
+* add notifications &amp; guards
+
+* pyinstaller currently broken
+
+* Update tray.py
+
+* Update cards.py
+
+* hide icon in taskbar + minor improvements
+
+* add dropdown for visualize
+
+* Update tray.py
+
+* Update tray.py
+
+* add py6tray + notifier
+
+* BYE BYE PYSTRAY !!!
+
+hello dependency inversion?
+
+* os.sep + fix console + other
+
+* use path.join
+
+* run -&gt; _run
+
+* add replays
+
+* fix conflicting action items
+
+* fix database is locked + threading
+
+* type annotations
+
+* Update cards.py
+
+* Create visualize1.py
+
+* Revert &#34;Create visualize1.py&#34;
+
+This reverts commit 753f6919e7566b89686922c4e6b2a4fddf33ef04.
+
+* fix typo
+
+* fix merge conflicts : still broken
+
+* fix
+
+* Revert &#34;fix&#34;
+
+This reverts commit 9d844467a9a9f16e219175eb60734b709c6f7b76.
+
+* Revert &#34;fix merge conflicts : still broken&#34;
+
+This reverts commit 82e62d95093e6114653f59b8a7ea94233efc60e1.
+
+* Update pyproject.toml
+
+* styling / linting
+
+* Update tray.py
+
+* Update build.py
+
+* return vals
+
+* Update build.py
+
+* show app
+
+* changes ([`9f2a04e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9f2a04e8580ae5db62426aeba67eecb89ff09b62))
+
+### Unknown
+
+* fix pytest (#460) ([`1049589`](https://github.com/OpenAdaptAI/OpenAdapt/commit/10495890195acf3bc6a51731f0471fbef31835d7))
+
+
 ## v0.7.1 (2023-08-10)
 
 ### Chore
