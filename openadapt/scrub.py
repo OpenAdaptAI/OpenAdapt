@@ -20,6 +20,7 @@ from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import fire
 import spacy
+import spacy_transformers
 
 from openadapt import config, utils
 

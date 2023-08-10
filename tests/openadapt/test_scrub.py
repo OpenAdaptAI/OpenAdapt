@@ -2,6 +2,13 @@
 
 from io import BytesIO
 import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not spacy.util.is_package(config.SPACY_MODEL_NAME),
+    reason="spacy model not installed",
+)
 import warnings
 
 from PIL import Image
