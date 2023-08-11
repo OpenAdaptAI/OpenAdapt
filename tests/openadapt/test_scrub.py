@@ -7,6 +7,7 @@ from loguru import logger
 from PIL import Image
 import cv2
 import pytesseract
+import pytest
 import requests
 
 from openadapt import config, scrub
@@ -109,14 +110,26 @@ def test_emr_image() -> None:
         },
     )
 
+    if "entities" not in resp.json().keys() or "content" not in resp.json().keys():
+        pytestmark = pytest.mark.skip(
+            reason="Cape failed to return entities and content"
+        )
+
     detect_entities = resp.json().get("entities")
     important_entities = [
+        "NAME",
         "NAME_GIVEN",
         "NAME_FAMILY",
         "TIME",
         "DATE",
         "PHONE_NUMBER",
-        "DATE_TIME",
+        "DOB",
+        "EMAIL_ADDRESS",
+        "CREDIT_CARD",
+        "LOCATION",
+        "DRIVER_LICENSE",
+        "DATE_INTERVAL",
+        "SSN",
     ]
     filtered_entities = []
 
