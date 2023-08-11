@@ -21,10 +21,10 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
         tuple[int, int, int]: RGB values.
     """
     assert 0x000000 <= hex_color <= 0xFFFFFF
-    black = (hex_color >> 16) & 0xFF
+    blue = (hex_color >> 16) & 0xFF
     green = (hex_color >> 8) & 0xFF
     red = hex_color & 0xFF
-    return red, green, black
+    return red, green, blue
 
 
 def _enhance_image_for_ocr(input_image_path: str, enhanced_image_path: str) -> None:
