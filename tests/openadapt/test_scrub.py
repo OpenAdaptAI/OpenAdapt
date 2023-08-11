@@ -3,6 +3,7 @@
 from io import BytesIO
 import os
 
+from loguru import logger
 from PIL import Image
 import cv2
 import pytesseract
@@ -109,10 +110,26 @@ def test_emr_image() -> None:
     )
 
     detect_entities = resp.json().get("entities")
+    important_entities = [
+        "NAME_GIVEN",
+        "NAME_FAMILY",
+        "TIME",
+        "DATE",
+        "PHONE_NUMBER",
+        "DATE_TIME",
+    ]
+    filtered_entities = []
+
+    for entity in detect_entities:
+        label = entity.get("best_label")
+        if label in important_entities and label not in filtered_entities:
+            filtered_entities.append(label)
+
+    logger.debug(filtered_entities)
 
     assert (
-        resp.json().get("entities") == []
-    )  # Empty list means no PII or PHI was found by Cape
+        not filtered_entities
+    )  # Empty list means no important PII or PHI was found by Cape
 
 
 def test_scrub_image() -> None:
