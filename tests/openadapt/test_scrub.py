@@ -97,6 +97,7 @@ def test_emr_image() -> None:
     test_image.close()
     os.remove(scrubbed_image_path)
 
+    # try:
     # Use Cape to detect PII/PHI in the scrubbed image ocr text
     resp = requests.post(  # pylint: disable=missing-timeout
         "https://api.capeprivacy.com/v1/privacy/deidentify/text",
@@ -109,13 +110,16 @@ def test_emr_image() -> None:
             "content": scrubbed_image_text,
         },
     )
+    cape_response = resp.json()
 
-    if "entities" not in resp.json().keys() or "content" not in resp.json().keys():
-        pytestmark = pytest.mark.skip(
-            reason="Cape failed to return entities and content"
-        )
+    if (
+        "entities" not in cape_response.keys()
+        or "content" not in cape_response.keys()
+        or cape_response is None
+    ):
+        pytestmark = pytest.skip(reason="Cape failed to return entities and content")
 
-    detect_entities = resp.json().get("entities")
+    detect_entities = cape_response.get("entities")
     important_entities = [
         "NAME",
         "NAME_GIVEN",
@@ -143,6 +147,9 @@ def test_emr_image() -> None:
     assert (
         not filtered_entities
     )  # Empty list means no important PII or PHI was found by Cape
+
+    # except Exception as e:
+    #     pytestmark = pytest.mark.skip(reason="Cape API failed to respond")
 
 
 def test_scrub_image() -> None:
