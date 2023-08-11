@@ -90,6 +90,7 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
+    "SCRUB_PROVIDER_NAME": ["Presidio"],
 }
 
 # each string in STOP_STRS should only contain strings
