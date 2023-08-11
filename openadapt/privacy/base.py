@@ -1,15 +1,15 @@
-"""The Base (Parent) Class for Privacy Scrubbing Providers"""
+"""The Base (Parent) Class for Privacy Scrubbing Providers."""
 
 from typing import List
 
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel  # pylint: disable=no-name-in-module
 
 from openadapt import config
 
 
 class Modality:  # pylint: disable=too-few-public-methods
-    """A Base Class for Modality Types"""
+    """A Base Class for Modality Types."""
 
     TEXT = "TEXT"
     PIL_IMAGE = "PIL_IMAGE"
@@ -18,13 +18,13 @@ class Modality:  # pylint: disable=too-few-public-methods
 
 
 class ScrubbingProvider(BaseModel):
-    """A Base Class for Scrubbing Providers"""
+    """A Base Class for Scrubbing Providers."""
 
     name: str
     capabilities: List[str]
 
     class Config:  # pylint: disable=too-few-public-methods
-        """Pydantic Config Class"""
+        """Pydantic Config Class."""
 
         arbitrary_types_allowed = True
 
@@ -74,7 +74,7 @@ class ScrubbingProvider(BaseModel):
         playback_speed_multiplier: float = 1.0,
         crop_start_time: int = 0,
         crop_end_time: int | None = None,
-    ):
+    ) -> str:
         """Scrub a mp4 file.
 
         Args:
@@ -91,13 +91,13 @@ class ScrubbingProvider(BaseModel):
 
 
 class ScrubbingProviderFactory:  # pylint: disable=too-few-public-methods
-    """A Factory Class for Scrubbing Providers"""
+    """A Factory Class for Scrubbing Providers."""
 
     @staticmethod
     def get_for_modality(
         modality: Modality,
     ) -> List[ScrubbingProvider]:
-        """Get Scrubbing Providers for a given Modality
+        """Get Scrubbing Providers for a given Modality.
 
         Args:
             modality (Modality): Modality Type
