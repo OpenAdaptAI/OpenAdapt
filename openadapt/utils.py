@@ -24,6 +24,7 @@ import numpy as np
 
 from openadapt import common, config
 from openadapt.db import BaseModel
+from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
@@ -58,7 +59,9 @@ def configure_logging(logger: logger, log_level: str) -> None:
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+            filter=(
+                filter_log_messages if config.MAX_NUM_WARNINGS_PER_SECOND > 0 else None
+            ),
         )
         logger.debug(f"{log_level=}")
 
