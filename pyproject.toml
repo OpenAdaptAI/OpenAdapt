@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.7.1"
+version = "0.8.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'Mustafa Abdulrahman <mustafa@openadapt.ai>',
@@ -12,11 +12,11 @@ authors = [
     'Aaron Shah <aaron@openadapt.ai>',
     'Jesica Susanto <jesica@openadapt.ai>',
     'Angela Zhuo <angela@openadapt.ai>',
-    'Owais Zahid <owais@openadapt.ai>'
+    'Owais Zahid <owais@openadapt.ai>',
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
 
 readme = "README.md"
@@ -31,12 +31,12 @@ homepage = "https://openadapt.ai/"
 python = "3.10.x"
 alembic = "1.8.1"
 black = "23.3.0"
-pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
-pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
+pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
+pywin32 = { version = "306", markers = "sys_platform == 'win32'" }
 ascii-magic = "2.3.0"
 bokeh = "2.4.3"
 clipboard = "0.0.4"
-deepdiff = {extras = ["optimize"], version = "^6.3.0"}
+deepdiff = { extras = ["optimize"], version = "^6.3.0" }
 ascii_magic = "2.3.0"
 dictalchemy3 = "1.0.0"
 fire = "0.4.0"
@@ -62,28 +62,31 @@ python-dotenv = "1.0.0"
 pyinstaller = "^5.12.0"
 setuptools-lint = "^0.6.0"
 sphinx = "7.0.1"
-nicegui = "1.2.16"
+nicegui = "1.2.24"
 spacy = "^3.5.3"
 fuzzywuzzy = "0.18.0"
 segment-anything = "^1.0"
 torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
-pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+pillow = "9.5.0"
+pywinauto = { version = "^0.6.8", markers = "sys_platform == 'win32'" }
 flake8 = "^6.0.0"
 flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+pyside6 = "^6.5.1.1"
+notify-py = "^0.3.42"
 flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
-pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
+pyobjc-framework-avfoundation = { version = "^9.2", markers = "sys_platform == 'darwin'" }
 fastapi = "0.98.0"
 screen-recorder-sdk = "^1.3.0"
 pyaudio = "^0.2.13"
 oa-pynput = "^1.7.7"
-oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
+oa-atomacos = { version = "3.2.0", markers = "sys_platform == 'darwin'" }
 presidio-image-redactor = "^0.0.48"
 
 [build-system]
@@ -99,8 +102,10 @@ from_first = true
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
-app = "openadapt.app.main:run_app"
+app = "openadapt.app.tray:_run"
+reset = "openadapt.scripts.reset_db:reset_db"
 capture = "openadapt.capture:start"
+
 
 [tool.black]
 extend-exclude = '''
@@ -111,12 +116,8 @@ extend-exclude = '''
 '''
 
 [tool.semantic_release]
-version_variable = [
-    "openadapt/__init__.py:__version__"
-]
-version_toml = [
-    "pyproject.toml:tool.poetry.version"
-]
+version_variable = ["openadapt/__init__.py:__version__"]
+version_toml = ["pyproject.toml:tool.poetry.version"]
 major_on_zero = false
 branch = "main"
 commit_subject = "chore(release): v{version}"
