@@ -117,7 +117,7 @@ def test_emr_image() -> None:
         or "content" not in cape_response.keys()
         or cape_response is None
     ):
-        pytestmark = pytest.skip(reason="Cape failed to return entities and content")
+        pytest.skip(reason="Cape failed to return entities and content")
 
     detect_entities = cape_response.get("entities")
     important_entities = [
