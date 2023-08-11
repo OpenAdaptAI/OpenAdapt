@@ -26,6 +26,7 @@ from openadapt import common, config
 from openadapt.db import BaseModel
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
+from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
 EMPTY = (None, [], {}, "")
 
@@ -535,7 +536,7 @@ def display_event(
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
         if config.SCRUB_ENABLED:
-            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
+            text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
