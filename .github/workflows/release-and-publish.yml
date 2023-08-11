@@ -20,8 +20,6 @@ jobs:
         uses: relekang/python-semantic-release@master
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
-          repository_username: __token__
-          repository_password: ${{ secrets.PYPI_TOKEN }}
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
 
@@ -34,12 +32,15 @@ jobs:
         with:
           ref: main
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: '3.10'
-      - name: Build and publish to PyPI
-        uses: JRubics/poetry-publish@v1.17
-        with:
-          python_version: "3.10"
-          poetry_version: "==1.5.1"
-          pypi_token: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish
+        env:
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install poetry
+          poetry install
+          poetry config pypi-token.pypi $PYPI_TOKEN
+          poetry build
+          poetry publish --no-interaction --skip-existing
