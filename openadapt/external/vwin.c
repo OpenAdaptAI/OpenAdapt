@@ -6,6 +6,7 @@ typedef struct {
     char title[256];
     DWORD pid;
     SYSTEMTIME startTime;
+    char startDate[20];
 } WindowInfo;
 
 int compareStartTime(const void* a, const void* b) {
@@ -18,8 +19,8 @@ int compareStartTime(const void* a, const void* b) {
 }
 
 int main() {
-    printf("%-40s %-10s %-20s\n", "Title", "PID", "Start Time");
-    printf("%-40s %-10s %-20s\n", "-----", "---", "----------");
+    printf("%-40s %-10s %-20s %-20s\n", "Title", "PID", "Start Time", "Start Date");
+    printf("%-40s %-10s %-20s %-20s\n", "-----", "---", "----------", "----------");
     HWND hwnd = GetTopWindow(NULL);
     int numWindows = 0;
     WindowInfo windows[1024];
@@ -40,22 +41,21 @@ int main() {
                     strncpy(window.title, title, sizeof(window.title) - 1);
                     window.pid = pid;
                     window.startTime = localSt;
+                    char startDate[20];
+                    sprintf(startDate, "%04d-%02d-%02d", localSt.wYear, localSt.wMonth, localSt.wDay);
+                    strncpy(window.startDate, startDate, sizeof(window.startDate) - 1);
                     windows[numWindows++] = window;
                 } else {
-                    printf("%-40s %-10d\n", title, pid);
+                    CloseHandle(hProcess);
                 }
-                CloseHandle(hProcess);
-            } else {
-                printf("%-40s %-10d\n", title, pid);
             }
         }
         hwnd = GetNextWindow(hwnd, GW_HWNDNEXT);
     }
     qsort(windows, numWindows, sizeof(WindowInfo), compareStartTime);
     for (int i = 0; i < numWindows; i++) {
-        printf("%-40s %-10d %02d:%02d:%02d\n", windows[i].title, windows[i].pid,
-               windows[i].startTime.wHour, windows[i].startTime.wMinute,
-               windows[i].startTime.wSecond);
+        WindowInfo window = windows[i];
+        printf("%-40s %-10d %02d:%02d:%02d %20s\n", window.title, window.pid, window.startTime.wHour, window.startTime.wMinute, window.startTime.wSecond, window.startDate);
     }
     return 0;
 }
