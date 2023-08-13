@@ -75,7 +75,7 @@ class GPT2Evaluator(BaseEvaluator):
 
 def main():
     evaluation = GPT2Evaluator()
-    evaluation.evaluate_single_action()
+    evaluation.evaluate()
 
 
 def start():

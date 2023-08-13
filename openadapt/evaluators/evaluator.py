@@ -1,6 +1,4 @@
-from abc import abstractmethod
 from typing import Tuple
-import math
 
 from loguru import logger
 
@@ -31,18 +29,16 @@ class BaseEvaluator:
         self.max_tokens = max_tokens
         self.max_screen_size = max_screen_size
 
-    @abstractmethod
     def init_model(self):
         """Initialize the model. This must be adapted for each model, given attribute model name"""
-        self.model = None
+        raise NotImplementedError
 
-    @abstractmethod
     def get_completion(
         self,
         prompt: str,
-    ):
+    ) -> str:
         """Get the completion for a given prompt"""
-        return ""
+        raise NotImplementedError
 
     def build_prompt(
         self, ref_window: Window, action: KeyAction | MouseAction, active_window: Window
@@ -64,7 +60,7 @@ class BaseEvaluator:
         )
         return prompt
 
-    def evaluate_single_action(self) -> float:
+    def evaluate(self) -> float:
         """Evaluate the model completion on a set of fixtures
 
         Returns:
