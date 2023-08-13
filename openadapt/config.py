@@ -223,3 +223,8 @@ def filter_log_messages(data: dict) -> bool:
         "Cannot pickle Objective-C objects",
     ]
     return not any(msg in data["message"] for msg in messages_to_ignore)
+
+
+DEFAULT_MAX_SCREEN_SIZE = (1920, 1080)
+DEFAULT_MAX_INPUT_SIZE = 1024
+DEFAULT_MAX_TOKENS = 1024

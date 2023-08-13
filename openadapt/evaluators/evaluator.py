@@ -3,13 +3,16 @@ from typing import Tuple
 from loguru import logger
 
 from openadapt import utils
+from openadapt.config import (
+    DEFAULT_MAX_INPUT_SIZE,
+    DEFAULT_MAX_SCREEN_SIZE,
+    DEFAULT_MAX_TOKENS,
+)
 from openadapt.evaluators import fixtures
 from openadapt.models import KeyAction, MouseAction, Window
 
 LOG_LEVEL = "DEBUG"
-DEFAULT_MAX_SCREEN_SIZE = (1920, 1080)
-DEFAULT_MAX_INPUT_SIZE = 1024
-DEFAULT_MAX_TOKENS = 1024
+
 
 utils.configure_logging(logger, LOG_LEVEL)
 
