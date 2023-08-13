@@ -1,10 +1,12 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from enum import Enum
+from typing import Any, Optional, Union
 import io
 
 from loguru import logger
 from PIL import Image, ImageChops
+from pydantic import BaseModel
 from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
@@ -399,3 +401,45 @@ class MemoryStat(db.Base):
     recording_timestamp = sa.Column(sa.Integer)
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+class Window(BaseModel):
+    title: str
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+class MouseActionType(Enum):
+    click = "click"
+    move = "move"
+
+
+class MouseButton(Enum):
+    left = "left"
+    right = "right"
+
+
+class KeyActionType(Enum):
+    press = "press"
+    release = "release"
+
+
+class MouseAction(BaseModel):
+    name: MouseActionType
+    mouse_x: float
+    mouse_y: float
+    mouse_button_name: Optional[MouseButton]
+    mouse_pressed: Optional[bool]
+    element_state: Optional[dict[Any, Any]]
+
+
+class KeyAction(BaseModel):
+    name: KeyActionType
+    key_name: Optional[str]
+    element_state: Optional[dict[Any, Any]]
+
+
+class ActionEvents(BaseModel):
+    actions: list[Any]

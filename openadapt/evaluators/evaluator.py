@@ -6,7 +6,7 @@ from loguru import logger
 
 from openadapt import utils
 from openadapt.evaluators import fixtures
-from openadapt.evaluators.data_models import KeyAction, MouseAction, Window
+from openadapt.models import KeyAction, MouseAction, Window
 
 LOG_LEVEL = "DEBUG"
 DEFAULT_MAX_SCREEN_SIZE = (1920, 1080)
@@ -71,90 +71,70 @@ class BaseEvaluator:
             float: average score
         """
         self.init_model()
-        # [TODO] run evaluation on different fixtures
+        # TODO: run evaluation on different fixtures
         ref_window, action, active_window = fixtures.generate_single_mouse()
         prompt = self.build_prompt(ref_window, action, active_window)
         completion = self.get_completion(prompt)
-        score = self._score_completion(completion, action)
+        score = self._score_completion(completion, active_window, action)
         logger.info(f"Average score is {score=}")
         return score
 
-    def _euclidean_distance(
-        self, point1: Tuple[float, float], point2: Tuple[float, float]
-    ):
-        """Calculate the euclidean distance between two points
-
-        Args:
-            point1 (Tuple[float, float]): first point
-            point2 (Tuple[float, float]): second point
-
-        Raises:
-            ValueError: if either point is not 2D
-
-        Returns:
-            float: euclidean distance between the two points
-        """
-        if len(point1) != 2 or len(point2) != 2:
-            raise ValueError("Both points must be 2D coordinates (x, y)")
-
-        x1, y1 = point1
-        x2, y2 = point2
-        distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        return distance
+    def _is_valid_position(
+        self, position: tuple[int, int], active_window: Window
+    ) -> bool:
+        if (
+            position[0] < active_window.left
+            or position[0] > active_window.left + active_window.width
+        ):
+            return False
+        if (
+            position[1] < active_window.top
+            or position[1] > active_window.top + active_window.height
+        ):
+            return False
+        return True
 
     def _score_valid_actions(
         self,
         ref_action: KeyAction | MouseAction,
+        active_window: Window,
         prediction_action: KeyAction | MouseAction,
-    ) -> float:
+    ) -> bool:
         """Score the validity of the predicted action
 
         Args:
             ref_action (KeyAction | MouseAction): reference action
+            active_window (Window): active window
             prediction_action (KeyAction | MouseAction): predicted action
 
         Returns:
-            float: score of the predicted action
+            bool: True/False score to indicate this completion is valid or not
         """
-        score = 0
         # verify if ref_action and prediction_action are of the same object type
         if type(ref_action) != type(prediction_action):
-            # if the actions are not of the same type, return 0.1, as a correct action
-            # is already worth the score
-            return score + 0.1
+            return False
         # if it is same key action, same button pressed, give full score
         if type(ref_action) == KeyAction:
-            score += 0.5
-            if ref_action.name == prediction_action.name:
-                score += 0.25
-            if ref_action.key_name == prediction_action.key_name:
-                score += 0.25
-            return score
+            if (
+                ref_action.name == prediction_action.name
+                and ref_action.key_name == prediction_action.key_name
+            ):
+                return True
+            return False
 
-        # for mouse actions, give score for each attribute
-        # the point click is compared by Euclidean distance to see how close the
-        # predicted point is to the reference point
         if type(ref_action) == MouseAction:
-            score += 0.5
-
-            if ref_action.name == prediction_action.name:
-                score += 0.10
-            if ref_action.mouse_button_name == prediction_action.mouse_button_name:
-                score += 0.10
-            if ref_action.mouse_pressed == prediction_action.mouse_pressed:
-                score += 0.10
+            if ref_action.name != prediction_action.name:
+                return False
+            if ref_action.mouse_button_name != prediction_action.mouse_button_name:
+                return False
+            if ref_action.mouse_pressed != prediction_action.mouse_pressed:
+                return False
 
             ref_mouse_pos = (ref_action.mouse_x, ref_action.mouse_y)
-            prediction_mouse_pos = (
-                prediction_action.mouse_x,
-                prediction_action.mouse_y,
-            )
-            distance = self._euclidean_distance(ref_mouse_pos, prediction_mouse_pos)
-            normalized_distance = distance / self.max_screen_size[0]
-            # the smaller the distance, the better the score
-            additional_score = 0.1 - normalized_distance
-            score += additional_score
-            return score
+            # verify if ref_mouse_pos is within the active window
+            if not self._is_valid_position(ref_mouse_pos, active_window):
+                return False
+            return True
 
     def parse_completion(self, completion: str) -> KeyAction | MouseAction:
         """Parse a completion string to a KeyAction or MouseAction
@@ -170,7 +150,7 @@ class BaseEvaluator:
         except Exception as e:
             logger.error(f"Failed to parse completion: {e}, {completion=}")
             return None
-        # [TODO] handle list of actions
+        # TODO: handle list of actions
         result = results[0]
         # try to parse the result to a KeyAction or MouseAction
         try:
@@ -185,8 +165,11 @@ class BaseEvaluator:
                 return None
 
     def _score_completion(
-        self, completion: str, ref_action: KeyAction | MouseAction
-    ) -> float:
+        self,
+        completion: str,
+        active_window: Window,
+        ref_action: KeyAction | MouseAction,
+    ) -> bool:
         """Score a completion based on the reference action
 
         Args:
@@ -194,11 +177,11 @@ class BaseEvaluator:
             ref_action (KeyAction | MouseAction): reference action
 
         Returns:
-            float: score to represent the similarity between the completion and the reference action
+            bool: True/False score to indicate this completion is valid or not
         """
         completion = completion[completion.find("[") : completion.find("]") + 1]
         action = self.parse_completion(completion)
         if not action:
-            return 0
-        score = self._score_valid_actions(ref_action, action)
+            return False
+        score = self._score_valid_actions(ref_action, active_window, action)
         return score

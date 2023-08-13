@@ -10,12 +10,11 @@ The `BaseEvaluator` class perform the following action:
 The `BaseEvaluator` class does NOT implement code related to model prompts and completion. It only peform the evaluation based on a basic single mouse action or key board action.
 
 The score is given as following:
+For any given pair of `active_window` and `reference_action`:
 
-- As long as the completion can be parsed to a valid action, a score is given.
-- A maximum score of 0.9-1 is given to the prediction which predicts the exact same action as the reference.
-- If it is a key action, then compare the type of action : `press` or `release` and the key used.
-- If it is a mouse action, then compare the type of action: `click` or `move`, then calculate the normalized `Euclidean distance` between the reference point and the predicted point.
-
+- If both the predicted action and reference action are of type key press and the same key is press, give score `True`
+- If both the predicted action and reference action are of type mouse click or mouse movement and the clicked, moved position of the mouse cursor is within the boundary of the active window, give score `True`
+- Give score `False` to everything else
 
 
 ### How to use the `evaluator` module
@@ -40,98 +39,4 @@ and implement the following methods
 - `parse_completion`: how to parse a completion to a valid Action
 
 
-As these methods are model specific, it is not implemented inside `BaseEvaluator`
-
-```python
-from typing import Tuple
-
-from loguru import logger
-import fire
-import transformers as tf
-
-from openadapt import utils
-from openadapt.evaluators.data_models import KeyAction, MouseAction, Window
-from openadapt.evaluators.evaluator import BaseEvaluation
-
-LOG_LEVEL = "DEBUG"
-MAX_SCREEN_SIZE = (1920, 1080)
-MAX_INPUT_SIZE = 1024
-MAX_TOKENS = 1024
-
-utils.configure_logging(logger, LOG_LEVEL)
-
-
-class MyFineTunedModelEvaluator(BaseEvaluator):
-    def __init__(
-        self,
-        model_name: str = "my-fine-tuned-model",
-        max_input_size: int = MAX_INPUT_SIZE,
-        max_tokens: int = MAX_TOKENS,
-        max_screen_size: Tuple[int, int] = MAX_SCREEN_SIZE,
-    ):
-        super().__init__(
-            model_name=model_name,
-            max_input_size=max_input_size,
-            max_tokens=max_tokens,
-            max_screen_size=max_screen_size,
-        )
-
-    def init_model(self):
-        logger.info(f"{self.model_name=}")
-        self.tokenizer = tf.AutoTokenizer.from_pretrained(self.model_name)
-        self.model = tf.AutoModelForCausalLM.from_pretrained(self.model_name)
-
-    def get_completion(
-        self,
-        prompt: str,
-    ):
-        if len(prompt) > self.max_input_size:
-            logger.warning(f"Truncating from {len(prompt) =} to {self.max_input_size=}")
-            prompt = prompt[-self.max_input_size :]
-            logger.warning(f"Truncated {len(prompt)=}")
-        input_tokens = self.tokenizer(prompt, return_tensors="pt")
-        pad_token_id = self.tokenizer.eos_token_id
-        attention_mask = input_tokens["attention_mask"]
-        output_tokens = self.model.generate(
-            input_ids=input_tokens["input_ids"],
-            attention_mask=attention_mask,
-            pad_token_id=pad_token_id,
-            max_length=1000,
-            num_return_sequences=1,
-        )
-        N = input_tokens["input_ids"].shape[-1]
-        completion = self.tokenizer.decode(
-            output_tokens[:, N:][0],
-            clean_up_tokenization_spaces=True,
-        )
-        completion = self.tokenizer.decode(output_tokens[0])
-        return completion
-
-    def build_prompt(
-        self, ref_window: Window, action: KeyAction | MouseAction, active_window: Window
-    ):
-        prompt = (
-            f"{ref_window.dict()=} {action.dict()=} {active_window=} # Provide valid"
-            " Python3 code containing the action dicts by completing the following,"
-            " and nothing else: active_action_dict="
-        )
-        return prompt
-
-
-def main():
-    evaluation = GPT2Evaluator()
-    evaluation.evaluate_single_action()
-
-
-def start():
-    fire.Fire(main)
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
-
-
-
-
-
-```
+As these methods are model specific, it is not implemented inside `BaseEvaluator`. Refer to [an example for implementation](./examples/gpt2_evaluator.py)

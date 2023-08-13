@@ -1,4 +1,4 @@
-from openadapt.evaluators.data_models import (
+from openadapt.models import (
     ActionEvents,
     KeyAction,
     KeyActionType,
@@ -54,6 +54,9 @@ NEW_MULTI_ACTION_WIN_LEFT = 87
 NEW_MULTI_ACTION_WIN_TOP = 101
 
 MULTI_ACTION_LOOP_GUARD = 20
+
+# TODO: Consider moving all code related to generation of fixtures
+# data to a common space. This will allow for easier maintenance
 
 
 def generate_single_mouse() -> tuple[Window, MouseAction, Window]:

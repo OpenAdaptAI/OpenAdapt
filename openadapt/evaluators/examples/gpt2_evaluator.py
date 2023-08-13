@@ -5,8 +5,8 @@ import fire
 import transformers as tf
 
 from openadapt import utils
-from openadapt.evaluators.data_models import KeyAction, MouseAction, Window
 from openadapt.evaluators.evaluator import BaseEvaluator
+from openadapt.models import KeyAction, MouseAction, Window
 
 LOG_LEVEL = "DEBUG"
 MAX_SCREEN_SIZE = (1920, 1080)
