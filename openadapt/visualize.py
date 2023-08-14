@@ -7,12 +7,13 @@ from pprint import pformat
 
 from loguru import logger
 from nicegui import events, ui
+from notifypy import Notify
 from tqdm import tqdm
+import click
 
 from openadapt import config
-from openadapt.crud import get_latest_recording
+from openadapt.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
-from openadapt.models import Recording
 from openadapt.utils import (
     EMPTY,
     configure_logging,
@@ -58,7 +59,7 @@ def create_tree(
         node = {
             "id": (
                 str(key)
-                + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"
+                + f"{(': '  + str(value)) if not isinstance(value, (dict, list)) else ''}"  # noqa
             )
         }
         if isinstance(value, dict):
@@ -123,16 +124,22 @@ def toggle_dark_mode(
 
 
 @logger.catch
-def main(recording: Recording = get_latest_recording()) -> None:
-    """Visualize a recording.
-
-    Args:
-        recording (Recording, optional): The recording to visualize.
-        Defaults to get_latest_recording().
-    """
+@click.command()
+@click.option(
+    "--timestamp",
+    type=str,
+    help="The timestamp of the recording to visualize.",
+)
+def main(timestamp: str, notify: bool = True) -> None:
+    """Visualize a recording."""
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
+
+    if timestamp is None:
+        recording = get_latest_recording()
+    else:
+        recording = get_recording(timestamp)
 
     if SCRUB:
         scrub.scrub_text(recording.task_description)
@@ -235,7 +242,10 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
                 ui.button(
                     on_click=lambda: plot_performance(
-                        recording.timestamp, save_file=True, view_file=False
+                        recording.timestamp,
+                        save_file=True,
+                        view_file=False,
+                        dark_mode=ui_dark.value,
                     ),
                     icon="save",
                 ).props("flat fab").tooltip("Save as PNG")
@@ -387,12 +397,21 @@ def main(recording: Recording = get_latest_recording()) -> None:
 
         progress.close()
 
+    if notify:
+        Notify("Status", "Visualization finished", "OpenAdapt").send()
+        if not config.VISUALIZE_RUN_NATIVELY:
+            Notify(
+                "Status",
+                "Press Ctrl+C in the terminal to stop the visualization",
+                "OpenAdapt",
+            ).send()
+
     ui.run(
         reload=False,
         title=f"OpenAdapt: recording-{recording.id}",
         favicon="📊",
         native=config.VISUALIZE_RUN_NATIVELY,
-        fullscreen=False,
+        fullscreen=config.VISUALIZE_RUN_NATIVELY,
     )
 
 
