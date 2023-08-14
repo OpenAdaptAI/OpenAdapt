@@ -43,4 +43,6 @@ jobs:
           poetry install
           poetry config pypi-token.pypi $PYPI_TOKEN
           poetry build
-          poetry publish --no-interaction --skip-existing
+          poetry config repositories.openadapt https://test.pypi.org/legacy/
+          poetry config pypi-token.test-pypi $TEST_PYPI_API_TOKEN
+          poetry publish -r test-pypi  --no-interaction --skip-existing
