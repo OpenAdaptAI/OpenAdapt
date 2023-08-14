@@ -3,6 +3,7 @@ import transformers
 import io
 import time
 
+BASE_LLAMA_PATH = "decapoda-research/llama-7b-hf"
 CONDA_IMAGE = (
     modal.Image.conda()
     .conda_install(
@@ -32,8 +33,10 @@ CONDA_IMAGE = (
         "wandb==0.13.4",
     )
 )
+GISTING_LLAMA_PATH = "jayelm/llama-7b-gist-1"
 
-stub = modal.Stub("incorporate bigger LLMS for generative mixins", image=CONDA_IMAGE)
+
+stub = modal.Stub("Prompt compression using gisting", image=CONDA_IMAGE)
 
 
 @stub.function(gpu=modal.gpu.A100(count=1), timeout=1500)
@@ -41,8 +44,10 @@ def infer(instruction: str):
     from gisting_test.src import compress
 
     output = compress.main(
-        model_name_or_path="jayelm/llama-7b-gist-1",
-        base_llama_path="decapoda-research/llama-7b-hf",
+        # LLama-7b is the only model that leads to a successful
+        # run on Modal, and as such is left as a constant for now.
+        model_name_or_path=GISTING_LLAMA_PATH,
+        base_llama_path=BASE_LLAMA_PATH,
         instruction=instruction,
     )
     return output
@@ -51,9 +56,3 @@ def infer(instruction: str):
 @stub.local_entrypoint()
 def execute(prompt: str):
     return infer.call(prompt)
-
-
-if __name__ == "__main__":
-    prompt = input()
-    with stub.run():
-        execute(prompt)
