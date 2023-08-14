@@ -9,7 +9,7 @@ IMAGE_FILE_NAMES = [
     "tests/openadapt/assets/test_ladingbill.png",
     "tests/openadapt/assets/test_invoice.png",
     "tests/openadapt/assets/test_calendar.png",
-    "/Users/owaiszahid/Desktop/LLD/OpenAdapt/tests/openadapt/assets/test_calc.png",
+    "tests/openadapt/assets/test_calc.png",
 ]
 
 
