@@ -15,7 +15,7 @@ CONDA_IMAGE = (
     .apt_install("git")
     .pip_install(
         "git+https://github.com/huggingface/transformers@fb366b9a2a",
-        "gisting_test==0.2.3",
+        "gisting_test==0.2.5",
         "accelerate==0.18.0",
         "datasets==2.10.0",
         "deepspeed==0.8.3",
