@@ -1,10 +1,10 @@
 all: qsysinfo vwin
 
 clean:
-	del *.exe
+	del bin/*.exe
 
 qsysinfo:
-	gcc -O3 qsysinfo.c -o qsysinfo.exe -lntdll -lShlwapi
+	gcc -O3 qsysinfo.c -o bin/qsysinfo.exe -lntdll -lShlwapi
 
 vwin:
-	gcc -O3 vwin.c -o vwin.exe
+	gcc -O3 vwin.c -o bin/vwin.exe
