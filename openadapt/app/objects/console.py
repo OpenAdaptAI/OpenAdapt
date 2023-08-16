@@ -19,7 +19,7 @@ class Console(object):
         """Initialize the Console object."""
         self.log = ui.log().classes("w-full h-20")
         self.old_stderr = sys.stderr
-        sys.stderr = self
+        self.buffer = ""
 
     def write(self, data: str) -> None:
         """Write data to the log.
@@ -29,10 +29,12 @@ class Console(object):
         """
         self.log.push(data[:-1])
         self.log.update()
+        self.old_stderr.write(data)
 
     def flush(self) -> None:
         """Flush the log."""
         self.log.update()
+        self.old_stderr.flush()
 
     def reset(self) -> None:
         """Reset the log and restore stderr."""
