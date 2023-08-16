@@ -50,3 +50,9 @@ class GenericHuggingFaceProvider(CompletionProvider):
             )
             model = GenericHuggingFaceProvider.fetch_model(model_name=model_name)
             raise NotImplementedError
+
+    def save_model():
+        raise NotImplementedError
+
+    def fine_tune():
+        raise NotImplementedError
