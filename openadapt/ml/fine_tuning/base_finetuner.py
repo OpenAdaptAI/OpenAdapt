@@ -24,7 +24,6 @@ class DataProcessor:
                 self._sanitize(total_acx[i])[1],
             )
             processed_wd.pop("meta")
-            # which timestamp to finetune on?
             total_acx[i] = (processed_acx, processed_wd)
         return total_acx
 
@@ -89,21 +88,16 @@ class FineTuner:
         The output data is stored in a temporary file and the path to the
         file is returned.
         """
-        pass
+        raise NotImplementedError
 
     def tune_model(self, fine_tune_data_path: Optional[str] = None) -> any:
         """
         Fine tune the model with the given data.
         """
-        pass
+        raise NotImplementedError
 
     def tune_model_autoregressively(self, recording_id: str):
         """
         Fine tune the model autoregressively on the given recording.
         """
-        data = self.data_processor.generate_data(recording_id)
-        # TODO: Save condensed data to a temporary file for fine-tuning
-        # TODO: Fine-tune the model with the data
-        prep_data_path = self.prepare_data_for_tuning("tmp/data/prompt.json")
-        self.tune_model(prep_data_path)
-        # TODO: maybe return the fine-tuned model name or fine tuned params
+        raise NotImplementedError

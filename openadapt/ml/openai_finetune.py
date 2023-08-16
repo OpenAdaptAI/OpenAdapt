@@ -1,21 +1,36 @@
-from openadapt.crud import *
-from openadapt import models, utils
-from copy import deepcopy
-from loguru import logger
-import json
-import openai
-import fire
+from openadapt.ml.fine_tuning.base_finetuner import FineTuner
+from typing import Optional
+import subprocess
 
+class OpenAIFineTuner(FineTuner):
+    def __init__(self, model_name) -> None:
+        super().__init__()
+        self.model_name = model_name
 
-def main(recording_id: int):
-    write_to_file(recording_id)
+    def prepare_data_for_tuning(self, file_path: str) -> str:
+        """
+        Prepare the data for fine-tuning the model. The data should be
+        stored in correct format in the given file path.
 
+        The output data is stored in a temporary file and the path to the
+        file is returned.
+        """
+        output = subprocess.run(
+            ["openai", "tools", "fine_tunes.prepare_data", "-f", file_path],
+            capture_output=True,
+        )
+        return output.stdout.decode("utf-8")
+    
+    def tune_model(self, fine_tune_data_path: Optional[str] = None):
+        output = subprocess.run(
+            ["openai", "api", "fine_tunes.create", "-t", fine_tune_data_path, "-m", self.model_name],
+            capture_output=True,
+        )
+        return output.stdout.decode("utf-8")
 
+"""
 def write_to_file(recording_id: int):
-    """
-    Creates a file for a new recording and writes
-    the prompt, completion pairs to it.
-    """
+    
     condensed_recording = condense_window_state(recording_id)
     # for curr_acx, curr_window in condensed_recording:
     #   curr_pair= f'action:{curr_acx}, window: {curr_window}'
@@ -42,56 +57,4 @@ def write_to_file(recording_id: int):
             json_file.write("\n")
 
         json_file.close()
-
-
-def run_inference(incomplete_recording_id: int, finetuned_model):
-    processed_recording = condense_window_state(incomplete_recording_id)
-    openai.Completion.create(model=finetuned_model, prompt=processed_recording)
-
-
-def sanitize(action):
-    # taken from statefulreplaystrat
-    reference_window = action.window_event
-
-    reference_window_dict = deepcopy(
-        {
-            key: val
-            for key, val in utils.row2dict(reference_window, follow=False).items()
-            if val is not None
-            and not key.endswith("timestamp")
-            and not key.endswith("id")
-            # and not isinstance(getattr(models.WindowEvent, key), property)
-        }
-    )
-    if action.children:
-        reference_action_dicts = [
-            deepcopy(
-                {
-                    key: val
-                    for key, val in utils.row2dict(child, follow=False).items()
-                    if val is not None
-                    and not key.endswith("timestamp")
-                    and not key.endswith("id")
-                    and not isinstance(getattr(models.ActionEvent, key), property)
-                }
-            )
-            for child in action.children
-        ]
-    else:
-        reference_action_dicts = [
-            deepcopy(
-                {
-                    key: val
-                    for key, val in utils.row2dict(action, follow=False).items()
-                    if val is not None
-                    and not key.endswith("timestamp")
-                    and not key.endswith("id")
-                }
-            )
-        ]
-    reference_window_dict["state"].pop("data")
-    return reference_action_dicts, reference_window_dict["state"]
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
+"""
