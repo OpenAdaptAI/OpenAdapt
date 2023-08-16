@@ -32,7 +32,7 @@ _DEFAULTS = {
     "TEST_OPENAI": False,
     "DEFAULT_SIGNALS": [(".venv/lib/site-packages","openai.Completion.create")],
     "DIRECTORIES_TO_AVOID": ["System32", "Windows", "Program Files", "Program Files (x86)", "Temp"],
-    "FILE_TYPE_WHITELIST": [".json", ".csv", ".txt", ".xlsx", ".xls"],
+    "FILE_TYPE_WHITELIST": [".json", ".csv", ".txt", ".xlsx", ".xls", ".log"],
     # IGNORES WARNINGS (PICKLING, ETC.)
     # TODO: ignore warnings by default on GUI
     "IGNORE_WARNINGS": False,

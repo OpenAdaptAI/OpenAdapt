@@ -10,7 +10,7 @@ def get_window_pid(title):
     hwnd = win32gui.FindWindow(None, title)
     if not hwnd:
         logger.info(f"Window not found: {title}")
-        return None
+        return 0
     threadid,pid = win32process.GetWindowThreadProcessId(hwnd)
     return pid
 

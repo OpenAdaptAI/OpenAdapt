@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import tracemalloc
+import pathlib
 
 from loguru import logger
 from pympler import tracker
@@ -28,6 +29,7 @@ import psutil
 
 from openadapt import config, crud, utils, window
 from openadapt.extensions import synchronized_queue as sq
+from openadapt.scripts.lm import get_recent_files
 from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
@@ -198,11 +200,11 @@ def process_events(
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         #logger.info(f"{event_q.qsize()=}")
-        if prev_event is not None:
-            assert event.timestamp > prev_event.timestamp, (
-                event,
-                prev_event,
-            )
+        # if prev_event is not None:
+        #     assert event.timestamp > prev_event.timestamp, (
+        #         event,
+        #         prev_event,
+        #     )
         if event.type == "screen":
             prev_screen_event = event
         elif event.type == "window":
@@ -690,7 +692,35 @@ def get_file_signal_data():
 
     try:
         if ACTIVE_PID.value != 0:
-            process = psutil.Process(ACTIVE_PID.value)
+            logger.info(f"Gathering recently opened files")
+            folder_to_explore = [pathlib.Path.home()]
+            patterns_to_ignore = [
+                ".DS_Store",
+                ".git",
+                ".vscode",
+                "__pycache__",
+                "node_modules",
+                ".exe",
+                "AppData",
+                ".lnk",
+                ".ini"
+            ]
+            time1 = time.time()
+            recent_files = get_recent_files(folders=folder_to_explore, ignore_patterns=patterns_to_ignore, limit=10)
+            logger.info(f"Time to gather recent files: {time.time() - time1}")
+
+
+            long_fpath = ""
+            for file in recent_files:
+                long_fpath = long_fpath + str(file)
+                logger.info(f"{str(file)}")
+
+            #logger.info(f"{ACTIVE_PID.value=} {long_fpath=}")
+
+            file_signal_addresses["pid"] = ACTIVE_PID.value
+            file_signal_addresses["file_path"] = long_fpath
+
+            # process = psutil.Process(ACTIVE_PID.value)
             # for proc in psutil.process_iter():
             #     try:
             #         pid = proc.pid
@@ -698,23 +728,23 @@ def get_file_signal_data():
             #         logger.info(f"{pid=} {open_file=}")
             #     except:
             #         pass
+            # open_files = process.open_files()
+            # for file in open_files:
+            #     fpath = file.path
+            #     logger.info(f"{fpath=}")
+            #     for file_type in FILE_TYPE_WHITELIST:
+            #         if str(fpath).endswith(file_type):
+            #             if (
+            #                 not any(
+            #                     directory in str(fpath)
+            #                     for directory in DIRECTORIES_TO_AVOID
+            #                 )
+            #             ):
+            #                 logger.info(f"Open file: {fpath}")
+            #                 file_signal_addresses["pid"] = ACTIVE_PID.value
+            #                 file_signal_addresses["file_path"] = fpath
+            #                 # file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
 
-            open_files = process.open_files()
-            for file in open_files:
-                fpath = file.path
-                logger.info(f"{fpath=}")
-                for file_type in FILE_TYPE_WHITELIST:
-                    if str(fpath).endswith(file_type):
-                        if (
-                            not any(
-                                directory in str(fpath)
-                                for directory in DIRECTORIES_TO_AVOID
-                            )
-                        ):
-                            logger.info(f"Open file: {fpath}")
-                            file_signal_addresses["pid"] = ACTIVE_PID.value
-                            file_signal_addresses["file_path"] = fpath
-                            # file_signal_addresses.append({'pid': ACTIVE_PID, 'path': fpath})
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         print("No such process or access denied")
 
