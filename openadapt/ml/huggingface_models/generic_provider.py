@@ -31,3 +31,18 @@ class GenericHuggingFaceProvider(CompletionProvider):
             task=task, model=model_name, trust_remote_code=trust_remote_code
         )
         return hf_pipeline
+
+    # TODO: Pipeline is a hack, give users the option to decode logits
+    def infer(prompt: str, model_name: str, task_description=True, use_pipeline=True):
+        """
+        Infers on the model of the user's choice. Currently resorting to
+        defaulting on using HF pipelines for the inference.
+        """
+        if use_pipeline and task_description:
+            inference_pipeline = GenericHuggingFaceProvider.create_pipeline(
+                model_name=model_name, task=task_description
+            )
+            inference_output = inference_pipeline(prompt)
+            return inference_output
+        else:
+            raise NotImplementedError

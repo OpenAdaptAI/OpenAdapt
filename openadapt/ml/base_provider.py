@@ -30,7 +30,7 @@ class CompletionProvider(BaseModel):
     Modalities: list[Modality]
     Availabilities: list[Availability]
 
-    def infer(prompt: str):
+    def infer(prompt: str, model_name: str):
         raise NotImplementedError
 
     def finetune(prompt_completion_pair: list[dict[str]]):
