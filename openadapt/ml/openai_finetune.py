@@ -9,7 +9,7 @@ class OpenAIFineTuner(FineTuner):
         super().__init__()
         self.model_name = model_name
 
-    def prepare_data_for_tuning(self, file_path: str) -> str:
+    def check_data_for_tuning(self, file_path: str) -> str:
         """
         Prepare the data for fine-tuning the model. The data should be
         stored in correct format in the given file path.
@@ -38,11 +38,12 @@ class OpenAIFineTuner(FineTuner):
         )
         return output.stdout.decode("utf-8")
 
-    def write_to_file(self, recording_id: int) -> str:
+    def prepare_data_for_tuning(self, recording_id: int) -> str:
         """
         users must invoke this to prepare their data into a JSONL file
         formatted according to OpenAI Finetune standards. The function
-        returns the file path which can be passed into prepare_data_for_tuning.
+        returns the file path which can be passed into check_data_for_tuning
+        to confirm that it has been formatted properly.
         """
         condensed_recording = self.data_processor._condense_data(recording_id)
 
