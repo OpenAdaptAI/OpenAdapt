@@ -11,30 +11,6 @@ def main(recording_id: int):
     write_to_file(recording_id)
 
 
-def condense_window_state(recording_id: int):
-    """
-    Takes in a recording as input and outputs a list of tuples
-    of action, window events where window events are condensed
-    to contain basic information, as in stateful_test.py
-    """
-    grab_recording = get_recording_by_id(recording_id)
-    total_acx = get_action_events(grab_recording)
-
-    for i in range(len(total_acx)):
-        processed_acx, processed_wd = (
-            sanitize(total_acx[i])[0],
-            sanitize(total_acx[i])[1],
-        )
-        processed_wd.pop("meta")
-        # task_description = recording.task_description
-
-        logger.debug(f"{total_acx[i].timestamp=}")
-        logger.debug(f"{total_acx[i].window_event_timestamp=}")
-        # which timestamp to finetune on?
-        total_acx[i] = (processed_acx, processed_wd)
-    return total_acx
-
-
 def write_to_file(recording_id: int):
     """
     Creates a file for a new recording and writes
