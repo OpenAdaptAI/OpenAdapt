@@ -40,7 +40,7 @@ class OpenAIFineTuner(FineTuner):
 
     def prepare_data_for_tuning(self, recording_id: int) -> str:
         """
-        users must invoke this to prepare their data into a JSONL file
+        Users must invoke this to prepare their data into a JSONL file
         formatted according to OpenAI Finetune standards. The function
         returns the file path which can be passed into check_data_for_tuning
         to confirm that it has been formatted properly.
