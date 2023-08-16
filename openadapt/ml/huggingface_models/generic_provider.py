@@ -45,4 +45,8 @@ class GenericHuggingFaceProvider(CompletionProvider):
             inference_output = inference_pipeline(prompt)
             return inference_output
         else:
+            tokenizer = GenericHuggingFaceProvider.create_tokenizer(
+                model_name=model_name
+            )
+            model = GenericHuggingFaceProvider.fetch_model(model_name=model_name)
             raise NotImplementedError
