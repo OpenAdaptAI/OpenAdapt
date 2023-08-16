@@ -6,7 +6,6 @@ class GPT3CompletionProvider(CompletionProvider):
     Capabilities = [
         Capability.TRAINING,
         Capability.TUNING,
-        Capability.USABLE_OUTPUT,
         Capability.INFERENCE,
     ]
     Modalities = [Modality.TEXT]
