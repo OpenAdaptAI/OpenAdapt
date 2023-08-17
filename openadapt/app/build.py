@@ -7,22 +7,23 @@ Example usage:
 """
 
 from pathlib import Path
-import os
 import subprocess
 
 import nicegui
 
 spec = [
     "pyi-makespec",
-    f"{Path(__file__).parent}/main.py",
-    f"--icon={Path(__file__).parent}/assets/logo.ico",
+    f"{Path(__file__).parent / 'tray.py'}",
+    f"--icon={Path(__file__).parent / 'assets' / 'logo.ico'}",
     "--name",
     "OpenAdapt",  # name
     # "--onefile", # trade startup speed for smaller file size
     "--onedir",
     "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
     "--add-data",
-    f"{Path(nicegui.__file__).parent}{os.pathsep}nicegui",
+    f"{Path(nicegui.__file__).parent}:{Path('nicegui')}",
+    "--add-data",
+    f"{Path(__file__).parent}:{Path('assets')}",
 ]
 
 subprocess.call(spec)
@@ -36,4 +37,6 @@ with open("OpenAdapt.spec", "r+") as f:
     f.truncate()
     f.writelines(lines)
 
-subprocess.call(["pyinstaller", "OpenAdapt.spec"])
+# building
+proc = subprocess.Popen("pyinstaller OpenAdapt.spec", shell=True)
+proc.wait()

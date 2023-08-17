@@ -5,7 +5,7 @@ import io
 
 from loguru import logger
 from PIL import Image, ImageChops
-from pynput import keyboard
+from oa_pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 
@@ -277,7 +277,7 @@ class Screenshot(db.Base):
 
     @property
     def diff(self) -> Image:
-        """Get the difference between the current screenshot and the previous screenshot."""
+        """Get the difference between the current and previous screenshot."""
         if self.png_diff_data:
             return self.convert_binary_to_png(self.png_diff_data)
 
@@ -287,7 +287,7 @@ class Screenshot(db.Base):
 
     @property
     def diff_mask(self) -> Image:
-        """Get the difference mask between the current screenshot and the previous screenshot."""
+        """Get the difference mask between the current and previous screenshot."""
         if self.png_diff_mask_data:
             return self.convert_binary_to_png(self.png_diff_mask_data)
 
@@ -347,7 +347,6 @@ class Screenshot(db.Base):
         Returns:
             bytes: The binary image data.
         """
-
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
