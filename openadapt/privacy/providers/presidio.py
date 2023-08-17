@@ -1,4 +1,4 @@
-""" A Module for Presidio Scrubbing Provider Class """
+"""A Module for Presidio Scrubbing Provider Class."""
 
 from typing import List
 
@@ -14,7 +14,7 @@ from openadapt.privacy.base import Modality, ScrubbingProvider
 
 
 class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
-    """A Class for Presidio Scrubbing Provider"""
+    """A Class for Presidio Scrubbing Provider."""
 
     name: str = config.SCRUB_PROVIDER_NAME[0]  # pylint: disable=E1101
     capabilities: List[Modality] = [Modality.TEXT, Modality.PIL_IMAGE]
@@ -187,8 +187,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
     def scrub_list_dicts(
         self, input_list: list[dict], list_keys: list = None
     ) -> list[dict]:
-        """Scrub list of dicts to remove PII/PHI
-        using Presidio ANALYZER.TRF and Anonymizer.
+        """Scrub list of dicts to remove PII/PHI.
 
         Args:
             input_list (list[dict]): A list of dicts to be scrubbed
