@@ -70,18 +70,24 @@ def replay(
     logger.info(f"{strategy=}")
 
     handler = None
+    rval = True
     if record:
         capture.start(audio=False, camera=False)
         handler = logger.add(
             open(f"captures{sep}log-{strategy_name}-{recording.timestamp}.log", "w")
         )
-    strategy.run()
+    try:
+        strategy.run()
+    except Exception as e:
+        logger.exception(e)
+        rval = False
+
     if record:
         sleep(1)
         capture.stop()
         logger.remove(handler)
 
-    return True
+    return rval
 
 
 # Entry point
