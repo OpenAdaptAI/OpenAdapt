@@ -88,6 +88,7 @@ oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
 presidio-image-redactor = "^0.0.48"
 pywebview = "^4.2.2"
 click = "^8.1.6"
+spacy-transformers = "^1.2.5"
 
 [build-system]
 requires = ["poetry-core"]

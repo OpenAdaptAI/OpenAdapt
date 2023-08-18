@@ -12,14 +12,21 @@ Module: scrub.py
 
 from typing import Union
 
+from loguru import logger
 from PIL import Image
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import fire
+import spacy
+import spacy_transformers
 
 from openadapt import config, utils
+
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+    spacy.cli.download(config.SPACY_MODEL_NAME)
 
 SCRUB_PROVIDER_TRF = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
 NLP_ENGINE_TRF = SCRUB_PROVIDER_TRF.create_engine()
