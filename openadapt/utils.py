@@ -536,6 +536,8 @@ def display_event(
         text = action_event.text
 
         if config.SCRUB_ENABLED:
+            import spacy
+
             if spacy.util.is_package(
                 config.SPACY_MODEL_NAME
             ):  # Check if the model is installed
