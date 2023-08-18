@@ -1,3 +1,12 @@
+"""
+Script for creating vision dataset of screenshots and window states taken from a recording.
+
+Usage:
+
+    $ python -m openadapt.ml.data.synthesize
+
+"""
+
 import json
 import os
 
@@ -7,7 +16,7 @@ PATH_TO_IMAGES = "openadapt/ml/data/vision_dataset/images"
 PATH_TO_JSON = "openadapt/ml/data/vision_dataset/states.json"
 
 
-def synthesize():
+def synthesize() -> None:
     """
     Creates dataset of screenshots and their respective window states from the latest recording.
     Filters out unneeded info from window states (meta, data, window_id).
@@ -17,6 +26,8 @@ def synthesize():
     window_events = get_window_events(recording)
     states = []
 
+    # if this script hasn't been run yet, image_id starts at 1
+    # if it has been run already, image_id starts at the max existing id + 1
     existing_ids = [
         int(filename.split(".")[0])
         for filename in os.listdir(PATH_TO_IMAGES)
@@ -24,6 +35,7 @@ def synthesize():
     ]
     image_id = max(existing_ids, default=0) + 1
 
+    # check if the json file already has contents
     if os.path.isfile(PATH_TO_JSON):
         with open(PATH_TO_JSON, "r") as json_file:
             existing_json = json.load(json_file)
@@ -34,6 +46,7 @@ def synthesize():
         state = event.state
 
         if state is None:
+            # create state object using the event attributes
             state = {
                 "title": event.title,
                 "left": event.left,
@@ -42,6 +55,7 @@ def synthesize():
                 "height": event.height,
             }
         else:
+            # filter unneeded info
             del state["meta"]
             del state["data"]
             del state["window_id"]
@@ -56,16 +70,6 @@ def synthesize():
     existing_json.extend(states)
     with open(PATH_TO_JSON, "w") as json_file:
         json.dump(existing_json, json_file)
-
-
-def get_event_screenshots():
-    recording = get_latest_recording()
-    window_events = get_window_events(recording)
-    screenshots = []
-    for event in window_events:
-        ss = event.action_events[-1].screenshot
-        screenshots.append(ss)
-    return screenshots
 
 
 if __name__ == "__main__":
