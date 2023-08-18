@@ -399,3 +399,15 @@ def get_window_events(recording: Recording) -> list[WindowEvent]:
         list[WindowEvent]: A list of window events for the recording.
     """
     return _get(WindowEvent, recording.timestamp)
+
+
+def new_session() -> None:
+    """Create a new database session.
+
+    This was necessary because the database session was not being closed
+    properly, and the database would become locked.
+    """
+    global db
+    if db:
+        db.close()
+    db = Session()
