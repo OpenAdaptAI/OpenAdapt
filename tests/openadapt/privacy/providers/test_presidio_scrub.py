@@ -11,7 +11,7 @@ import spacy
 from openadapt import config
 
 if not spacy.util.is_package(config.SPACY_MODEL_NAME):
-    pytest.mark.skip(reason="SpaCy model not installed.")
+    pytest.mark.skip(reason="SpaCy model not installed!")
 else:
     from openadapt.privacy.base import Modality, ScrubbingProviderFactory
     from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
