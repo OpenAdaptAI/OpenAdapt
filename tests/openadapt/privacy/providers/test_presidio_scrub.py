@@ -3,15 +3,20 @@
 
 from io import BytesIO
 import os
-import warnings
 
 from PIL import Image
+import pytest
+import spacy
 
 from openadapt import config
-from openadapt.privacy.base import Modality, ScrubbingProviderFactory
-from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
-scrub = PresidioScrubbingProvider()
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    pytest.mark.skip(reason="SpaCy model not installed.")
+else:
+    from openadapt.privacy.base import Modality, ScrubbingProviderFactory
+    from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+    scrub = PresidioScrubbingProvider()
 
 
 def test_scrubbing_provider_factory() -> None:

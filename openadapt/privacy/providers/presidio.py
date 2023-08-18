@@ -8,9 +8,15 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+import spacy
+import spacy_transformers
 
 from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
+
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+    spacy.cli.download(config.SPACY_MODEL_NAME)
 
 
 class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
