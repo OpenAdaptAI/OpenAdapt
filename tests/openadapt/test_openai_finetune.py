@@ -1,6 +1,6 @@
 from loguru import logger
 from openadapt.ml.fine_tuning.openai.openai_finetune import *
-
+import openai
 
 def test_openai_finetune_on_recording():
     """
@@ -26,6 +26,14 @@ def test_openai_finetune_on_recording():
     # TODO: feed a new recording using StatefulReplayStrat and
     # use the fine-tuned model for inference.
 
+def test_finetuned_completion():
+
+    test_ft_comp = openai.Completion.create(
+        model="davinci:ft-openadaptai-2023-08-18-04-09-43",
+        messages="What is my name?"
+    )
+
+    print(test_ft_comp["choices"][0]["message"]["content"])
 
 if __name__ == "__main__":
-    test_openai_finetune_on_recording()
+    test_finetuned_completion()
