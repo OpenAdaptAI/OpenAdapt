@@ -1,26 +1,50 @@
-from datetime import datetime
-from dateutil import parser
+"""Replay recorded events.
+
+Usage:
+python openadapt/replay.py <strategy_name> [--timestamp=<timestamp>]
+
+Arguments:
+strategy_name Name of the replay strategy to use.
+
+Options:
+--timestamp=<timestamp> Timestamp of the recording to replay.
+
+"""
+
 from typing import Union
 
 from loguru import logger
 import fire
 
 from openadapt import crud, utils
-
+from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
 
 
+@logger.catch
 def replay(
     strategy_name: str,
     timestamp: Union[str, None] = None,
-):
+    recording: Recording = None,
+) -> bool:
+    """Replay recorded events.
+
+    Args:
+        strategy_name (str): Name of the replay strategy to use.
+        timestamp (str, optional): Timestamp of the recording to replay.
+        recording (Recording, optional): Recording to replay.
+
+    Returns:
+        bool: True if replay was successful, None otherwise.
+    """
     utils.configure_logging(logger, LOG_LEVEL)
 
-    if timestamp:
+    if timestamp and recording is None:
         recording = crud.get_recording(timestamp)
-    else:
+    elif recording is None:
         recording = crud.get_latest_recording()
+
     logger.debug(f"{recording=}")
     assert recording, "No recording found"
 
@@ -43,10 +67,12 @@ def replay(
     logger.info(f"{strategy=}")
 
     strategy.run()
+    return True
 
 
-# entry point
-def start():
+# Entry point
+def start() -> None:
+    """Starts the replay."""
     fire.Fire(replay)
 
 
