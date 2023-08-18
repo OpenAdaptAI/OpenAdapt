@@ -24,7 +24,7 @@ import numpy as np
 
 from openadapt import common, config
 from openadapt.db import BaseModel
-from openadapt.logging import filter_log_messages
+from openadapt.logging_config import filter_log_messages
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
