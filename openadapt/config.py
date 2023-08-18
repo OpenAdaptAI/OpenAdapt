@@ -91,6 +91,7 @@ _DEFAULTS = {
     "PLOT_PERFORMANCE": True,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
+    "SPACY_MODEL_NAME": "en_core_web_trf",
 }
 
 # each string in STOP_STRS should only contain strings
