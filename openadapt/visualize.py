@@ -16,7 +16,6 @@ from tqdm import tqdm
 from openadapt import config, crud
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
-from openadapt.models import Recording
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
