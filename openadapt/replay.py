@@ -73,6 +73,7 @@ def replay(
     rval = True
     if record:
         capture.start(audio=False, camera=False)
+        sleep(1)
         handler = logger.add(
             open(f"captures{sep}log-{strategy_name}-{recording.timestamp}.log", "w")
         )
