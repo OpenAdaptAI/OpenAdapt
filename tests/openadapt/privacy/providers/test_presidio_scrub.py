@@ -10,7 +10,7 @@ import spacy
 
 from openadapt import config
 
-if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
     pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")
 else:
     from openadapt.privacy.base import Modality, ScrubbingProviderFactory
@@ -62,7 +62,6 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
 
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
-
     # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:

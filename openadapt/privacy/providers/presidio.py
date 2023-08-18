@@ -9,12 +9,12 @@ from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import spacy
-import spacy_transformers
+import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
 from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
 
-if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
     logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
     spacy.cli.download(config.SPACY_MODEL_NAME)
 
