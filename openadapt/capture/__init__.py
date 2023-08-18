@@ -11,6 +11,8 @@ elif sys.platform == "win32":
 else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 
+device = impl.Capture()
+
 
 def get_capture() -> impl.Capture:
     """Get the capture object.
@@ -18,16 +20,25 @@ def get_capture() -> impl.Capture:
     Returns:
         Capture: The capture object.
     """
-    return impl.Capture()
+    return device
 
 
-def start() -> None:
-    """Entry point for the capture module."""
-    capture = get_capture()
-    capture.start(audio=True, camera=False)
+def start(audio: bool = False, camera: bool = False) -> None:
+    """Start the capture."""
+    device.start(audio=audio, camera=camera)
+
+
+def stop() -> None:
+    """Stop the capture."""
+    device.stop()
+
+
+def test() -> None:
+    """Test the capture."""
+    device.start()
     input("Press enter to stop")
-    capture.stop()
+    device.stop()
 
 
 if __name__ in ("__main__", "capture"):
-    start()
+    test()

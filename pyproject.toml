@@ -3,20 +3,20 @@ name = "openadapt"
 version = "0.8.0"
 description = "GUI Process Automation with Transformers"
 authors = [
-    'Mustafa Abdulrahman <mustafa@openadapt.ai>',
-    'Richard Abrich <richard.abrich@mldsai.com>',
-    'Avid Eslami <avid@openadapt.ai>',
-    'Andrew Gorton <andrew.gorton@mail.utoronto.ca>',
-    'Krish Patel <krish@openadapt.ai>',
-    'Dian Rong <dian@openadapt.ai>',
-    'Aaron Shah <aaron@openadapt.ai>',
-    'Jesica Susanto <jesica@openadapt.ai>',
-    'Angela Zhuo <angela@openadapt.ai>',
-    'Owais Zahid <owais@openadapt.ai>',
+  'Mustafa Abdulrahman <mustafa@openadapt.ai>',
+  'Richard Abrich <richard.abrich@mldsai.com>',
+  'Avid Eslami <avid@openadapt.ai>',
+  'Andrew Gorton <andrew.gorton@mail.utoronto.ca>',
+  'Krish Patel <krish@openadapt.ai>',
+  'Dian Rong <dian@openadapt.ai>',
+  'Aaron Shah <aaron@openadapt.ai>',
+  'Jesica Susanto <jesica@openadapt.ai>',
+  'Angela Zhuo <angela@openadapt.ai>',
+  'Owais Zahid <owais@openadapt.ai>',
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
 ]
 
 readme = "README.md"
@@ -83,7 +83,7 @@ pympler = "^1.0.1"
 psutil = "^5.9.5"
 pyobjc-framework-avfoundation = { version = "^9.2", markers = "sys_platform == 'darwin'" }
 fastapi = "0.98.0"
-screen-recorder-sdk = "^1.3.0"
+screen-recorder-sdk = { version = "^1.3.0", markers = "sys_platform == 'win32'" }
 pyaudio = "^0.2.13"
 oa-pynput = "^1.7.7"
 oa-atomacos = { version = "3.2.0", markers = "sys_platform == 'darwin'" }
@@ -105,7 +105,7 @@ record = "openadapt.record:start"
 replay = "openadapt.replay:start"
 app = "openadapt.app.tray:_run"
 reset = "openadapt.scripts.reset_db:reset_db"
-capture = "openadapt.capture:start"
+capture = "openadapt.capture:test"
 
 
 [tool.black]
