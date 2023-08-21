@@ -86,6 +86,7 @@ fastapi = "0.98.0"
 presidio-image-redactor = "^0.0.48"
 oa-pynput = "^1.7.7"
 oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
+spacy-transformers = "^1.2.5"
 opencv-python = "^4.8.0.76"
 
 [build-system]

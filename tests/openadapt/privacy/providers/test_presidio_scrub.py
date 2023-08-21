@@ -1,16 +1,47 @@
 """Module to test scrub.py."""
 
+
 from io import BytesIO
 import os
 
-from loguru import logger
 from PIL import Image
-import cv2
-import pytesseract
 import pytest
-import requests
+import spacy
 
-from openadapt import config, scrub
+from openadapt import config
+
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
+    pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")
+else:
+    from openadapt.privacy.base import Modality, ScrubbingProviderFactory
+    from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+    scrub = PresidioScrubbingProvider()
+
+
+def test_scrubbing_provider_factory() -> None:
+    """Test the ScrubbingProviderFactory for Modality.TEXT."""
+    providers = ScrubbingProviderFactory.get_for_modality(Modality.TEXT)
+
+    # Ensure that we get at least one provider
+    assert providers
+
+    for provider in providers:
+        # Ensure the provider is an instance of PresidioScrubbingProvider
+        assert isinstance(provider, PresidioScrubbingProvider)
+
+        # Ensure that the provider supports Modality.TEXT
+        assert Modality.TEXT in provider.capabilities
+
+
+def test_presidio_scrub_text() -> None:
+    """Test that PresidioScrubbingProvider can scrub text."""
+    text = "My phone number is 123-456-7890."
+    expected_result = "My phone number is <PHONE_NUMBER>."
+
+    scrubbed_text = scrub.scrub_text(text)
+
+    assert scrubbed_text == expected_result
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -27,129 +58,6 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
     green = (hex_color >> 8) & 0xFF
     red = hex_color & 0xFF
     return red, green, blue
-
-
-def _enhance_image_for_ocr(input_image_path: str, enhanced_image_path: str) -> None:
-    """Enhance the image for better OCR results.
-
-    Args:
-        input_image_path (str): Path to the input image.
-        enhanced_image_path (str): Path to the enhanced image.
-
-    Returns:
-        None
-    """
-    # Covert image to 300 DPI for best OCR results with Tesseract
-    # Reference:
-    # https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html#:~:text=Tesseract%20works%20best%20on%20images,of%20capital%20letter%20in%20pixels. # pylint: disable=line-too-long # noqa: E501
-    image = Image.open(input_image_path)
-    image.save(enhanced_image_path, dpi=(300, 300))
-
-    image_read = cv2.imread(enhanced_image_path)  # pylint: disable=no-member
-    os.remove(enhanced_image_path)
-
-    # Develop contrast for better OCR results with Tesseract
-    # Reference: https://stackoverflow.com/questions/58314275/how-to-make-image-more-contrast-grayscale-then-get-all-characters-exactly-with # pylint: disable=line-too-long # noqa: E501
-
-    gray_image = cv2.cvtColor(  # pylint: disable=no-member
-        image_read, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
-    )  # developing contrast for better OCR results with Tesseract
-    thr_image = cv2.adaptiveThreshold(  # pylint: disable=no-member
-        gray_image,
-        255,
-        cv2.ADAPTIVE_THRESH_MEAN_C,  # pylint: disable=no-member
-        cv2.THRESH_BINARY_INV,  # pylint: disable=no-member
-        23,
-        100,
-    )
-    bnt_image = cv2.bitwise_not(thr_image)  # pylint: disable=no-member
-    cv2.imwrite(enhanced_image_path, bnt_image)  # pylint: disable=no-member
-
-
-def test_emr_image() -> None:
-    """Test to verify that an EMR scrubbed image does not contain any PII/PHI."""
-    test_image_path = "assets/test_emr_image.png"
-    test_image_path_300 = "assets/test_emr_image_300.png"
-    scrubbed_image_path = test_image_path[:-4] + "_scrubbed.png"
-
-    _enhance_image_for_ocr(test_image_path, test_image_path_300)
-    # original_image_text = (
-    #     pytesseract.image_to_string(Image.open(test_image_path_300))
-    # )
-    os.remove(test_image_path_300)
-
-    # Preparing for Scrubbing
-    with open(test_image_path, "rb") as file:
-        test_image_data = file.read()
-
-    # Convert image data to PIL Image object
-    test_image = Image.open(BytesIO(test_image_data))
-
-    # Scrub the image
-    scrubbed_image = scrub.scrub_image(test_image)
-
-    # Save the scrubbed image data to a file
-    scrubbed_image.save(scrubbed_image_path)
-
-    _enhance_image_for_ocr(scrubbed_image_path, test_image_path_300)
-    scrubbed_image_text = pytesseract.image_to_string(Image.open(test_image_path_300))
-    os.remove(test_image_path_300)
-    test_image.close()
-    os.remove(scrubbed_image_path)
-
-    # try:
-    # Use Cape to detect PII/PHI in the scrubbed image ocr text
-    resp = requests.post(  # pylint: disable=missing-timeout
-        "https://api.capeprivacy.com/v1/privacy/deidentify/text",
-        headers={
-            "Authorization": (
-                f"Bearer {config.CAPE_API_KEY}"  # pylint: disable=no-member
-            )
-        },
-        json={
-            "content": scrubbed_image_text,
-        },
-    )
-    cape_response = resp.json()
-
-    if (
-        "entities" not in cape_response.keys()
-        or "content" not in cape_response.keys()
-        or cape_response is None
-    ):
-        pytest.skip(reason="Cape failed to return entities and content")
-
-    detect_entities = cape_response.get("entities")
-    important_entities = [
-        "NAME",
-        "NAME_GIVEN",
-        "NAME_FAMILY",
-        "TIME",
-        "DATE",
-        "PHONE_NUMBER",
-        "DOB",
-        "EMAIL_ADDRESS",
-        "CREDIT_CARD",
-        "LOCATION",
-        "DRIVER_LICENSE",
-        "DATE_INTERVAL",
-        "SSN",
-    ]
-    filtered_entities = []
-
-    for entity in detect_entities:
-        label = entity.get("best_label")
-        if label in important_entities and label not in filtered_entities:
-            filtered_entities.append(label)
-
-    logger.debug(filtered_entities)
-
-    assert (
-        not filtered_entities
-    )  # Empty list means no important PII or PHI was found by Cape
-
-    # except Exception as e:
-    #     pytestmark = pytest.mark.skip(reason="Cape API failed to respond")
 
 
 def test_scrub_image() -> None:

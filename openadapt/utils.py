@@ -26,6 +26,7 @@ from openadapt import common, config
 from openadapt.db import BaseModel
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
+from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
 EMPTY = (None, [], {}, "")
 
@@ -534,8 +535,24 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
+
         if config.SCRUB_ENABLED:
-            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
+            import spacy
+
+            if spacy.util.is_package(
+                config.SPACY_MODEL_NAME
+            ):  # Check if the model is installed
+                from openadapt.privacy.providers.presidio import (
+                    PresidioScrubbingProvider,
+                )
+
+                text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
+            else:
+                logger.warning(
+                    f"SpaCy model not installed! {config.SPACY_MODEL_NAME=}. Using"
+                    " original text."
+                )
+
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
