@@ -14,9 +14,9 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
     pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")
 else:
     from openadapt.privacy.base import Modality, ScrubbingProviderFactory
-    from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+    from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
 
-    scrub = PresidioScrubbingProvider()
+    scrub = ComprehendScrubbingProvider()
 
 
 def test_scrubbing_provider_factory() -> None:
@@ -28,7 +28,9 @@ def test_scrubbing_provider_factory() -> None:
 
     for provider in providers:
         # Ensure the provider is an instance of PresidioScrubbingProvider
-        assert isinstance(provider, PresidioScrubbingProvider)
+        assert isinstance(
+            provider, PresidioScrubbingProvider or ComprehendScrubbingProvider
+        )
 
         # Ensure that the provider supports Modality.TEXT
         assert Modality.TEXT in provider.capabilities

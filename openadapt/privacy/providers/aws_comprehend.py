@@ -21,7 +21,7 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
     spacy.cli.download(config.SPACY_MODEL_NAME)
 
 
-class AWSComprehendScrubbingProvider(ScrubbingProvider):
+class ComprehendScrubbingProvider(ScrubbingProvider):
     """A Class for AWS Comprehend Scrubbing Provider."""
 
     name: str = config.SCRUB_PROVIDER_NAME[1]  # pylint: disable=E1101
