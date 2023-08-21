@@ -1,6 +1,5 @@
 """A Module for AWS Comprehend Scrubbing Provider Class."""
 
-
 from typing import List
 
 from botocore.exceptions import ClientError
@@ -25,7 +24,7 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
 class AWSComprehendScrubbingProvider(ScrubbingProvider):
     """A Class for AWS Comprehend Scrubbing Provider."""
 
-    name: str = config.SCRUB_PROVIDER_NAME[0]  # pylint: disable=E1101
+    name: str = config.SCRUB_PROVIDER_NAME[1]  # pylint: disable=E1101
     capabilities: List[Modality] = [Modality.TEXT]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
@@ -38,7 +37,7 @@ class AWSComprehendScrubbingProvider(ScrubbingProvider):
         Returns:
             str: Scrubbed text
         """
-        comp_detect = ComprehendDetect(boto3.client("comprehend"))
+        comp_detect = ComprehendDetect(boto3.client(self.name))  # pylint: disable=E1101
 
         languages = comp_detect.detect_languages(text)
         lang_code = languages[0]["LanguageCode"]
@@ -50,9 +49,9 @@ class AWSComprehendScrubbingProvider(ScrubbingProvider):
         for NER in reversed(pii_entities):
             scrubbed_text = (
                 scrubbed_text[: NER["BeginOffset"]]
-                + "<"
+                + config.ACTION_TEXT_NAME_PREFIX  # pylint: disable=E1101
                 + NER["Type"]
-                + ">"
+                + config.ACTION_TEXT_NAME_SUFFIX  # pylint: disable=E1101
                 + scrubbed_text[NER["EndOffset"] :]
             )
 
