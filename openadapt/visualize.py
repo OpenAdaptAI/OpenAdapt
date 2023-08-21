@@ -29,7 +29,9 @@ SCRUB = config.SCRUB_ENABLED
 if SCRUB:
     # too many warnings from scrubbing
     __import__("warnings").filterwarnings("ignore", category=DeprecationWarning)
-    from openadapt import scrub
+    from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+    scrub = PresidioScrubbingProvider()
 
 
 LOG_LEVEL = "INFO"
