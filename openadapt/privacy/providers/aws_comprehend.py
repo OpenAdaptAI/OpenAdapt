@@ -1,1 +1,1 @@
-"""A Module for AWs Comprehend Scrubbing Provider Class."""
+"""A Module for AWS Comprehend Scrubbing Provider Class."""
