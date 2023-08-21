@@ -224,6 +224,19 @@ def usage_demo():
     print(f"The first {demo_size} are:")
     pprint(syntax_tokens[:demo_size])
 
+    clean_text = sample_text
+
+    for NER in reversed(pii_entities):
+        clean_text = (
+            clean_text[: NER["BeginOffset"]]
+            + "<"
+            + NER["Type"]
+            + ">"
+            + clean_text[NER["EndOffset"] :]
+        )
+
+    print(clean_text)
+
     print("Thanks for watching!")
     print("-" * 88)
 
