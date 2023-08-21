@@ -8,8 +8,8 @@ Usage:
 
 from collections import namedtuple
 from functools import partial, wraps
-from typing import Any, Callable, Dict
 from multiprocessing.connection import Client
+from typing import Any, Callable, Dict
 import multiprocessing
 import os
 import queue
@@ -20,14 +20,14 @@ import time
 import tracemalloc
 
 from loguru import logger
+from oa_pynput import keyboard, mouse
 from pympler import tracker
-from pynput import keyboard, mouse
 from tqdm import tqdm
 import fire
 import mss.tools
 import psutil
 
-from openadapt import config, crud, utils, window, sockets
+from openadapt import config, crud, sockets, utils, window
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
 
@@ -213,7 +213,9 @@ def process_events(
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            event.data["browser_event_timestamp"] = prev_browser_event.timestamp if not prev_browser_event is None else None
+            event.data["browser_event_timestamp"] = (
+                prev_browser_event.timestamp if not prev_browser_event is None else None
+            )
             process_event(
                 event,
                 action_write_q,
@@ -624,7 +626,7 @@ def read_browser_events(
             # logger.info(f"{msg=}")
             if msg is not None:
                 logger.info("Received DOM message.")
-                browser_data = msg 
+                browser_data = msg
                 logger.debug("queuing browser event for writing")
                 event_q.put(
                     Event(
@@ -1004,7 +1006,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
-            term_pipe_child_action
+            term_pipe_child_action,
         ),
     )
     browser_event_writer.start()

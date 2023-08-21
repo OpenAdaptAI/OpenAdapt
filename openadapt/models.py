@@ -1,12 +1,11 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from typing import Any, Union
 import io
-from typing import Any
 
 from loguru import logger
+from oa_pynput import keyboard
 from PIL import Image, ImageChops
-from pynput import keyboard
 import numpy as np
 import sqlalchemy as sa
 
@@ -285,7 +284,7 @@ class Screenshot(db.Base):
 
     @property
     def diff(self) -> Image:
-        """Get the difference between the current screenshot and the previous screenshot."""
+        """Get the difference between the current and previous screenshot."""
         if self.png_diff_data:
             return self.convert_binary_to_png(self.png_diff_data)
 
@@ -295,7 +294,7 @@ class Screenshot(db.Base):
 
     @property
     def diff_mask(self) -> Image:
-        """Get the difference mask between the current screenshot and the previous screenshot."""
+        """Get the difference mask between the current and previous screenshot."""
         if self.png_diff_mask_data:
             return self.convert_binary_to_png(self.png_diff_mask_data)
 
@@ -355,7 +354,6 @@ class Screenshot(db.Base):
         Returns:
             bytes: The binary image data.
         """
-
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
@@ -389,7 +387,7 @@ class WindowEvent(db.Base):
 class BrowserEvent(db.Base):
     """Class representing a browser event in the database."""
 
-    __tablename__ = 'browser_event'
+    __tablename__ = "browser_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))

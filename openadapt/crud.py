@@ -2,7 +2,6 @@
 
 Module: crud.py
 """
-
 from typing import Any
 
 from loguru import logger
@@ -12,14 +11,12 @@ from openadapt import config
 from openadapt.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
+    BrowserEvent,
     MemoryStat,
     PerformanceStat,
     Recording,
     Screenshot,
     WindowEvent,
-    BrowserEvent,
-    PerformanceStat,
-    MemoryStat
 )
 
 BATCH_SIZE = 1
@@ -129,13 +126,9 @@ def insert_window_event(
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_browser_event(
-    recording_timestamp,
-    event_timestamp,
-    event_data
-) -> None:
+def insert_browser_event(recording_timestamp, event_timestamp, event_data) -> None:
     """Insert a browser event into the database.
-    
+
     Args:
         recording_timestamp (int): The timestamp of the recording.
         event_timestamp (int): The timestamp of the event.
@@ -218,6 +211,15 @@ def insert_recording(recording_data: Recording) -> Recording:
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+def get_all_recordings() -> list[Recording]:
+    """Get all recordings.
+
+    Returns:
+        list[Recording]: A list of all recordings.
+    """
+    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
 
 
 def get_latest_recording() -> Recording:
@@ -346,14 +348,14 @@ def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
 
 
 def save_screenshot_diff(screenshots: list[Screenshot]) -> list[Screenshot]:
-    """Save screenshot diff data to the database. The diff data is the difference
-    between two consecutive screenshots.
+    """Save screenshot diff data to the database.
 
     Args:
         screenshots (list[Screenshot]): A list of screenshots.
 
     Returns:
-        list[Screenshot]: A list of screenshots with diff data saved to the db."""
+        list[Screenshot]: A list of screenshots with diff data saved to the db.
+    """
     data_updated = False
     logger.info("verifying diffs for screenshots...")
 
@@ -412,11 +414,23 @@ def get_window_events(recording: Recording) -> list[WindowEvent]:
 
 def get_browser_events(recording) -> list[BrowserEvent]:
     """Get browser events for a given recording
-    
+
     Args:
         recording (Recording): recording object
-    
+
     Returns:
         List[BrowserEvent]: list of browser events
     """
     return _get(BrowserEvent, recording.timestamp)
+
+
+def new_session() -> None:
+    """Create a new database session.
+
+    This was necessary because the database session was not being closed
+    properly, and the database would become locked.
+    """
+    global db
+    if db:
+        db.close()
+    db = Session()

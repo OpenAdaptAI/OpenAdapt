@@ -1,7 +1,7 @@
 name: Python CI
 
 on:
-  push:
+  pull_request_target:
     branches:
       - '**'
 
@@ -51,7 +51,7 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Check formatting with Black
-        run: poetry run black --check .
+        run: poetry run black --preview --check .
 
       - name: Run Flake8
         run: poetry run flake8

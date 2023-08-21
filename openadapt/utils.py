@@ -10,7 +10,6 @@ from typing import Union
 import base64
 import inspect
 import os
-import psutil
 import signal
 import socket
 import sys
@@ -24,9 +23,11 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import psutil
 
 from openadapt import common, config
 from openadapt.db import BaseModel
+from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
@@ -60,7 +61,9 @@ def configure_logging(logger: logger, log_level: str) -> None:
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+            filter=(
+                filter_log_messages if config.MAX_NUM_WARNINGS_PER_SECOND > 0 else None
+            ),
         )
         logger.debug(f"{log_level=}")
 
@@ -534,8 +537,24 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
+
         if config.SCRUB_ENABLED:
-            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
+            import spacy
+
+            if spacy.util.is_package(
+                config.SPACY_MODEL_NAME
+            ):  # Check if the model is installed
+                from openadapt.privacy.providers.presidio import (
+                    PresidioScrubbingProvider,
+                )
+
+                text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
+            else:
+                logger.warning(
+                    f"SpaCy model not installed! {config.SPACY_MODEL_NAME=}. Using"
+                    " original text."
+                )
+
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
@@ -738,7 +757,7 @@ def get_free_port() -> int:
     """
     # Create a temporary socket to find a free port
     temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    temp_socket.bind(('localhost', 0))
+    temp_socket.bind(("localhost", 0))
     _, port = temp_socket.getsockname()
     temp_socket.close()
     return port
@@ -754,9 +773,9 @@ def send_kill_signal(pid):
 
 
 def get_pid_by_name(process_name):
-    for process in psutil.process_iter(['pid', 'name']):
-        if process.info['name'] == process_name:
-            return process.info['pid']
+    for process in psutil.process_iter(["pid", "name"]):
+        if process.info["name"] == process_name:
+            return process.info["pid"]
     return None
 
 

@@ -111,7 +111,8 @@ def get_events(
             num_screenshots_raw,
         )
         meta["num_browser_events"] = format_num(
-            num_browser_events, num_browser_events_raw,
+            num_browser_events,
+            num_browser_events_raw,
         )
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
@@ -725,9 +726,12 @@ def process_events(
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
     num_browser_events = len(browser_events)
-    num_total = num_action_events + num_window_events + num_screenshots + num_browser_events
+    num_total = (
+        num_action_events + num_window_events + num_screenshots + num_browser_events
+    )
     logger.info(
-        f"before {num_action_events=} {num_window_events=} {num_screenshots=} {num_browser_events=} "
+        "before"
+        f" {num_action_events=} {num_window_events=} {num_screenshots=} {num_browser_events=} "
         f"{num_total=}"
     )
     process_fns = [
@@ -763,25 +767,29 @@ def process_events(
             "screenshot_timestamp",
         )
         browser_events = discard_unused_events(
-            browser_events, action_events, "browser_event_timestamp",
+            browser_events,
+            action_events,
+            "browser_event_timestamp",
         )
 
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
     num_browser_events_ = len(browser_events)
-    num_total_ = num_action_events_ + num_window_events_ + num_screenshots_ + num_browser_events_
+    num_total_ = (
+        num_action_events_ + num_window_events_ + num_screenshots_ + num_browser_events_
+    )
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
     pct_browser_events = num_browser_events_ / num_browser_events
     pct_total = num_total_ / num_total
     logger.info(
-        f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} {num_browser_events_} "
+        "after"
+        f" {num_action_events_=} {num_window_events_=} {num_screenshots_=} {num_browser_events_} "
         f"{num_total=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_browser_events=} "
-        f"{pct_total=}"
+        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
     )
     return action_events, window_events, screenshots, browser_events

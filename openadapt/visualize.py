@@ -15,6 +15,8 @@ from tqdm import tqdm
 from openadapt import config
 from openadapt.crud import get_latest_recording
 from openadapt.events import get_events
+from openadapt.models import Recording
+from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
     configure_logging,
@@ -27,7 +29,7 @@ from openadapt.utils import (
 
 SCRUB = config.SCRUB_ENABLED
 if SCRUB:
-    from openadapt import scrub
+    scrub = PresidioScrubbingProvider()
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -35,8 +37,7 @@ MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template(
-    """
+CSS = string.Template("""
     table {
         outline: 1px solid black;
     }
@@ -70,8 +71,7 @@ CSS = string.Template(
     .screenshot:active img:nth-child(3) {
         display: block;
     }
-"""
-).substitute(
+""").substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -164,18 +164,12 @@ def dict2html(
             children = indicate_missing(children, all_children, "...")
         html_str = "\n".join(children)
     elif isinstance(obj, dict):
-        rows_html = "\n".join(
-            [
-                f"""
+        rows_html = "\n".join([f"""
                 <tr>
                     <th>{format_key(key, value)}</th>
                     <td>{dict2html(value, max_children)}</td>
                 </tr>
-            """
-                for key, value in obj.items()
-                if value not in EMPTY
-            ]
-        )
+            """ for key, value in obj.items() if value not in EMPTY])
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
@@ -190,11 +184,19 @@ def dict2html(
 
 
 @logger.catch
-def main() -> None:
-    """Main function to generate an HTML report for a recording."""
+def main(recording: Recording = None) -> bool:
+    """Visualize a recording.
+
+    Args:
+        recording (Recording, optional): The recording to visualize.
+
+    Returns:
+        bool: True if visualization was successful, None otherwise.
+    """
     configure_logging(logger, LOG_LEVEL)
 
-    recording = get_latest_recording()
+    if recording is None:
+        recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
@@ -302,13 +304,11 @@ def main() -> None:
                             </table>
                         """,
                         ),
-                        Div(
-                            text=f"""
+                        Div(text=f"""
                             <table>
                                 {dict2html(action_event_dict)}
                             </table>
-                        """
-                        ),
+                        """),
                     ),
                 ]
             )
@@ -334,6 +334,7 @@ def main() -> None:
         logger.info(f"{removed=}")
 
     Timer(1, cleanup).start()
+    return True
 
 
 if __name__ == "__main__":
