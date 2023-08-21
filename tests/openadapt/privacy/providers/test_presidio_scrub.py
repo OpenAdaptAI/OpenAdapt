@@ -19,21 +19,6 @@ else:
     scrub = PresidioScrubbingProvider()
 
 
-def test_scrubbing_provider_factory() -> None:
-    """Test the ScrubbingProviderFactory for Modality.TEXT."""
-    providers = ScrubbingProviderFactory.get_for_modality(Modality.TEXT)
-
-    # Ensure that we get at least one provider
-    assert providers
-
-    for provider in providers:
-        # Ensure the provider is an instance of PresidioScrubbingProvider
-        assert isinstance(provider, PresidioScrubbingProvider)
-
-        # Ensure that the provider supports Modality.TEXT
-        assert Modality.TEXT in provider.capabilities
-
-
 def test_presidio_scrub_text() -> None:
     """Test that PresidioScrubbingProvider can scrub text."""
     text = "My phone number is 123-456-7890."

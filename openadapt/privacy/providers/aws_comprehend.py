@@ -21,6 +21,63 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
     spacy.cli.download(config.SPACY_MODEL_NAME)
 
 
+# snippet-start:[python.example_code.comprehend.ComprehendDetect]
+class ComprehendDetect:
+    """Encapsulates Comprehend detection functions."""
+
+    def __init__(self, comprehend_client):
+        """
+        :param comprehend_client: A Boto3 Comprehend client.
+        """
+        self.comprehend_client = comprehend_client
+
+    # snippet-end:[python.example_code.comprehend.ComprehendDetect]
+
+    # snippet-start:[python.example_code.comprehend.DetectDominantLanguage]
+    def detect_languages(self, text):
+        """
+        Detects languages used in a document.
+
+        :param text: The document to inspect.
+        :return: The list of languages along with their confidence scores.
+        """
+        try:
+            response = self.comprehend_client.detect_dominant_language(Text=text)
+            languages = response["Languages"]
+            logger.info("Detected %s languages.", len(languages))
+        except ClientError:
+            logger.exception("Couldn't detect languages.")
+            raise
+        else:
+            return languages
+
+    # snippet-end:[python.example_code.comprehend.DetectDominantLanguage]
+
+    # snippet-start:[python.example_code.comprehend.DetectPiiEntities]
+    def detect_pii(self, text, language_code):
+        """
+        Detects personally identifiable information (PII) in a document. PII can be
+        things like names, account numbers, or addresses.
+
+        :param text: The document to inspect.
+        :param language_code: The language of the document.
+        :return: The list of PII entities along with their confidence scores.
+        """
+        try:
+            response = self.comprehend_client.detect_pii_entities(
+                Text=text, LanguageCode=language_code
+            )
+            entities = response["Entities"]
+            logger.info("Detected %s PII entities.", len(entities))
+        except ClientError:
+            logger.exception("Couldn't detect PII entities.")
+            raise
+        else:
+            return entities
+
+    # snippet-end:[python.example_code.comprehend.DetectPiiEntities]
+
+
 class ComprehendScrubbingProvider(ScrubbingProvider):
     """A Class for AWS Comprehend Scrubbing Provider."""
 
