@@ -1,4 +1,4 @@
-""" A Module for Presidio Scrubbing Provider Class """
+"""A Module for Presidio Scrubbing Provider Class."""
 
 from typing import List
 
@@ -8,13 +8,19 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+import spacy
+import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
 from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider
 
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
+    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+    spacy.cli.download(config.SPACY_MODEL_NAME)
+
 
 class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
-    """A Class for Presidio Scrubbing Provider"""
+    """A Class for Presidio Scrubbing Provider."""
 
     name: str = config.SCRUB_PROVIDER_NAME[0]  # pylint: disable=E1101
     capabilities: List[Modality] = [Modality.TEXT, Modality.PIL_IMAGE]
@@ -187,8 +193,7 @@ class PresidioScrubbingProvider(ScrubbingProvider):  # pylint: disable=W0223
     def scrub_list_dicts(
         self, input_list: list[dict], list_keys: list = None
     ) -> list[dict]:
-        """Scrub list of dicts to remove PII/PHI
-        using Presidio ANALYZER.TRF and Anonymizer.
+        """Scrub list of dicts to remove PII/PHI.
 
         Args:
             input_list (list[dict]): A list of dicts to be scrubbed
