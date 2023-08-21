@@ -43,7 +43,7 @@ _DEFAULTS = {
     # APP CONFIGURATIONS
     "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
-    "SCRUB_ENABLED": False,
+    "SCRUB_ENABLED": True,
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
@@ -63,13 +63,13 @@ _DEFAULTS = {
         # 'PHONE_NUMBER',
         # 'US_ITIN',
         # 'AU_ABN',
-        "DATE_TIME",
+        # 'DATE_TIME',
         # 'NRP',
         # 'SG_NRIC_FIN',
         # 'AU_ACN',
         # 'IP_ADDRESS',
         # 'EMAIL_ADDRESS',
-        "URL",
+        # 'URL',
         # 'IBAN_CODE',
         # 'AU_TFN',
         # 'LOCATION',
@@ -92,6 +92,7 @@ _DEFAULTS = {
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
+    "SCRUB_PROVIDER_NAME": ["Presidio"],
 }
 
 # each string in STOP_STRS should only contain strings
