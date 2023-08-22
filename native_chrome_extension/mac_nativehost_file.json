@@ -1,7 +1,7 @@
 {
     "name": "openadapt",
     "description": "OpenAdapt DOM Listener",
-    "path": "/Users/aaron/Documents/GitHub/OpenAdapt/native_chrome_extension/browser.sh",
+    "path": "/Users/aaron/Documents/GitHub/OpenAdapt/native_chrome_extension/browser.py",
     "type": "stdio",
     "allowed_origins": ["chrome-extension://nhbpabaagkpjeppjkhopppfhdjpelchg/"]
 }

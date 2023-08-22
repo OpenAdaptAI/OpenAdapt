@@ -1,36 +1,18 @@
-#!/usr/bin/env -S python3 -u
+#!/usr/bin/env python3
 
-"""Script for communicating with the browser extension.
-
-Usage:
-
-    See `native_chrome_extension/browser.bat`.
-
-"""
-
-# Note that running python with the `-u` flag is required on Windows,
-# in order to ensure that stdin and stdout are opened in binary, rather
-# than text, mode.
-
-from multiprocessing.connection import Listener
-from typing import Any
 import json
+import sqlite3
 import struct
 import sys
 
-from loguru import logger
-
-from openadapt import config, sockets
+STORE_DATA = False
 
 
-def get_message() -> Any:
+def get_message() -> dict:
     """Read a message from stdin and decode it.
 
-    Args:
-        None
-
     Returns:
-        A Python object representing the message.
+        A dictionary representing the decoded message.
     """
     raw_length = sys.stdin.buffer.read(4)
     if len(raw_length) == 0:
@@ -40,7 +22,7 @@ def get_message() -> Any:
     return json.loads(message)
 
 
-def encode_message(message_content: Any) -> dict[bytes, str]:
+def encode_message(message_content: any) -> dict:
     """Encode a message for transmission, given its content.
 
     Args:
@@ -54,47 +36,54 @@ def encode_message(message_content: Any) -> dict[bytes, str]:
     # (',', ':') to eliminate whitespace.
     # We want the most compact representation because the browser rejects
     # messages that exceed 1 MB.
-    encoded_content = json.dumps(message_content, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    encoded_content = json.dumps(message_content, separators=(",", ":")).encode("utf-8")
     encoded_length = struct.pack("@I", len(encoded_content))
     return {"length": encoded_length, "content": encoded_content}
 
 
-def send_message(encoded_message: dict[bytes, str]) -> None:
+def send_message(encoded_message: dict) -> None:
     """Send an encoded message to stdout
 
     Args:
         encoded_message: The encoded message to be sent.
-
-    Returns:
-        None
     """
     sys.stdout.buffer.write(encoded_message["length"])
     sys.stdout.buffer.write(encoded_message["content"])
     sys.stdout.buffer.flush()
 
 
-# TODO: send the Javascript memory state to the server
+def main() -> None:
+    # Connect to the database
+    conn = sqlite3.connect("messages.db")
+    c = conn.cursor()
+    # Create the messages table if it doesn't exist
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL
+        )
+        """)
+    # Keep track of the last message that was logged
+    last_message = None
+    while True:
+        message = get_message()
+        # Check if the message is the same as the last one
+        if message == last_message:
+            response = {"message": "Duplicate message received and ignored."}
+        else:
+            if STORE_DATA:
+                # Log the message to the database
+                c.execute(
+                    "INSERT INTO messages (message) VALUES (?)", (json.dumps(message),)
+                )
+                conn.commit()
+            response = {"message": "Data received and logged successfully!"}
+            last_message = message
+        # Send a response to the extension
+        encoded_response = encode_message(response)
+        send_message(encoded_response)
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
-
-    # Establish a server connection
-    conn = sockets.create_server_connection(config.SOCKET_PORT)
-    
-    # address = (config.SOCKET_ADDRESS, config.SOCKET_PORT)
-    # conn = Listener(address, authkey=config.SOCKET_AUTHKEY)
-    # conn = conn.accept()
-
-    # Start the event loop
-    while True:
-        received_message = get_message()
-
-        # Sending message to Client
-        # sockets.server_send_message(config.SOCKET_PORT, received_message)
-        sockets.server_sends(conn, received_message)
-        # conn.send(received_message)
-
-        # Sending the received message back to background.js
-        send_message(encode_message(received_message))
+    main()

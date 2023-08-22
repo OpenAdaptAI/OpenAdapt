@@ -1,14 +1,13 @@
 """Module for managing socket connections and communication."""
 
 from multiprocessing import Queue
-from multiprocessing.connection import Client, Listener, Connection
+from multiprocessing.connection import Client, Connection, Listener
+from typing import Any, Optional
 import time
-from typing import Optional, Any
 
 from loguru import logger
 
 from openadapt import config
-
 
 client_by_port = {}
 server_by_port = {}
@@ -60,8 +59,8 @@ def client_receive_message(port: int) -> Optional[str]:
     client_conn = client_by_port.get(port)
     if client_conn:
         try:
-            message = client_conn.recv()
-            return message
+            if message := client_conn.recv():
+                return message
         except Exception as exc:
             logger.warning("Connection was closed.")
             del client_by_port[port]
@@ -201,7 +200,7 @@ def event_loop() -> None:
             try:
                 message = client_conn.recv()
                 # if message:
-                    # TODO: Handle message
+                # TODO: Handle message
 
             except EOFError:
                 # Handle connection closed or error
@@ -221,10 +220,10 @@ def event_loop() -> None:
         #         del queue_by_port[port]
 
 
-
 def server_sends(conn: Connection, message: Any) -> None:
     if conn:
         conn.send(message)
+
 
 def client_receive(conn: Connection) -> Any:
     if conn:

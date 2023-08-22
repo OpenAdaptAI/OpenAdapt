@@ -6,11 +6,11 @@
  */
 
 
-let port = null; // Native Messaging port
+var port = null; // Native Messaging port
 const hostName = 'openadapt';
 
 
-/* 
+/*
  * Handle received messages from browser.js
 */
 function onReceived(response) {
@@ -29,7 +29,7 @@ function connect() {
 }
 
 
-/* 
+/*
  * Message listener for content script
 */
 function messageListener(message, sender, sendResponse) {
@@ -41,7 +41,5 @@ function messageListener(message, sender, sendResponse) {
     connect();
   }
 }
-
-chrome.runtime.onMessage.addListener(messageListener);
-
 connect();
+chrome.runtime.onMessage.addListener(messageListener);
