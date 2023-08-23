@@ -1,10 +1,6 @@
 """Module to test scrub.py."""
 
 
-from io import BytesIO
-import os
-
-from PIL import Image
 import pytest
 import spacy
 
