@@ -472,3 +472,12 @@ def get_window_event(window_event_timestamp: float) -> WindowEvent:
         .filter(WindowEvent.timestamp == window_event_timestamp)
         .first()
     )
+
+
+def get_dataset_entries(dataset_id: int) -> list[DatasetEntry]:
+    return (
+        db.query(DatasetEntry)
+        .filter(DatasetEntry.dataset_id == dataset_id)
+        .order_by(DatasetEntry.id)
+        .all()
+    )
