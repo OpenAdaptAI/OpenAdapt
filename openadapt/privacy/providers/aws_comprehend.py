@@ -101,6 +101,7 @@ class ComprehendScrubbingProvider(ScrubbingProvider):
 
         scrubbed_text = text
 
+        # NER = Named Entity Recognition
         for NER in reversed(pii_entities):
             scrubbed_text = (
                 scrubbed_text[: NER["BeginOffset"]]
