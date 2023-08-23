@@ -4,8 +4,8 @@ from typing import Union
 import io
 
 from loguru import logger
-from PIL import Image, ImageChops
 from oa_pynput import keyboard
+from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
@@ -399,3 +399,24 @@ class MemoryStat(db.Base):
     recording_timestamp = sa.Column(sa.Integer)
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+class Dataset(db.Base):
+    """Class representing a dataset of screenshots and window states from WindowEvents
+    in the database."""
+
+    __tablename__ = "dataset"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+
+
+class DatasetEntry(db.Base):
+    """Class representing a screenshot and a WindowEvent associated with a Dataset
+    in the database."""
+
+    __tablename__ = "dataset_entry"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    dataset_id = sa.Column(sa.Integer)
+    window_event_timestamp = sa.Column(ForceFloat)
+    screenshot_timestamp = sa.Column(ForceFloat)
