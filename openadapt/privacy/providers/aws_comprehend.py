@@ -94,12 +94,18 @@ class ComprehendScrubbingProvider(ScrubbingProvider):
         Returns:
             str: Scrubbed text
         """
+
+        if text == "":  # empty text
+            return text
+
         comp_detect = ComprehendDetect(boto3.client(self.name))  # pylint: disable=E1101
 
         languages = comp_detect.detect_languages(text)
         lang_code = languages[0]["LanguageCode"]
 
         pii_entities = comp_detect.detect_pii(text, lang_code)
+        if not pii_entities:  # no pii/phi detected
+            return text
 
         scrubbed_text = text
 
