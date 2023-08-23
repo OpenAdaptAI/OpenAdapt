@@ -12,6 +12,8 @@ from openadapt import config
 from openadapt.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
+    Dataset,
+    DatasetEntry,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -405,3 +407,68 @@ def new_session() -> None:
     if db:
         db.close()
     db = Session()
+
+
+def insert_dataset() -> Dataset:
+    """Insert a new dataset into to the db."""
+    db_obj = Dataset()
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+
+def insert_dataset_entry(dataset_entry_data: dict) -> None:
+    """Insert a new dataset entry into to the db.
+
+    Args:
+        dataset_entry_data (dict): A dictionary containing the data for a new dataset entry.
+    """
+    db_obj = DatasetEntry(**dataset_entry_data)
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+
+
+def get_dataset(dataset_id: int) -> Dataset:
+    """Get dataset with a given id.
+
+    Args:
+        dataset_id (int): The dataset's id.
+
+    Returns:
+        Dataset: A dataset object
+    """
+    return db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+
+def get_screenshot(screenshot_timestamp: float) -> Screenshot:
+    """Get screenshot with given timestamp.
+
+    Args:
+        screenshot_timestamp (float): The timestamp of the desired screenshot.
+
+    Returns:
+        Screenshot: A screenshot with the given timestamp.
+    """
+    return (
+        db.query(Screenshot)
+        .filter(Screenshot.timestamp == screenshot_timestamp)
+        .first()
+    )
+
+
+def get_window_event(window_event_timestamp: float) -> WindowEvent:
+    """Get window event with given timestamp.
+
+    Args:
+        window_event_timestamp (float): The timestamp of the desired window event.
+
+    Returns:
+        WindowEvent: A window event with the given timestamp.
+    """
+    return (
+        db.query(WindowEvent)
+        .filter(WindowEvent.timestamp == window_event_timestamp)
+        .first()
+    )
