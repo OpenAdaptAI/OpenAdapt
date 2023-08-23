@@ -4,12 +4,8 @@ from typing import List
 
 from botocore.exceptions import ClientError
 from loguru import logger
-from PIL import Image
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import boto3
+import botocore
 import spacy
 import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
@@ -25,18 +21,15 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
 class ComprehendDetect:
     """Encapsulates Comprehend detection functions."""
 
-    def __init__(self, comprehend_client):
-        """
-        :param comprehend_client: A Boto3 Comprehend client.
-        """
+    def __init__(self, comprehend_client: botocore.client.Comprehend) -> None:
+        """:param comprehend_client: A Boto3 Comprehend client."""
         self.comprehend_client = comprehend_client
 
     # snippet-end:[python.example_code.comprehend.ComprehendDetect]
 
     # snippet-start:[python.example_code.comprehend.DetectDominantLanguage]
-    def detect_languages(self, text):
-        """
-        Detects languages used in a document.
+    def detect_languages(self, text: str) -> List[dict]:
+        """Detects languages used in a document.
 
         :param text: The document to inspect.
         :return: The list of languages along with their confidence scores.
@@ -54,10 +47,10 @@ class ComprehendDetect:
     # snippet-end:[python.example_code.comprehend.DetectDominantLanguage]
 
     # snippet-start:[python.example_code.comprehend.DetectPiiEntities]
-    def detect_pii(self, text, language_code):
-        """
-        Detects personally identifiable information (PII) in a document. PII can be
-        things like names, account numbers, or addresses.
+    def detect_pii(self, text: str, language_code: str) -> List[dict]:
+        """Detects personally identifiable information (PII) in a document.
+
+        PII can be things like names, account numbers, or addresses.
 
         :param text: The document to inspect.
         :param language_code: The language of the document.
@@ -94,7 +87,6 @@ class ComprehendScrubbingProvider(ScrubbingProvider):
         Returns:
             str: Scrubbed text
         """
-
         if text == "":  # empty text
             return text
 
@@ -115,7 +107,7 @@ class ComprehendScrubbingProvider(ScrubbingProvider):
                 + config.ACTION_TEXT_NAME_PREFIX  # pylint: disable=E1101
                 + NER["Type"]
                 + config.ACTION_TEXT_NAME_SUFFIX  # pylint: disable=E1101
-                + scrubbed_text[NER["EndOffset"] :]
+                + scrubbed_text[NER["EndOffset"] :]  # noqa: E203
             )
 
         return scrubbed_text

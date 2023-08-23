@@ -5,13 +5,9 @@ import pytest
 import spacy
 
 from openadapt import config
+from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
 
-if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
-    pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")
-else:
-    from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
-
-    scrub = ComprehendScrubbingProvider()
+scrub = ComprehendScrubbingProvider()
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
