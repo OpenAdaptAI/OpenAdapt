@@ -1,0 +1,1 @@
+"""Privacy package for OpenAdapt."""
