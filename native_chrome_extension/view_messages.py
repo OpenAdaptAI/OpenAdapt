@@ -36,16 +36,28 @@ for d in dicts:
             }
         )
         document_head = html.escape(d["message"]["documentHead"])
+        children.append(
+            {
+                "id": "documentHead",
+                "children": [{"id": "<pre>" + document_head + "</pre>"}],
+            }
+        )
+        children.append({"id": "url", "children": [{"id": str(d["message"]["url"])}]})
     else:
         tagName = d["message"]["tagName"]
         children.append({"id": "tagName", "children": [{"id": str(tagName)}]})
 
+        if d["message"]["action"] == "elementInput":
+            value = d["message"]["value"]
+            children.append({"id": "value", "children": [{"id": str(value)}]})
+
+        x, y = d["message"]["x"], d["message"]["y"]
+        children.append({"id": "x", "children": [{"id": str(x)}]})
+        children.append({"id": "y", "children": [{"id": str(y)}]})
+
         attributes = d["message"]["attributes"]
         children.append({"id": "attributes", "children": [{"id": str(attributes)}]})
-    children.append(
-        {"id": "documentHead", "children": [{"id": "<pre>" + document_head + "</pre>"}]}
-    )
-    children.append({"id": "url", "children": [{"id": str(d["message"]["url"])}]})
+
     tree[0]["children"] = children
     ui.tree(tree, label_key="id")._props["default-expand-all"] = True
 

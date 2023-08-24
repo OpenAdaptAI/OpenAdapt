@@ -12,8 +12,7 @@ let observer = null;
  * Function to send a message to the background script
  */
 function sendMessageToBackgroundScript(message) {
-  if (typeof chrome.app.isInstalled !== "undefined")
-    chrome.runtime.sendMessage(message);
+  chrome.runtime.sendMessage(message);
 }
 
 /*
@@ -43,16 +42,35 @@ function handleElementClick(event) {
     attributes[attr.name] = attr.value;
   }
 
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + window.scrollX;
+  const y = rect.top + window.scrollY;
+
   sendMessageToBackgroundScript({
     action: "elementClicked",
     tagName: tagName,
     attributes: attributes,
+    x: x,
+    y: y,
     url: window.location.href,
     timestamp: Date.now(),
   });
 }
 
-function handleElementInput(event) {
+function debounce(func, delay) {
+  let timerId;
+  return function (...args) {
+    if (timerId) {
+      clearTimeout(timerId);
+    }
+    timerId = setTimeout(() => {
+      func.apply(this, args);
+      timerId = null;
+    }, delay);
+  };
+}
+
+function handleDebouncedInput(event) {
   const element = event.target;
   const tagName = element.tagName;
   const attributes = {};
@@ -61,13 +79,27 @@ function handleElementInput(event) {
     attributes[attr.name] = attr.value;
   }
 
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + window.scrollX;
+  const y = rect.top + window.scrollY;
+  const value = element.value;
+
   sendMessageToBackgroundScript({
     action: "elementInput",
     tagName: tagName,
     attributes: attributes,
+    x: x,
+    y: y,
+    value: value,
     url: window.location.href,
     timestamp: Date.now(),
   });
+}
+
+const debouncedInputHandler = debounce(handleDebouncedInput, 500);
+
+function handleElementInput(event) {
+  debouncedInputHandler(event);
 }
 
 function addEventListeners() {
