@@ -1,18 +1,9 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.8.0"
+version = "0.8.1"
 description = "GUI Process Automation with Transformers"
 authors = [
-    'Mustafa Abdulrahman <mustafa@openadapt.ai>',
-    'Richard Abrich <richard.abrich@mldsai.com>',
-    'Avid Eslami <avid@openadapt.ai>',
-    'Andrew Gorton <andrew.gorton@mail.utoronto.ca>',
-    'Krish Patel <krish@openadapt.ai>',
-    'Dian Rong <dian@openadapt.ai>',
-    'Aaron Shah <aaron@openadapt.ai>',
-    'Jesica Susanto <jesica@openadapt.ai>',
-    'Angela Zhuo <angela@openadapt.ai>',
-    'Owais Zahid <owais@openadapt.ai>',
+    'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
