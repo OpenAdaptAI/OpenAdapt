@@ -6,7 +6,7 @@ on:
       - '**'
 
 jobs:
-  run-ci:
+  test-run-ci:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -25,13 +25,6 @@ jobs:
         uses: actions/setup-python@v3
         with:
           python-version: '3.10'
-
-      - name: Run tests using the shell script (macOS compatible).
-        if: matrix.os == 'macos-latest'
-        run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
-
-      - name: Checkout code
-        uses: actions/checkout@v3
 
       - name: Install poetry
         uses: snok/install-poetry@v1
