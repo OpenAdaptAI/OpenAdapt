@@ -9,6 +9,7 @@ import boto3
 
 from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
+from openadapt.privacy.providers import ScrubProvider
 
 
 # snippet-start:[python.example_code.comprehend.ComprehendDetect
@@ -67,11 +68,11 @@ class ComprehendDetect:
 
 
 class ComprehendScrubbingProvider(
-    ScrubbingProvider, TextScrubbingMixin
+    ScrubbingProvider, TextScrubbingMixin, ScrubProvider
 ):  # pylint: disable=abstract-method
     """A Class for AWS Comprehend Scrubbing Provider."""
 
-    name: str = config.SCRUB_PROVIDER_NAME[1]  # pylint: disable=E1101
+    name: str = ScrubProvider.COMPREHEND
     capabilities: List[Modality] = [Modality.TEXT]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
@@ -87,9 +88,9 @@ class ComprehendScrubbingProvider(
         if text == "":  # empty text
             return text
 
-        logger.info(type(boto3.client(self.name)))
-
-        comp_detect = ComprehendDetect(boto3.client(self.name))  # pylint: disable=E1101
+        comp_detect = ComprehendDetect(
+            boto3.client(self.name.lower())
+        )  # pylint: disable=E1101
 
         languages = comp_detect.detect_languages(text)
         lang_code = languages[0]["LanguageCode"]

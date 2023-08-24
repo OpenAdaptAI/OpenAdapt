@@ -13,6 +13,7 @@ import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
 from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
+from openadapt.privacy.providers import ScrubProvider
 
 if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
     logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
@@ -20,11 +21,11 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
 
 
 class PresidioScrubbingProvider(
-    ScrubbingProvider, TextScrubbingMixin
+    ScrubbingProvider, TextScrubbingMixin, ScrubProvider
 ):  # pylint: disable=W0223
     """A Class for Presidio Scrubbing Provider."""
 
-    name: str = config.SCRUB_PROVIDER_NAME[0]  # pylint: disable=E1101
+    name: str = ScrubProvider.PRESIDIO  # pylint: disable=E1101
     capabilities: List[Modality] = [Modality.TEXT, Modality.PIL_IMAGE]
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
