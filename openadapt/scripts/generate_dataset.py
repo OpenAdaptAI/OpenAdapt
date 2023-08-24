@@ -1,4 +1,5 @@
-"""
+"""Script for saving the dataset entries with a given dataset_id locally.
+
 Usage:
 
     $ python openadapt/scripts/generate_dataset.py <dataset_id>
@@ -16,12 +17,21 @@ from openadapt.crud import (
     get_screenshot,
     get_window_event,
 )
+from openadapt.scrub import scrub_dict, scrub_image
 
 PATH_TO_IMAGES = "openadapt/ml/data/vision_dataset/images"
 PATH_TO_JSON = "openadapt/ml/data/vision_dataset/states.json"
 
 
 def generate_dataset(dataset_id: int) -> None:
+    """
+    Saves dataset of screenshots and their respective window states with the given dataset_id.
+    Scrubs any private information from screenshot and window state.
+    Saves screenshot with a unique ID, and saves the window states along with the ID to a JSON file.
+
+    Args:
+        dataset_id (int): The ID of the desired dataset.
+    """
     # check if valid dataset id
     dataset = get_dataset(dataset_id)
     if dataset is None:
@@ -46,10 +56,11 @@ def generate_dataset(dataset_id: int) -> None:
                 "width": window_event.width,
                 "height": window_event.height,
             }
-        # TODO: scrub ss and event
 
-        # TODO: check how mss images should be saved
-        final_ss = screenshot.image
+        # scrub screenshot and event
+        final_ss = scrub_image(screenshot.image)
+        state = scrub_dict(state)
+
         final_ss.save(f"{PATH_TO_IMAGES}/{entry.id}.jpg")
 
         new_state_entry = {"id": entry.id, "window_state": state}
