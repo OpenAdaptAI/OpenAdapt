@@ -2,6 +2,136 @@
 
 
 
+## v0.8.1 (2023-08-21)
+
+### Chore
+
+* chore(*): change installation of spacy weights to runtime (#462)
+
+* remove spacy from
+ manual steup instruciton in README.md
+
+* remove spacy
+ installion from both the install scripts
+
+* add todo
+
+* test runtime code for spacy installtion
+
+* pyetst passes even if spacy model is not installed
+
+* addressing:
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/462#issuecomment-1673807055
+
+* add spacy-trnasformers
+
+address comment:
+https://github.com/OpenAdaptAI/OpenAdapt/pull/462#issuecomment-1673807055
+
+* skip all the tests in test_scrub if
+ spacy miodel is ont installed
+
+* format ([`479937e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/479937ee623fee58587ff24380ea6eb3549ab480))
+
+### Fix
+
+* fix: enhance publish action and authors in pyproject.toml (#463)
+
+* fix: enhance publish action and authors in pyproject.toml
+
+* modify release-and-publish.yml
+
+* change author name to OpenAdapt.AI Team
+
+* use pull_request_target to trigger status checks for any git branch ([`c7813c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7813c2b42e963041a671b9c9c2057c9ea203609))
+
+### Refactor
+
+* refactor: add Privacy design API (#439)
+
+* add Privacy API design code
+
+* add Presidio.scrub_text
+
+* update script to remove linting error
+
+* add test script
+
+* try to fix the pytest error
+
+* try to fix failing test_scrub_api.py
+
+* fixed the pytest error
+
+* change the test file to use the providers code
+
+* refactor presidio_scrub
+
+* fix pytest test_presidio_scrub_text
+
+* fix pytest
+
+* update the scrub_image method header
+
+* add module docstrings
+
+* update base.py
+
+* update providers
+
+* update providers
+
+* add noqa
+
+* update flake8 to
+ignore flake8 F821 undefined name &#39;...&#39; error
+
+* remove noqa from line now
+
+* update flake8:
+fix undefined error in pylint and falek8
+
+* update privacy api
+
+* fix all pylint errors
+
+* fix all pytlint errors
+
+* fix all pylint errors in base.py
+
+* now pytest passes with 6 warnings
+
+* update visualize to
+ use the privacy api providers code
+
+* now visualization works with new Privacy API
+
+* change scrub ebaled to False
+
+* fix pytest
+
+* remove scrbu.py old moidule
+
+* format test script
+
+* format base.py and presidio.py
+
+* remove scrub module
+
+* fix merge
+
+* add spacy runtime code
+
+* remove pytestmark unused variable
+
+* tests get skippped if spacy is not installed
+
+* update utils
+
+* format for final commit ([`5151cb5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5151cb557599fb3958b04f9e6955229f3cd91b1e))
+
+
 ## v0.8.0 (2023-08-10)
 
 ### Chore
