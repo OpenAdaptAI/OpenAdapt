@@ -5,7 +5,7 @@ import sqlite3
 import struct
 import sys
 
-STORE_DATA = False
+STORE_DATA = True
 
 
 def get_message() -> dict:
@@ -63,25 +63,18 @@ def main() -> None:
             message TEXT NOT NULL
         )
         """)
-    # Keep track of the last message that was logged
-    last_message = None
+
     while True:
         message = get_message()
-        # Check if the message is the same as the last one
-        if message == last_message:
-            response = {"message": "Duplicate message received and ignored."}
-        else:
-            if STORE_DATA:
-                # Log the message to the database
-                c.execute(
-                    "INSERT INTO messages (message) VALUES (?)", (json.dumps(message),)
-                )
-                conn.commit()
+        if STORE_DATA:
+            # Log the message to the database
+            c.execute(
+                "INSERT INTO messages (message) VALUES (?)", (json.dumps(message),)
+            )
+            conn.commit()
             response = {"message": "Data received and logged successfully!"}
-            last_message = message
-        # Send a response to the extension
-        encoded_response = encode_message(response)
-        send_message(encoded_response)
+            encoded_response = encode_message(response)
+            send_message(encoded_response)
     sys.stdout.buffer.flush()
 
 

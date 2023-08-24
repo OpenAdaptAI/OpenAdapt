@@ -5,20 +5,19 @@
  * @see https://docs.google.com/presentation/d/106AXW3sBe7-7E-zIggnMnaUKUXWAj_aAuSxBspTDcGk/edit#slide=id.p
  */
 
-
+const hostName = "openadapt";
 var port = null; // Native Messaging port
-const hostName = 'openadapt';
-
+var lastMsg = null;
 
 /*
  * Handle received messages from browser.js
-*/
+ */
 function onReceived(response) {
   console.log(response);
 }
 
 function onDisconnected() {
-  msg = 'Failed to connect: ' + chrome.runtime.lastError.message; // silence error
+  msg = "Failed to connect: " + chrome.runtime.lastError.message; // silence error
   port = null;
 }
 
@@ -28,16 +27,26 @@ function connect() {
   port.onDisconnect.addListener(onDisconnected);
 }
 
-
 /*
  * Message listener for content script
-*/
+ */
 function messageListener(message, sender, sendResponse) {
+  const timestampThreshold = 3; // arbitrary threshold in milliseconds
+
   try {
+    if (lastMsg !== null) {
+      if (
+        Math.abs(message.timestamp - lastMsg.timestamp) < timestampThreshold &&
+        message.tagName === lastMsg.tagName &&
+        message.action === lastMsg.action
+      ) {
+        return;
+      }
+    }
     console.log({ message, sender, sendResponse });
     port.postMessage(message); // send to browser.py (native messaging host)
-  }
-  catch (e) {
+    lastMsg = message;
+  } catch (e) {
     connect();
   }
 }
