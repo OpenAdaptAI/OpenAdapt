@@ -109,11 +109,14 @@ def test_finetuned_completion():
     for dict in incomplete_recording:
         prompt_str += str(dict["prompt"]) + ","
 
+    
     test_ft_comp = openai.Completion.create(
-        model="davinci:ft-openadaptai-2023-08-18-04-09-43", prompt=prompt_str
+        model="davinci:ft-openadaptai-2023-08-18-04-09-43", 
+        prompt = prompt_str,
+        max_tokens=388
     )
-    logger.debug(f'{test_ft_comp["choices"][0]["text"]=}')
+    logger.debug(f'{test_ft_comp["choices"]=}')
 
 
 if __name__ == "__main__":
-    test_finetuned_completion()
+    test_openai_finetune_on_recording()
