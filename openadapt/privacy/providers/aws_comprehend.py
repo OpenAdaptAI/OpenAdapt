@@ -2,6 +2,7 @@
 
 from typing import List
 
+from botocore import client
 from botocore.exceptions import ClientError
 from loguru import logger
 import boto3
@@ -10,18 +11,14 @@ import spacy
 import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
 from openadapt import config
-from openadapt.privacy.base import Modality, ScrubbingProvider
-
-if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
-    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
-    spacy.cli.download(config.SPACY_MODEL_NAME)
+from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 
 
-# snippet-start:[python.example_code.comprehend.ComprehendDetect]
+# snippet-start:[python.example_code.comprehend.ComprehendDetect
 class ComprehendDetect:
     """Encapsulates Comprehend detection functions."""
 
-    def __init__(self, comprehend_client: botocore.client.Comprehend) -> None:
+    def __init__(self, comprehend_client: client) -> None:
         """:param comprehend_client: A Boto3 Comprehend client."""
         self.comprehend_client = comprehend_client
 
@@ -71,7 +68,7 @@ class ComprehendDetect:
     # snippet-end:[python.example_code.comprehend.DetectPiiEntities]
 
 
-class ComprehendScrubbingProvider(ScrubbingProvider):
+class ComprehendScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
     """A Class for AWS Comprehend Scrubbing Provider."""
 
     name: str = config.SCRUB_PROVIDER_NAME[1]  # pylint: disable=E1101
@@ -89,6 +86,8 @@ class ComprehendScrubbingProvider(ScrubbingProvider):
         """
         if text == "":  # empty text
             return text
+
+        logger.info(type(boto3.client(self.name)))
 
         comp_detect = ComprehendDetect(boto3.client(self.name))  # pylint: disable=E1101
 

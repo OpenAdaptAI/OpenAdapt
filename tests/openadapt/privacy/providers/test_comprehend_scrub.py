@@ -144,3 +144,12 @@ def test_scrub_all_together() -> None:
         " his social security number is <SSN>."
         " He was born on <DATE_TIME>."
     )
+
+
+def test_scrub_dict() -> None:
+    """Test that the scrub_dict function works."""
+    text_with_pii_phi = {"title": "hi my name is Bob Smith."}
+
+    expected_output = {"title": "hi my name is <NAME>."}
+
+    assert scrub.scrub_dict(text_with_pii_phi) == expected_output
