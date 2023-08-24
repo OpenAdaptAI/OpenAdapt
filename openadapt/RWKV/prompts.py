@@ -134,7 +134,7 @@ def get_prompt(task_id, signal_ids, rearranged_indices=None):
 
     prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 # Instruction:
-You are {task}. A list of information signals is provided in JSON format. Please respond with only the id of the signal that is most relevant to the task formatted as a list.
+You are {task}. A list of information signals is provided in JSON format. Please respond with only the ids of the signals that are most relevant to the task formatted as a list.
 # Input:
 {str(test_signals)}
 # Response: 
