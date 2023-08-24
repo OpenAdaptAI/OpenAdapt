@@ -1,10 +1,6 @@
 """Module to test scrub.py."""
 
 
-import pytest
-import spacy
-
-from openadapt import config
 from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
 
 scrub = ComprehendScrubbingProvider()
