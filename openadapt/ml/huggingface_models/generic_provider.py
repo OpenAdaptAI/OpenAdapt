@@ -1,15 +1,32 @@
-from openadapt.ml.base_provider import Availability, CompletionProvider, Modality
+from openadapt.ml.base_provider import (
+    Availability,
+    Capability,
+    CompletionProvider,
+    Modality,
+)
 from transformers import AutoTokenizer, AutoModel, pipeline
 
 
 class GenericHuggingFaceProvider(CompletionProvider):
     Name: str = "Generic HuggingFace Provider"
+    Capabilities: list[Capability] = [
+        Capability.TRAINING,
+        Capability.TUNING,
+        Capability.INFERENCE,
+    ]
     Modalities: list[Modality] = [Modality.TEXT]
     Availabilities: list[Availability] = [Availability.HOSTED]
 
-    def infer(prompt: str, model_path: str, task_description: str, use_pipeline=True, trust_remote_code=False):
+    def infer(
+        self,
+        prompt: str,
+        model_path: str,
+        task_description: str,
+        use_pipeline=True,
+        trust_remote_code=False,
+    ):
         """
-        Infers on a model of the user's choice, using Huggingface pipelines. 
+        Infers on a model of the user's choice, using Huggingface pipelines.
 
         Initializes a pipeline object to infer from using the
         given model and its corresponding task description.

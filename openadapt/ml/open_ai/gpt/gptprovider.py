@@ -1,4 +1,9 @@
-from openadapt.ml.base_provider import CompletionProvider, Modality, Capability, Availability
+from openadapt.ml.base_provider import (
+    CompletionProvider,
+    Modality,
+    Capability,
+    Availability,
+)
 import openai
 
 
@@ -12,16 +17,16 @@ class GPTCompletionProvider(CompletionProvider):
     Modalities: list[Modality] = [Modality.TEXT]
     Availabilities: list[Availability] = [Availability.HOSTED]
 
-    def finetune(prompt_completion_pair: list[dict[str]]):
+    def finetune(self, prompt_completion_pair: list[dict[str]]):
         # waiting on FineTuning PR which is currently
         # a work in progress.
         raise NotImplementedError
 
-    def infer(gpt_model_name: str, prompt: str):
+    def infer(self, gpt_model_name: str, prompt: str):
         """
         Users can only infer from models available within their organization
-        on OpenAI. This includes base models provided by OpenAI as well as 
-        finetuned models. 
+        on OpenAI. This includes base models provided by OpenAI as well as
+        finetuned models.
         """
         valid_inference_models = openai.Model.list()["data"]
         for model_dict in valid_inference_models:
