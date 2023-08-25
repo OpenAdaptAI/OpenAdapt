@@ -1,10 +1,11 @@
+from transformers import pipeline
+
 from openadapt.ml.base_provider import (
     Availability,
     Capability,
     CompletionProvider,
     Modality,
 )
-from transformers import pipeline
 
 
 class GenericHuggingFaceProvider(CompletionProvider):

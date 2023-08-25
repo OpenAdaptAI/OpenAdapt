@@ -14,9 +14,9 @@ import urllib
 from loguru import logger
 from PIL import Image
 from segment_anything import (
-    modeling,
     SamAutomaticMaskGenerator,
     SamPredictor,
+    modeling,
     sam_model_registry,
 )
 import matplotlib.axes as axes

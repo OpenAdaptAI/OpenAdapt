@@ -1,10 +1,11 @@
+import openai
+
 from openadapt.ml.base_provider import (
+    Availability,
+    Capability,
     CompletionProvider,
     Modality,
-    Capability,
-    Availability,
 )
-import openai
 
 
 class GPTCompletionProvider(CompletionProvider):
