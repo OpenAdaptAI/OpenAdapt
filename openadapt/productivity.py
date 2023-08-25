@@ -4,14 +4,14 @@ latest recording.
 
 Usage:
 
-    $ python openadapt/productivity.py"
+    $ python -m openadapt.productivity
 """
 
 from pprint import pformat
 from threading import Timer
+from typing import Optional, Tuple
 import os
 import string
-from typing import Optional, Tuple
 
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
@@ -19,11 +19,8 @@ from bokeh.models.widgets import Div
 from loguru import logger
 
 from openadapt.crud import get_latest_recording, get_window_events
-
-from openadapt.events import (
-    get_events,
-)
-
+from openadapt.events import get_events
+from openadapt.models import ActionEvent, WindowEvent
 from openadapt.utils import (
     configure_logging,
     display_event,
@@ -31,17 +28,9 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
-
 from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
-from openadapt.models import (
-    ActionEvent,
-    Screenshot,
-    WindowEvent,
-)
-
-CSS = string.Template(
-    """
+CSS = string.Template("""
     table {
         outline: 1px solid black;
     }
@@ -62,8 +51,7 @@ CSS = string.Template(
     .screenshot:active img:nth-child(1) {
         display: block;
     }
-"""
-).substitute(
+""").substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -178,7 +166,7 @@ def find_num_tasks(
     action_events: list[ActionEvent],
     start: ActionEvent,
     length: int,
-    task: Optional[ActionEvent] = None,
+    task: Optional[list[ActionEvent]] = None,
 ) -> Tuple[list[ActionEvent], int, float]:
     """
     Given a list of ActionEvents, the start of a repeating task, the length of the task, and
@@ -586,13 +574,11 @@ def calculate_productivity():
                                 </table>
                             """,
                             ),
-                            Div(
-                                text=f"""
+                            Div(text=f"""
                                 <table>
                                     {dict2html(window_info)}
                                 </table>
-                            """
-                            ),
+                            """),
                         ),
                     ]
                 )
@@ -639,13 +625,11 @@ def calculate_productivity():
                                     </table>
                                 """,
                     ),
-                    Div(
-                        text=f"""
+                    Div(text=f"""
                                     <table>
                                         {dict2html(window_info)}
                                     </table>
-                                """
-                    ),
+                                """),
                 ),
             ]
         )
