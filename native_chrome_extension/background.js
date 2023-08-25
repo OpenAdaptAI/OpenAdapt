@@ -31,7 +31,7 @@ function connect() {
  * Message listener for content script
  */
 function messageListener(message, sender, sendResponse) {
-  const timestampThreshold = 3; // arbitrary threshold in milliseconds
+  const timestampThreshold = 30; // arbitrary threshold in milliseconds
 
   try {
     if (lastMsg !== null) {

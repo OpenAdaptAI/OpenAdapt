@@ -1,3 +1,7 @@
+"""
+nicegui app to view messages from the native chrome extension
+"""
+
 import html
 import json
 import sqlite3
