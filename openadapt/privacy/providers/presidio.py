@@ -52,7 +52,8 @@ class PresidioScrubbingProvider(
         SCRUBBING_ENTITIES = [  # pylint: disable=C0103
             entity
             for entity in ANALYZER_TRF.get_supported_entities()
-            if entity not in config.SCRUB_IGNORE_ENTITIES  # pylint: disable=E1101
+            if entity
+            not in config.SCRUB_PRESIDIO_IGNORE_ENTITIES  # pylint: disable=E1101
         ]
 
         if is_separated and not (
@@ -116,7 +117,8 @@ class PresidioScrubbingProvider(
         SCRUBBING_ENTITIES = [  # pylint: disable=C0103
             entity
             for entity in ANALYZER_TRF.get_supported_entities()
-            if entity not in config.SCRUB_IGNORE_ENTITIES  # pylint: disable=E1101
+            if entity
+            not in config.SCRUB_PRESIDIO_IGNORE_ENTITIES  # pylint: disable=E1101
         ]
 
         redacted_image = IMAGE_REDACTOR.redact(
