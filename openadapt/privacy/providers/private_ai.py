@@ -100,12 +100,15 @@ class PrivateAIScrubbingProvider(
                 "entity_types": [
                     {
                         "type": "ENABLE",
-                        "value": PRIVATE_AI_SCRUB_ENTITIES_ENABLE,
+                        "value": PRIVATE_AI_SCRUB_ENTITIES,
                     }
                 ],
                 "return_entity": True,
             },
-            "processed_text": {"type": "MARKER", "pattern": "[NUMBERED_ENTITY_TYPE]"},
+            "processed_text": {
+                "type": "MARKER",
+                "pattern": "[UNIQUE_NUMBERED_ENTITY_TYPE]",
+            },
         }
 
         headers = {
@@ -116,6 +119,8 @@ class PrivateAIScrubbingProvider(
         response = requests.post(url, json=payload, headers=headers)
 
         data = response.json()
-        logger.debug(data)
 
-        logger.info(data[0].get("processed_text"))
+        logger.debug(data)
+        logger.debug(data[0].get("processed_text"))
+
+        return data[0].get("processed_text")  # redacted text

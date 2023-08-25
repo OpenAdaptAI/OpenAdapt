@@ -1,9 +1,15 @@
 """Module to test PrivateAIScrubbingProvider."""
 
+import pytest
 
 from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()
+
+try:
+    scrub.scrub_text("Bob smith")
+except KeyError:
+    pytestmark = pytest.mark.skip(reason="PRIVATE AI API KEY NOT FOUND")
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
