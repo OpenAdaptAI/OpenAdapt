@@ -663,6 +663,9 @@ def calculate_productivity():
     )
 
     def cleanup():
+        """
+        Removes the generated html file.
+        """
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
