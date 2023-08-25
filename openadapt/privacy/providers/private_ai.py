@@ -68,6 +68,8 @@ PRIVATE_AI_SCRUB_ENTITIES = [
     "ROUTING_NUMBER",
 ]
 
+PAI_OUTPUT_FILE_DIR = "assets\\"
+
 
 class PrivateAIScrubbingProvider(
     ScrubProvider, ScrubbingProvider, TextScrubbingMixin
@@ -90,7 +92,7 @@ class PrivateAIScrubbingProvider(
         if text == "":
             return text
 
-        url = "https://api.private-ai.com/deid/v3/process/text"
+        url = "https://api.private-ai.com/deid/v3/process/text"  # PrivateAI demo server
 
         payload = {
             "text": [text],
@@ -113,7 +115,7 @@ class PrivateAIScrubbingProvider(
 
         headers = {
             "Content-Type": "application/json",
-            "X-API-KEY": "config.PRIVATE_AI_API_KEY",
+            "X-API-KEY": config.PRIVATE_AI_API_KEY,
         }
 
         response = requests.post(url, json=payload, headers=headers)
@@ -124,3 +126,31 @@ class PrivateAIScrubbingProvider(
         logger.debug(data[0].get("processed_text"))
 
         return data[0].get("processed_text")  # redacted text
+
+    def scrub_pdf(self, pdf_path: str) -> str:
+        """Scrub the text of all PII/PHI using Private AI.
+
+        Args:
+            pdf_path (str): Path to the PDF to be scrubbed
+
+        Returns:
+            str: Scrubbed text
+        """
+        import requests
+
+        url = "https://api.private-ai.com/deid/v3/process/files/uri"
+
+        payload = {
+            "uri": "assets\sample_llc_1.pdf",
+            "entity_detection": {"accuracy": "high", "return_entity": True},
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-KEY": config.PRIVATE_AI_API_KEY,
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+
+        data = response.json()
+        print(data)
