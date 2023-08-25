@@ -3,6 +3,7 @@
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
 
+from datetime import datetime
 from subprocess import Popen
 import signal
 
@@ -10,8 +11,9 @@ from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
+from openadapt.crud import new_session
 
-PROC = None
+record_proc = None
 
 
 def settings(dark_mode: bool) -> None:
@@ -63,6 +65,28 @@ def select_import(f: callable) -> None:
     import_dialog.open()
 
 
+def stop_record() -> None:
+    """Stop the current recording session."""
+    global record_proc
+    if record_proc is not None:
+        record_proc.send_signal(signal.SIGINT)
+
+        # wait for process to terminate
+        record_proc.wait()
+        record_proc = None
+
+
+def quick_record() -> None:
+    """Run a recording session with no option for recording name (uses date instead)."""
+    global record_proc
+    new_session()
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    record_proc = Popen(
+        f"python -m openadapt.record '{now}'",
+        shell=True,
+    )
+
+
 def recording_prompt(options: list[str], record_button: ui.button) -> None:
     """Display the recording prompt dialog.
 
@@ -70,7 +94,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         options (list): List of autocomplete options.
         record_button (nicegui.widgets.Button): Record button widget.
     """
-    if PROC is None:
+    if record_proc is None:
         with ui.dialog() as dialog, ui.card():
             ui.label("Enter a name for the recording: ")
             ui.input(
@@ -88,28 +112,34 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
             dialog.open()
 
     def terminate() -> None:
-        global process
-        process.send_signal(signal.SIGINT)
+        global record_proc
+        record_proc.send_signal(signal.SIGINT)
 
-        # Wait for process to terminate
-        process.wait()
+        # wait for process to terminate
+        record_proc.wait()
         ui.notify("Stopped recording")
         record_button._props["name"] = "radio_button_checked"
         record_button.on("click", lambda: recording_prompt(options, record_button))
 
-        process = None
+        record_proc = None
 
     def begin() -> None:
         name = result.text.__getattribute__("value")
 
-        ui.notify(f"Recording {name}... Press CTRL + C in terminal window to cancel")
-        PROC = Popen("python3 -m openadapt.record " + name, shell=True)
+        ui.notify(
+            f"Recording {name}... Press CTRL + C in terminal window to cancel",
+        )
+        new_session()
+        proc = Popen(
+            "python -m openadapt.record " + name,
+            shell=True,
+        )
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())
         record_button.update()
-        return PROC
+        return proc
 
     def on_record() -> None:
-        global PROC
+        global record_proc
         dialog.close()
-        PROC = begin()
+        record_proc = begin()

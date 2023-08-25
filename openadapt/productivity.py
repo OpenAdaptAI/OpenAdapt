@@ -4,7 +4,7 @@ latest recording.
 
 Usage:
 
-    $ python openadapt/productivity.py"
+    $ python -m openadapt.productivity
 """
 
 from pprint import pformat
@@ -166,7 +166,7 @@ def find_num_tasks(
     action_events: list[ActionEvent],
     start: ActionEvent,
     length: int,
-    task: Optional[ActionEvent] = None,
+    task: Optional[list[ActionEvent]] = None,
 ) -> Tuple[list[ActionEvent], int, float]:
     """
     Given a list of ActionEvents, the start of a repeating task, the length of the task, and
