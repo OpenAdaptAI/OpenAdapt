@@ -8,6 +8,7 @@ import openai
 
 
 class GPTCompletionProvider(CompletionProvider):
+    """ GPTCompletionProvider class. """
     Name: str = "GPTCompletionProvider"
     Capabilities: list[Capability] = [
         Capability.TRAINING,
@@ -18,6 +19,9 @@ class GPTCompletionProvider(CompletionProvider):
     Availabilities: list[Availability] = [Availability.HOSTED]
 
     def finetune(self, prompt_completion_pair: list[dict[str]]):
+        """
+        Fine-tune the GPT model.
+        """
         # waiting on FineTuning PR which is currently
         # a work in progress.
         raise NotImplementedError

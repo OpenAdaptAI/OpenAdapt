@@ -8,6 +8,7 @@ from transformers import AutoTokenizer, AutoModel, pipeline
 
 
 class GenericHuggingFaceProvider(CompletionProvider):
+    """ GenericHuggingFaceProvider class. """
     Name: str = "Generic HuggingFace Provider"
     Capabilities: list[Capability] = [
         Capability.TRAINING,

@@ -3,28 +3,35 @@ from pydantic import BaseModel
 
 
 class Modality:
+    """ LLM Modality class. """
     TEXT = "TEXT"
     IMAGE = "IMAGE"
 
 
 class Use:
+    """ LLM Use Class. """
     COMMERCIAL_USE = "COMMERCIAL"
     NON_COMMERCIAL_USE = "NON_COMMERCIAL"
 
 
 class Capability:
+    """ LLM Capability Class. """
     TRAINING = "TRAINING"
     TUNING = "TUNING"
     INFERENCE = "INFERENCE"
 
 
 class Availability:
+    """ LLM Availability Class. """
     LOCAL_CPU = "LOCAL_CPU"
     LOCAL_GPU = "LOCAL_GPU"
     HOSTED = "HOSTED"
 
 
 class CompletionProvider(BaseModel):
+    """
+    Base CompletionProvider class.
+    """
     Name: str
     Capabilities: list[Capability]
     Modalities: list[Modality]
@@ -36,17 +43,31 @@ class CompletionProvider(BaseModel):
         arbitrary_types_allowed = True
 
     def infer(prompt: str, model_name: str):
+        """
+        Run inference on the provider.
+        """
         raise NotImplementedError
 
     def finetune(prompt_completion_pair: list[dict[str]]):
+        """
+        Fine-tune the provider.
+        """
         raise NotImplementedError
 
     def get_children():
+        """
+        Grab all completion provider classes.
+        """
         return CompletionProvider.__subclasses__()
 
 
 class CompletionProviderFactory:
+    """ CompletionProviderFactory class. """
+    
     def get_for_modality(modality: Modality) -> list[CompletionProvider]:
+        """
+        Gets all available CompletionProviders with the given modality.
+        """
         completion_providers = CompletionProvider.get_children()
         filtered_providers = [
             provider()
