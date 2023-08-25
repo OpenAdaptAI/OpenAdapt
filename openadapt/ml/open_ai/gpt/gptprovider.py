@@ -8,7 +8,8 @@ import openai
 
 
 class GPTCompletionProvider(CompletionProvider):
-    """ GPTCompletionProvider class. """
+    """GPTCompletionProvider class."""
+
     Name: str = "GPTCompletionProvider"
     Capabilities: list[Capability] = [
         Capability.TRAINING,

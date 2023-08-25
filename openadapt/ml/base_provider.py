@@ -3,26 +3,30 @@ from pydantic import BaseModel
 
 
 class Modality:
-    """ LLM Modality class. """
+    """LLM Modality class."""
+
     TEXT = "TEXT"
     IMAGE = "IMAGE"
 
 
 class Use:
-    """ LLM Use Class. """
+    """LLM Use Class."""
+
     COMMERCIAL_USE = "COMMERCIAL"
     NON_COMMERCIAL_USE = "NON_COMMERCIAL"
 
 
 class Capability:
-    """ LLM Capability Class. """
+    """LLM Capability Class."""
+
     TRAINING = "TRAINING"
     TUNING = "TUNING"
     INFERENCE = "INFERENCE"
 
 
 class Availability:
-    """ LLM Availability Class. """
+    """LLM Availability Class."""
+
     LOCAL_CPU = "LOCAL_CPU"
     LOCAL_GPU = "LOCAL_GPU"
     HOSTED = "HOSTED"
@@ -32,6 +36,7 @@ class CompletionProvider(BaseModel):
     """
     Base CompletionProvider class.
     """
+
     Name: str
     Capabilities: list[Capability]
     Modalities: list[Modality]
@@ -62,8 +67,8 @@ class CompletionProvider(BaseModel):
 
 
 class CompletionProviderFactory:
-    """ CompletionProviderFactory class. """
-    
+    """CompletionProviderFactory class."""
+
     def get_for_modality(modality: Modality) -> list[CompletionProvider]:
         """
         Gets all available CompletionProviders with the given modality.
