@@ -1,4 +1,4 @@
-from base_provider import Modality, CompletionProvider
+from openadapt.ml.base_provider import Modality, CompletionProvider
 
 
 class CompletionProviderFactory:

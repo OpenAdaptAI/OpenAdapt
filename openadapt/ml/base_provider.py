@@ -30,6 +30,11 @@ class CompletionProvider(BaseModel):
     Modalities: list[Modality]
     Availabilities: list[Availability]
 
+    class Config:  # pylint: disable=too-few-public-methods
+        """Pydantic Config Class."""
+
+        arbitrary_types_allowed = True
+        
     def infer(prompt: str, model_name: str):
         raise NotImplementedError
 
