@@ -11,6 +11,7 @@ else:
     from openadapt.privacy.base import Modality, ScrubbingProviderFactory
     from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
     from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+    from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 
 def test_scrubbing_provider_factory() -> None:
@@ -21,9 +22,11 @@ def test_scrubbing_provider_factory() -> None:
     assert providers_list
 
     for provider in providers_list:
-        # Ensure the provider is an instance of PresidioScrubbingProvider
-        assert isinstance(provider, PresidioScrubbingProvider) or isinstance(
-            provider, ComprehendScrubbingProvider
+        # Ensure the provider is an instance
+        assert (
+            isinstance(provider, PresidioScrubbingProvider)
+            or isinstance(provider, ComprehendScrubbingProvider)
+            or isinstance(provider, PrivateAIScrubbingProvider)
         )
 
         # Ensure that the provider supports Modality.TEXT

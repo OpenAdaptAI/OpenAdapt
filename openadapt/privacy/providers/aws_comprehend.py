@@ -68,7 +68,7 @@ class ComprehendDetect:
 
 
 class ComprehendScrubbingProvider(
-    ScrubbingProvider, TextScrubbingMixin, ScrubProvider
+    ScrubProvider, ScrubbingProvider, TextScrubbingMixin
 ):  # pylint: disable=abstract-method
     """A Class for AWS Comprehend Scrubbing Provider."""
 

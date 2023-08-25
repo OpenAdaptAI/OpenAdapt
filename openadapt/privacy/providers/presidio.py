@@ -21,7 +21,7 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
 
 
 class PresidioScrubbingProvider(
-    ScrubbingProvider, TextScrubbingMixin, ScrubProvider
+    ScrubProvider, ScrubbingProvider, TextScrubbingMixin
 ):  # pylint: disable=W0223
     """A Class for Presidio Scrubbing Provider."""
 

@@ -1,4 +1,4 @@
-"""Module to test scrub.py."""
+"""Module to test ComprehendScrubbingProvider."""
 
 
 from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider

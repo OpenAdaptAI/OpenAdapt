@@ -1,4 +1,4 @@
-"""Module to test scrub.py."""
+"""Module to test PresidioScrubbingProvider."""
 
 
 from io import BytesIO
