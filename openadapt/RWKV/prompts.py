@@ -185,7 +185,7 @@ def evaluate(for_dataset=False):
         return prompt, relevant_signals
 
 
-def generate_dataset(num_samples=10):
+def generate_dataset(num_samples=1000):
     # Run evaluate() several times and save the results to a file
     # Each line of jsonl file should be a dictionary as follows: {"text": "{prompt} {target_response}"}
     # Create jsonl file
@@ -206,12 +206,12 @@ def generate_labelled_dataset():
     # Create jsonl file
     # Run evaluate() 1000x times and save the result to the file
     with open("labelled_dataset.jsonl", "w") as file:
-        for i in range(5000):
+        for i in range(500):
             value = evaluate(for_dataset=True)
-            if i != 4999:
-                file.write(json.dumps({"prompt": value[0], "output": str(value[1])}) + "\n")
+            if i != 499:
+                file.write(json.dumps({"prompt": value[0], "completion": str(value[1])}) + "\n")
             else:
-                file.write(json.dumps({"prompt": value[0], "output": str(value[1])}))
+                file.write(json.dumps({"prompt": value[0], "completion": str(value[1])}))
 
 
     print("\n###### Labelled Dataset Generated Successfully ######")
