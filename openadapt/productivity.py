@@ -1,6 +1,6 @@
 """
-This module generates an HTML page with information about the productivity of the user in the
-latest recording.
+This module generates an HTML page with information about the productivity
+of the user in the latest recording.
 
 Usage:
 
@@ -30,8 +30,7 @@ from openadapt.utils import (
 )
 from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
-CSS = string.Template(
-    """
+CSS = string.Template("""
     table {
         outline: 1px solid black;
     }
@@ -52,8 +51,7 @@ CSS = string.Template(
     .screenshot:active img:nth-child(1) {
         display: block;
     }
-"""
-).substitute(
+""").substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -133,8 +131,8 @@ def is_within_margin(event1: ActionEvent, event2: ActionEvent, margin: int) -> b
         coordinates of the two events for them to be considered the same event.
 
     Returns:
-        bool: True if the distance between the mouse coordinates of the events is within the
-        specified margin, False otherwise.
+        bool: True if the distance between the mouse coordinates of the events
+        is within the specified margin, False otherwise.
     """
     return (
         abs(event1.mouse_x - event2.mouse_x) <= margin
@@ -171,16 +169,18 @@ def find_num_tasks(
     task: Optional[list[ActionEvent]] = None,
 ) -> Tuple[list[ActionEvent], int, float]:
     """
-    Given a list of ActionEvents, the start of a repeating task, the length of the task, and
-    optionally the identified task, verify that the task repeats (and if not,
-    find the correct repeating task), find how many times the task is repeated,
-    and how much time in total is spent repeating the task.
+    Given a list of ActionEvents, the start of a repeating task,
+    the length of the task, and optionally the identified task, verify that
+    the task repeats (and if not, find the correct repeating task), find
+    how many times the task is repeated, and how much time in total is spent
+    repeating the task.
 
     Parameters:
         action_events (List[ActionEvent]): A list of ActionEvents.
         start (ActionEvent): The starting ActionEvent of the task.
         length (int): The number of ActionEvents in the identified task.
-        task (Optional[ActionEvent]): An optional task identified by the search algorithm.
+        task (Optional[ActionEvent]): An optional task identified by the
+        search algorithm.
 
     Returns:
         list[ActionEvent]: The final verified task.
@@ -271,7 +271,8 @@ def rec_lrs(
 ) -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
     """
     Caller function that calls longest_repeated_substring recursively to find the
-    longest repeating non-overlapping task of ActionEvents from the original action_events.
+    longest repeating non-overlapping task of ActionEvents from
+    the original action_events.
 
     Parameters:
         action_events (List[ActionEvent]): A list of ActionEvents.
@@ -301,7 +302,8 @@ def longest_repeated_substring(
     """
     Recursive function to find the longest repeating non-overlapping task of
     ActionEvents from the original action_events. Based on algorithm found at
-    this link: https://www.geeksforgeeks.org/longest-repeating-and-non-overlapping-substring/
+    this link:
+    https://www.geeksforgeeks.org/longest-repeating-and-non-overlapping-substring/
 
     Parameters:
         action_events (List[ActionEvent]): A list of ActionEvents.
@@ -424,7 +426,8 @@ def find_num_window_tab_changes(window_events: list[WindowEvent]) -> int:
 
 def calculate_productivity():
     """
-    Calculate any relevant information about the productivity of a user in the latest recording.
+    Calculate any relevant information about the productivity of a user
+    in the latest recording.
     Display this information in an HTML page and open the page.
     """
     configure_logging(logger, LOG_LEVEL)
@@ -576,13 +579,11 @@ def calculate_productivity():
                                 </table>
                             """,
                             ),
-                            Div(
-                                text=f"""
+                            Div(text=f"""
                                 <table>
                                     {dict2html(window_info)}
                                 </table>
-                            """
-                            ),
+                            """),
                         ),
                     ]
                 )
@@ -629,13 +630,11 @@ def calculate_productivity():
                                     </table>
                                 """,
                     ),
-                    Div(
-                        text=f"""
+                    Div(text=f"""
                                     <table>
                                         {dict2html(window_info)}
                                     </table>
-                                """
-                    ),
+                                """),
                 ),
             ]
         )
