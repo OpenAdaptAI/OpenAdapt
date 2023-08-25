@@ -43,9 +43,3 @@ class GenericHuggingFaceProvider(CompletionProvider):
         )
         inference_output = inference_pipeline(prompt)
         return inference_output
-
-    def save_model():
-        raise NotImplementedError
-
-    def fine_tune():
-        raise NotImplementedError
