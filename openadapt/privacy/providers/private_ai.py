@@ -113,7 +113,7 @@ class PrivateAIScrubbingProvider(
 
         headers = {
             "Content-Type": "application/json",
-            "X-API-KEY": config.PRIVATE_AI_API_KEY,
+            "X-API-KEY": "config.PRIVATE_AI_API_KEY",
         }
 
         response = requests.post(url, json=payload, headers=headers)

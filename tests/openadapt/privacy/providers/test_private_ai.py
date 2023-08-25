@@ -1,15 +1,8 @@
 """Module to test PrivateAIScrubbingProvider."""
 
-import pytest
-
 from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()
-
-try:
-    scrub.scrub_text("Bob smith")
-except KeyError:
-    pytestmark = pytest.mark.skip(reason="PRIVATE AI API KEY NOT FOUND")
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -45,7 +38,8 @@ def test_no_scrub_string() -> None:
 def test_scrub_email() -> None:
     """Test that the email address is scrubbed."""
     assert (
-        scrub.scrub_text("My email is john.doe@example.com.") == "My email is <EMAIL>."
+        scrub.scrub_text("My email is john.doe@example.com.")
+        == "My email is [EMAIL_ADDRESS_1]."
     )
 
 
@@ -53,7 +47,7 @@ def test_scrub_phone_number() -> None:
     """Test that the phone number is scrubbed."""
     assert (
         scrub.scrub_text("My phone number is 123-456-7890.")
-        == "My phone number is <PHONE>."
+        == "My phone number is [PHONE_NUMBER_1]."
     )
 
 
@@ -61,14 +55,14 @@ def test_scrub_credit_card() -> None:
     """Test that the credit card number is scrubbed."""
     assert (
         scrub.scrub_text("My credit card number is 4234-5678-9012-3456 and ")
-    ) == "My credit card number is <CREDIT_DEBIT_NUMBER> and "
+    ) == "My credit card number is [CREDIT_CARD_1] and "
 
 
 def test_scrub_date_of_birth() -> None:
     """Test that the date of birth is scrubbed."""
     assert (
         scrub.scrub_text("My date of birth is 01/01/2000.")
-        == "My date of birth is <DATE_TIME>."
+        == "My date of birth is [DOB_1]."
     )
 
 
@@ -76,7 +70,7 @@ def test_scrub_address() -> None:
     """Test that the address is scrubbed."""
     assert (
         scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
-        == "My address is <ADDRESS>."
+        == "My address is [LOCATION_ADDRESS_1]."
     )
 
 
@@ -85,7 +79,7 @@ def test_scrub_ssn() -> None:
     # Test scrubbing of social security number
     assert (
         scrub.scrub_text("My social security number is 923-45-6789")
-        == "My social security number is <SSN>"
+        == "My social security number is [SSN_1]"
     )
 
 
@@ -93,7 +87,7 @@ def test_scrub_dl() -> None:
     """Test that the driver's license number is scrubbed."""
     assert (
         scrub.scrub_text("My driver's license number is A123-456-789-012")
-        == "My driver's license number is <DRIVER_ID>"
+        == "My driver's license number is [DRIVER_LICENSE_1]"
     )
 
 
@@ -101,7 +95,7 @@ def test_scrub_passport() -> None:
     """Test that the passport number is scrubbed."""
     assert (
         scrub.scrub_text("My passport number is A1234567.")
-        == "My passport number is <PASSPORT_NUMBER>."
+        == "My passport number is [PASSPORT_NUMBER_1]."
     )
 
 
@@ -109,7 +103,7 @@ def test_scrub_national_id() -> None:
     """Test that the national ID number is scrubbed."""
     assert (
         scrub.scrub_text("My national ID number is 1234567890123.")
-        == "My national ID number is <PHONE>."
+        == "My national ID number is [HEALTHCARE_NUMBER_1]."
     )
 
 
@@ -117,7 +111,7 @@ def test_scrub_routing_number() -> None:
     """Test that the bank routing number is scrubbed."""
     assert (
         scrub.scrub_text("My bank routing number is 123456789.")
-        == "My bank routing number is <BANK_ROUTING>."
+        == "My bank routing number is [ROUTING_NUMBER_1]."
     )
 
 
@@ -125,7 +119,7 @@ def test_scrub_bank_account() -> None:
     """Test that the bank account number is scrubbed."""
     assert (
         scrub.scrub_text("My bank account number is 635526789012.")
-        == "My bank account number is <BANK_ACCOUNT_NUMBER>."
+        == "My bank account number is [BANK_ACCOUNT_1]."
     )
 
 
@@ -140,11 +134,11 @@ def test_scrub_all_together() -> None:
     )
     assert (
         scrub.scrub_text(text_with_pii_phi)
-        == "<NAME>'s email is <EMAIL> and"
-        " his phone number is <PHONE>"
-        " credit card number is <CREDIT_DEBIT_NUMBER> and"
-        " his social security number is <SSN>."
-        " He was born on <DATE_TIME>."
+        == "[NAME_1]'s email is [EMAIL_ADDRESS_1] and"
+        " his phone number is [PHONE_NUMBER_1]."
+        "His credit card number is [CREDIT_CARD_1] and"
+        " his social security number is [SSN_1]."
+        " He was born on [DOB_1]."
     )
 
 
@@ -152,6 +146,6 @@ def test_scrub_dict() -> None:
     """Test that the scrub_dict function works."""
     text_with_pii_phi = {"title": "hi my name is Bob Smith."}
 
-    expected_output = {"title": "hi my name is <NAME>."}
+    expected_output = {"title": "hi my name is [NAME_1]."}
 
     assert scrub.scrub_dict(text_with_pii_phi) == expected_output
