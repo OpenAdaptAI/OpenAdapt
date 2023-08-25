@@ -4,7 +4,7 @@ from openadapt.ml.base_provider import (
     CompletionProvider,
     Modality,
 )
-from transformers import AutoTokenizer, AutoModel, pipeline
+from transformers import pipeline
 
 
 class GenericHuggingFaceProvider(CompletionProvider):

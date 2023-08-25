@@ -1,7 +1,6 @@
 from openadapt.ml.base_provider import CompletionProviderFactory, Modality
 from openadapt.ml.open_ai.gpt.gptprovider import GPTCompletionProvider
 from openadapt.ml.huggingface_models.generic_provider import GenericHuggingFaceProvider
-import openai
 
 
 test_gpt_provider = GPTCompletionProvider()

@@ -1,4 +1,3 @@
-from openadapt import models
 from pydantic import BaseModel
 
 
