@@ -43,8 +43,6 @@ def test_huggingface_completion_provider():
         trust_remote_code=True,
     )
 
-    print(inference_output)
-
     assert len(inference_output) > 0
 
 
