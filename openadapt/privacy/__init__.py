@@ -1,1 +1,4 @@
-"""Privacy package for OpenAdapt."""
+"""Package for the Privacy API.
+
+Module: __init__.py
+"""
