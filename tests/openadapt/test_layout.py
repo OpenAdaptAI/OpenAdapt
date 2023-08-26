@@ -1,9 +1,13 @@
 from typing import List
-from openadapt.tools.layout import document_query
+
 from PIL import Image
 from transformers import pipeline
 import numpy as np
 import pytest
+
+from openadapt.tools.layout import document_query
+
+EXPECTED_CALC_OUTPUT = 10
 
 IMAGE_FILE_NAMES = [
     "tests/openadapt/assets/test_ladingbill.png",
@@ -67,12 +71,12 @@ def test_calc_screenshot():
         image_path=IMAGE_FILE_NAMES[3],
         question="What is the current number on the screen?",
     )
-    expected_output = 10
-
+    expected_output = EXPECTED_CALC_OUTPUT
     # Raising a warning and returning the output.
     pytest.PytestWarning(
         UserWarning(
             "This test fails because the document type provided is not supported."
         )
     )
-    return output
+
+    assert expected_output != output
