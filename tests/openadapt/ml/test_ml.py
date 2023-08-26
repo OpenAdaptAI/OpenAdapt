@@ -12,7 +12,7 @@ def test_openai_completion_provider():
     all available models within a user's organization, and can run inference
     on them. A prerequisite is having your OpenAI API key set up properly.
     """
-    test_gpt_provider = GPTCompletionProvider()
+
     gpt_4_chat_response = test_gpt_provider.infer(
         "gpt-4", "What is your maximum context size?"
     )
@@ -31,9 +31,7 @@ def test_openai_completion_provider():
 
 
 def test_huggingface_completion_provider():
-    """
-    Test to verify that inference using HuggingFace Pipelines works.
-    """
+    """Test to verify that inference using HuggingFace Pipelines works."""
     inference_output = test_hf_provider.infer(
         "What is the next number in the series 1, 3, 5, 7 ",
         "gpt2-medium",
@@ -45,10 +43,7 @@ def test_huggingface_completion_provider():
 
 
 def test_abstract_completion_provider_factory():
-    """
-    Test to verify that the completion provider factory class fetches
-    completion providers with Modality = TEXT.
-    """
+    """Test that the provider factory class gets completion providers with Modality.TEXT."""
     test_modality = Modality.TEXT
     providers_list = CompletionProviderFactory.get_for_modality(test_modality)
 
