@@ -1,8 +1,4 @@
-from typing import List
-
-from PIL import Image
-from transformers import pipeline
-import numpy as np
+"""Layout Extraction tool test module."""
 import pytest
 
 from openadapt.tools.layout import document_query
@@ -17,7 +13,8 @@ IMAGE_FILE_NAMES = [
 ]
 
 
-def test_lading_bill_screenshot():
+def test_lading_bill_screenshot() -> None:
+    """Lading Bill Screenshot test."""
     questions = [
         "What is the bill of lading number?",
         "What is the carrier name?",
@@ -39,7 +36,8 @@ def test_lading_bill_screenshot():
     assert output_answers == expected_output
 
 
-def test_invoice_screenshot():
+def test_invoice_screenshot() -> None:
+    """Invoice Screenshot test."""
     questions = [
         "What is the sender's phone number?",
         "What is the sender's address?",
@@ -57,7 +55,8 @@ def test_invoice_screenshot():
     assert output_answers == expected_answers
 
 
-def test_calendar_screenshot():
+def test_calendar_screenshot() -> None:
+    """Calendar Screenshot test."""
     output = document_query(
         image=None, image_path=IMAGE_FILE_NAMES[2], question="What month is it?"
     )[0]["answer"]
@@ -65,7 +64,8 @@ def test_calendar_screenshot():
     assert output.lower() == expected_output
 
 
-def test_calc_screenshot():
+def test_calc_screenshot() -> None:
+    """Calc Screenshot test."""
     output = document_query(
         image=None,
         image_path=IMAGE_FILE_NAMES[3],
