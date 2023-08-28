@@ -15,6 +15,8 @@ cache
 *.db
 *.db-journal
 
+*.html
+
 # VSCode
 .VSCode
 .vsCode

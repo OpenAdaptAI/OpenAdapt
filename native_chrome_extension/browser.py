@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 # noqa: D205
 
-"""Script for communicating with the browser extension.
+"""Script for communicating with the browser extension. # noqa: D205 D415
 Usage:
     See `native_chrome_extension/browser.bat`.
 """
@@ -9,7 +9,6 @@ Usage:
 # in order to ensure that stdin and stdout are opened in binary, rather
 # than text, mode.
 
-from multiprocessing.connection import Listener
 import json
 import sqlite3
 import struct
@@ -54,7 +53,7 @@ def encode_message(message_content: any) -> dict:
 
 
 def send_message(encoded_message: dict) -> None:
-    """Send an encoded message to stdout
+    """Send an encoded message to stdout.
 
     Args:
         encoded_message: The encoded message to be sent.
@@ -64,9 +63,13 @@ def send_message(encoded_message: dict) -> None:
     sys.stdout.buffer.flush()
 
 
-def send_message_to_client(conn, message):
-    # check if client connection exists
-    # if not, create one
+def send_message_to_client(conn: sockets.Connection, message: dict) -> None:
+    """Send a message to the client.
+
+    Args:
+        conn: The connection to the client.
+        message: The message to be sent.
+    """
     try:
         conn.send(message)
     except Exception as exc:
@@ -74,6 +77,7 @@ def send_message_to_client(conn, message):
 
 
 def main() -> None:
+    """Main function."""
     # Connect to the database
     db_conn = sqlite3.connect("messages.db")
     c = db_conn.cursor()

@@ -1,6 +1,4 @@
-
 from typing import Any
-
 
 # TODO: implement extension
 # def get_active_chrome_data() -> Any:

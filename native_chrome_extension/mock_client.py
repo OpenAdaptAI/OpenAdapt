@@ -1,4 +1,4 @@
-from multiprocessing.connection import Client
+"""Mock client for testing the server."""
 import time
 
 from loguru import logger
@@ -9,12 +9,14 @@ RETRY_INTERVAL = 5
 SERVER_SENDS = True
 
 
-def establish_connection():
+def establish_connection() -> sockets.Connection:
+    """Establish a connection to the server."""
     return sockets.create_client_connection(config.SOCKET_PORT)
 
 
-def main():
-    conn = sockets.create_client_connection(config.SOCKET_PORT)
+def main() -> None:
+    """Main function."""
+    conn = establish_connection()
     while True:
         try:
             if SERVER_SENDS:
