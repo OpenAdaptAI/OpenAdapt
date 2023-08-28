@@ -218,6 +218,6 @@ if multiprocessing.current_process().name == "MainProcess":
 # sentry reporting
 if REPORT_ERRORS and git.Repo(os.getcwd()).active_branch.name == "main":  # type: ignore # noqa
     sentry_sdk.init(
-        dsn=os.getenv("SENTRY_DSN"),
+        dsn=SENTRY_DSN,
         traces_sample_rate=1.0,
     )
