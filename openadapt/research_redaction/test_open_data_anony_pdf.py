@@ -1,6 +1,5 @@
 from anonympy.pdf import pdfAnonymizer
 
-
 # need to specify paths, since I don't have them in system variables
 anonym = pdfAnonymizer(
     path_to_pdf="embedded_text.pdf",
