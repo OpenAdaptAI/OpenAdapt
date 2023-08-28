@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.8.1"
+version = "0.9.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
