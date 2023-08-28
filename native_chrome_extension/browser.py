@@ -88,6 +88,8 @@ def main() -> None:
         """)
     conn = sockets.create_server_connection(config.SOCKET_PORT)
     while True:
+        if conn.closed:
+            conn = sockets.create_server_connection(config.SOCKET_PORT)
         message = get_message()
         if STORE_DATA:
             # Log the message to the database
