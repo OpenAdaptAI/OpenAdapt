@@ -10,9 +10,9 @@ Options:
 --timestamp=<timestamp> Timestamp of the recording to replay.
 
 """
-from os import sep
 from time import sleep
 from typing import Union
+import os
 
 from loguru import logger
 import fire
@@ -80,9 +80,7 @@ def replay(
         dir_name = "captures"
         file_path = os.path.join(dir_name, file_name)
         logger.info(f"{file_path=}")
-        handler = logger.add(
-            open(file_path, "w")
-        )
+        handler = logger.add(open(file_path, "w"))
     try:
         strategy.run()
     except Exception as e:
