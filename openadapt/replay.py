@@ -75,7 +75,11 @@ def replay(
         capture.start(audio=False, camera=False)
         sleep(1)
         handler = logger.add(
-            open(f"captures{sep}log-{strategy_name}-{recording.timestamp}.log", "w")
+            file_name = f"log-{strategy_name}-{recording.timestamp}.log"
+            # TODO: make configurable
+            dir_name = "captures"
+            file_path = os.path.join(dir_name, file_name)
+            open(file_path, "w")
         )
     try:
         strategy.run()
