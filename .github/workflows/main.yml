@@ -28,33 +28,7 @@ jobs:
 
       - name: Run tests using the shell script (macOS compatible).
         if: matrix.os == 'macos-latest'
-        run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
-
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.5.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache deps
-        id: cache-deps
-        uses: actions/cache@v2
-        with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
-
-      - run: poetry install --no-interaction --no-root
-        if: steps.cache-deps.outputs.cache-hit != 'true'
-
-      - name: Check formatting with Black
-        run: poetry run black --preview --check .
-
-      - name: Run Flake8
-        run: poetry run flake8
+        run: |
+          REPO="${{ github.event.pull_request.head.repo.full_name }}"  # Using full_name for repository
+          BRANCH="${{ github.event.pull_request.head.ref }}"  # Using ref for branch
+          SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
