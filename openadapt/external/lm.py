@@ -1,3 +1,5 @@
+"""Gets recently accessed files."""
+
 from datetime import datetime
 from typing import List, Tuple
 import os
@@ -7,6 +9,7 @@ import pathlib
 def get_recent_files(
     folders: List[str], ignore_patterns: List[str], limit: int
 ) -> Tuple[List[Tuple[str, datetime]], int]:
+    """Gets recently accessed files in folders."""
     files = []
     for folder in folders:
         for root, dirs, filenames in os.walk(folder):
@@ -28,7 +31,8 @@ def get_recent_files(
     return files[:limit], len(files)
 
 
-def test_common_user_directories():
+def test_common_user_directories() -> None:
+    """Gets recently accessed files in common user directories."""
     folders = [
         os.path.expanduser("~" + os.path.sep + "Documents"),
         os.path.expanduser("~" + os.path.sep + "Downloads"),
@@ -50,7 +54,8 @@ def test_common_user_directories():
     print(f"\nsearched {num_files:,} files.\n")
 
 
-def test_system_directories():
+def test_system_directories() -> None:
+    """Gets recently accessed files in system directories."""
     if os.name == "nt":
         folders = [os.environ["SystemRoot"] + os.path.sep + "System32"]
     else:
@@ -71,7 +76,8 @@ def test_system_directories():
     print(f"\nsearched {num_files:,} files.\n")
 
 
-def test_home_directory():
+def test_home_directory() -> None:
+    """Gets recently accessed files in home directory."""
     folders = [
         pathlib.Path.home(),
         pathlib.Path("/usr/bin"),
