@@ -9,6 +9,9 @@ pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
 
+# Construct the repository URL
+REPO_URL="https://github.com/$REPO"
+
 ################################ HELPER FUNCTIONS ################################
 
 # Remove OpenAdapt if it exists
@@ -121,9 +124,9 @@ fi
 CheckPythonExists
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
-
+RunAndCheck "git clone $REPO_URL" "Clone git repo"
 cd OpenAdapt
+RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 
 RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
