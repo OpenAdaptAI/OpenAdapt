@@ -150,8 +150,10 @@ class TransformersAgentsMixin(OpenAiAgent):
                 self.chat(get_prompt(action_event, diffs), image=screenshot.image)
                 if diffs:
                     self.chat(
-                        "Here is a diff of the screenshot. The event text is"
-                        f" {action_event.text} What can you conclude?",
+                        (
+                            "Here is a diff of the screenshot. The event text is"
+                            f" {action_event.text} What can you conclude?"
+                        ),
                         image=diff,
                     )
             except Exception as e:
