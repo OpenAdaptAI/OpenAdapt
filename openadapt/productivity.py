@@ -664,7 +664,6 @@ def calculate_productivity() -> None:
         )
     )
 
-  
     def cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
