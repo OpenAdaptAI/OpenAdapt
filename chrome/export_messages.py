@@ -33,6 +33,7 @@ for i, message in enumerate(messages):
     if message_json["action"] == "captureDocumentState":
         message_json["documentBody"] = "..."
         message_json["documentHead"] = "..."
+        message_json["elements"] = "..."
 
     message_html = json.dumps(message_json, indent=4, ensure_ascii=False)
     message_html = html.escape(message_html)

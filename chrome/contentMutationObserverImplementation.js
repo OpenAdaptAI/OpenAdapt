@@ -48,7 +48,7 @@ const observer = new MutationObserver((mutations) => {
     const value = target.value;
 
     sendMessageToBackgroundScript({
-      action: "elementMutation",
+      action: "mutation",
       type: type,
       tagName: tagName,
       attributes: attributes,

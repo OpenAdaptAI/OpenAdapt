@@ -6,6 +6,7 @@
 
 let logged = false;
 let ignoreAttributes = new Set();
+const elements = {};
 
 /*
  * Function to send a message to the background script
@@ -27,6 +28,7 @@ function captureDocumentState() {
     action: "captureDocumentState",
     documentBody: documentBody,
     documentHead: documentHead,
+    elements: elements,
     url: page_url,
     timestamp: Date.now(),
   });
@@ -35,15 +37,13 @@ function captureDocumentState() {
 function handleElementClick(event) {
   const element = event.target;
   const tagName = element.tagName;
+  const { x, y } = elements[element.id];
+  const value = elements[element.id].element.value;
   const attributes = {};
 
   for (const attr of element.attributes) {
     attributes[attr.name] = attr.value;
   }
-
-  const rect = element.getBoundingClientRect();
-  const x = rect.left + window.scrollX;
-  const y = rect.top + window.scrollY;
 
   sendMessageToBackgroundScript({
     action: "elementClicked",
@@ -51,6 +51,7 @@ function handleElementClick(event) {
     attributes: attributes,
     x: x,
     y: y,
+    value: value,
     url: window.location.href,
     timestamp: Date.now(),
   });
@@ -71,17 +72,14 @@ function debounce(func, delay) {
 
 function handleDebouncedInput(event) {
   const element = event.target;
+  const { x, y } = elements[element.id];
+  const value = elements[element.id].element.value;
   const tagName = element.tagName;
   const attributes = {};
 
   for (const attr of element.attributes) {
     attributes[attr.name] = attr.value;
   }
-
-  const rect = element.getBoundingClientRect();
-  const x = rect.left + window.scrollX;
-  const y = rect.top + window.scrollY;
-  const value = element.value;
 
   sendMessageToBackgroundScript({
     action: "elementInput",
@@ -101,12 +99,24 @@ function handleElementInput(event) {
   debouncedInputHandler(event);
 }
 
+function addElement(element) {
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + window.scrollX;
+  const y = rect.top + window.scrollY;
+  const value = element.value;
+  if (!element.id) {
+    element.id = element.tagName + "_" + x + "_" + y;
+  }
+  elements[element.id] = { element, x, y, value };
+  element.addEventListener("click", handleElementClick);
+  element.addEventListener("input", debounce(handleDebouncedInput, 500));
+}
+
 function addEventListeners() {
   const elements = document.getElementsByTagName("*");
 
   for (const element of elements) {
-    element.addEventListener("click", handleElementClick);
-    element.addEventListener("input", handleElementInput);
+    addElement(element);
   }
 }
 
