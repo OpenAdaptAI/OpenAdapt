@@ -52,7 +52,7 @@ page += (
 )
 
 if len(messages) > 0:
-    name = f"messages-{json.loads(messages[0][1])['timestamp']}.html"
+    name = f"messages-{json.loads(messages[-1][1])['timestamp']}.html"
 else:
     name = f"messages-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.html"
 
