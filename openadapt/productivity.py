@@ -1,17 +1,17 @@
-"""
-This module generates an HTML page with information about the productivity of the user in the
-latest recording.
+"""This module generates an HTML page.
+
+The page has information about the productivity of the user in the latest recording.
 
 Usage:
 
-    $ python openadapt/productivity.py"
+    $ python -m openadapt.productivity
 """
 
 from pprint import pformat
 from threading import Timer
+from typing import Optional, Tuple
 import os
 import string
-from typing import Optional, Tuple
 
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
@@ -19,11 +19,8 @@ from bokeh.models.widgets import Div
 from loguru import logger
 
 from openadapt.crud import get_latest_recording, get_window_events
-
-from openadapt.events import (
-    get_events,
-)
-
+from openadapt.events import get_events
+from openadapt.models import ActionEvent, WindowEvent
 from openadapt.utils import (
     configure_logging,
     display_event,
@@ -31,17 +28,9 @@ from openadapt.utils import (
     row2dict,
     rows2dicts,
 )
-
 from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
-from openadapt.models import (
-    ActionEvent,
-    Screenshot,
-    WindowEvent,
-)
-
-CSS = string.Template(
-    """
+CSS = string.Template("""
     table {
         outline: 1px solid black;
     }
@@ -62,8 +51,7 @@ CSS = string.Template(
     .screenshot:active img:nth-child(1) {
         display: block;
     }
-"""
-).substitute(
+""").substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -76,10 +64,9 @@ MIN_TASK_LENGTH = 4
 
 
 def find_gaps(action_events: list[ActionEvent]) -> Tuple[int, float]:
-    """
-    Find and count gaps between ActionEvents that are longer than MAX_GAP_SECONDS.
+    """Find and count gaps between ActionEvents that are longer than MAX_GAP_SECONDS.
 
-    Parameters:
+    Args:
         action_events (list[ActionEvent]): A list of ActionEvent objects.
 
     Returns:
@@ -99,10 +86,9 @@ def find_gaps(action_events: list[ActionEvent]) -> Tuple[int, float]:
 
 
 def find_clicks(action_events: list[ActionEvent]) -> int:
-    """
-    Count the number of mouse clicks in a list of ActionEvents.
+    """Count the number of mouse clicks in a list of ActionEvents.
 
-    Parameters:
+    Args:
         action_events (list[ActionEvent]): A list of ActionEvent objects.
 
     Returns:
@@ -116,10 +102,9 @@ def find_clicks(action_events: list[ActionEvent]) -> int:
 
 
 def find_key_presses(action_events: list[ActionEvent]) -> int:
-    """
-    Count the number of key presses in a list of ActionEvents.
+    """Count the number of key presses in a list of ActionEvents.
 
-    Parameters:
+    Args:
         action_events (list[ActionEvent]): A list of ActionEvent objects.
 
     Returns:
@@ -133,18 +118,17 @@ def find_key_presses(action_events: list[ActionEvent]) -> int:
 
 
 def is_within_margin(event1: ActionEvent, event2: ActionEvent, margin: int) -> bool:
-    """
-    Check if two mouse events are within a specified pixel distance from each other.
+    """Check if two mouse events are within a specified pixel distance from each other.
 
-    Parameters:
+    Args:
         event1 (ActionEvent): The first ActionEvent.
         event2 (ActionEvent): The second ActionEvent.
         margin (int): The maximum allowable distance in pixels between the mouse
         coordinates of the two events for them to be considered the same event.
 
     Returns:
-        bool: True if the distance between the mouse coordinates of the events is within the
-        specified margin, False otherwise.
+        bool: True if the distance between the mouse coordinates
+        of the events is within the specified margin, False otherwise.
     """
     return (
         abs(event1.mouse_x - event2.mouse_x) <= margin
@@ -153,12 +137,14 @@ def is_within_margin(event1: ActionEvent, event2: ActionEvent, margin: int) -> b
 
 
 def compare_events(event1: ActionEvent, event2: ActionEvent) -> bool:
-    """
-    Compare two action events to determine if they are similar enough to be considered
-    the same. For mouse events, clicks must be a within some distance of each other. For
+    """Compare two action events.
+
+    To determine if they are similar enough to be considered the same.
+
+    For mouse events, clicks must be a within some distance of each other. For
     key presses, the keys must be the same.
 
-    Parameters:
+    Args:
         event1 (ActionEvent): The first ActionEvent object to be compared.
         event2 (ActionEvent): The second ActionEvent object to be compared.
 
@@ -178,19 +164,22 @@ def find_num_tasks(
     action_events: list[ActionEvent],
     start: ActionEvent,
     length: int,
-    task: Optional[ActionEvent] = None,
+    task: Optional[list[ActionEvent]] = None,
 ) -> Tuple[list[ActionEvent], int, float]:
-    """
-    Given a list of ActionEvents, the start of a repeating task, the length of the task, and
-    optionally the identified task, verify that the task repeats (and if not,
-    find the correct repeating task), find how many times the task is repeated,
+    """Find the num of times a task is repeated and how much time is spent on the task.
+
+    Given a list of ActionEvents, the start of a repeating task,
+    the length of the task, and optionally the identified task,
+    verify that the task repeats (and if not, find the correct repeating task),
+    find how many times the task is repeated,
     and how much time in total is spent repeating the task.
 
-    Parameters:
+    Args:
         action_events (List[ActionEvent]): A list of ActionEvents.
         start (ActionEvent): The starting ActionEvent of the task.
         length (int): The number of ActionEvents in the identified task.
-        task (Optional[ActionEvent]): An optional task identified by the search algorithm.
+        task (Optional[ActionEvent]):
+        An optional task identified by the search algorithm.
 
     Returns:
         list[ActionEvent]: The final verified task.
@@ -279,11 +268,13 @@ def find_num_tasks(
 def rec_lrs(
     action_events: list[ActionEvent],
 ) -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
-    """
-    Caller function that calls longest_repeated_substring recursively to find the
-    longest repeating non-overlapping task of ActionEvents from the original action_events.
+    """A function to find the longest repeating non-overlapping task of ActionEvents.
 
-    Parameters:
+    Caller function that calls longest_repeated_substring recursively to find the
+    longest repeating non-overlapping task of ActionEvents
+    from the original action_events.
+
+    Args:
         action_events (List[ActionEvent]): A list of ActionEvents.
 
     Returns:
@@ -308,12 +299,14 @@ def rec_lrs(
 def longest_repeated_substring(
     action_events: list[ActionEvent],
 ) -> Tuple[list[ActionEvent], Optional[ActionEvent], int]:
-    """
+    """A function to find the longest repeating non-overlapping task of ActionEvents.
+
     Recursive function to find the longest repeating non-overlapping task of
     ActionEvents from the original action_events. Based on algorithm found at
-    this link: https://www.geeksforgeeks.org/longest-repeating-and-non-overlapping-substring/
+    this link:
+    https://www.geeksforgeeks.org/longest-repeating-and-non-overlapping-substring/
 
-    Parameters:
+    Args:
         action_events (List[ActionEvent]): A list of ActionEvents.
 
     Returns:
@@ -362,10 +355,9 @@ def longest_repeated_substring(
 
 
 def filter_move_release(action_events: list[ActionEvent]) -> list[ActionEvent]:
-    """
-    Filter out any events that aren't clicks and key presses.
+    """Filter out any events that aren't clicks and key presses.
 
-    Parameters:
+    Args:
         action_events (list[ActionEvent]): list of ActionEvents to be filtered
 
     Returns:
@@ -384,9 +376,14 @@ def filter_move_release(action_events: list[ActionEvent]) -> list[ActionEvent]:
     return filtered_action_events
 
 
-def find_errors(action_events: list[ActionEvent]):
-    """
-    Currently unused as there is no good way to find errors.
+def find_errors(action_events: list[ActionEvent]) -> int:
+    """Currently unused as there is no good way to find errors.
+
+    Args:
+        action_events (list[ActionEvent]): list of ActionEvents.
+
+    Returns:
+        int: number of errors.
     """
     # TODO: how to find click errors
     errors = 0
@@ -406,10 +403,9 @@ def find_errors(action_events: list[ActionEvent]):
 
 
 def find_num_window_tab_changes(window_events: list[WindowEvent]) -> int:
-    """
-    Find the number of times a user switches between tabs or applications.
+    """Find the number of times a user switches between tabs or applications.
 
-    Parameters:
+    Args:
         window_events (list[WindowEvent]): list of WindowEvents.
 
     Return:
@@ -432,10 +428,18 @@ def find_num_window_tab_changes(window_events: list[WindowEvent]) -> int:
     return num_window_tab_changes - 1
 
 
-def calculate_productivity():
-    """
-    Calculate any relevant information about the productivity of a user in the latest recording.
+def calculate_productivity() -> None:
+    """A function to calculate productivity metrics.
+
+    Calculate any relevant information
+    about the productivity of a user in the latest recording.
     Display this information in an HTML page and open the page.
+
+    Args:
+        None
+
+    Returns:
+        None
     """
     configure_logging(logger, LOG_LEVEL)
 
@@ -586,13 +590,11 @@ def calculate_productivity():
                                 </table>
                             """,
                             ),
-                            Div(
-                                text=f"""
+                            Div(text=f"""
                                 <table>
                                     {dict2html(window_info)}
                                 </table>
-                            """
-                            ),
+                            """),
                         ),
                     ]
                 )
@@ -639,13 +641,11 @@ def calculate_productivity():
                                     </table>
                                 """,
                     ),
-                    Div(
-                        text=f"""
+                    Div(text=f"""
                                     <table>
                                         {dict2html(window_info)}
                                     </table>
-                                """
-                    ),
+                                """),
                 ),
             ]
         )
@@ -656,13 +656,13 @@ def calculate_productivity():
     logger.info(f"{fname_out=}")
     output_file(fname_out, title=title)
 
-    result = show(
+    result = show(  # noqa: F841
         layout(
             rows,
         )
     )
 
-    def cleanup():
+    def cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
