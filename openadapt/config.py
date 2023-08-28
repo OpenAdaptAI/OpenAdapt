@@ -216,7 +216,7 @@ if multiprocessing.current_process().name == "MainProcess":
             logger.info(f"{key}={val}")
 
 # sentry reporting
-if REPORT_ERRORS and git.Repo(os.getcwd()).active_branch.name == "main":  # type: ignore # noqa
+if REPORT_ERRORS and git.Repo(ROOT_DIRPATH).active_branch.name == "main":  # type: ignore # noqa
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         traces_sample_rate=1.0,
