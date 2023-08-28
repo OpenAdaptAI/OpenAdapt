@@ -7,7 +7,7 @@ authors = [
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
 
 readme = "README.md"
@@ -22,12 +22,12 @@ homepage = "https://openadapt.ai/"
 python = "3.10.x"
 alembic = "1.8.1"
 black = "23.3.0"
-pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
-pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
+pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
+pywin32 = { version = "306", markers = "sys_platform == 'win32'" }
 ascii-magic = "2.3.0"
 bokeh = "2.4.3"
 clipboard = "0.0.4"
-deepdiff = {extras = ["optimize"], version = "^6.3.0"}
+deepdiff = { extras = ["optimize"], version = "^6.3.0" }
 ascii_magic = "2.3.0"
 dictalchemy3 = "1.0.0"
 fire = "0.4.0"
@@ -72,12 +72,20 @@ flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
 psutil = "^5.9.5"
-pyobjc-framework-avfoundation = {version = "^9.2", markers = "sys_platform == 'darwin'"}
+tomlkit = "^0.11.8"
+pyobjc-framework-avfoundation = { version = "^9.2", markers = "sys_platform == 'darwin'" }
 fastapi = "0.98.0"
 oa-pynput = "^1.7.7"
 oa-atomacos = {version = "3.2.0", markers = "sys_platform == 'darwin'"}
 presidio-image-redactor = "^0.0.48"
 spacy-transformers = "^1.2.5"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # suppress warnings starting from "setuptools>=67.3"
+    "ignore:Deprecated call to `pkg_resources\\.declare_namespace\\('.*'\\):DeprecationWarning",
+    "ignore:pkg_resources is deprecated as an API",
+]
 
 [build-system]
 requires = ["poetry-core"]
@@ -104,12 +112,8 @@ extend-exclude = '''
 '''
 
 [tool.semantic_release]
-version_variable = [
-    "openadapt/__init__.py:__version__"
-]
-version_toml = [
-    "pyproject.toml:tool.poetry.version"
-]
+version_variable = ["openadapt/__init__.py:__version__"]
+version_toml = ["pyproject.toml:tool.poetry.version"]
 major_on_zero = false
 branch = "main"
 commit_subject = "chore(release): v{version}"
