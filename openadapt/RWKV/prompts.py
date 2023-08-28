@@ -15,6 +15,18 @@ Tasks = {
     10: "posting on social media platforms",
     11: "editing photos for an online portfolio",
     12: "updating a LinkedIn profile",
+    13: "posting to a book blog",
+    14: "joining a team meeting",
+    15: "updating store inventory records",
+    16: "performing a virus scan",
+    17: "updating lab reports",
+    18: "sending an update to the team",
+    19: "deleting old emails",
+    20: "making a credit card payment",
+    21: "testing a new software integration",
+    22: "testing a new software deployment", 
+    23: "starting a ROS instance",   
+    24: "organizing a folder of files",
 }
 
 ShortSignals = [
@@ -41,7 +53,7 @@ ShortSignals = [
         "id": 4,
         "type": "database",
         "descriptor": "footwear.db",
-        "relevant_task_ids": [2],
+        "relevant_task_ids": [2, 3],
     },
     {
         "id": 5,
@@ -53,8 +65,8 @@ ShortSignals = [
         "id": 6,
         "type": "file",
         "descriptor": "electronic_medical_record_template.xls",
-        "relevant_task_ids": [3],
-    },  # 4 is very loosely relevant
+        "relevant_task_ids": [3, 4],
+    },  # 4 is loosely relevant
     {
         "id": 7,
         "type": "url",
@@ -65,7 +77,7 @@ ShortSignals = [
         "id": 8,
         "type": "database",
         "descriptor": "user_info.db",
-        "relevant_task_ids": [3, 6, 7],
+        "relevant_task_ids": [3, 6, 7, 14, 20],
     },
     {
         "id": 9,
@@ -77,7 +89,7 @@ ShortSignals = [
         "id": 10,
         "type": "file",
         "descriptor": "File_Sorting_Script.py",
-        "relevant_task_ids": [],
+        "relevant_task_ids": [24],
     },
     {
         "id": 11,
@@ -102,6 +114,84 @@ ShortSignals = [
         "type": "url",
         "descriptor": "https://www.linkedin.com",
         "relevant_task_ids": [6, 10, 12],
+    },
+    {
+        "id": 15,
+        "type": "database",
+        "descriptor": "book_summaries.db",
+        "relevant_task_ids": [15],
+    },
+    {
+        "id": 16,
+        "type": "url",
+        "descriptor": "https://www.zoom.us",
+        "relevant_task_ids": [14, 18],
+    },
+    {
+        "id": 17,
+        "type": "file",
+        "descriptor": "clothing_size_inventory.csv",
+        "relevant_task_ids": [15],
+    },
+    {
+        "id": 18,
+        "type": "function",
+        "descriptor": "openai.Engine.list",
+        "relevant_task_ids": [],
+    },
+    {
+        "id": 19,
+        "type": "function",
+        "descriptor": "antivirus.start_security_scan",
+        "relevant_task_ids": [16],
+    },
+    {
+        "id": 20,
+        "type": "file",
+        "descriptor": "genetherapy_data.csv",
+        "relevant_task_ids": [17],
+    },
+    {
+        "id": 21,
+        "type": "function",
+        "descriptor": "emailLibrary.sendEmail",
+        "relevant_task_ids": [5, 18],
+    },
+    {
+        "id": 22,
+        "type": "url",
+        "descriptor": "https://www.gmail.com",
+        "relevant_task_ids": [5, 18, 19],
+    },
+    {
+        "id": 23,
+        "type": "file",
+        "descriptor": "sales_report.xls",
+        "relevant_task_ids": [4, 15],
+    }, # 4 is loosely relevant
+    {
+        "id": 24,
+        "type": "function",
+        "descriptor": "runIntegrationTest",
+        "relevant_task_ids": [21],
+    },
+    {
+        "id": 25,
+        "type": "function",
+        "descriptor": "runDeploymentTest",
+        "relevant_task_ids": [22],
+    },
+    {   
+        "id": 26,
+        "type": "file",
+        "descriptor": "test_results.txt",
+        "relevant_task_ids": [17, 21, 22],
+    },
+    {
+        "id": 27,
+        "type": "function",
+        "descriptor": "roscore",
+        "relevant_task_ids": [23],
     },
 ]
 
@@ -141,6 +231,15 @@ You are {task}. A list of information signals is provided in JSON format. Please
 """
     return prompt
 
+def back_heavy_randint(max_val):
+    """
+    Returns a random integer between 0 and max_val, with a bias towards higher numbers.
+    
+    The bias is achieved by squaring a random float between 0 and 1, then multiplying it by max_val.
+    """
+    rand_float = random.random()
+    squared_float = rand_float ** 0.9
+    return round(squared_float * max_val)
 
 def evaluate(for_dataset=False):
     # 1. Pick a random task_id and a random number of random signals
@@ -150,8 +249,8 @@ def evaluate(for_dataset=False):
     # 5. Check if the model's output is correct
 
     task_id = random.randint(0, len(Tasks) - 1)
-    # signal_count = random.randint(3, 7)
-    signal_count = len(ShortSignals)
+    signal_count = back_heavy_randint(15)
+    # signal_count = len(ShortSignals)
 
     # Select signal_count random signals (avoid duplicates)
     # Have signal indexes start at 0 despite pre-existing signal ids
@@ -234,5 +333,5 @@ if __name__ == "__main__":
     evaluate()
 
     print("\n###### Generating Dataset ######")
-    generate_dataset()
-    generate_labelled_dataset()
+    generate_dataset(1000)
+    # generate_labelled_dataset()
