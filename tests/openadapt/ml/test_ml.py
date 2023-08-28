@@ -9,7 +9,7 @@ test_hf_provider = GenericHuggingFaceProvider()
 
 
 def test_openai_completion_provider() -> None:
-    """OpenAI Completion Provider test."""
+    """Openai Completion Provider test."""
     gpt_4_chat_response = test_gpt_provider.infer(
         "gpt-4", "What is your maximum context size?"
     )
@@ -28,7 +28,7 @@ def test_openai_completion_provider() -> None:
 
 
 def test_huggingface_completion_provider() -> None:
-    """HuggingFace Completion Provider test."""
+    """Huggingface Completion Provider test."""
     inference_output = test_hf_provider.infer(
         "What is the next number in the series 1, 3, 5, 7 ",
         "gpt2-medium",

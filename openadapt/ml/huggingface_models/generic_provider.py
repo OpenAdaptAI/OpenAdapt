@@ -1,4 +1,4 @@
-"""Generic CompletionProvider file."""
+"""Generic CompletionProvider module."""
 
 from transformers import pipeline
 

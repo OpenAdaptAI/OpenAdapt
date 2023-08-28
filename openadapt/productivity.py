@@ -127,7 +127,6 @@ def is_within_margin(event1: ActionEvent, event2: ActionEvent, margin: int) -> b
         coordinates of the two events for them to be considered the same event.
 
     Returns:
-
         bool: True if the distance between the mouse coordinates
         of the events is within the specified margin, False otherwise.
     """

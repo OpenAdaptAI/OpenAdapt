@@ -1,1 +1,1 @@
-"""OpenAI GPT CompletionProvider module."""
+"""OpenAI GPT CompletionProvider package."""

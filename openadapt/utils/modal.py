@@ -1,3 +1,4 @@
+"""Conda Image creation tool."""
 import modal
 
 BASE_PACKAGE_LIST = [
@@ -13,11 +14,8 @@ BASE_PACKAGE_LIST = [
 ]
 
 
-def create_conda_image(package: str, packages: list[str]):
-    """
-    Enables the user to create a conda image
-    with packages of their choosing, to configure their
-    Modal stubs.
+def create_conda_image(package: str, packages: list[str]) -> modal.Image:
+    """Creates conda image to use with Modal stub.
 
     This is useful because Modal is being used across various
     tasks in the repository for inference and fine-tuning when

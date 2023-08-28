@@ -29,8 +29,9 @@ class GPTCompletionProvider(CompletionProvider):
         raise NotImplementedError
 
     def infer(self, gpt_model_name: str, prompt: str) -> str:
-        """Users can only infer from models available within their organization
-        on OpenAI. This includes base models provided by OpenAI as well as
+        """Users can only infer from models available within their OpenAI organization.
+
+        This includes base models provided by OpenAI as well as
         finetuned models.
         """
         valid_inference_models = openai.Model.list()["data"]

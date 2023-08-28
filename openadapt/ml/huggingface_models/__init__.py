@@ -1,1 +1,1 @@
-"""HuggingFace Provider Module."""
+"""HuggingFace ml package."""
