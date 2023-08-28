@@ -2,6 +2,243 @@
 
 
 
+## v0.8.1 (2023-08-21)
+
+### Chore
+
+* chore(*): change installation of spacy weights to runtime (#462)
+
+* remove spacy from
+ manual steup instruciton in README.md
+
+* remove spacy
+ installion from both the install scripts
+
+* add todo
+
+* test runtime code for spacy installtion
+
+* pyetst passes even if spacy model is not installed
+
+* addressing:
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/462#issuecomment-1673807055
+
+* add spacy-trnasformers
+
+address comment:
+https://github.com/OpenAdaptAI/OpenAdapt/pull/462#issuecomment-1673807055
+
+* skip all the tests in test_scrub if
+ spacy miodel is ont installed
+
+* format ([`479937e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/479937ee623fee58587ff24380ea6eb3549ab480))
+
+### Fix
+
+* fix: enhance publish action and authors in pyproject.toml (#463)
+
+* fix: enhance publish action and authors in pyproject.toml
+
+* modify release-and-publish.yml
+
+* change author name to OpenAdapt.AI Team
+
+* use pull_request_target to trigger status checks for any git branch ([`c7813c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7813c2b42e963041a671b9c9c2057c9ea203609))
+
+### Refactor
+
+* refactor: add Privacy design API (#439)
+
+* add Privacy API design code
+
+* add Presidio.scrub_text
+
+* update script to remove linting error
+
+* add test script
+
+* try to fix the pytest error
+
+* try to fix failing test_scrub_api.py
+
+* fixed the pytest error
+
+* change the test file to use the providers code
+
+* refactor presidio_scrub
+
+* fix pytest test_presidio_scrub_text
+
+* fix pytest
+
+* update the scrub_image method header
+
+* add module docstrings
+
+* update base.py
+
+* update providers
+
+* update providers
+
+* add noqa
+
+* update flake8 to
+ignore flake8 F821 undefined name &#39;...&#39; error
+
+* remove noqa from line now
+
+* update flake8:
+fix undefined error in pylint and falek8
+
+* update privacy api
+
+* fix all pylint errors
+
+* fix all pytlint errors
+
+* fix all pylint errors in base.py
+
+* now pytest passes with 6 warnings
+
+* update visualize to
+ use the privacy api providers code
+
+* now visualization works with new Privacy API
+
+* change scrub ebaled to False
+
+* fix pytest
+
+* remove scrbu.py old moidule
+
+* format test script
+
+* format base.py and presidio.py
+
+* remove scrub module
+
+* fix merge
+
+* add spacy runtime code
+
+* remove pytestmark unused variable
+
+* tests get skippped if spacy is not installed
+
+* update utils
+
+* format for final commit ([`5151cb5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5151cb557599fb3958b04f9e6955229f3cd91b1e))
+
+
+## v0.8.0 (2023-08-10)
+
+### Chore
+
+* chore: resolve failing publish github actions (#458)
+
+* check if modified flake8 works
+
+* Add release github action
+
+* Add oa-pynput and oa-atomacos and refactor accordingly
+
+* Use simpler publish github action and rename to release-and-publish.yml
+
+* add preview check in main.yml
+
+* add documentation on publishing direct dependencies
+
+* chore: resolve publishing github action errors ([`7b57505`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7b575059d45a2a697fcb2b88f5921a2cc80cf430))
+
+### Feature
+
+* feat: Implement System Tray Icon (#300)
+
+* add tray icon
+
+* move to tray.py
+
+* add notifications &amp; guards
+
+* pyinstaller currently broken
+
+* Update tray.py
+
+* Update cards.py
+
+* hide icon in taskbar + minor improvements
+
+* add dropdown for visualize
+
+* Update tray.py
+
+* Update tray.py
+
+* add py6tray + notifier
+
+* BYE BYE PYSTRAY !!!
+
+hello dependency inversion?
+
+* os.sep + fix console + other
+
+* use path.join
+
+* run -&gt; _run
+
+* add replays
+
+* fix conflicting action items
+
+* fix database is locked + threading
+
+* type annotations
+
+* Update cards.py
+
+* Create visualize1.py
+
+* Revert &#34;Create visualize1.py&#34;
+
+This reverts commit 753f6919e7566b89686922c4e6b2a4fddf33ef04.
+
+* fix typo
+
+* fix merge conflicts : still broken
+
+* fix
+
+* Revert &#34;fix&#34;
+
+This reverts commit 9d844467a9a9f16e219175eb60734b709c6f7b76.
+
+* Revert &#34;fix merge conflicts : still broken&#34;
+
+This reverts commit 82e62d95093e6114653f59b8a7ea94233efc60e1.
+
+* Update pyproject.toml
+
+* styling / linting
+
+* Update tray.py
+
+* Update build.py
+
+* return vals
+
+* Update build.py
+
+* show app
+
+* changes ([`9f2a04e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9f2a04e8580ae5db62426aeba67eecb89ff09b62))
+
+### Unknown
+
+* fix pytest (#460) ([`1049589`](https://github.com/OpenAdaptAI/OpenAdapt/commit/10495890195acf3bc6a51731f0471fbef31835d7))
+
+
 ## v0.7.1 (2023-08-10)
 
 ### Chore
