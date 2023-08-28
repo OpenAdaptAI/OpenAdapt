@@ -15,8 +15,7 @@ queue_by_port = {}
 
 
 def client_send_message(port: int, msg: Any) -> None:
-    """
-    Send a message to the client connection associated with the given port.
+    """Send a message to the client connection associated with the given port.
 
     Args:
         port: The port number associated with the client connection.
@@ -31,8 +30,7 @@ def client_send_message(port: int, msg: Any) -> None:
 
 
 def server_send_message(port: int, msg: Any) -> None:
-    """
-    Send a message to the server connection associated with the given port.
+    """Send a message to the server connection associated with the given port.
 
     Args:
         port: The port number associated with the server connection.
@@ -47,8 +45,7 @@ def server_send_message(port: int, msg: Any) -> None:
 
 
 def client_receive_message(port: int) -> Optional[str]:
-    """
-    Receive a message from the client connection associated with the given port.
+    """Receive a message from the client connection associated with the given port.
 
     Args:
         port: The port number associated with the client connection.
@@ -62,13 +59,13 @@ def client_receive_message(port: int) -> Optional[str]:
             if message := client_conn.recv():
                 return message
         except Exception as exc:
-            logger.warning("Connection was closed.")
+            logger.error("Connection was closed.")
+            logger.error(exc)
             del client_by_port[port]
 
 
 def server_receive_message(port: int) -> Optional[str]:
-    """
-    Receive a message from the server connection associated with the given port.
+    """Receive a message from the server connection associated with the given port.
 
     Args:
         port: The port number associated with the server connection.
@@ -95,8 +92,7 @@ def server_receive_message(port: int) -> Optional[str]:
 
 
 def client_add_sink(port: int, queue: Queue) -> None:
-    """
-    Add a sink queue to the specified client port.
+    """Add a sink queue to the specified client port.
 
     Args:
         port: The port number to associate with the sink queue.
@@ -114,8 +110,7 @@ def client_add_sink(port: int, queue: Queue) -> None:
 
 
 def server_add_sink(port: int, queue: Queue) -> None:
-    """
-    Add a sink queue to the specified server port.
+    """Add a sink queue to the specified server port.
 
     Args:
         port: The port number to associate with the sink queue.
@@ -135,9 +130,8 @@ def server_add_sink(port: int, queue: Queue) -> None:
 _terminate_event: Optional[bool] = None
 
 
-def set_terminate_event(terminate_event) -> None:
-    """
-    Set the termination event to control the event loop.
+def set_terminate_event(terminate_event: bool) -> None:
+    """Set the termination event to control the event loop.
 
     Args:
         terminate_event: The termination event object.
@@ -150,8 +144,7 @@ def set_terminate_event(terminate_event) -> None:
 
 
 def create_client_connection(port: int) -> Connection:
-    """
-    Create a client connection and establish a connection to the specified port.
+    """Create a client connection and establish a connection to the specified port.
 
     Args:
         port: The port number to connect to.
@@ -167,8 +160,7 @@ def create_client_connection(port: int) -> Connection:
 
 
 def create_server_connection(port: int) -> Connection:
-    """
-    Create a server connection and start listening for connections on the specified port.
+    """Create and listen for connections on the specified port.
 
     Args:
         port: The port number to bind the server connection to.
@@ -185,8 +177,7 @@ def create_server_connection(port: int) -> Connection:
 
 
 def event_loop() -> None:
-    """
-    The event loop for receiving and handling messages.
+    """The event loop for receiving and handling messages.
 
     Raises:
         AssertionError: If `_terminate_event` is not set.
@@ -198,7 +189,7 @@ def event_loop() -> None:
     while not _terminate_event.is_set():
         for port, client_conn in client_by_port.items():
             try:
-                message = client_conn.recv()
+                message = client_conn.recv()  # noqa: F841
                 # if message:
                 # TODO: Handle message
 
@@ -221,11 +212,13 @@ def event_loop() -> None:
 
 
 def server_sends(conn: Connection, message: Any) -> None:
+    """Send a message to the server connection associated with the given port."""
     if conn:
         conn.send(message)
 
 
 def client_receive(conn: Connection) -> Any:
+    """Receive a message from the client connection associated with the given port."""
     if conn:
         try:
             message = conn.recv()

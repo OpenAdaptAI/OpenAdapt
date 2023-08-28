@@ -1,6 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Any, Union
+from typing import Union
 import io
 
 from loguru import logger

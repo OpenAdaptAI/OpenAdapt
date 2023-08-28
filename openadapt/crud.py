@@ -126,7 +126,9 @@ def insert_window_event(
     _insert(event_data, WindowEvent, window_events)
 
 
-def insert_browser_event(recording_timestamp, event_timestamp, event_data) -> None:
+def insert_browser_event(
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any] = None
+) -> None:
     """Insert a browser event into the database.
 
     Args:
@@ -412,8 +414,8 @@ def get_window_events(recording: Recording) -> list[WindowEvent]:
     return _get(WindowEvent, recording.timestamp)
 
 
-def get_browser_events(recording) -> list[BrowserEvent]:
-    """Get browser events for a given recording
+def get_browser_events(recording: Recording) -> list[BrowserEvent]:
+    """Get browser events for a given recording.
 
     Args:
         recording (Recording): recording object

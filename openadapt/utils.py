@@ -746,8 +746,7 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
 
 
 def get_free_port() -> int:
-    """
-    Get a free port number on the local machine.
+    """Get a free port number on the local machine.
 
     Returns:
         An available free port number.
@@ -763,7 +762,15 @@ def get_free_port() -> int:
     return port
 
 
-def send_kill_signal(pid):
+def send_kill_signal(pid: int) -> None:
+    """Send a kill signal to the process identified by the PID.
+
+    Args:
+        pid (int): The PID of the process.
+
+    Raises:
+        OSError: If the kill signal cannot be sent.
+    """
     try:
         # Send the kill signal (SIGTERM) to the process identified by the PID
         os.kill(pid, signal.SIGTERM)
@@ -772,16 +779,23 @@ def send_kill_signal(pid):
         logger.info(f"Failed to send kill signal: {e}")
 
 
-def get_pid_by_name(process_name):
+def get_pid_by_name(process_name: str) -> int:
+    """Get the PID of the process with the given name.
+
+    Args:
+        process_name (str): The name of the process.
+
+    Returns:
+        int: The PID of the process.
+    """
     for process in psutil.process_iter(["pid", "name"]):
         if process.info["name"] == process_name:
             return process.info["pid"]
     return None
 
 
-def get_functions(name) -> dict:
-    """
-    Get a dictionary of function names to functions for all non-private functions
+def get_functions(name: str) -> dict:
+    """Get a dictionary of function names to functions for all non-private functions.
 
     Usage:
 

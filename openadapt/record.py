@@ -8,8 +8,7 @@ Usage:
 
 from collections import namedtuple
 from functools import partial, wraps
-from multiprocessing.connection import Client
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Union
 import multiprocessing
 import os
 import queue
@@ -175,6 +174,7 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        browser_write_q: A queue for writing browser events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
@@ -214,7 +214,7 @@ def process_events(
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
             event.data["browser_event_timestamp"] = (
-                prev_browser_event.timestamp if not prev_browser_event is None else None
+                prev_browser_event.timestamp if prev_browser_event is not None else None
             )
             process_event(
                 event,
@@ -315,16 +315,14 @@ def write_browser_event(
     recording_timestamp: float,
     event: Event,
     perf_q: sq.SynchronizedQueue,
-):
-    """
-    Write a browser event to the database and update the performance queue.
+) -> None:
+    """Write a browser event to the database and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
         event: A browser event to be written.
         perf_q: A queue for collecting performance data.
     """
-
     assert event.type == "browser", event
     crud.insert_browser_event(recording_timestamp, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -606,8 +604,7 @@ def read_browser_events(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
-    """
-    Read browser events and add them to the event queue.
+    """Read browser events and add them to the event queue.
 
     Args:
         event_q: A queue for adding window events.
@@ -616,7 +613,7 @@ def read_browser_events(
     """
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
-    logger.info(f"starting")
+    logger.info("starting")
     conn = sockets.create_client_connection(config.SOCKET_PORT)
     while not terminate_event.is_set() and conn is not None:
         try:
@@ -639,6 +636,7 @@ def read_browser_events(
                 logger.info("No message received or received None Type Message.")
         except Exception as exc:
             logger.warning("Connection closed.")
+            logger.warning(exc)
             break
             #     while True:
             #         try:

@@ -731,7 +731,8 @@ def process_events(
     )
     logger.info(
         "before"
-        f" {num_action_events=} {num_window_events=} {num_screenshots=} {num_browser_events=} "
+        f" {num_action_events=} {num_window_events=}"
+        f" {num_screenshots=} {num_browser_events=} "
         f"{num_total=}"
     )
     process_fns = [
@@ -782,11 +783,12 @@ def process_events(
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
-    pct_browser_events = num_browser_events_ / num_browser_events
+    # pct_browser_events = num_browser_events_ / num_browser_events
     pct_total = num_total_ / num_total
     logger.info(
         "after"
-        f" {num_action_events_=} {num_window_events_=} {num_screenshots_=} {num_browser_events_} "
+        f" {num_action_events_=} {num_window_events_=}"
+        f" {num_screenshots_=} {num_browser_events_} "
         f"{num_total=}"
     )
     logger.info(
