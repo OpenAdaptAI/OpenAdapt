@@ -1,91 +1,32 @@
+import base64
+import os
+
 from loguru import logger
-import requests
+from privateai_client import PAIClient
+from privateai_client.objects import request_objects
 
 from openadapt import config
 
-url = "https://api.private-ai.com/deid/v3/process/text"
+file_dir = "files"
+file_name = "sample_llc_1.pdf"
+filepath = os.path.join(file_dir, file_name)
+file_type = "application/pdf"  # eg. application/pdf
+client = PAIClient(url="http://localhost:8080")
 
-payload = {
-    "text": ["hello my name is Bob Smith"],
-    "link_batch": False,
-    "entity_detection": {
-        "accuracy": "high",
-        "entity_types": [
-            {
-                "type": "ENABLE",
-                "value": [
-                    "ACCOUNT_NUMBER",
-                    "AGE",
-                    "DATE",
-                    "DATE_INTERVAL",
-                    "DOB",
-                    "DRIVER_LICENSE",
-                    "DURATION",
-                    "EMAIL_ADDRESS",
-                    "EVENT",
-                    "FILENAME",
-                    "GENDER_SEXUALITY",
-                    "HEALTHCARE_NUMBER",
-                    "IP_ADDRESS",
-                    "LANGUAGE",
-                    "LOCATION",
-                    "LOCATION_ADDRESS",
-                    "LOCATION_CITY",
-                    "LOCATION_COORDINATE",
-                    "LOCATION_COUNTRY",
-                    "LOCATION_STATE",
-                    "LOCATION_ZIP",
-                    "MARITAL_STATUS",
-                    "MONEY",
-                    "NAME",
-                    "NAME_FAMILY",
-                    "NAME_GIVEN",
-                    "NAME_MEDICAL_PROFESSIONAL",
-                    "NUMERICAL_PII",
-                    "ORGANIZATION",
-                    "ORGANIZATION_MEDICAL_FACILITY",
-                    "OCCUPATION",
-                    "ORIGIN",
-                    "PASSPORT_NUMBER",
-                    "PASSWORD",
-                    "PHONE_NUMBER",
-                    "PHYSICAL_ATTRIBUTE",
-                    "POLITICAL_AFFILIATION",
-                    "RELIGION",
-                    "SSN",
-                    "TIME",
-                    "URL",
-                    "USERNAME",
-                    "VEHICLE_ID",
-                    "ZODIAC_SIGN",
-                    "BLOOD_TYPE",
-                    "CONDITION",
-                    "DOSE",
-                    "DRUG",
-                    "INJURY",
-                    "MEDICAL_PROCESS",
-                    "STATISTICS",
-                    "BANK_ACCOUNT",
-                    "CREDIT_CARD",
-                    "CREDIT_CARD_EXPIRATION",
-                    "CVV",
-                    "ROUTING_NUMBER",
-                ],
-            }
-        ],
-        "return_entity": True,
-    },
-    "processed_text": {"type": "MARKER", "pattern": "[UNIQUE_NUMBERED_ENTITY_TYPE]"},
-}
+# Read from file
+with open(filepath, "rb") as b64_file:
+    file_data = base64.b64encode(b64_file.read())
+    file_data = file_data.decode("ascii")
 
-headers = {
-    "Content-Type": "application/json",
-    "X-API-KEY": config.PRIVATE_AI_API_KEY,
-}
+# Make the request
+file_obj = request_objects.file_obj(data=file_data, content_type=file_type)
+request_obj = request_objects.file_base64_obj(file=file_obj)
+resp = client.process_files_base64(request_object=request_obj)
+if not resp.ok:
+    logger.warning(f"response for file {file_name} returned with {resp.status_code}")
 
-response = requests.post(url, json=payload, headers=headers)
-
-data = response.json()
-
-logger.info(data)
-logger.info(data[0].get("processed_text"))
+# Write to file
+with open(os.path.join(file_dir, f"redacted-{file_name}"), "wb") as redacted_file:
+    processed_file = resp.processed_file.encode("ascii")
+    processed_file = base64.b64decode(processed_file, validate=True)
+    redacted_file.write(processed_file)
