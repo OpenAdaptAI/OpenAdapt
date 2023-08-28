@@ -9,7 +9,10 @@ pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
 
-# Construct the repository URL
+# Set default values when no parameters are provided
+BRANCH=${BRANCH:-main}
+REPO=${REPO:-https://github.com/MLDSAI/OpenAdapt.git}
+
 REPO_URL="https://github.com/$REPO"
 
 ################################ HELPER FUNCTIONS ################################
