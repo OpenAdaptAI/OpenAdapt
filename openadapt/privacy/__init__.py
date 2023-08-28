@@ -1,4 +1,1 @@
-"""Package for the Privacy API.
-
-Module: __init__.py
-"""
+"""Package for the Privacy API."""
