@@ -31,19 +31,20 @@ def get_prompt(action_event: ActionEvent, diffs: bool = False) -> str:
         str: The prompt for the agent.
     """
     return (
-        f"In the image, you are presented with a "
-        f"screenshot of a user's current active window."
+        "In the image, you are presented with a "
+        "screenshot of a user's current active window."
         f"The user's current window event is: {action_event.window_event.title}. "
-        f"What is the user doing, and what text do they see? "
-        f"DO NOT SEGMENT, feel free to use text_classifier and text_qa. "
-        f"If you have been given another image previously, "
-        f"please use that image and list the user's next possible actions."
-    ) + (
-        "A diff of the screenshot may be given after the prompt".join(
-            " if it does not contain useful information, disregard it."
+        "What is the user doing, and what text do they see? "
+        "DO NOT SEGMENT, feel free to use text_classifier and text_qa. "
+        "If you have been given another image previously, "
+        "please use that image and list the user's next possible actions."
+        + (
+            "A diff of the screenshot may be given after the prompt".join(
+                " if it does not contain useful information, disregard it."
+            )
+            if diffs
+            else ""
         )
-        if diffs
-        else ""
     )
 
 
@@ -149,7 +150,7 @@ class TransformersAgentsMixin(OpenAiAgent):
                 self.chat(get_prompt(action_event, diffs), image=screenshot.image)
                 if diffs:
                     self.chat(
-                        f"Here is a diff of the screenshot. "
+                        "Here is a diff of the screenshot. "
                         f"The event text is {action_event.text} What can you conclude?",
                         image=diff,
                     )
