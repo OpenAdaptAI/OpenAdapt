@@ -333,5 +333,5 @@ if __name__ == "__main__":
     evaluate()
 
     print("\n###### Generating Dataset ######")
-    generate_dataset(1000)
+    generate_dataset(5000)
     # generate_labelled_dataset()
