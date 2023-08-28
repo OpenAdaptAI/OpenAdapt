@@ -1,3 +1,5 @@
+"""GPT Completion Provider file."""
+
 import openai
 
 from openadapt.ml.base_provider import (
@@ -20,17 +22,14 @@ class GPTCompletionProvider(CompletionProvider):
     Modalities: list[Modality] = [Modality.TEXT]
     Availabilities: list[Availability] = [Availability.HOSTED]
 
-    def finetune(self, prompt_completion_pair: list[dict[str]]):
-        """
-        Fine-tune the GPT model.
-        """
+    def finetune(self, prompt_completion_pair: list[dict[str]]) -> None:
+        """Fine-tune the GPT model."""
         # waiting on FineTuning PR which is currently
         # a work in progress.
         raise NotImplementedError
 
-    def infer(self, gpt_model_name: str, prompt: str):
-        """
-        Users can only infer from models available within their organization
+    def infer(self, gpt_model_name: str, prompt: str) -> str:
+        """Users can only infer from models available within their organization
         on OpenAI. This includes base models provided by OpenAI as well as
         finetuned models.
         """

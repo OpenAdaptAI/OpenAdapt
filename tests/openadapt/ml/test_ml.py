@@ -1,3 +1,5 @@
+"""Module to test the CompletionProvider API."""
+
 from openadapt.ml.base_provider import CompletionProviderFactory, Modality
 from openadapt.ml.huggingface_models.generic_provider import GenericHuggingFaceProvider
 from openadapt.ml.open_ai.gpt.gptprovider import GPTCompletionProvider
@@ -6,13 +8,8 @@ test_gpt_provider = GPTCompletionProvider()
 test_hf_provider = GenericHuggingFaceProvider()
 
 
-def test_openai_completion_provider():
-    """
-    Test to verify that the GPTCompletionProvider correctly fetches
-    all available models within a user's organization, and can run inference
-    on them. A prerequisite is having your OpenAI API key set up properly.
-    """
-
+def test_openai_completion_provider() -> None:
+    """OpenAI Completion Provider test."""
     gpt_4_chat_response = test_gpt_provider.infer(
         "gpt-4", "What is your maximum context size?"
     )
@@ -30,8 +27,8 @@ def test_openai_completion_provider():
     )
 
 
-def test_huggingface_completion_provider():
-    """Test to verify that inference using HuggingFace Pipelines works."""
+def test_huggingface_completion_provider() -> None:
+    """HuggingFace Completion Provider test."""
     inference_output = test_hf_provider.infer(
         "What is the next number in the series 1, 3, 5, 7 ",
         "gpt2-medium",
@@ -42,11 +39,12 @@ def test_huggingface_completion_provider():
     assert len(inference_output) > 0
 
 
-def test_abstract_completion_provider_factory():
-    """Test that the provider factory class gets completion providers with Modality.TEXT."""
+def test_abstract_completion_provider_factory() -> None:
+    """Completion Provider Factory test."""
     test_modality = Modality.TEXT
     providers_list = CompletionProviderFactory.get_for_modality(test_modality)
 
     assert providers_list
+
     for completion_providers in providers_list:
         assert test_modality in completion_providers.Modalities

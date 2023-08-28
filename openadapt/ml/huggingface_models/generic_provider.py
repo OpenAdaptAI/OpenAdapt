@@ -1,3 +1,5 @@
+"""Generic CompletionProvider file."""
+
 from transformers import pipeline
 
 from openadapt.ml.base_provider import (
@@ -25,11 +27,10 @@ class GenericHuggingFaceProvider(CompletionProvider):
         prompt: str,
         model_path: str,
         task_description: str,
-        use_pipeline=True,
-        trust_remote_code=False,
-    ):
-        """
-        Infers on a model of the user's choice, using Huggingface pipelines.
+        use_pipeline: bool = True,
+        trust_remote_code: bool = False,
+    ) -> str:
+        """Infers on a model of the user's choice, using Huggingface pipelines.
 
         Initializes a pipeline object to infer from using the
         given model and its corresponding task description.

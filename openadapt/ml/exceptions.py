@@ -1,13 +1,13 @@
-class ModelNotImplementedError(BaseException):
-    """
-    To be raised when a model is not supported by the infrastructure.
-    """
+"""Exceptions file for the Completions Provider API."""
 
-    def __init__(self, model_name: str):
+
+class ModelNotImplementedError(BaseException):
+    """To be raised when a model is not supported by the infrastructure."""
+
+    def __init__(self, model_name: str) -> None:
+        """ModelNotImplementedError init method."""
         super().__init__(f"{model_name} is not currently supported")
 
 
 class GpuNotAvailableError(BaseException):
-    """
-    Raised when no GPU is available on the system.
-    """
+    """Raised when no GPU is available on the system."""

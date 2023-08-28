@@ -1,3 +1,7 @@
+"""CompletionProvider and related classes."""
+
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -32,9 +36,7 @@ class Availability:
 
 
 class CompletionProvider(BaseModel):
-    """
-    Base CompletionProvider class.
-    """
+    """Base CompletionProvider class."""
 
     Name: str
     Capabilities: list[Capability]
@@ -46,22 +48,16 @@ class CompletionProvider(BaseModel):
 
         arbitrary_types_allowed = True
 
-    def infer(prompt: str, model_name: str):
-        """
-        Run inference on the provider.
-        """
+    def infer(prompt: str, model_name: str) -> None:
+        """Run inference on the provider."""
         raise NotImplementedError
 
-    def finetune(prompt_completion_pair: list[dict[str]]):
-        """
-        Fine-tune the provider.
-        """
+    def finetune(prompt_completion_pair: list[dict[str]]) -> None:
+        """Fine-tune the provider."""
         raise NotImplementedError
 
-    def get_children():
-        """
-        Grab all completion provider classes.
-        """
+    def get_children() -> Any:
+        """Grab all completion provider classes."""
         return CompletionProvider.__subclasses__()
 
 
@@ -69,9 +65,7 @@ class CompletionProviderFactory:
     """CompletionProviderFactory class."""
 
     def get_for_modality(modality: Modality) -> list[CompletionProvider]:
-        """
-        Gets all available CompletionProviders with the given modality.
-        """
+        """Gets all available CompletionProviders with the given modality."""
         completion_providers = CompletionProvider.get_children()
         filtered_providers = [
             provider()
