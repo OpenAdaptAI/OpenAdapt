@@ -1,4 +1,7 @@
-"""Removes recordings from the database."""
+"""Removes recordings from the database.
+
+Usage: python -m openadapt.db.remove [--all | --latest | --id <recording_id>]
+"""
 from sys import stdout
 
 from loguru import logger

@@ -1,4 +1,7 @@
-"""Lists all recordings in the database."""
+"""Lists all recordings in the database.
+
+Usage: python -m openadapt.db.list
+"""
 
 from sys import stdout
 
