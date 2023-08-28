@@ -73,6 +73,7 @@ def replay(
     rval = True
     if record:
         capture.start(audio=False, camera=False)
+        # TODO: handle this more robustly
         sleep(1)
         handler = logger.add(
             file_name = f"log-{strategy_name}-{recording.timestamp}.log"
