@@ -1,4 +1,4 @@
-name: Semantic Release and PyPi Publish
+name: Semantic Release and PyPI Publish
 
 on:
   push:
@@ -32,12 +32,15 @@ jobs:
         with:
           ref: main
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: '3.10'
-      - name: Build and publish to PyPI
-        uses: JRubics/poetry-publish@v1.17
-        with:
-          python_version: "3.10"
-          poetry_version: "==1.5.1"
-          pypi_token: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish to PyPI
+        env:
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install poetry
+          poetry install
+          poetry config pypi-token.pypi $PYPI_TOKEN
+          poetry build
+          poetry publish --no-interaction --skip-existing

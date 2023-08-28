@@ -1,4 +1,4 @@
-"""Package for the Privacy API Providers.
+"""Package for the Providers.
 
 Module: __init__.py
 """
