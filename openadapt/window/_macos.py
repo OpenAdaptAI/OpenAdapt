@@ -7,8 +7,8 @@ import re
 from loguru import logger
 import AppKit
 import ApplicationServices
-import oa_atomacos
 import Foundation
+import oa_atomacos
 import Quartz
 
 

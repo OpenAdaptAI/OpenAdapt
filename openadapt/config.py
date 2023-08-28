@@ -88,6 +88,10 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    "SOCKET_PORT": 6001,
+    "SOCKET_AUTHKEY": b"openadapt",
+    "SOCKET_ADDRESS": "localhost",
+    "SOCKET_RETRY_INTERVAL": 5,  # seconds
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
@@ -200,7 +204,8 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     return rval
 
 
-_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
+
 if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():

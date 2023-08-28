@@ -4,8 +4,8 @@ from typing import Union
 import io
 
 from loguru import logger
-from PIL import Image, ImageChops
 from oa_pynput import keyboard
+from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
@@ -59,6 +59,11 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    browser_events = sa.orm.relationship(
+        "BrowserEvent",
+        back_populates="recording",
+        order_by="BrowserEvent.timestamp",
+    )
 
     _processed_action_events = None
 
@@ -83,6 +88,7 @@ class ActionEvent(db.Base):
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
+    browser_event_timestamp = sa.Column(sa.ForeignKey("browser_event.timestamp"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -111,6 +117,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_event")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -375,6 +382,28 @@ class WindowEvent(db.Base):
     def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
+
+
+class BrowserEvent(db.Base):
+    """Class representing a browser event in the database."""
+
+    __tablename__ = "browser_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
+    bodyHTML = sa.Column(sa.String)
+    headHTML = sa.Column(sa.String)
+    url = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="browser_events")
+    action_event = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    # TODO: implement for extension
+    # @classmethod
+    # def get_active_browser_event(cls: Any) -> Any:
+    #     """Get the active chrome tab window's DOM"""
+    #     return BrowserEvent(**get_active_chrome_data())
 
 
 class PerformanceStat(db.Base):
