@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
 
+"""Script for communicating with the browser extension.
+Usage:
+    See `native_chrome_extension/browser.bat`.
+"""
+
+# Note that running python with the `-u` flag is required on Windows,
+# in order to ensure that stdin and stdout are opened in binary, rather
+# than text, mode.
+
+from multiprocessing.connection import Listener
 import json
 import sqlite3
 import struct
 import sys
 
-STORE_DATA = True
+from openadapt import config, sockets
+
+STORE_DATA = False
 
 
 def get_message() -> dict:
@@ -52,8 +64,20 @@ def send_message(encoded_message: dict) -> None:
     sys.stdout.buffer.flush()
 
 
+def send_message_to_client(message):
+    # check if client connection exists
+    # if not, create one
+    try:
+        conn = sockets.create_client_connection(config.SOCKET_PORT)
+        conn.send(message)
+        conn.close()
+    except Exception as exc:
+        print(f"Error sending message to client: {exc}")
+
+
 def main() -> None:
     # TODO: use sockets to communicate with openadapt client
+
     # Connect to the database
     conn = sqlite3.connect("messages.db")
     c = conn.cursor()
@@ -66,6 +90,7 @@ def main() -> None:
         """)
 
     while True:
+        conn = sockets.create_server_connection(config.SOCKET_PORT)
         message = get_message()
         if STORE_DATA:
             # Log the message to the database
@@ -76,7 +101,8 @@ def main() -> None:
             response = {"message": "Data received and logged successfully!"}
             encoded_response = encode_message(response)
             send_message(encoded_response)
-    sys.stdout.buffer.flush()
+            send_message_to_client(message)
+            sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
