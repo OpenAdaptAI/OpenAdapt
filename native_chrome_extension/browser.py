@@ -74,8 +74,6 @@ def send_message_to_client(conn, message):
 
 
 def main() -> None:
-    # TODO: use sockets to communicate with openadapt client
-
     # Connect to the database
     db_conn = sqlite3.connect("messages.db")
     c = db_conn.cursor()

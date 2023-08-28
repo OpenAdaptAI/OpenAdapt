@@ -6,7 +6,6 @@
 
 let logged = false;
 let ignoreAttributes = new Set();
-let observer = null;
 
 /*
  * Function to send a message to the background script
