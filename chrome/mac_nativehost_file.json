@@ -3,5 +3,5 @@
     "description": "OpenAdapt DOM Listener",
     "path": "/Users/aaron/Documents/GitHub/OpenAdapt/chrome/browser.py",
     "type": "stdio",
-    "allowed_origins": ["chrome-extension://nhbpabaagkpjeppjkhopppfhdjpelchg/"]
+    "allowed_origins": ["chrome-extension://ghlnbigmccnehdmcnbgjnlfehfkcieff/"]
 }

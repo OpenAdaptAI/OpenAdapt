@@ -17,6 +17,7 @@ import sys
 from openadapt import config, sockets
 
 STORE_DATA = True
+SOCKETS = False
 
 
 def get_message() -> dict:
@@ -88,9 +89,10 @@ def main() -> None:
             message TEXT NOT NULL
         )
         """)
-    conn = sockets.create_server_connection(config.SOCKET_PORT)
+    if SOCKETS:
+        conn = sockets.create_server_connection(config.SOCKET_PORT)
     while True:
-        if conn.closed:
+        if SOCKETS and conn.closed:
             conn = sockets.create_server_connection(config.SOCKET_PORT)
         message = get_message()
         if STORE_DATA:
@@ -102,7 +104,9 @@ def main() -> None:
             response = {"message": "Data received and logged successfully!"}
             encoded_response = encode_message(response)
             send_message(encoded_response)
-            send_message_to_client(conn, message)
+
+            if SOCKETS:
+                send_message_to_client(conn, message)
 
 
 if __name__ == "__main__":
