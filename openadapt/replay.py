@@ -75,11 +75,12 @@ def replay(
         capture.start(audio=False, camera=False)
         # TODO: handle this more robustly
         sleep(1)
+        file_name = f"log-{strategy_name}-{recording.timestamp}.log"
+        # TODO: make configurable
+        dir_name = "captures"
+        file_path = os.path.join(dir_name, file_name)
+        logger.info(f"{file_path=}")
         handler = logger.add(
-            file_name = f"log-{strategy_name}-{recording.timestamp}.log"
-            # TODO: make configurable
-            dir_name = "captures"
-            file_path = os.path.join(dir_name, file_name)
             open(file_path, "w")
         )
     try:
