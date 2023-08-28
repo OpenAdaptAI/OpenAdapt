@@ -2,11 +2,13 @@
 
 usage: `python -m openadapt.app.tray` or `poetry run app`
 """
+
 from functools import partial
-from threading import Thread
+from subprocess import Popen
 import os
 import sys
 
+from loguru import logger
 from notifypy import Notify
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction, QIcon
@@ -18,7 +20,6 @@ from openadapt.crud import get_all_recordings
 from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
-from openadapt.visualize import main as visualize
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -78,6 +79,8 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.timer.timeout.connect(self.update_tray_icon)
         self.timer.start()
 
+        self.visualize_proc = None
+
         Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
 
     def update_tray_icon(self) -> None:
@@ -117,11 +120,16 @@ class SystemTrayIcon(QSystemTrayIcon):
             recording (Recording): The recording to visualize.
         """
         Notify("Status", "Starting visualization...", "OpenAdapt").send()
-        vthread = oaThread(target=visualize, args=(recording,))
-        vthread.run()
-        if vthread.join():
-            Notify("Status", "Visualization finished", "OpenAdapt").send()
-        else:
+        try:
+            if self.visualize_proc is not None:
+                self.visualize_proc.kill()
+            self.visualize_proc = Popen(
+                f"python -m openadapt.visualize --timestamp {recording.timestamp}",
+                shell=True,
+            )
+
+        except Exception as e:
+            logger.error(e)
             Notify("Status", "Visualization failed", "OpenAdapt").send()
 
     def _replay(self, recording: Recording) -> None:
@@ -163,7 +171,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     def show_app(self) -> None:
         """Show the main application window."""
         if self.app_thread is None or not self.app_thread.is_alive():
-            self.app_thread = Thread(target=start, daemon=True, args=(True,))
+            self.app_thread = oaThread(target=start, daemon=True, args=(True,))
             self.app_thread.start()
 
     def run(self) -> None:

@@ -88,6 +88,13 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    # VISUALIZATION CONFIGURATIONS
+    "VISUALIZE_DARK_MODE": False,
+    "VISUALIZE_RUN_NATIVELY": True,
+    "VISUALIZE_DENSE_TREES": True,
+    "VISUALIZE_ANIMATIONS": True,
+    "VISUALIZE_EXPAND_ALL": False,  # not recommended for large trees
+    "VISUALIZE_MAX_TABLE_CHILDREN": 10,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
@@ -132,6 +139,8 @@ def getenv_fallback(var_name: str) -> str:
         "0",
     ):
         rval = rval.lower() == "true" or rval == "1"
+    if type(rval) is str and rval.isnumeric():
+        rval = int(rval)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
