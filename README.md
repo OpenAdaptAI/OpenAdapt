@@ -283,9 +283,9 @@ Now, the pre-commit hooks are installed and will run automatically before each c
 
 When you submit a PR, the "Python CI" workflow is triggered for code consistency. It follows organized steps to review your code:
 
-1. **Python Black Check** : This step verifies code formatting using Python Black style, with the `--preview`` flag for style.
+1. **Python Black Check** : This step verifies code formatting using Python Black style, with the `--preview` flag for style.
 
-2. **Flake8 Review** : Next, Flake8 tool thoroughly checks code structure, including flake8-annotations and flake8-docstrings. Though GitHub Actions automates checks, it's wise to locally run `flake8 .`` before finalizing changes for quicker issue spotting and resolution.
+2. **Flake8 Review** : Next, Flake8 tool thoroughly checks code structure, including flake8-annotations and flake8-docstrings. Though GitHub Actions automates checks, it's wise to locally run `flake8 .` before finalizing changes for quicker issue spotting and resolution.
 
 # Submitting an Issue
 
