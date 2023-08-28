@@ -283,7 +283,6 @@ Set-Location .\OpenAdapt
 RunAndCheck "pip install poetry" "Run ``pip install poetry``"
 RunAndCheck "poetry install" "Run ``poetry install``"
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
-RunAndCheck "poetry run python -m spacy download en_core_web_trf" "Run ``python -m spacy download en_core_web_trf``" -SkipCleanup:$true
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
 Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd'; poetry shell"
