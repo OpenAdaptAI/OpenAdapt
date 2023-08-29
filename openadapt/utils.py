@@ -655,16 +655,29 @@ def get_strategy_class_by_name() -> dict:
     return class_by_name
 
 
-def plot_performance(recording_timestamp: float = None) -> None:
+def plot_performance(
+    recording_timestamp: float = None,
+    view_file: bool = True,
+    save_file: bool = True,
+    dark_mode: bool = False,
+) -> str:
     """Plot the performance of the event processing and writing.
 
     Args:
-        recording_timestamp (float): The timestamp of the recording
-          (defaults to latest).
+        recording_timestamp: The timestamp of the recording (defaults to latest)
+        view_file: Whether to view the file after saving it.
+        save_file: Whether to save the file.
+        dark_mode: Whether to use dark mode.
+
+    Returns:
+        str: a base64-encoded image of the plot, if not viewing the file
     """
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
     event_types = set()
+
+    if dark_mode:
+        plt.style.use("dark_background")
 
     # avoid circular import
     from openadapt import crud
@@ -718,13 +731,26 @@ def plot_performance(recording_timestamp: float = None) -> None:
     ax.set_title(f"{recording_timestamp=}")
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", str(recording_timestamp)]
-    fname = "-".join(fname_parts) + ".png"
-    os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
-    logger.info(f"{fpath=}")
-    plt.savefig(fpath)
-    os.system(f"open {fpath}")
+    if save_file:
+        fname_parts = ["performance", str(recording_timestamp)]
+        fname = "-".join(fname_parts) + ".png"
+        os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+        fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
+        logger.info(f"{fpath=}")
+        plt.savefig(fpath)
+        if view_file:
+            os.system(f"open {fpath}")
+    else:
+        plt.savefig(BytesIO(), format="png")  # save fig to void
+        if view_file:
+            plt.show()
+        else:
+            plt.close()
+        return image2utf8(
+            Image.frombytes(
+                "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
+            )
+        )
 
 
 def strip_element_state(action_event: ActionEvent) -> ActionEvent:
