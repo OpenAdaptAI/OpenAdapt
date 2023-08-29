@@ -10,6 +10,7 @@ DISPLAY_EVENTS = False
 PROCESS_EVENTS = True
 REPLAY_EVENTS = True
 SLEEP = False
+assert PROCESS_EVENTS or not SLEEP, "invalid configuration"
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
