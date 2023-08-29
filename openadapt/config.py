@@ -15,6 +15,8 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
+import git
+import sentry_sdk
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -22,6 +24,11 @@ _DEFAULTS = {
     "CACHE_VERBOSITY": 0,
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
+    "ERROR_REPORTING_ENABLED": True,
+    "ERROR_REPORTING_DSN": (
+        "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
+    ),
+    "ERROR_REPORTING_BRANCH": "main",
     "OPENAI_API_KEY": "<set your api key in .env>",
     # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
@@ -220,3 +227,14 @@ if multiprocessing.current_process().name == "MainProcess":
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
+
+    if ERROR_REPORTING_ENABLED:  # type: ignore # noqa
+        active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
+        logger.info(f"{active_branch_name=}")
+        is_reporting_branch = active_branch_name == ERROR_REPORTING_BRANCH  # type: ignore # noqa
+        logger.info(f"{is_reporting_branch=}")
+        if is_reporting_branch:
+            sentry_sdk.init(
+                dsn=ERROR_REPORTING_DSN,  # type: ignore # noqa
+                traces_sample_rate=1.0,
+            )
