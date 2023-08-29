@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, engine, text
 import pytest
 
 from openadapt.config import ROOT_DIRPATH
-from openadapt.db import Base
+from openadapt.db.db import Base
 
 
 @pytest.fixture(scope="session")

@@ -2,6 +2,137 @@
 
 
 
+## v0.12.0 (2023-08-29)
+
+### Feature
+
+* feat: manage recording database (#451)
+
+* implemented db module
+* use click + loguru ([`5b25b90`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b25b90fc4b0a7221a062170c3cb38c520afc718))
+
+
+## v0.11.0 (2023-08-29)
+
+### Feature
+
+* feat: add capture.py - also fixes audio recording (#362)
+
+* merge
+
+* Create capture.py
+
+* Update capture.py
+
+* Update capture.py
+
+* it&#39;s finally fixed
+
+* add dependencies
+
+* comment
+
+* move code + use config.CAPTURE_DIR_PATH
+
+* remove debug lines
+
+* Update capture.py
+
+* OpenAdaptCapture -&gt; Capture
+
+* add camera
+
+* Let&#39;s have this off by default.
+
+* hotfix
+
+* fix
+
+* linting
+
+* Create capture.py
+
+* windows
+
+* cleanup + lint
+
+* Update _windows.py
+
+* add audio + new windows recording
+
+* screen_recorder.free_resources()
+
+* Update _windows.py
+
+* isort
+
+* add playback recording
+
+* Update replay.py
+
+* Update replay.py
+
+* Update README.md
+
+* Revert &#34;Update README.md&#34;
+
+This reverts commit 706410358d5e47ceccb34b77d82d5ffd0f3821a8.
+
+* Update README.md
+
+* Revert &#34;Revert &#34;Update README.md&#34;&#34;
+
+This reverts commit 0fe81563e88417d61012e24e1dc55befa960c2ed.
+
+* Update README.md
+
+* run pre-commit
+
+* Update pyproject.toml
+
+* Update openadapt/replay.py
+
+* Update openadapt/replay.py
+
+* Update openadapt/replay.py
+
+* Update replay.py
+
+* update poetry.lock
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`581b9b8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/581b9b831fe208e143169e90a1e7a02cd1a2c68d))
+
+
+## v0.10.0 (2023-08-29)
+
+### Feature
+
+* feat: use sentry.io (#386)
+
+* sentry
+
+* check for main branch
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* ERROR_REPORTING_ENABLED
+
+* Update config.py
+
+* update poetry.lock
+
+* Update openadapt/config.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`90bfe8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/90bfe8fd8068ad0d684b04f7ba3f06a9121d32d5))
+
+
 ## v0.9.0 (2023-08-28)
 
 ### Chore
