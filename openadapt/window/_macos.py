@@ -7,8 +7,8 @@ import re
 from loguru import logger
 import AppKit
 import ApplicationServices
-import atomacos
 import Foundation
+import oa_atomacos
 import Quartz
 
 
@@ -95,7 +95,6 @@ def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElementRef |
         logger.error("Error getting focused window")
         return None
     return window
-
 
 def get_window_data(window_meta: dict) -> dict:
     """Get the data of the window.
@@ -251,7 +250,7 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
             )
             logger.warning(f"{object=}")
     if value:
-        value = atomacos._converter.Converter().convert_value(value)
+        value = oa_atomacos._converter.Converter().convert_value(value)
     return value
 
 
@@ -267,7 +266,7 @@ def get_active_element_state(x: int, y: int) -> dict:
     """
     window_meta = get_active_window_meta()
     pid = window_meta["kCGWindowOwnerPID"]
-    app = atomacos._a11y.AXUIElement.from_pid(pid)
+    app = oa_atomacos._a11y.AXUIElement.from_pid(pid)
     el = app.get_element_at_position(x, y)
     state = dump_state(el.ref)
     state = deepconvert_objc(state)

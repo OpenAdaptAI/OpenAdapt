@@ -1,7 +1,7 @@
 name: Python CI
 
 on:
-  push:
+  pull_request_target:
     branches:
       - '**'
 
@@ -32,6 +32,9 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1
@@ -51,7 +54,7 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
       - name: Check formatting with Black
-        run: poetry run black --check .
+        run: poetry run black --preview --check .
 
       - name: Run Flake8
         run: poetry run flake8

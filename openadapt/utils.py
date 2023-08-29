@@ -24,6 +24,7 @@ import numpy as np
 
 from openadapt import common, config
 from openadapt.db import BaseModel
+from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
@@ -57,7 +58,9 @@ def configure_logging(logger: logger, log_level: str) -> None:
             level=log_level,
             enqueue=True,
             format=logger_format,
-            filter=config.filter_log_messages if config.IGNORE_WARNINGS else None,
+            filter=(
+                filter_log_messages if config.MAX_NUM_WARNINGS_PER_SECOND > 0 else None
+            ),
         )
         logger.debug(f"{log_level=}")
 
@@ -531,8 +534,24 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
+
         if config.SCRUB_ENABLED:
-            text = __import__("openadapt").scrub.scrub_text(text, is_separated=True)
+            import spacy
+
+            if spacy.util.is_package(
+                config.SPACY_MODEL_NAME
+            ):  # Check if the model is installed
+                from openadapt.privacy.providers.presidio import (
+                    PresidioScrubbingProvider,
+                )
+
+                text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
+            else:
+                logger.warning(
+                    f"SpaCy model not installed! {config.SPACY_MODEL_NAME=}. Using"
+                    " original text."
+                )
+
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
@@ -636,16 +655,29 @@ def get_strategy_class_by_name() -> dict:
     return class_by_name
 
 
-def plot_performance(recording_timestamp: float = None) -> None:
+def plot_performance(
+    recording_timestamp: float = None,
+    view_file: bool = True,
+    save_file: bool = True,
+    dark_mode: bool = False,
+) -> str:
     """Plot the performance of the event processing and writing.
 
     Args:
-        recording_timestamp (float): The timestamp of the recording
-          (defaults to latest).
+        recording_timestamp: The timestamp of the recording (defaults to latest)
+        view_file: Whether to view the file after saving it.
+        save_file: Whether to save the file.
+        dark_mode: Whether to use dark mode.
+
+    Returns:
+        str: a base64-encoded image of the plot, if not viewing the file
     """
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
     event_types = set()
+
+    if dark_mode:
+        plt.style.use("dark_background")
 
     # avoid circular import
     from openadapt import crud
@@ -699,13 +731,26 @@ def plot_performance(recording_timestamp: float = None) -> None:
     ax.set_title(f"{recording_timestamp=}")
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    fname_parts = ["performance", str(recording_timestamp)]
-    fname = "-".join(fname_parts) + ".png"
-    os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-    fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
-    logger.info(f"{fpath=}")
-    plt.savefig(fpath)
-    os.system(f"open {fpath}")
+    if save_file:
+        fname_parts = ["performance", str(recording_timestamp)]
+        fname = "-".join(fname_parts) + ".png"
+        os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
+        fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
+        logger.info(f"{fpath=}")
+        plt.savefig(fpath)
+        if view_file:
+            os.system(f"open {fpath}")
+    else:
+        plt.savefig(BytesIO(), format="png")  # save fig to void
+        if view_file:
+            plt.show()
+        else:
+            plt.close()
+        return image2utf8(
+            Image.frombytes(
+                "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
+            )
+        )
 
 
 def strip_element_state(action_event: ActionEvent) -> ActionEvent:
