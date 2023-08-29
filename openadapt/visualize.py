@@ -6,13 +6,12 @@ from os import path, sep
 from pprint import pformat
 
 from loguru import logger
-from sqlalchemy.orm import session
 from nicegui import events, ui
 from notifypy import Notify
 from tqdm import tqdm
 import click
 
-from openadapt import config, crud
+from openadapt import config
 from openadapt.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
