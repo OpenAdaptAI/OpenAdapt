@@ -84,6 +84,8 @@ presidio-image-redactor = "^0.0.48"
 pywebview = "^4.2.2"
 click = "^8.1.6"
 spacy-transformers = "^1.2.5"
+boto3 = "^1.28.30"
+botocore = "^1.31.30"
 
 [tool.pytest.ini_options]
 filterwarnings = [
