@@ -49,7 +49,7 @@ def remove(all: str, latest: str, recording_id: int) -> int:
     if latest:
         recording_id = len(recordings)
 
-    elif recording_id <= 0 or recording_id > len(recordings):
+    elif recording_id is None or not (1 <= recording_id <= len(recordings)):
         logger.error("Invalid recording ID.")
         return 1
     recording_to_delete = recordings[recording_id - 1]
