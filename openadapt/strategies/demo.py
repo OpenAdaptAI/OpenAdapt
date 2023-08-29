@@ -7,7 +7,7 @@ Usage:
 
 from loguru import logger
 
-from openadapt.crud import get_screenshots
+from openadapt.db.crud import get_screenshots
 from openadapt.models import Recording, Screenshot, WindowEvent
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
