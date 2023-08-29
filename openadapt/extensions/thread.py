@@ -8,9 +8,9 @@ from loguru import logger
 class Thread(Thread):
     """Thread class that allows for the return value of a thread to be accessed."""
 
-    def __init__(self, target: callable, args: tuple | list) -> None:
+    def __init__(self, daemon: bool, target: callable, args: tuple | list) -> None:
         """Initialize the Thread class."""
-        super().__init__(target=target, args=args)
+        super().__init__(target=target, daemon=daemon, args=args)
         self._return = None
 
     def run(self) -> None:
