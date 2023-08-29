@@ -26,7 +26,6 @@ from openadapt import common, config
 from openadapt.db import BaseModel
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
-from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
 EMPTY = (None, [], {}, "")
 
