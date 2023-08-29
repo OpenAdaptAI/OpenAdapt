@@ -5,6 +5,7 @@ import base64
 import os
 
 from loguru import logger
+from PIL import Image
 import requests
 
 from openadapt import config
@@ -143,6 +144,8 @@ class PrivateAIScrubbingProvider(
         Returns:
             Image: The scrubbed image with PII and PHI removed.
         """
+        url = "https://api.private-ai.com/deid/v3/process/files/base64"
+
         file_dir = "files/"
         file_name = "sample_emr_1.png"
         filepath = os.path.join(file_dir, file_name)
