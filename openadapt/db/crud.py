@@ -9,7 +9,7 @@ from loguru import logger
 import sqlalchemy as sa
 
 from openadapt import config
-from openadapt.db import BaseModel, Session
+from openadapt.db.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
     MemoryStat,
@@ -194,6 +194,12 @@ def insert_recording(recording_data: Recording) -> Recording:
     db.commit()
     db.refresh(db_obj)
     return db_obj
+
+
+def delete_recording(recording_timestamp: int) -> None:
+    """Remove the recording from the db."""
+    db.query(Recording).filter(Recording.timestamp == recording_timestamp).delete()
+    db.commit()
 
 
 def get_all_recordings() -> list[Recording]:
