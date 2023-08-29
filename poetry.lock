@@ -1298,6 +1298,34 @@ files = [
 speedup = ["python-levenshtein (>=0.12)"]
 
 [[package]]
+name = "gitdb"
+version = "4.0.10"
+description = "Git Object Database"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "gitdb-4.0.10-py3-none-any.whl", hash = "sha256:c286cf298426064079ed96a9e4a9d39e7f3e9bf15ba60701e95f5492f28415c7"},
+    {file = "gitdb-4.0.10.tar.gz", hash = "sha256:6eb990b69df4e15bad899ea868dc46572c3f75339735663b81de79b06f17eb9a"},
+]
+
+[package.dependencies]
+smmap = ">=3.0.1,<6"
+
+[[package]]
+name = "gitpython"
+version = "3.1.32"
+description = "GitPython is a Python library used to interact with Git repositories"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "GitPython-3.1.32-py3-none-any.whl", hash = "sha256:e3d59b1c2c6ebb9dfa7a184daf3b6dd4914237e7488a1730a6d8f6f5d0b4187f"},
+    {file = "GitPython-3.1.32.tar.gz", hash = "sha256:8d9b8cb1e80b9735e8717c9362079d3ce4c6e5ddeebedd0361b228c3a67a62f6"},
+]
+
+[package.dependencies]
+gitdb = ">=4.0.1,<5"
+
+[[package]]
 name = "greenlet"
 version = "2.0.2"
 description = "Lightweight in-process concurrent programming"
@@ -1382,6 +1410,27 @@ files = [
 ]
 
 [[package]]
+name = "httpcore"
+version = "0.17.3"
+description = "A minimal low-level HTTP client."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "httpcore-0.17.3-py3-none-any.whl", hash = "sha256:c2789b767ddddfa2a5782e3199b2b7f6894540b17b16ec26b2c4d8e103510b87"},
+    {file = "httpcore-0.17.3.tar.gz", hash = "sha256:a6f30213335e34c1ade7be6ec7c47f19f50c56db36abef1a9dfa3815b1cb3888"},
+]
+
+[package.dependencies]
+anyio = ">=3.0,<5.0"
+certifi = "*"
+h11 = ">=0.13,<0.15"
+sniffio = "==1.*"
+
+[package.extras]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (==1.*)"]
+
+[[package]]
 name = "httptools"
 version = "0.6.0"
 description = "A collection of framework independent HTTP protocol utils."
@@ -1427,6 +1476,29 @@ files = [
 
 [package.extras]
 test = ["Cython (>=0.29.24,<0.30.0)"]
+
+[[package]]
+name = "httpx"
+version = "0.24.1"
+description = "The next generation HTTP client."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "httpx-0.24.1-py3-none-any.whl", hash = "sha256:06781eb9ac53cde990577af654bd990a4949de37a28bdb4a230d434f3a30b9bd"},
+    {file = "httpx-0.24.1.tar.gz", hash = "sha256:5853a43053df830c20f8110c5e69fe44d035d850b2dfe795e196f00fdb774bdd"},
+]
+
+[package.dependencies]
+certifi = "*"
+httpcore = ">=0.15.0,<0.18.0"
+idna = "*"
+sniffio = "*"
+
+[package.extras]
+brotli = ["brotli", "brotlicffi"]
+cli = ["click (==8.*)", "pygments (==2.*)", "rich (>=10,<14)"]
+http2 = ["h2 (>=3,<5)"]
+socks = ["socksio (==1.*)"]
 
 [[package]]
 name = "huggingface-hub"
@@ -1555,25 +1627,6 @@ files = [
     {file = "imagesize-1.4.1-py2.py3-none-any.whl", hash = "sha256:0d8d18d08f840c19d0ee7ca1fd82490fdc3729b7ac93f49870406ddde8ef8d8b"},
     {file = "imagesize-1.4.1.tar.gz", hash = "sha256:69150444affb9cb0d5cc5a92b3676f0b2fb7cd9ae39e947a5e11a36b4497cd4a"},
 ]
-
-[[package]]
-name = "importlib-metadata"
-version = "6.8.0"
-description = "Read metadata from Python packages"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "importlib_metadata-6.8.0-py3-none-any.whl", hash = "sha256:3ebb78df84a805d7698245025b975d9d67053cd94c79245ba4b3eb694abe68bb"},
-    {file = "importlib_metadata-6.8.0.tar.gz", hash = "sha256:dbace7892d8c0c4ac1ad096662232f831d4e64f4c4545bd53016a3e9d4654743"},
-]
-
-[package.dependencies]
-zipp = ">=0.5"
-
-[package.extras]
-docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
-perf = ["ipython"]
-testing = ["flufl.flake8", "importlib-resources (>=1.3)", "packaging", "pyfakefs", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-perf (>=0.9.2)", "pytest-ruff"]
 
 [[package]]
 name = "iniconfig"
@@ -2539,33 +2592,37 @@ test = ["codecov (>=2.1)", "pytest (>=7.2)", "pytest-cov (>=4.0)"]
 
 [[package]]
 name = "nicegui"
-version = "1.2.24"
+version = "1.3.12"
 description = "Create web-based user interfaces with Python. The nice way."
 optional = false
-python-versions = ">=3.7,<4.0"
+python-versions = ">=3.8,<4.0"
 files = [
-    {file = "nicegui-1.2.24-py3-none-any.whl", hash = "sha256:f649e1e84012af4d9e6723fbb559df665ac2c798158dee61657257955657d477"},
-    {file = "nicegui-1.2.24.tar.gz", hash = "sha256:8d3973ec359c0cc2534712c25b92447878dc6ed394cb9a9a491396c6e04c2dbd"},
+    {file = "nicegui-1.3.12-py3-none-any.whl", hash = "sha256:7bd6fdfc5b0856ee8e3fd9f75edb822ff74ccf94033bd5962e453dacd0dd6636"},
+    {file = "nicegui-1.3.12.tar.gz", hash = "sha256:2454c0f0a98b5dbb798e0d6452545e38ecf1577a2c8d72c6f7be2667eca9b18a"},
 ]
 
 [package.dependencies]
 aiofiles = ">=23.1.0,<24.0.0"
+aiohttp = ">=3.8.5,<4.0.0"
 fastapi = ">=0.92,<1.0.0"
 fastapi-socketio = ">=0.0.10,<0.0.11"
-importlib_metadata = {version = ">=6.0.0,<7.0.0", markers = "python_version ~= \"3.7\""}
+httpx = ">=0.24.1,<0.25.0"
 itsdangerous = ">=2.1.2,<3.0.0"
 jinja2 = ">=3.1.2,<4.0.0"
 markdown2 = ">=2.4.7,<3.0.0"
-matplotlib = {version = ">=3.5.0,<4.0.0", markers = "python_version ~= \"3.7\""}
 orjson = {version = ">=3.8.6,<4.0.0", markers = "platform_machine != \"i386\" and platform_machine != \"i686\""}
-plotly = ">=5.13.0,<6.0.0"
 Pygments = ">=2.9.0,<3.0.0"
 python-multipart = ">=0.0.6,<0.0.7"
-pywebview = ">=4.0.2,<5.0.0"
 typing-extensions = ">=3.10.0"
-uvicorn = {version = ">=0.20.0,<0.21.0", extras = ["standard"]}
-vbuild = ">=0.8.1,<0.9.0"
-watchfiles = ">=0.18.1,<0.19.0"
+uvicorn = {version = ">=0.22.0,<0.23.0", extras = ["standard"]}
+vbuild = ">=0.8.2"
+watchfiles = ">=0.18.1,<1.0.0"
+
+[package.extras]
+matplotlib = ["matplotlib (>=3.5.0,<4.0.0)"]
+native = ["pywebview (>=4.0.2,<5.0.0)"]
+netifaces = ["netifaces (>=0.11.0,<0.12.0)"]
+plotly = ["plotly (>=5.13.0,<6.0.0)"]
 
 [[package]]
 name = "nltk"
@@ -3133,21 +3190,6 @@ files = [
 [package.extras]
 docs = ["furo (>=2023.7.26)", "proselint (>=0.13)", "sphinx (>=7.1.1)", "sphinx-autodoc-typehints (>=1.24)"]
 test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.4)", "pytest-cov (>=4.1)", "pytest-mock (>=3.11.1)"]
-
-[[package]]
-name = "plotly"
-version = "5.16.1"
-description = "An open-source, interactive data visualization library for Python"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "plotly-5.16.1-py2.py3-none-any.whl", hash = "sha256:19cc34f339acd4e624177806c14df22f388f23fb70658b03aad959a0e650a0dc"},
-    {file = "plotly-5.16.1.tar.gz", hash = "sha256:295ac25edeb18c893abb71dcadcea075b78fd6fdf07cee4217a4e1009667925b"},
-]
-
-[package.dependencies]
-packaging = "*"
-tenacity = ">=6.2.0"
 
 [[package]]
 name = "pluggy"
@@ -4807,6 +4849,48 @@ all = ["matplotlib", "onnx", "onnxruntime", "opencv-python", "pycocotools"]
 dev = ["black", "flake8", "isort", "mypy"]
 
 [[package]]
+name = "sentry-sdk"
+version = "1.29.2"
+description = "Python client for Sentry (https://sentry.io)"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sentry-sdk-1.29.2.tar.gz", hash = "sha256:a99ee105384788c3f228726a88baf515fe7b5f1d2d0f215a03d194369f158df7"},
+    {file = "sentry_sdk-1.29.2-py2.py3-none-any.whl", hash = "sha256:3e17215d8006612e2df02b0e73115eb8376c37e3f586d8436fa41644e605074d"},
+]
+
+[package.dependencies]
+certifi = "*"
+urllib3 = {version = ">=1.26.11", markers = "python_version >= \"3.6\""}
+
+[package.extras]
+aiohttp = ["aiohttp (>=3.5)"]
+arq = ["arq (>=0.23)"]
+beam = ["apache-beam (>=2.12)"]
+bottle = ["bottle (>=0.12.13)"]
+celery = ["celery (>=3)"]
+chalice = ["chalice (>=1.16.0)"]
+django = ["django (>=1.8)"]
+falcon = ["falcon (>=1.4)"]
+fastapi = ["fastapi (>=0.79.0)"]
+flask = ["blinker (>=1.1)", "flask (>=0.11)", "markupsafe"]
+grpcio = ["grpcio (>=1.21.1)"]
+httpx = ["httpx (>=0.16.0)"]
+huey = ["huey (>=2)"]
+loguru = ["loguru (>=0.5)"]
+opentelemetry = ["opentelemetry-distro (>=0.35b0)"]
+pure-eval = ["asttokens", "executing", "pure-eval"]
+pymongo = ["pymongo (>=3.1)"]
+pyspark = ["pyspark (>=2.4.4)"]
+quart = ["blinker (>=1.1)", "quart (>=0.16.1)"]
+rq = ["rq (>=0.6)"]
+sanic = ["sanic (>=0.8)"]
+sqlalchemy = ["sqlalchemy (>=1.2)"]
+starlette = ["starlette (>=0.19.1)"]
+starlite = ["starlite (>=1.48)"]
+tornado = ["tornado (>=5)"]
+
+[[package]]
 name = "setuptools"
 version = "68.1.2"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
@@ -4936,6 +5020,17 @@ s3 = ["boto3"]
 ssh = ["paramiko"]
 test = ["azure-common", "azure-core", "azure-storage-blob", "boto3", "google-cloud-storage (>=2.6.0)", "moto[server]", "paramiko", "pytest", "pytest-rerunfailures", "requests", "responses"]
 webhdfs = ["requests"]
+
+[[package]]
+name = "smmap"
+version = "5.0.0"
+description = "A pure Python implementation of a sliding window memory map manager"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "smmap-5.0.0-py3-none-any.whl", hash = "sha256:2aba19d6a040e78d8b09de5c57e96207b09ed71d8e55ce0959eeee6c8e190d94"},
+    {file = "smmap-5.0.0.tar.gz", hash = "sha256:c840e62059cd3be204b0c9c9f74be2c09d5648eddd4580d9314c3ecde0b30936"},
+]
 
 [[package]]
 name = "sniffio"
@@ -5491,20 +5586,6 @@ files = [
 mpmath = ">=0.19"
 
 [[package]]
-name = "tenacity"
-version = "8.2.3"
-description = "Retry code until it succeeds"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
-    {file = "tenacity-8.2.3.tar.gz", hash = "sha256:5398ef0d78e63f40007c1fb4c0bff96e1911394d2fa8d194f77619c05ff6cc8a"},
-]
-
-[package.extras]
-doc = ["reno", "sphinx", "tornado (>=4.5)"]
-
-[[package]]
 name = "termcolor"
 version = "2.3.0"
 description = "ANSI color formatting for output in terminal"
@@ -6004,13 +6085,13 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "uvicorn"
-version = "0.20.0"
+version = "0.22.0"
 description = "The lightning-fast ASGI server."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "uvicorn-0.20.0-py3-none-any.whl", hash = "sha256:c3ed1598a5668208723f2bb49336f4509424ad198d6ab2615b7783db58d919fd"},
-    {file = "uvicorn-0.20.0.tar.gz", hash = "sha256:a4e12017b940247f836bc90b72e725d7dfd0c8ed1c51eb365f5ba30d9f5127d8"},
+    {file = "uvicorn-0.22.0-py3-none-any.whl", hash = "sha256:e9434d3bbf05f310e762147f769c9f21235ee118ba2d2bf1155a7196448bd996"},
+    {file = "uvicorn-0.22.0.tar.gz", hash = "sha256:79277ae03db57ce7d9aa0567830bbb51d7a612f54d6e1e3e92da3ef24c2c8ed8"},
 ]
 
 [package.dependencies]
@@ -6121,29 +6202,33 @@ colorama = {version = ">=0.4.6", markers = "sys_platform == \"win32\" and python
 
 [[package]]
 name = "watchfiles"
-version = "0.18.1"
+version = "0.20.0"
 description = "Simple, modern and high performance file watching and code reload in python."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "watchfiles-0.18.1-cp37-abi3-macosx_10_7_x86_64.whl", hash = "sha256:9891d3c94272108bcecf5597a592e61105279def1313521e637f2d5acbe08bc9"},
-    {file = "watchfiles-0.18.1-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:7102342d60207fa635e24c02a51c6628bf0472e5fef067f78a612386840407fc"},
-    {file = "watchfiles-0.18.1-cp37-abi3-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:00ea0081eca5e8e695cffbc3a726bb90da77f4e3f78ce29b86f0d95db4e70ef7"},
-    {file = "watchfiles-0.18.1-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1b8e6db99e49cd7125d8a4c9d33c0735eea7b75a942c6ad68b75be3e91c242fb"},
-    {file = "watchfiles-0.18.1-cp37-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:bc7c726855f04f22ac79131b51bf0c9f728cb2117419ed830a43828b2c4a5fcb"},
-    {file = "watchfiles-0.18.1-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cbaff354d12235002e62d9d3fa8bcf326a8490c1179aa5c17195a300a9e5952f"},
-    {file = "watchfiles-0.18.1-cp37-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:888db233e06907c555eccd10da99b9cd5ed45deca47e41766954292dc9f7b198"},
-    {file = "watchfiles-0.18.1-cp37-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:dde79930d1b28f15994ad6613aa2865fc7a403d2bb14585a8714a53233b15717"},
-    {file = "watchfiles-0.18.1-cp37-abi3-win32.whl", hash = "sha256:e2b2bdd26bf8d6ed90763e6020b475f7634f919dbd1730ea1b6f8cb88e21de5d"},
-    {file = "watchfiles-0.18.1-cp37-abi3-win_amd64.whl", hash = "sha256:c541e0f2c3e95e83e4f84561c893284ba984e9d0025352057396d96dceb09f44"},
-    {file = "watchfiles-0.18.1-cp37-abi3-win_arm64.whl", hash = "sha256:9a26272ef3e930330fc0c2c148cc29706cc2c40d25760c7ccea8d768a8feef8b"},
-    {file = "watchfiles-0.18.1-pp38-pypy38_pp73-macosx_10_7_x86_64.whl", hash = "sha256:9fb12a5e2b42e0b53769455ff93546e6bc9ab14007fbd436978d827a95ca5bd1"},
-    {file = "watchfiles-0.18.1-pp38-pypy38_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:548d6b42303d40264118178053c78820533b683b20dfbb254a8706ca48467357"},
-    {file = "watchfiles-0.18.1-pp38-pypy38_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6e0d8fdfebc50ac7569358f5c75f2b98bb473befccf9498cf23b3e39993bb45a"},
-    {file = "watchfiles-0.18.1-pp39-pypy39_pp73-macosx_10_7_x86_64.whl", hash = "sha256:0f9a22fff1745e2bb930b1e971c4c5b67ea3b38ae17a6adb9019371f80961219"},
-    {file = "watchfiles-0.18.1-pp39-pypy39_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b02e7fa03cd4059dd61ff0600080a5a9e7a893a85cb8e5178943533656eec65e"},
-    {file = "watchfiles-0.18.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a868ce2c7565137f852bd4c863a164dc81306cae7378dbdbe4e2aca51ddb8857"},
-    {file = "watchfiles-0.18.1.tar.gz", hash = "sha256:4ec0134a5e31797eb3c6c624dbe9354f2a8ee9c720e0b46fc5b7bab472b7c6d4"},
+    {file = "watchfiles-0.20.0-cp37-abi3-macosx_10_7_x86_64.whl", hash = "sha256:3796312bd3587e14926013612b23066912cf45a14af71cf2b20db1c12dadf4e9"},
+    {file = "watchfiles-0.20.0-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:d0002d81c89a662b595645fb684a371b98ff90a9c7d8f8630c82f0fde8310458"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:570848706440373b4cd8017f3e850ae17f76dbdf1e9045fc79023b11e1afe490"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9a0351d20d03c6f7ad6b2e8a226a5efafb924c7755ee1e34f04c77c3682417fa"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:007dcc4a401093010b389c044e81172c8a2520dba257c88f8828b3d460c6bb38"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:0d82dbc1832da83e441d112069833eedd4cf583d983fb8dd666fbefbea9d99c0"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:99f4c65fd2fce61a571b2a6fcf747d6868db0bef8a934e8ca235cc8533944d95"},
+    {file = "watchfiles-0.20.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5392dd327a05f538c56edb1c6ebba6af91afc81b40822452342f6da54907bbdf"},
+    {file = "watchfiles-0.20.0-cp37-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:08dc702529bb06a2b23859110c214db245455532da5eaea602921687cfcd23db"},
+    {file = "watchfiles-0.20.0-cp37-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:7d4e66a857621584869cfbad87039e65dadd7119f0d9bb9dbc957e089e32c164"},
+    {file = "watchfiles-0.20.0-cp37-abi3-win32.whl", hash = "sha256:a03d1e6feb7966b417f43c3e3783188167fd69c2063e86bad31e62c4ea794cc5"},
+    {file = "watchfiles-0.20.0-cp37-abi3-win_amd64.whl", hash = "sha256:eccc8942bcdc7d638a01435d915b913255bbd66f018f1af051cd8afddb339ea3"},
+    {file = "watchfiles-0.20.0-cp37-abi3-win_arm64.whl", hash = "sha256:b17d4176c49d207865630da5b59a91779468dd3e08692fe943064da260de2c7c"},
+    {file = "watchfiles-0.20.0-pp38-pypy38_pp73-macosx_10_7_x86_64.whl", hash = "sha256:d97db179f7566dcf145c5179ddb2ae2a4450e3a634eb864b09ea04e68c252e8e"},
+    {file = "watchfiles-0.20.0-pp38-pypy38_pp73-macosx_11_0_arm64.whl", hash = "sha256:835df2da7a5df5464c4a23b2d963e1a9d35afa422c83bf4ff4380b3114603644"},
+    {file = "watchfiles-0.20.0-pp38-pypy38_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:608cd94a8767f49521901aff9ae0c92cc8f5a24d528db7d6b0295290f9d41193"},
+    {file = "watchfiles-0.20.0-pp38-pypy38_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:89d1de8218874925bce7bb2ae9657efc504411528930d7a83f98b1749864f2ef"},
+    {file = "watchfiles-0.20.0-pp39-pypy39_pp73-macosx_10_7_x86_64.whl", hash = "sha256:13f995d5152a8ba4ed7c2bbbaeee4e11a5944defc7cacd0ccb4dcbdcfd78029a"},
+    {file = "watchfiles-0.20.0-pp39-pypy39_pp73-macosx_11_0_arm64.whl", hash = "sha256:9b5c8d3be7b502f8c43a33c63166ada8828dbb0c6d49c8f9ce990a96de2f5a49"},
+    {file = "watchfiles-0.20.0-pp39-pypy39_pp73-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e43af4464daa08723c04b43cf978ab86cc55c684c16172622bdac64b34e36af0"},
+    {file = "watchfiles-0.20.0-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:87d9e1f75c4f86c93d73b5bd1ebe667558357548f11b4f8af4e0e272f79413ce"},
+    {file = "watchfiles-0.20.0.tar.gz", hash = "sha256:728575b6b94c90dd531514677201e8851708e6e4b5fe7028ac506a200b622019"},
 ]
 
 [package.dependencies]
@@ -6423,21 +6508,6 @@ files = [
 [package.dependencies]
 idna = ">=2.0"
 multidict = ">=4.0"
-
-[[package]]
-name = "zipp"
-version = "3.16.2"
-description = "Backport of pathlib-compatible object wrapper for zip files"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "zipp-3.16.2-py3-none-any.whl", hash = "sha256:679e51dd4403591b2d6838a48de3d283f3d188412a9782faadf845f298736ba0"},
-    {file = "zipp-3.16.2.tar.gz", hash = "sha256:ebc15946aa78bd63458992fc81ec3b6f7b1e92d51c35e6de1c3804e73b799147"},
-]
-
-[package.extras]
-docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
-testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-ignore-flaky", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
 
 [metadata]
 lock-version = "2.0"
