@@ -7,8 +7,8 @@ import re
 from loguru import logger
 import AppKit
 import ApplicationServices
-import oa_atomacos
 import Foundation
+import oa_atomacos
 import Quartz
 
 
@@ -95,7 +95,6 @@ def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElementRef |
         logger.error("Error getting focused window")
         return None
     return window
-
 
 def get_window_data(window_meta: dict) -> dict:
     """Get the data of the window.
