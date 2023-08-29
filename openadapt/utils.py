@@ -23,7 +23,7 @@ import mss.base
 import numpy as np
 
 from openadapt import common, config
-from openadapt.db import BaseModel
+from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
@@ -66,7 +66,7 @@ def configure_logging(logger: logger, log_level: str) -> None:
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Union[dict, BaseModel], follow: bool = True) -> dict:
+def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
@@ -681,7 +681,7 @@ def plot_performance(
         plt.style.use("dark_background")
 
     # avoid circular import
-    from openadapt import crud
+    from openadapt.db import crud
 
     if not recording_timestamp:
         recording_timestamp = crud.get_latest_recording().timestamp
