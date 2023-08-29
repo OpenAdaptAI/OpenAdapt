@@ -96,7 +96,6 @@ def get_active_window(window_meta: dict) -> ApplicationServices.AXUIElementRef |
         return None
     return window
 
-
 def get_window_data(window_meta: dict) -> dict:
     """Get the data of the window.
 
