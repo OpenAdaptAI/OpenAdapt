@@ -12,7 +12,7 @@ from tqdm import tqdm
 import click
 
 from openadapt import config
-from openadapt.crud import get_latest_recording, get_recording
+from openadapt.db.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.utils import (
     EMPTY,

@@ -18,7 +18,7 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from openadapt.crud import get_latest_recording, get_window_events
+from openadapt.db.crud import get_latest_recording, get_window_events
 from openadapt.events import get_events
 from openadapt.models import ActionEvent, WindowEvent
 from openadapt.utils import (
