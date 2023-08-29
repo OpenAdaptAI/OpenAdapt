@@ -28,7 +28,7 @@ _DEFAULTS = {
     "ERROR_REPORTING_DSN": (
         "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
     ),
-    "ERROR_REPORTING_BRANCH": "exception-handling",
+    "ERROR_REPORTING_BRANCH": "main",
     "OPENAI_API_KEY": "<set your api key in .env>",
     # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
