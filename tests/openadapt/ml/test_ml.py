@@ -44,7 +44,7 @@ def test_abstract_completion_provider_factory() -> None:
     test_modality = Modality.TEXT
     providers_list = CompletionProviderFactory.get_for_modality(test_modality)
 
-    assert providers_list
+    assert providers_list, (test_modality, providers_list)
 
     for completion_providers in providers_list:
         assert test_modality in completion_providers.Modalities
