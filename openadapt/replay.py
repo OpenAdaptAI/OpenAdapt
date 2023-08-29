@@ -17,7 +17,8 @@ import os
 from loguru import logger
 import fire
 
-from openadapt import capture, crud, utils
+from openadapt import capture, utils
+from openadapt.db import crud
 from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
