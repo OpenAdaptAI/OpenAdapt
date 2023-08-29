@@ -2,6 +2,81 @@
 
 
 
+## v0.13.0 (2023-08-29)
+
+### Feature
+
+* feat(privacy.providers): add aws_comprehend as scrubbing provider (#476)
+
+* add aws_comprehend provider module
+
+* fix typo
+
+* add boto3 and botocore to poetry
+
+* ran poetry update
+
+* add the AWS Comprehend Class
+
+* update the script
+
+* create test module to test comprhend
+
+* refactor name
+
+* add full fleged test module
+
+* try to fix failing tests
+
+* try to fix failing tests
+
+* fixed pytest
+
+* format test file
+
+* fix all flake 8 formattings
+
+* add naming meaning for NER
+
+* remove repeated code and make a TextMixin
+
+* format
+
+* change scrub enabled to false
+ after testing visualization
+
+* remove redundant rmethods
+
+* add enum style provider names
+
+addressing: https://github.com/OpenAdaptAI/OpenAdapt/pull/476#discussion_r1304821459
+
+* fix all flak8 errors
+
+* add files for private_ai scrubbing provider
+
+* change name
+
+* add scrub text function in
+PrivateAIScrubbingProvider
+
+* try to skip tests if api key is incorrect or missing or the syntax used in code is incorrect
+
+* pytest passes for test_private_ai
+
+* add temp code for pdfs redaction
+
+* remove the PRIVATE_AI provider code as it will be added in seprate pr
+
+* remove omre prvt_ai files
+
+* ran black
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](https://github.com/OpenAdaptAI/OpenAdapt/commit/33fe2446311dd8dea1465f617662407d3bc182cc))
+
+
 ## v0.12.0 (2023-08-29)
 
 ### Feature
