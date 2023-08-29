@@ -2,6 +2,33 @@
 
 
 
+## v0.10.0 (2023-08-29)
+
+### Feature
+
+* feat: use sentry.io (#386)
+
+* sentry
+
+* check for main branch
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* ERROR_REPORTING_ENABLED
+
+* Update config.py
+
+* update poetry.lock
+
+* Update openadapt/config.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`90bfe8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/90bfe8fd8068ad0d684b04f7ba3f06a9121d32d5))
+
+
 ## v0.9.0 (2023-08-28)
 
 ### Chore
