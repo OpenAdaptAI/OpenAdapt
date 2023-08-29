@@ -10,13 +10,14 @@ Options:
 --timestamp=<timestamp> Timestamp of the recording to replay.
 
 """
-
+from time import sleep
 from typing import Union
+import os
 
 from loguru import logger
 import fire
 
-from openadapt import crud, utils
+from openadapt import capture, crud, utils
 from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
@@ -25,6 +26,7 @@ LOG_LEVEL = "INFO"
 @logger.catch
 def replay(
     strategy_name: str,
+    record: bool = False,
     timestamp: Union[str, None] = None,
     recording: Recording = None,
 ) -> bool:
@@ -34,6 +36,7 @@ def replay(
         strategy_name (str): Name of the replay strategy to use.
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
+        record (bool, optional): Flag indicating whether to record the replay.
 
     Returns:
         bool: True if replay was successful, None otherwise.
@@ -66,8 +69,30 @@ def replay(
     strategy = strategy_class(recording)
     logger.info(f"{strategy=}")
 
-    strategy.run()
-    return True
+    handler = None
+    rval = True
+    if record:
+        capture.start(audio=False, camera=False)
+        # TODO: handle this more robustly
+        sleep(1)
+        file_name = f"log-{strategy_name}-{recording.timestamp}.log"
+        # TODO: make configurable
+        dir_name = "captures"
+        file_path = os.path.join(dir_name, file_name)
+        logger.info(f"{file_path=}")
+        handler = logger.add(open(file_path, "w"))
+    try:
+        strategy.run()
+    except Exception as e:
+        logger.exception(e)
+        rval = False
+
+    if record:
+        sleep(1)
+        capture.stop()
+        logger.remove(handler)
+
+    return rval
 
 
 # Entry point
