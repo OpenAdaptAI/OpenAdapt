@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.12.0"
+version = "0.13.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
@@ -84,6 +84,8 @@ presidio-image-redactor = "^0.0.48"
 pywebview = "^4.2.2"
 click = "^8.1.6"
 spacy-transformers = "^1.2.5"
+boto3 = "^1.28.30"
+botocore = "^1.31.30"
 
 [tool.pytest.ini_options]
 filterwarnings = [
