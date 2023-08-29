@@ -2,6 +2,16 @@
 
 
 
+## v0.12.0 (2023-08-29)
+
+### Feature
+
+* feat: manage recording database (#451)
+
+* implemented db module
+* use click + loguru ([`5b25b90`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b25b90fc4b0a7221a062170c3cb38c520afc718))
+
+
 ## v0.11.0 (2023-08-29)
 
 ### Feature
