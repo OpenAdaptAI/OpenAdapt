@@ -2,6 +2,468 @@
 
 
 
+## v0.13.0 (2023-08-29)
+
+### Feature
+
+* feat(privacy.providers): add aws_comprehend as scrubbing provider (#476)
+
+* add aws_comprehend provider module
+
+* fix typo
+
+* add boto3 and botocore to poetry
+
+* ran poetry update
+
+* add the AWS Comprehend Class
+
+* update the script
+
+* create test module to test comprhend
+
+* refactor name
+
+* add full fleged test module
+
+* try to fix failing tests
+
+* try to fix failing tests
+
+* fixed pytest
+
+* format test file
+
+* fix all flake 8 formattings
+
+* add naming meaning for NER
+
+* remove repeated code and make a TextMixin
+
+* format
+
+* change scrub enabled to false
+ after testing visualization
+
+* remove redundant rmethods
+
+* add enum style provider names
+
+addressing: https://github.com/OpenAdaptAI/OpenAdapt/pull/476#discussion_r1304821459
+
+* fix all flak8 errors
+
+* add files for private_ai scrubbing provider
+
+* change name
+
+* add scrub text function in
+PrivateAIScrubbingProvider
+
+* try to skip tests if api key is incorrect or missing or the syntax used in code is incorrect
+
+* pytest passes for test_private_ai
+
+* add temp code for pdfs redaction
+
+* remove the PRIVATE_AI provider code as it will be added in seprate pr
+
+* remove omre prvt_ai files
+
+* ran black
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](https://github.com/OpenAdaptAI/OpenAdapt/commit/33fe2446311dd8dea1465f617662407d3bc182cc))
+
+
+## v0.12.0 (2023-08-29)
+
+### Feature
+
+* feat: manage recording database (#451)
+
+* implemented db module
+* use click + loguru ([`5b25b90`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b25b90fc4b0a7221a062170c3cb38c520afc718))
+
+
+## v0.11.0 (2023-08-29)
+
+### Feature
+
+* feat: add capture.py - also fixes audio recording (#362)
+
+* merge
+
+* Create capture.py
+
+* Update capture.py
+
+* Update capture.py
+
+* it&#39;s finally fixed
+
+* add dependencies
+
+* comment
+
+* move code + use config.CAPTURE_DIR_PATH
+
+* remove debug lines
+
+* Update capture.py
+
+* OpenAdaptCapture -&gt; Capture
+
+* add camera
+
+* Let&#39;s have this off by default.
+
+* hotfix
+
+* fix
+
+* linting
+
+* Create capture.py
+
+* windows
+
+* cleanup + lint
+
+* Update _windows.py
+
+* add audio + new windows recording
+
+* screen_recorder.free_resources()
+
+* Update _windows.py
+
+* isort
+
+* add playback recording
+
+* Update replay.py
+
+* Update replay.py
+
+* Update README.md
+
+* Revert &#34;Update README.md&#34;
+
+This reverts commit 706410358d5e47ceccb34b77d82d5ffd0f3821a8.
+
+* Update README.md
+
+* Revert &#34;Revert &#34;Update README.md&#34;&#34;
+
+This reverts commit 0fe81563e88417d61012e24e1dc55befa960c2ed.
+
+* Update README.md
+
+* run pre-commit
+
+* Update pyproject.toml
+
+* Update openadapt/replay.py
+
+* Update openadapt/replay.py
+
+* Update openadapt/replay.py
+
+* Update replay.py
+
+* update poetry.lock
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`581b9b8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/581b9b831fe208e143169e90a1e7a02cd1a2c68d))
+
+
+## v0.10.0 (2023-08-29)
+
+### Feature
+
+* feat: use sentry.io (#386)
+
+* sentry
+
+* check for main branch
+
+* Update openadapt/config.py
+
+* Update openadapt/config.py
+
+* ERROR_REPORTING_ENABLED
+
+* Update config.py
+
+* update poetry.lock
+
+* Update openadapt/config.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`90bfe8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/90bfe8fd8068ad0d684b04f7ba3f06a9121d32d5))
+
+
+## v0.9.0 (2023-08-28)
+
+### Chore
+
+* chore: add invalid configuration assertion in naive.py (#471)
+
+* Update naive.py
+
+* simplify logical expression
+
+* github action check ([`6040fae`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6040fae7c4504f2339255b54b1b87d94ac183b9d))
+
+* chore: Silence pytest DeprecationWarnings (#407)
+
+* Update pyproject.toml
+
+* tomlkit
+
+* Update config.py
+
+* remove config ([`212452c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/212452ca99d4895b86f7005536e186f39097c10d))
+
+* chore: validate functionality of status checks (#477)
+
+* chore: validate functionality of status checks
+
+* test removing install script testing
+
+* try removing docstring form module to see if its picked up
+
+* add reference to pull request
+
+* add removed docstring back for app __init__ file
+
+* add missing check out statement ([`1485ae4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1485ae4518cc0deacf24c476a9315256b439f2bd))
+
+### Feature
+
+* feat: enhanced visualize.py with NiceGUI (#406)
+
+* Create visualize1.py
+
+* changes
+
+* fix actions + add dark mode + remove unused code
+
+* Update visualize1.py
+
+* Update visualize1.py
+
+* bump ^ nicegui == 1.2.24
+
+* splitter
+
+* add plot
+
+* updated
+
+* add search button
+
+* isort
+
+* formatting
+
+* make plot dynamic
+
+* Update visualize1.py
+
+* make logo dynamic
+
+* comments
+
+* missed one
+
+* fixed plot bug
+
+* + max table children, deprecate old visualize
+
+* Update visualize.py
+
+* Update config.py
+
+* Update config.py
+
+* Update config.py
+
+* refactor: show -&gt; view_file
+
+* Update visualize.py
+
+* Update visualize.py
+
+* downgrade fastapi
+
+* update config
+
+* linting
+
+* remove debug print
+
+* disabled on_select
+
+* Update visualize.py
+
+* fix visualization with tray
+
+* merge privacy api
+
+* Update visualize.py
+
+* pre-commit
+
+* Update poetry.lock ([`8031a9d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8031a9d445d9826ec43a46619a5c6ec883eb7497))
+
+### Refactor
+
+* refactor: failing actions (#474)
+
+* add missing dicstrings
+
+* make docstring a bit longer
+
+* fix all flake8 errors
+
+* Add documentation on status checks
+
+* Update README.md
+
+---------
+
+Co-authored-by: Mustafa Abdulrahman &lt;mus2003.abdul@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`09f4e71`](https://github.com/OpenAdaptAI/OpenAdapt/commit/09f4e715c5c956fd0b3e597bb51efd478a2b2181))
+
+* refactor: style errors from productivity measurement PR (#480)
+
+* check for long gaps in recording
+
+* display basic productivity data in html page similar to visualize
+
+* show images for each window change
+
+* show productivity info for each window
+
+* WIP find tasks/cycles of ActionEvents
+
+* WIP find tasks/cycles of ActionEvents
+
+* WIP implementing brent&#39;s algorithm
+
+* implemented brent&#39;s algorithm
+
+* add task duration info + style changes to display
+
+* comments
+
+* floyd&#39;s algorithm and basic implementation of counting errors
+
+* implement longest repeated non-overlapping substring algorithm
+
+* removed unused code
+
+* small bug fixes
+
+* no empty window titles
+
+* small fixes
+
+* add title
+
+* edge case
+
+* make longest repeated substring recursive
+
+* changed window/tab switching
+
+* add number of actions in a task
+
+* add comments
+
+* make sure no non-repeating tasks are found
+
+* fix off by 1 error with window event screenshots
+
+* remove unused functions, comments, and some refactoring
+
+* docstrings
+
+* black
+
+* Undo changing PLOT_PERFORMANCE
+
+* style changes ([`2089e74`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2089e7435fd32c480d5265dd1b4fab2b1c97e742))
+
+### Unknown
+
+* Update README.md ([`250949f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/250949f18ad6c72df16bce2ab6d32764c0af3a82))
+
+* Productivity measurement (#234)
+
+* check for long gaps in recording
+
+* display basic productivity data in html page similar to visualize
+
+* show images for each window change
+
+* show productivity info for each window
+
+* WIP find tasks/cycles of ActionEvents
+
+* WIP find tasks/cycles of ActionEvents
+
+* WIP implementing brent&#39;s algorithm
+
+* implemented brent&#39;s algorithm
+
+* add task duration info + style changes to display
+
+* comments
+
+* floyd&#39;s algorithm and basic implementation of counting errors
+
+* implement longest repeated non-overlapping substring algorithm
+
+* removed unused code
+
+* small bug fixes
+
+* no empty window titles
+
+* small fixes
+
+* add title
+
+* edge case
+
+* make longest repeated substring recursive
+
+* changed window/tab switching
+
+* add number of actions in a task
+
+* add comments
+
+* make sure no non-repeating tasks are found
+
+* fix off by 1 error with window event screenshots
+
+* remove unused functions, comments, and some refactoring
+
+* docstrings
+
+* black
+
+* Undo changing PLOT_PERFORMANCE ([`56d22a8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/56d22a8fe0e532f671020c8393d07c6b072acac4))
+
+
 ## v0.8.1 (2023-08-21)
 
 ### Chore
