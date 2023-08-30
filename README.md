@@ -264,7 +264,7 @@ The following pre-commit hooks are used in OpenAdapt:
 - [check-yaml](https://github.com/pre-commit/pre-commit-hooks#check-yaml): Validates the syntax and structure of YAML files.
 - [end-of-file-fixer](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer): Ensures that files end with a newline character.
 - [trailing-whitespace](https://github.com/pre-commit/pre-commit-hooks#trailing-whitespace): Detects and removes trailing whitespace at the end of lines.
-- [black](https://github.com/psf/black): Formats Python code to adhere to the Black code style.
+- [black](https://github.com/psf/black): Formats Python code to adhere to the Black code style. Notably, the `--preview` feature is used.
 - [isort](https://github.com/PyCQA/isort): Sorts Python import statements in a consistent and standardized manner.
 
 To set up the pre-commit hooks, follow these steps:
@@ -278,6 +278,14 @@ pre-commit install
 ```
 
 Now, the pre-commit hooks are installed and will run automatically before each commit. They will enforce code quality standards and prevent committing code that doesn't pass the defined checks.
+
+### Status Checks
+
+When you submit a PR, the "Python CI" workflow is triggered for code consistency. It follows organized steps to review your code:
+
+1. **Python Black Check** : This step verifies code formatting using Python Black style, with the `--preview` flag for style.
+
+2. **Flake8 Review** : Next, Flake8 tool thoroughly checks code structure, including flake8-annotations and flake8-docstrings. Though GitHub Actions automates checks, it's wise to locally run `flake8 .` before finalizing changes for quicker issue spotting and resolution.
 
 # Submitting an Issue
 

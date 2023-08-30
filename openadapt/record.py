@@ -19,14 +19,15 @@ import time
 import tracemalloc
 
 from loguru import logger
-from pympler import tracker
 from oa_pynput import keyboard, mouse
+from pympler import tracker
 from tqdm import tqdm
 import fire
 import mss.tools
 import psutil
 
-from openadapt import config, crud, utils, window
+from openadapt import config, utils, window
+from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
 

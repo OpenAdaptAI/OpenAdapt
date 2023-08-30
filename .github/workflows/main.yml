@@ -1,7 +1,7 @@
 name: Python CI
 
 on:
-  push:
+  pull_request_target:
     branches:
       - '**'
 
@@ -17,6 +17,11 @@ jobs:
         # TODO: add windows matrix
         os: [macos-latest]
 
+    env:
+      REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      SKIP_POETRY_SHELL: 1
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -28,10 +33,13 @@ jobs:
 
       - name: Run tests using the shell script (macOS compatible).
         if: matrix.os == 'macos-latest'
-        run: SKIP_POETRY_SHELL=1 sh install/install_openadapt.sh
+        run: sh install/install_openadapt.sh
 
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ env.BRANCH }}
+          repository: ${{ env.REPO }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1
