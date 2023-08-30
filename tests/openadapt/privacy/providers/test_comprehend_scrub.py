@@ -10,10 +10,11 @@ scrub = ComprehendScrubbingProvider()
 try:
     scrub.scrub_text("hello Bob smith")
 except NoRegionError:
-    pytestmark = pytest.mark.skip(
-        reason="AWS Config Files not setup correctly. Please see "
+    msg = (
+        "AWS Config Files not setup correctly. Please see "
         "https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html#configuration"  # noqa: E501
     )
+    pytestmark = pytest.mark.skip(reason=msg)
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
