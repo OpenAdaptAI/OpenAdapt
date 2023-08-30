@@ -47,7 +47,7 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
     # Read test image data from file
-    test_image_path = "assets/test_scrub_image.png"
+    test_image_path = "tests/test_files/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
         test_image_data = file.read()
 

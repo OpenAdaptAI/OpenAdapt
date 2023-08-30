@@ -164,11 +164,12 @@ class PrivateAIScrubbingProvider(
         if response is None:
             raise ValueError("Private AI request returned None")
         response = response.json()
-        logger.debug(response)
-        if type(data) == dict and "details" in data.keys():
+        if type(response) == dict and "details" in response.keys():
             raise ValueError(response.get("detail"))
+        logger.debug(response.get("entities"))
+        logger.debug(len(response.get("entities")))
 
-        redacted_file_path = path_to_pdf.split(".")[0], "_redacted.pdf"
+        redacted_file_path = path_to_pdf.split(".")[0] + "_redacted.pdf"
 
         # Write to file
         with open(redacted_file_path, "wb") as redacted_file:

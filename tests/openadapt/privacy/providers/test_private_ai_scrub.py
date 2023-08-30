@@ -1,8 +1,12 @@
-"""Module to test ComprehendScrubbingProvider."""
+"""Module to test PrivateAIScrubbingProvider."""
 
-from botocore.exceptions import NoRegionError
-import pytest
+import base64
+import os
 
+from loguru import logger
+import requests
+
+from openadapt import config
 from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()
@@ -10,23 +14,82 @@ scrub = PrivateAIScrubbingProvider()
 try:
     scrub.scrub_text("hello Bob smith")
 except ValueError:
-    pytestmark = pytest.mark.skip(reason="Private AI API key not configured.")
+    import pytest
+
+    pytestmark = pytest.mark.skip(reason="Private AI API key not found or uin")
 
 
-def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
-    """Convert a hex color (int) to RGB.
+def test_pdf_redaction() -> None:
+    """Test to check that the PDF redaction works."""
+    pdf_path = "tests/test_files/sample_llc_1.pdf"
+    redacted_pdf_path = scrub.scrub_pdf(pdf_path)
 
-    Args:
-        hex_color (int): Hex color value.
+    url = "https://api.private-ai.com/deid/v3/process/files/base64"
 
-    Returns:
-        tuple[int, int, int]: RGB values.
-    """
-    assert 0x000000 <= hex_color <= 0xFFFFFF
-    blue = (hex_color >> 16) & 0xFF
-    green = (hex_color >> 8) & 0xFF
-    red = hex_color & 0xFF
-    return red, green, blue
+    file_type = "application/pdf"
+
+    # Read from file
+    with open(redacted_pdf_path, "rb") as b64_file:
+        file_data = base64.b64encode(b64_file.read())
+        file_data = file_data.decode("ascii")
+    os.remove(redacted_pdf_path)
+
+    payload = {
+        "file": {"data": file_data, "content_type": file_type},
+        "entity_detection": {"accuracy": "high", "return_entity": True},
+        "pdf_options": {"density": 150, "max_resolution": 2000},
+        "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-KEY": config.PRIVATE_AI_API_KEY,
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    if response is None:
+        raise ValueError("Private AI request returned None")
+    response = response.json()
+    if type(response) == dict and "details" in response.keys():
+        raise ValueError(response.get("detail"))
+
+    assert response.get("entities_present") == False
+
+
+def test_image_redaction() -> None:
+    """Test to check that the image redaction works."""
+    image_path = "tests/test_files/test_emr_image.png"
+
+    url = "https://api.private-ai.com/deid/v3/process/files/base64"
+
+    file_type = "image/png"
+
+    # Read from file
+    with open(redacted_pdf_path, "rb") as b64_file:
+        file_data = base64.b64encode(b64_file.read())
+        file_data = file_data.decode("ascii")
+    os.remove(redacted_pdf_path)
+
+    payload = {
+        "file": {"data": file_data, "content_type": file_type},
+        "entity_detection": {"accuracy": "high", "return_entity": True},
+        "pdf_options": {"density": 150, "max_resolution": 2000},
+        "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-KEY": config.PRIVATE_AI_API_KEY,
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    if response is None:
+        raise ValueError("Private AI request returned None")
+    response = response.json()
+    if type(response) == dict and "details" in response.keys():
+        raise ValueError(response.get("detail"))
+
+    assert response.get("entities_present") == False
 
 
 def test_empty_string() -> None:
