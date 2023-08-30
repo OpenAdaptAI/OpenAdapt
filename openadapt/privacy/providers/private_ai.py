@@ -173,7 +173,12 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(url, json=payload, headers=headers)
+        if response is None:
+            raise ValueError("Private AI request returned None")
         response = response.json()
+        logger.debug(response)
+        if "detail" in response.keys():
+            raise ValueError(response["detail"])
 
         redact_file_path = os.path.join(file_dir, f"redacted-{file_name}")
 
@@ -221,7 +226,12 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(url, json=payload, headers=headers)
+        if response is None:
+            raise ValueError("Private AI request returned None")
         response = response.json()
+        logger.debug(response)
+        if "detail" in response.keys():
+            raise ValueError(response["detail"])
 
         redacted_file_path = path_to_pdf.split(".")[0], "_redacted.pdf"
 
