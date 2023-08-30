@@ -6,22 +6,6 @@ from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvid
 scrub = ComprehendScrubbingProvider()
 
 
-def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
-    """Convert a hex color (int) to RGB.
-
-    Args:
-        hex_color (int): Hex color value.
-
-    Returns:
-        tuple[int, int, int]: RGB values.
-    """
-    assert 0x000000 <= hex_color <= 0xFFFFFF
-    blue = (hex_color >> 16) & 0xFF
-    green = (hex_color >> 8) & 0xFF
-    red = hex_color & 0xFF
-    return red, green, blue
-
-
 def test_empty_string() -> None:
     """Test empty string input for scrub function returns empty string."""
     text = ""

@@ -35,7 +35,7 @@ class PrivateAIScrubbingProvider(
         url = "https://api.private-ai.com/deid/v3/process/text"
 
         payload = {
-            "text": text,
+            "text": [text],
             "link_batch": False,
             "entity_detection": {
                 "accuracy": "high",
