@@ -199,4 +199,36 @@ class PrivateAIScrubbingProvider(
         Returns:
             str: Path to the scrubbed PDF
         """
-        raise NotImplementedError
+        url = "https://api.private-ai.com/deid/v3/process/files/base64"
+
+        file_type = "application/pdf"
+
+        # Read from file
+        with open(path_to_pdf, "rb") as b64_file:
+            file_data = base64.b64encode(b64_file.read())
+            file_data = file_data.decode("ascii")
+
+        payload = {
+            "file": {"data": file_data, "content_type": file_type},
+            "entity_detection": {"accuracy": "high", "return_entity": True},
+            "pdf_options": {"density": 150, "max_resolution": 2000},
+            "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-KEY": config.PRIVATE_AI_API_KEY,
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+        response = response.json()
+
+        redacted_file_path = path_to_pdf.split(".")[0], "_redacted.pdf"
+
+        # Write to file
+        with open(redacted_file_path, "wb") as redacted_file:
+            processed_file = response.get("processed_file").encode("ascii")
+            processed_file = base64.b64decode(processed_file, validate=True)
+            redacted_file.write(processed_file)
+
+        return redacted_file_path
