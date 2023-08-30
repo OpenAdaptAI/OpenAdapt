@@ -98,69 +98,6 @@ class PrivateAIScrubbingProvider(
             "link_batch": False,
             "entity_detection": {
                 "accuracy": "high",
-                "entity_types": [
-                    {
-                        "type": "ENABLE",
-                        "value": [
-                            "ACCOUNT_NUMBER",
-                            "AGE",
-                            "DATE",
-                            "DATE_INTERVAL",
-                            "DOB",
-                            "DRIVER_LICENSE",
-                            "DURATION",
-                            "EMAIL_ADDRESS",
-                            "EVENT",
-                            "FILENAME",
-                            "GENDER_SEXUALITY",
-                            "HEALTHCARE_NUMBER",
-                            "IP_ADDRESS",
-                            "LANGUAGE",
-                            "LOCATION",
-                            "LOCATION_ADDRESS",
-                            "LOCATION_CITY",
-                            "LOCATION_COORDINATE",
-                            "LOCATION_COUNTRY",
-                            "LOCATION_STATE",
-                            "LOCATION_ZIP",
-                            "MARITAL_STATUS",
-                            "MONEY",
-                            "NAME",
-                            "NAME_FAMILY",
-                            "NAME_GIVEN",
-                            "NAME_MEDICAL_PROFESSIONAL",
-                            "NUMERICAL_PII",
-                            "ORGANIZATION",
-                            "ORGANIZATION_MEDICAL_FACILITY",
-                            "OCCUPATION",
-                            "ORIGIN",
-                            "PASSPORT_NUMBER",
-                            "PASSWORD",
-                            "PHONE_NUMBER",
-                            "PHYSICAL_ATTRIBUTE",
-                            "POLITICAL_AFFILIATION",
-                            "RELIGION",
-                            "SSN",
-                            "TIME",
-                            "URL",
-                            "USERNAME",
-                            "VEHICLE_ID",
-                            "ZODIAC_SIGN",
-                            "BLOOD_TYPE",
-                            "CONDITION",
-                            "DOSE",
-                            "DRUG",
-                            "INJURY",
-                            "MEDICAL_PROCESS",
-                            "STATISTICS",
-                            "BANK_ACCOUNT",
-                            "CREDIT_CARD",
-                            "CREDIT_CARD_EXPIRATION",
-                            "CVV",
-                            "ROUTING_NUMBER",
-                        ],
-                    }
-                ],
                 "return_entity": True,
             },
             "processed_text": {
@@ -180,8 +117,8 @@ class PrivateAIScrubbingProvider(
 
         data = response.json()
         logger.debug(data)
-        if "detail" in data.keys():
-            raise ValueError(data["detail"])
+        if type(data) == dict and "detail" in data.keys():
+            raise ValueError(data.get("detail"))
 
         redacted_text = data[0].get("processed_text")
         logger.debug(redacted_text)
@@ -234,8 +171,8 @@ class PrivateAIScrubbingProvider(
             raise ValueError("Private AI request returned None")
         response = response.json()
         logger.debug(response)
-        if "detail" in response.keys():
-            raise ValueError(response["detail"])
+        if type(response) == dict and "detail" in response.keys():
+            raise ValueError(response.get("detail"))
 
         redact_file_path = os.path.join(file_dir, f"redacted-{file_name}")
 
@@ -287,8 +224,8 @@ class PrivateAIScrubbingProvider(
             raise ValueError("Private AI request returned None")
         response = response.json()
         logger.debug(response)
-        if "detail" in response.keys():
-            raise ValueError(response["detail"])
+        if type(data) == dict and "details" in data.keys():
+            raise ValueError(response.get("detail"))
 
         redacted_file_path = path_to_pdf.split(".")[0], "_redacted.pdf"
 

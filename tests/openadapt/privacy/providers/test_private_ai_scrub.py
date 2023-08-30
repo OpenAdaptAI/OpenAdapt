@@ -7,10 +7,10 @@ from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()
 
-# try:
-#     scrub.scrub_text("hello Bob smith")
-# except ValueError:
-#     pytestmark = pytest.mark.skip(reason="Private AI API key not configured.")
+try:
+    scrub.scrub_text("hello Bob smith")
+except ValueError:
+    pytestmark = pytest.mark.skip(reason="Private AI API key not configured.")
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
