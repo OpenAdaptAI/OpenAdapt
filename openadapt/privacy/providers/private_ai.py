@@ -128,6 +128,10 @@ class PrivateAIScrubbingProvider(
             redacted_file_data = file.read()
 
         redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
+
+        os.remove(temp_image_path)
+        os.remove(redact_file_path)
+
         return redact_pil_image_data
 
     def scrub_pdf(self, path_to_pdf: str) -> str:

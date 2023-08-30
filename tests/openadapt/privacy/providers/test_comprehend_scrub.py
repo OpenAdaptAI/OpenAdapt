@@ -8,7 +8,7 @@ from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvid
 scrub = ComprehendScrubbingProvider()
 
 try:
-    scrub.scrub_text("hello Bob smith")
+    scrub.scrub_text("hello James Mark")
 except NoRegionError:
     msg = (
         "AWS Config Files not setup correctly. Please see "
