@@ -987,24 +987,6 @@ files = [
 ]
 
 [[package]]
-name = "en-core-web-trf"
-version = "3.5.0"
-description = "English transformer pipeline (roberta-base). Components: transformer, tagger, parser, ner, attribute_ruler, lemmatizer."
-optional = false
-python-versions = "*"
-files = [
-    {file = "en_core_web_trf-3.5.0.tar.gz", hash = "sha256:ecb0526630a1a05b2a2df6636bd8059bd0b4cb2280e91708f03f7838d14d0be7"},
-]
-
-[package.dependencies]
-spacy = ">=3.5.0,<3.6.0"
-spacy-transformers = "==1.2.*"
-
-[package.source]
-type = "url"
-url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
-
-[[package]]
 name = "evdev"
 version = "1.6.1"
 description = "Bindings to the Linux input handling subsystem"
