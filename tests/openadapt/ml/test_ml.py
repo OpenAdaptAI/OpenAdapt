@@ -1,11 +1,14 @@
 """Module to test the CompletionProvider API."""
+import openai
 
+from openadapt import config
 from openadapt.ml.base_provider import CompletionProviderFactory, Modality
 from openadapt.ml.huggingface_models.generic_provider import GenericHuggingFaceProvider
 from openadapt.ml.open_ai.gpt.gptprovider import GPTCompletionProvider
 
 test_gpt_provider = GPTCompletionProvider()
 test_hf_provider = GenericHuggingFaceProvider()
+openai.api_key = config.OPENAI_API_KEY
 
 
 def test_openai_completion_provider() -> None:
