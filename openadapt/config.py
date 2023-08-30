@@ -53,7 +53,7 @@ _DEFAULTS = {
     # APP CONFIGURATIONS
     "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
-    "SCRUB_ENABLED": True,
+    "SCRUB_ENABLED": False,
     "SCRUB_CHAR": "*",
     "SCRUB_LANGUAGE": "en",
     # TODO support lists in getenv_fallback
@@ -62,7 +62,7 @@ _DEFAULTS = {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     },
-    "SCRUB_IGNORE_ENTITIES": [
+    "SCRUB_PRESIDIO_IGNORE_ENTITIES": [
         # 'US_PASSPORT',
         # 'US_DRIVER_LICENSE',
         # 'CRYPTO',
