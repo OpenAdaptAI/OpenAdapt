@@ -24,6 +24,7 @@ from openadapt.utils import (
     rows2dicts,
 )
 
+
 # default duration between consecutive events
 # this needs to be small enough such that dt_short + DEFAULT < x,
 # where x is the double click interval in seconds
