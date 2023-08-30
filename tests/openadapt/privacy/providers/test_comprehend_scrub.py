@@ -1,9 +1,19 @@
 """Module to test ComprehendScrubbingProvider."""
 
+from botocore.exceptions import NoRegionError
+import pytest
 
 from openadapt.privacy.providers.aws_comprehend import ComprehendScrubbingProvider
 
 scrub = ComprehendScrubbingProvider()
+
+try:
+    scrub.scrub_text("hello Bob smith")
+except NoRegionError:
+    pytestmark = pytest.mark.skip(
+        reason="AWS Config Files not setup correctly. Please see "
+        "https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html#configuration"  # noqa: E501
+    )
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
