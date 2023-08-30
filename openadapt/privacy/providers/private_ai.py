@@ -189,3 +189,14 @@ class PrivateAIScrubbingProvider(
 
         redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
         return redact_pil_image_data
+
+    def scrub_pdf(self, path_to_pdf: str) -> str:
+        """Scrub the PDF of all PII/PHI.
+
+        Args:
+            path_to_pdf (str): Path to the PDF to be scrubbed
+
+        Returns:
+            str: Path to the scrubbed PDF
+        """
+        raise NotImplementedError
