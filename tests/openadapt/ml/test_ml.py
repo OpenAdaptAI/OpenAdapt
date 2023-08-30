@@ -1,33 +1,39 @@
 """Module to test the CompletionProvider API."""
-import openai
+from openai.error import AuthenticationError
+import pytest
 
-from openadapt import config
 from openadapt.ml.base_provider import CompletionProviderFactory, Modality
 from openadapt.ml.huggingface_models.generic_provider import GenericHuggingFaceProvider
 from openadapt.ml.open_ai.gpt.gptprovider import GPTCompletionProvider
 
 test_gpt_provider = GPTCompletionProvider()
 test_hf_provider = GenericHuggingFaceProvider()
-openai.api_key = config.OPENAI_API_KEY
 
 
 def test_openai_completion_provider() -> None:
     """Openai Completion Provider test."""
-    gpt_4_chat_response = test_gpt_provider.infer(
-        "gpt-4", "What is your maximum context size?"
-    )
+    try:
+        gpt_4_chat_response = test_gpt_provider.infer(
+            "gpt-4", "What is your maximum context size?"
+        )
 
-    gpt_3_turbo_chat_response = test_gpt_provider.infer(
-        "gpt-3.5-turbo", "What day is it today?"
-    )
+        gpt_3_turbo_chat_response = test_gpt_provider.infer(
+            "gpt-3.5-turbo", "What day is it today?"
+        )
 
-    davinci_completion_response = test_gpt_provider.infer("davinci", "Today is ")
+        davinci_completion_response = test_gpt_provider.infer("davinci", "Today is ")
 
-    assert (
-        len(gpt_3_turbo_chat_response) > 0
-        and len(gpt_4_chat_response) > 0
-        and len(davinci_completion_response) > 0
-    )
+        assert (
+            len(gpt_3_turbo_chat_response) > 0
+            and len(gpt_4_chat_response) > 0
+            and len(davinci_completion_response) > 0
+        )
+    except AuthenticationError:
+        exception_msg = (
+            "Incorrect API key provided: <set you**************env>. You can find your"
+            " API key at https://platform.openai.com/account/api-keys."
+        )
+        pytest.mark.skip(reason=exception_msg)
 
 
 def test_huggingface_completion_provider() -> None:
