@@ -2,8 +2,8 @@
 
 Usage:
 
-    $ python openadapt/scripts/tag_dataset.py <window_event_timestamp> <screenshot_timestamp>
-    [<dataset_id>]
+    $ python openadapt/scripts/tag_dataset.py <window_event_timestamp>
+    <screenshot_timestamp> [<dataset_id>]
 
 """
 

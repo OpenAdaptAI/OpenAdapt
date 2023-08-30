@@ -422,7 +422,8 @@ def insert_dataset_entry(dataset_entry_data: dict) -> None:
     """Insert a new dataset entry into to the db.
 
     Args:
-        dataset_entry_data (dict): A dictionary containing the data for a new dataset entry.
+        dataset_entry_data (dict): A dictionary containing the data for
+        a new dataset entry.
     """
     db_obj = DatasetEntry(**dataset_entry_data)
     db.add(db_obj)
@@ -475,6 +476,15 @@ def get_window_event(window_event_timestamp: float) -> WindowEvent:
 
 
 def get_dataset_entries(dataset_id: int) -> list[DatasetEntry]:
+    """Get dataset entries with given dataset ID.
+
+    Args:
+        dataset_id (id): The desired dataset's id
+
+    Returns:
+        list[DatasetEntry]: A list of all dataset entries with given dataset ID
+
+    """
     return (
         db.query(DatasetEntry)
         .filter(DatasetEntry.dataset_id == dataset_id)

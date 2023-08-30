@@ -25,9 +25,10 @@ PATH_TO_JSON = "openadapt/ml/data/vision_dataset/states.json"
 
 def generate_dataset(dataset_id: int) -> None:
     """
-    Saves dataset of screenshots and their respective window states with the given dataset_id.
-    Scrubs any private information from screenshot and window state.
-    Saves screenshot with a unique ID, and saves the window states along with the ID to a JSON file.
+    Saves dataset of screenshots and their respective window states with
+    the given dataset_id. Scrubs any private information from screenshot
+    and window state. Saves screenshot with a unique ID, and saves the
+    window states along with the image ID to a JSON file.
 
     Args:
         dataset_id (int): The ID of the desired dataset.
