@@ -1,5 +1,6 @@
 """A Module for Private AI Scrubbing Provider."""
 
+from io import BytesIO
 from typing import List
 import base64
 import os
@@ -145,14 +146,17 @@ class PrivateAIScrubbingProvider(
             Image: The scrubbed image with PII and PHI removed.
         """
         url = "https://api.private-ai.com/deid/v3/process/files/base64"
+        file_dir = "assets/"
+        file_name = "temp_image_to_scrub.png"
 
-        file_dir = "files/"
-        file_name = "sample_emr_1.png"
-        filepath = os.path.join(file_dir, file_name)
+        # save file as "temp_image_to_scrub.png in assets/
+        temp_image_path = os.path.join(file_dir, file_name)
+        image.save(temp_image_path)
+
         file_type = "image/png"
 
         # Read from file
-        with open(filepath, "rb") as b64_file:
+        with open(temp_image_path, "rb") as b64_file:
             file_data = base64.b64encode(b64_file.read())
             file_data = file_data.decode("ascii")
 
@@ -171,12 +175,17 @@ class PrivateAIScrubbingProvider(
         response = requests.post(url, json=payload, headers=headers)
         response = response.json()
 
+        redact_file_path = os.path.join(file_dir, f"redacted-{file_name}")
+
         # Write to file
-        with open(
-            os.path.join(file_dir, f"redacted-{file_name}"), "wb"
-        ) as redacted_file:
+        with open(redact_file_path, "wb") as redacted_file:
             processed_file = response.get("processed_file").encode("ascii")
             processed_file = base64.b64decode(processed_file, validate=True)
             redacted_file.write(processed_file)
 
         # return PIL_IMAGE type of redacted image
+        with open(redact_file_path, "rb") as file:
+            redacted_file_data = file.read()
+
+        redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
+        return redact_pil_image_data
