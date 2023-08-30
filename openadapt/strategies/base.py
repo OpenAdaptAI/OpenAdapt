@@ -5,6 +5,8 @@ Module: base.py
 
 from abc import ABC, abstractmethod
 from pprint import pformat
+import sys
+import threading
 import time
 
 from loguru import logger
@@ -36,6 +38,12 @@ class BaseReplayStrategy(ABC):
         self.screenshots = []
         self.window_events = []
         self.frame_times = []
+        self.is_paused = False
+        self.pause_event = threading.Event()
+
+        # Start the pause listener in a separate thread
+        self.pause_thread = threading.Thread(target=self.pause_listener)
+        self.pause_thread.start()
 
     @abstractmethod
     def get_next_action_event(
@@ -52,11 +60,27 @@ class BaseReplayStrategy(ABC):
         """
         pass
 
+    def pause_listener(self) -> None:
+        """Listen for 'q' key release to stop the replay."""
+
+        def on_key_release(key) -> None:
+            """Callback function for key release event.
+
+            Args:
+                key: The released key.
+            """
+            if key == keyboard.Key.q:
+                logger.info("Replay stopped.")
+                sys.exit(0)  # Exit the program
+
+        with keyboard.Listener(on_key_release=on_key_release) as listener:
+            listener.join()
+
     def run(self) -> None:
         """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
-        while True:
+        while not self.is_paused:
             screenshot = models.Screenshot.take_screenshot()
             self.screenshots.append(screenshot)
             window_event = models.WindowEvent.get_active_window_event()
