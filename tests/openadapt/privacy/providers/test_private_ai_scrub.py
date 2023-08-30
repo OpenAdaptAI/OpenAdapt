@@ -1,9 +1,12 @@
 """Module to test PrivateAIScrubbingProvider."""
 
+from io import BytesIO
 import base64
 import os
 
 from loguru import logger
+from PIL import Image
+import easyocr
 import requests
 
 from openadapt import config
@@ -21,7 +24,7 @@ except ValueError:
 
 def test_pdf_redaction() -> None:
     """Test to check that the PDF redaction works."""
-    pdf_path = "tests/test_files/sample_llc_1.pdf"
+    pdf_path = "tests/assets/sample_llc_1.pdf"
     redacted_pdf_path = scrub.scrub_pdf(pdf_path)
 
     url = "https://api.private-ai.com/deid/v3/process/files/base64"
@@ -50,46 +53,39 @@ def test_pdf_redaction() -> None:
     if response is None:
         raise ValueError("Private AI request returned None")
     response = response.json()
-    if type(response) == dict and "details" in response.keys():
+    if type(response) is dict and "details" in response.keys():
         raise ValueError(response.get("detail"))
 
-    assert response.get("entities_present") == False
+    assert response.get("entities_present") is False
 
 
 def test_image_redaction() -> None:
     """Test to check that the image redaction works."""
-    image_path = "tests/test_files/test_emr_image.png"
+    image_path = "tests/assets/test_image_redaction_privateai.png"
 
-    url = "https://api.private-ai.com/deid/v3/process/files/base64"
+    reader = easyocr.Reader(["en"])
+    results = reader.readtext(image_path, detail=0)
+    extract_original_text = " ".join(results)
+    logger.debug(extract_original_text)
 
-    file_type = "image/png"
+    # Convert the image to PIL.Image
+    with open(image_path, "rb") as file:
+        image_data = file.read()
+    test_image_pil_data = Image.open(BytesIO(image_data))
 
-    # Read from file
-    with open(redacted_pdf_path, "rb") as b64_file:
-        file_data = base64.b64encode(b64_file.read())
-        file_data = file_data.decode("ascii")
-    os.remove(redacted_pdf_path)
+    scrubbed_test_image_pil_data = scrub.scrub_image(test_image_pil_data)
 
-    payload = {
-        "file": {"data": file_data, "content_type": file_type},
-        "entity_detection": {"accuracy": "high", "return_entity": True},
-        "pdf_options": {"density": 150, "max_resolution": 2000},
-        "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
-    }
+    redacted_image_path = image_path.split(".")[0] + "_redacted.png"
+    scrubbed_test_image_pil_data.save(redacted_image_path)
 
-    headers = {
-        "Content-Type": "application/json",
-        "X-API-KEY": config.PRIVATE_AI_API_KEY,
-    }
+    results = reader.readtext(redacted_image_path, detail=0)
+    extract_redacted_text = " ".join(results)
+    logger.debug(extract_redacted_text)
+    os.remove(redacted_image_path)
 
-    response = requests.post(url, json=payload, headers=headers)
-    if response is None:
-        raise ValueError("Private AI request returned None")
-    response = response.json()
-    if type(response) == dict and "details" in response.keys():
-        raise ValueError(response.get("detail"))
+    redact_text = scrub.scrub_text(extract_redacted_text)
 
-    assert response.get("entities_present") == False
+    assert redact_text == extract_redacted_text
 
 
 def test_empty_string() -> None:
