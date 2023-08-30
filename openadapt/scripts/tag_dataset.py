@@ -26,9 +26,10 @@ def tag_data(
     screenshot_timestamp: float,
     dataset_id: Optional[int] = None,
 ) -> None:
-    """
-    Create a DatasetEntry in the database using the window event and screenshot with the
-    given timestamps. This DatasetEntry will be part of the dataset with the given ID.
+    """Create a DatasetEntry in the database.
+
+    This entry will refer to the window event and screenshot with the
+    given timestamps, and will be part of the dataset with the given ID.
 
     Args:
         window_event_timestamp (float): The timestamp of the desired window event.

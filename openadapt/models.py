@@ -403,8 +403,7 @@ class MemoryStat(db.Base):
 
 
 class Dataset(db.Base):
-    """Class representing a dataset of screenshots and window states from WindowEvents
-    in the database."""
+    """Class representing a dataset of screenshots and window states in the database."""
 
     __tablename__ = "dataset"
 
@@ -412,8 +411,7 @@ class Dataset(db.Base):
 
 
 class DatasetEntry(db.Base):
-    """Class representing a screenshot and a WindowEvent associated with a Dataset
-    in the database."""
+    """Class representing a dataset entry associated with a Dataset in the database."""
 
     __tablename__ = "dataset_entry"
 

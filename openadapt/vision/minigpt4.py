@@ -1,4 +1,6 @@
-"""This script executes the MiniGPT-4 model within a modal container and asks
+"""This script executes the MiniGPT-4 model within a modal container.
+
+The user can interact with the MiniGPT-4 model by asking
 the questions from openadapt/vision/questions.txt about the images in
 openadapt/vision/images.
 
@@ -12,6 +14,7 @@ Usage:
     $ modal run openadapt/vision/minigpt4.py
 
 """
+import argparse
 
 from modal import Image, Stub, method
 from PIL import Image as PILImage
@@ -27,9 +30,7 @@ MAX_LENGTH = (2000,)
 
 
 def download_model() -> None:
-    """This function downloads the necessary Vicuna-13B model snapshot from Hugging Face
-    Hub.
-    """
+    """Download the necessary Vicuna-13B model snapshot from Hugging Face Hub."""
     from huggingface_hub import snapshot_download
 
     snapshot_download("lmsys/vicuna-13b-delta-v0", local_dir="/root/weights/delta")
@@ -51,8 +52,7 @@ def download_checkpoint() -> None:
 
 
 def change_paths() -> None:
-    """Change the config paths in the MiniGPT-4 repository according to the
-    setup instructions"""
+    """Change the config paths in the repository according to the instructions."""
     file1 = "/root/MiniGPT-4/eval_configs/minigpt4_eval.yaml"
     with open(file1, "r") as file:
         file_contents = file.read()
@@ -175,15 +175,16 @@ stub = Stub(name="minigpt4", image=image)
 @stub.cls(gpu="a10g", timeout=TIMEOUT)
 class MiniGPT4Model:
     """This class facilitates interactions with the MiniGPT-4 model.
+
     Sample usage where pil_image is an open PIL Image and question is a string:
     >>> model = MiniGPT4Model()
     >>> model.generate.call(pil_image, question)
     """
 
     def __enter__(self) -> None:
-        """
-        Automatically initialize the MiniGPT-4 model and processor upon initializing
-        the MiniGPT4Model class.
+        """Initialize the MiniGPT-4 model and processor.
+
+        Automatically runs upon initializing the MiniGPT4Model class.
         """
         import sys
 
@@ -217,24 +218,27 @@ class MiniGPT4Model:
         self.chat_state = CONV_VISION.copy()
         print("Initialization Finished")
 
-    def parse_args(self):
+    def parse_args(self) -> argparse.Namespace:
+        """Create a Namespace class with the arguments taken from the MiniGPT-4 demo.
+
+        Returns:
+            argparse.Namespace: arguments used for configuration of the MiniGPT4Model
+        """
         import argparse
 
         parser = argparse.ArgumentParser(description="Demo")
         parser.add_argument(
-            "--cfg-path", required=True, help="path to configuration file."
+            "--cfg-path",
+            required=True,
         )
         parser.add_argument(
-            "--gpu-id", type=int, default=0, help="specify the gpu to load the model."
+            "--gpu-id",
+            type=int,
+            default=0,
         )
         parser.add_argument(
             "--options",
             nargs="+",
-            help=(
-                "override some settings in the used config, the key-value pair "
-                "in xxx=yyy format will be merged into config file (deprecate), "
-                "change to --cfg-options instead."
-            ),
         )
         args = parser.parse_args(
             ["--cfg-path=/root/MiniGPT-4/eval_configs/minigpt4_eval.yaml", "--gpu-id=0"]
@@ -244,6 +248,7 @@ class MiniGPT4Model:
     @method()
     def generate(self, image: PILImage, question: str) -> str:
         """Generate a completion for the given question about the given image.
+
         Use .call to call this function in the modal container.
 
         Args:
@@ -268,7 +273,6 @@ class MiniGPT4Model:
 @stub.local_entrypoint()
 def main() -> None:
     """Entrypoint for the modal container."""
-
     import os
 
     from PIL import Image
