@@ -55,8 +55,7 @@ def test_pdf_redaction() -> None:
 
     response = response.json()
     if isinstance(response, dict) and "details" in response:
-        response.raise_for_status()
-        logger.debug(f"{response.get('details')=}")
+        raise ValueError(response.get("details"))
     assert response.get("entities_present") is False
 
 
