@@ -87,14 +87,18 @@ class PrivateAIScrubbingProvider(
         """
         # save file as "temp_image_to_scrub.png in assets/
         temp_image_path = os.path.join(FILES_DIR, TEMP_IMAGEFILE_NAME)
-        image.save(temp_image_path)
 
-        # Read from file
-        with open(temp_image_path, "rb") as b64_file:
-            file_data = base64.b64encode(b64_file.read())
-            file_data = file_data.decode("ascii")
+        buffer = BytesIO()
 
-        os.remove(temp_image_path)  # remove temp image after reading data
+        image.save(buffer, format="PNG")
+        # Get the image data as bytes
+        image_data = buffer.getvalue()
+
+        file_data = base64.b64encode(image_data)
+        file_data = file_data.decode("ascii")
+
+        # Clean up by closing the BytesIO buffer
+        buffer.close()
 
         payload = {
             "file": {"data": file_data, "content_type": IMAGE_CONTENT_TYPE},
