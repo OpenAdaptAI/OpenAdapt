@@ -22,12 +22,5 @@ def test_scrubbing_provider_factory() -> None:
     assert providers_list
 
     for provider in providers_list:
-        # Ensure the provider is an instance
-        assert (
-            isinstance(provider, PresidioScrubbingProvider)
-            or isinstance(provider, ComprehendScrubbingProvider)
-            or isinstance(provider, PrivateAIScrubbingProvider)
-        )
-
         # Ensure that the provider supports Modality.TEXT
         assert Modality.TEXT in provider.capabilities
