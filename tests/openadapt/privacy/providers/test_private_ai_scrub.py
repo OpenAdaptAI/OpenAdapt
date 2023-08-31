@@ -56,8 +56,7 @@ def test_pdf_redaction() -> None:
     response = response.json()
     if isinstance(response, dict) and "details" in response:
         response.raise_for_status()
-        logger.debug(response.get("details"))
-
+        logger.debug(f"{response.get('details')=}")
     assert response.get("entities_present") is False
 
 
@@ -68,7 +67,7 @@ def test_image_redaction() -> None:
     reader = easyocr.Reader(["en"])
     results = reader.readtext(image_path, detail=0)
     extract_original_text = " ".join(results)
-    logger.debug(extract_original_text)
+    logger.debug(f"{extract_original_text=}")
 
     # Convert the image to PIL.Image
     with open(image_path, "rb") as file:
@@ -82,7 +81,7 @@ def test_image_redaction() -> None:
 
     results = reader.readtext(redacted_image_path, detail=0)
     extract_redacted_text = " ".join(results)
-    logger.debug(extract_redacted_text)
+    logger.debug(f"{extract_redacted_text=}")
     os.remove(redacted_image_path)
 
     redact_text = scrub.scrub_text(extract_redacted_text)
