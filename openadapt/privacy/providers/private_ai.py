@@ -165,11 +165,12 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(url, json=payload, headers=headers)
-        if response is None:
-            raise ValueError("Private AI request returned None")
-        response = response.json()
-        if type(response) is dict and "details" in response.keys():
-            raise ValueError(response.get("detail"))
+        response.raise_for_status()
+        # This will raise an HTTPError if the response status code indicates an error (4xx or 5xx)
+        response_data = response.json()
+        if isinstance(response_data, dict) and "details" in response_data:
+            raise response_data.get("detail")
+
         logger.debug(f"{response.get('entities')=}")
         logger.debug(f"{len(response.get('entities'))=}")
 
