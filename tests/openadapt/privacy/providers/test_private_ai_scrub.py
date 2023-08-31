@@ -50,11 +50,11 @@ def test_pdf_redaction() -> None:
     }
 
     response = requests.post(url, json=payload, headers=headers)
-    if response is None:
-        raise ValueError("Private AI request returned None")
+    response.raise_for_status()  # This will raise an exception if the response status code indicates an error.
     response = response.json()
-    if type(response) is dict and "details" in response.keys():
-        raise ValueError(response.get("detail"))
+    if isinstance(response, dict) and "details" in response:
+        response.raise_for_status()
+        logger.debug(response.get("details"))
 
     assert response.get("entities_present") is False
 
