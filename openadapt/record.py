@@ -213,9 +213,12 @@ def process_events(
                 continue
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            event.data["browser_event_timestamp"] = (
-                prev_browser_event.timestamp if prev_browser_event is not None else None
-            )
+            if prev_browser_event is not None:
+                event.data["browser_event_timestamp"] = (
+                    prev_browser_event.message["timestamp"]
+                    if prev_browser_event is not None
+                    else None
+                )
             process_event(
                 event,
                 action_write_q,
@@ -241,15 +244,19 @@ def process_events(
                     perf_q,
                 )
                 prev_saved_window_timestamp = prev_window_event.timestamp
-            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
-                process_event(
-                    prev_browser_event,
-                    browser_write_q,
-                    write_browser_event,
-                    recording_timestamp,
-                    perf_q,
-                )
-                prev_saved_browser_timestamp = prev_browser_event.timestamp
+            if prev_browser_event is not None:
+                if prev_saved_browser_timestamp < prev_browser_event.msg["timestamp"]:
+                    process_event(
+                        prev_browser_event,
+                        browser_write_q,
+                        write_browser_event,
+                        recording_timestamp,
+                        perf_q,
+                    )
+                if prev_browser_event is not None:
+                    prev_saved_browser_timestamp = prev_browser_event.message[
+                        "timestamp"
+                    ]
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -615,14 +622,16 @@ def read_browser_events(
     utils.set_start_time(recording_timestamp)
     logger.info("starting")
     conn = sockets.create_client_connection(config.SOCKET_PORT)
-    while not terminate_event.is_set() and conn is not None:
+    while not terminate_event.is_set():
         try:
-            logger.info("Waiting for message...")
-            # msg = sockets.client_receive_message(config.SOCKET_PORT)
-            msg = sockets.client_receive(conn)
-            # logger.info(f"{msg=}")
+            if not conn.closed:
+                logger.info("Waiting for message...")
+                msg = conn.recv()
+                logger.info(f"{msg=}")
+            else:
+                conn = sockets.create_client_connection(config.SOCKET_PORT)
             if msg is not None:
-                logger.info("Received DOM message.")
+                logger.info("Received message.")
                 browser_data = msg
                 logger.debug("queuing browser event for writing")
                 event_q.put(
@@ -648,11 +657,9 @@ def read_browser_events(
             # except Exception as exc:
             #     logger.warning(f"Error during communication: {exc}")
             #     time.sleep(config.SOCKET_RETRY_INTERVAL)
-    if conn:
-        conn.close()
+    # if conn:
+    #     conn.close()
 
-    pid = utils.get_pid_by_name("browser.py")
-    utils.send_kill_signal(pid)
     logger.info("done")
 
 

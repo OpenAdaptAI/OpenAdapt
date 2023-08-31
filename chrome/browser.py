@@ -16,8 +16,8 @@ import sys
 
 from openadapt import config, sockets
 
-STORE_DATA = True
-SOCKETS = False
+SOCKETS = True
+DBG_DATABASE = False
 
 
 def get_message() -> dict:
@@ -79,32 +79,32 @@ def send_message_to_client(conn: sockets.Connection, message: dict) -> None:
 
 def main() -> None:
     """Main function."""
-    # Connect to the database
-    db_conn = sqlite3.connect("messages.db")
-    c = db_conn.cursor()
-    # Create the messages table if it doesn't exist
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message TEXT NOT NULL
-        )
-        """)
+    if DBG_DATABASE:
+        db_conn = sqlite3.connect("messages.db")
+        c = db_conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL
+            )
+            """)
     if SOCKETS:
         conn = sockets.create_server_connection(config.SOCKET_PORT)
     while True:
         if SOCKETS and conn.closed:
             conn = sockets.create_server_connection(config.SOCKET_PORT)
         message = get_message()
-        if STORE_DATA:
-            # Log the message to the database
+
+        # Log the message to the database
+        if DBG_DATABASE:
             c.execute(
                 "INSERT INTO messages (message) VALUES (?)", (json.dumps(message),)
             )
             db_conn.commit()
             response = {"message": "Data received and logged successfully!"}
+        if message:
             encoded_response = encode_message(response)
             send_message(encoded_response)
-
             if SOCKETS:
                 send_message_to_client(conn, message)
 

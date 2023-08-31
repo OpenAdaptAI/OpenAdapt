@@ -37,8 +37,8 @@ function captureDocumentState() {
 function handleElementClick(event) {
   const element = event.target;
   const tagName = element.tagName;
-  const { x, y } = elements[element.id];
-  const value = elements[element.id].element.value;
+  const { x, y } = elements[element.id] || {};
+  const value = elements[element.id]?.value || "";
   const attributes = {};
 
   for (const attr of element.attributes) {
