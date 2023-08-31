@@ -50,7 +50,9 @@ def test_pdf_redaction() -> None:
     }
 
     response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()  # This will raise an exception if the response status code indicates an error.
+    response.raise_for_status()
+    # This will raise an exception if the response status code indicates an error.
+
     response = response.json()
     if isinstance(response, dict) and "details" in response:
         response.raise_for_status()
