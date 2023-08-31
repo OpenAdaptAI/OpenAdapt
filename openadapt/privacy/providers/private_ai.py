@@ -97,7 +97,7 @@ class PrivateAIScrubbingProvider(
         os.remove(temp_image_path)  # remove temp image after reading data
 
         payload = {
-            "file": {"data": file_data, "content_type": file_type},
+            "file": {"data": file_data, "content_type": IMAGE_CONTENT_TYPE},
             "entity_detection": {"accuracy": "high", "return_entity": True},
             "pdf_options": {"density": 150, "max_resolution": 2000},
             "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
@@ -115,7 +115,7 @@ class PrivateAIScrubbingProvider(
         if type(response) is dict and "detail" in response:
             raise ValueError(response.get("detail"))
 
-        redact_file_path = os.path.join(file_dir, f"redacted-{file_name}")
+        redact_file_path = os.path.join(FILES_DIR, f"redacted-{TEMP_IMAGEFILE_NAME}")
 
         # Write to file
         with open(redact_file_path, "wb") as redacted_file:
@@ -160,7 +160,8 @@ class PrivateAIScrubbingProvider(
 
         response = requests.post(BASE64_URL, json=payload, headers=headers)
         response.raise_for_status()
-        # This will raise an HTTPError if the response status code indicates an error (4xx or 5xx)
+        # This will raise an HTTPError
+        # if the response status code indicates an error (4xx or 5xx)
         response_data = response.json()
         if isinstance(response_data, dict) and "details" in response_data:
             raise response_data.get("detail")
