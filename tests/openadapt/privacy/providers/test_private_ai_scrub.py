@@ -22,14 +22,14 @@ except ValueError:
     pytestmark = pytest.mark.skip(reason="Private AI API key not found or uin")
 
 
+URL = "https://api.private-ai.com/deid/v3/process/files/base64"
+CONTENT_TYPE = "application/pdf"
+TEST_PDF_PATH = "tests/assets/sample_llc_1.pdf"
+
+
 def test_pdf_redaction() -> None:
     """Test to check that the PDF redaction works."""
-    pdf_path = "tests/assets/sample_llc_1.pdf"
-    redacted_pdf_path = scrub.scrub_pdf(pdf_path)
-
-    url = "https://api.private-ai.com/deid/v3/process/files/base64"
-
-    file_type = "application/pdf"
+    redacted_pdf_path = scrub.scrub_pdf(TEST_PDF_PATH)
 
     # Read from file
     with open(redacted_pdf_path, "rb") as b64_file:
@@ -38,7 +38,7 @@ def test_pdf_redaction() -> None:
     os.remove(redacted_pdf_path)
 
     payload = {
-        "file": {"data": file_data, "content_type": file_type},
+        "file": {"data": file_data, "content_type": CONTENT_TYPE},
         "entity_detection": {"accuracy": "high", "return_entity": True},
         "pdf_options": {"density": 150, "max_resolution": 2000},
         "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
@@ -49,7 +49,7 @@ def test_pdf_redaction() -> None:
         "X-API-KEY": config.PRIVATE_AI_API_KEY,
     }
 
-    response = requests.post(url, json=payload, headers=headers)
+    response = requests.post(URL, json=payload, headers=headers)
     response.raise_for_status()
     # This will raise an exception if the response status code indicates an error.
 
