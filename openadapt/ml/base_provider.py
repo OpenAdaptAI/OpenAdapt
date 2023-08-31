@@ -64,6 +64,7 @@ class CompletionProvider(BaseModel):
 class CompletionProviderFactory:
     """CompletionProviderFactory class."""
 
+    @staticmethod
     def get_for_modality(modality: Modality) -> list[CompletionProvider]:
         """Gets all available CompletionProviders with the given modality."""
         completion_providers = CompletionProvider.get_children()

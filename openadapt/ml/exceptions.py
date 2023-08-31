@@ -9,5 +9,5 @@ class ModelNotImplementedError(BaseException):
         super().__init__(f"{model_name} is not currently supported")
 
 
-class GpuNotAvailableError(BaseException):
+class GPUNotAvailableError(BaseException):
     """Raised when no GPU is available on the system."""

@@ -9,6 +9,8 @@ from openadapt.ml.base_provider import (
     Modality,
 )
 
+CHAT_MODEL_NAMES = {"gpt-4", "gpt-3.5-turbo"}
+
 
 class GPTCompletionProvider(CompletionProvider):
     """GPTCompletionProvider class."""
@@ -24,8 +26,7 @@ class GPTCompletionProvider(CompletionProvider):
 
     def finetune(self, prompt_completion_pair: list[dict[str]]) -> None:
         """Fine-tune the GPT model."""
-        # waiting on FineTuning PR which is currently
-        # a work in progress.
+        # TODO: implement once fine tuning is merged
         raise NotImplementedError
 
     def infer(self, gpt_model_name: str, prompt: str) -> str:
@@ -37,7 +38,7 @@ class GPTCompletionProvider(CompletionProvider):
         valid_inference_models = openai.Model.list()["data"]
         for model_dict in valid_inference_models:
             if model_dict["id"] == gpt_model_name:
-                if gpt_model_name == "gpt-4" or gpt_model_name == "gpt-3.5-turbo":
+                if gpt_model_name in CHAT_MODEL_NAMES:
                     completion_agent = openai.ChatCompletion.create(
                         model=gpt_model_name,
                         messages=[

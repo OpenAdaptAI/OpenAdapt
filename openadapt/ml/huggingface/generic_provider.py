@@ -9,8 +9,11 @@ from openadapt.ml.base_provider import (
     Modality,
 )
 
+# TODO: Implement HostedHuggingFaceProvider to support
+# HF Inference Endpoints: https://huggingface.co/docs/huggingface_hub/guides/inference
 
-class GenericHuggingFaceProvider(CompletionProvider):
+
+class LocalHuggingFaceProvider(CompletionProvider):
     """GenericHuggingFaceProvider class."""
 
     Name: str = "Generic HuggingFace Provider"
@@ -20,14 +23,16 @@ class GenericHuggingFaceProvider(CompletionProvider):
         Capability.INFERENCE,
     ]
     Modalities: list[Modality] = [Modality.TEXT]
-    Availabilities: list[Availability] = [Availability.HOSTED]
+    Availabilities: list[Availability] = [
+        Availability.LOCAL_CPU,
+        Availability.LOCAL_GPU,
+    ]
 
     def infer(
         self,
         prompt: str,
         model_path: str,
-        task_description: str,
-        use_pipeline: bool = True,
+        huggingface_task: str,
         trust_remote_code: bool = False,
     ) -> str:
         """Infers on a model of the user's choice, using Huggingface pipelines.
@@ -41,9 +46,9 @@ class GenericHuggingFaceProvider(CompletionProvider):
         An example of a model that requires trust_remote_code=True is
         MPT-7b-Instruct.
         """
-        assert use_pipeline and task_description, "Please enter a task description."
+        assert huggingface_task, "Please enter a task description."
         inference_pipeline = pipeline(
-            task_description, model=model_path, trust_remote_code=trust_remote_code
+            huggingface_task, model=model_path, trust_remote_code=trust_remote_code
         )
         inference_output = inference_pipeline(prompt)
         return inference_output
