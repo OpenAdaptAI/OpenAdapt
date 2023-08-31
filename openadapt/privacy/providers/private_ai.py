@@ -58,7 +58,7 @@ class PrivateAIScrubbingProvider(
 
         data = response.json()
         logger.debug(f"{data=}")
-        if type(data) is dict and "detail" in data.keys():
+        if type(data) is dict and "detail" in data:
             raise ValueError(data.get("detail"))
 
         redacted_text = data[0].get("processed_text")
@@ -112,7 +112,7 @@ class PrivateAIScrubbingProvider(
             raise ValueError("Private AI request returned None")
         response = response.json()
         logger.debug(f"{response=}")
-        if type(response) is dict and "detail" in response.keys():
+        if type(response) is dict and "detail" in response:
             raise ValueError(response.get("detail"))
 
         redact_file_path = os.path.join(file_dir, f"redacted-{file_name}")
@@ -171,8 +171,8 @@ class PrivateAIScrubbingProvider(
         if isinstance(response_data, dict) and "details" in response_data:
             raise response_data.get("detail")
 
-        logger.debug(f"{response.get('entities')=}")
-        logger.debug(f"{len(response.get('entities'))=}")
+        logger.debug(f"{response_data.get('entities')=}")
+        logger.debug(f"{len(response_data.get('entities'))=}")
 
         redacted_file_path = path_to_pdf.split(".")[0] + "_redacted.pdf"
 
