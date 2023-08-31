@@ -381,6 +381,8 @@ class WindowEvent(db.Base):
 
 
 class AudioInfo(db.Base):
+    """Class representing the audio from a recording in the database."""
+
     __tablename__ = "audio_info"
 
     id = sa.Column(sa.Integer, primary_key=True)

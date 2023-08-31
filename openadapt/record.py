@@ -4,6 +4,10 @@ Usage:
 
     $ python openadapt/record.py "<description of task to be recorded>"
 
+To record audio:
+
+    $ python openadapt/record.py "<description of task to be recorded>" --enable_audio
+
 """
 
 from collections import namedtuple
@@ -813,12 +817,25 @@ def record_audio(
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
 ) -> None:
+    """Record audio narration during the recording and store data in database.
+
+    Args:
+        terminate_event: The event to signal termination of event reading.
+        recording_timestamp: The timestamp of the recording.
+    """
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
 
     audio_frames = []  # to store audio frames
 
-    def audio_callback(indata, frames, time, status):
+    def audio_callback(
+        indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
+    ) -> None:
+        """Callback function used when new audio frames are recorded.
+
+        Note: time is of type cffi.FFI.CData, but since we don't use this argument
+        and we also don't use the cffi library, the Any type annotation is used.
+        """
         # called whenever there is new audio frames
         audio_frames.append(indata.copy())
 
