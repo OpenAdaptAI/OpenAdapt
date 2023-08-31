@@ -1,3 +1,4 @@
-from openadapt.app.main import run_app
+"""Package for the GUI.
 
-run_app()
+Module: __init__.py
+"""

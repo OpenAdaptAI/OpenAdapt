@@ -1,26 +1,33 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.1.0"
+version = "0.13.1"
 description = "GUI Process Automation with Transformers"
-authors = ["Richard Abrich <richard.abrich@mldsai.com>"]
-readme = ["README.md", "LICENSE"]
+authors = [
+    'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+readme = "README.md"
 
 repository = "https://github.com/mldsai/openadapt"
 homepage = "https://openadapt.ai/"
 
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
 
 [tool.poetry.dependencies]
 python = "3.10.x"
-atomacos = {git = "https://github.com/abrichr/atomacos.git", markers = "sys_platform == 'darwin'"}
-pynput = {git = "https://github.com/abrichr/pynput.git"}
 alembic = "1.8.1"
 black = "23.3.0"
-pygetwindow = {version = "<0.0.5", markers = "sys_platform == 'win32'"}
-pywin32 = {version = "306", markers = "sys_platform == 'win32'"}
+pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
+pywin32 = { version = "306", markers = "sys_platform == 'win32'" }
 ascii-magic = "2.3.0"
 bokeh = "2.4.3"
 clipboard = "0.0.4"
-deepdiff = {extras = ["optimize"], version = "^6.3.0"}
+deepdiff = { extras = ["optimize"], version = "^6.3.0" }
 ascii_magic = "2.3.0"
 dictalchemy3 = "1.0.0"
 fire = "0.4.0"
@@ -32,7 +39,6 @@ openai = "0.27.5"
 pandas = "2.0.0"
 presidio_analyzer = "2.2.32"
 presidio_anonymizer = "2.2.32"
-presidio_image_redactor = "0.0.46"
 pytesseract = "0.3.7"
 pytest = "7.1.3"
 rapidocr-onnxruntime = "1.2.3"
@@ -47,26 +53,82 @@ python-dotenv = "1.0.0"
 pyinstaller = "^5.12.0"
 setuptools-lint = "^0.6.0"
 sphinx = "7.0.1"
-nicegui = "1.2.16"
+nicegui = "^1.2.24"
 spacy = "^3.5.3"
 fuzzywuzzy = "0.18.0"
 segment-anything = "^1.0"
 torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
-pywinauto = {version = "^0.6.8", markers = "sys_platform == 'win32'"}
+pillow = "9.5.0"
+pywinauto = { version = "^0.6.8", markers = "sys_platform == 'win32'" }
+flake8 = "^6.0.0"
+flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+pyside6 = "^6.5.1.1"
+notify-py = "^0.3.42"
+flake8-annotations = "^3.0.1"
+pre-commit = "^3.3.3"
+pympler = "^1.0.1"
+psutil = "^5.9.5"
+sentry-sdk = "^1.28.1"
+gitpython = "^3.1.32"
+pyobjc-framework-avfoundation = { version = "^9.2", markers = "sys_platform == 'darwin'" }
+fastapi = "0.98.0"
+screen-recorder-sdk = { version = "^1.3.0", markers = "sys_platform == 'win32'" }
+pyaudio = { version = "^0.2.13", markers = "sys_platform == 'win32'" }
+oa-pynput = "^1.7.7"
+oa-atomacos = { version = "3.2.0", markers = "sys_platform == 'darwin'" }
+presidio-image-redactor = "^0.0.48"
+pywebview = "^4.2.2"
+click = "^8.1.6"
+spacy-transformers = "^1.2.5"
+boto3 = "^1.28.30"
+botocore = "^1.31.30"
 
-[tool.poetry.dependencies.en_core_web_trf]
-url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.5.0/en_core_web_trf-3.5.0.tar.gz"
+[tool.pytest.ini_options]
+filterwarnings = [
+    # suppress warnings starting from "setuptools>=67.3"
+    "ignore:Deprecated call to `pkg_resources\\.declare_namespace\\('.*'\\):DeprecationWarning",
+    "ignore:pkg_resources is deprecated as an API",
+]
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.isort]
+profile = "black"
+group_by_package = true
+from_first = true
+
 [tool.poetry.scripts]
 visualize = "openadapt.visualize:main"
 record = "openadapt.record:start"
 replay = "openadapt.replay:start"
-app = "openadapt.app.main:run_app"
+app = "openadapt.app.tray:_run"
+reset = "openadapt.scripts.reset_db:reset_db"
+capture = "openadapt.capture:test"
+
+
+[tool.black]
+extend-exclude = '''
+/(
+  | venv
+  | alembic
+)/
+'''
+
+[tool.semantic_release]
+version_variable = ["openadapt/__init__.py:__version__"]
+version_toml = ["pyproject.toml:tool.poetry.version"]
+major_on_zero = false
+branch = "main"
+commit_subject = "chore(release): v{version}"
+commit_version_number = true
+upload_to_PyPI = false
+upload_to_release = true
+upload_to_repository = false
+repository_url = "https://upload.pypi.org/legacy/"
+build_command = "pip install poetry && poetry build"
