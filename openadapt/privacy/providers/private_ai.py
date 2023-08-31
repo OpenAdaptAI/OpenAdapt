@@ -13,6 +13,14 @@ from openadapt import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 
+BASE64_URL = "https://api.private-ai.com/deid/v3/process/files/base64"
+FILES_DIR = "assets/"
+HEADER_CONTENT_TYPE = "application/json"
+IMAGE_CONTENT_TYPE = "image/png"
+PDF_CONTENT_TYPE = "application/pdf"
+TEMP_IMAGEFILE_NAME = "temp_image_to_scrub.png"
+TEXT_URL = "https://api.private-ai.com/deid/v3/process/text"
+
 
 class PrivateAIScrubbingProvider(
     ScrubProvider, ScrubbingProvider, TextScrubbingMixin
@@ -26,14 +34,12 @@ class PrivateAIScrubbingProvider(
         """Scrub the text of all PII/PHI.
 
         Args:
-            text (str): Text to be scrubbed
+            text (str): Text to be redacted
             is_separated (bool): Whether the text is separated with special characters
 
         Returns:
-            str: Scrubbed text
+            str: redacted text
         """
-        url = "https://api.private-ai.com/deid/v3/process/text"
-
         payload = {
             "text": [text],
             "link_batch": False,
@@ -48,13 +54,12 @@ class PrivateAIScrubbingProvider(
         }
 
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": HEADER_CONTENT_TYPE,
             "X-API-KEY": config.PRIVATE_AI_API_KEY,
         }
 
-        response = requests.post(url, json=payload, headers=headers)
-        if response is None:
-            raise ValueError("Private AI request returned None")
+        response = requests.post(TEXT_URL, json=payload, headers=headers)
+        response.raise_for_status()
 
         data = response.json()
         logger.debug(f"{data=}")
@@ -74,26 +79,22 @@ class PrivateAIScrubbingProvider(
         """Scrub the image of all PII/PHI.
 
         Args:
-            image (Image): A PIL.Image object to be scrubbed
+            image (Image): A PIL.Image object to be redacted
             fill_color (int): The color used to fill the redacted regions(BGR).
 
         Returns:
-            Image: The scrubbed image with PII and PHI removed.
+            Image: The redacted image with PII and PHI removed.
         """
-        url = "https://api.private-ai.com/deid/v3/process/files/base64"
-        file_dir = "assets/"
-        file_name = "temp_image_to_scrub.png"
-
         # save file as "temp_image_to_scrub.png in assets/
-        temp_image_path = os.path.join(file_dir, file_name)
+        temp_image_path = os.path.join(FILES_DIR, TEMP_IMAGEFILE_NAME)
         image.save(temp_image_path)
-
-        file_type = "image/png"
 
         # Read from file
         with open(temp_image_path, "rb") as b64_file:
             file_data = base64.b64encode(b64_file.read())
             file_data = file_data.decode("ascii")
+
+        os.remove(temp_image_path)  # remove temp image after reading data
 
         payload = {
             "file": {"data": file_data, "content_type": file_type},
@@ -103,13 +104,12 @@ class PrivateAIScrubbingProvider(
         }
 
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": HEADER_CONTENT_TYPE,
             "X-API-KEY": config.PRIVATE_AI_API_KEY,
         }
 
-        response = requests.post(url, json=payload, headers=headers)
-        if response is None:
-            raise ValueError("Private AI request returned None")
+        response = requests.post(BASE64_URL, json=payload, headers=headers)
+        response.raise_for_status()
         response = response.json()
         logger.debug(f"{response=}")
         if type(response) is dict and "detail" in response:
@@ -123,14 +123,12 @@ class PrivateAIScrubbingProvider(
             processed_file = base64.b64decode(processed_file, validate=True)
             redacted_file.write(processed_file)
 
-        # return PIL_IMAGE type of redacted image
+        # return PIL.IMAGE type of redacted image
         with open(redact_file_path, "rb") as file:
             redacted_file_data = file.read()
+        os.remove(redact_file_path)  # remove redacted image after reading data
 
         redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
-
-        os.remove(temp_image_path)
-        os.remove(redact_file_path)
 
         return redact_pil_image_data
 
@@ -138,33 +136,29 @@ class PrivateAIScrubbingProvider(
         """Scrub the PDF of all PII/PHI.
 
         Args:
-            path_to_pdf (str): Path to the PDF to be scrubbed
+            path_to_pdf (str): Path to the PDF to be redacted
 
         Returns:
-            str: Path to the scrubbed PDF
+            str: Path to the redacted PDF
         """
-        url = "https://api.private-ai.com/deid/v3/process/files/base64"
-
-        file_type = "application/pdf"
-
         # Read from file
         with open(path_to_pdf, "rb") as b64_file:
             file_data = base64.b64encode(b64_file.read())
             file_data = file_data.decode("ascii")
 
         payload = {
-            "file": {"data": file_data, "content_type": file_type},
+            "file": {"data": file_data, "content_type": PDF_CONTENT_TYPE},
             "entity_detection": {"accuracy": "high", "return_entity": True},
             "pdf_options": {"density": 150, "max_resolution": 2000},
             "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
         }
 
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": HEADER_CONTENT_TYPE,
             "X-API-KEY": config.PRIVATE_AI_API_KEY,
         }
 
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(BASE64_URL, json=payload, headers=headers)
         response.raise_for_status()
         # This will raise an HTTPError if the response status code indicates an error (4xx or 5xx)
         response_data = response.json()
