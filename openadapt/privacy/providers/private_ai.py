@@ -90,9 +90,6 @@ class PrivateAIScrubbingProvider(
         Returns:
             Image: The redacted image with PII and PHI removed.
         """
-        # save file as "temp_image_to_scrub.png in assets/
-        temp_image_path = os.path.join(FILES_DIR, TEMP_IMAGEFILE_NAME)
-
         buffer = BytesIO()
 
         image.save(buffer, format="PNG")
