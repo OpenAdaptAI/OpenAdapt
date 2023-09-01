@@ -144,7 +144,7 @@ def getenv_fallback(var_name: str) -> str:
     Raises:
         ValueError: If the environment variable is not defined.
     """
-    rval = os.getenv(var_name) or globals()[var_name]
+    rval = os.getenv(var_name) or globals().get(var_name)
     if type(rval) is str and rval.lower() in (
         "true",
         "false",
@@ -227,10 +227,9 @@ if multiprocessing.current_process().name == "MainProcess":
     for key, val in dict(locals()).items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
-            if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
-                and val != globals()[key]
-            ):
+            if any(
+                [part in parts for part in _OBFUSCATE_KEY_PARTS]
+            ) and val != globals().get(key):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
