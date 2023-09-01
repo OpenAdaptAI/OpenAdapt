@@ -2,6 +2,122 @@
 
 
 
+## v0.13.1 (2023-08-30)
+
+### Fix
+
+* fix(tests.openadapt.privacy.providers): failing `test_comprehend_scrub.py` (#488)
+
+* skip all the tests if ther is an issue wiht aws config files, either they are not htere or incorrect values are porided
+
+* format ([`cec2a53`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cec2a53ed329060ed20f1d80773d1a2873cb9fb3))
+
+### Unknown
+
+* Merge pull request #483 from OpenAdaptAI/modify-install-script ([`5fa12eb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5fa12ebddf8271883aa54c6beb6d43df79a8a609))
+
+* Merge branch &#39;main&#39; into modify-install-script ([`73bfad4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/73bfad4bd845f91563c1f50a23ef851a68a864b4))
+
+
+## v0.13.0 (2023-08-29)
+
+### Feature
+
+* feat(privacy.providers): add aws_comprehend as scrubbing provider (#476)
+
+* add aws_comprehend provider module
+
+* fix typo
+
+* add boto3 and botocore to poetry
+
+* ran poetry update
+
+* add the AWS Comprehend Class
+
+* update the script
+
+* create test module to test comprhend
+
+* refactor name
+
+* add full fleged test module
+
+* try to fix failing tests
+
+* try to fix failing tests
+
+* fixed pytest
+
+* format test file
+
+* fix all flake 8 formattings
+
+* add naming meaning for NER
+
+* remove repeated code and make a TextMixin
+
+* format
+
+* change scrub enabled to false
+ after testing visualization
+
+* remove redundant rmethods
+
+* add enum style provider names
+
+addressing: https://github.com/OpenAdaptAI/OpenAdapt/pull/476#discussion_r1304821459
+
+* fix all flak8 errors
+
+* add files for private_ai scrubbing provider
+
+* change name
+
+* add scrub text function in
+PrivateAIScrubbingProvider
+
+* try to skip tests if api key is incorrect or missing or the syntax used in code is incorrect
+
+* pytest passes for test_private_ai
+
+* add temp code for pdfs redaction
+
+* remove the PRIVATE_AI provider code as it will be added in seprate pr
+
+* remove omre prvt_ai files
+
+* ran black
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](https://github.com/OpenAdaptAI/OpenAdapt/commit/33fe2446311dd8dea1465f617662407d3bc182cc))
+
+### Unknown
+
+* Merge branch &#39;main&#39; into modify-install-script ([`705a2f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/705a2f0d0414d9010f9b0cea7a3a3a1306b49de1))
+
+
+## v0.12.0 (2023-08-29)
+
+### Feature
+
+* feat: manage recording database (#451)
+
+* implemented db module
+* use click + loguru ([`5b25b90`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b25b90fc4b0a7221a062170c3cb38c520afc718))
+
+### Unknown
+
+* fix formatting ([`d668901`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d66890159c202308ee22aa919784f2d13a46b349))
+
+* Merge branch &#39;modify-install-script&#39; of github.com:OpenAdaptAI/OpenAdapt into modify-install-script ([`4e52dc3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4e52dc3bc9c50207683f09067b3b70f330662222))
+
+* address formatting errors ([`2fa3fde`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2fa3fde760692a4c820ebc06976064ce2b865eab))
+
+* Merge branch &#39;main&#39; into modify-install-script ([`b5ad05c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b5ad05c90e9fba38b0d9e95145a0d98b209ba4ac))
+
+
 ## v0.11.0 (2023-08-29)
 
 ### Feature
@@ -144,6 +260,8 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`90bfe8f`](htt
 * Update config.py
 
 * remove config ([`212452c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/212452ca99d4895b86f7005536e186f39097c10d))
+
+* chore: modify install script to execute on user&#39;s repo and branch ([`21e4942`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21e4942fda2748501f07280194e5150129d5e9af))
 
 * chore: validate functionality of status checks (#477)
 
@@ -319,6 +437,8 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`09f4e71`](htt
 ### Unknown
 
 * Update README.md ([`250949f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/250949f18ad6c72df16bce2ab6d32764c0af3a82))
+
+* add default values when no parameters are passed ([`e8775e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e8775e8151fbb3965f372c89fc8d1c52b892b5c8))
 
 * Productivity measurement (#234)
 
