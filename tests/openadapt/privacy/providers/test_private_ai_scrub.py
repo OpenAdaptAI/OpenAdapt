@@ -19,7 +19,9 @@ try:
 except ValueError:
     import pytest
 
-    pytestmark = pytest.mark.skip(reason="Private AI API key not found or uin")
+    pytestmark = pytest.mark.skip(
+        reason="Private AI API key not found or invalid usage."
+    )
 
 
 URL = "https://api.private-ai.com/deid/v3/process/files/base64"
