@@ -69,7 +69,7 @@ SCRUB_ENABLED = os.getenv("SCRUB_ENABLED", "False").lower() == "true"
 SCRUB_CHAR = os.getenv("SCRUB_CHAR", "*")
 SCRUB_LANGUAGE = os.getenv("SCRUB_LANGUAGE", "en")
 # TODO support lists in getenv_fallback
-SCRUB_FILL_COLOR = int(os.getenv("SCRUB_FILL_COLOR", 0x0000FF), 16)
+SCRUB_FILL_COLOR = os.getenv("SCRUB_FILL_COLOR", 0x0000FF)
 SCRUB_CONFIG_TRF = {
     "nlp_engine_name": os.getenv("SCRUB_CONFIG_TRF_nlp_engine_name", "spacy"),
     "models": [
