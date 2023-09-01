@@ -3,7 +3,6 @@
 from io import BytesIO
 from typing import List
 import base64
-import os
 
 from loguru import logger
 from PIL import Image
@@ -130,7 +129,7 @@ class PrivateAIScrubbingProvider(
         # Use a BytesIO buffer to work with redacted_file_data
         redacted_buffer = BytesIO(redacted_file_data)
 
-        redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
+        redact_pil_image_data = Image.open(redacted_buffer)
 
         return redact_pil_image_data
 
