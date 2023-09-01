@@ -124,18 +124,18 @@ class PrivateAIScrubbingProvider(
         if type(response) is dict and "detail" in response:
             raise ValueError(response.get("detail"))
 
-        redact_file_path = os.path.join(FILES_DIR, f"redacted-{TEMP_IMAGEFILE_NAME}")
+        redacted_file_path = os.path.join(FILES_DIR, f"redacted-{TEMP_IMAGEFILE_NAME}")
 
         # Write to file
-        with open(redact_file_path, "wb") as redacted_file:
+        with open(redacted_file_path, "wb") as redacted_file:
             processed_file = response.get("processed_file").encode("ascii")
             processed_file = base64.b64decode(processed_file, validate=True)
             redacted_file.write(processed_file)
 
         # return PIL.IMAGE type of redacted image
-        with open(redact_file_path, "rb") as file:
+        with open(redacted_file_path, "rb") as file:
             redacted_file_data = file.read()
-        os.remove(redact_file_path)  # remove redacted image after reading data
+        os.remove(redacted_file_path)  # remove redacted image after reading data
 
         redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
 
