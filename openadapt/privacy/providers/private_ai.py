@@ -124,18 +124,11 @@ class PrivateAIScrubbingProvider(
         if type(response) is dict and "detail" in response:
             raise ValueError(response.get("detail"))
 
-        redacted_file_path = os.path.join(FILES_DIR, f"redacted-{TEMP_IMAGEFILE_NAME}")
+        redacted_file_data = response.get("processed_file").encode("ascii")
+        redacted_file_data = base64.b64decode(redacted_file_data, validate=True)
 
-        # Write to file
-        with open(redacted_file_path, "wb") as redacted_file:
-            processed_file = response.get("processed_file").encode("ascii")
-            processed_file = base64.b64decode(processed_file, validate=True)
-            redacted_file.write(processed_file)
-
-        # return PIL.IMAGE type of redacted image
-        with open(redacted_file_path, "rb") as file:
-            redacted_file_data = file.read()
-        os.remove(redacted_file_path)  # remove redacted image after reading data
+        # Use a BytesIO buffer to work with redacted_file_data
+        redacted_buffer = BytesIO(redacted_file_data)
 
         redact_pil_image_data = Image.open(BytesIO(redacted_file_data))
 
@@ -150,13 +143,19 @@ class PrivateAIScrubbingProvider(
         Returns:
             str: Path to the redacted PDF
         """
-        # Read from file
-        with open(path_to_pdf, "rb") as b64_file:
-            file_data = base64.b64encode(b64_file.read())
-            file_data = file_data.decode("ascii")
+        # Create a BytesIO buffer to read the PDF file
+        with open(path_to_pdf, "rb") as pdf_file:
+            pdf_buffer = BytesIO(pdf_file.read())
+
+        # Read PDF data from the BytesIO buffer
+        pdf_data = pdf_buffer.getvalue()
+        pdf_buffer.close()
+
+        # Encode PDF data as base64
+        pdf_base64 = base64.b64encode(pdf_data).decode("ascii")
 
         payload = {
-            "file": {"data": file_data, "content_type": PDF_CONTENT_TYPE},
+            "file": {"data": pdf_base64, "content_type": PDF_CONTENT_TYPE},
             "entity_detection": {"accuracy": "high", "return_entity": True},
             "pdf_options": {"density": 150, "max_resolution": 2000},
             "audio_options": {"bleep_start_padding": 0, "bleep_end_padding": 0},
@@ -182,10 +181,17 @@ class PrivateAIScrubbingProvider(
 
         redacted_file_path = path_to_pdf.split(".")[0] + "_redacted.pdf"
 
-        # Write to file
+        # Create a BytesIO buffer to handle the redacted PDF data
+        redacted_buffer = BytesIO()
+
+        # Decode and write the redacted PDF data to the BytesIO buffer
+        processed_file = response_data.get("processed_file").encode("ascii")
+        processed_file = base64.b64decode(processed_file, validate=True)
+        redacted_buffer.write(processed_file)
+
+        # Write the redacted PDF data to a file
         with open(redacted_file_path, "wb") as redacted_file:
-            processed_file = response_data.get("processed_file").encode("ascii")
-            processed_file = base64.b64decode(processed_file, validate=True)
-            redacted_file.write(processed_file)
+            redacted_buffer.seek(0)  # Move the buffer position to the beginning
+            redacted_file.write(redacted_buffer.read())
 
         return redacted_file_path

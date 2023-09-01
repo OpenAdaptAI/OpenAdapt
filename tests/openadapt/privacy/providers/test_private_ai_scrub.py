@@ -68,16 +68,30 @@ def test_image_redaction() -> None:
     extract_original_text = " ".join(results)
     logger.debug(f"{extract_original_text=}")
 
-    # Convert the image to PIL.Image
-    with open(image_path, "rb") as file:
-        image_data = file.read()
-    test_image_pil_data = Image.open(BytesIO(image_data))
+    # Create a BytesIO buffer to read the image file
+    with open(image_path, "rb") as image_file:
+        image_buffer = BytesIO(image_file.read())
 
+    # Open the image from the BytesIO buffer
+    test_image_pil_data = Image.open(image_buffer)
+
+    # Scrub the image using BytesIO
     scrubbed_test_image_pil_data = scrub.scrub_image(test_image_pil_data)
 
-    redacted_image_path = image_path.split(".")[0] + "_redacted.png"
-    scrubbed_test_image_pil_data.save(redacted_image_path)
+    # Create a BytesIO buffer to save the redacted image
+    redacted_image_buffer = BytesIO()
+    scrubbed_test_image_pil_data.save(redacted_image_buffer, format="PNG")
 
+    # Read the redacted image data from the BytesIO buffer
+    redacted_image_data = redacted_image_buffer.getvalue()
+    redacted_image_buffer.close()
+
+    # Save the redacted image to a temporary file
+    redacted_image_path = image_path.split(".")[0] + "_redacted.png"
+    with open(redacted_image_path, "wb") as redacted_file:
+        redacted_file.write(redacted_image_data)
+
+    # Read text from the redacted image
     results = reader.readtext(redacted_image_path, detail=0)
     extract_redacted_text = " ".join(results)
     logger.debug(f"{extract_redacted_text=}")
