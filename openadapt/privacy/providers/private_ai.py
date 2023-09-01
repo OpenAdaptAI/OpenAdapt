@@ -63,6 +63,11 @@ class PrivateAIScrubbingProvider(
 
         data = response.json()
         logger.debug(f"{data=}")
+
+        # According to the API documentation,
+        # the response is a list of dicts when there is no error/issue in the request
+        # else it is a dict with a key "detail" containing the error message
+
         if type(data) is dict and "detail" in data:
             raise ValueError(data.get("detail"))
 
@@ -116,6 +121,11 @@ class PrivateAIScrubbingProvider(
         response.raise_for_status()
         response = response.json()
         logger.debug(f"{response=}")
+
+        # According to the API documentation,
+        # the response is a list of dicts when there is no error/issue in the request
+        # else it is a dict with a key "detail" containing the error message
+
         if type(response) is dict and "detail" in response:
             raise ValueError(response.get("detail"))
 
@@ -167,6 +177,11 @@ class PrivateAIScrubbingProvider(
         # This will raise an HTTPError
         # if the response status code indicates an error (4xx or 5xx)
         response_data = response.json()
+
+        # According to the API documentation,
+        # the response is a list of dicts when there is no error/issue in the request
+        # else it is a dict with a key "detail" containing the error message
+
         if isinstance(response_data, dict) and "details" in response_data:
             raise response_data.get("detail")
 
