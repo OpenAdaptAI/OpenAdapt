@@ -62,7 +62,8 @@ class PrivateAIScrubbingProvider(
         data = response.json()
         logger.debug(f"{data=}")
 
-        # According to the API documentation,
+        # According to the PrivateAI API documentation,
+        # https://docs.private-ai.com/reference/latest/operation/process_text_v3_process_text_post/
         # the response is a list of dicts when there is no error/issue in the request
         # else it is a dict with a key "detail" containing the error message
 
@@ -116,8 +117,8 @@ class PrivateAIScrubbingProvider(
         response = response.json()
         logger.debug(f"{response=}")
 
-        # According to the API documentation,
-        # the response is a list of dicts when there is no error/issue in the request
+        # According to the PrivateAI API documentation,
+        # https://docs.private-ai.com/reference/latest/operation/process_files_base64_v3_process_files_base64_post/
         # else it is a dict with a key "detail" containing the error message
 
         if type(response) is dict and "detail" in response:
@@ -168,7 +169,8 @@ class PrivateAIScrubbingProvider(
         response = requests.post(BASE64_URL, json=payload, headers=headers)
         response_data = response.json()
 
-        # According to the API documentation,
+        # According to the PrivateAI API documentation,
+        # https://docs.private-ai.com/reference/latest/operation/process_files_base64_v3_process_files_base64_post/
         # the response is a list of dicts when there is no error/issue in the request
         # else it is a dict with a key "detail" containing the error message
 
