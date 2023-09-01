@@ -180,7 +180,7 @@ class PrivateAIScrubbingProvider(
         # else it is a dict with a key "detail" containing the error message
 
         if isinstance(response_data, dict) and "details" in response_data:
-            raise response_data.get("detail")
+            raise ValueError(response_data.get("detail"))
 
         logger.debug(f"{response_data.get('entities')=}")
         logger.debug(f"{len(response_data.get('entities'))=}")
@@ -189,7 +189,7 @@ class PrivateAIScrubbingProvider(
 
         # Write to file
         with open(redacted_file_path, "wb") as redacted_file:
-            processed_file = response.get("processed_file").encode("ascii")
+            processed_file = response_data.get("processed_file").encode("ascii")
             processed_file = base64.b64decode(processed_file, validate=True)
             redacted_file.write(processed_file)
 
