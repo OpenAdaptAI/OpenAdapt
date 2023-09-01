@@ -59,7 +59,6 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(TEXT_URL, json=payload, headers=headers)
-        response.raise_for_status()
 
         data = response.json()
         logger.debug(f"{data=}")
@@ -115,7 +114,6 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(BASE64_URL, json=payload, headers=headers)
-        response.raise_for_status()
         response = response.json()
         logger.debug(f"{response=}")
 
@@ -170,9 +168,6 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(BASE64_URL, json=payload, headers=headers)
-        response.raise_for_status()
-        # This will raise an HTTPError
-        # if the response status code indicates an error (4xx or 5xx)
         response_data = response.json()
 
         # According to the API documentation,
