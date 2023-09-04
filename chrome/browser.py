@@ -101,7 +101,7 @@ def main() -> None:
                 "INSERT INTO messages (message) VALUES (?)", (json.dumps(message),)
             )
             db_conn.commit()
-            response = {"message": "Data received and logged successfully!"}
+        response = {"message": "Data received and logged successfully!"}
         if message:
             encoded_response = encode_message(response)
             send_message(encoded_response)

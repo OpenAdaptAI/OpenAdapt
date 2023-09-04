@@ -624,12 +624,13 @@ def read_browser_events(
     conn = sockets.create_client_connection(config.SOCKET_PORT)
     while not terminate_event.is_set():
         try:
-            if not conn.closed:
+            if conn.closed:
+                conn = sockets.create_client_connection(config.SOCKET_PORT)
+            else:
                 logger.info("Waiting for message...")
                 msg = conn.recv()
                 logger.info(f"{msg=}")
-            else:
-                conn = sockets.create_client_connection(config.SOCKET_PORT)
+
             if msg is not None:
                 logger.info("Received message.")
                 browser_data = msg
@@ -643,7 +644,7 @@ def read_browser_events(
                 )
             else:
                 logger.info("No message received or received None Type Message.")
-        except Exception as exc:
+        except EOFError as exc:
             logger.warning("Connection closed.")
             logger.warning(exc)
             break
