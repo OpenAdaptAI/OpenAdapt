@@ -1,5 +1,5 @@
 """Layout Extraction tool test module."""
-import pytest
+import warnings
 
 from openadapt.tools.layout import document_query
 
@@ -73,10 +73,8 @@ def test_calc_screenshot() -> None:
     )
     expected_output = EXPECTED_CALC_OUTPUT
     # Raising a warning and returning the output.
-    pytest.PytestWarning(
-        UserWarning(
-            "This test fails because the document type provided is not supported."
-        )
+    warnings.warn(
+        "This test fails because the document type is not supported.", UserWarning
     )
 
     assert expected_output != output
