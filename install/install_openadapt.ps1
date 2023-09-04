@@ -20,6 +20,10 @@ $gitCmd = "git"
 $gitInstaller = "Git-2.40.1-64-bit.exe"
 $gitInstallerLoc = "https://github.com/git-for-windows/git/releases/download/v2.40.1.windows.1/Git-2.40.1-64-bit.exe"
 $gitUninstaller = "C:\Program Files\Git\unins000.exe"
+
+$VCRedistInstaller = "vc_redist.x64.exe"
+$VCRedistInstallerLoc = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+$VCRedistRegPath = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
 ################################   PARAMETERS   ################################
 
 
@@ -255,6 +259,38 @@ function GetGitCMD {
     # Return the git command
     return $gitCmd
 }
+
+
+function Install-VCRedist {
+    # Check if Visual C++ Redist is installed
+    try {
+        $vcredistExists = (Get-ItemPropertyValue -Path $VCRedistRegPath -Name Installed -ErrorAction Stop)
+    }
+    catch {
+        $vcredistExists = $false
+    }
+
+    if (!$vcredistExists) {
+        # Install Visual C++ Redist
+        Write-Host "Downloading Visual C++ Redist"
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $VCRedistInstallerLoc -OutFile $VCRedistInstaller
+
+        if (-Not (Test-Path -Path $VCRedistInstaller -PathType Leaf)) {
+            Write-Host "Failed to download Visual C++ installer"
+            return
+        }
+
+        Write-Host "Installing Visual C++ Redist, click 'Yes' if prompted for permission"
+        Start-Process -FilePath $VCRedistInstaller -Verb runAs -ArgumentList "/install /quiet /norestart" -Wait
+        Remove-Item $VCRedistInstaller
+
+        if ($LastExitCode) {
+            Write-Host "Failed to install Visual C++ Redist: $LastExitCode"
+            return
+        }
+    }
+}
 ################################   FUNCTIONS    ################################
 
 
@@ -276,6 +312,8 @@ RunAndCheck "$python --version" "check Python"
 
 $git = GetGitCMD
 RunAndCheck "$git --version" "check Git"
+
+Install-VCRedist
 
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
