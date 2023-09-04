@@ -294,7 +294,7 @@ function Install-VCRedist {
 ################################   FUNCTIONS    ################################
 
 
-################################   SCRIPT    ################################
+################################   SCRIPT    ###################################
 
 Write-Host "Install Script Started..." -ForegroundColor Yellow
 
@@ -325,4 +325,4 @@ RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
 Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd'; poetry shell"
 
-################################   SCRIPT    ################################
+################################   SCRIPT    ###################################
