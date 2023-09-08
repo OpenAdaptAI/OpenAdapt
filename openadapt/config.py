@@ -63,7 +63,7 @@ _DEFAULTS = {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     },
-    "SCRUB_IGNORE_ENTITIES": [
+    "SCRUB_PRESIDIO_IGNORE_ENTITIES": [
         # 'US_PASSPORT',
         # 'US_DRIVER_LICENSE',
         # 'CRYPTO',
@@ -110,7 +110,7 @@ _DEFAULTS = {
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
-    "SCRUB_PROVIDER_NAME": ["Presidio"],
+    "PRIVATE_AI_API_KEY": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings

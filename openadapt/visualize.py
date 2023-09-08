@@ -12,8 +12,8 @@ from sqlalchemy.orm import session
 from tqdm import tqdm
 import click
 
-from openadapt import config, crud
-from openadapt.crud import get_latest_recording, get_recording
+from openadapt import config
+from openadapt.db.crud import db, get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
@@ -137,7 +137,7 @@ def toggle_dark_mode(
 def main(timestamp: str, notify: bool = True, sesh: session.Session = None) -> None:
     """Visualize a recording."""
     if sesh:
-        crud.db = sesh
+        db = sesh
 
     configure_logging(logger, LOG_LEVEL)
 
