@@ -102,6 +102,7 @@ def send_recording(recording_id: int) -> None:
         recording_id (int): The ID of the recording to send.
     """
     zip_file_path = export_recording_to_folder(recording_id)
+    print(zip_file_path)
 
     assert zip_file_path, zip_file_path
     try:
@@ -187,7 +188,7 @@ def visualize_recording(db_name: str) -> None:
         with Session(engine) as session:
             os.system("alembic upgrade head")
             # Visualize the recording
-            visualize.main(session)
+            visualize.main(None, False, session)
     except Exception as exc:
         # Handle any exceptions that may occur during visualization
         logger.exception(exc)

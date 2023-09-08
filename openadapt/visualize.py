@@ -8,10 +8,11 @@ from pprint import pformat
 from loguru import logger
 from nicegui import events, ui
 from notifypy import Notify
+from sqlalchemy.orm import session
 from tqdm import tqdm
 import click
 
-from openadapt import config
+from openadapt import config, crud
 from openadapt.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
@@ -133,8 +134,11 @@ def toggle_dark_mode(
     type=str,
     help="The timestamp of the recording to visualize.",
 )
-def main(timestamp: str, notify: bool = True) -> None:
+def main(timestamp: str, notify: bool = True, sesh: session.Session = None) -> None:
     """Visualize a recording."""
+    if sesh:
+        crud.db = sesh
+
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)

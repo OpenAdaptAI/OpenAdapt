@@ -5,6 +5,7 @@ Module: db.py
 
 from typing import Any
 import os
+import time
 
 from dictalchemy import DictableModel
 from loguru import logger
@@ -198,10 +199,11 @@ def export_recording(recording_id: int) -> str:
         recording_id (int): The ID of the recording to export.
 
     Returns:
-        str: The file path of the new database.
+        str: The file path of the new database with timestamp.
     """
-    db_fname = f"recording_{recording_id}.db"
-    target_path = config.ROOT_DIRPATH / db_fname
+    timestamp = int(time.time())
+    db_fname = f"recording_{recording_id}_{timestamp}.db"
+    target_path = config.RECORDING_DIRECTORY_PATH / db_fname
     target_db_url = f"sqlite:///{target_path}"
 
     target_engine = create_engine(target_db_url, future=True)
