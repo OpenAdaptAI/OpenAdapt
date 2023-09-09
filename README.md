@@ -1,4 +1,4 @@
-[Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw)
+[Join us on Discord](https://discord.gg/yF527cQbDG)
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
@@ -182,7 +182,7 @@ You can assume that you have access to the following functions:
 
 ### Instructions
 
-[Join us on Slack](https://join.slack.com/t/mldsai/shared_invite/zt-1uf94nn7r-qcQnS~hinLPKftUapNzbuw). Then:
+[Join us on Discord](https://discord.gg/yF527cQbDG). Then:
 
 1. Fork this repository and clone it to your local machine.
 2. Get OpenAdapt up and running by following the instructions under [Setup](#Setup).
