@@ -9,6 +9,12 @@ pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
 
+# Set default values when no parameters are provided
+BRANCH=${BRANCH:-main}
+REPO=${REPO:-https://github.com/MLDSAI/OpenAdapt.git}
+
+REPO_URL="https://github.com/$REPO"
+
 ################################ HELPER FUNCTIONS ################################
 
 # Remove OpenAdapt if it exists
@@ -121,14 +127,13 @@ fi
 CheckPythonExists
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
-RunAndCheck "git clone https://github.com/MLDSAI/OpenAdapt.git" "Clone git repo"
-
+RunAndCheck "git clone $REPO_URL" "Clone git repo"
 cd OpenAdapt
+RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 
 RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
-RunAndCheck "poetry run python -m spacy download en_core_web_trf" "Download spacy en_core_web_trf model"
 RunAndCheck "poetry run pytest" "Run tests"
 if [ -z "$SKIP_POETRY_SHELL" ]; then
     RunAndCheck "poetry shell" "Activate virtual environment"

@@ -15,6 +15,8 @@ import pathlib
 
 from dotenv import load_dotenv
 from loguru import logger
+import git
+import sentry_sdk
 
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
@@ -22,6 +24,11 @@ _DEFAULTS = {
     "CACHE_VERBOSITY": 0,
     "DB_ECHO": False,
     "DB_FNAME": "openadapt.db",
+    "ERROR_REPORTING_ENABLED": True,
+    "ERROR_REPORTING_DSN": (
+        "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
+    ),
+    "ERROR_REPORTING_BRANCH": "main",
     "OPENAI_API_KEY": "<set your api key in .env>",
     # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
@@ -39,6 +46,10 @@ _DEFAULTS = {
     "ACTION_TEXT_SEP": "-",
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
+    # PERFORMANCE PLOTTING CONFIGURATION
+    "PLOT_PERFORMANCE": True,
+    # CAPTURE CONFIGURATION
+    "CAPTURE_DIR_PATH": "captures",
     # APP CONFIGURATIONS
     "APP_DARK_MODE": False,
     # SCRUBBING CONFIGURATIONS
@@ -51,7 +62,7 @@ _DEFAULTS = {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     },
-    "SCRUB_IGNORE_ENTITIES": [
+    "SCRUB_PRESIDIO_IGNORE_ENTITIES": [
         # 'US_PASSPORT',
         # 'US_DRIVER_LICENSE',
         # 'CRYPTO',
@@ -62,13 +73,13 @@ _DEFAULTS = {
         # 'PHONE_NUMBER',
         # 'US_ITIN',
         # 'AU_ABN',
-        "DATE_TIME",
+        # 'DATE_TIME',
         # 'NRP',
         # 'SG_NRIC_FIN',
         # 'AU_ACN',
         # 'IP_ADDRESS',
         # 'EMAIL_ADDRESS',
-        "URL",
+        # 'URL',
         # 'IBAN_CODE',
         # 'AU_TFN',
         # 'LOCATION',
@@ -88,8 +99,17 @@ _DEFAULTS = {
         "children",
     ],
     "PLOT_PERFORMANCE": True,
+    # VISUALIZATION CONFIGURATIONS
+    "VISUALIZE_DARK_MODE": False,
+    "VISUALIZE_RUN_NATIVELY": True,
+    "VISUALIZE_DENSE_TREES": True,
+    "VISUALIZE_ANIMATIONS": True,
+    "VISUALIZE_EXPAND_ALL": False,  # not recommended for large trees
+    "VISUALIZE_MAX_TABLE_CHILDREN": 10,
     # Calculate and save the difference between 2 neighboring screenshots
     "SAVE_SCREENSHOT_DIFF": False,
+    "SPACY_MODEL_NAME": "en_core_web_trf",
+    "PRIVATE_AI_API_KEY": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings
@@ -130,6 +150,8 @@ def getenv_fallback(var_name: str) -> str:
         "0",
     ):
         rval = rval.lower() == "true" or rval == "1"
+    if type(rval) is str and rval.isnumeric():
+        rval = int(rval)
     if rval is None:
         raise ValueError(f"{var_name=} not defined")
     return rval
@@ -209,3 +231,14 @@ if multiprocessing.current_process().name == "MainProcess":
             ):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
+
+    if ERROR_REPORTING_ENABLED:  # type: ignore # noqa
+        active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
+        logger.info(f"{active_branch_name=}")
+        is_reporting_branch = active_branch_name == ERROR_REPORTING_BRANCH  # type: ignore # noqa
+        logger.info(f"{is_reporting_branch=}")
+        if is_reporting_branch:
+            sentry_sdk.init(
+                dsn=ERROR_REPORTING_DSN,  # type: ignore # noqa
+                traces_sample_rate=1.0,
+            )

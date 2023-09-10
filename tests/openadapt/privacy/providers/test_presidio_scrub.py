@@ -1,12 +1,31 @@
-"""Module to test scrub.py."""
+"""Module to test PresidioScrubbingProvider."""
+
 
 from io import BytesIO
 import os
-import warnings
 
 from PIL import Image
+import pytest
+import spacy
 
-from openadapt import config, scrub
+from openadapt import config
+
+if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
+    pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")
+else:
+    from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+    scrub = PresidioScrubbingProvider()
+
+
+def test_presidio_scrub_text() -> None:
+    """Test that PresidioScrubbingProvider can scrub text."""
+    text = "My phone number is 123-456-7890."
+    expected_result = "My phone number is <PHONE_NUMBER>."
+
+    scrubbed_text = scrub.scrub_text(text)
+
+    assert scrubbed_text == expected_result
 
 
 def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
@@ -19,16 +38,14 @@ def _hex_to_rgb(hex_color: int) -> tuple[int, int, int]:
         tuple[int, int, int]: RGB values.
     """
     assert 0x000000 <= hex_color <= 0xFFFFFF
-    b = (hex_color >> 16) & 0xFF
-    g = (hex_color >> 8) & 0xFF
-    r = hex_color & 0xFF
-    return r, g, b
+    blue = (hex_color >> 16) & 0xFF
+    green = (hex_color >> 8) & 0xFF
+    red = hex_color & 0xFF
+    return red, green, blue
 
 
 def test_scrub_image() -> None:
     """Test that the scrubbed image data is different."""
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-
     # Read test image data from file
     test_image_path = "assets/test_scrub_image.png"
     with open(test_image_path, "rb") as file:
@@ -52,7 +69,7 @@ def test_scrub_image() -> None:
     mask_pixels = sum(
         1
         for pixel in scrubbed_image.getdata()
-        if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)
+        if pixel == _hex_to_rgb(config.SCRUB_FILL_COLOR)  # pylint: disable=no-member
     )
     total_pixels = scrubbed_image.width * scrubbed_image.height
 
@@ -62,7 +79,7 @@ def test_scrub_image() -> None:
 
     # Assert ~1.5% mask pixels compared to total pixels.
     assert (
-        round((mask_pixels / total_pixels), 3) == 0.015
+        round((mask_pixels / total_pixels), 3) == 0.022
     )  # Change this value as necessary
 
 
@@ -107,7 +124,7 @@ def test_scrub_date_of_birth() -> None:
     """Test that the date of birth is scrubbed."""
     assert (
         scrub.scrub_text("My date of birth is 01/01/2000.")
-        == "My date of birth is 01/01/2000."
+        == "My date of birth is <DATE_TIME>."
     )
 
 
@@ -185,9 +202,14 @@ def test_scrub_all_together() -> None:
         " his phone number is <PHONE_NUMBER>."
         "His credit card number is <CREDIT_CARD> and"
         " his social security number is <US_SSN>."
-        " He was born on 01/01/1980."
+        " He was born on <DATE_TIME>."
     )
 
 
-if __name__ == "__main__":
-    test_scrub_image()
+def test_scrub_dict() -> None:
+    """Test that the scrub_dict function works."""
+    text_with_pii_phi = {"title": "hi my name is Bob Smith."}
+
+    expected_output = {"title": "hi my name is <PERSON>."}
+
+    assert scrub.scrub_dict(text_with_pii_phi) == expected_output
