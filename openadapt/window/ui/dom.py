@@ -96,7 +96,7 @@ class DOMElement:
     @classmethod
     def find_actionable_elements(cls, element: "DOMElement", point: (int, int)):
         actionable_elements = []
-        queue = element.children
+        queue = element.children.copy()
         while queue:
             current_element = queue.pop(0)
             if (
@@ -107,7 +107,8 @@ class DOMElement:
                 <= point[1]
                 <= current_element.frame.y + current_element.frame.height
             ):
-                actionable_elements.append(current_element)
+                if isinstance(current_element.tag_name, ActionableElements):
+                    actionable_elements.append(current_element)
             queue.extend(current_element.children)
         return actionable_elements
 

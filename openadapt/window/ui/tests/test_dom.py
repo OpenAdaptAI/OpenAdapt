@@ -65,16 +65,26 @@ def test_remove_child_element():
 def test_find_actionable_elements():
     parent_element = DOMElement(
         "Parent",
-        "AXButton",
+        ActionableElements.BUTTON,
         "Button",
         "Click Me",
         Frame(x=0, y=0, width=100, height=30),
     )
+
     child_element1 = DOMElement(
-        "Child1", "AXLink", "Link", "Visit", Frame(x=10, y=10, width=50, height=20)
+        "Child1",
+        ActionableElements.LINK,
+        "Link",
+        "Visit",
+        Frame(x=10, y=10, width=50, height=20),
     )
+
     child_element2 = DOMElement(
-        "Child2", "AXButton", "Button", "Submit", Frame(x=20, y=20, width=50, height=20)
+        "Child2",
+        ActionableElements.TEXT_AREA,
+        "Text",
+        "Submit",
+        Frame(x=20, y=20, width=50, height=20),
     )
 
     parent_element.add_child(child_element1)
@@ -97,8 +107,105 @@ def test_find_actionable_elements():
     assert len(actionable_elements1) == 1
     assert actionable_elements1[0] == child_element1
 
+    assert len(actionable_elements2) == 2
+    assert actionable_elements2[1] == child_element2
+
+    assert len(actionable_elements_outside) == 0
+
+
+def test_find_actionable_elements_ignore_nonactionable_items():
+    parent_element = DOMElement(
+        "Parent",
+        ActionableElements.BUTTON,
+        "Button",
+        "Click Me",
+        Frame(x=0, y=0, width=100, height=30),
+    )
+
+    child_element1 = DOMElement(
+        "Child1",
+        NonActionableElements.IMAGE,
+        "Image",
+        "Image",
+        Frame(x=20, y=20, width=50, height=20),
+    )
+
+    child_element2 = DOMElement(
+        "Child2",
+        ActionableElements.TEXT_AREA,
+        "Text",
+        "Submit",
+        Frame(x=20, y=20, width=50, height=20),
+    )
+
+    parent_element.add_child(child_element1)
+    parent_element.add_child(child_element2)
+
+    point_inside_child1 = (15, 15)
+    point_inside_child2 = (25, 25)
+
+    actionable_elements1 = DOMElement.find_actionable_elements(
+        parent_element, point_inside_child1
+    )
+    actionable_elements2 = DOMElement.find_actionable_elements(
+        parent_element, point_inside_child2
+    )
+
+    assert len(actionable_elements1) == 0
+
     assert len(actionable_elements2) == 1
     assert actionable_elements2[0] == child_element2
+
+
+def test_find_actionable_elements_in_complex_dom():
+    """create multiple levels of DOM elements and test if the correct"""
+    parent_element = DOMElement(
+        "Parent",
+        ActionableElements.BUTTON,
+        "Button",
+        "Click Me",
+        Frame(x=0, y=0, width=100, height=30),
+    )
+
+    child_element = DOMElement(
+        "Child",
+        ActionableElements.LINK,
+        "Link",
+        "Visit",
+        Frame(x=10, y=10, width=50, height=20),
+    )
+
+    parent_element.add_child(child_element)
+
+    grandchild_element = DOMElement(
+        "Grandchild",
+        ActionableElements.TEXT_AREA,
+        "Text",
+        "Submit",
+        Frame(x=20, y=20, width=50, height=20),
+    )
+
+    child_element.add_child(grandchild_element)
+
+    point_inside_grandchild = (25, 25)
+    point_inside_child = (15, 15)
+    point_outside_elements = (200, 200)
+
+    actionable_elements1 = DOMElement.find_actionable_elements(
+        parent_element, point_inside_grandchild
+    )
+    actionable_elements2 = DOMElement.find_actionable_elements(
+        parent_element, point_inside_child
+    )
+    actionable_elements_outside = DOMElement.find_actionable_elements(
+        parent_element, point_outside_elements
+    )
+
+    assert len(actionable_elements1) == 2
+    assert actionable_elements1[1] == grandchild_element
+
+    assert len(actionable_elements2) == 1
+    assert actionable_elements2[0] == child_element
 
     assert len(actionable_elements_outside) == 0
 
