@@ -62,15 +62,57 @@ class Frame(BaseModel):
     height: int
 
 
-class BaseElement(BaseModel):
-    title: Optional[str]
-    role: Union[ActionableElements, NonActionableElements]
-    children: List[Any] = []
-    frame: Frame
-    actionable: bool = False
+class DOMElement:
+    def __init__(
+        self,
+        title: str,
+        role: Union[ActionableElements, NonActionableElements],
+        role_description: str,
+        text: str,
+        frame: Frame,
+        children: List["DOMElement"] = None,
+    ):
+        self.title = title
+        self.tag_name = role
+        self.role = role
+        self.role_description = role_description
+        self.text = text
+        self.frame = frame
+        self.children = children or []
+
+    def __str__(self):
+        return f"<{self.role_description}>"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def add_child(self, child: "DOMElement"):
+        self.children.append(child)
+
+    def remove_child(self, child: "DOMElement"):
+        if child in self.children:
+            self.children.remove(child)
+
+    @classmethod
+    def find_actionable_elements(cls, element: "DOMElement", point: (int, int)):
+        actionable_elements = []
+        queue = element.children
+        while queue:
+            current_element = queue.pop(0)
+            if (
+                current_element.frame.x
+                <= point[0]
+                <= current_element.frame.x + current_element.frame.width
+                and current_element.frame.y
+                <= point[1]
+                <= current_element.frame.y + current_element.frame.height
+            ):
+                actionable_elements.append(current_element)
+            queue.extend(current_element.children)
+        return actionable_elements
 
 
-class ElementGenerator:
+class DOMElementFactory:
     macos_mapping = {
         "AXButton": ActionableElements.BUTTON,
         "AXLink": ActionableElements.LINK,
@@ -114,33 +156,40 @@ class ElementGenerator:
         "AXValueIndicator": NonActionableElements.VALUE_INDICATOR,
     }
 
-    @staticmethod
-    def generate_element(role: str, title: str, frame: Frame, os_type: OSType):
+    @classmethod
+    def generate_element(
+        cls,
+        title: str,
+        role: str,
+        role_description: str,
+        text: str,
+        frame: dict,
+        os_type: OSType,
+    ) -> Optional[DOMElement]:
+        # build frame object from frame dict
+        frame = Frame(**frame)
+        # generate element based on os type
         if os_type == OSType.MACOS:
-            return ElementGenerator.generate_macos_element(role, title, frame)
+            element = cls.generate_macos_element(
+                title, role, role_description, text, frame
+            )
         elif os_type == OSType.WINDOWS:
-            return ElementGenerator.generate_windows_element(role, title, frame)
-        else:
-            raise ValueError(f"Unknown OS type: {os_type}")
+            element = cls.generate_windows_element(
+                title, role, role_description, text, frame
+            )
+        return element
 
     @staticmethod
-    def generate_macos_element(role: str, title: str, frame: Frame):
-        element = ElementGenerator.macos_mapping.get(role)
-        is_actionable = isinstance(element, ActionableElements)
-        if not element:
-            return
-        return BaseElement(
-            title=title, role=element, frame=frame, actionable=is_actionable
-        )
+    def generate_macos_element(
+        title: str, role: str, role_description: str, text: str, frame: Frame
+    ):
+        role = DOMElementFactory.macos_mapping.get(role)
+        if role is None:
+            return None
+        return DOMElement(title, role, role_description, text, frame)
 
     @staticmethod
-    def generate_windows_element(role: str, title: str, frame: Frame):
+    def generate_windows_element(
+        title: str, role: str, role_description: str, text: str, frame: Frame
+    ):
         raise NotImplementedError()
-
-
-# use main class to test
-
-if __name__ == "__main__":
-    frame = Frame(x=0, y=0, width=100, height=100)
-    element = ElementGenerator.generate_element("AXColumn", "test", frame, OSType.MACOS)
-    print(element)
