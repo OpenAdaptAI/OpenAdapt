@@ -10,6 +10,84 @@ from openadapt.window.ui.dom import (
 )
 
 
+@pytest.fixture
+def sample_dom_dict_with_children():
+    return {
+        "AXTitle": "Root Element",
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "A group element",
+        "AXValue": "",
+        "AXFrame": {"x": 0, "y": 0, "width": 100, "height": 100},
+        "AXChildrenInNavigationOrder": [
+            {
+                "AXTitle": "Child Element 1",
+                "AXRole": "AXButton",
+                "AXRoleDescription": "A button element",
+                "AXValue": "Click me",
+                "AXFrame": {"x": 10, "y": 10, "width": 80, "height": 30},
+                "AXChildren": [],  # Add children if needed
+            },
+            {
+                "AXTitle": "Child Element 2",
+                "AXRole": "AXTextField",
+                "AXRoleDescription": "A text field element",
+                "AXValue": "Input text",
+                "AXFrame": {"x": 10, "y": 50, "width": 80, "height": 30},
+                "AXChildren": [],  # Add children if needed
+            },
+        ],
+    }
+
+
+@pytest.fixture
+def sample_dom_dict_no_children():
+    return {
+        "AXTitle": "Single Element",
+        "AXRole": "AXButton",
+        "AXRoleDescription": "A button element",
+        "AXValue": "Click me",
+        "AXFrame": {"x": 10, "y": 10, "width": 80, "height": 30},
+    }
+
+
+@pytest.fixture
+def sample_dom_dict_with_multiple_layers():
+    return {
+        "AXTitle": "Root Element",
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "A group element",
+        "AXValue": "",
+        "AXFrame": {"x": 0, "y": 0, "width": 100, "height": 100},
+        "AXChildrenInNavigationOrder": [
+            {
+                "AXTitle": "Child Element 1",
+                "AXRole": "AXButton",
+                "AXRoleDescription": "A button element",
+                "AXValue": "Click me",
+                "AXFrame": {"x": 10, "y": 10, "width": 80, "height": 30},
+                "AXChildren": [
+                    {
+                        "AXTitle": "Grandchild 1",
+                        "AXRole": "AXTextField",
+                        "AXRoleDescription": "A text field element",
+                        "AXValue": "Input text",
+                        "AXFrame": {"x": 10, "y": 50, "width": 80, "height": 30},
+                        "AXChildren": [],  # Add children if needed
+                    },
+                ],
+            },
+            {
+                "AXTitle": "Child Element 2",
+                "AXRole": "AXTextField",
+                "AXRoleDescription": "A text field element",
+                "AXValue": "Input text",
+                "AXFrame": {"x": 10, "y": 50, "width": 80, "height": 30},
+                "AXChildren": [],  # Add children if needed
+            },
+        ],
+    }
+
+
 def test_create_dom_element():
     title = "Button"
     role = ActionableElements.BUTTON
@@ -295,3 +373,93 @@ def test_generate_unknown_element(
     )
 
     assert element is None
+
+
+def test_generate_element_from_dict_with_children(sample_dom_dict_with_children):
+    os_type = OSType.MACOS
+
+    root_element = DOMElementFactory.generate_element_from_dict(
+        sample_dom_dict_with_children, os_type
+    )
+
+    assert isinstance(root_element, DOMElement)
+    assert root_element.title == "Root Element"
+    assert root_element.role == NonActionableElements.GROUP
+    assert root_element.text == ""
+    assert root_element.frame == {"x": 0, "y": 0, "width": 100, "height": 100}
+    assert len(root_element.children) == 2
+
+    child1 = root_element.children[0]
+    child2 = root_element.children[1]
+
+    assert isinstance(child1, DOMElement)
+    assert child1.title == "Child Element 1"
+    assert child1.role == ActionableElements.BUTTON
+    assert child1.text == "Click me"
+    assert child1.frame == {"x": 10, "y": 10, "width": 80, "height": 30}
+    assert len(child1.children) == 0
+
+    assert isinstance(child2, DOMElement)
+    assert child2.title == "Child Element 2"
+    assert child2.role == ActionableElements.TEXT_FIELD
+    assert child2.text == "Input text"
+    assert child2.frame == {"x": 10, "y": 50, "width": 80, "height": 30}
+    assert len(child2.children) == 0
+
+
+def test_generate_element_from_dict_no_children(sample_dom_dict_no_children):
+    os_type = OSType.MACOS
+
+    element = DOMElementFactory.generate_element_from_dict(
+        sample_dom_dict_no_children, os_type
+    )
+
+    assert isinstance(element, DOMElement)
+    assert element.title == "Single Element"
+    assert element.role == ActionableElements.BUTTON
+    assert element.text == "Click me"
+    assert element.frame == Frame(x=10, y=10, width=80, height=30)
+    assert len(element.children) == 0
+
+
+def test_generate_element_from_dict_with_multiple_layers(
+    sample_dom_dict_with_multiple_layers,
+):
+    os_type = OSType.MACOS
+
+    root_element = DOMElementFactory.generate_element_from_dict(
+        sample_dom_dict_with_multiple_layers, os_type
+    )
+
+    assert isinstance(root_element, DOMElement)
+    assert root_element.title == "Root Element"
+    assert root_element.role == NonActionableElements.GROUP
+    assert root_element.text == ""
+    assert root_element.frame == {"x": 0, "y": 0, "width": 100, "height": 100}
+    assert len(root_element.children) == 2
+
+    child1 = root_element.children[0]
+    child2 = root_element.children[1]
+
+    assert isinstance(child1, DOMElement)
+    assert child1.title == "Child Element 1"
+    assert child1.role == ActionableElements.BUTTON
+    assert child1.text == "Click me"
+    assert child1.frame == {"x": 10, "y": 10, "width": 80, "height": 30}
+    assert len(child1.children) == 1
+
+    grandchild1 = child1.children[0]
+
+    assert isinstance(grandchild1, DOMElement)
+    assert grandchild1.title == "Grandchild 1"
+    assert grandchild1.role == ActionableElements.TEXT_FIELD
+    assert grandchild1.text == "Input text"
+    assert grandchild1.frame == {"x": 10, "y": 50, "width": 80, "height": 30}
+    assert len(grandchild1.children) == 0
+
+    assert isinstance(child2, DOMElement)
+    assert child2.title == "Child Element 2"
+    assert child2.role == ActionableElements.TEXT_FIELD
+    assert child2.text == "Input text"
+    assert child2.frame == {"x": 10, "y": 50, "width": 80, "height": 30}
+    assert len(child2.children) == 0

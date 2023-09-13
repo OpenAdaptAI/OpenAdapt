@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, List, Optional, Union
+from typing import Any, Iterable, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -94,7 +94,19 @@ class DOMElement:
             self.children.remove(child)
 
     @classmethod
-    def find_actionable_elements(cls, element: "DOMElement", point: (int, int)):
+    def find_actionable_elements(
+        cls, element: "DOMElement", point: (int, int)
+    ) -> Iterable["DOMElement"]:
+        """Find actionable elements at a given point in the DOM tree
+
+        Args:
+            element (DOMElement): Root element to search from
+            point (int, int): Point to search from
+
+        Returns:
+            Iterable[DOMElement]: List of actionable elements at the given point. The lowest element in the DOM tree
+            will be returned last.
+        """
         actionable_elements = []
         queue = element.children.copy()
         while queue:
@@ -194,3 +206,30 @@ class DOMElementFactory:
         title: str, role: str, role_description: str, text: str, frame: Frame
     ):
         raise NotImplementedError()
+
+    @classmethod
+    def generate_element_from_dict(
+        cls, element_dict: dict, os_type: OSType
+    ) -> Optional[DOMElement]:
+        if os_type == OSType.MACOS:
+            title = element_dict.get("AXTitle", "")
+            role = element_dict.get("AXRole", "")
+            role_description = element_dict.get("AXRoleDescription", "")
+            text = element_dict.get("AXValue", "")
+            frame = element_dict.get("AXFrame", {})
+            children = element_dict.get(
+                "AXChildrenInNavigationOrder", []
+            ) or element_dict.get("AXChildren", [])
+        elif os_type == OSType.WINDOWS:
+            raise NotImplementedError()
+
+        element = cls.generate_element(
+            title, role, role_description, text, frame, os_type
+        )
+
+        if children and element:
+            for child_dict in children:
+                child_element = cls.generate_element_from_dict(child_dict, os_type)
+                if child_element:
+                    element.add_child(child_element)
+        return element
