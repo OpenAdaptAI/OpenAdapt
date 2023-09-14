@@ -25,7 +25,7 @@ def sample_dom_dict_with_children():
                 "AXRoleDescription": "A button element",
                 "AXValue": "Click me",
                 "AXFrame": {"x": 10, "y": 10, "width": 80, "height": 30},
-                "AXChildren": [],  # Add children if needed
+                "AXChildren": [],
             },
             {
                 "AXTitle": "Child Element 2",
@@ -33,7 +33,7 @@ def sample_dom_dict_with_children():
                 "AXRoleDescription": "A text field element",
                 "AXValue": "Input text",
                 "AXFrame": {"x": 10, "y": 50, "width": 80, "height": 30},
-                "AXChildren": [],  # Add children if needed
+                "AXChildren": [],
             },
         ],
     }
@@ -289,8 +289,10 @@ def test_find_actionable_elements_in_complex_dom():
 
 
 @pytest.mark.parametrize(
-    "os_type, title, role, role_description, text, frame_data, expected_role,"
-    " expected_exception",
+    (
+        "os_type, title, role, role_description, text, frame_data, expected_role,"
+        " expected_exception"
+    ),
     [
         (
             OSType.MACOS,
