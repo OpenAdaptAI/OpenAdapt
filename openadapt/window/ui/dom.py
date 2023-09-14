@@ -63,6 +63,8 @@ class Frame(BaseModel):
 
 
 class DOMElement:
+    """DOMElement class for storing information about an element on the screen"""
+
     def __init__(
         self,
         title: str,
@@ -126,6 +128,10 @@ class DOMElement:
 
 
 class DOMElementFactory:
+    """Factory class for generating DOMElements from dicts
+    It should support both macOS and Windows dicts
+    """
+
     macos_mapping = {
         "AXButton": ActionableElements.BUTTON,
         "AXLink": ActionableElements.LINK,
@@ -179,7 +185,7 @@ class DOMElementFactory:
         frame: dict,
         os_type: OSType,
     ) -> Optional[DOMElement]:
-        # build frame object from frame dict
+        """Generate a single DOMElement"""
         frame = Frame(**frame)
         # generate element based on os type
         if os_type == OSType.MACOS:
@@ -195,7 +201,7 @@ class DOMElementFactory:
     @staticmethod
     def generate_macos_element(
         title: str, role: str, role_description: str, text: str, frame: Frame
-    ):
+    ) -> Optional[DOMElement]:
         role = DOMElementFactory.macos_mapping.get(role)
         if role is None:
             return None
@@ -204,13 +210,24 @@ class DOMElementFactory:
     @staticmethod
     def generate_windows_element(
         title: str, role: str, role_description: str, text: str, frame: Frame
-    ):
+    ) -> Optional[DOMElement]:
         raise NotImplementedError()
 
     @classmethod
     def generate_element_from_dict(
         cls, element_dict: dict, os_type: OSType
     ) -> Optional[DOMElement]:
+        """Generate a DOMElement from a dict
+
+        Args:
+            element_dict (dict): Dict containing information about the element, usually
+            a window state dict
+            os_type (OSType): The operating system type
+
+        Returns:
+            Optional[DOMElement]: The root DOMElement which contains all the children and subchildren recursively.
+            I.e: a DOM Tree
+        """
         if os_type == OSType.MACOS:
             title = element_dict.get("AXTitle", "")
             role = element_dict.get("AXRole", "")
