@@ -2,6 +2,25 @@
 
 
 
+## v0.13.2 (2023-10-16)
+
+### Fix
+
+* fix: resolve repository not found error in mac install.sh script (#502)
+
+* Update install_openadapt.sh
+
+* Update install_openadapt.sh ([`eb3c8c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/eb3c8c397d784285c7b0ed7efbf34ae38f522fed))
+
+### Unknown
+
+* Update README.md (#493)
+
+* Update README.md
+
+replace slack with discord ([`5a6530a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a6530a3592ef271652409768ece66bf6183998e))
+
+
 ## v0.13.1 (2023-08-30)
 
 ### Fix
