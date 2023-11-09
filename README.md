@@ -166,7 +166,7 @@ course of action.
 
 ### Data Model
 
-The data model  consists of the following entities:
+The data model consists of the following entities:
 
 1. `Recording`: Contains information about the screen dimensions, platform, and
    other metadata.
