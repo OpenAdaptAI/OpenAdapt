@@ -30,7 +30,7 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 1. OpenAdapt is model agnostic
 2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
-4. OpenAdapt is open source! (license TBD, please see https://github.com/OpenAdaptAI/OpenAdapt/issues/246)
+4. OpenAdapt is open source (MIT license)
 
 
 ## Install
@@ -141,7 +141,11 @@ You can play back the recording using the following command:
 python -m openadapt.replay NaiveReplayStrategy
 ```
 
-More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
+Other replay strategies include:
+
+- [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
+
+See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
 
 ## Contributing
@@ -160,9 +164,10 @@ If it's not clear what `ActionEvent` is appropriate for the given `Screenshot`,
 we can ask the user to take over temporarily to demonstrate the appropriate
 course of action.
 
-### Dataset
+### Data Model
 
-The dataset consists of the following entities:
+The data model  consists of the following entities:
+
 1. `Recording`: Contains information about the screen dimensions, platform, and
    other metadata.
 2. `ActionEvent`: Represents a user action event such as a mouse click or key
@@ -174,11 +179,16 @@ The dataset consists of the following entities:
 4. `WindowEvent`: Represents a window event such as a change in window title,
    position, or size.
 
+### API
+
 You can assume that you have access to the following functions:
+
 - `create_recording("doing taxes")`: Creates a recording.
 - `get_latest_recording()`: Gets the latest recording.
 - `get_events(recording)`: Returns a list of `ActionEvent` objects for the given
   recording.
+
+See https://openadapt.gitbook.io/openadapt.ai/ for more.
 
 ### Instructions
 
