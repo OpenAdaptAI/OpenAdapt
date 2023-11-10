@@ -2,6 +2,25 @@
 
 
 
+## v0.14.0 (2023-11-10)
+
+### Feature
+
+* feat(openadapt.record): implemented notifications on record (#510)
+
+* implemented notifications on record
+
+fixed deprecated/visualize
+
+* fix import ([`22db2dc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/22db2dc7be561f1fd6e35489080779c1d95dc96d))
+
+### Unknown
+
+* Update README.md (#514) ([`f5a22fb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f5a22fbf0a2d2931216ac28b63b60dc7a8a4c3cb))
+
+* Update LICENSE (#505) ([`97478b7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/97478b7369602d90655b3a211c97fe35d39c5403))
+
+
 ## v0.13.2 (2023-10-16)
 
 ### Fix
