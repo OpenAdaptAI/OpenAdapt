@@ -16,7 +16,7 @@ scrub = PrivateAIScrubbingProvider()
 
 try:
     scrub.scrub_text("hello Bob smith")
-except ValueError, requests.exceptions.HTTPError:
+except (ValueError, requests.exceptions.HTTPError):
     import pytest
 
     pytestmark = pytest.mark.skip(
