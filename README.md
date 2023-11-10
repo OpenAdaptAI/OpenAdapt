@@ -74,6 +74,26 @@ Prerequisite:
 For the setup of any/all of the above dependencies, follow the steps [SETUP.md](./SETUP.md).
 
 <br/>
+### Managing Python Versions with Pyenv
+
+If you do not have the required Python version installed, you can use `pyenv` to manage Python versions. `pyenv` is a tool that allows you to switch between multiple versions of Python. You can find more detailed information or install `pyenv` from its [GitHub repository](https://github.com/pyenv/pyenv).
+
+Here are the steps to use `pyenv` to install the required Python version and set it as the local version for the OpenAdapt project:
+
+1. Install a specific Python version with `pyenv`:
+   ```
+   pyenv install 3.10.0
+   ```
+2. Set the local Python version for the project:
+   ```
+   pyenv local 3.10.0
+   ```
+3. Verify the Python version:
+   ```
+   python --version
+   ```
+
+After setting the local Python version with `pyenv`, you can proceed with the "Manual Setup" instructions as usual.
 
 Install with [Poetry](https://python-poetry.org/) :
 ```
