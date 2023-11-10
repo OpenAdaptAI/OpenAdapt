@@ -12,7 +12,7 @@ from tqdm import tqdm
 import click
 
 from openadapt import config
-from openadapt.db.crud import get_latest_recording, get_recording
+from openadapt.db.crud import get_audio_info, get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.utils import (
     EMPTY,
@@ -146,6 +146,10 @@ def main(timestamp: str, notify: bool = True) -> None:
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
+
+    audio_info = row2dict(get_audio_info(recording))
+    # don't display the FLAC data
+    del audio_info["flac_data"]
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)

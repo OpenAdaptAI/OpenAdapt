@@ -5,7 +5,7 @@ Module: db.py
 
 from dictalchemy import DictableModel
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
@@ -67,4 +67,5 @@ def get_base(engine: sa.engine) -> sa.engine:
 
 engine = get_engine()
 Base = get_base(engine)
-Session = sessionmaker(bind=engine)
+session_factory = sessionmaker(bind=engine)
+Session = scoped_session(session_factory)

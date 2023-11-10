@@ -4,6 +4,7 @@ Module: crud.py
 """
 
 from typing import Any
+import json
 
 from loguru import logger
 import sqlalchemy as sa
@@ -12,6 +13,7 @@ from openadapt import config
 from openadapt.db.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
+    AudioInfo,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -411,3 +413,22 @@ def new_session() -> None:
     if db:
         db.close()
     db = Session()
+
+
+def insert_audio_info(
+    audio_data: bytes,
+    transcribed_text: str,
+    recording_timestamp: float,
+    sample_rate: int,
+    word_list: list,
+) -> None:
+    """Create an AudioInfo entry in the database."""
+    audio_info = AudioInfo(
+        flac_data=audio_data,
+        transcribed_text=transcribed_text,
+        recording_timestamp=recording_timestamp,
+        sample_rate=sample_rate,
+        words_with_timestamps=json.dumps(word_list),
+    )
+    db.add(audio_info)
+    db.commit()

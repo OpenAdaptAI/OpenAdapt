@@ -4,11 +4,16 @@ Usage:
 
     $ python openadapt/record.py "<description of task to be recorded>"
 
+To record audio:
+
+    $ python openadapt/record.py "<description of task to be recorded>" --enable_audio
+
 """
 
 from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Union
+import io
 import multiprocessing
 import os
 import queue
@@ -24,7 +29,11 @@ from pympler import tracker
 from tqdm import tqdm
 import fire
 import mss.tools
+import numpy as np
 import psutil
+import sounddevice
+import soundfile
+import whisper
 
 from openadapt import config, utils, window
 from openadapt.db import crud
@@ -804,15 +813,101 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+def record_audio(
+    terminate_event: multiprocessing.Event,
+    recording_timestamp: float,
+) -> None:
+    """Record audio narration during the recording and store data in database.
+
+    Args:
+        terminate_event: The event to signal termination of event reading.
+        recording_timestamp: The timestamp of the recording.
+    """
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording_timestamp)
+
+    audio_frames = []  # to store audio frames
+
+    def audio_callback(
+        indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
+    ) -> None:
+        """Callback function used when new audio frames are recorded.
+
+        Note: time is of type cffi.FFI.CData, but since we don't use this argument
+        and we also don't use the cffi library, the Any type annotation is used.
+        """
+        # called whenever there is new audio frames
+        audio_frames.append(indata.copy())
+
+    # open InputStream and start recording while ActionEvents are recorded
+    audio_stream = sounddevice.InputStream(
+        callback=audio_callback, samplerate=16000, channels=1
+    )
+    logger.info("Audio recording started.")
+    audio_stream.start()
+    terminate_event.wait()
+    audio_stream.stop()
+    audio_stream.close()
+
+    # Concatenate into one Numpy array
+    concatenated_audio = np.concatenate(audio_frames, axis=0)
+    # convert concatenated_audio to format expected by whisper
+    converted_audio = concatenated_audio.flatten().astype(np.float32)
+
+    # Convert audio to text using OpenAI's Whisper
+    logger.info("Transcribing audio...")
+    model = whisper.load_model("base")
+    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+    logger.info(f"The narrated text is: {result_info['text']}")
+    # empty word_list if the user didn't say anything
+    word_list = []
+    # segments could be empty
+    if len(result_info["segments"]) > 0:
+        # there won't be a 'words' list if the user didn't say anything
+        if "words" in result_info["segments"][0]:
+            word_list = result_info["segments"][0]["words"]
+
+    # compress and convert to bytes to save to database
+    logger.info(
+        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
+    )
+    # Create an in-memory file-like object
+    file_obj = io.BytesIO()
+    # Write the audio data using lossless compression
+    soundfile.write(
+        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
+    )
+    # Get the compressed audio data as bytes
+    compressed_audio_bytes = file_obj.getvalue()
+
+    logger.info(
+        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
+    )
+
+    file_obj.close()
+
+    # To decompress the audio and restore it to its original form:
+    # restored_audio, restored_samplerate = sf.read(
+    # io.BytesIO(compressed_audio_bytes))
+
+    # Create AudioInfo entry
+    crud.insert_audio_info(
+        compressed_audio_bytes,
+        result_info["text"],
+        recording_timestamp,
+        int(audio_stream.samplerate),
+        word_list,
+    )
+
+
 @logger.catch
 @trace(logger)
-def record(
-    task_description: str,
-) -> None:
+def record(task_description: str, enable_audio: bool = False) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
         task_description: A text description of the task to be recorded.
+        enable_audio: a flag to enable or disable audio recording (default: False)
     """
     logger.info(f"{task_description=}")
 
@@ -943,6 +1038,13 @@ def record(
         )
         mem_plotter.start()
 
+    if enable_audio:
+        audio_recorder = threading.Thread(
+            target=record_audio,
+            args=(terminate_event, recording_timestamp),
+        )
+        audio_recorder.start()
+
     # TODO: discard events until everything is ready
 
     collect_stats()
@@ -972,6 +1074,9 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    if enable_audio:
+        audio_recorder.join()
+
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
