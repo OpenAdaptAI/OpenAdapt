@@ -58,7 +58,7 @@ class PrivateAIScrubbingProvider(
         }
 
         response = requests.post(TEXT_URL, json=payload, headers=headers)
-
+        response.raise_for_status()
         data = response.json()
         logger.debug(f"{data=}")
 
