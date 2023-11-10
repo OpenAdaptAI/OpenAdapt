@@ -17,6 +17,6 @@ def test_persist_env(tmp_path):
     assert "TEST_VAR=test_value\n" in lines
 
 def test_obfuscate():
-    assert config.obfuscate("test_value", 0.5, "*") == "*****alue"
+    assert config.obfuscate("test_value", 0.5, "*") == "*****value"
     assert config.obfuscate("another_test_value", 0.3, "#") == "#############t_value"
     assert config.obfuscate("yet_another_test_value", 0.1, "@") == "@@@@@@@@@@@@@@@@@@@@e"
