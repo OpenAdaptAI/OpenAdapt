@@ -14,7 +14,7 @@ def test_persist_env(tmp_path):
     config.persist_env("TEST_VAR", "test_value", env_file)
     with open(env_file, "r") as f:
         lines = f.readlines()
-    assert "TEST_VAR=test_value\n" in lines
+    assert "TEST_VAR=test_value" in lines
 
 def test_obfuscate():
     assert config.obfuscate("test_value", 0.5, "*") == "*****value"
