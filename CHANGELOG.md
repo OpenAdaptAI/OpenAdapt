@@ -2,6 +2,132 @@
 
 
 
+## v0.15.0 (2023-11-11)
+
+### Feature
+
+* feat(openadapt.privacy.providers): add private_ai as a scrubbing provider (#486)
+
+* ran black
+
+* add blank file for priavte ai
+
+* add class `PrivateAIScrubbingProvider`
+
+* add pvt_ai api key in config
+
+* ran `pre-commit run --all`
+
+* add scrub_text function
+
+* progress for image redaction
+
+* format
+
+* complete scrub_image
+
+* start scrub_pdf
+
+* add pdf redaction code
+
+* add more wrapper for invalid reponse from priavate ai
+
+* try to fix pytest
+
+* try to fix pytest
+
+* remove lst
+
+* remove uncessary methods
+
+* text scrubbing test all passses
+
+* pdf_redaction test works
+
+* add test_image_redaction test in pyetst
+
+* add easy ocr to poetry
+
+* pytest is fixed
+
+* remove versino files
+
+* remove un-neccasry files
+
+* add code to remove uncessary files after pytest
+
+* addressed https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312117748
+
+* address comment https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312118632
+
+* reduce line chars
+
+* addressed comment: https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312119001
+
+* fix flake8
+
+* use f strings
+
+* address comment: https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312116014
+
+* address comment: https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312115220
+
+* change to value error
+
+* remove .keys()
+
+* add constants
+
+* fix flake8 erros
+
+* use BytesIO
+
+* address comment https://github.com/OpenAdaptAI/OpenAdapt/pull/486#discussion_r1312114102
+
+* rna black
+
+* final commit
+
+* remove unused code
+
+* refactor typo
+
+* rename `redact_file_path` to `redacted_file_path`
+
+* use BytesIO wherever possible
+
+* fix flake8
+
+* add documentation links
+
+* Apply suggestions from code review
+
+* Update tests/openadapt/privacy/providers/test_private_ai_scrub.py
+
+* fix poetry.lock
+
+* poetry.lock
+
+---------
+
+Co-authored-by: Krish Patel &lt;kmppatel133@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`396bbb5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/396bbb52fb93ffb720a34396399ac12a85fe1d21))
+
+### Fix
+
+* fix(install): add vs redistributable installation in powershell script (#490)
+
+* VS C++ redist installation
+
+* add VS C++ redist installtion
+
+---------
+
+Co-authored-by: Krish Patel &lt;kmppatel133@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`086a5ca`](https://github.com/OpenAdaptAI/OpenAdapt/commit/086a5ca9a1f98ec58295241faf11b5bb73110c30))
+
+
 ## v0.14.0 (2023-11-10)
 
 ### Feature
