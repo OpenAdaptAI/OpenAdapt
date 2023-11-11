@@ -9,3 +9,4 @@ class ScrubProvider:  # pylint: disable=too-few-public-methods
 
     PRESIDIO = "PRESIDIO"
     COMPREHEND = "COMPREHEND"
+    PRIVATE_AI = "PRIVATE_AI"
