@@ -13,7 +13,7 @@ from loguru import logger
 from tqdm import tqdm
 
 from openadapt import config
-from openadapt.crud import get_latest_recording
+from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider

@@ -11,7 +11,7 @@ from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
-from openadapt.crud import new_session
+from openadapt.db.crud import new_session
 
 record_proc = None
 

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.main import FPATH, start
-from openadapt.crud import get_all_recordings
+from openadapt.db.crud import get_all_recordings
 from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay

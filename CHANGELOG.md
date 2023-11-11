@@ -2,6 +2,44 @@
 
 
 
+## v0.14.0 (2023-11-10)
+
+### Feature
+
+* feat(openadapt.record): implemented notifications on record (#510)
+
+* implemented notifications on record
+
+fixed deprecated/visualize
+
+* fix import ([`22db2dc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/22db2dc7be561f1fd6e35489080779c1d95dc96d))
+
+### Unknown
+
+* Update README.md (#514) ([`f5a22fb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f5a22fbf0a2d2931216ac28b63b60dc7a8a4c3cb))
+
+* Update LICENSE (#505) ([`97478b7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/97478b7369602d90655b3a211c97fe35d39c5403))
+
+
+## v0.13.2 (2023-10-16)
+
+### Fix
+
+* fix: resolve repository not found error in mac install.sh script (#502)
+
+* Update install_openadapt.sh
+
+* Update install_openadapt.sh ([`eb3c8c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/eb3c8c397d784285c7b0ed7efbf34ae38f522fed))
+
+### Unknown
+
+* Update README.md (#493)
+
+* Update README.md
+
+replace slack with discord ([`5a6530a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a6530a3592ef271652409768ece66bf6183998e))
+
+
 ## v0.13.1 (2023-08-30)
 
 ### Fix
