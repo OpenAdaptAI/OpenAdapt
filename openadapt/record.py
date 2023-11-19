@@ -19,6 +19,7 @@ import time
 import tracemalloc
 
 from loguru import logger
+from notifypy import Notify
 from oa_pynput import keyboard, mouse
 from pympler import tracker
 from tqdm import tqdm
@@ -180,6 +181,7 @@ def process_events(
     """
     utils.set_start_time(recording_timestamp)
     logger.info("Starting")
+    Notify("Status", "Starting recording...", "OpenAdapt").send()
 
     prev_event = None
     prev_screen_event = None
@@ -238,6 +240,7 @@ def process_events(
         del prev_event
         prev_event = event
     logger.info("Done")
+    Notify("Status", "Writing to database...", "OpenAdapt").send()
 
 
 def write_action_event(
@@ -345,6 +348,7 @@ def write_events(
 
     if progress is not None:
         progress.close()
+        Notify("Status", "Recording complete.", "OpenAdapt").send()
 
     logger.info(f"{event_type=} done")
 
