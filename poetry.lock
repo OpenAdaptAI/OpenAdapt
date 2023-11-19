@@ -968,6 +968,60 @@ test = ["pretend", "pytest (>=6.2.0)", "pytest-benchmark", "pytest-cov", "pytest
 test-randomorder = ["pytest-randomly"]
 
 [[package]]
+name = "curated-tokenizers"
+version = "0.0.8"
+description = "Lightweight piece tokenization library"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "curated-tokenizers-0.0.8.tar.gz", hash = "sha256:e3e052c72c0adfad919cf6cb88a505d982100425b4b1aaa3f7b3e4cb4a95b818"},
+    {file = "curated_tokenizers-0.0.8-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0480cbad4ac6cd25d28bcf6ac387514728dae0c2bc4b21fc7c6df240ac48e5d0"},
+    {file = "curated_tokenizers-0.0.8-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:db635ac5d7b5c266dfc3779effe2fa1741cd8a1cd464418fbbb5434a3697bf77"},
+    {file = "curated_tokenizers-0.0.8-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:122400061351a61f4608acaf2bfa99da2354ad950626aaa3b7f429e2bf6401ca"},
+    {file = "curated_tokenizers-0.0.8-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:39bc2b36cd40a2583541b54e67ae8eaf45331ca6adb086c2feb7d14da6dd8f14"},
+    {file = "curated_tokenizers-0.0.8-cp310-cp310-win_amd64.whl", hash = "sha256:5797c513f1d9188c8fbd8b38b0f863561e0ae2858f9a4269dc538e6100bae833"},
+    {file = "curated_tokenizers-0.0.8-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:b26ad4c62f00778f94266e8d2aac4fad25fdd915c2d0bf4b993be10dd9cdf27e"},
+    {file = "curated_tokenizers-0.0.8-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:247ff8998198b16ea1d9419c6655e6e25b9cf3cf6a4db1ebed0beebb5e69e1eb"},
+    {file = "curated_tokenizers-0.0.8-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:887e3e92d564a9a3beac7ded2e633aa17d5754181935fb5b3bf019275247f9df"},
+    {file = "curated_tokenizers-0.0.8-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:af42fffeab7eaf8e2e03d52f17bdeb2d00d864685bc7faca242f14c2814380fd"},
+    {file = "curated_tokenizers-0.0.8-cp311-cp311-win_amd64.whl", hash = "sha256:56bc82bb3ccac138b5da6df5bf785522fa888a08ae521b650493d5e60d277855"},
+    {file = "curated_tokenizers-0.0.8-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f5d1d13a28eb043cdd1f527875d0b98e0d71e84df9790c35d20d62ba869e21ed"},
+    {file = "curated_tokenizers-0.0.8-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:08c601b4fc3e3ff6023b2a259d5ed6a2cb3efb34bda44368051544c7395db037"},
+    {file = "curated_tokenizers-0.0.8-cp36-cp36m-win_amd64.whl", hash = "sha256:87cf6efd1bc260fb51cc79065a39420d1a0b8c39265da4916a9f17ec8701f786"},
+    {file = "curated_tokenizers-0.0.8-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:076e7874edf453657173cacaa8f4cf82e928c16021839145dca127295695b3b5"},
+    {file = "curated_tokenizers-0.0.8-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2cc6f48569609d8a1a01dbdd8e430368b3ccda078e0959f6dba5bcae6bfdb564"},
+    {file = "curated_tokenizers-0.0.8-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:22a123fddd16721ac799e29840409566550bb927d6acc8ae14513932c714a170"},
+    {file = "curated_tokenizers-0.0.8-cp37-cp37m-win_amd64.whl", hash = "sha256:6788272cc0ff6edfd2124891b0131a024058715493c52435571c994cd624f7ad"},
+    {file = "curated_tokenizers-0.0.8-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:c72f3028585f357cc0ed785f4a3bdcef5507ee97e9fc3227bb12dee604fcae46"},
+    {file = "curated_tokenizers-0.0.8-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:32268ce4ed90faed38ee95a22ab6d484576010ce7d65dc945d33e774e6f0901d"},
+    {file = "curated_tokenizers-0.0.8-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:29d484c5a14d5856bcae7e211f2d0d5b99bb7366a8215adf00812612afb88e1f"},
+    {file = "curated_tokenizers-0.0.8-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:faca4ed350ed19fd706afaf1e3f3ac0a5a83067c9087638b3364a4f9cdca6e2f"},
+    {file = "curated_tokenizers-0.0.8-cp38-cp38-win_amd64.whl", hash = "sha256:dbd8322dada11dd3e8020523cf6413d7a839e76d7cba6d202bf41a92a99f0063"},
+    {file = "curated_tokenizers-0.0.8-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:09aff37f1b1ecd95e02c898c5756a48d650c4c527c402d69b0e69d3b362e8467"},
+    {file = "curated_tokenizers-0.0.8-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:49911eeca4b8d4543c11cb020707b0bb33f4541f2e64c53796ab09da0321e16c"},
+    {file = "curated_tokenizers-0.0.8-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:59cfccbbd93841b8d20fc6ad50463ec7724ae49d414e696f93694a5a8005a4d9"},
+    {file = "curated_tokenizers-0.0.8-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bf33a34c472abe89724b61708956f00f4b567a8f3ec6b4268e81e2f73aa1440d"},
+    {file = "curated_tokenizers-0.0.8-cp39-cp39-win_amd64.whl", hash = "sha256:460cd6a533d8ad6c093cc442c8c4b9836b88e4f2e069c0a7423a74b28d47623f"},
+]
+
+[package.dependencies]
+regex = ">=2022"
+
+[[package]]
+name = "curated-transformers"
+version = "0.1.1"
+description = "Curated transformer models"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "curated-transformers-0.1.1.tar.gz", hash = "sha256:4671f03314df30efda2ec2b59bc7692ea34fcea44cb65382342c16684e8a2119"},
+    {file = "curated_transformers-0.1.1-py2.py3-none-any.whl", hash = "sha256:d716063d73d803c6925d2dab56fde9b9ab8e89e663c2c0587804944ba488ff01"},
+]
+
+[package.dependencies]
+torch = ">=1.12.0"
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 description = "Composable style cycles"
@@ -5667,6 +5721,23 @@ files = [
 ]
 
 [[package]]
+name = "spacy-curated-transformers"
+version = "0.2.0"
+description = "Curated transformer models for spaCy pipelines"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "spacy-curated-transformers-0.2.0.tar.gz", hash = "sha256:64b145d45fe381548ddfa73be9bcc8290efc7da5b238afb88d7b27936de15fc5"},
+    {file = "spacy_curated_transformers-0.2.0-py2.py3-none-any.whl", hash = "sha256:3c9edfd5667d271c9429dede7519efaa5f1f2e441fc8df02ee3ec3e3b66ba2bb"},
+]
+
+[package.dependencies]
+curated-tokenizers = ">=0.0.7,<0.1.0"
+curated-transformers = ">=0.1.0,<0.2.0"
+spacy = ">=3.7.0.dev0,<4.0.0"
+torch = ">=1.12.0"
+
+[[package]]
 name = "spacy-legacy"
 version = "3.0.12"
 description = "Legacy registered functions for spaCy backwards compatibility"
@@ -7200,4 +7271,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "eb8325b5b674ff644a1f23f3123213d4df898e7139131fe6f8e098d20f2f71a2"
+content-hash = "4c341e7bc89f42d27e764bfb1f10a7b8d44c6a510836ae5f9958e5566decfc09"
