@@ -131,7 +131,7 @@ def test_scrub_date_of_birth() -> None:
 def test_scrub_address() -> None:
     """Test that the address is scrubbed."""
     assert (
-        scrub.scrub_text("My address is 123 Main St, Toronto, On, CAN.")
+        scrub.scrub_text("My address is 123 Main St, Toronto, ON, CAN.")
         == "My address is 123 Main St, <LOCATION>, <LOCATION>, <LOCATION>."
     )
 
