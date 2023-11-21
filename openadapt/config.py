@@ -257,7 +257,7 @@ if multiprocessing.current_process().name == "MainProcess":
                 and val != _DEFAULTS[key]
             ):
                 val = obfuscate(val)
-            logger.info(f"{key}={val}")
+            logger.debug(f"{key}={val}")
 
     if ERROR_REPORTING_ENABLED:  # type: ignore # noqa
         active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
