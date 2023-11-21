@@ -206,9 +206,7 @@ def draw_box_and_label(data, draw, grid_spacing, font):
         y2 = end_row * grid_spacing
 
         # Draw the rectangle
-        rectangle = [x1, y1, x2, y2]
-        draw.rectangle(rectangle, outline="red", width=2)
-        print(f"{rectangle=}")
+        draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
 
         # Draw the label and content
         label = item.get("label", "") + ": " + item.get("content", "")
@@ -224,5 +222,3 @@ draw_box_and_label(parsed_json["children"], draw, GRID_SPACING, get_font(GRID_SP
 
 # Display the image
 img.show()
-
-print('done')
