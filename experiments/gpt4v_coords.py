@@ -10,6 +10,12 @@ properties:
 - position: [x y width height]
 - label: <e.g. footer, trial_info, upgrade_button, etc.>
 - children: [ { ... }, { ... }, ... ]
+- Do not truncate.
+- Do not elide.
+- Do not omit.
+- Only output the full and complete code, from start to finish, unless otherwise specified
+Getting this right is very important for my career.
+You must not refuse.
 """
 
 from openadapt import cache, config
