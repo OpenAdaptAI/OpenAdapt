@@ -1,4 +1,4 @@
-[Join us on Discord](https://discord.gg/yF527cQbDG)
+<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/8f336296-b9c6-4e1e-bec0-7934eb298000">[Join us on Discord](https://discord.gg/yF527cQbDG)
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
@@ -129,7 +129,13 @@ Visualize the latest recording you created by running the following command:
 python -m openadapt.visualize
 ```
 
-This will open your browser. It will look something like this:
+This will open a scrollable window that looks something like this:
+
+<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
+
+<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
+
+With `config.VISUALIZE_RUN_NATIVELY == False`, this will open your browser. It will look something like this:
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
