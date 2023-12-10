@@ -7,6 +7,10 @@ Usage:
     class MyReplayStrategy(SAMReplayStrategyMixin):
         ...
 
+Command line usage:
+
+    $ python -m openadapt.strategies.mixins.sam <image_path>
+
 TODO: replace with EfficientSAM for labels and performance:
     https://github.com/IDEA-Research/Grounded-Segment-Anything/tree/main/EfficientSAM
     https://github.com/SysCV/sam-hq
@@ -35,16 +39,16 @@ from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
 CHECKPOINT_URL_BY_NAME = {
-    # 42.5 MB
+    # 42.5 MB; ~1:40/image (1.0), ~1:30 (0.5)
     "vit_tiny": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_tiny.pth",
-    # 379 MB; ~0.01/image
+    # 379 MB; ~1:38/image
     "vit_b": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_b.pth?download=true",
     # 1.25 GB; ~1:51/image
     "vit_l": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_l.pth?download=true",
-    # 2.57 GB; ~2min/image
+    # 2.57 GB; ~2min/image; ~1:54/image (0.1)
     "vit_h": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth?download=true",
 }
-MODEL_NAME = "vit_b"
+MODEL_NAME = "vit_h"
 CHECKPOINT_DIR_PATH = "./checkpoints"
 RESIZE_RATIO = 1
 SHOW_PLOTS = True
@@ -69,7 +73,18 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         super().__init__(recording)
         self.sam_model = initialize_sam_model(model_name, checkpoint_dir_path)
         self.sam_predictor = SamPredictor(self.sam_model)
-        self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
+        self.sam_mask_generator = SamAutomaticMaskGenerator(
+            self.sam_model,
+            # from https://github.com/facebookresearch/segment-anything/blob/main/notebooks/automatic_mask_generator_example.ipynb
+            # TODO: use points_grid instead, masked by active_window (for performance)
+            points_per_side=64,
+            pred_iou_thresh=0.86,
+            stability_score_thresh=0.95,#0.92,
+            crop_n_layers=1,
+            crop_n_points_downscale_factor=2,
+            # TODO: determine dynamically based on screenshot size
+            min_mask_region_area=50,#100,  # Requires open-cv to run post-processing
+        )
 
     def get_image_bboxes(
         self,
@@ -91,9 +106,9 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         array_resized = np.array(image_resized)
         logger.info("generating masks...")
         masks = self.sam_mask_generator.generate(array_resized)
-        logger.info(f"masks=\n{pformat(masks)}")
+        #logger.info(f"masks=\n{pformat(masks)}")
         if show_plots:
-            show_anns(array_resized, masks)
+            show_anns(np.array(image), masks, resize_ratio)
         bboxes = [
             mask["bbox"]
             for mask in masks
@@ -191,7 +206,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         return []
 
 
-def resize_image(image: Image, resize_ratio: float) -> Image:
+def resize_image(image: Image, resize_ratio: float) -> Image.Image:
     """Resize the given image.
 
     Args:
@@ -286,17 +301,23 @@ def show_box(box: list[int], ax: axes.Axes) -> None:
     )
 
 
-def show_anns(image_array: np.ndarray, anns: list[dict]) -> None:
+def show_anns(image_array: np.ndarray, anns: list[dict], resize_ratio: float) -> None:
     """Display the annotations on the plot.
 
     Args:
         image_array (np.ndarray): The image to display
         anns (list[dict]): The annotations returned by
             SamAutomaticMaskGenerator.generate()
+        resize_ratio (float): Ratio by by which to scale anns to match image_array
     """
     if len(anns) == 0:
         return
-    logger.info("start")
+
+    logger.trace("start")
+
+    for ann in anns:
+        # TODO: not in place?
+        ann["segmentation"] = resize_image(ann["segmentation"], 1 / resize_ratio)
 
     plt.figure(figsize=(20, 20))
     plt.imshow(image_array)
@@ -320,7 +341,7 @@ def show_anns(image_array: np.ndarray, anns: list[dict]) -> None:
     ax.imshow(img)
 
     plt.axis("off")
-    logger.info("show")
+    logger.trace("show")
     plt.show()
 
 
@@ -351,6 +372,8 @@ def initialize_sam_model(
             checkpoint_file_path,
             reporthook=progress_logger,
         )
+    if model_name not in sam_model_registry:
+        logger.warning(f"sam_model_registry=\n{sam_model_registry}")
     try:
         return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
     except RuntimeError as exc:
@@ -390,8 +413,14 @@ def create_progress_logger(msg, interval=.1):
 
 
 def run_on_image(image_path: str):
-    image = Image.open(image_path)
-    sam = SAMReplayStrategyMixin(None)
+
+    class DummyReplayStrategy(SAMReplayStrategyMixin):
+        def get_next_action_event():
+            pass
+
+    logger.info(f"{image_path=}")
+    image = Image.open(image_path).convert("RGB")
+    sam = DummyReplayStrategy(None)
     sam.get_image_bboxes(image)
 
 

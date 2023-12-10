@@ -263,7 +263,7 @@ class Screenshot(db.Base):
     _base64 = None
 
     @property
-    def image(self) -> Image:
+    def image(self) -> Image.Image:
         """Get the image associated with the screenshot."""
         if not self._image:
             if self.sct_img:
@@ -279,7 +279,7 @@ class Screenshot(db.Base):
         return self._image
 
     @property
-    def diff(self) -> Image:
+    def diff(self) -> Image.Image:
         """Get the difference between the current and previous screenshot."""
         if self.png_diff_data:
             return self.convert_binary_to_png(self.png_diff_data)
@@ -289,7 +289,7 @@ class Screenshot(db.Base):
         return self._diff
 
     @property
-    def diff_mask(self) -> Image:
+    def diff_mask(self) -> Image.Image:
         """Get the difference mask between the current and previous screenshot."""
         if self.png_diff_mask_data:
             return self.convert_binary_to_png(self.png_diff_mask_data)
@@ -329,23 +329,23 @@ class Screenshot(db.Base):
         box = (x0, y0, x1, y1)
         self._image = self._image.crop(box)
 
-    def convert_binary_to_png(self, image_binary: bytes) -> Image:
+    def convert_binary_to_png(self, image_binary: bytes) -> Image.Image:
         """Convert a binary image to a PNG image.
 
         Args:
             image_binary (bytes): The binary image data.
 
         Returns:
-            Image: The PNG image.
+            PIL.Image.Image: The PNG image.
         """
         buffer = io.BytesIO(image_binary)
         return Image.open(buffer)
 
-    def convert_png_to_binary(self, image: Image) -> bytes:
+    def convert_png_to_binary(self, image: Image.Image) -> bytes:
         """Convert a PNG image to binary image data.
 
         Args:
-            image (Image): The PNG image.
+            image (PIL.Image.Image): The PNG image.
 
         Returns:
             bytes: The binary image data.

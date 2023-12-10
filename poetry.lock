@@ -5162,8 +5162,8 @@ dev = ["black", "flake8", "isort", "mypy"]
 [package.source]
 type = "git"
 url = "https://github.com/SysCV/sam-hq"
-reference = "24a4963d7fdefb46168062eae3c73d9bc1e00aa2"
-resolved_reference = "24a4963d7fdefb46168062eae3c73d9bc1e00aa2"
+reference = "61ea10f267c097005e284ad636c4a7bed3d04499"
+resolved_reference = "61ea10f267c097005e284ad636c4a7bed3d04499"
 
 [[package]]
 name = "sentry-sdk"
@@ -6900,4 +6900,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "c19496110f3525e598c2569312110129d0527556ecf88a6f9d9dcbed14921a8e"
+content-hash = "8719b5c89dfd6f74456700ed109d2a3892e6df3eda1984da6f0a6b098df538bb"

@@ -87,7 +87,7 @@ boto3 = "^1.28.30"
 botocore = "^1.31.30"
 easyocr = "^1.7.0"
 timm = "^0.9.12"
-segment-anything = {git = "https://github.com/SysCV/sam-hq", rev = "24a4963d7fdefb46168062eae3c73d9bc1e00aa2"}
+segment-anything = {git = "https://github.com/SysCV/sam-hq", rev = "61ea10f267c097005e284ad636c4a7bed3d04499"}
 
 [tool.pytest.ini_options]
 filterwarnings = [
