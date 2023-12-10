@@ -9,7 +9,6 @@ from loguru import logger
 
 from openadapt.db.crud import get_screenshots
 from openadapt.models import Recording, Screenshot, WindowEvent
-from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.strategies.mixins.ascii import ASCIIReplayStrategyMixin
 from openadapt.strategies.mixins.huggingface import (
     MAX_INPUT_SIZE,
@@ -26,7 +25,6 @@ class DemoReplayStrategy(
     ASCIIReplayStrategyMixin,
     SAMReplayStrategyMixin,
     SummaryReplayStrategyMixin,
-    BaseReplayStrategy,
 ):
     """Demo replay strategy that combines HuggingFace, OCR, and ASCII mixins."""
 
@@ -64,8 +62,8 @@ class DemoReplayStrategy(
         # ocr_text = self.get_ocr_text(screenshot)
         # logger.info(f"ocr_text=\n{ocr_text}")
 
-        screenshot_bbox = self.get_screenshot_bbox(screenshot)
-        logger.info(f"screenshot_bbox=\n{screenshot_bbox}")
+        screenshot_bboxes = self.get_image_bboxes(screenshot.image)
+        logger.info(f"screenshot_bboxes=\n{screenshot_bboxes}")
 
         screenshot_click_event_bbox = self.get_click_event_bbox(
             self.screenshots[self.screenshot_idx]

@@ -260,6 +260,8 @@ class Screenshot(db.Base):
     _diff = None
     _diff_mask = None
 
+    _base64 = None
+
     @property
     def image(self) -> Image:
         """Get the image associated with the screenshot."""

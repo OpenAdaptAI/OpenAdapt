@@ -1,15 +1,22 @@
-"""Implements a ReplayStrategy mixin for getting segmenting images via SAM model.
+"""Implements a ReplayStrategy mixin for segmenting images via Segment Anything model.
 
-Uses SAM model:https://github.com/facebookresearch/segment-anything
+For more about SAM model, see: https://github.com/facebookresearch/segment-anything
 
 Usage:
 
     class MyReplayStrategy(SAMReplayStrategyMixin):
         ...
+
+TODO: replace with EfficientSAM for labels and performance:
+    https://github.com/IDEA-Research/Grounded-Segment-Anything/tree/main/EfficientSAM
+    https://github.com/SysCV/sam-hq
 """
 
 from pathlib import Path
+from pprint import pformat
+import os
 import urllib
+import sys
 
 from loguru import logger
 from PIL import Image
@@ -19,6 +26,7 @@ from segment_anything import (
     modeling,
     sam_model_registry,
 )
+import fire
 import matplotlib.axes as axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,15 +34,19 @@ import numpy as np
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
-CHECKPOINT_URL_BASE = "https://dl.fbaipublicfiles.com/segment_anything/"
 CHECKPOINT_URL_BY_NAME = {
-    "default": f"{CHECKPOINT_URL_BASE}sam_vit_h_4b8939.pth",
-    "vit_l": f"{CHECKPOINT_URL_BASE}sam_vit_l_0b3195.pth",
-    "vit_b": f"{CHECKPOINT_URL_BASE}sam_vit_b_01ec64.pth",
+    # 42.5 MB
+    "vit_tiny": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_tiny.pth",
+    # 379 MB; ~0.01/image
+    "vit_b": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_b.pth?download=true",
+    # 1.25 GB; ~1:51/image
+    "vit_l": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_l.pth?download=true",
+    # 2.57 GB; ~2min/image
+    "vit_h": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_h.pth?download=true",
 }
-MODEL_NAME = "default"
+MODEL_NAME = "vit_b"
 CHECKPOINT_DIR_PATH = "./checkpoints"
-RESIZE_RATIO = 0.1
+RESIZE_RATIO = 1
 SHOW_PLOTS = True
 
 
@@ -55,65 +67,51 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
         """
         super().__init__(recording)
-        self.sam_model = self._initialize_model(model_name, checkpoint_dir_path)
+        self.sam_model = initialize_sam_model(model_name, checkpoint_dir_path)
         self.sam_predictor = SamPredictor(self.sam_model)
         self.sam_mask_generator = SamAutomaticMaskGenerator(self.sam_model)
 
-    def _initialize_model(
-        self, model_name: str, checkpoint_dir_path: str
-    ) -> modeling.Sam:
-        """Initialize the SAM model.
-
-        Args:
-            model_name (str): The name of the SAM model.
-            checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
-
-        Returns:
-            modeling.Sam: The initialized SAM model.
-        """
-        checkpoint_url = CHECKPOINT_URL_BY_NAME[model_name]
-        checkpoint_file_name = checkpoint_url.split("/")[-1]
-        checkpoint_file_path = Path(checkpoint_dir_path, checkpoint_file_name)
-        if not Path.exists(checkpoint_file_path):
-            Path(checkpoint_dir_path).mkdir(parents=True, exist_ok=True)
-            logger.info(f"downloading {checkpoint_url=} to {checkpoint_file_path=}")
-            urllib.request.urlretrieve(checkpoint_url, checkpoint_file_path)
-        return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
-
-    def get_screenshot_bbox(
-        self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
+    def get_image_bboxes(
+        self,
+        image: Image.Image,
+        resize_ratio: float = RESIZE_RATIO,
+        show_plots: bool = SHOW_PLOTS,
     ) -> str:
-        """Retrieve object bounding boxes of screenshot image(XYWH) with RESIZE_RATIO.
+        """Retrieve object bounding boxes of screenshot image(XYWH) with resize_ratio.
 
         Args:
-            screenshot (Screenshot): The screenshot object containing the image.
+            image (Image.Image): The image to segment.
+            resize_ratio (float): The ratio by which to resize the image.
             show_plots (bool): Flag indicating whether to display the plots or not.
 
         Returns:
-            str: String representation of list containing the bounding boxes of objects.
+            list: list containing the bounding boxes of objects, in XYWH format
         """
-        image_resized = resize_image(screenshot.image)
+        image_resized = resize_image(image, resize_ratio)
         array_resized = np.array(image_resized)
+        logger.info("generating masks...")
         masks = self.sam_mask_generator.generate(array_resized)
-        bbox_list = []
-        for mask in masks:
-            bbox_list.append(mask["bbox"])
-        if SHOW_PLOTS:
-            plt.figure(figsize=(20, 20))
-            plt.imshow(array_resized)
-            show_anns(masks)
-            plt.axis("off")
-            plt.show()
-        return str(bbox_list)
+        logger.info(f"masks=\n{pformat(masks)}")
+        if show_plots:
+            show_anns(array_resized, masks)
+        bboxes = [
+            mask["bbox"]
+            for mask in masks
+        ]
+        return bboxes
 
     def get_click_event_bbox(
-        self, screenshot: Screenshot, show_plots: bool = SHOW_PLOTS
+        self,
+        screenshot: Screenshot,
+        resize_ratio: float = RESIZE_RATIO,
+        show_plots: bool = SHOW_PLOTS,
     ) -> str:
         """Get bounding box of a clicked object in resized image w/ RESIZE_RATIO(XYWH).
 
         Args:
-            screenshot: The screenshot object containing the image.
-            show_plots: Flag indicating whether to display the plots or not.
+            screenshot (models.Screenshot): The screenshot object containing the image.
+            resize_ratio (float): The ratio by which to resize the image.
+            show_plots: (bool) Flag indicating whether to display the plots or not.
 
         Returns:
             str: A string representation of a list containing the bounding box
@@ -125,7 +123,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         for action_event in screenshot.action_event:
             if action_event.name in "click" and action_event.mouse_pressed is True:
                 logger.info(f"click_action_event=\n{action_event}")
-                image_resized = resize_image(screenshot.image)
+                image_resized = resize_image(screenshot.image, resize_ratio)
                 array_resized = np.array(image_resized)
 
                 # Resize mouse coordinates
@@ -179,7 +177,7 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
                 w = x1 - x0
                 h = y1 - y0
                 input_box = [x0, y0, w, h]
-                if SHOW_PLOTS:
+                if show_plots:
                     plt.figure(figsize=(10, 10))
                     plt.imshow(array_resized)
                     show_mask(best_mask, plt.gca())
@@ -193,18 +191,23 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
         return []
 
 
-def resize_image(image: Image) -> Image:
+def resize_image(image: Image, resize_ratio: float) -> Image:
     """Resize the given image.
 
     Args:
         image (PIL.Image.Image): The image to be resized.
+        resize_ratio (float): The ratio by which to resize.
 
     Returns:
         PIL.Image.Image: The resized image.
 
     """
-    new_size = [int(dim * RESIZE_RATIO) for dim in image.size]
+    if resize_ratio == 1:
+        return image
+    logger.info(f"{resize_ratio=} {image.size=}")
+    new_size = [int(dim * resize_ratio) for dim in image.size]
     image_resized = image.resize(new_size)
+    logger.info(f"{image_resized.size=}")
     return image_resized
 
 
@@ -283,14 +286,21 @@ def show_box(box: list[int], ax: axes.Axes) -> None:
     )
 
 
-def show_anns(anns: axes.Axes) -> None:
+def show_anns(image_array: np.ndarray, anns: list[dict]) -> None:
     """Display the annotations on the plot.
 
     Args:
-        anns: The annotations.
+        image_array (np.ndarray): The image to display
+        anns (list[dict]): The annotations returned by
+            SamAutomaticMaskGenerator.generate()
     """
     if len(anns) == 0:
         return
+    logger.info("start")
+
+    plt.figure(figsize=(20, 20))
+    plt.imshow(image_array)
+
     sorted_anns = sorted(anns, key=(lambda x: x["area"]), reverse=True)
     ax = plt.gca()
     ax.set_autoscale_on(False)
@@ -308,3 +318,82 @@ def show_anns(anns: axes.Axes) -> None:
         color_mask = np.concatenate([np.random.random(3), [0.35]])
         img[m] = color_mask
     ax.imshow(img)
+
+    plt.axis("off")
+    logger.info("show")
+    plt.show()
+
+
+def initialize_sam_model(
+    model_name: str,
+    checkpoint_dir_path: str,
+) -> modeling.Sam:
+    """Initialize the SAM model.
+
+    Args:
+        model_name (str): The name of the SAM model.
+        checkpoint_dir_path (str): The directory path to store SAM model checkpoint.
+
+    Returns:
+        segment_anything.modeling.Sam: The initialized SAM model.
+    """
+    checkpoint_url = CHECKPOINT_URL_BY_NAME[model_name]
+    url_parsed = urllib.parse.urlparse(checkpoint_url)
+    checkpoint_file_name = os.path.basename(url_parsed.path)
+    checkpoint_file_path = Path(checkpoint_dir_path, checkpoint_file_name)
+    if not Path.exists(checkpoint_file_path):
+        Path(checkpoint_dir_path).mkdir(parents=True, exist_ok=True)
+        msg = f"downloading {checkpoint_url} to {checkpoint_file_path}"
+        logger.info(msg)
+        progress_logger = create_progress_logger(msg)
+        urllib.request.urlretrieve(
+            checkpoint_url,
+            checkpoint_file_path,
+            reporthook=progress_logger,
+        )
+    try:
+        return sam_model_registry[model_name](checkpoint=checkpoint_file_path)
+    except RuntimeError as exc:
+        logger.exception(exc)
+        logger.warning(f"{exc=}, retrying...")
+        # TODO: sleep with backoff
+        logger.info(f"unlinking {checkpoint_file_path=}")
+        checkpoint_file_path.unlink()
+        return initialize_sam_model(model_name, checkpoint_dir_path)
+
+def create_progress_logger(msg, interval=.1):
+    """
+    Creates a progress logger function with a specified reporting interval.
+
+    Args:
+        interval (float): Every nth % at which to update progress
+
+    Returns:
+        callable: function to pass into urllib.request.urlretrieve as reporthook
+    """
+    last_reported_percent = 0
+
+    def download_progress(block_num, block_size, total_size):
+        nonlocal last_reported_percent
+        downloaded = block_num * block_size
+        if total_size > 0:
+            percent = (downloaded / total_size) * 100
+            if percent - last_reported_percent >= interval:
+                sys.stdout.write(f"\r{percent:.1f}% {msg}")
+                sys.stdout.flush()
+                last_reported_percent = percent
+        else:
+            sys.stdout.write(f"\rDownloaded {downloaded} bytes")
+            sys.stdout.flush()
+
+    return download_progress
+
+
+def run_on_image(image_path: str):
+    image = Image.open(image_path)
+    sam = SAMReplayStrategyMixin(None)
+    sam.get_image_bboxes(image)
+
+
+if __name__ == "__main__":
+    fire.Fire(run_on_image)

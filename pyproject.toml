@@ -56,7 +56,6 @@ sphinx = "7.0.1"
 nicegui = "^1.2.24"
 spacy = "^3.5.3"
 fuzzywuzzy = "0.18.0"
-segment-anything = "^1.0"
 torchvision = "^0.15.2"
 sumy = "0.11.0"
 nltk = "3.8.1"
@@ -87,6 +86,8 @@ spacy-transformers = "^1.2.5"
 boto3 = "^1.28.30"
 botocore = "^1.31.30"
 easyocr = "^1.7.0"
+timm = "^0.9.12"
+segment-anything = {git = "https://github.com/SysCV/sam-hq", rev = "24a4963d7fdefb46168062eae3c73d9bc1e00aa2"}
 
 [tool.pytest.ini_options]
 filterwarnings = [
