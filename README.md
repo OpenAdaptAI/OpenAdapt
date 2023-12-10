@@ -34,23 +34,23 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## Features
 
-- State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
 
-- Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+### Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
 
-- Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
+### Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
 
-- Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
+## Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
 
-- And much more!
+### And much more!
 
 ## Install
 
