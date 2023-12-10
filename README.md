@@ -1,4 +1,4 @@
-<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/8f336296-b9c6-4e1e-bec0-7934eb298000">[Join us on Discord](https://discord.gg/yF527cQbDG)
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/a880a427-8165-4419-a230-1a99b436f3b1)<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/8f336296-b9c6-4e1e-bec0-7934eb298000">[Join us on Discord](https://discord.gg/yF527cQbDG)
 
 # OpenAdapt: AI-First Process Automation with Transformers
 
@@ -31,6 +31,20 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
 4. OpenAdapt is open source (MIT license)
+
+## Features
+
+- Through privacy scrubbing via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
+
+- Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
+
+- State-of-the-art GUI labelling via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
 
 
 ## Install
