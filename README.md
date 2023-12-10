@@ -34,20 +34,17 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## Features
 
-- Through privacy scrubbing via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+- State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
+
+- Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/81015ff9-2462-44e3-9636-d81fea8c558e)
-
 
 - Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
-
-- State-of-the-art GUI labelling via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
 
 - Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
 
