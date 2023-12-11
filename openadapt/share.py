@@ -3,7 +3,6 @@
 Usage:
     python -m openadapt.share send --recording_id=1
     python -m openadapt.share receive <wormhole_code>
-    python -m openadapt.share visualize <db_name>
 """
 
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -12,11 +11,9 @@ import re
 import subprocess
 
 from loguru import logger
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 import fire
 
-from openadapt import config, db, utils, visualize
+from openadapt import config, db, utils
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
@@ -152,58 +149,11 @@ def receive_recording(wormhole_code: str) -> None:
             logger.info(f"deleted {zip_path=}")
 
 
-def visualize_recording(db_name: str) -> None:
-    """Visualize a recording from a SQLite database.
-
-    This function loads the specified db file containing a recording and
-    visualizes the data using the 'visualize.main' function.
-
-    Args:
-        db_name (str): The name of the SQLite database containing the recording.
-
-    Raises:
-        Exception: If there is an error accessing the database.
-    """
-    # Determine the recording path based on the database name
-    if db_name == "openadapt.db":
-        recording_path = os.path.join(config.ROOT_DIRPATH, db_name)
-    else:
-        recording_path = os.path.join(config.RECORDING_DIRECTORY_PATH, db_name)
-
-    recording_url = f"sqlite:///{recording_path}"
-
-    # Save the old value of DB_FNAME
-    old_val = os.getenv("DB_FNAME")
-
-    # Update the environment variable DB_FNAME and persist it
-    config.persist_env("DB_FNAME", db_name)
-    os.environ["DB_FNAME"] = db_name
-
-    # Set the database URL
-    config.set_db_url(db_name)
-
-    engine = create_engine(recording_url)
-
-    try:
-        with Session(engine) as session:
-            os.system("alembic upgrade head")
-            # Visualize the recording
-            visualize.main(None, False, session)
-    except Exception as exc:
-        # Handle any exceptions that may occur during visualization
-        logger.exception(exc)
-    finally:
-        # Restore the old value of DB_FNAME in case of exceptions or at the end
-        os.environ["DB_FNAME"] = old_val
-        config.persist_env("DB_FNAME", old_val)
-
-
 # Create a command-line interface using python-fire and utils.get_functions
 if __name__ == "__main__":
     fire.Fire(
         {
             "send": send_recording,
             "receive": receive_recording,
-            "visualize": visualize_recording,
         }
     )
