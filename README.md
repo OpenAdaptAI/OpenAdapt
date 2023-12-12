@@ -1,6 +1,8 @@
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
-# OpenAdapt: AI-First Process Automation with Transformers
+# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
+
+**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
 ### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
@@ -10,21 +12,21 @@
 
 <img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
 
-
 ([Slides](https://t.ly/7RGr))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
-with the power of Transformers by:
+with the power of Large Multimodal Modals (LMMs) by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
-- Replaying synthetic input to complete tasks
+- Generating task trees by analyzing recordings (work-in-progress)
+- Replaying synthetic input to complete tasks (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
-except that we use transformers instead of conventional RPA tools.
+except that we use Large Multimodal Models instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
 1. OpenAdapt is model agnostic
@@ -32,6 +34,25 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
 4. OpenAdapt is open source (MIT license)
 
+## Features
+
+### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
+
+### Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
+
+### Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
+
+## Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
+
+### And much more!
 
 ## Install
 
@@ -61,7 +82,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
   </pre>
 
-<br/>
 <br/>
 
 ### Manual Setup
@@ -129,7 +149,19 @@ Visualize the latest recording you created by running the following command:
 python -m openadapt.visualize
 ```
 
-This will open your browser. It will look something like this:
+This will open a scrollable window that looks something like this:
+
+<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
+
+<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
+
+For an alternative visualization, run:
+
+```
+python -m openadapt.deprecated.visualize
+```
+
+This will open up a tab in your browser that looks something like this:
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
