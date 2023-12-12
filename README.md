@@ -1,6 +1,8 @@
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
-# OpenAdapt: AI-First Process Automation with Transformers
+# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
+
+**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
 ### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
@@ -10,21 +12,21 @@
 
 <img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
 
-
 ([Slides](https://t.ly/7RGr))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
-with the power of Transformers by:
+with the power of Large Multimodal Modals (LMMs) by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
-- Replaying synthetic input to complete tasks
+- Generating task trees by analyzing recordings (work-in-progress)
+- Replaying synthetic input to complete tasks (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
-except that we use transformers instead of conventional RPA tools.
+except that we use Large Multimodal Models instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
 1. OpenAdapt is model agnostic
@@ -80,7 +82,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
   </pre>
 
-<br/>
 <br/>
 
 ### Manual Setup
@@ -154,7 +155,13 @@ This will open a scrollable window that looks something like this:
 
 <img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
 
-With `config.VISUALIZE_RUN_NATIVELY == False`, this will open your browser. It will look something like this:
+For an alternative visualization, run:
+
+```
+python -m openadapt.deprecated.visualize
+```
+
+This will open up a tab in your browser that looks something like this:
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
