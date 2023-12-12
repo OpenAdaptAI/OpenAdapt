@@ -2,6 +2,65 @@
 
 
 
+## v0.15.1 (2023-12-12)
+
+### Documentation
+
+* docs(README): Transformers -&gt; LLMs
+
+Transformers -&gt; LMMs ([`ef4c901`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ef4c9010e7b19c5f8174eeae4aca416952cb1c63))
+
+* docs: README ([`aca53f5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/aca53f57bff3b867d616fee0799eb3bc063f81c1))
+
+* docs: features
+
+* Update README.md
+
+* Update README.md
+
+* Update README.md ([`aaf7727`](https://github.com/OpenAdaptAI/OpenAdapt/commit/aaf7727321224d7512c7f88b60c7ca31bb28e32e))
+
+* docs: README ([`c8bb1a7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c8bb1a78e03f9c92aba0c3d5d9a25280f769ed2e))
+
+### Unknown
+
+* Merge pull request #223 from Mustaballer/share-magic-wormhole ([`cf81f1a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf81f1aeabd0cd01f6a932f984b91790eef11896))
+
+* Update openadapt/config.py
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`b79f3b5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b79f3b54bbfb4a7dc63ea32002cc82a118056287))
+
+* Update openadapt/config.py
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`39b334e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/39b334e4b8284f1321abae275c330ecef5119844))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`bf9e8bf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bf9e8bf195eae11c2afe30f271ad862a4a5dc461))
+
+* docs(README) ([`ec58755`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ec5875503b529f8be6aee77606902608e5eb0d90))
+
+* Merge branch &#39;share-magic-wormhole&#39; of https://github.com/Mustaballer/puterbot into share-magic-wormhole ([`117694b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/117694b7a51407c67f1927d5a8710cef904d7c5a))
+
+* Restore `export_recording` import with lint ignore comment ([`6651f2c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6651f2ccbb97fdaded42c4cace8ff967e7660f4d))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`9682209`](https://github.com/OpenAdaptAI/OpenAdapt/commit/96822095b30c51d6df9bcf094fc80b891e1de668))
+
+* change logging.py name to resolve naming conflict with logger library ([`54a954f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/54a954ff191ae84ee341b17ac12934b872f26e1b))
+
+* remove custom visualize function ([`1367cb9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1367cb92671d5f6331e74620beeec4646f674fcc))
+
+* Update README.md (#538) ([`a4bfdbd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a4bfdbd1df5483003db8639e6bddb2497d6d2116))
+
+* add spacy-curated-transformers ([`0edcd88`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0edcd885f0b695e3c6bdeb5637415966f0ca652c))
+
+* poetry lock ([`21340b2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21340b2deaeee04928c919c69a4c25ffada08561))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`00c79cf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/00c79cf4118d75da0f538802338c35989c38247f))
+
+* fix failing tests ([`22b5f0c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/22b5f0cd4241904999ba2e543f5e1218e728a1f1))
+
+* poetry lock ([`61553f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/61553f00c57436ea8a6b3fe73306c990e34fc189))
+
+
 ## v0.15.0 (2023-11-11)
 
 ### Feature
@@ -165,6 +224,10 @@ fixed deprecated/visualize
 
 replace slack with discord ([`5a6530a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a6530a3592ef271652409768ece66bf6183998e))
 
+* Merge remote-tracking branch &#39;upstream/main&#39; into share-magic-wormhole ([`ca04296`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca042968a53fbb8da0fe019c76964cbf435952f4))
+
+* fix wormhole sharing ([`a94c303`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a94c303452ace7688630a7487b79835b80f10604))
+
 
 ## v0.13.1 (2023-08-30)
 
@@ -272,6 +335,10 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](ht
 * use click + loguru ([`5b25b90`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b25b90fc4b0a7221a062170c3cb38c520afc718))
 
 ### Unknown
+
+* update poetry.lock file and some formatting ([`a03bd59`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a03bd59c06c674e79995def05c27bbb8cbbc7a94))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`24a3e79`](https://github.com/OpenAdaptAI/OpenAdapt/commit/24a3e79a7e036581ebe763b8261bc245c0ea0c08))
 
 * fix formatting ([`d668901`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d66890159c202308ee22aa919784f2d13a46b349))
 
@@ -602,6 +669,8 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`09f4e71`](htt
 
 * Update README.md ([`250949f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/250949f18ad6c72df16bce2ab6d32764c0af3a82))
 
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`5b9bbe0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b9bbe0824b730c548e9aeb4869193abbdfffcd5))
+
 * add default values when no parameters are passed ([`e8775e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e8775e8151fbb3965f372c89fc8d1c52b892b5c8))
 
 * Productivity measurement (#234)
@@ -707,6 +776,8 @@ https://github.com/OpenAdaptAI/OpenAdapt/pull/462#issuecomment-1673807055
 
 * use pull_request_target to trigger status checks for any git branch ([`c7813c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7813c2b42e963041a671b9c9c2057c9ea203609))
 
+* fix: enhance publish action and authors in pyproject.toml ([`dc5f2b6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc5f2b657f62f96193457a18be53166a41208a50))
+
 ### Refactor
 
 * refactor: add Privacy design API (#439)
@@ -791,6 +862,24 @@ fix undefined error in pylint and falek8
 * update utils
 
 * format for final commit ([`5151cb5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5151cb557599fb3958b04f9e6955229f3cd91b1e))
+
+### Unknown
+
+* resolve merge conflicts and linting errors from recent merge ([`0e8d620`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0e8d620fd53b828827c3d7d13306847d39658d21))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`1b2eef3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b2eef37dd7782c3f03a9626e52fddc25108100a))
+
+* fix poetry conflicts and conflicting files ([`8ea0ee4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8ea0ee40d217c61a8232f490bbe8c3ff7e43278b))
+
+* test publish to test pypi ([`09dd4d6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/09dd4d66e9c3da0901b9e8c1ed9c5500075cc929))
+
+* Merge remote-tracking branch &#39;upstream/enhance-publishing&#39; into share-magic-wormhole ([`8b1299d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8b1299d42ea79245f8255c76d275c0c332b348c7))
+
+* change author name to OpenAdapt.AI Team ([`c77f339`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c77f33965bdcb2a7058d172a5eae52f4970e3e52))
+
+* modify release-and-publish.yml ([`ebea2cb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ebea2cb5979e08ba38a34f382374497be158980c))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`75b324d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/75b324d31f71f6192c3e55a59cd331e4932b2092))
 
 
 ## v0.8.0 (2023-08-10)
@@ -899,6 +988,10 @@ This reverts commit 82e62d95093e6114653f59b8a7ea94233efc60e1.
 
 * fix pytest (#460) ([`1049589`](https://github.com/OpenAdaptAI/OpenAdapt/commit/10495890195acf3bc6a51731f0471fbef31835d7))
 
+* update poetry.lock ([`4d66584`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4d66584d254e3907ee495e2dab55f49e4166e69c))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`453d2c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/453d2c25d890e59427adfd0f444bc3068cc5909d))
+
 
 ## v0.7.1 (2023-08-10)
 
@@ -939,6 +1032,28 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7648210`](htt
 * remove trf from toml and then ran `poetry update`
 
 * update all neccessary files ([`d638469`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d638469e238eb5fb3d386ca2ad8c64542a10c6c9))
+
+### Unknown
+
+* Add timestamp to exported recording db files and update unit tests ([`5fd9868`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5fd9868836a9fa8eb258448cd84227b26b84b232))
+
+* remove unused import ([`961130b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/961130b90c6417c9d4992e76e9a179d468a71630))
+
+* run black --preview and modify main.yml to check black --preview ([`d9eefa0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d9eefa0ed234c68e567db96807c55737968aee7e))
+
+* Merge branch &#39;share-magic-wormhole&#39; of https://github.com/Mustaballer/puterbot into share-magic-wormhole ([`b6cce11`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b6cce110bb3b550c2c1b0fa80b7bc6c3a335b176))
+
+* add type annotation ([`7d0d343`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7d0d3438effd3ca361d49d92e2f1321826f5535c))
+
+* resolve https://github.com/OpenAdaptAI/OpenAdapt/issues/441 ([`0123aae`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0123aae77e0c362bc968c5b76420b0843dd60120))
+
+* Update openadapt/share.py
+
+Co-authored-by: M &lt;mortezaho.1376@gmail.com&gt; ([`ea25b53`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ea25b536da800b89f83e76b80f907bead5025797))
+
+* resolve merge issues ([`c3173f8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c3173f8a2c46fa7124788383d3720ed6a32b1272))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`1a10f8a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1a10f8a924c1c443a9eba5b12a99d7907a31ba15))
 
 
 ## v0.7.0 (2023-07-28)
@@ -1030,6 +1145,14 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](htt
 * refactor(crud): add missing type annotations
 
 * refactor(crud): add missing type annotations ([`9189bca`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9189bca7aef05ef7801545cc0a55bca54898820a))
+
+### Unknown
+
+* address flake8 errors ([`f29f199`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f29f19935b3d71c8e21ad3aaf5c64310e57c434e))
+
+* resolve merge conflicts ([`2f66b8a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2f66b8ac81ea24dbc648ac4574cf125809caf77d))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`ada2aad`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ada2aad0eef8962e412b5026920eb7f70434b032))
 
 
 ## v0.5.8 (2023-07-25)
@@ -1263,6 +1386,26 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`c815924`](htt
 Co-authored-by: Mustafa Abdulrahman &lt;mus2003.abdul@gmail.com&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`2d4e8c6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2d4e8c6fee245bfdc4726f113b27367a36ae96c7))
 
+### Unknown
+
+* update unit tests ([`76f14b0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/76f14b0cdb4bfacde7858d983d59756e182e098d))
+
+* modify conftest.py and fixtures.sql to insert data to every table for fixture ([`653e785`](https://github.com/OpenAdaptAI/OpenAdapt/commit/653e78505775f6e2de1960475d2b07b74f06d6f7))
+
+* remove unittest class and fix failing test case for receiving recording, and clean up share.py ([`644c83a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/644c83a02a5ab0274801b39212c08eb2f9b36009))
+
+* refactor copy_recording_data ([`786e063`](https://github.com/OpenAdaptAI/OpenAdapt/commit/786e063e33a504b075c37200ff3d24353a836609))
+
+* remove unnecessary function and todo comment ([`9b7f7af`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9b7f7afb8ca51a093e868f61d39cc239cf2117b0))
+
+* add command to visualize recording ([`18a4918`](https://github.com/OpenAdaptAI/OpenAdapt/commit/18a4918796a15d3c8d928a48c3fbea212315938c))
+
+* extract db file upon receiving recording ([`625c192`](https://github.com/OpenAdaptAI/OpenAdapt/commit/625c1922c3007f4854364a759d87e39493d4caf5))
+
+* Copy all data relating to recording_timestamp in all tables ([`2f1548d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2f1548d31aab0fe4010cf46241b4695f04428bd7))
+
+* copy alembic migrations ([`2149adc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2149adc4102606ee1e40153dc9788225eefd6693))
+
 
 ## v0.5.6 (2023-07-20)
 
@@ -1293,6 +1436,18 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`2d4e8c6`](htt
 * fix(merge_consecutive_keyboard_events): Fix reference before assignment (#411)
 
 Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-Pro.local&gt; ([`e136b28`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e136b28731d09745a23adb11cc5309ec86b7fdd9))
+
+### Unknown
+
+* modify env names and add asserts to share.py ([`5893b3e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5893b3e599ce05ec0a8ae20fea592d666ac00bd9))
+
+* modify copy deb function to return recording data and remov comments and unused set_db_url ([`6196876`](https://github.com/OpenAdaptAI/OpenAdapt/commit/619687685cb4e681365286d5332ffc73b85b836a))
+
+* Merge branch &#39;share-magic-wormhole&#39; of https://github.com/Mustaballer/puterbot into share-magic-wormhole ([`7a67386`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7a673862638897c17e5b326642d99490157cc0fb))
+
+* use new approach for copying db ([`2f2c0dd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2f2c0dd35ea700c1fa160c17ea9159ef26b1e5c7))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`d4d3f1c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d4d3f1c238e3a511dec73707ca9e3f9845b5f4a2))
 
 
 ## v0.5.5 (2023-07-17)
@@ -1515,7 +1670,23 @@ https://github.com/OpenAdaptAI/OpenAdapt/pull/289/files#r1252150636 ([`755dd55`]
 
 ### Unknown
 
+* use .env.example for creating .env and removed unnecessary exceptions ([`3992d1c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3992d1c78d334a352054c2575db248df8677ec4a))
+
+* Add .env.example and generate env in config.py ([`2d54e83`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2d54e83e405cc97ba7c5af222c494c23f4f78de1))
+
 * update `config.SCRUB_ENABLED` to False (#373) ([`3f32883`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3f328830380468e95932e1fab9c2c390112069a3))
+
+* merge with latest main ([`04c69b8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/04c69b8897d12286a38d2e1d2d4c1cfe5fe507a9))
+
+* delete temp .env if ctrl+c during sharing ([`e675227`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e675227a2a7b69a1c13b2e3c2351306ba72b5934))
+
+* Add missing docstring in db.py ([`8317634`](https://github.com/OpenAdaptAI/OpenAdapt/commit/83176344093cdff64e7aa789472912dd1532d385))
+
+* ran black and update poetry.lock ([`5e52b5c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5e52b5c5a7175f4c4de17b025037a19484ce8563))
+
+* Add exception handling when ctrl+c during sharing that deletes db and zip file and reverts db environment. Also add type and return annotations ([`01eef24`](https://github.com/OpenAdaptAI/OpenAdapt/commit/01eef24eea31efde7dc649799e95aa0136951497))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`1096a15`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1096a1566e7d198c1d8790d87f29c2b90ffefeed))
 
 
 ## v0.5.1 (2023-07-04)
@@ -1927,9 +2098,19 @@ https://github.com/MLDSAI/OpenAdapt/pull/312#discussion_r1244070600
 
 ### Unknown
 
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`088f370`](https://github.com/OpenAdaptAI/OpenAdapt/commit/088f370d40252d9852d528cb993eac1940bd04e4))
+
+* ran black -l 60, and it used call chain ([`4c59c10`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4c59c10aeeff5abc7e93c11c9a40bdfbfecebcf9))
+
 * Merge pull request #178 from Mustaballer/publishing-with-pypi
 
 Automatic Publishing with PyPi ([`a37b62f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a37b62f32b30fe13484846408fea28fa0c344fd0))
+
+* restore original db name instead of literal ([`b801caf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b801cafdaef9594eb46aab479ad87855a6cc3d4f))
+
+* use tempfile in test_share.py and address minor changes ([`3434a00`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3434a00b4134bd756043123a23458b3e1c4126ed))
+
+* moved functions in crud.py to db.py ([`dafca05`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dafca05e7547c0ba835a3e70f74ed87bc7520a70))
 
 * Update CONTRIBUTING.md referring to comments ([`84b623e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/84b623e466f0cb26ac0726d295a0930be64c70bc))
 
@@ -1961,6 +2142,14 @@ config.obfuscate ([`495a280`](https://github.com/OpenAdaptAI/OpenAdapt/commit/49
 
 * config.obfuscate ([`79c41f5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/79c41f5af2a79a4739d42a696bb37eb98374f1dc))
 
+* ran black ([`f58fd5f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f58fd5f325f6ca2eaffc6eef9e87df0ed1f9815e))
+
+* ran black ([`2211f78`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2211f7891318a7363106ebd2a1f32e09e84ab55f))
+
+* reformat file and group constants together in config.py ([`afd9810`](https://github.com/OpenAdaptAI/OpenAdapt/commit/afd9810527f878dc6b1e0213fa5d5caf2e83466a))
+
+* Remove unnecessary function and pass test cases ([`9819330`](https://github.com/OpenAdaptAI/OpenAdapt/commit/981933027f3299d88783b5d88d57c24ac3e620c8))
+
 * comments ([`a87e202`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a87e20247926993821c147232d014f0cfd779e86))
 
 * Merge pull request #310 from KrishPatel13/feature/install
@@ -1988,11 +2177,23 @@ as python3.10 is not a valid command ([`388ce67`](https://github.com/OpenAdaptAI
 
 * simplify the refresh command ([`ab56341`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ab56341d9a98643db4b143d0721fc88ec7a781cc))
 
+* fix merge conflict and use better approach for overwriting env ([`cbee5e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbee5e833a9a198b216fd52a52f3aaec3677e5c7))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`0977859`](https://github.com/OpenAdaptAI/OpenAdapt/commit/097785999ba1a7a44a31d8817e922a7d60b1b4ff))
+
+* try resolve merge conflict with poetry.lock ([`53f11f5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/53f11f512153b8c37f1b5eee9957354ff9ff99b6))
+
+* modify export_sql to use paramerterized queries to prevent sql injection ([`9dc1850`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9dc1850918e81648b9885dd8a1be836d5e8d95ef))
+
 * Organize Tesseract Installation ([`d3f479e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d3f479e98e2782c5337a283ac0f69201906971bf))
 
 * Merge pull request #292 from KrishPatel13/feature/scrub_mp4
 
 Scrubbing for mp4 files ([`fee2c72`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fee2c72e6b67fac5f84a9bd91c2d78dcc8e901a6))
+
+* Merge branch &#39;share-magic-wormhole&#39; of https://github.com/Mustaballer/puterbot into share-magic-wormhole ([`0a0208e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0a0208ee5d405492fc476025874aa2265ee3bce6))
+
+* Merge remote-tracking branch &#39;upstream/main&#39; into share-magic-wormhole ([`5fbdc1a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5fbdc1a8c65f8436ecc932caca8018b7e69c2a21))
 
 * organize imports ([`f2671f7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f2671f7ba6715e5874fbec986ba9d01d62ba4d0e))
 
@@ -2187,6 +2388,8 @@ Windowstate for windows ([`f837d62`](https://github.com/OpenAdaptAI/OpenAdapt/co
 
 Update Contributing Templates ([`8653d0c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8653d0cdf3bcb263989a0817f4475c2e9e93edc9))
 
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`395fa00`](https://github.com/OpenAdaptAI/OpenAdapt/commit/395fa00089e5fd17c6341107bace0f1b34fe7dce))
+
 * Merge pull request #215 from Mustaballer/github-actions-lint-tests
 
 Github actions for automatic testing and linting ([`0cd5c54`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0cd5c54fd1c300706d172dc7046ccfe557bcfea6))
@@ -2238,6 +2441,8 @@ changed the test_scrub ([`d03aae7`](https://github.com/OpenAdaptAI/OpenAdapt/com
 * Add .idea to gitignore ([`5a28170`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a28170d7e4f31916e376d8b8785f219d8d47445))
 
 * Merge branch &#39;main&#39; into publishing-with-pypi ([`cbdf887`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbdf887f9fbf71dcd1499f4cb65efdbca1fe26ef))
+
+* Merge branch &#39;main&#39; into share-magic-wormhole ([`b4b7879`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b4b787925453b3b8ea43b3806e5db4e69791a3a8))
 
 * Merge branch &#39;MLDSAI:main&#39; into feat/windowstate_for_windows ([`43ead42`](https://github.com/OpenAdaptAI/OpenAdapt/commit/43ead422f11337381000778d1c8430ddada2ed12))
 
@@ -2482,6 +2687,8 @@ Add openadapt/install ([`7db7cc9`](https://github.com/OpenAdaptAI/OpenAdapt/comm
 * check if stashing is needed ([`cf9afa6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf9afa6e5c457586cdd2950a47d1adc00185c58a))
 
 * added pull request template ([`bdb3ba8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bdb3ba81fdfa3f5ce6c650838b72543cef90bae8))
+
+* Copy from closed PR magic wormhole working code and test cases ([`8c0a78d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8c0a78d81a94e33605b81404df05ac081c2c27af))
 
 * add issue template to contributing ([`92889d9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/92889d96da5aa8d9fdb8e6c0ad136ab3e82ac5c3))
 
