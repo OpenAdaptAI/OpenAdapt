@@ -200,6 +200,7 @@ for key in _DEFAULTS:
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
 DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
 RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
+# TODO: clarify why this is necessary (see share.py)
 if DB_FNAME == "openadapt.db":  # noqa
     DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
 else:
