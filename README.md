@@ -2,7 +2,7 @@
 
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
 
-OpenAdapt is the *Open* source software *Adapt*er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
+**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
 ### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
@@ -11,7 +11,6 @@ OpenAdapt is the *Open* source software *Adapt*er between Large Multimodal Model
 ### OpenAdapt connects Foundation Models to GUIs:
 
 <img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
-
 
 ([Slides](https://t.ly/7RGr))
 
@@ -22,7 +21,8 @@ with the power of Large Multimodal Modals (LMMs) by:
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
-- Replaying synthetic input to complete tasks
+- Generating task trees by analyzing recordings (work-in-progress)
+- Replaying synthetic input to complete tasks (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
@@ -82,7 +82,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/HEAD/install/install_openadapt.sh)"
   </pre>
 
-<br/>
 <br/>
 
 ### Manual Setup
