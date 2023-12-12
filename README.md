@@ -154,7 +154,13 @@ This will open a scrollable window that looks something like this:
 
 <img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
 
-With `config.VISUALIZE_RUN_NATIVELY == False`, this will open your browser. It will look something like this:
+For an alternative visualization, run:
+
+```
+python -m openadapt.deprecated.visualize
+```
+
+This will open up a tab in your browser that looks something like this:
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
