@@ -66,6 +66,7 @@ flake8 = "^6.0.0"
 flake8-docstrings = "^1.7.0"
 moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
+magic-wormhole = "0.12.0"
 pyside6 = "^6.5.1.1"
 notify-py = "^0.3.42"
 flake8-annotations = "^3.0.1"
@@ -87,6 +88,7 @@ spacy-transformers = "^1.2.5"
 boto3 = "^1.28.30"
 botocore = "^1.31.30"
 easyocr = "^1.7.0"
+spacy-curated-transformers = "^0.2.0"
 
 [tool.pytest.ini_options]
 filterwarnings = [
