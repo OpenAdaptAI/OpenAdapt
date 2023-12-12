@@ -215,6 +215,7 @@ def set_db_url(db_fname: str) -> None:
     Args:
         db_fname (str): The database file name.
     """
+    # TODO: pass these in as parameters, whose default values are the globals
     global DB_FNAME, DB_FPATH, DB_URL
     DB_FNAME = db_fname
     if DB_FNAME == "openadapt.db":  # noqa
