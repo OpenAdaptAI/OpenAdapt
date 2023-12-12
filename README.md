@@ -12,6 +12,8 @@
 
 <img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
 
+Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
+
 ([Slides](https://t.ly/7RGr))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
