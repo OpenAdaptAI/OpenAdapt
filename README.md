@@ -1,6 +1,8 @@
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
-# OpenAdapt: AI-First Process Automation with Transformers
+# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
+
+OpenAdapt is the *Open* source software *Adapt*er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
 ### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
@@ -14,7 +16,7 @@
 ([Slides](https://t.ly/7RGr))
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
-with the power of Transformers by:
+with the power of Large Multimodal Modals (LMMs) by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
@@ -24,7 +26,7 @@ with the power of Transformers by:
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
-except that we use transformers instead of conventional RPA tools.
+except that we use Large Multimodal Models instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
 1. OpenAdapt is model agnostic
