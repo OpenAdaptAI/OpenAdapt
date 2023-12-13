@@ -1,7 +1,7 @@
 ---
 description: >-
   This Python library implements AI-First Process Automation with the power of
-  Transformers by recording user input / screenshots & replaying generated
+  Large Multimodal Models (LMMs) by recording user input / screenshots & replaying generated
   synthetic input via model completions.
 ---
 
