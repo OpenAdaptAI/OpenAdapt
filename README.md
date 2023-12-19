@@ -269,10 +269,18 @@ Your submission will be evaluated based on the following criteria:
    in order to generate code and/or evaluate design decisions is encouraged. If
    you choose to do so, please include the full transcript.
 
+## 📢 Open Contract Positions at OpenAdapt.AI 🚀
 
-## We're hiring!
+We're excited to announce new contract opportunities for talented developers to join our team at OpenAdapt.AI:
 
-If you're interested in getting paid for your work, please mention it in your Pull Request.
+Frontend Developer: You'll be creating and testing cool features like process visualization, demo booking, and our blog.
+
+Machine Learning Engineer: Get hands-on with building and testing innovative process replay strategies, and extracting process trees from recordings, using LLMs/LMMs.
+
+Software Engineer: Focus on enhancing memory optimization during process recording/replay and developing process observation and productivity measurement tools.
+
+🔍 How to Apply?
+Easy! Just submit an empty Pull Request to OpenAdapt or OpenAdapt.web. In your PR description, include a brief informal outline of your approach and any questions you might have. Don't hesitate to reach out on Discord for clarifications.
 
 ## Troubleshooting
 
