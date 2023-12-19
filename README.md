@@ -56,6 +56,31 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ### And much more!
 
+## 🚀 Open Contract Positions at OpenAdapt.AI
+
+### Join Our Innovative Team!
+
+We are thrilled to open new contract positions for developers passionate about pushing boundaries in technology. If you're ready to make a significant impact, consider the following roles:
+
+#### Frontend Developer
+- **Responsibilities**: Develop and test key features such as process visualization, demo booking, app store, and blog integration.
+- **Skills**: Proficiency in modern frontend technologies and a knack for UI/UX design.
+
+#### Machine Learning Engineer
+- **Role**: Implement and refine process replay strategies using state-of-the-art LLMs/LMMs. Extract dynamic process descriptions from extensive process recordings.
+- **Skills**: Strong background in machine learning, experience with LLMs/LMMs, and problem-solving aptitude.
+
+#### Software Engineer
+- **Focus**: Enhance memory optimization techniques during process recording and replay. Develop sophisticated tools for process observation and productivity measurement.
+- **Skills**: Expertise in software optimization, memory management, and analytics.
+
+### 🔍 How to Apply
+- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
+- **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
+- **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
+
+We're looking forward to your innovative contributions. Let's create the future of process automation together!
+
 ## Install
 
 <br/>
@@ -107,7 +132,6 @@ poetry shell
 alembic upgrade head
 pytest
 ```
-
 
 ## Permissions
 
@@ -180,7 +204,6 @@ Other replay strategies include:
 - [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
-
 
 ## Contributing
 
@@ -268,11 +291,6 @@ Your submission will be evaluated based on the following criteria:
 4. *Bonus*: interacting with ChatGPT and/or other language transformer models
    in order to generate code and/or evaluate design decisions is encouraged. If
    you choose to do so, please include the full transcript.
-
-
-## We're hiring!
-
-If you're interested in getting paid for your work, please mention it in your Pull Request.
 
 ## Troubleshooting
 
