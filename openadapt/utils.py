@@ -789,5 +789,33 @@ def get_functions(name: str) -> dict:
     return functions
 
 
+def create_progress_logger(msg, interval=.1):
+    """
+    Creates a progress logger function with a specified reporting interval.
+
+    Args:
+        interval (float): Every nth % at which to update progress
+
+    Returns:
+        callable: function to pass into urllib.request.urlretrieve as reporthook
+    """
+    last_reported_percent = 0
+
+    def download_progress(block_num, block_size, total_size):
+        nonlocal last_reported_percent
+        downloaded = block_num * block_size
+        if total_size > 0:
+            percent = (downloaded / total_size) * 100
+            if percent - last_reported_percent >= interval:
+                sys.stdout.write(f"\r{percent:.1f}% {msg}")
+                sys.stdout.flush()
+                last_reported_percent = percent
+        else:
+            sys.stdout.write(f"\rDownloaded {downloaded} bytes")
+            sys.stdout.flush()
+
+    return download_progress
+
+
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))

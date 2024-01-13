@@ -30,7 +30,6 @@ from segment_anything import (
     modeling,
     sam_model_registry,
 )
-import fire
 import matplotlib.axes as axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -78,8 +77,8 @@ class SAMReplayStrategyMixin(BaseReplayStrategy):
             # from https://github.com/facebookresearch/segment-anything/blob/main/notebooks/automatic_mask_generator_example.ipynb
             # TODO: use points_grid instead, masked by active_window (for performance)
             points_per_side=64,
-            pred_iou_thresh=0.86,
-            stability_score_thresh=0.95,#0.92,
+            #pred_iou_thresh=0.86,
+            #stability_score_thresh=0.95,#0.92,
             crop_n_layers=1,
             crop_n_points_downscale_factor=2,
             # TODO: determine dynamically based on screenshot size
@@ -383,46 +382,3 @@ def initialize_sam_model(
         logger.info(f"unlinking {checkpoint_file_path=}")
         checkpoint_file_path.unlink()
         return initialize_sam_model(model_name, checkpoint_dir_path)
-
-def create_progress_logger(msg, interval=.1):
-    """
-    Creates a progress logger function with a specified reporting interval.
-
-    Args:
-        interval (float): Every nth % at which to update progress
-
-    Returns:
-        callable: function to pass into urllib.request.urlretrieve as reporthook
-    """
-    last_reported_percent = 0
-
-    def download_progress(block_num, block_size, total_size):
-        nonlocal last_reported_percent
-        downloaded = block_num * block_size
-        if total_size > 0:
-            percent = (downloaded / total_size) * 100
-            if percent - last_reported_percent >= interval:
-                sys.stdout.write(f"\r{percent:.1f}% {msg}")
-                sys.stdout.flush()
-                last_reported_percent = percent
-        else:
-            sys.stdout.write(f"\rDownloaded {downloaded} bytes")
-            sys.stdout.flush()
-
-    return download_progress
-
-
-def run_on_image(image_path: str):
-
-    class DummyReplayStrategy(SAMReplayStrategyMixin):
-        def get_next_action_event():
-            pass
-
-    logger.info(f"{image_path=}")
-    image = Image.open(image_path).convert("RGB")
-    sam = DummyReplayStrategy(None)
-    sam.get_image_bboxes(image)
-
-
-if __name__ == "__main__":
-    fire.Fire(run_on_image)

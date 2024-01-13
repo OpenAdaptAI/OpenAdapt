@@ -10,14 +10,14 @@ import importlib
 from loguru import logger
 
 
-package_name = "openadapt.strategies"
+PACKAGE_NAME = "openadapt.strategies"
 
 
 # Iterate through all modules in the specified package
 strategy_by_name = {}
-for _, module_name, _ in pkgutil.iter_modules([package_name.replace('.', '/')]):
+for _, module_name, _ in pkgutil.iter_modules([PACKAGE_NAME.replace('.', '/')]):
     # Import the module
-    module = importlib.import_module(f"{package_name}.{module_name}")
+    module = importlib.import_module(f"{PACKAGE_NAME}.{module_name}")
     # Filter and add classes ending with 'ReplayStrategy' to the global namespace
     names = [
         name
@@ -35,4 +35,5 @@ for _, module_name, _ in pkgutil.iter_modules([package_name.replace('.', '/')]):
         },
     }
 logger.info(f"strategy_by_name=\n{pformat(strategy_by_name)}")
+
 globals().update(strategy_by_name)

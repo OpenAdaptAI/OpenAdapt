@@ -1,0 +1,3 @@
+[submodule "external/SoM"]
+	path = external/SoM
+	url = https://github.com/OpenAdaptAI/SoM
