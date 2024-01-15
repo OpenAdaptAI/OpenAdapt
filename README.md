@@ -4,7 +4,11 @@
 
 [Join the Discussion on the Request for Comments](https://github.com/OpenAdaptAI/OpenAdapt/discussions/552)
 
-See also: https://github.com/OpenAdaptAI/SoM
+See also:
+
+- https://github.com/OpenAdaptAI/SoM
+- https://github.com/OpenAdaptAI/pynput
+- https://github.com/OpenAdaptAI/atomacos
 
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
 
