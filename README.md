@@ -4,6 +4,8 @@
 
 [Join the Discussion on the Request for Comments](https://github.com/OpenAdaptAI/OpenAdapt/discussions/552)
 
+See also: https://github.com/OpenAdaptAI/SoM
+
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
 
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
