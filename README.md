@@ -68,8 +68,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 
 ## 🚀 Open Contract Positions at OpenAdapt.AI
 
-### Join Our Innovative Team!
-
 We are thrilled to open new contract positions for developers passionate about pushing boundaries in technology. If you're ready to make a significant impact, consider the following roles:
 
 #### Frontend Developer
@@ -84,12 +82,16 @@ We are thrilled to open new contract positions for developers passionate about p
 - **Focus**: Enhance memory optimization techniques during process recording and replay. Develop sophisticated tools for process observation and productivity measurement.
 - **Skills**: Expertise in software optimization, memory management, and analytics.
 
+#### Technical Writer
+- **Focus**: Maintaining [OpenAdapt](https://github.com/OpenAdaptAI) repositories
+- **Skills**: Passion for writing and/or documentation
+
 ### 🔍 How to Apply
 - **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
 - **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
 - **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
 
-We're looking forward to your innovative contributions. Let's create the future of process automation together!
+We're looking forward to your contributions. Let's build the future 🚀
 
 ## Install
 
