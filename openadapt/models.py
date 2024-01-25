@@ -261,6 +261,7 @@ class Screenshot(db.Base):
     _diff_mask = None
 
     _base64 = None
+    _marked_image = None
 
     @property
     def image(self) -> Image.Image:
@@ -353,6 +354,18 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
+
+    def base64(self) -> str:
+        """Returns data URI of JPEG encoded base64"""
+        if not _base64:
+            _base64 = utils.image2utf8(self.image)
+        return _base64
+
+    @property
+    def marked_image(self) -> Image:
+        if not self._marked_image:
+            self._marked_image = utils.get_marked_image(self.base64)
+        return self._marked_image
 
 
 class WindowEvent(db.Base):

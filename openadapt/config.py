@@ -18,6 +18,7 @@ from loguru import logger
 import git
 import sentry_sdk
 
+# TODO: replace with pydantic
 _DEFAULTS = {
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
@@ -111,6 +112,8 @@ _DEFAULTS = {
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
+    "REPLICATE_API_TOKEN": "<set your api key in .env>",
+    "ULTRALYTICS_API_KEY": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings

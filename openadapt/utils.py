@@ -9,6 +9,8 @@ from logging import StreamHandler
 from typing import Union
 import base64
 import inspect
+import hashlib
+import requests
 import os
 import sys
 import threading
@@ -21,8 +23,9 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import replicate
 
-from openadapt import common, config
+from openadapt import cache, common, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
@@ -816,6 +819,29 @@ def create_progress_logger(msg, interval=.1):
 
     return download_progress
 
+
+def hash(s: str):
+    b = str.encode(s)
+    hash_object = hashlib.sha256(b)
+    hex_digest = hash_object.hexdigest()
+    return hex_digest
+
+def display_two_images(image1: Image, image2: Image) -> None:
+    # Calculate dimensions for the combined image
+    width1, height1 = image1.size
+    width2, height2 = image2.size
+    combined_width = width1 + width2
+    combined_height = max(height1, height2)
+
+    # Create a new blank image with the combined dimensions
+    combined_image = Image.new('RGB', (combined_width, combined_height))
+
+    # Paste the two images into the combined image
+    combined_image.paste(image1, (0, 0))
+    combined_image.paste(image2, (width1, 0))
+
+    # Display the combined image
+    combined_image.show()
 
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))
