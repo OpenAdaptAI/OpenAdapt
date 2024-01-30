@@ -232,36 +232,56 @@ def get_recording(timestamp: int) -> Recording:
     return db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table: BaseModel, recording_timestamp: int) -> list[BaseModel]:
+def _get(
+    table: BaseModel,
+    recording_timestamp: float,
+    start_timestamp: float | None,
+    end_timestamp: float | None,
+) -> list[BaseModel]:
     """Retrieve records from the database table based on the recording timestamp.
 
     Args:
         table (BaseModel): The database table to query.
-        recording_timestamp (int): The recording timestamp to filter the records.
+        recording_timestamp: The recording timestamp to filter the records.
+        start_timestamp: Earliest timestamp to return.
+        end_timestamp: Latest timestamp to return.
 
     Returns:
         list[BaseModel]: A list of records retrieved from the database table,
           ordered by timestamp.
     """
-    return (
+    query = (
         db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
+    )
+    if start_timestamp:
+        query = query.filter(table.timestamp >= start_timestamp)
+    if end_timestamp:
+        query = query.filter(table.timestamp <= end_timestamp)
+    return (
+        query
         .order_by(table.timestamp)
         .all()
     )
 
 
-def get_action_events(recording: Recording) -> list[ActionEvent]:
+def get_action_events(
+    recording: Recording,
+    start_timestamp: float | None = None,
+    end_timestamp: float | None = None,
+) -> list[ActionEvent]:
     """Get action events for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        start_timestamp: Earliest timestamp to return.
+        end_timestamp: Latest timestamp to return.
 
     Returns:
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    action_events = _get(ActionEvent, recording.timestamp)
+    action_events = _get(ActionEvent, recording.timestamp, start_timestamp, end_timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
@@ -368,16 +388,22 @@ def save_screenshot_diff(screenshots: list[Screenshot]) -> list[Screenshot]:
     return screenshots
 
 
-def get_screenshots(recording: Recording) -> list[Screenshot]:
+def get_screenshots(
+    recording: Recording,
+    start_timestamp: float | None = None,
+    end_timestamp: float | None = None,
+) -> list[Screenshot]:
     """Get screenshots for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        start_timestamp: Earliest timestamp to return.
+        end_timestamp: Latest timestamp to return.
 
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = _get(Screenshot, recording.timestamp)
+    screenshots = _get(Screenshot, recording.timestamp, start_timestamp, end_timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
@@ -389,16 +415,22 @@ def get_screenshots(recording: Recording) -> list[Screenshot]:
     return screenshots
 
 
-def get_window_events(recording: Recording) -> list[WindowEvent]:
+def get_window_events(
+    recording: Recording,
+    start_timestamp: float | None = None,
+    end_timestamp: float | None = None,
+) -> list[WindowEvent]:
     """Get window events for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        start_timestamp: Earliest timestamp to return.
+        end_timestamp: Latest timestamp to return.
 
     Returns:
         list[WindowEvent]: A list of window events for the recording.
     """
-    return _get(WindowEvent, recording.timestamp)
+    return _get(WindowEvent, recording.timestamp, start_timestamp, end_timestamp)
 
 
 def new_session() -> None:

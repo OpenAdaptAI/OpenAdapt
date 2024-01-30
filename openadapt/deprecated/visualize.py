@@ -11,9 +11,10 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
+import fire
 
-from openadapt import config
-from openadapt.db.crud import get_latest_recording
+from openadapt import config, process
+from openadapt.db.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
@@ -36,6 +37,7 @@ MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
+ANALYZE_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
     table {
@@ -184,25 +186,47 @@ def dict2html(
 
 
 @logger.catch
-def main(recording: Recording = None) -> bool:
+def main(
+    recording_timestamp: float | None = None,
+    start_timestamp: float | None = None,
+    end_timestamp: float | None = None,
+    max_events: int | None = None,
+    skip_events: int = 0,
+    process_events: bool = PROCESS_EVENTS,
+    analyze_events: bool = ANALYZE_EVENTS,
+    cleanup: bool = False,
+) -> bool:
     """Visualize a recording.
 
     Args:
-        recording (Recording, optional): The recording to visualize.
+        recording_timestamp: Timestamp of the recording to visualize.
+          If not provided, the the latest recording will be visualized.
+        start_timestamp: Earliest timestamp in the recording to visualize.
+        end_timestamp: Latest timestamp in the recording to visualize.
+        process_events: Whether to fuse events.
 
     Returns:
-        bool: True if visualization was successful, None otherwise.
+        True if visualization was successful, None otherwise.
     """
     configure_logging(logger, LOG_LEVEL)
 
-    if recording is None:
+    if recording_timestamp:
+        recording = get_recording(recording_timestamp)
+    else:
         recording = get_latest_recording()
+
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
-    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(
+        recording,
+        process=process_events,
+        meta=meta,
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+    )
     event_dicts = rows2dicts(action_events)
 
     if SCRUB:
@@ -234,8 +258,8 @@ def main(recording: Recording = None) -> bool:
     logger.info(f"{len(action_events)=}")
 
     num_events = (
-        min(MAX_EVENTS, len(action_events))
-        if MAX_EVENTS is not None
+        min(max_events + skip_events, len(action_events))
+        if max_events is not None
         else len(action_events)
     )
     with tqdm(
@@ -246,10 +270,16 @@ def main(recording: Recording = None) -> bool:
         dynamic_ncols=True,
     ) as progress:
         for idx, action_event in enumerate(action_events):
-            if idx == MAX_EVENTS:
+            if idx < skip_events:
+                continue
+            if max_events and idx == max_events + skip_events:
                 break
             image = display_event(action_event)
-            diff = display_event(action_event, diff=True)
+            try:
+                diff = display_event(action_event, diff=True)
+            except Exception as exc:
+                logger.exception(exc)
+                import ipdb; ipdb.set_trace()
             mask = action_event.screenshot.diff_mask
 
             if SCRUB:
@@ -307,6 +337,28 @@ def main(recording: Recording = None) -> bool:
                     ),
                 ]
             )
+            rows.append(
+                [
+                    row(
+                        Div(text=f"""
+                            <table>
+                                {dict2html(process.describe_action(action_event))}
+                            </table>
+                        """),
+                    ),
+                ]
+            )
+            rows.append(
+                [
+                    row(
+                        Div(
+                            text="-" * 200,
+                            sizing_mode="stretch_width",
+                            width=800,
+                        )
+                    )
+                ]
+            )
 
             progress.update()
 
@@ -323,14 +375,16 @@ def main(recording: Recording = None) -> bool:
         )
     )
 
-    def cleanup() -> None:
+    def _cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
 
-    Timer(1, cleanup).start()
+
+    if cleanup:
+        Timer(1, _cleanup).start()
     return True
 
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

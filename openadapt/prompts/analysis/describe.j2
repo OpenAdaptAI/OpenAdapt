@@ -1,0 +1,57 @@
+We are currently in the process of creating a graph describing a process, in which nodes are actions, and edges are states. Nodes represent distinct user actions such as keyboard inputs or mouse clicks, each with specific parameters. Edges define the transitions between these actions, including conditions or sequences. The graph is directed, emphasizing the flow of the process.
+Consider the following action:
+###
+{{ action }}
+###
+At the time this action was taken, the active window state was:
+###
+{{ window_state }}
+###
+Considering the associated screenshot, describe this action in a format that is
+amenable to constructing a process graph, parameterizing the specifics where necessary.
+Based on the associated screenshot, describe this action for inclusion in the process graph. Emphasize action type, parameters, application context, and pre/post conditions. Ensure consistency in terminology for similar actions and provide enough detail for parameterization. Be mindful of the screenshot's contextual relevance.
+Respond in JSON only. The JSON should match the following schema:
+###
+{
+  "type": "object",
+  "required": ["actionType", "action", "parameters", "preconditionState", "postconditionState", "additionalContext"],
+  "properties": {
+    "actionType": {
+      "type": "string",
+      "description": "Type of the action, e.g., Keyboard Shortcut, Mouse Click."
+    },
+    "action": {
+      "type": "string",
+      "description": "Specific action performed, e.g., Switch Application."
+    },
+    "parameters": {
+      "type": "object",
+      "required": ["command", "context"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Specific command or input used in the action."
+        },
+        "context": {
+          "type": "string",
+          "description": "Application or environment context where the action is performed."
+        }
+      },
+      "additionalProperties": false
+    },
+    "preconditionState": {
+      "type": "string",
+      "description": "State of the system before the action is performed."
+    },
+    "postconditionState": {
+      "type": "string",
+      "description": "State of the system after the action is performed."
+    },
+    "additionalContext": {
+      "type": "string",
+      "description": "Any additional information from the screenshot that is relevant to the action."
+    }
+  },
+  "additionalProperties": false
+}
+###

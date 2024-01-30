@@ -8,6 +8,8 @@ import sys
 
 from loguru import logger
 
+from openadapt import config
+
 if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform in ("win32", "linux"):
@@ -24,7 +26,7 @@ def get_active_window_data() -> dict[str, Any] | None:
         dict or None: A dictionary containing information about the active window,
         or None if the state is not available.
     """
-    state = get_active_window_state()
+    state = get_active_window_state(config.RECORD_WINDOW_DATA)
     if not state:
         return None
     title = state["title"]
@@ -45,7 +47,7 @@ def get_active_window_data() -> dict[str, Any] | None:
     return window_data
 
 
-def get_active_window_state() -> dict | None:
+def get_active_window_state(read_window_data: bool) -> dict | None:
     """Get the state of the active window.
 
     Returns:
@@ -54,7 +56,7 @@ def get_active_window_state() -> dict | None:
     """
     # TODO: save window identifier (a window's title can change, or
     try:
-        return impl.get_active_window_state()
+        return impl.get_active_window_state(read_window_data)
     except Exception as exc:
         logger.warning(f"{exc=}")
         return None

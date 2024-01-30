@@ -114,6 +114,11 @@ class ActionEvent(db.Base):
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
+    original_timestamp = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.original_timestamp = self.timestamp
 
     def _key(
         self, key_name: str, key_char: str, key_vk: str
@@ -212,7 +217,7 @@ class ActionEvent(db.Base):
             "element_state",
         ]
         attrs = [getattr(self, attr_name) for attr_name in attr_names]
-        attrs = [int(attr) if isinstance(attr, float) else attr for attr in attrs]
+        #attrs = [int(attr) if isinstance(attr, float) else attr for attr in attrs]
         attrs = [
             f"{attr_name}=`{attr}`"
             for attr_name, attr in zip(attr_names, attrs)
@@ -259,6 +264,7 @@ class Screenshot(db.Base):
     _image = None
     _diff = None
     _diff_mask = None
+    _base64 = None
 
     @property
     def image(self) -> Image:
@@ -351,6 +357,14 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
+
+    @property
+    def base64(self) -> str:
+        """Return data URI of JPEG encoded base64"""
+        if not self._base64:
+            from openadapt import utils
+            self._base64 = utils.image2utf8(self.image)
+        return self._base64
 
 
 class WindowEvent(db.Base):

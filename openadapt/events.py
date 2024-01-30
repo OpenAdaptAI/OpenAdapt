@@ -17,13 +17,14 @@ from openadapt.db import crud
 MAX_PROCESS_ITERS = 1
 MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD = 1
 MOUSE_MOVE_EVENT_MERGE_MIN_IDX_DELTA = 5
-KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS = True
 
 
 def get_events(
     recording: models.Recording,
     process: bool = True,
     meta: dict = None,
+    start_timestamp: float | None = None,
+    end_timestamp: float | None = None,
 ) -> list[models.ActionEvent]:
     """Retrieve events for a recording.
 
@@ -33,26 +34,28 @@ def get_events(
           types of events. Default is True.
         meta (dict): Metadata dictionary to populate with information
           about the processing. Default is None.
+        start_timestamp: Earliest timestamp in the recording to visualize.
+        end_timestamp: Latest timestamp in the recording to visualize.
 
     Returns:
         list: A list of action events.
     """
     start_time = time.time()
-    action_events = crud.get_action_events(recording)
-    window_events = crud.get_window_events(recording)
-    screenshots = crud.get_screenshots(recording)
+    action_events = crud.get_action_events(recording, start_timestamp, end_timestamp)
+    #window_events = crud.get_window_events(recording)
+    #screenshots = crud.get_screenshots(recording)
 
     raw_action_event_dicts = utils.rows2dicts(action_events)
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 
     num_action_events = len(action_events)
     assert num_action_events > 0, "No action events found."
-    num_window_events = len(window_events)
-    num_screenshots = len(screenshots)
+    #num_window_events = len(window_events)
+    #num_screenshots = len(screenshots)
 
     num_action_events_raw = num_action_events
-    num_window_events_raw = num_window_events
-    num_screenshots_raw = num_screenshots
+    #num_window_events_raw = num_window_events
+    #num_screenshots_raw = num_screenshots
     duration_raw = action_events[-1].timestamp - action_events[0].timestamp
 
     num_process_iters = 0
@@ -61,28 +64,28 @@ def get_events(
             logger.info(
                 f"{num_process_iters=} "
                 f"{num_action_events=} "
-                f"{num_window_events=} "
-                f"{num_screenshots=}"
+                #f"{num_window_events=} "
+                #f"{num_screenshots=}"
             )
             (
                 action_events,
-                window_events,
-                screenshots,
+                #window_events,
+                #screenshots,
             ) = process_events(
                 action_events,
-                window_events,
-                screenshots,
+                #window_events,
+                #screenshots,
             )
             if (
                 len(action_events) == num_action_events
-                and len(window_events) == num_window_events
-                and len(screenshots) == num_screenshots
+                #and len(window_events) == num_window_events
+                #and len(screenshots) == num_screenshots
             ):
                 break
             num_process_iters += 1
             num_action_events = len(action_events)
-            num_window_events = len(window_events)
-            num_screenshots = len(screenshots)
+            #num_window_events = len(window_events)
+            #num_screenshots = len(screenshots)
             if num_process_iters == MAX_PROCESS_ITERS:
                 break
 
@@ -95,14 +98,14 @@ def get_events(
             num_action_events,
             num_action_events_raw,
         )
-        meta["num_window_events"] = format_num(
-            num_window_events,
-            num_window_events_raw,
-        )
-        meta["num_screenshots"] = format_num(
-            num_screenshots,
-            num_screenshots_raw,
-        )
+        #meta["num_window_events"] = format_num(
+        #    num_window_events,
+        #    num_window_events_raw,
+        #)
+        #meta["num_screenshots"] = format_num(
+        #    num_screenshots,
+        #    num_screenshots_raw,
+        #)
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
         if len(action_events) > 1:
@@ -112,6 +115,10 @@ def get_events(
     end_time = time.time()
     duration = end_time - start_time
     logger.info(f"{duration=}")
+
+    for prev, cur in zip(action_events, action_events[1:]):
+        cur.screenshot.prev = prev.screenshot
+    action_events[0].screenshot.prev = action_events[0].screenshot
 
     return action_events  # , window_events, screenshots
 
@@ -450,15 +457,42 @@ def merge_consecutive_mouse_click_events(
     )
 
 
+def remove_invalid_keyboard_events(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
+    """Remove invalid keyboard events."""
+
+    return [
+        event
+        for event in events
+        # https://github.com/moses-palmer/pynput/issues/481
+        if not str(event.key) == "<0>"
+    ]
+
+
 def merge_consecutive_keyboard_events(
     events: list[models.ActionEvent],
-    group_named_keys: bool = KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS,
 ) -> list[models.ActionEvent]:
     """Merge consecutive keyboard char press events into a single press event."""
 
+    # TODO XXX: if the mouse is moved (e.g. accidentally) while a key is pressed,
+    # the key's pressed state will be lost
+    _pressed_keys = set()  # currently unused, see comment in is_target_event below
+
     def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
-        is_target_event = bool(event.key)
-        logger.debug(f"{is_target_event=} {event=}")
+        # possible workaround (may result in lost mouse events)
+        """
+        logger.info(f"{_pressed_keys=}")
+        if event.key and event.name == "press":
+            _pressed_keys.add(event.key)
+        elif event.key and event.name == "release":
+            if event.key not in _pressed_keys:
+                logger.warning(f"{event.key} not in {_pressed_keys=}")
+            else:
+                _pressed_keys.remove(event.key)
+        """
+        is_target_event = bool(event.key) or _pressed_keys
+        logger.debug(f"{_pressed_keys=} {is_target_event=} {event=}")
         return is_target_event
 
     def get_group_idx_tups(to_merge: list[models.ActionEvent]) -> list[tuple[int, int]]:
@@ -468,17 +502,16 @@ def merge_consecutive_keyboard_events(
         group_idx_tups = []
         for event_idx, event in enumerate(to_merge):
             assert event.name in ("press", "release"), event
-            if event.key_name:
-                if event.name == "press":
-                    if event.key in pressed_keys:
-                        logger.warning(f"{event.key=} already in {pressed_keys=}")
-                    else:
-                        pressed_keys.add(event.key)
-                elif event.name == "release":
-                    if event.key not in pressed_keys:
-                        logger.warning(f"{event.key} not in {pressed_keys=}")
-                    else:
-                        pressed_keys.remove(event.key)
+            if event.name == "press":
+                if event.key in pressed_keys:
+                    logger.warning(f"{event.key=} already in {pressed_keys=}")
+                else:
+                    pressed_keys.add(event.key)
+            elif event.name == "release":
+                if event.key not in pressed_keys:
+                    logger.warning(f"{event.key} not in {pressed_keys=}")
+                else:
+                    pressed_keys.remove(event.key)
             is_pressed = bool(pressed_keys)
             group_end = was_pressed and not is_pressed
             group_start = is_pressed and not was_pressed
@@ -502,10 +535,7 @@ def merge_consecutive_keyboard_events(
     def get_merged_events(
         to_merge: list[models.ActionEvent], state: dict[str, Any]
     ) -> list[models.ActionEvent]:
-        if group_named_keys:
-            group_idx_tups = get_group_idx_tups(to_merge)
-        else:
-            group_idx_tups = [(0, len(to_merge))]
+        group_idx_tups = get_group_idx_tups(to_merge)
         merged_events = []
         for start_idx, end_idx in group_idx_tups:
             children = to_merge[start_idx:end_idx]
@@ -685,12 +715,12 @@ def discard_unused_events(
 
 def process_events(
     action_events: list[models.ActionEvent],
-    window_events: list[models.WindowEvent],
-    screenshots: list[models.Screenshot],
+    #window_events: list[models.WindowEvent],
+    #screenshots: list[models.Screenshot],
 ) -> tuple[
     list[models.ActionEvent],
-    list[models.WindowEvent],
-    list[models.Screenshot],
+    #list[models.WindowEvent],
+    #list[models.Screenshot],
 ]:
     """Process action events, window events, and screenshots.
 
@@ -709,14 +739,18 @@ def process_events(
     # _screenshots = screenshots
 
     num_action_events = len(action_events)
-    num_window_events = len(window_events)
-    num_screenshots = len(screenshots)
-    num_total = num_action_events + num_window_events + num_screenshots
+    #num_window_events = len(window_events)
+    #num_screenshots = len(screenshots)
+    #num_total = num_action_events + num_window_events + num_screenshots
     logger.info(
-        f"before {num_action_events=} {num_window_events=} {num_screenshots=} "
-        f"{num_total=}"
+        f"before "
+        f"{num_action_events=} "
+        #f"{num_window_events=} "
+        #f"{num_screenshots=} "
+        #f"{num_total=}"
     )
     process_fns = [
+        remove_invalid_keyboard_events,
         merge_consecutive_keyboard_events,
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,
@@ -738,29 +772,35 @@ def process_events(
                 import ipdb
 
                 ipdb.set_trace()
-        window_events = discard_unused_events(
-            window_events,
-            action_events,
-            "window_event_timestamp",
-        )
-        screenshots = discard_unused_events(
-            screenshots,
-            action_events,
-            "screenshot_timestamp",
-        )
+        #window_events = discard_unused_events(
+        #    window_events,
+        #    action_events,
+        #    "window_event_timestamp",
+        #)
+        #screenshots = discard_unused_events(
+        #    screenshots,
+        #    action_events,
+        #    "screenshot_timestamp",
+        #)
     num_action_events_ = len(action_events)
-    num_window_events_ = len(window_events)
-    num_screenshots_ = len(screenshots)
-    num_total_ = num_action_events_ + num_window_events_ + num_screenshots_
+    #num_window_events_ = len(window_events)
+    #num_screenshots_ = len(screenshots)
+    #num_total_ = num_action_events_ + num_window_events_ + num_screenshots_
     pct_action_events = num_action_events_ / num_action_events
-    pct_window_events = num_window_events_ / num_window_events
-    pct_screenshots = num_screenshots_ / num_screenshots
-    pct_total = num_total_ / num_total
+    #pct_window_events = num_window_events_ / num_window_events
+    #pct_screenshots = num_screenshots_ / num_screenshots
+    #pct_total = num_total_ / num_total
     logger.info(
-        f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} "
-        f"{num_total=}"
+        f"after "
+        f"{num_action_events_=} "
+        #f"{num_window_events_=} "
+        #f"{num_screenshots_=} "
+        #f"{num_total=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
+        f"{pct_action_events=} "
+        #f"{pct_window_events=} "
+        #f"{pct_screenshots=} "
+        #f"{pct_total=}"
     )
-    return action_events, window_events, screenshots
+    return action_events, #window_events, screenshots

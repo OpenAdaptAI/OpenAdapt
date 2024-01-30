@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import fire
@@ -24,7 +25,6 @@ import numpy as np
 
 from openadapt import common, config
 from openadapt.db import db
-from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 EMPTY = (None, [], {}, "")
@@ -65,6 +65,40 @@ def configure_logging(logger: logger, log_level: str) -> None:
         logger.debug(f"{log_level=}")
 
 
+_message_timestamps = defaultdict(list)
+def filter_log_messages(data: dict) -> bool:
+    """Filter log messages based on the defined criteria.
+
+    Args:
+        data: The log message data from a loguru logger.
+
+    Returns:
+        bool: True if the log message should not be ignored, False otherwise.
+    """
+    # TODO: ultimately, we want to fix the underlying issues, but for now,
+    # we can ignore these messages
+    for msg in config.MESSAGES_TO_FILTER:
+        if msg in data["message"]:
+            if config.MAX_NUM_WARNINGS_PER_SECOND > 0:
+                current_timestamp = time.time()
+                _message_timestamps[msg].append(current_timestamp)
+                timestamps = _message_timestamps[msg]
+
+                # Remove timestamps older than 1 second
+                timestamps = [
+                    ts
+                    for ts in timestamps
+                    if current_timestamp - ts <= config.WARNING_SUPPRESSION_PERIOD
+                ]
+
+                if len(timestamps) > config.MAX_NUM_WARNINGS_PER_SECOND:
+                    return False
+
+                _message_timestamps[msg] = timestamps
+
+    return True
+
+
 def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
@@ -90,6 +124,7 @@ def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
         "text",
         "canonical_key",
         "canonical_text",
+        "original_timestamp",
     ]
     to_include = [key for key in try_include if hasattr(row, key)]
     row_dict = row.asdict(follow=to_follow, include=to_include)
@@ -533,7 +568,7 @@ def display_event(
     elif action_event.name in common.KEY_EVENTS:
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
-        text = action_event.text
+        text = str(action_event.text)
 
         if config.SCRUB_ENABLED:
             import spacy
@@ -552,29 +587,37 @@ def display_event(
                     " original text."
                 )
 
-        image = draw_text(x, y, text, image, outline=True)
+        try:
+            image = draw_text(x, y, text, image, outline=True)
+        except Exception as exc:
+            logger.exception(exc)
+            import ipdb; ipdb.set_trace()
     else:
         raise Exception("unhandled {action_event.name=}")
 
     return image
 
 
-def image2utf8(image: Image.Image) -> str:
+def image2utf8(image: Image.Image, default_format: str = "PNG") -> str:
     """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
+        default_format (str): The default format to use if image format is not known.
 
     Returns:
         str: The UTF-8 encoded image.
     """
     image = image.convert("RGB")
+    format = image.format if image.format else default_format
+    logger.debug(f"{image.format=} {default_format=} {format=}")
     buffered = BytesIO()
-    image.save(buffered, format="JPEG")
-    image_str = base64.b64encode(buffered.getvalue())
-    base64_prefix = bytes("data:image/jpeg;base64,", encoding="utf-8")
-    image_base64 = base64_prefix + image_str
-    image_utf8 = image_base64.decode("utf-8")
+    image.save(buffered, format=format)
+    mime_type = f"image/{format.lower()}"
+    base64_prefix = f"data:{mime_type};base64,"
+
+    image_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    image_utf8 = base64_prefix + image_str
     return image_utf8
 
 
@@ -788,6 +831,33 @@ def get_functions(name: str) -> dict:
             functions[name] = obj
     return functions
 
+
+def render_template_from_file(template_relative_path: str, **kwargs) -> str:
+    """
+    Load a Jinja2 template from a file using the project's root directory and interpolate arguments.
+
+    Args:
+        template_relative_path (str): Relative path to the Jinja2 template file from the project root.
+        **kwargs: Arguments to interpolate into the template.
+
+    Returns:
+        str: Rendered template with interpolated arguments.
+    """
+    # Construct the full path to the template file
+    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+
+    # Extract the directory and template file name
+    template_dir, template_file = os.path.split(template_path)
+    logger.info(f"{template_dir=} {template_file=}")
+
+    # Create a Jinja2 environment with the directory
+    env = Environment(loader=FileSystemLoader(template_dir))
+
+    # Load the template
+    template = env.get_template(template_file)
+
+    # Render the template with provided arguments
+    return template.render(**kwargs)
 
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))
