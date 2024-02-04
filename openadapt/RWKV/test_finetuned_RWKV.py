@@ -2,6 +2,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel, PeftConfig
 import modal
 
+# Note: This file tests RWKV models finetuned through HuggingFace's Trainer API, not the default RWKV finetune API.
 
 stub = modal.Stub("finetune-RWKV")
 
