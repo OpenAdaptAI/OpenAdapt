@@ -1,3 +1,5 @@
+[Read our latest slides](https://t.ly/pdUUv)
+
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
 [Read our Architecture document](https://github.com/OpenAdaptAI/OpenAdapt/wiki/OpenAdapt-Architecture-(draft))
@@ -24,8 +26,6 @@ See also:
 
 Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
 
-([Slides](https://t.ly/7RGr))
-
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Large Multimodal Modals (LMMs) by:
 
@@ -41,10 +41,10 @@ The goal is similar to that of
 except that we use Large Multimodal Models instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
-1. OpenAdapt is model agnostic
-2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
-3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
-4. OpenAdapt is open source (MIT license)
+1. OpenAdapt is model agnostic.
+2. OpenAdapt generates prompts automatically by **learning from human demonstration** (auto-prompted, not user-prompted). This means that agents are **grounded** in **existing processes**, which mitigates hallucinations and ensures successful task completion.
+3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web.
+4. OpenAdapt is open source (MIT license).
 
 ## Features
 
