@@ -111,6 +111,7 @@ _DEFAULTS = {
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
+    "REPLICATE_API_TOKEN": "<set your api key in .env>",
 }
 
 # each string in STOP_STRS should only contain strings

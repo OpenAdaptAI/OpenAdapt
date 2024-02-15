@@ -14,7 +14,7 @@ Respond in JSON only. The JSON should match the following schema:
 ###
 {
   "type": "object",
-  "required": ["actionType", "action", "parameters", "preconditionState", "postconditionState", "additionalContext"],
+  "required": ["actionType", "action", "targetElement", "parameters", "preconditionState", "postconditionState", "additionalContext"],
   "properties": {
     "actionType": {
       "type": "string",
@@ -23,6 +23,10 @@ Respond in JSON only. The JSON should match the following schema:
     "action": {
       "type": "string",
       "description": "Specific action performed, e.g., Switch Application."
+    },
+    "targetElement": {
+      "type": "string",
+      "description": "Specific and unique identifier of the target GUI element where the action is performed, if applicable (may be None). Include distinctive features like element type (e.g., button, input field), its label or text if visible, its functional purpose (e.g., 'Start Timer Button', 'Date Selection Dropdown'), and its relative position or unique identifier within the application (e.g., 'Top-Right Corner', 'Second Row in Timesheet'). Avoid general descriptions and focus on attributes that differentiate this element from others in the same context. The description MUST be detailed enough such that it is possible to understand the exact element being described."
     },
     "parameters": {
       "type": "object",
@@ -55,3 +59,5 @@ Respond in JSON only. The JSON should match the following schema:
   "additionalProperties": false
 }
 ###
+Do not make any assumptions, only describe exactly what you see. Do not include specific x/y values. Be concise.
+Remember, the targetElement description MUST BE DETAILED ENOUGH TO PRECISELY IDENTIFY THE ELEMENT. Lives are at stake. My career depends on this.

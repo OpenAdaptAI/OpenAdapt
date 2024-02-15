@@ -54,6 +54,7 @@ def describe_action(
 
 def main(
     recording_timestamp: float | None = None,
+    skip_num_actions: int = 0,
 ):
     utils.configure_logging(logger, "INFO")
 
@@ -63,7 +64,9 @@ def main(
         recording = db.crud.get_latest_recording()
 
     actions = recording.processed_action_events
-    for action in actions:
+    for idx, action in enumerate(actions):
+        if idx < skip_num_actions:
+            continue
         action_node_dict = describe_action(action)
         import ipdb; ipdb.set_trace()
 
