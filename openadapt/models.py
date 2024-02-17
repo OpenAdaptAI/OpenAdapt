@@ -44,6 +44,7 @@ class Recording(db.Base):
     double_click_distance_pixels = sa.Column(sa.Numeric(asdecimal=False))
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
+    video_start_time = sa.Column(ForceFloat)
 
     action_events = sa.orm.relationship(
         "ActionEvent",

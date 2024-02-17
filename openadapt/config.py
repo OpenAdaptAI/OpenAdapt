@@ -110,6 +110,7 @@ _DEFAULTS = {
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
+    "RECORD_VIDEO": True,
 }
 
 # each string in STOP_STRS should only contain strings

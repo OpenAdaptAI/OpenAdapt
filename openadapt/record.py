@@ -165,7 +165,7 @@ def process_events(
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: int,
+    recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -823,6 +823,17 @@ def record(
     recording = create_recording(task_description)
     recording_timestamp = recording.timestamp
 
+    video_file_name = get_video_file_name(recording_timestamp)
+    ffmpeg_process = start_ffmpeg_recording(video_file_name)
+    video_start_time = wait_for_ffmpeg_to_start(ffmpeg_process)
+    logger.info(f"{video_start_time=}")
+    if video_start_time is None:
+        logger.error("Failed to detect the start of the ffmpeg recording process.")
+        ffmpeg_process.terminate()
+        return
+
+    crud.update_video_start_time(recording_timestamp, video_start_time)
+
     event_q = queue.Queue()
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
@@ -967,6 +978,8 @@ def record(
     term_pipe_parent_action.send(action_write_q.qsize())
     term_pipe_parent_screen.send(screen_write_q.qsize())
 
+    ffmpeg_process.terminate()
+
     logger.info("joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
@@ -989,6 +1002,117 @@ def record(
 def start() -> None:
     """Starts the recording process."""
     fire.Fire(record)
+
+import subprocess
+import re
+import time
+
+def find_desktop_capture_index():
+    """
+    Runs ffmpeg to list avfoundation devices and parses the output to find the desktop capture index.
+
+    Returns:
+        The index of the desktop capture device as a string, or None if not found.
+    """
+    command = ['ffmpeg', '-f', 'avfoundation', '-list_devices', 'true', '-i', '""']
+    process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+    stdout, stderr = process.communicate()
+
+    # Pattern to match the desktop capture device
+    pattern = re.compile(r"\[AVFoundation indev @ .*\] \[(\d+)\] Capture screen 0")
+
+    match = pattern.search(stderr)  # stderr is used because ffmpeg outputs device info there
+    if match:
+        return match.group(1)  # Returns the index of the desktop capture device
+    else:
+        return None
+
+def start_ffmpeg_recording(output_file):
+    desktop_index = find_desktop_capture_index()
+    assert desktop_index is not None, "Desktop capture device not found."
+
+    if sys.platform == "darwin":
+        capture_device = "avfoundation"
+        input_source = f"{desktop_index}:none"  # Assuming no audio capture
+        frame_rate = "30"  # Set to a supported frame rate
+    elif sys.platform == "win32":
+        capture_device = "gdigrab"
+        input_source = "desktop"
+        frame_rate = ""  # TODO
+
+    command = [
+        'ffmpeg',
+        '-f', capture_device,
+        '-r', frame_rate,  # Frame rate option included here directly
+        '-i', input_source,
+        '-loglevel', 'verbose',
+        output_file
+    ]
+    # Ensure all parts of the command are valid before executing
+    command = [arg for arg in command if arg]
+    logger.info(f"{command=}")
+
+    return subprocess.Popen(command, stderr=subprocess.PIPE, universal_newlines=True)
+
+def parse_ffmpeg_log_for_start_time(process, timeout=10):
+    start_time_pattern = re.compile(r'frame=\s*1\s')
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        line = process.stderr.readline()
+        if not line:
+            break  # End of output
+        if start_time_pattern.search(line):
+            # Found the line indicating the first frame; this is our start time
+            return time.time()  # Return the current time as an approximation of the first frame time
+    return None
+
+def extract_frames_at_offsets(video_file, action_event_timestamps, video_start_time):
+    # Calculate offsets from the start of the video
+    offsets = [event - video_start_time for event in action_event_timestamps]
+
+    for offset in offsets:
+        # Use ffmpeg to extract the frame at the specified offset
+        command = [
+            'ffmpeg',
+            '-ss', str(offset),
+            '-i', video_file,
+            '-frames:v', '1',
+            '-q:v', '2',
+            f'frame_at_{offset:.3f}.jpg'
+        ]
+        subprocess.run(command)
+
+def wait_for_ffmpeg_to_start(process, timeout=30, print_output=True):
+    """
+    Waits for ffmpeg to start and returns the approximate start time by monitoring its stderr output.
+
+    Args:
+    - process: The Popen object of the running ffmpeg process.
+    - timeout: Maximum time to wait for the ffmpeg start signal in seconds.
+    - print_output: Whether to print ffmpeg logs.
+
+    Returns:
+    - The Unix timestamp of when ffmpeg likely started recording, or None if not detected.
+    """
+    start_time_pattern = re.compile(r'Stream mapping:')
+    start_time = None
+    end_time = time.time() + timeout
+
+    while time.time() < end_time and not start_time:
+        line = process.stderr.readline()
+        if print_output:
+            print(line)
+        if not line:
+            break  # End of output or timeout
+        # Check for the log line indicating that ffmpeg has started processing
+        if start_time_pattern.search(line):
+            start_time = time.time()  # Use current time as an approximation of the start time
+            logger.info("ffmpeg has started processing.")
+
+    return start_time
+
+def get_video_file_name(recording_timestamp: float):
+    return f"oa_recording-{recording_timestamp}.mp4"
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
-PROCESS_EVENTS = True
+PROCESS_EVENTS = False
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
     table {
@@ -183,6 +183,31 @@ def dict2html(
     return html_str
 
 
+from moviepy.editor import VideoFileClip
+from PIL import Image
+import numpy as np
+def extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
+    clip = VideoFileClip(video_filename)
+    images = []
+    for timestamp in frame_timestamps:
+        # Extract frame as an RGB image
+        frame = clip.get_frame(timestamp)
+        # Convert numpy array (frame) to PIL Image
+        image = Image.fromarray(frame.astype(np.uint8))
+        images.append(image)
+    clip.close()
+    return images
+
+def compute_diff(image1, image2):
+    """
+    Computes the difference between two PIL Images and returns the diff image.
+    """
+    arr1 = np.array(image1)
+    arr2 = np.array(image2)
+    diff = np.abs(arr1 - arr2)
+    return Image.fromarray(diff.astype('uint8'))
+
+
 @logger.catch
 def main(recording: Recording = None) -> bool:
     """Visualize a recording.
@@ -233,6 +258,18 @@ def main(recording: Recording = None) -> bool:
     ]
     logger.info(f"{len(action_events)=}")
 
+    from openadapt.record import get_video_file_name
+    video_file_name = get_video_file_name(recording.timestamp)
+    timestamps = [
+        action_event.timestamp - recording.video_start_time
+        for action_event in action_events
+    ]
+    import ipdb; ipdb.set_trace()
+    video_start_time = recording.video_start_time
+    fps = 30
+
+    frames = extract_frames_to_pil_images(video_file_name, timestamps)
+
     num_events = (
         min(MAX_EVENTS, len(action_events))
         if MAX_EVENTS is not None
@@ -249,8 +286,15 @@ def main(recording: Recording = None) -> bool:
             if idx == MAX_EVENTS:
                 break
             image = display_event(action_event)
-            diff = display_event(action_event, diff=True)
-            mask = action_event.screenshot.diff_mask
+            #diff = display_event(action_event, diff=True)
+            #mask = action_event.screenshot.diff_mask
+
+            frame_image = frames[idx]
+            diff_image = compute_diff(frame_image, action_event.screenshot.image)
+
+            diff = image2utf8(frame_image)
+            mask = image2utf8(diff_image)
+
 
             if SCRUB:
                 image = scrub.scrub_image(image)
