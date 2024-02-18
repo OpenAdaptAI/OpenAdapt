@@ -450,6 +450,19 @@ def merge_consecutive_mouse_click_events(
     )
 
 
+def remove_invalid_keyboard_events(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
+    """Remove invalid keyboard events."""
+
+    return [
+        event
+        for event in events
+        # https://github.com/moses-palmer/pynput/issues/481
+        if not str(event.key) == "<0>"
+    ]
+
+
 def merge_consecutive_keyboard_events(
     events: list[models.ActionEvent],
     group_named_keys: bool = KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS,
@@ -717,6 +730,7 @@ def process_events(
         f"{num_total=}"
     )
     process_fns = [
+        remove_invalid_keyboard_events,
         merge_consecutive_keyboard_events,
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,

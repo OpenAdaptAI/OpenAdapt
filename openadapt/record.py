@@ -24,6 +24,7 @@ from oa_pynput import keyboard, mouse
 from pympler import tracker
 from tqdm import tqdm
 import fire
+import mss
 import mss.tools
 import psutil
 
@@ -179,7 +180,6 @@ def process_events(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-    utils.set_start_time(recording_timestamp)
     logger.info("Starting")
     Notify("Status", "Starting recording...", "OpenAdapt").send()
 
@@ -319,7 +319,6 @@ def write_events(
         term_pipe: A pipe for communicating \
             the number of events left to be written.
     """
-    utils.set_start_time(recording_timestamp)
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -512,14 +511,14 @@ def read_screen_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    utils.set_start_time(recording_timestamp)
     logger.info("Starting")
-    while not terminate_event.is_set():
-        screenshot = utils.take_screenshot()
-        if screenshot is None:
-            logger.warning("Screenshot was None")
-            continue
-        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
+    with mss.mss() as sct:
+        while not terminate_event.is_set():
+            screenshot = utils.take_screenshot(sct)
+            if screenshot is None:
+                logger.warning("Screenshot was None")
+                continue
+            event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("Done")
 
 
@@ -536,7 +535,6 @@ def read_window_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    utils.set_start_time(recording_timestamp)
     logger.info("Starting")
     prev_window_data = {}
     while not terminate_event.is_set():
@@ -584,7 +582,6 @@ def performance_stats_writer(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
-    utils.set_start_time(recording_timestamp)
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not perf_q.empty():
@@ -618,7 +615,6 @@ def memory_writer(
     Returns:
         None
     """
-    utils.set_start_time(recording_timestamp)
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
@@ -661,7 +657,7 @@ def create_recording(
     Returns:
         The newly created Recording object.
     """
-    timestamp = utils.set_start_time()
+    timestamp = utils.get_timestamp()
     monitor_width, monitor_height = utils.get_monitor_dims()
     double_click_distance_pixels = utils.get_double_click_distance_pixels()
     double_click_interval_seconds = utils.get_double_click_interval_seconds()
@@ -772,7 +768,6 @@ def read_keyboard_events(
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
 
-    utils.set_start_time(recording_timestamp)
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
         on_release=partial(on_release, event_q),
@@ -797,7 +792,6 @@ def read_mouse_events(
     Returns:
         None
     """
-    utils.set_start_time(recording_timestamp)
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
         on_click=partial(on_click, event_q),
@@ -1046,6 +1040,7 @@ def start_ffmpeg_recording(output_file):
         '-r', frame_rate,  # Frame rate option included here directly
         '-i', input_source,
         '-loglevel', 'verbose',
+        '-copyts',
         output_file
     ]
     # Ensure all parts of the command are valid before executing
@@ -1053,34 +1048,6 @@ def start_ffmpeg_recording(output_file):
     logger.info(f"{command=}")
 
     return subprocess.Popen(command, stderr=subprocess.PIPE, universal_newlines=True)
-
-def parse_ffmpeg_log_for_start_time(process, timeout=10):
-    start_time_pattern = re.compile(r'frame=\s*1\s')
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        line = process.stderr.readline()
-        if not line:
-            break  # End of output
-        if start_time_pattern.search(line):
-            # Found the line indicating the first frame; this is our start time
-            return time.time()  # Return the current time as an approximation of the first frame time
-    return None
-
-def extract_frames_at_offsets(video_file, action_event_timestamps, video_start_time):
-    # Calculate offsets from the start of the video
-    offsets = [event - video_start_time for event in action_event_timestamps]
-
-    for offset in offsets:
-        # Use ffmpeg to extract the frame at the specified offset
-        command = [
-            'ffmpeg',
-            '-ss', str(offset),
-            '-i', video_file,
-            '-frames:v', '1',
-            '-q:v', '2',
-            f'frame_at_{offset:.3f}.jpg'
-        ]
-        subprocess.run(command)
 
 def wait_for_ffmpeg_to_start(process, timeout=30, print_output=True):
     """
@@ -1107,6 +1074,8 @@ def wait_for_ffmpeg_to_start(process, timeout=30, print_output=True):
         # Check for the log line indicating that ffmpeg has started processing
         if start_time_pattern.search(line):
             start_time = time.time()  # Use current time as an approximation of the start time
+            print(f"{line=}")
+            print(f"{start_time=}")
             logger.info("ffmpeg has started processing.")
 
     return start_time

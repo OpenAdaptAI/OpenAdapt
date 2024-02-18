@@ -35,7 +35,7 @@ LOG_LEVEL = "INFO"
 MAX_EVENTS = None
 MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
-PROCESS_EVENTS = False
+PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
 CSS = string.Template("""
     table {
@@ -285,15 +285,20 @@ def main(recording: Recording = None) -> bool:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
-            image = display_event(action_event)
+            try:
+                image = display_event(action_event)
+            except TypeError as exc:
+                # https://github.com/moses-palmer/pynput/issues/481
+                logger.warning(exc)
+                continue
             #diff = display_event(action_event, diff=True)
             #mask = action_event.screenshot.diff_mask
 
             frame_image = frames[idx]
             diff_image = compute_diff(frame_image, action_event.screenshot.image)
 
-            diff = image2utf8(frame_image)
-            mask = image2utf8(diff_image)
+            diff = frame_image
+            mask = diff_image
 
 
             if SCRUB:
