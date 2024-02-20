@@ -9,7 +9,9 @@ Usage:
 from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Union
+import av
 import multiprocessing
+import numpy as np
 import os
 import queue
 import signal
@@ -32,6 +34,7 @@ from openadapt import config, utils, window
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
+
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -168,6 +171,9 @@ def process_events(
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    video_container: av.container.OutputContainer,
+    video_stream: av.stream.Stream,
+    video_start_time: float,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -179,6 +185,9 @@ def process_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        video_container: The video container.
+        video_stream: The stream to which to write video frames.
+        video_start_time: The timestamp at which the video strema was started.
     """
     logger.info("Starting")
     Notify("Status", "Starting recording...", "OpenAdapt").send()
@@ -188,6 +197,7 @@ def process_events(
     prev_window_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+    last_pts = 0
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
         logger.trace(f"{event=}")
@@ -199,6 +209,16 @@ def process_events(
             )
         if event.type == "screen":
             prev_screen_event = event
+
+            last_pts = write_frame(
+                video_container,
+                video_stream,
+                event.data,
+                event.timestamp,
+                video_start_time,
+                last_pts,
+            )
+
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "action":
@@ -512,13 +532,12 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
     logger.info("Starting")
-    with mss.mss() as sct:
-        while not terminate_event.is_set():
-            screenshot = utils.take_screenshot(sct)
-            if screenshot is None:
-                logger.warning("Screenshot was None")
-                continue
-            event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
+    while not terminate_event.is_set():
+        screenshot = utils.take_screenshot()
+        if screenshot is None:
+            logger.warning("Screenshot was None")
+            continue
+        event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("Done")
 
 
@@ -818,13 +837,11 @@ def record(
     recording_timestamp = recording.timestamp
 
     video_file_name = get_video_file_name(recording_timestamp)
-    ffmpeg_process = start_ffmpeg_recording(video_file_name)
-    video_start_time = wait_for_ffmpeg_to_start(ffmpeg_process)
-    logger.info(f"{video_start_time=}")
-    if video_start_time is None:
-        logger.error("Failed to detect the start of the ffmpeg recording process.")
-        ffmpeg_process.terminate()
-        return
+    # TODO XXX replace with utils.get_monitor_dims() once fixed
+    width, height = utils.take_screenshot().size
+    video_container, video_stream, video_start_time = initialize_video_writer(
+        video_file_name, width, height,
+    )
 
     crud.update_video_start_time(recording_timestamp, video_start_time)
 
@@ -883,6 +900,9 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            video_container,
+            video_stream,
+            video_start_time,
         ),
     )
     event_processor.start()
@@ -972,8 +992,6 @@ def record(
     term_pipe_parent_action.send(action_write_q.qsize())
     term_pipe_parent_screen.send(screen_write_q.qsize())
 
-    ffmpeg_process.terminate()
-
     logger.info("joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
@@ -984,6 +1002,8 @@ def record(
     action_event_writer.join()
     window_event_writer.join()
     terminate_perf_event.set()
+
+    finalize_video_writer(video_container, video_stream)
 
     if PLOT_PERFORMANCE:
         mem_plotter.join()
@@ -997,92 +1017,126 @@ def start() -> None:
     """Starts the recording process."""
     fire.Fire(record)
 
-import subprocess
-import re
-import time
-
-def find_desktop_capture_index():
-    """
-    Runs ffmpeg to list avfoundation devices and parses the output to find the desktop capture index.
-
-    Returns:
-        The index of the desktop capture device as a string, or None if not found.
-    """
-    command = ['ffmpeg', '-f', 'avfoundation', '-list_devices', 'true', '-i', '""']
-    process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
-    stdout, stderr = process.communicate()
-
-    # Pattern to match the desktop capture device
-    pattern = re.compile(r"\[AVFoundation indev @ .*\] \[(\d+)\] Capture screen 0")
-
-    match = pattern.search(stderr)  # stderr is used because ffmpeg outputs device info there
-    if match:
-        return match.group(1)  # Returns the index of the desktop capture device
-    else:
-        return None
-
-def start_ffmpeg_recording(output_file):
-    desktop_index = find_desktop_capture_index()
-    assert desktop_index is not None, "Desktop capture device not found."
-
-    if sys.platform == "darwin":
-        capture_device = "avfoundation"
-        input_source = f"{desktop_index}:none"  # Assuming no audio capture
-        frame_rate = "30"  # Set to a supported frame rate
-    elif sys.platform == "win32":
-        capture_device = "gdigrab"
-        input_source = "desktop"
-        frame_rate = ""  # TODO
-
-    command = [
-        'ffmpeg',
-        '-f', capture_device,
-        '-r', frame_rate,  # Frame rate option included here directly
-        '-i', input_source,
-        '-loglevel', 'verbose',
-        '-copyts',
-        output_file
-    ]
-    # Ensure all parts of the command are valid before executing
-    command = [arg for arg in command if arg]
-    logger.info(f"{command=}")
-
-    return subprocess.Popen(command, stderr=subprocess.PIPE, universal_newlines=True)
-
-def wait_for_ffmpeg_to_start(process, timeout=30, print_output=True):
-    """
-    Waits for ffmpeg to start and returns the approximate start time by monitoring its stderr output.
-
-    Args:
-    - process: The Popen object of the running ffmpeg process.
-    - timeout: Maximum time to wait for the ffmpeg start signal in seconds.
-    - print_output: Whether to print ffmpeg logs.
-
-    Returns:
-    - The Unix timestamp of when ffmpeg likely started recording, or None if not detected.
-    """
-    start_time_pattern = re.compile(r'Stream mapping:')
-    start_time = None
-    end_time = time.time() + timeout
-
-    while time.time() < end_time and not start_time:
-        line = process.stderr.readline()
-        if print_output:
-            print(line)
-        if not line:
-            break  # End of output or timeout
-        # Check for the log line indicating that ffmpeg has started processing
-        if start_time_pattern.search(line):
-            start_time = time.time()  # Use current time as an approximation of the start time
-            print(f"{line=}")
-            print(f"{start_time=}")
-            logger.info("ffmpeg has started processing.")
-
-    return start_time
+###
 
 def get_video_file_name(recording_timestamp: float):
     return f"oa_recording-{recording_timestamp}.mp4"
 
+def initialize_video_writer(
+    output_path: str,
+	width: int,
+	height: int,
+	fps: int = 24,
+	codec: str = 'libx264rgb',
+	pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
+	crf: int = 0,
+	preset: str = 'veryslow',
+) -> tuple[av.container.OutputContainer, av.stream.Stream, float]:
+    """
+    Initializes the video writer and returns the container, stream, and base timestamp.
+
+    Args:
+        output_path (str): Path to the output video file.
+        width (int): Width of the video.
+        height (int): Height of the video.
+        fps (int, optional): Frames per second of the video. Defaults to 24.
+        codec (str, optional): Codec used for encoding the video.
+            Defaults to 'libx264rgb'.
+        pix_fmt (str, optional): Pixel format of the video. Defaults to 'rgb24'.
+        crf (int, optional): Constant Rate Factor for encoding quality.
+            Defaults to 0 for lossless.
+        preset (str, optional): Encoding speed/quality trade-off.
+            Defaults to 'veryslow' for maximum compression.
+
+    Returns:
+        tuple[av.container.OutputContainer, av.stream.Stream, float]: The initialized
+            container, stream, and base timestamp.
+    """
+    logger.info("initializing video stream...")
+    container = av.open(output_path, mode='w')
+    stream = container.add_stream(codec, rate=fps)
+    print(f"{width=} {height=}")
+    stream.width = width
+    stream.height = height
+    stream.pix_fmt = pix_fmt
+    stream.options = {'crf': str(crf), 'preset': preset}
+
+    base_timestamp = utils.get_timestamp()
+
+    return container, stream, base_timestamp
+
+from fractions import Fraction
+
+def write_frame(
+    container: av.container.OutputContainer,
+    stream: av.stream.Stream,
+    screenshot: mss.base.ScreenShot,
+    timestamp: float,
+    base_timestamp: float,
+    last_pts: int,  # Add this parameter to track the last PTS
+    pix_fmt: str = 'rgb24',  # Assuming 'rgb24' is your default pixel format
+) -> int:  # Returns the updated last_pts
+    # Convert MSS ScreenShot to np.ndarray
+    frame = screenshot_to_np(screenshot)
+
+    # Convert the numpy array to an AVFrame
+    av_frame = av.VideoFrame.from_ndarray(frame, format=pix_fmt)
+
+    # Calculate the time difference in seconds
+    time_diff = timestamp - base_timestamp
+
+    # Calculate PTS, taking into account the fractional average rate
+    pts = int(time_diff * float(Fraction(stream.average_rate)))
+
+    # Ensure monotonically increasing PTS
+    if pts <= last_pts:
+        pts = last_pts + 1
+    av_frame.pts = pts
+    last_pts = pts  # Update the last_pts
+
+    # Encode and write the frame
+    for packet in stream.encode(av_frame):
+        container.mux(packet)
+
+    return last_pts  # Return the updated last_pts for the next call
+
+def finalize_video_writer(
+    container: av.container.OutputContainer,
+    stream: av.stream.Stream,
+) -> None:
+    """
+    Finalizes the video writer, ensuring all buffered frames are encoded and written.
+
+    Args:
+        container (av.container.OutputContainer): The AV container to finalize.
+        stream (av.stream.Stream): The AV stream to finalize.
+    """
+    # Flush stream
+    logger.info("flushing...")
+    for packet in stream.encode():
+        container.mux(packet)
+
+    # Close the container
+    logger.info("closing...")
+    container.close()
+
+    logger.info("done")
+
+def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
+    """
+    Converts an MSS screenshot to a NumPy array.
+
+    Args:
+        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
+
+    Returns:
+        np.ndarray: The screenshot as a NumPy array in RGB format.
+    """
+    # Convert the screenshot to a PIL Image first (mss provides a method for this)
+    img = screenshot.rgb  # Get the RGB data from the screenshot
+    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
+    frame = np.frombuffer(img, dtype=np.uint8).reshape(screenshot.height, screenshot.width, 3)
+    return frame
 
 if __name__ == "__main__":
     fire.Fire(record)

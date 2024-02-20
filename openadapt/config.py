@@ -111,6 +111,7 @@ _DEFAULTS = {
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
     "RECORD_VIDEO": True,
+    "VIDEO_PIXEL_FORMAT": "rgb24",
 }
 
 # each string in STOP_STRS should only contain strings

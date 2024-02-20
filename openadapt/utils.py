@@ -227,12 +227,17 @@ def get_double_click_distance_pixels() -> int:
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_monitor_dims() -> tuple:
+def get_monitor_dims() -> tuple[int, int]:
     """Get the dimensions of the monitor.
 
     Returns:
-        tuple: The width and height of the monitor.
+        tuple[int, int]: The width and height of the monitor.
     """
+
+
+    # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
+
+
     SCT = mss.mss()
     monitor = SCT.monitors[0]
     monitor_width = monitor["width"]
@@ -578,37 +583,13 @@ def image2utf8(image: Image.Image) -> str:
     return image_utf8
 
 
-_start_time = None
-_start_perf_counter = None
-
-
-def set_start_time(value: float = None) -> float:
-    """Set the start time for performance measurements.
-
-    Args:
-        value (float): The start time value. Defaults to the current time.
-
-    Returns:
-        float: The start time.
-    """
-    global _start_time
-    _start_time = value or time.time()
-    logger.debug(f"{_start_time=}")
-    return _start_time
-
-
-def get_timestamp(is_global: bool = False) -> float:
+def get_timestamp() -> float:
     """Get the current timestamp.
-
-    Args:
-        is_global (bool): Flag indicating whether to use the global
-          start time. Defaults to False.
 
     Returns:
         float: The current timestamp.
     """
-    global _start_time
-    return _start_time + time.perf_counter()
+    return time.time()
 
 
 # https://stackoverflow.com/a/50685454
