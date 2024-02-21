@@ -168,12 +168,13 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
-    video_container: av.container.OutputContainer,
-    video_stream: av.stream.Stream,
-    video_start_time: float,
+    #video_container: av.container.OutputContainer,
+    #video_stream: av.stream.Stream,
+    #video_start_time: float,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -209,15 +210,7 @@ def process_events(
             )
         if event.type == "screen":
             prev_screen_event = event
-
-            last_pts = write_frame(
-                video_container,
-                video_stream,
-                event.data,
-                event.timestamp,
-                video_start_time,
-                last_pts,
-            )
+            video_write_q.put(event)
 
         elif event.type == "window":
             prev_window_event = event
@@ -370,6 +363,41 @@ def write_events(
         Notify("Status", "Recording complete.", "OpenAdapt").send()
 
     logger.info(f"{event_type=} done")
+
+
+def write_video(
+    video_write_q: sq.SynchronizedQueue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+) -> None:
+    logger.info(f"starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    video_file_name = get_video_file_name(recording_timestamp)
+    # TODO XXX replace with utils.get_monitor_dims() once fixed
+    width, height = utils.take_screenshot().size
+    video_container, video_stream, video_start_time = initialize_video_writer(
+        video_file_name, width, height,
+    )
+    crud.update_video_start_time(recording_timestamp, video_start_time)
+
+    last_pts = 0
+    while not terminate_event.is_set() or not video_write_q.empty():
+        try:
+            event = video_write_q.get_nowait()
+        except queue.Empty:
+            continue
+        assert event.type == "screen", ("screen", event)
+        last_pts = write_video_frame(
+            video_container,
+            video_stream,
+            event.data,
+            event.timestamp,
+            video_start_time,
+            last_pts,
+        )
+    finalize_video_writer(video_container, video_stream)
+    logger.info("done")
 
 
 def trigger_action_event(
@@ -836,19 +864,11 @@ def record(
     recording = create_recording(task_description)
     recording_timestamp = recording.timestamp
 
-    video_file_name = get_video_file_name(recording_timestamp)
-    # TODO XXX replace with utils.get_monitor_dims() once fixed
-    width, height = utils.take_screenshot().size
-    video_container, video_stream, video_start_time = initialize_video_writer(
-        video_file_name, width, height,
-    )
-
-    crud.update_video_start_time(recording_timestamp, video_start_time)
-
     event_q = queue.Queue()
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
@@ -897,12 +917,13 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            video_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
-            video_container,
-            video_stream,
-            video_start_time,
+            #video_container,
+            #video_stream,
+            #video_start_time,
         ),
     )
     event_processor.start()
@@ -948,6 +969,16 @@ def record(
         ),
     )
     window_event_writer.start()
+
+    video_writer = multiprocessing.Process(
+        target=write_video,
+        args=(
+            video_write_q,
+            recording_timestamp,
+            terminate_event,
+        )
+    )
+    video_writer.start()
 
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
@@ -1001,9 +1032,8 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    video_writer.join()
     terminate_perf_event.set()
-
-    finalize_video_writer(video_container, video_stream)
 
     if PLOT_PERFORMANCE:
         mem_plotter.join()
@@ -1055,7 +1085,6 @@ def initialize_video_writer(
     logger.info("initializing video stream...")
     container = av.open(output_path, mode='w')
     stream = container.add_stream(codec, rate=fps)
-    print(f"{width=} {height=}")
     stream.width = width
     stream.height = height
     stream.pix_fmt = pix_fmt
@@ -1067,15 +1096,15 @@ def initialize_video_writer(
 
 from fractions import Fraction
 
-def write_frame(
+def write_video_frame(
     container: av.container.OutputContainer,
     stream: av.stream.Stream,
     screenshot: mss.base.ScreenShot,
     timestamp: float,
     base_timestamp: float,
-    last_pts: int,  # Add this parameter to track the last PTS
-    pix_fmt: str = 'rgb24',  # Assuming 'rgb24' is your default pixel format
-) -> int:  # Returns the updated last_pts
+    last_pts: int,
+    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
+) -> int:
     # Convert MSS ScreenShot to np.ndarray
     frame = screenshot_to_np(screenshot)
 
@@ -1088,14 +1117,18 @@ def write_frame(
     # Calculate PTS, taking into account the fractional average rate
     pts = int(time_diff * float(Fraction(stream.average_rate)))
 
+    print(f"{time_diff=} {pts=}")
+
     # Ensure monotonically increasing PTS
     if pts <= last_pts:
+        print("inc")
         pts = last_pts + 1
     av_frame.pts = pts
     last_pts = pts  # Update the last_pts
 
     # Encode and write the frame
     for packet in stream.encode(av_frame):
+        packet.pts = pts
         container.mux(packet)
 
     return last_pts  # Return the updated last_pts for the next call
@@ -1111,16 +1144,25 @@ def finalize_video_writer(
         container (av.container.OutputContainer): The AV container to finalize.
         stream (av.stream.Stream): The AV stream to finalize.
     """
+    # Define a function to close the container
+    def close_container():
+        logger.info("closing...")
+        container.close()
+        logger.info("done")
+
+    # Create a new thread to close the container
+    close_thread = threading.Thread(target=close_container)
+
     # Flush stream
     logger.info("flushing...")
     for packet in stream.encode():
         container.mux(packet)
 
-    # Close the container
-    logger.info("closing...")
-    container.close()
+    # Start the thread to close the container
+    close_thread.start()
 
-    logger.info("done")
+    # Wait for the thread to finish execution
+    close_thread.join()
 
 def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
     """
