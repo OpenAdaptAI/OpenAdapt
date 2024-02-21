@@ -30,3 +30,6 @@ src
 
 # MacOS file
 .DS_Store
+
+*.pyc
+*.pt

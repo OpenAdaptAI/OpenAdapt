@@ -186,7 +186,7 @@ def dict2html(
 from moviepy.editor import VideoFileClip
 from PIL import Image
 import numpy as np
-def extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
+def _extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
     clip = VideoFileClip(video_filename)
     images = []
     for timestamp in frame_timestamps:
@@ -196,6 +196,32 @@ def extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[flo
         image = Image.fromarray(frame.astype(np.uint8))
         images.append(image)
     clip.close()
+    return images
+
+import av
+
+def extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
+    container = av.open(video_filename)
+    stream = container.streams.video[0]  # Assuming the first video stream
+    images = []
+
+    # Convert frame timestamps to stream timebase
+    frame_timestamps_in_stream_tb = [int(ts * stream.time_base.denominator / stream.time_base.numerator) for ts in frame_timestamps]
+    logger.info(f"{frame_timestamps=}")
+    logger.info(f"{frame_timestamps_in_stream_tb=}")
+
+    for target in frame_timestamps_in_stream_tb:
+        container.seek(target, stream=stream)
+        for frame in container.decode(video=0):
+            if frame.pts >= target:
+                logger.info(f"{frame.pts=}")
+                logger.info(f"{target=}")
+                # Convert the frame to PIL Image
+                img = frame.to_image()
+                images.append(img)
+                break  # Move to the next timestamp after the frame is found and added
+
+    container.close()
     return images
 
 def compute_diff(image1, image2):

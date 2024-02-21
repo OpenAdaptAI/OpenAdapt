@@ -190,6 +190,8 @@ def process_events(
         video_stream: The stream to which to write video frames.
         video_start_time: The timestamp at which the video strema was started.
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     Notify("Status", "Starting recording...", "OpenAdapt").send()
 
@@ -332,6 +334,8 @@ def write_events(
         term_pipe: A pipe for communicating \
             the number of events left to be written.
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -370,6 +374,8 @@ def write_video(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
+    utils.set_start_time(recording_timestamp)
+
     logger.info(f"starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -559,6 +565,8 @@ def read_screen_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     while not terminate_event.is_set():
         screenshot = utils.take_screenshot()
@@ -582,6 +590,8 @@ def read_window_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     prev_window_data = {}
     while not terminate_event.is_set():
@@ -629,6 +639,8 @@ def performance_stats_writer(
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not perf_q.empty():
@@ -662,6 +674,8 @@ def memory_writer(
     Returns:
         None
     """
+    utils.set_start_time(recording_timestamp)
+
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
@@ -704,7 +718,7 @@ def create_recording(
     Returns:
         The newly created Recording object.
     """
-    timestamp = utils.get_timestamp()
+    timestamp = utils.set_start_time()
     monitor_width, monitor_height = utils.get_monitor_dims()
     double_click_distance_pixels = utils.get_double_click_distance_pixels()
     double_click_interval_seconds = utils.get_double_click_interval_seconds()
@@ -815,6 +829,8 @@ def read_keyboard_events(
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
 
+    utils.set_start_time(recording_timestamp)
+
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
         on_release=partial(on_release, event_q),
@@ -839,6 +855,8 @@ def read_mouse_events(
     Returns:
         None
     """
+    utils.set_start_time(recording_timestamp)
+
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
         on_click=partial(on_click, event_q),
@@ -1105,6 +1123,8 @@ def write_video_frame(
     last_pts: int,
     pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
 ) -> int:
+    logger.info(f"{timestamp=} {base_timestamp=}")
+
     # Convert MSS ScreenShot to np.ndarray
     frame = screenshot_to_np(screenshot)
 
@@ -1117,7 +1137,7 @@ def write_video_frame(
     # Calculate PTS, taking into account the fractional average rate
     pts = int(time_diff * float(Fraction(stream.average_rate)))
 
-    print(f"{time_diff=} {pts=}")
+    print(f"{time_diff=} {pts=} {stream.average_rate=}")
 
     # Ensure monotonically increasing PTS
     if pts <= last_pts:

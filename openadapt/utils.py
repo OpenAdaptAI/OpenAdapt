@@ -583,13 +583,44 @@ def image2utf8(image: Image.Image) -> str:
     return image_utf8
 
 
+_start_time = None
+_start_perf_counter = None
+
+
+def set_start_time(value: float = None) -> float:
+    """Set the start time for recordings. Required for accurate process-wide timestamps.
+
+    Args:
+        value (float): The start time value. Defaults to the current time.
+
+    Returns:
+        float: The start time.
+    """
+    global _start_time
+    global _start_perf_counter
+    _start_time = value or time.time()
+    _start_perf_counter = time.perf_counter()
+    logger.debug(f"{_start_time=} {_start_perf_counter=}")
+    return _start_time
+
+
 def get_timestamp() -> float:
-    """Get the current timestamp.
+    """Get the current timestamp, synchronized between processes.
+
+    Before calling this function from any process, set_start_time must have been called.
 
     Returns:
         float: The current timestamp.
     """
-    return time.time()
+    global _start_time
+    global _start_perf_counter
+
+    msg = "set_start_time must be called before get_timestamp"
+    assert _start_time, f"{_start_time=}; {msg}"
+    assert _start_perf_counter, f"{_start_perf_counter=}; {msg}"
+
+    perf_duration = time.perf_counter() - _start_perf_counter
+    return _start_time + perf_duration
 
 
 # https://stackoverflow.com/a/50685454
