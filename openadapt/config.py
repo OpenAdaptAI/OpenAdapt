@@ -48,7 +48,7 @@ _DEFAULTS = {
     "ACTION_TEXT_NAME_PREFIX": "<",
     "ACTION_TEXT_NAME_SUFFIX": ">",
     # PERFORMANCE PLOTTING CONFIGURATION
-    "PLOT_PERFORMANCE": False,
+    "PLOT_PERFORMANCE": True,
     # CAPTURE CONFIGURATION
     "CAPTURE_DIR_PATH": "captures",
     # APP CONFIGURATIONS
@@ -110,7 +110,8 @@ _DEFAULTS = {
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
-    "RECORD_VIDEO": True,
+    "RECORD_VIDEO": False,
+    "RECORD_IMAGES": True,
     "VIDEO_PIXEL_FORMAT": "rgb24",
 }
 

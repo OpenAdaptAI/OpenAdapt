@@ -1,0 +1,253 @@
+"""Module for recording and manipulating video recordings."""
+
+from fractions import Fraction
+from pprint import pformat
+import threading
+
+from loguru import logger
+from PIL import Image
+import av
+import numpy as np
+import mss
+
+from openadapt import config, utils
+
+
+def get_video_file_name(recording_timestamp: float):
+    """
+    Generates a file name for a video recording based on a timestamp.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+
+    Returns:
+        str: The generated file name for the video recording.
+    """
+    return f"oa_recording-{recording_timestamp}.mp4"
+
+
+def initialize_video_writer(
+    output_path: str,
+	width: int,
+	height: int,
+	fps: int = 24,
+	codec: str = 'libx264rgb',
+	pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
+	crf: int = 0,
+	preset: str = 'veryslow',
+) -> tuple[av.container.OutputContainer, av.stream.Stream, float]:
+    """
+    Initializes the video writer and returns the container, stream, and base timestamp.
+
+    Args:
+        output_path (str): Path to the output video file.
+        width (int): Width of the video.
+        height (int): Height of the video.
+        fps (int, optional): Frames per second of the video. Defaults to 24.
+        codec (str, optional): Codec used for encoding the video.
+            Defaults to 'libx264rgb'.
+        pix_fmt (str, optional): Pixel format of the video. Defaults to 'rgb24'.
+        crf (int, optional): Constant Rate Factor for encoding quality.
+            Defaults to 0 for lossless.
+        preset (str, optional): Encoding speed/quality trade-off.
+            Defaults to 'veryslow' for maximum compression.
+
+    Returns:
+        tuple[av.container.OutputContainer, av.stream.Stream, float]: The initialized
+            container, stream, and base timestamp.
+    """
+    logger.info("initializing video stream...")
+    container = av.open(output_path, mode='w')
+    stream = container.add_stream(codec, rate=fps)
+    stream.width = width
+    stream.height = height
+    stream.pix_fmt = pix_fmt
+    stream.options = {'crf': str(crf), 'preset': preset}
+
+    base_timestamp = utils.get_timestamp()
+
+    return container, stream, base_timestamp
+
+
+def write_video_frame(
+    container: av.container.OutputContainer,
+    stream: av.stream.Stream,
+    screenshot: mss.base.ScreenShot,
+    timestamp: float,
+    base_timestamp: float,
+    last_pts: int,
+    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
+) -> int:
+    """
+    Encodes and writes a video frame to the output container from a given screenshot.
+
+    This function converts a screenshot to a numpy array, then to an AVFrame, and encodes it
+    for writing to the video stream. It calculates the presentation timestamp (PTS) for each frame
+    based on the elapsed time since the base timestamp, ensuring monotonically increasing PTS values.
+
+    Args:
+        container (av.container.OutputContainer): The output container to which the frame is written.
+        stream (av.stream.Stream): The video stream within the container.
+        screenshot (mss.base.ScreenShot): The screenshot to be written as a video frame.
+        timestamp (float): The timestamp of the current frame.
+        base_timestamp (float): The base timestamp from which the video recording started.
+        last_pts (int): The PTS of the last written frame.
+        pix_fmt (str, optional): The pixel format of the video. Defaults to the value specified in the
+            configuration ('VIDEO_PIXEL_FORMAT').
+
+    Returns:
+        int: The updated last_pts value, to be used for writing the next frame.
+        
+    Note:
+        - This function assumes the screenshot is in the correct pixel format and dimensions as
+          specified in the video stream settings.
+        - It is crucial to maintain monotonically increasing PTS values for the video stream's
+          consistency and playback.
+        - The function logs the current timestamp, base timestamp, and calculated PTS values for
+          debugging purposes.
+    """
+    logger.debug(f"{timestamp=} {base_timestamp=}")
+
+    # Convert MSS ScreenShot to np.ndarray
+    frame = screenshot_to_np(screenshot)
+
+    # Convert the numpy array to an AVFrame
+    av_frame = av.VideoFrame.from_ndarray(frame, format=pix_fmt)
+
+    # Calculate the time difference in seconds
+    time_diff = timestamp - base_timestamp
+
+    # Calculate PTS, taking into account the fractional average rate
+    pts = int(time_diff * float(Fraction(stream.average_rate)))
+
+    logger.debug(f"{time_diff=} {pts=} {stream.average_rate=}")
+
+    # Ensure monotonically increasing PTS
+    if pts <= last_pts:
+        pts = last_pts + 1
+        logger.debug("incremented {pts=}")
+    av_frame.pts = pts
+    last_pts = pts  # Update the last_pts
+
+    # Encode and write the frame
+    for packet in stream.encode(av_frame):
+        packet.pts = pts
+        container.mux(packet)
+
+    return last_pts  # Return the updated last_pts for the next call
+
+
+def finalize_video_writer(
+    container: av.container.OutputContainer,
+    stream: av.stream.Stream,
+) -> None:
+    """
+    Finalizes the video writer, ensuring all buffered frames are encoded and written.
+
+    Args:
+        container (av.container.OutputContainer): The AV container to finalize.
+        stream (av.stream.Stream): The AV stream to finalize.
+    """
+    # Closing the container in the main thread leads to a GIL deadlock.
+    # https://github.com/PyAV-Org/PyAV/issues/1053
+
+    # Define a function to close the container
+    def close_container():
+        logger.info("closing video container...")
+        container.close()
+
+    # Create a new thread to close the container
+    close_thread = threading.Thread(target=close_container)
+
+    # Flush stream
+    logger.info("flushing video stream...")
+    for packet in stream.encode():
+        container.mux(packet)
+
+    # Start the thread to close the container
+    close_thread.start()
+
+    # Wait for the thread to finish execution
+    close_thread.join()
+    logger.info("done")
+
+
+def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
+    """
+    Converts an MSS screenshot to a NumPy array.
+
+    Args:
+        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
+
+    Returns:
+        np.ndarray: The screenshot as a NumPy array in RGB format.
+    """
+    # Convert the screenshot to an RGB PIL Image
+    img = screenshot.rgb
+    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
+    frame = np.frombuffer(img, dtype=np.uint8).reshape(
+        screenshot.height, screenshot.width, 3,
+    )
+    return frame
+
+
+def extract_frames(video_filename, timestamps, tolerance=0.1):
+    """
+    Extracts frames from a video file at specified timestamps within a tolerance.
+
+    Args:
+        video_filename (str): The path to the video file.
+        timestamps (list): A list of timestamps (in seconds) at which to extract frames.
+        tolerance (float, optional): The maximum difference in seconds between the desired
+            timestamp and the actual frame timestamp. Defaults to 0.1.
+
+    Returns:
+        list: A list of extracted frames as PIL Image objects.
+
+    Raises:
+        Exception: If a frame is found to be the closest for more than one timestamp.
+        Exception: If no frame is found within the tolerance for any of the timestamps.
+    """
+    # Open the video file
+    container = av.open(video_filename)
+    stream = container.streams.video[0]  # Assuming the first video stream
+
+    # To store matched frames
+    timestamp_frames = {t: None for t in timestamps}
+    # To store closest frame differences
+    frame_differences = {t: float('inf') for t in timestamps}
+
+    # Prepare to convert PTS to seconds
+    time_base = float(stream.time_base)
+
+    for frame in container.decode(stream):
+        frame_timestamp = frame.pts * time_base  # Convert to float
+        # Find the closest timestamp within tolerance
+        for timestamp in timestamps:
+            difference = abs(frame_timestamp - timestamp)
+            #if difference <= tolerance and difference < frame_differences[timestamp]:
+            if difference <= tolerance:
+                # Check if this frame is already the closest for another timestamp
+                if frame_timestamp in frame_differences.values():
+                    raise Exception(
+                        f"Frame at {frame_timestamp}s is closest for more than one timestamp."
+                    )
+                timestamp_frames[timestamp] = frame
+                frame_differences[timestamp] = difference
+
+    container.close()
+
+    logger.info(f"frame_differences=\n{pformat(frame_differences)}")
+
+    # Check if all timestamps have been matched
+    for timestamp, frame in timestamp_frames.items():
+        if frame is None:
+            raise Exception(f"No frame found within tolerance for timestamp {timestamp}s.")
+
+    # Convert frames to PIL Image and return
+    extracted_frames = [
+        timestamp_frames[t].to_image()
+        for t in timestamps
+    ]
+
+    return extracted_frames

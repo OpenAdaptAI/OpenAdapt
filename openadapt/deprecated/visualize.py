@@ -11,14 +11,17 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
+import av
+import fire
 
-from openadapt import config
+from openadapt import config, video
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
+    compute_diff,
     configure_logging,
     display_event,
     evenly_spaced,
@@ -183,63 +186,18 @@ def dict2html(
     return html_str
 
 
-from moviepy.editor import VideoFileClip
-from PIL import Image
-import numpy as np
-def _extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
-    clip = VideoFileClip(video_filename)
-    images = []
-    for timestamp in frame_timestamps:
-        # Extract frame as an RGB image
-        frame = clip.get_frame(timestamp)
-        # Convert numpy array (frame) to PIL Image
-        image = Image.fromarray(frame.astype(np.uint8))
-        images.append(image)
-    clip.close()
-    return images
-
-import av
-
-def extract_frames_to_pil_images(video_filename: str, frame_timestamps: list[float]) -> list[Image.Image]:
-    container = av.open(video_filename)
-    stream = container.streams.video[0]  # Assuming the first video stream
-    images = []
-
-    # Convert frame timestamps to stream timebase
-    frame_timestamps_in_stream_tb = [int(ts * stream.time_base.denominator / stream.time_base.numerator) for ts in frame_timestamps]
-    logger.info(f"{frame_timestamps=}")
-    logger.info(f"{frame_timestamps_in_stream_tb=}")
-
-    for target in frame_timestamps_in_stream_tb:
-        container.seek(target, stream=stream)
-        for frame in container.decode(video=0):
-            if frame.pts >= target:
-                logger.info(f"{frame.pts=}")
-                logger.info(f"{target=}")
-                # Convert the frame to PIL Image
-                img = frame.to_image()
-                images.append(img)
-                break  # Move to the next timestamp after the frame is found and added
-
-    container.close()
-    return images
-
-def compute_diff(image1, image2):
-    """
-    Computes the difference between two PIL Images and returns the diff image.
-    """
-    arr1 = np.array(image1)
-    arr2 = np.array(image2)
-    diff = np.abs(arr1 - arr2)
-    return Image.fromarray(diff.astype('uint8'))
-
-
 @logger.catch
-def main(recording: Recording = None) -> bool:
+def main(
+    recording: Recording = None,
+    diff_video: bool = False,
+    cleanup: bool = True,
+) -> bool:
     """Visualize a recording.
 
     Args:
         recording (Recording, optional): The recording to visualize.
+        diff_video (bool): Whether to diff Screenshots against video frames.
+        cleanup (bool): Whether to remove the HTML file after it is displayed.
 
     Returns:
         bool: True if visualization was successful, None otherwise.
@@ -250,7 +208,8 @@ def main(recording: Recording = None) -> bool:
         recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
-    logger.debug(f"{recording=}")
+    logger.info(f"{recording=}")
+    logger.info(f"{diff_video=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
@@ -284,17 +243,13 @@ def main(recording: Recording = None) -> bool:
     ]
     logger.info(f"{len(action_events)=}")
 
-    from openadapt.record import get_video_file_name
-    video_file_name = get_video_file_name(recording.timestamp)
-    timestamps = [
-        action_event.timestamp - recording.video_start_time
-        for action_event in action_events
-    ]
-    import ipdb; ipdb.set_trace()
-    video_start_time = recording.video_start_time
-    fps = 30
-
-    frames = extract_frames_to_pil_images(video_file_name, timestamps)
+    if diff_video:
+        video_file_name = video.get_video_file_name(recording.timestamp)
+        timestamps = [
+            action_event.screenshot.timestamp - recording.video_start_time
+            for action_event in action_events
+        ]
+        frames = video.extract_frames(video_file_name, timestamps)
 
     num_events = (
         min(MAX_EVENTS, len(action_events))
@@ -311,21 +266,24 @@ def main(recording: Recording = None) -> bool:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
+
             try:
                 image = display_event(action_event)
             except TypeError as exc:
                 # https://github.com/moses-palmer/pynput/issues/481
                 logger.warning(exc)
                 continue
-            #diff = display_event(action_event, diff=True)
-            #mask = action_event.screenshot.diff_mask
 
-            frame_image = frames[idx]
-            diff_image = compute_diff(frame_image, action_event.screenshot.image)
+            if diff_video:
+                frame_image = frames[idx]
+                diff_image = compute_diff(frame_image, action_event.screenshot.image)
 
-            diff = frame_image
-            mask = diff_image
-
+                # TODO: rename
+                diff = frame_image
+                mask = diff_image
+            else:
+                diff = display_event(action_event, diff=True)
+                mask = action_event.screenshot.diff_mask
 
             if SCRUB:
                 image = scrub.scrub_image(image)
@@ -398,14 +356,15 @@ def main(recording: Recording = None) -> bool:
         )
     )
 
-    def cleanup() -> None:
+    def _cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
 
-    Timer(1, cleanup).start()
+    if cleanup:
+        Timer(1, _cleanup).start()
     return True
 
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

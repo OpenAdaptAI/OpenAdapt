@@ -26,11 +26,10 @@ from oa_pynput import keyboard, mouse
 from pympler import tracker
 from tqdm import tqdm
 import fire
-import mss
 import mss.tools
 import psutil
 
-from openadapt import config, utils, window
+from openadapt import config, utils, video, window
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
@@ -172,9 +171,6 @@ def process_events(
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
-    #video_container: av.container.OutputContainer,
-    #video_stream: av.stream.Stream,
-    #video_start_time: float,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -212,8 +208,8 @@ def process_events(
             )
         if event.type == "screen":
             prev_screen_event = event
-            video_write_q.put(event)
-
+            if config.RECORD_VIDEO:
+                video_write_q.put(event)
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "action":
@@ -289,8 +285,11 @@ def write_screen_event(
     """
     assert event.type == "screen", event
     screenshot = event.data
-    png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
-    event_data = {"png_data": png_data}
+    if config.RECORD_IMAGES:
+        png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+        event_data = {"png_data": png_data}
+    else:
+        event_data = {}
     crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
@@ -379,10 +378,10 @@ def write_video(
     logger.info(f"starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    video_file_name = get_video_file_name(recording_timestamp)
+    video_file_name = video.get_video_file_name(recording_timestamp)
     # TODO XXX replace with utils.get_monitor_dims() once fixed
     width, height = utils.take_screenshot().size
-    video_container, video_stream, video_start_time = initialize_video_writer(
+    video_container, video_stream, video_start_time = video.initialize_video_writer(
         video_file_name, width, height,
     )
     crud.update_video_start_time(recording_timestamp, video_start_time)
@@ -394,7 +393,7 @@ def write_video(
         except queue.Empty:
             continue
         assert event.type == "screen", ("screen", event)
-        last_pts = write_video_frame(
+        last_pts = video.write_video_frame(
             video_container,
             video_stream,
             event.data,
@@ -402,7 +401,7 @@ def write_video(
             video_start_time,
             last_pts,
         )
-    finalize_video_writer(video_container, video_stream)
+    video.finalize_video_writer(video_container, video_stream)
     logger.info("done")
 
 
@@ -877,6 +876,10 @@ def record(
     Args:
         task_description: A text description of the task to be recorded.
     """
+    assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
+        config.RECORD_VIDEO, config.RECORD_IMAGES,
+    )
+
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)
@@ -939,9 +942,6 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
-            #video_container,
-            #video_stream,
-            #video_start_time,
         ),
     )
     event_processor.start()
@@ -988,15 +988,16 @@ def record(
     )
     window_event_writer.start()
 
-    video_writer = multiprocessing.Process(
-        target=write_video,
-        args=(
-            video_write_q,
-            recording_timestamp,
-            terminate_event,
+    if config.RECORD_VIDEO:
+        video_writer = multiprocessing.Process(
+            target=write_video,
+            args=(
+                video_write_q,
+                recording_timestamp,
+                terminate_event,
+            )
         )
-    )
-    video_writer.start()
+        video_writer.start()
 
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
@@ -1050,7 +1051,8 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    video_writer.join()
+    if config.RECORD_VIDEO:
+        video_writer.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
@@ -1065,140 +1067,6 @@ def start() -> None:
     """Starts the recording process."""
     fire.Fire(record)
 
-###
-
-def get_video_file_name(recording_timestamp: float):
-    return f"oa_recording-{recording_timestamp}.mp4"
-
-def initialize_video_writer(
-    output_path: str,
-	width: int,
-	height: int,
-	fps: int = 24,
-	codec: str = 'libx264rgb',
-	pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
-	crf: int = 0,
-	preset: str = 'veryslow',
-) -> tuple[av.container.OutputContainer, av.stream.Stream, float]:
-    """
-    Initializes the video writer and returns the container, stream, and base timestamp.
-
-    Args:
-        output_path (str): Path to the output video file.
-        width (int): Width of the video.
-        height (int): Height of the video.
-        fps (int, optional): Frames per second of the video. Defaults to 24.
-        codec (str, optional): Codec used for encoding the video.
-            Defaults to 'libx264rgb'.
-        pix_fmt (str, optional): Pixel format of the video. Defaults to 'rgb24'.
-        crf (int, optional): Constant Rate Factor for encoding quality.
-            Defaults to 0 for lossless.
-        preset (str, optional): Encoding speed/quality trade-off.
-            Defaults to 'veryslow' for maximum compression.
-
-    Returns:
-        tuple[av.container.OutputContainer, av.stream.Stream, float]: The initialized
-            container, stream, and base timestamp.
-    """
-    logger.info("initializing video stream...")
-    container = av.open(output_path, mode='w')
-    stream = container.add_stream(codec, rate=fps)
-    stream.width = width
-    stream.height = height
-    stream.pix_fmt = pix_fmt
-    stream.options = {'crf': str(crf), 'preset': preset}
-
-    base_timestamp = utils.get_timestamp()
-
-    return container, stream, base_timestamp
-
-from fractions import Fraction
-
-def write_video_frame(
-    container: av.container.OutputContainer,
-    stream: av.stream.Stream,
-    screenshot: mss.base.ScreenShot,
-    timestamp: float,
-    base_timestamp: float,
-    last_pts: int,
-    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
-) -> int:
-    logger.info(f"{timestamp=} {base_timestamp=}")
-
-    # Convert MSS ScreenShot to np.ndarray
-    frame = screenshot_to_np(screenshot)
-
-    # Convert the numpy array to an AVFrame
-    av_frame = av.VideoFrame.from_ndarray(frame, format=pix_fmt)
-
-    # Calculate the time difference in seconds
-    time_diff = timestamp - base_timestamp
-
-    # Calculate PTS, taking into account the fractional average rate
-    pts = int(time_diff * float(Fraction(stream.average_rate)))
-
-    print(f"{time_diff=} {pts=} {stream.average_rate=}")
-
-    # Ensure monotonically increasing PTS
-    if pts <= last_pts:
-        print("inc")
-        pts = last_pts + 1
-    av_frame.pts = pts
-    last_pts = pts  # Update the last_pts
-
-    # Encode and write the frame
-    for packet in stream.encode(av_frame):
-        packet.pts = pts
-        container.mux(packet)
-
-    return last_pts  # Return the updated last_pts for the next call
-
-def finalize_video_writer(
-    container: av.container.OutputContainer,
-    stream: av.stream.Stream,
-) -> None:
-    """
-    Finalizes the video writer, ensuring all buffered frames are encoded and written.
-
-    Args:
-        container (av.container.OutputContainer): The AV container to finalize.
-        stream (av.stream.Stream): The AV stream to finalize.
-    """
-    # Define a function to close the container
-    def close_container():
-        logger.info("closing...")
-        container.close()
-        logger.info("done")
-
-    # Create a new thread to close the container
-    close_thread = threading.Thread(target=close_container)
-
-    # Flush stream
-    logger.info("flushing...")
-    for packet in stream.encode():
-        container.mux(packet)
-
-    # Start the thread to close the container
-    close_thread.start()
-
-    # Wait for the thread to finish execution
-    close_thread.join()
-
-def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
-    """
-    Converts an MSS screenshot to a NumPy array.
-
-    Args:
-        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
-
-    Returns:
-        np.ndarray: The screenshot as a NumPy array in RGB format.
-    """
-    # Convert the screenshot to a PIL Image first (mss provides a method for this)
-    img = screenshot.rgb  # Get the RGB data from the screenshot
-    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
-    frame = np.frombuffer(img, dtype=np.uint8).reshape(screenshot.height, screenshot.width, 3)
-    return frame
 
 if __name__ == "__main__":
     fire.Fire(record)

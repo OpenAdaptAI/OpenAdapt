@@ -27,9 +27,13 @@ from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
+# TODO: move to constants.py
 EMPTY = (None, [], {}, "")
+SCT = mss.mss()
 
 _logger_lock = threading.Lock()
+_start_time = None
+_start_perf_counter = None
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
@@ -573,6 +577,8 @@ def image2utf8(image: Image.Image) -> str:
     Returns:
         str: The UTF-8 encoded image.
     """
+    if not image:
+        return ""
     image = image.convert("RGB")
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
@@ -581,10 +587,6 @@ def image2utf8(image: Image.Image) -> str:
     image_base64 = base64_prefix + image_str
     image_utf8 = image_base64.decode("utf-8")
     return image_utf8
-
-
-_start_time = None
-_start_perf_counter = None
 
 
 def set_start_time(value: float = None) -> float:
@@ -640,7 +642,6 @@ def evenly_spaced(arr: list, N: list) -> list:
     return [val for idx, val in enumerate(arr) if idx in idxs]
 
 
-SCT = mss.mss()
 def take_screenshot() -> mss.base.ScreenShot:
     """Take a screenshot.
 
@@ -778,6 +779,16 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     for child in action_event.children:
         strip_element_state(child)
     return action_event
+
+
+def compute_diff(image1, image2):
+    """
+    Computes the difference between two PIL Images and returns the diff image.
+    """
+    arr1 = np.array(image1)
+    arr2 = np.array(image2)
+    diff = np.abs(arr1 - arr2)
+    return Image.fromarray(diff.astype('uint8'))
 
 
 def get_functions(name: str) -> dict:

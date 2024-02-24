@@ -6,6 +6,7 @@ import io
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
+from sqlalchemy.ext.hybrid import hybrid_property
 import numpy as np
 import sqlalchemy as sa
 
@@ -81,7 +82,7 @@ class ActionEvent(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
-    timestamp = sa.Column(ForceFloat)
+    _timestamp = sa.Column("timestamp", ForceFloat)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
@@ -114,7 +115,17 @@ class ActionEvent(db.Base):
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
 
-    # TODO: playback_timestamp / original_timestamp
+    # no setter, read-only
+    @hybrid_property
+    def timestamp(self):
+        return self._timestamp
+
+    @property
+    def original_timestamp(self):
+        this = self
+        while getattr(this, "children"):
+            this = this.children[0]
+        return this.timestamp
 
     def _key(
         self, key_name: str, key_char: str, key_vk: str
