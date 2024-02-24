@@ -242,7 +242,6 @@ def get_monitor_dims() -> tuple[int, int]:
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
 
 
-    SCT = mss.mss()
     monitor = SCT.monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
