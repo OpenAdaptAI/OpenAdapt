@@ -556,25 +556,58 @@ def read_screen_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
+    max_memory_percent: float = 50.0,  # Maximum allowed memory percent
+    fps_warning_threshold: float = 10.0,  # FPS threshold below which to warn
 ) -> None:
-    """Read screen events and add them to the event queue.
+    """Read screen events and add them to the event queue while monitoring
+    and adapting to CPU, memory usage, and maintaining true FPS of successful screenshots.
 
     Args:
         event_q: A queue for adding screen events.
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
+        max_cpu_percent: Maximum allowed CPU usage percent.
+        max_memory_percent: Maximum allowed memory usage percent.
+        fps_warning_threshold: FPS warning threshold.
     """
     utils.set_start_time(recording_timestamp)
+    last_frame_time = time.time()
+    frames_captured = 0  # Track the number of successful screenshots
 
     logger.info("Starting")
     while not terminate_event.is_set():
+        # Check current CPU and memory usage
+        current_cpu_percent = psutil.cpu_percent(interval=1)
+        current_memory_percent = psutil.virtual_memory().percent
+
+        if current_cpu_percent > max_cpu_percent or current_memory_percent > max_memory_percent:
+            logger.warning(f"High resource usage detected: CPU={current_cpu_percent}%, Memory={current_memory_percent}%")
+            time.sleep(0.01)  # Introduce a short delay to avoid excessive looping under high resource usage
+            continue
+
         screenshot = utils.take_screenshot()
         if screenshot is None:
             logger.warning("Screenshot was None")
+            time.sleep(0.01)  # Introduce a short delay if screenshot fails
             continue
+
+        now = time.time()
+        frames_captured += 1
+        elapsed_time = now - last_frame_time
+        if elapsed_time >= 1.0:  # Update FPS calculation every second
+            fps = frames_captured / elapsed_time
+            logger.info(f"True FPS: {fps:.2f}")
+
+            if fps < fps_warning_threshold:
+                logger.warning(f"FPS below threshold: {fps:.2f} FPS (Threshold: {fps_warning_threshold} FPS)")
+
+            # Reset counters for the next interval
+            last_frame_time = now
+            frames_captured = 0
+
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("Done")
-
 
 @trace(logger)
 def read_window_events(

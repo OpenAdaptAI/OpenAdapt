@@ -89,32 +89,36 @@ def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
         to_follow = {key: {} for key in to_follow}
         to_follow["children"]["follow"] = to_follow
 
+    # properties
     try_include = [
         "key",
         "text",
         "canonical_key",
         "canonical_text",
+        "timestamp",
     ]
     to_include = [key for key in try_include if hasattr(row, key)]
     row_dict = row.asdict(follow=to_follow, include=to_include)
+    assert "timestamp" in row_dict, row_dict
     return row_dict
 
 
-def round_timestamps(events: list[ActionEvent], num_digits: int) -> None:
-    """Round timestamps in a list of events.
+def round_timestamps(event_dicts: list[dict], num_digits: int) -> None:
+    """Round timestamps in a list of event dictss.
 
     Args:
-        events (list): The list of events.
+        event_dicts (list): The list of event dicts.
         num_digits (int): The number of digits to round to.
     """
-    for event in events:
-        if isinstance(event, dict):
+    for event_dict in event_dicts:
+        if "timestamp" not in event_dict:
+            # XXX how does this happen?
             continue
-        prev_timestamp = event.timestamp
-        event.timestamp = round(event.timestamp, num_digits)
-        logger.debug(f"{prev_timestamp=} {event.timestamp=}")
-        if hasattr(event, "children") and event.children:
-            round_timestamps(event.children, num_digits)
+        prev_timestamp = event_dict["timestamp"]
+        event_dict["timestamp"] = round(event_dict["timestamp"], num_digits)
+        logger.debug(f"{prev_timestamp=} {event_dict['timestamp']=}")
+        if event_dict.get("children"):
+            round_timestamps(event_dict["children"], num_digits)
 
 
 def rows2dicts(
@@ -135,9 +139,9 @@ def rows2dicts(
     Returns:
         list: The list of dictionaries representing the rows.
     """
-    if num_digits:
-        round_timestamps(rows, num_digits)
     row_dicts = [row2dict(row) for row in rows]
+    if num_digits:
+        round_timestamps(row_dicts, num_digits)
     if drop_empty:
         keep_keys = set()
         for row_dict in row_dicts:
@@ -780,7 +784,7 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     return action_event
 
 
-def compute_diff(image1, image2):
+def compute_diff(image1: Image.Image, image2: Image.Image):
     """
     Computes the difference between two PIL Images and returns the diff image.
     """

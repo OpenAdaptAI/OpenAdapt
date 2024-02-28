@@ -269,6 +269,7 @@ def merge_consecutive_mouse_move_events(
                         "mouse_y": last_child.mouse_y,
                         "timestamp": first_child.timestamp - state["dt"],
                         "children": children,
+                        "dt": state["dt"],
                     },
                 )
                 state["dt"] += last_child.timestamp - first_child.timestamp

@@ -97,7 +97,7 @@ def write_video_frame(
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
-        
+
     Note:
         - This function assumes the screenshot is in the correct pixel format and dimensions as
           specified in the video stream settings.
