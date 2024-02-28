@@ -6,7 +6,7 @@ from loguru import logger
 import pywinauto
 
 
-def get_active_window_state(read_window_data: ) -> dict:
+def get_active_window_state(read_window_data: bool) -> dict:
     """Get the state of the active window.
 
     Returns:
