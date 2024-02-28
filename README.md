@@ -227,8 +227,11 @@ We're looking forward to your contributions. Let's build the future 🚀
 Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
 `ActionEvent`(s) based on the previously recorded `ActionEvent`s in order to
-accomplish the task specified in the `Recording.task_description`, while
-accounting for differences in screen resolution, window size, application
+accomplish the task specified in the
+[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/models.py#L46)
+and narrated by the user in
+[`AudioInfo.words_with_timestamps`](https://github.com/OpenAdaptAI/OpenAdapt/pull/346/files#diff-224d5ce89a18f796cae99bf3da5a9862def2127db2ed38e68a07a25a8624166fR393),
+while accounting for differences in screen resolution, window size, application
 behavior, etc.
 
 If it's not clear what `ActionEvent` is appropriate for the given `Screenshot`,
