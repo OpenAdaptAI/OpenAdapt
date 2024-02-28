@@ -238,9 +238,7 @@ def get_monitor_dims() -> tuple[int, int]:
         tuple[int, int]: The width and height of the monitor.
     """
 
-
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-
 
     monitor = SCT.monitors[0]
     monitor_width = monitor["width"]
@@ -787,7 +785,7 @@ def compute_diff(image1, image2):
     arr1 = np.array(image1)
     arr2 = np.array(image2)
     diff = np.abs(arr1 - arr2)
-    return Image.fromarray(diff.astype('uint8'))
+    return Image.fromarray(diff.astype("uint8"))
 
 
 def get_functions(name: str) -> dict:

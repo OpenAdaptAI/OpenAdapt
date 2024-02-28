@@ -70,13 +70,17 @@ def test_scrub_address() -> None:
     acceptable_patterns = [
         "My address is <ADDRESS>.",
         "My address is 123 Main St, <LOCATION>, On, <LOCATION>.",
-        "My address is 123 Main St, <LOCATION>, <LOCATION>, <LOCATION>."
+        "My address is 123 Main St, <LOCATION>, <LOCATION>, <LOCATION>.",
     ]
-    
+
     # Check if scrubbed_text matches any of the acceptable patterns
-    match_found = any(re.match(pattern, scrubbed_text) for pattern in acceptable_patterns)
-    
-    assert match_found, f"Scrubbed text '{scrubbed_text}' did not match any expected patterns."
+    match_found = any(
+        re.match(pattern, scrubbed_text) for pattern in acceptable_patterns
+    )
+
+    assert (
+        match_found
+    ), f"Scrubbed text '{scrubbed_text}' did not match any expected patterns."
 
 
 def test_scrub_ssn() -> None:
@@ -110,9 +114,11 @@ def test_scrub_national_id() -> None:
     expected_outcomes = [
         "My national ID number is <PHONE>.",
         "My national ID number is <DATA>.",
-        "My national ID number is <SSN>."  # Adding <SSN> to expected outcomes
+        "My national ID number is <SSN>.",  # Adding <SSN> to expected outcomes
     ]
-    assert scrubbed_text in expected_outcomes, f"Scrubbed text '{scrubbed_text}' did not match any expected outcomes."
+    assert (
+        scrubbed_text in expected_outcomes
+    ), f"Scrubbed text '{scrubbed_text}' did not match any expected outcomes."
 
 
 def test_scrub_routing_number() -> None:

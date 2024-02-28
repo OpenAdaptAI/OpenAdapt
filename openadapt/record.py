@@ -382,7 +382,9 @@ def write_video(
     # TODO XXX replace with utils.get_monitor_dims() once fixed
     width, height = utils.take_screenshot().size
     video_container, video_stream, video_start_time = video.initialize_video_writer(
-        video_file_name, width, height,
+        video_file_name,
+        width,
+        height,
     )
     crud.update_video_start_time(recording_timestamp, video_start_time)
 
@@ -877,7 +879,8 @@ def record(
         task_description: A text description of the task to be recorded.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
-        config.RECORD_VIDEO, config.RECORD_IMAGES,
+        config.RECORD_VIDEO,
+        config.RECORD_IMAGES,
     )
 
     logger.info(f"{task_description=}")
@@ -995,7 +998,7 @@ def record(
                 video_write_q,
                 recording_timestamp,
                 terminate_event,
-            )
+            ),
         )
         video_writer.start()
 

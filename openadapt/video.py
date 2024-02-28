@@ -28,13 +28,13 @@ def get_video_file_name(recording_timestamp: float):
 
 def initialize_video_writer(
     output_path: str,
-	width: int,
-	height: int,
-	fps: int = 24,
-	codec: str = 'libx264rgb',
-	pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
-	crf: int = 0,
-	preset: str = 'veryslow',
+    width: int,
+    height: int,
+    fps: int = 24,
+    codec: str = "libx264rgb",
+    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
+    crf: int = 0,
+    preset: str = "veryslow",
 ) -> tuple[av.container.OutputContainer, av.stream.Stream, float]:
     """
     Initializes the video writer and returns the container, stream, and base timestamp.
@@ -57,12 +57,12 @@ def initialize_video_writer(
             container, stream, and base timestamp.
     """
     logger.info("initializing video stream...")
-    container = av.open(output_path, mode='w')
+    container = av.open(output_path, mode="w")
     stream = container.add_stream(codec, rate=fps)
     stream.width = width
     stream.height = height
     stream.pix_fmt = pix_fmt
-    stream.options = {'crf': str(crf), 'preset': preset}
+    stream.options = {"crf": str(crf), "preset": preset}
 
     base_timestamp = utils.get_timestamp()
 
@@ -97,7 +97,7 @@ def write_video_frame(
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
-        
+
     Note:
         - This function assumes the screenshot is in the correct pixel format and dimensions as
           specified in the video stream settings.
@@ -186,7 +186,9 @@ def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
     img = screenshot.rgb
     # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
     frame = np.frombuffer(img, dtype=np.uint8).reshape(
-        screenshot.height, screenshot.width, 3,
+        screenshot.height,
+        screenshot.width,
+        3,
     )
     return frame
 
@@ -215,7 +217,7 @@ def extract_frames(video_filename, timestamps, tolerance=0.1):
     # To store matched frames
     timestamp_frames = {t: None for t in timestamps}
     # To store closest frame differences
-    frame_differences = {t: float('inf') for t in timestamps}
+    frame_differences = {t: float("inf") for t in timestamps}
 
     # Prepare to convert PTS to seconds
     time_base = float(stream.time_base)
@@ -225,12 +227,13 @@ def extract_frames(video_filename, timestamps, tolerance=0.1):
         # Find the closest timestamp within tolerance
         for timestamp in timestamps:
             difference = abs(frame_timestamp - timestamp)
-            #if difference <= tolerance and difference < frame_differences[timestamp]:
+            # if difference <= tolerance and difference < frame_differences[timestamp]:
             if difference <= tolerance:
                 # Check if this frame is already the closest for another timestamp
                 if frame_timestamp in frame_differences.values():
                     raise Exception(
-                        f"Frame at {frame_timestamp}s is closest for more than one timestamp."
+                        f"Frame at {frame_timestamp}s is closest for more than one"
+                        " timestamp."
                     )
                 timestamp_frames[timestamp] = frame
                 frame_differences[timestamp] = difference
@@ -242,12 +245,11 @@ def extract_frames(video_filename, timestamps, tolerance=0.1):
     # Check if all timestamps have been matched
     for timestamp, frame in timestamp_frames.items():
         if frame is None:
-            raise Exception(f"No frame found within tolerance for timestamp {timestamp}s.")
+            raise Exception(
+                f"No frame found within tolerance for timestamp {timestamp}s."
+            )
 
     # Convert frames to PIL Image and return
-    extracted_frames = [
-        timestamp_frames[t].to_image()
-        for t in timestamps
-    ]
+    extracted_frames = [timestamp_frames[t].to_image() for t in timestamps]
 
     return extracted_frames

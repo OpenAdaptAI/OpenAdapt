@@ -412,7 +412,10 @@ def new_session() -> None:
         db.close()
     db = Session()
 
-def update_video_start_time(recording_timestamp: float, video_start_time: float) -> None:
+
+def update_video_start_time(
+    recording_timestamp: float, video_start_time: float
+) -> None:
     """Update the video start time of a specific recording.
 
     Args:
@@ -420,7 +423,9 @@ def update_video_start_time(recording_timestamp: float, video_start_time: float)
         video_start_time (float): The new video start time to set.
     """
     # Find the recording by its timestamp
-    recording = db.query(Recording).filter(Recording.timestamp == recording_timestamp).first()
+    recording = (
+        db.query(Recording).filter(Recording.timestamp == recording_timestamp).first()
+    )
 
     if not recording:
         logger.error(f"No recording found with timestamp {recording_timestamp}.")
@@ -432,4 +437,7 @@ def update_video_start_time(recording_timestamp: float, video_start_time: float)
     # Commit the changes to the database
     db.commit()
 
-    logger.info(f"Updated video start time for recording {recording_timestamp} to {video_start_time}.")
+    logger.info(
+        f"Updated video start time for recording {recording_timestamp} to"
+        f" {video_start_time}."
+    )
