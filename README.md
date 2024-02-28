@@ -46,53 +46,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
 3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web.
 4. OpenAdapt is open source (MIT license).
 
-## Features
-
-### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
-
-### Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
-
-### Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
-
-## Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
-
-### And much more!
-
-## 🚀 Open Contract Positions at OpenAdapt.AI
-
-We are thrilled to open new contract positions for developers passionate about pushing boundaries in technology. If you're ready to make a significant impact, consider the following roles:
-
-#### Frontend Developer
-- **Responsibilities**: Develop and test key features such as process visualization, demo booking, app store, and blog integration.
-- **Skills**: Proficiency in modern frontend technologies and a knack for UI/UX design.
-
-#### Machine Learning Engineer
-- **Role**: Implement and refine process replay strategies using state-of-the-art LLMs/LMMs. Extract dynamic process descriptions from extensive process recordings.
-- **Skills**: Strong background in machine learning, experience with LLMs/LMMs, and problem-solving aptitude.
-
-#### Software Engineer
-- **Focus**: Enhance memory optimization techniques during process recording and replay. Develop sophisticated tools for process observation and productivity measurement.
-- **Skills**: Expertise in software optimization, memory management, and analytics.
-
-#### Technical Writer
-- **Focus**: Maintaining [OpenAdapt](https://github.com/OpenAdaptAI) repositories
-- **Skills**: Passion for writing and/or documentation
-
-### 🔍 How to Apply
-- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
-- **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
-- **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
-
-We're looking forward to your contributions. Let's build the future 🚀
-
 ## Install
 
 <br/>
@@ -145,11 +98,11 @@ alembic upgrade head
 pytest
 ```
 
-## Permissions
+### Permissions
 
 See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
-## Run
+## Usage
 
 ### Record
 
@@ -178,7 +131,6 @@ possible memory leak
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
-
 ### Visualize
 
 Visualize the latest recording you created by running the following command:
@@ -193,7 +145,7 @@ This will open a scrollable window that looks something like this:
 
 <img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
 
-For an alternative visualization, run:
+For a browser-based visualization, run:
 
 ```
 python -m openadapt.deprecated.visualize
@@ -216,6 +168,53 @@ Other replay strategies include:
 - [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
+
+## Features
+
+### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
+
+### Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
+
+### Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
+
+### Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
+
+### And much more!
+
+## 🚀 Open Contract Positions at OpenAdapt.AI
+
+We are thrilled to open new contract positions for developers passionate about pushing boundaries in technology. If you're ready to make a significant impact, consider the following roles:
+
+#### Frontend Developer
+- **Responsibilities**: Develop and test key features such as process visualization, demo booking, app store, and blog integration.
+- **Skills**: Proficiency in modern frontend technologies and a knack for UI/UX design.
+
+#### Machine Learning Engineer
+- **Role**: Implement and refine process replay strategies using state-of-the-art LLMs/LMMs. Extract dynamic process descriptions from extensive process recordings.
+- **Skills**: Strong background in machine learning, experience with LLMs/LMMs, and problem-solving aptitude.
+
+#### Software Engineer
+- **Focus**: Enhance memory optimization techniques during process recording and replay. Develop sophisticated tools for process observation and productivity measurement.
+- **Skills**: Expertise in software optimization, memory management, and analytics.
+
+#### Technical Writer
+- **Focus**: Maintaining [OpenAdapt](https://github.com/OpenAdaptAI) repositories
+- **Skills**: Passion for writing and/or documentation
+
+### 🔍 How to Apply
+- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
+- **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
+- **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
+
+We're looking forward to your contributions. Let's build the future 🚀
 
 ## Contributing
 
