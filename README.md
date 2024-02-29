@@ -108,6 +108,25 @@ See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
 ## Usage
 
+### Shell
+
+Run this in every new terminal window once before running any openadapt commands below:
+
+```
+poetry shell
+```
+
+You should see the something like this:
+
+```
+% poetry shell
+Using python3.10 (3.10.13)
+...
+(openadapt-py3.10) %
+```
+
+Notice the environment prefix `(openadapt-py3.10)`.
+
 ### Record
 
 Create a new recording by running the following command:
