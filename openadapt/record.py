@@ -9,9 +9,7 @@ Usage:
 from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Union
-import av
 import multiprocessing
-import numpy as np
 import os
 import queue
 import signal
@@ -179,12 +177,10 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
-        video_container: The video container.
-        video_stream: The stream to which to write video frames.
-        video_start_time: The timestamp at which the video strema was started.
     """
     utils.set_start_time(recording_timestamp)
 
@@ -196,7 +192,6 @@ def process_events(
     prev_window_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
-    last_pts = 0
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
         logger.trace(f"{event=}")
@@ -373,9 +368,35 @@ def write_video(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
+    """Writes video frames from a synchronized queue to a video file until termination.
+
+    This function initializes video writing by setting a start time and
+    ignoring SIGINT signals for graceful shutdown.  It generates a video file
+    name based on the recording timestamp, computes the video dimensions from a
+    screenshot, and initializes the video writer with these parameters. The
+    function then enters a loop, polling the queue for new "screen" type events
+    and writing each frame to the video file, until the termination event is
+    set and the queue is empty. Finally, it finalizes the video writer,
+    ensuring the video is properly closed and saved.
+
+    Args:
+        video_write_q (sq.SynchronizedQueue): A queue synchronized across
+            multiple processes that contains video frame events to write to the
+            video file.
+        recording_timestamp (float): The timestamp at which the video recording
+            started. Used for naming the video file and as a reference for
+            calculating frame timestamps.
+        terminate_event (multiprocessing.Event): An event used to signal when
+            video writing should be terminated. The function will continue to
+            process events in the queue until it is empty, even after the terminate
+            event is set.
+
+    Returns:
+        None
+    """
     utils.set_start_time(recording_timestamp)
 
-    logger.info(f"starting")
+    logger.info("starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     video_file_name = video.get_video_file_name(recording_timestamp)

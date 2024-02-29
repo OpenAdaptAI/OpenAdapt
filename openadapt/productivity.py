@@ -30,7 +30,8 @@ from openadapt.utils import (
 )
 from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
-CSS = string.Template("""
+CSS = string.Template(
+    """
     table {
         outline: 1px solid black;
     }
@@ -51,7 +52,8 @@ CSS = string.Template("""
     .screenshot:active img:nth-child(1) {
         display: block;
     }
-""").substitute(
+"""
+).substitute(
     IMG_WIDTH_PCT=IMG_WIDTH_PCT,
 )
 
@@ -590,11 +592,13 @@ def calculate_productivity() -> None:
                                 </table>
                             """,
                             ),
-                            Div(text=f"""
+                            Div(
+                                text=f"""
                                 <table>
                                     {dict2html(window_info)}
                                 </table>
-                            """),
+                            """
+                            ),
                         ),
                     ]
                 )
@@ -641,11 +645,13 @@ def calculate_productivity() -> None:
                                     </table>
                                 """,
                     ),
-                    Div(text=f"""
+                    Div(
+                        text=f"""
                                     <table>
                                         {dict2html(window_info)}
                                     </table>
-                                """),
+                                """
+                    ),
                 ),
             ]
         )

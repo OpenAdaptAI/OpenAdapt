@@ -237,9 +237,7 @@ def get_monitor_dims() -> tuple[int, int]:
     Returns:
         tuple[int, int]: The width and height of the monitor.
     """
-
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-
     monitor = SCT.monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
@@ -778,10 +776,8 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     return action_event
 
 
-def compute_diff(image1, image2):
-    """
-    Computes the difference between two PIL Images and returns the diff image.
-    """
+def compute_diff(image1: Image.Image, image2: Image.Image) -> Image.Image:
+    """Computes the difference between two PIL Images and returns the diff image."""
     arr1 = np.array(image1)
     arr2 = np.array(image2)
     diff = np.abs(arr1 - arr2)

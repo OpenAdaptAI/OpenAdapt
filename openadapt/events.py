@@ -454,7 +454,6 @@ def remove_invalid_keyboard_events(
     events: list[models.ActionEvent],
 ) -> list[models.ActionEvent]:
     """Remove invalid keyboard events."""
-
     return [
         event
         for event in events

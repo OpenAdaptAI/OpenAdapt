@@ -13,9 +13,8 @@ import mss
 from openadapt import config, utils
 
 
-def get_video_file_name(recording_timestamp: float):
-    """
-    Generates a file name for a video recording based on a timestamp.
+def get_video_file_name(recording_timestamp: float) -> str:
+    """Generates a file name for a video recording based on a timestamp.
 
     Args:
         recording_timestamp (float): The timestamp of the recording.
@@ -36,8 +35,7 @@ def initialize_video_writer(
     crf: int = 0,
     preset: str = "veryslow",
 ) -> tuple[av.container.OutputContainer, av.stream.Stream, float]:
-    """
-    Initializes the video writer and returns the container, stream, and base timestamp.
+    """Initializes video writer and returns the container, stream, and base timestamp.
 
     Args:
         output_path (str): Path to the output video file.
@@ -78,33 +76,35 @@ def write_video_frame(
     last_pts: int,
     pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
 ) -> int:
-    """
-    Encodes and writes a video frame to the output container from a given screenshot.
+    """Encodes and writes a video frame to the output container from a given screenshot.
 
-    This function converts a screenshot to a numpy array, then to an AVFrame, and encodes it
-    for writing to the video stream. It calculates the presentation timestamp (PTS) for each frame
-    based on the elapsed time since the base timestamp, ensuring monotonically increasing PTS values.
+    This function converts a screenshot to a numpy array, then to an AVFrame,
+    and encodes it for writing to the video stream. It calculates the
+    presentation timestamp (PTS) for each frame based on the elapsed time since
+    the base timestamp, ensuring monotonically increasing PTS values.
 
     Args:
-        container (av.container.OutputContainer): The output container to which the frame is written.
+        container (av.container.OutputContainer): The output container to which
+            the frame is written.
         stream (av.stream.Stream): The video stream within the container.
         screenshot (mss.base.ScreenShot): The screenshot to be written as a video frame.
         timestamp (float): The timestamp of the current frame.
-        base_timestamp (float): The base timestamp from which the video recording started.
+        base_timestamp (float): The base timestamp from which the video
+            recording started.
         last_pts (int): The PTS of the last written frame.
-        pix_fmt (str, optional): The pixel format of the video. Defaults to the value specified in the
-            configuration ('VIDEO_PIXEL_FORMAT').
+        pix_fmt (str, optional): The pixel format of the video. Defaults to the
+            value specified in the configuration ('VIDEO_PIXEL_FORMAT').
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
 
     Note:
-        - This function assumes the screenshot is in the correct pixel format and dimensions as
-          specified in the video stream settings.
-        - It is crucial to maintain monotonically increasing PTS values for the video stream's
-          consistency and playback.
-        - The function logs the current timestamp, base timestamp, and calculated PTS values for
-          debugging purposes.
+        - This function assumes the screenshot is in the correct pixel format
+              and dimensions as specified in the video stream settings.
+        - It is crucial to maintain monotonically increasing PTS values for the
+              video stream's consistency and playback.
+        - The function logs the current timestamp, base timestamp, and
+              calculated PTS values for debugging purposes.
     """
     logger.debug(f"{timestamp=} {base_timestamp=}")
 
@@ -141,8 +141,7 @@ def finalize_video_writer(
     container: av.container.OutputContainer,
     stream: av.stream.Stream,
 ) -> None:
-    """
-    Finalizes the video writer, ensuring all buffered frames are encoded and written.
+    """Finalizes the video writer, ensuring all buffered frames are encoded and written.
 
     Args:
         container (av.container.OutputContainer): The AV container to finalize.
@@ -152,7 +151,7 @@ def finalize_video_writer(
     # https://github.com/PyAV-Org/PyAV/issues/1053
 
     # Define a function to close the container
-    def close_container():
+    def close_container() -> None:
         logger.info("closing video container...")
         container.close()
 
@@ -173,8 +172,7 @@ def finalize_video_writer(
 
 
 def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
-    """
-    Converts an MSS screenshot to a NumPy array.
+    """Converts an MSS screenshot to a NumPy array.
 
     Args:
         screenshot (mss.base.ScreenShot): The screenshot object from MSS.
@@ -193,15 +191,18 @@ def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
     return frame
 
 
-def extract_frames(video_filename, timestamps, tolerance=0.1):
-    """
-    Extracts frames from a video file at specified timestamps within a tolerance.
+def extract_frames(
+    video_filename: str,
+    timestamps: list[str],
+    tolerance: float = 0.1,
+) -> list[Image.Image]:
+    """Extracts frames from a video file at specified timestamps within a tolerance.
 
     Args:
         video_filename (str): The path to the video file.
         timestamps (list): A list of timestamps (in seconds) at which to extract frames.
-        tolerance (float, optional): The maximum difference in seconds between the desired
-            timestamp and the actual frame timestamp. Defaults to 0.1.
+        tolerance (float, optional): The maximum difference in seconds between
+            th timestamp and the actual frame timestamp. Defaults to 0.1.
 
     Returns:
         list: A list of extracted frames as PIL Image objects.
