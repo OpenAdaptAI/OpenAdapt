@@ -147,7 +147,8 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert (
-        scrub.scrub_text(text_with_pii_phi) == "<NAME>'s email is <EMAIL> and"
+        scrub.scrub_text(text_with_pii_phi)
+        == "<NAME>'s email is <EMAIL> and"
         " his phone number is <PHONE>"
         " credit card number is <CREDIT_DEBIT_NUMBER> and"
         " his social security number is <SSN>."

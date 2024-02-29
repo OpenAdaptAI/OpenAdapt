@@ -579,6 +579,10 @@ def read_screen_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    # TODO: throttle
+    # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
+    # max_memory_percent: float = 50.0,  # Maximum allowed memory percent
+    # fps_warning_threshold: float = 10.0,  # FPS threshold below which to warn
 ) -> None:
     """Read screen events and add them to the event queue.
 
