@@ -1,6 +1,20 @@
+[Read our latest slides](https://t.ly/pdUUv)
+
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
-# OpenAdapt: AI-First Process Automation with Transformers
+[Read our Architecture document](https://github.com/OpenAdaptAI/OpenAdapt/wiki/OpenAdapt-Architecture-(draft))
+
+[Join the Discussion on the Request for Comments](https://github.com/OpenAdaptAI/OpenAdapt/discussions/552)
+
+See also:
+
+- https://github.com/OpenAdaptAI/SoM
+- https://github.com/OpenAdaptAI/pynput
+- https://github.com/OpenAdaptAI/atomacos
+
+# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
+
+**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
 ### Enormous volumes of mental labor are wasted on repetitive GUI workflows.
 
@@ -8,30 +22,33 @@
 
 ### OpenAdapt connects Foundation Models to GUIs:
 
-<img width="1473" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5a760e4a-c596-4604-b1a4-a9563dce0fe7">
+<img width="1507" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/6f0355a2-8693-447e-90e6-2aff975dc21f">
 
+System Overview:
 
-([Slides](https://t.ly/7RGr))
+<img width="1504" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/1cbb4418-6c03-447d-b66a-6341043ffbcd">
+
+Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
-with the power of Transformers by:
+with the power of Large Multimodal Modals (LMMs) by:
 
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
 - Generating synthetic input via transformer model completions
-- Replaying synthetic input to complete tasks
+- Generating task trees by analyzing recordings (work-in-progress)
+- Replaying synthetic input to complete tasks (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
-except that we use transformers instead of conventional RPA tools.
+except that we use Large Multimodal Models instead of conventional RPA tools.
 
 The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differences:
-1. OpenAdapt is model agnostic
-2. OpenAdapt generates prompts automatically (auto-prompted, not user-prompted)
-3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web
-4. OpenAdapt is open source (MIT license)
-
+1. OpenAdapt is model agnostic.
+2. OpenAdapt generates prompts automatically by **learning from human demonstration** (auto-prompted, not user-prompted). This means that agents are **grounded** in **existing processes**, which mitigates hallucinations and ensures successful task completion.
+3. OpenAdapt works with all types of desktop GUIs, including virtualized (e.g. Citrix) and web.
+4. OpenAdapt is open source (MIT license).
 
 ## Install
 
@@ -62,7 +79,6 @@ The direction is adjacent to [Adept.ai](https://adept.ai/), with some key differ
   </pre>
 
 <br/>
-<br/>
 
 ### Manual Setup
 
@@ -86,12 +102,11 @@ alembic upgrade head
 pytest
 ```
 
-
-## Permissions
+### Permissions
 
 See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
-## Run
+## Usage
 
 ### Record
 
@@ -120,7 +135,6 @@ possible memory leak
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
-
 ### Visualize
 
 Visualize the latest recording you created by running the following command:
@@ -129,7 +143,19 @@ Visualize the latest recording you created by running the following command:
 python -m openadapt.visualize
 ```
 
-This will open your browser. It will look something like this:
+This will open a scrollable window that looks something like this:
+
+<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
+
+<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
+
+For a browser-based visualization, run:
+
+```
+python -m openadapt.deprecated.visualize
+```
+
+This will open up a tab in your browser that looks something like this:
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
@@ -147,6 +173,52 @@ Other replay strategies include:
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
+## Features
+
+### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5fa6d008-4042-40ea-b3e6-f97ef4dd83db)
+
+### Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/87c3ab4a-1761-4222-b5d1-6368177ca637)
+
+### Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/cd8bc2a7-6f6d-4218-843f-adfd7a684fc8)
+
+### Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
+
+### And much more!
+
+## 🚀 Open Contract Positions at OpenAdapt.AI
+
+We are thrilled to open new contract positions for developers passionate about pushing boundaries in technology. If you're ready to make a significant impact, consider the following roles:
+
+#### Frontend Developer
+- **Responsibilities**: Develop and test key features such as process visualization, demo booking, app store, and blog integration.
+- **Skills**: Proficiency in modern frontend technologies and a knack for UI/UX design.
+
+#### Machine Learning Engineer
+- **Role**: Implement and refine process replay strategies using state-of-the-art LLMs/LMMs. Extract dynamic process descriptions from extensive process recordings.
+- **Skills**: Strong background in machine learning, experience with LLMs/LMMs, and problem-solving aptitude.
+
+#### Software Engineer
+- **Focus**: Enhance memory optimization techniques during process recording and replay. Develop sophisticated tools for process observation and productivity measurement.
+- **Skills**: Expertise in software optimization, memory management, and analytics.
+
+#### Technical Writer
+- **Focus**: Maintaining [OpenAdapt](https://github.com/OpenAdaptAI) repositories
+- **Skills**: Passion for writing and/or documentation
+
+### 🔍 How to Apply
+- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
+- **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
+- **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
+
+We're looking forward to your contributions. Let's build the future 🚀
 
 ## Contributing
 
@@ -155,8 +227,11 @@ See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for 
 Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
 `ActionEvent`(s) based on the previously recorded `ActionEvent`s in order to
-accomplish the task specified in the `Recording.task_description`, while
-accounting for differences in screen resolution, window size, application
+accomplish the task specified in the
+[`Recording.task_description`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/models.py#L46)
+and narrated by the user in
+[`AudioInfo.words_with_timestamps`](https://github.com/OpenAdaptAI/OpenAdapt/pull/346/files#diff-224d5ce89a18f796cae99bf3da5a9862def2127db2ed38e68a07a25a8624166fR393),
+while accounting for differences in screen resolution, window size, application
 behavior, etc.
 
 If it's not clear what `ActionEvent` is appropriate for the given `Screenshot`,
@@ -234,11 +309,6 @@ Your submission will be evaluated based on the following criteria:
 4. *Bonus*: interacting with ChatGPT and/or other language transformer models
    in order to generate code and/or evaluate design decisions is encouraged. If
    you choose to do so, please include the full transcript.
-
-
-## We're hiring!
-
-If you're interested in getting paid for your work, please mention it in your Pull Request.
 
 ## Troubleshooting
 

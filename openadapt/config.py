@@ -12,6 +12,7 @@ Usage:
 import multiprocessing
 import os
 import pathlib
+import shutil
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -131,6 +132,11 @@ STOP_SEQUENCES = [
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
 ENV_FILE_PATH = ".env"
+ENV_EXAMPLE_FILE_PATH = ".env.example"
+
+# Create .env file if it doesn't exist
+if not os.path.isfile(ENV_FILE_PATH):
+    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
 
 
 def getenv_fallback(var_name: str) -> str:
@@ -140,7 +146,7 @@ def getenv_fallback(var_name: str) -> str:
         var_name (str): The name of the environment variable.
 
     Returns:
-        The value of the environment variable or the fallback default value.
+        str: The value of the environment variable or the default value if not found.
 
     Raises:
         ValueError: If the environment variable is not defined.
@@ -195,9 +201,32 @@ for key in _DEFAULTS:
     locals()[key] = val
 
 ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DB_FPATH = ROOT_DIRPATH / DB_FNAME  # type: ignore # noqa
+DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
+RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
+# TODO: clarify why this is necessary (see share.py)
+if DB_FNAME == "openadapt.db":  # noqa
+    DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+else:
+    DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
 DB_URL = f"sqlite:///{DB_FPATH}"
 DIRNAME_PERFORMANCE_PLOTS = "performance"
+
+
+def set_db_url(db_fname: str) -> None:
+    """Set the database URL based on the given database file name.
+
+    Args:
+        db_fname (str): The database file name.
+    """
+    # TODO: pass these in as parameters, whose default values are the globals
+    global DB_FNAME, DB_FPATH, DB_URL
+    DB_FNAME = db_fname
+    if DB_FNAME == "openadapt.db":  # noqa
+        DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+    else:
+        DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
+    DB_URL = f"sqlite:///{DB_FPATH}"
+    logger.info(f"{DB_URL=}")
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
