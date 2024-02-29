@@ -81,7 +81,7 @@ class ActionEvent(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
-    timestamp = sa.Column("timestamp", ForceFloat)
+    timestamp = sa.Column(ForceFloat)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
     screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
     window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
@@ -113,6 +113,8 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+
+    # TODO: playback_timestamp / original_timestamp
 
     def _key(
         self, key_name: str, key_char: str, key_vk: str
