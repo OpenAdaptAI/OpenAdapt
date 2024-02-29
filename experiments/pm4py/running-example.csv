@@ -1,0 +1,43 @@
+case_id;activity;timestamp;costs;resource
+3;register request;2010-12-30 14:32:00+01:00;50;Pete
+3;examine casually;2010-12-30 15:06:00+01:00;400;Mike
+3;check ticket;2010-12-30 16:34:00+01:00;100;Ellen
+3;decide;2011-01-06 09:18:00+01:00;200;Sara
+3;reinitiate request;2011-01-06 12:18:00+01:00;200;Sara
+3;examine thoroughly;2011-01-06 13:06:00+01:00;400;Sean
+3;check ticket;2011-01-08 11:43:00+01:00;100;Pete
+3;decide;2011-01-09 09:55:00+01:00;200;Sara
+3;pay compensation;2011-01-15 10:45:00+01:00;200;Ellen
+2;register request;2010-12-30 11:32:00+01:00;50;Mike
+2;check ticket;2010-12-30 12:12:00+01:00;100;Mike
+2;examine casually;2010-12-30 14:16:00+01:00;400;Sean
+2;decide;2011-01-05 11:22:00+01:00;200;Sara
+2;pay compensation;2011-01-08 12:05:00+01:00;200;Ellen
+1;register request;2010-12-30 11:02:00+01:00;50;Pete
+1;examine thoroughly;2010-12-31 10:06:00+01:00;400;Sue
+1;check ticket;2011-01-05 15:12:00+01:00;100;Mike
+1;decide;2011-01-06 11:18:00+01:00;200;Sara
+1;reject request;2011-01-07 14:24:00+01:00;200;Pete
+6;register request;2011-01-06 15:02:00+01:00;50;Mike
+6;examine casually;2011-01-06 16:06:00+01:00;400;Ellen
+6;check ticket;2011-01-07 16:22:00+01:00;100;Mike
+6;decide;2011-01-07 16:52:00+01:00;200;Sara
+6;pay compensation;2011-01-16 11:47:00+01:00;200;Mike
+5;register request;2011-01-06 09:02:00+01:00;50;Ellen
+5;examine casually;2011-01-07 10:16:00+01:00;400;Mike
+5;check ticket;2011-01-08 11:22:00+01:00;100;Pete
+5;decide;2011-01-10 13:28:00+01:00;200;Sara
+5;reinitiate request;2011-01-11 16:18:00+01:00;200;Sara
+5;check ticket;2011-01-14 14:33:00+01:00;100;Ellen
+5;examine casually;2011-01-16 15:50:00+01:00;400;Mike
+5;decide;2011-01-19 11:18:00+01:00;200;Sara
+5;reinitiate request;2011-01-20 12:48:00+01:00;200;Sara
+5;examine casually;2011-01-21 09:06:00+01:00;400;Sue
+5;check ticket;2011-01-21 11:34:00+01:00;100;Pete
+5;decide;2011-01-23 13:12:00+01:00;200;Sara
+5;reject request;2011-01-24 14:56:00+01:00;200;Mike
+4;register request;2011-01-06 15:02:00+01:00;50;Pete
+4;check ticket;2011-01-07 12:06:00+01:00;100;Mike
+4;examine thoroughly;2011-01-08 14:43:00+01:00;400;Sean
+4;decide;2011-01-09 12:02:00+01:00;200;Sara
+4;reject request;2011-01-12 15:44:00+01:00;200;Ellen

@@ -1,0 +1,33 @@
+case_id;activity;timestamp;costs;resource
+3;Daum - Google Chrome - Kibeom;2024-02-20 15:19:53;3.967902660369873;click left
+3;Daum - Google Chrome - Kibeom;2024-02-20 15:19:53;0.1681363582611084;click left
+3;Daum - Google Chrome - Kibeom;2024-02-20 15:19:54;0.40992307662963867;click left
+3;Daum - Google Chrome - Kibeom;2024-02-20 15:19:54;0.14792943000793457;click left
+3;Kakao Account - Google Chrome - Kibeom;2024-02-20 15:19:47;4.497575521469116;click left
+3;Kakao Account - Google Chrome - Kibeom;2024-02-20 15:19:47;0.19006752967834473;click left
+3;Kakao Account - Google Chrome - Kibeom;2024-02-20 15:19:49;1.287890911102295;click left
+3;Kakao Account - Google Chrome - Kibeom;2024-02-20 15:19:49;0.18001270294189453;click left
+3;Talk Calendar | Feb 2024 - Google Chrome - Kibeom;2024-02-20 15:20:13;4.9439170360565186;click left
+3;Talk Calendar | Feb 2024 - Google Chrome - Kibeom;2024-02-20 15:20:13;0.21620821952819824;click left
+9;record.py - OpenAdapt - Visual Studio Code;2024-02-20 15:19:43;0;click left
+9;record.py - OpenAdapt - Visual Studio Code;2024-02-20 15:19:43;0.17062020301818848;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:01;6.938098669052124;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:01;0.2041032314300537;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:03;1.8118367195129395;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:03;0.25811195373535156;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:08;4.787813663482666;click left
+2;받은메일함 | 다음메일 - Google Chrome - Kibeom;2024-02-20 15:20:08;0.20414185523986816;click left
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.5533862113952637;press ctrl_l
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.11470413208007812;release ctrl_l
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.08814048767089844;press ctrl_l
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.10458946228027344;release ctrl_l
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.08151817321777344;press ctrl_l
+1;톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:28;0.10245394706726074;release ctrl_l
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:20;6.929049253463745;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:20;0.22891998291015625;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:21;1.2839081287384033;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:22;0.17425966262817383;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:23;1.4636240005493164;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:23;0.17663002014160156;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:27;3.483438491821289;click left
+1;팀채팅 | 톡서랍 플러스 - Google Chrome - Kibeom;2024-02-20 15:20:27;0.20815396308898926;click left
