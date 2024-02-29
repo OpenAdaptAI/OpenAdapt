@@ -11,14 +11,16 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 from tqdm import tqdm
+import fire
 
-from openadapt import config
+from openadapt import config, video
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
+    compute_diff,
     configure_logging,
     display_event,
     evenly_spaced,
@@ -184,11 +186,17 @@ def dict2html(
 
 
 @logger.catch
-def main(recording: Recording = None) -> bool:
+def main(
+    recording: Recording = None,
+    diff_video: bool = False,
+    cleanup: bool = True,
+) -> bool:
     """Visualize a recording.
 
     Args:
         recording (Recording, optional): The recording to visualize.
+        diff_video (bool): Whether to diff Screenshots against video frames.
+        cleanup (bool): Whether to remove the HTML file after it is displayed.
 
     Returns:
         bool: True if visualization was successful, None otherwise.
@@ -199,7 +207,8 @@ def main(recording: Recording = None) -> bool:
         recording = get_latest_recording()
     if SCRUB:
         scrub.scrub_text(recording.task_description)
-    logger.debug(f"{recording=}")
+    logger.info(f"{recording=}")
+    logger.info(f"{diff_video=}")
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
@@ -233,6 +242,14 @@ def main(recording: Recording = None) -> bool:
     ]
     logger.info(f"{len(action_events)=}")
 
+    if diff_video:
+        video_file_name = video.get_video_file_name(recording.timestamp)
+        timestamps = [
+            action_event.screenshot.timestamp - recording.video_start_time
+            for action_event in action_events
+        ]
+        frames = video.extract_frames(video_file_name, timestamps)
+
     num_events = (
         min(MAX_EVENTS, len(action_events))
         if MAX_EVENTS is not None
@@ -248,9 +265,24 @@ def main(recording: Recording = None) -> bool:
         for idx, action_event in enumerate(action_events):
             if idx == MAX_EVENTS:
                 break
-            image = display_event(action_event)
-            diff = display_event(action_event, diff=True)
-            mask = action_event.screenshot.diff_mask
+
+            try:
+                image = display_event(action_event)
+            except TypeError as exc:
+                # https://github.com/moses-palmer/pynput/issues/481
+                logger.warning(exc)
+                continue
+
+            if diff_video:
+                frame_image = frames[idx]
+                diff_image = compute_diff(frame_image, action_event.screenshot.image)
+
+                # TODO: rename
+                diff = frame_image
+                mask = diff_image
+            else:
+                diff = display_event(action_event, diff=True)
+                mask = action_event.screenshot.diff_mask
 
             if SCRUB:
                 image = scrub.scrub_image(image)
@@ -323,14 +355,15 @@ def main(recording: Recording = None) -> bool:
         )
     )
 
-    def cleanup() -> None:
+    def _cleanup() -> None:
         os.remove(fname_out)
         removed = not os.path.exists(fname_out)
         logger.info(f"{removed=}")
 
-    Timer(1, cleanup).start()
+    if cleanup:
+        Timer(1, _cleanup).start()
     return True
 
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

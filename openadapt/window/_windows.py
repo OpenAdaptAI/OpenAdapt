@@ -6,7 +6,7 @@ from loguru import logger
 import pywinauto
 
 
-def get_active_window_state() -> dict:
+def get_active_window_state(read_window_data: bool) -> dict:
     """Get the state of the active window.
 
     Returns:
@@ -29,7 +29,10 @@ def get_active_window_state() -> dict:
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
-    data = get_element_properties(active_window)
+    if read_window_data:
+        data = get_element_properties(active_window)
+    else:
+        data = {}
     state = {
         "title": meta["texts"][0],
         "left": meta["rectangle"].left,

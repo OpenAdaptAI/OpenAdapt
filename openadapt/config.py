@@ -33,6 +33,7 @@ _DEFAULTS = {
     "OPENAI_API_KEY": "<set your api key in .env>",
     # "OPENAI_MODEL_NAME": "gpt-4",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
+    "RECORD_WINDOW_DATA": False,
     # may incur significant performance penalty
     "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
     # TODO: remove?
@@ -99,7 +100,6 @@ _DEFAULTS = {
         "key_vk",
         "children",
     ],
-    "PLOT_PERFORMANCE": True,
     # VISUALIZATION CONFIGURATIONS
     "VISUALIZE_DARK_MODE": False,
     "VISUALIZE_RUN_NATIVELY": True,
@@ -111,6 +111,9 @@ _DEFAULTS = {
     "SAVE_SCREENSHOT_DIFF": False,
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "PRIVATE_AI_API_KEY": "<set your api key in .env>",
+    "RECORD_VIDEO": False,
+    "RECORD_IMAGES": True,
+    "VIDEO_PIXEL_FORMAT": "rgb24",
 }
 
 # each string in STOP_STRS should only contain strings

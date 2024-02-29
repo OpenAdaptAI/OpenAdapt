@@ -27,10 +27,11 @@ import fire
 import mss.tools
 import psutil
 
-from openadapt import config, utils, window
+from openadapt import config, utils, video, window
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
+
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -164,8 +165,9 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: int,
+    recording_timestamp: float,
     terminate_event: multiprocessing.Event,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -175,11 +177,13 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     Notify("Status", "Starting recording...", "OpenAdapt").send()
 
@@ -199,6 +203,8 @@ def process_events(
             )
         if event.type == "screen":
             prev_screen_event = event
+            if config.RECORD_VIDEO:
+                video_write_q.put(event)
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "action":
@@ -274,8 +280,11 @@ def write_screen_event(
     """
     assert event.type == "screen", event
     screenshot = event.data
-    png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
-    event_data = {"png_data": png_data}
+    if config.RECORD_IMAGES:
+        png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+        event_data = {"png_data": png_data}
+    else:
+        event_data = {}
     crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
@@ -320,6 +329,7 @@ def write_events(
             the number of events left to be written.
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -351,6 +361,71 @@ def write_events(
         Notify("Status", "Recording complete.", "OpenAdapt").send()
 
     logger.info(f"{event_type=} done")
+
+
+def write_video(
+    video_write_q: sq.SynchronizedQueue,
+    recording_timestamp: float,
+    terminate_event: multiprocessing.Event,
+) -> None:
+    """Writes video frames from a synchronized queue to a video file until termination.
+
+    This function initializes video writing by setting a start time and
+    ignoring SIGINT signals for graceful shutdown.  It generates a video file
+    name based on the recording timestamp, computes the video dimensions from a
+    screenshot, and initializes the video writer with these parameters. The
+    function then enters a loop, polling the queue for new "screen" type events
+    and writing each frame to the video file, until the termination event is
+    set and the queue is empty. Finally, it finalizes the video writer,
+    ensuring the video is properly closed and saved.
+
+    Args:
+        video_write_q (sq.SynchronizedQueue): A queue synchronized across
+            multiple processes that contains video frame events to write to the
+            video file.
+        recording_timestamp (float): The timestamp at which the video recording
+            started. Used for naming the video file and as a reference for
+            calculating frame timestamps.
+        terminate_event (multiprocessing.Event): An event used to signal when
+            video writing should be terminated. The function will continue to
+            process events in the queue until it is empty, even after the terminate
+            event is set.
+
+    Returns:
+        None
+    """
+    utils.set_start_time(recording_timestamp)
+
+    logger.info("starting")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    video_file_name = video.get_video_file_name(recording_timestamp)
+    # TODO XXX replace with utils.get_monitor_dims() once fixed
+    width, height = utils.take_screenshot().size
+    video_container, video_stream, video_start_time = video.initialize_video_writer(
+        video_file_name,
+        width,
+        height,
+    )
+    crud.update_video_start_time(recording_timestamp, video_start_time)
+
+    last_pts = 0
+    while not terminate_event.is_set() or not video_write_q.empty():
+        try:
+            event = video_write_q.get_nowait()
+        except queue.Empty:
+            continue
+        assert event.type == "screen", ("screen", event)
+        last_pts = video.write_video_frame(
+            video_container,
+            video_stream,
+            event.data,
+            event.timestamp,
+            video_start_time,
+            last_pts,
+        )
+    video.finalize_video_writer(video_container, video_stream)
+    logger.info("done")
 
 
 def trigger_action_event(
@@ -504,6 +579,10 @@ def read_screen_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    # TODO: throttle
+    # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
+    # max_memory_percent: float = 50.0,  # Maximum allowed memory percent
+    # fps_warning_threshold: float = 10.0,  # FPS threshold below which to warn
 ) -> None:
     """Read screen events and add them to the event queue.
 
@@ -513,6 +592,7 @@ def read_screen_events(
         recording_timestamp: The timestamp of the recording.
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     while not terminate_event.is_set():
         screenshot = utils.take_screenshot()
@@ -537,6 +617,7 @@ def read_window_events(
         recording_timestamp: The timestamp of the recording.
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info("Starting")
     prev_window_data = {}
     while not terminate_event.is_set():
@@ -585,6 +666,7 @@ def performance_stats_writer(
         terminate_event: An event to signal the termination of the process.
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     while not terminate_event.is_set() or not perf_q.empty():
@@ -619,6 +701,7 @@ def memory_writer(
         None
     """
     utils.set_start_time(recording_timestamp)
+
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
@@ -773,6 +856,7 @@ def read_keyboard_events(
             handle_key(event_q, "release", key, canonical_key)
 
     utils.set_start_time(recording_timestamp)
+
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
         on_release=partial(on_release, event_q),
@@ -798,6 +882,7 @@ def read_mouse_events(
         None
     """
     utils.set_start_time(recording_timestamp)
+
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
         on_click=partial(on_click, event_q),
@@ -818,6 +903,11 @@ def record(
     Args:
         task_description: A text description of the task to be recorded.
     """
+    assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
+        config.RECORD_VIDEO,
+        config.RECORD_IMAGES,
+    )
+
     logger.info(f"{task_description=}")
 
     recording = create_recording(task_description)
@@ -827,6 +917,7 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
@@ -875,6 +966,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            video_write_q,
             perf_q,
             recording_timestamp,
             terminate_event,
@@ -923,6 +1015,17 @@ def record(
         ),
     )
     window_event_writer.start()
+
+    if config.RECORD_VIDEO:
+        video_writer = multiprocessing.Process(
+            target=write_video,
+            args=(
+                video_write_q,
+                recording_timestamp,
+                terminate_event,
+            ),
+        )
+        video_writer.start()
 
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
@@ -976,6 +1079,8 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    if config.RECORD_VIDEO:
+        video_writer.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:

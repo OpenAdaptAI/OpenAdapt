@@ -12,7 +12,7 @@ import oa_atomacos
 import Quartz
 
 
-def get_active_window_state() -> dict | None:
+def get_active_window_state(read_window_data: bool) -> dict | None:
     """Get the state of the active window.
 
     Returns:
@@ -22,7 +22,10 @@ def get_active_window_state() -> dict | None:
     # pywinctl performance on macOS is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
-    data = get_window_data(meta)
+    if read_window_data:
+        data = get_window_data(meta)
+    else:
+        data = {}
     title_parts = [
         meta["kCGWindowOwnerName"],
         meta["kCGWindowName"],

@@ -27,9 +27,13 @@ from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
+# TODO: move to constants.py
 EMPTY = (None, [], {}, "")
+SCT = mss.mss()
 
 _logger_lock = threading.Lock()
+_start_time = None
+_start_perf_counter = None
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
@@ -227,14 +231,14 @@ def get_double_click_distance_pixels() -> int:
         raise Exception(f"Unsupported {sys.platform=}")
 
 
-def get_monitor_dims() -> tuple:
+def get_monitor_dims() -> tuple[int, int]:
     """Get the dimensions of the monitor.
 
     Returns:
-        tuple: The width and height of the monitor.
+        tuple[int, int]: The width and height of the monitor.
     """
-    sct = mss.mss()
-    monitor = sct.monitors[0]
+    # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
+    monitor = SCT.monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
     return monitor_width, monitor_height
@@ -568,6 +572,8 @@ def image2utf8(image: Image.Image) -> str:
     Returns:
         str: The UTF-8 encoded image.
     """
+    if not image:
+        return ""
     image = image.convert("RGB")
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
@@ -578,12 +584,8 @@ def image2utf8(image: Image.Image) -> str:
     return image_utf8
 
 
-_start_time = None
-_start_perf_counter = None
-
-
 def set_start_time(value: float = None) -> float:
-    """Set the start time for performance measurements.
+    """Set the start time for recordings. Required for accurate process-wide timestamps.
 
     Args:
         value (float): The start time value. Defaults to the current time.
@@ -592,23 +594,30 @@ def set_start_time(value: float = None) -> float:
         float: The start time.
     """
     global _start_time
+    global _start_perf_counter
     _start_time = value or time.time()
-    logger.debug(f"{_start_time=}")
+    _start_perf_counter = time.perf_counter()
+    logger.debug(f"{_start_time=} {_start_perf_counter=}")
     return _start_time
 
 
-def get_timestamp(is_global: bool = False) -> float:
-    """Get the current timestamp.
+def get_timestamp() -> float:
+    """Get the current timestamp, synchronized between processes.
 
-    Args:
-        is_global (bool): Flag indicating whether to use the global
-          start time. Defaults to False.
+    Before calling this function from any process, set_start_time must have been called.
 
     Returns:
         float: The current timestamp.
     """
     global _start_time
-    return _start_time + time.perf_counter()
+    global _start_perf_counter
+
+    msg = "set_start_time must be called before get_timestamp"
+    assert _start_time, f"{_start_time=}; {msg}"
+    assert _start_perf_counter, f"{_start_perf_counter=}; {msg}"
+
+    perf_duration = time.perf_counter() - _start_perf_counter
+    return _start_time + perf_duration
 
 
 # https://stackoverflow.com/a/50685454
@@ -634,10 +643,9 @@ def take_screenshot() -> mss.base.ScreenShot:
     Returns:
         mss.base.ScreenShot: The screenshot.
     """
-    with mss.mss() as sct:
-        # monitor 0 is all in one
-        monitor = sct.monitors[0]
-        sct_img = sct.grab(monitor)
+    # monitor 0 is all in one
+    monitor = SCT.monitors[0]
+    sct_img = SCT.grab(monitor)
     return sct_img
 
 
@@ -766,6 +774,14 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     for child in action_event.children:
         strip_element_state(child)
     return action_event
+
+
+def compute_diff(image1: Image.Image, image2: Image.Image) -> Image.Image:
+    """Computes the difference between two PIL Images and returns the diff image."""
+    arr1 = np.array(image1)
+    arr2 = np.array(image2)
+    diff = np.abs(arr1 - arr2)
+    return Image.fromarray(diff.astype("uint8"))
 
 
 def get_functions(name: str) -> dict:
