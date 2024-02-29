@@ -22,7 +22,7 @@ See also:
 
 ### OpenAdapt connects Foundation Models to GUIs:
 
-<img width="1507" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/6f0355a2-8693-447e-90e6-2aff975dc21f">
+<img width="1499" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/c811654e-3450-42cd-91ee-935378e3a858">
 
 System Overview:
 
