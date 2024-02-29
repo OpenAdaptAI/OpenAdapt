@@ -2,6 +2,73 @@
 
 
 
+## v0.16.0 (2024-02-29)
+
+### Documentation
+
+* docs(README): document AudioInfo.words_with_timestamps ([`7759996`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7759996623a5273ed32505de11322f0c204f42d5))
+
+* docs(README): add System Overview image ([`8b56a83`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8b56a834cf10a6fb809f58c91954806ad17c8df2))
+
+* docs(README): early loom demo ([`729e0be`](https://github.com/OpenAdaptAI/OpenAdapt/commit/729e0be5c431de1c5cf8e255d15be852f55f2726))
+
+### Feature
+
+* feat: video
+
+* replace multiprocessing with pyav
+
+* add config.RECORD_WINDOW_DATA
+
+* video_write_q
+
+* fix get_timestamp; extract_frames_to_pil_images with pyav
+
+* add video.py; ActionEvent.original_timestamp
+
+* use global SCT in get_monitor_dims
+
+* fix tests
+
+* fix window._windows.get_active_window_state (missing type)
+
+* add tests/openadapt/test_video.py
+
+* flake8
+
+* black
+
+* poetry lock ([`20e08b8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/20e08b8ac7d4f2c5f23d37839e7f9ef522427f90))
+
+### Unknown
+
+* Update README.md (#566) ([`c7f8af4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c7f8af48a23c791f042431af9fc0da2a7279d47a))
+
+* docs(README) ([`000db3c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/000db3ce010ab51a6cc746143f86a3290a3a8255))
+
+* Update README.md (#558) ([`028f6e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/028f6e859d5a52df5a9d89ab7426fcb989922c46))
+
+* Update README.md (#557)
+
+* Update README.md
+
+Add links to Architecture and RFC
+
+* Update README.md
+
+* Update README.md ([`ad6de5b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ad6de5b67b5e1a78ab06004603154382f44e6884))
+
+* docs(README)
+
+* Update README.md
+
+Add contract positions
+
+* Update README.md
+
+Improve contracts section ([`275db79`](https://github.com/OpenAdaptAI/OpenAdapt/commit/275db79d4230cf726ec8e8876f4a3c1f8eb644f5))
+
+
 ## v0.15.1 (2023-12-12)
 
 ### Documentation
