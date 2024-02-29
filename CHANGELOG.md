@@ -2,6 +2,17 @@
 
 
 
+## v0.16.1 (2024-02-29)
+
+### Documentation
+
+* docs(README): remove redundant text from image ([`76b55fd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/76b55fdaf0a988eab396e0f58d3dbc17b301faff))
+
+### Fix
+
+* fix(video): add migration script ([`b769c4a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b769c4a19b520a109a84fa02f21e5d31596d4641))
+
+
 ## v0.16.0 (2024-02-29)
 
 ### Documentation
