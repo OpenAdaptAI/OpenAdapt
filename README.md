@@ -110,7 +110,8 @@ See how to set up system permissions on macOS [here](./permissions_in_macOS.md).
 
 ### Shell
 
-Run this in every new terminal window once before running any openadapt commands below:
+Run this in every new terminal window once (while inside the `OpenAdapt` root
+directory) before running any `openadapt` commands below:
 
 ```
 poetry shell
