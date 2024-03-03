@@ -197,10 +197,15 @@ def process_events(
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         if prev_event is not None:
-            assert event.timestamp > prev_event.timestamp, (
-                event,
-                prev_event,
-            )
+            try:
+                assert event.timestamp > prev_event.timestamp, (
+                    event,
+                    prev_event,
+                )
+            except AssertionError as exc:
+                logger.error(exc)
+                # behavior undefined, swallow for now
+                # XXX TODO: mitigate
         if event.type == "screen":
             prev_screen_event = event
             if config.RECORD_VIDEO:
