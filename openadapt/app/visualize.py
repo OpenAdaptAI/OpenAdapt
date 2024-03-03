@@ -200,7 +200,7 @@ def main(timestamp: str, notify: bool = True) -> None:
 
             # generate base64 encoded images for light and dark mode
             for i in range(2):
-                fp = f"{path.dirname(__file__)}{sep}app{sep}assets{sep}logo"
+                fp = f"{path.dirname(__file__)}{sep}assets{sep}logo"
                 logo_base64 = b64encode(
                     open(
                         f"{fp}{'_inverted' if i > 0 else ''}.png",
