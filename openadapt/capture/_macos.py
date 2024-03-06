@@ -98,7 +98,7 @@ class Capture:
 
         if not os.path.exists(config.CAPTURE_DIR_PATH):
             os.mkdir(config.CAPTURE_DIR_PATH)
-    
+
         self.file_url = NSURL.fileURLWithPath_(
             os.path.join(
                 config.CAPTURE_DIR_PATH,
