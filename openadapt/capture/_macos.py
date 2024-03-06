@@ -4,16 +4,61 @@ This is based on: https://gist.github.com/timsutton/0c6439eb6eb1621a5964
 
 usage: see bottom of file
 """
+
 from datetime import datetime
 from sys import platform
 import os
 
 from Foundation import NSURL, NSObject  # type: ignore # noqa
 from Quartz import CGMainDisplayID  # type: ignore # noqa
+import Quartz.CoreVideo  # type: ignore # noqa
+import Quartz.CoreGraphics  # type: ignore # noqa
+from AppKit import NSImage, NSBitmapImageRep  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
+import concurrent.futures
 
 from openadapt import config
+
+
+class VideoDelegate(NSObject):
+    """Delegate for the video capture."""
+
+    def captureOutput_didOutputSampleBuffer_fromConnection_(
+        self, output, sampleBuffer, connection
+    ):
+        image_buffer = AVF.CMSampleBufferGetImageBuffer(sampleBuffer)
+        Quartz.CoreVideo.CVPixelBufferLockBaseAddress(
+            image_buffer, Quartz.CoreVideo.kCVPixelBufferLock_ReadOnly
+        )
+        width = Quartz.CoreVideo.CVPixelBufferGetWidth(image_buffer)
+        height = Quartz.CoreVideo.CVPixelBufferGetHeight(image_buffer)
+        color_space = Quartz.CoreGraphics.CGColorSpaceCreateDeviceRGB()
+        context = Quartz.CoreGraphics.CGBitmapContextCreate(
+            Quartz.CoreVideo.CVPixelBufferGetBaseAddress(image_buffer),
+            width,
+            height,
+            8,
+            Quartz.CoreVideo.CVPixelBufferGetBytesPerRow(image_buffer),
+            color_space,
+            Quartz.CoreGraphics.kCGImageAlphaNoneSkipFirst,
+        )
+        quartz_image = Quartz.CoreGraphics.CGBitmapContextCreateImage(context)
+        Quartz.CoreVideo.CVPixelBufferUnlockBaseAddress(
+            image_buffer, Quartz.CoreVideo.kCVPixelBufferLock_ReadOnly
+        )
+        image = NSImage.alloc().initWithCGImage_size_(quartz_image, (width, height))
+        bitmap_rep = NSBitmapImageRep.alloc().initWithData_(image.TIFFRepresentation())
+        if not os.path.exists(config.CAPTURE_DIR_PATH):
+            os.mkdir(config.CAPTURE_DIR_PATH)
+        self.file_url = NSURL.fileURLWithPath_(
+            os.path.join(
+                config.CAPTURE_DIR_PATH,
+                datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".tiff",
+            )
+        )
+        file_path = self.file_url.path()
+        bitmap_rep.TIFFRepresentation().writeToFile_atomically_(file_path, True)
 
 
 class Capture:
@@ -40,8 +85,11 @@ class Capture:
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
             self.display_id
         )
-        self.file_output = AVF.AVCaptureMovieFileOutput.alloc().init()
+        self.video_data_output = AVF.AVCaptureVideoDataOutput.alloc().init()
         self.camera_session = None  # not used if camera=False
+
+        queue = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        delegate = VideoDelegate.alloc().init()
 
         # Create an audio device input with the default audio device
         self.audio_input = AVF.AVCaptureDeviceInput.alloc().initWithDevice_error_(
@@ -50,29 +98,25 @@ class Capture:
 
         if not os.path.exists(config.CAPTURE_DIR_PATH):
             os.mkdir(config.CAPTURE_DIR_PATH)
+    
         self.file_url = NSURL.fileURLWithPath_(
             os.path.join(
                 config.CAPTURE_DIR_PATH,
                 datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
             )
         )
+
+        self.video_data_output.setSampleBufferDelegate_queue_(delegate, queue)
+        if self.session.canAddOutput_(self.video_data_output):
+            self.session.addOutput_(self.video_data_output)
+
         if audio and self.session.canAddInput_(self.audio_input[0]):
             self.session.addInput_(self.audio_input[0])
 
         if self.session.canAddInput_(self.screen_input):
             self.session.addInput_(self.screen_input)
 
-        self.session.addOutput_(self.file_output)
-
         self.session.startRunning()
-
-        # Cheat and pass a dummy delegate object where
-        # normally we'd have a AVCaptureFileOutputRecordingDelegate
-        self.file_url = (
-            self.file_output.startRecordingToOutputFileURL_recordingDelegate_(
-                self.file_url, NSObject.alloc().init()
-            )
-        )
 
         if camera:
             self._use_camera()
