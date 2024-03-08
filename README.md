@@ -242,7 +242,14 @@ We're looking forward to your contributions. Let's build the future 🚀
 
 ## Contributing
 
-### Problem Statement
+### Notable Works-in-progress (incomplete, see https://github.com/OpenAdaptAI/OpenAdapt/pulls and https://github.com/OpenAdaptAI/OpenAdapt/issues/ for more)
+
+- [Video Recording Hardware Acceleration](https://github.com/OpenAdaptAI/OpenAdapt/issues/570) (help wanted)
+- [Audio Narration](https://github.com/OpenAdaptAI/OpenAdapt/pull/346) (help wanted)
+- [Chrome Extension](https://github.com/OpenAdaptAI/OpenAdapt/pull/364) (help wanted)
+- [Gemini Vision](https://github.com/OpenAdaptAI/OpenAdapt/issues/551) (help wanted)
+
+### Replay Problem Statement
 
 Our goal is to automate the task described and demonstrated in a `Recording`.
 That is, given a new `Screenshot`, we want to generate the appropriate
