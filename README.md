@@ -1,4 +1,4 @@
-[Read our latest slides](https://t.ly/pdUUv)
+<img width="1508" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/7796b62c-834e-4e2a-9e85-8f95aae82760">[Read our latest slides](https://t.ly/pdUUv)
 
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
@@ -26,7 +26,7 @@ See also:
 
 System Overview:
 
-<img width="1509" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/8ed92525-9b18-4163-9f17-5308ad988eee">
+<img width="1508" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/4d9c2ca0-a60f-4569-b5c8-66984c542053">
 
 Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
 
