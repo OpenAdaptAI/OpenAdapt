@@ -44,7 +44,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.app = QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
 
-        self.icon = QIcon(f"{FPATH}{os.sep}assets{os.sep}logo_inverted.png")
+        self.icon = QIcon(f"{FPATH}{os.sep}assets{os.sep}logo.png")
 
         self.tray = QSystemTrayIcon()
         self.tray.setIcon(self.icon)
@@ -176,7 +176,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def run(self) -> None:
         """Run the system tray icon."""
-        self.app.exec_()
+        self.app.exec()
 
 
 def _run() -> None:
