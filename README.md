@@ -26,7 +26,7 @@ See also:
 
 System Overview:
 
-<img width="1508" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/70e25f66-edec-4bfc-bb09-f5d4bf057b41">
+<img width="881" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/8bfd6a3f-9e45-427d-a6a8-b03d166313f0">
 
 Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
 
