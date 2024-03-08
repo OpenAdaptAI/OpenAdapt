@@ -1,5 +1,3 @@
-<img width="1508" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/7796b62c-834e-4e2a-9e85-8f95aae82760">[Read our latest slides](https://t.ly/pdUUv)
-
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
 [Read our Architecture document](https://github.com/OpenAdaptAI/OpenAdapt/wiki/OpenAdapt-Architecture-(draft))
@@ -210,6 +208,10 @@ See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for 
 ### Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ae047b8a-b584-4f5f-9981-34cb88c5be54)
+
+### System Tray Icon and Client GUI App (work-in-progress)
+
+<img width="661" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/601b3a9f-ff16-45e0-a302-39257b06e382">
 
 ### And much more!
 
