@@ -2,6 +2,57 @@
 
 
 
+## v0.16.2 (2024-03-08)
+
+### Documentation
+
+* docs(README): add image of system tray icon and client GUI app ([`985cc6e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/985cc6e37b82932764802aa5b09ed1cfc35d583b))
+
+* docs(README): update System Overview diagram ([`edf2241`](https://github.com/OpenAdaptAI/OpenAdapt/commit/edf224147aa62092bfdf6d20a623faf5ce15d924))
+
+* docs(README): update System Overview diagram ([`1b12ffb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b12ffbb06dcbdb28031c4b58c331696d09c64db))
+
+* docs(README): update System Overview diagram
+
+* Update README.md
+
+Update system overview diagram ([`15f2818`](https://github.com/OpenAdaptAI/OpenAdapt/commit/15f2818ac4bd91a5320cddafdcfbd6f8acaba413))
+
+* docs(README): add notable works-in-progress under contributing ([`e44aa1f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e44aa1fdcd5f46e983ea12dd9a3b575290cf0b21))
+
+* docs(README): update system overview image (#587)
+
+* Update README.md
+
+Update system overview image
+
+* Update README.md ([`91c3eab`](https://github.com/OpenAdaptAI/OpenAdapt/commit/91c3eabcf01cadd683b13d715a8be9a58e0a916f))
+
+* docs(README): document root directory requirement ([`a021c2b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a021c2b0e00276e03ab0f4b9771e6e80bf926781))
+
+* docs(README): poetry shell ([`dd9dc9f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd9dc9f962788a0736299c732777c5a6311a86f6))
+
+### Fix
+
+* fix(app): use default logo for tray icon ([`21f229b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21f229b4eb198887be28f6da0de7bca8bd8eedb2))
+
+### Refactor
+
+* refactor(visualize): /visualize.py to /app; move deprecated/visualize.py to /
+
+* mv visualize.py -&gt; app.py; restore deprecated/visualize.py
+
+* remove deprecated
+
+* swallow AssertionError regarding timestamps
+
+* fix logo path
+
+---------
+
+Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt; ([`9ed9ac3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9ed9ac3bcb46bd2485c0abe7398a9130218e2c17))
+
+
 ## v0.16.1 (2024-02-29)
 
 ### Documentation
