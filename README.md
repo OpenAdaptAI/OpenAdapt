@@ -22,9 +22,8 @@ See also:
 
 <img width="1499" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/c811654e-3450-42cd-91ee-935378e3a858">
 
-System Overview:
+<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/82814cdb-f0d5-4a6b-9d44-a4628fca1590">
 
-<img width="1510" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/ff20df43-855f-4276-a918-d3d5f80a19f4">
 
 Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
 
