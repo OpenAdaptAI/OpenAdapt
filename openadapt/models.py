@@ -260,6 +260,7 @@ class Screenshot(db.Base):
     _image = None
     _diff = None
     _diff_mask = None
+    _base64 = None
 
     @property
     def image(self) -> Image:
@@ -276,6 +277,14 @@ class Screenshot(db.Base):
             else:
                 self._image = self.convert_binary_to_png(self.png_data)
         return self._image
+
+    @property
+    def base64(self) -> str:
+        """Return data URI of JPEG encoded base64"""
+        if not self._base64:
+            from openadapt import utils
+            self._base64 = utils.image2utf8(self.image)
+        return self._base64
 
     @property
     def diff(self) -> Image:

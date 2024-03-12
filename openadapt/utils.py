@@ -9,11 +9,13 @@ from logging import StreamHandler
 from typing import Union
 import base64
 import inspect
+import json
 import os
 import sys
 import threading
 import time
 
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import fire
@@ -803,6 +805,86 @@ def get_functions(name: str) -> dict:
         if inspect.isfunction(obj) and not name.startswith("_"):
             functions[name] = obj
     return functions
+
+
+from openadapt import models
+def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
+    """Convert the completion to a dictionary containing action information.
+
+    Args:
+        completion (str): The completion provided by the user.
+
+    Returns:
+        dict: The action dictionary.
+    """
+    try:
+        action = eval(completion)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+    else:
+        return action
+
+
+def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
+    """Convert the completion from JSON to a dictionary containing action information.
+
+    Args:
+        completion (str): The JSON string provided by the user.
+
+    Returns:
+        dict: The action dictionary, or None if an error occurs.
+    """
+    try:
+        action = json.loads(completion)
+    except json.JSONDecodeError as exc:
+        logger.warning(f"JSON decode error: {exc=}")
+        return None
+    except Exception as exc:
+        logger.warning(f"Unexpected error: {exc=}")
+        logger.warning(f"{completion=}")
+        return None
+    else:
+        # Assuming the JSON directly maps to models.ActionEvent structure
+        return action
+
+
+# copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
+def render_template_from_file(template_relative_path: str, **kwargs) -> str:
+    """
+    Load a Jinja2 template from a file using the project's root directory and interpolate arguments.
+    Args:
+        template_relative_path (str): Relative path to the Jinja2 template file from the project root.
+        **kwargs: Arguments to interpolate into the template.
+    Returns:
+        str: Rendered template with interpolated arguments.
+    """
+    # Construct the full path to the template file
+    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+
+    # Extract the directory and template file name
+    template_dir, template_file = os.path.split(template_path)
+    logger.info(f"{template_dir=} {template_file=}")
+
+    # Create a Jinja2 environment with the directory
+    env = Environment(loader=FileSystemLoader(template_dir))
+
+    # Load the template
+    template = env.get_template(template_file)
+
+    # Render the template with provided arguments
+    return template.render(**kwargs)
+
+
+def parse_json_snippet(snippet):
+    # Remove Markdown code block syntax
+    json_string = (
+        snippet
+        .replace('```json\n', '')
+        .replace('```', '')
+        .strip()
+    )
+    # Parse the JSON string
+    return json.loads(json_string)
 
 
 if __name__ == "__main__":

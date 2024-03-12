@@ -41,18 +41,22 @@ class BaseReplayStrategy(ABC):
     def get_next_action_event(
         self,
         screenshot: models.Screenshot,
+        instructions: str | None,
     ) -> models.ActionEvent:
         """Get the next action event based on the current screenshot.
 
         Args:
             screenshot (models.Screenshot): The current screenshot.
+            instructions (str, optional): Natural language instructions to the model,
+                e.g. description of what are the parameters in the recording, and how
+                the replay should behave as a function of those parameters.
 
         Returns:
             models.ActionEvent: The next action event.
         """
         pass
 
-    def run(self) -> None:
+    def run(self, instructions: str | None) -> None:
         """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
@@ -65,6 +69,7 @@ class BaseReplayStrategy(ABC):
                 action_event = self.get_next_action_event(
                     screenshot,
                     window_event,
+                    instructions,
                 )
             except StopIteration:
                 break
