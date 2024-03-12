@@ -91,11 +91,19 @@ def play_action_event(
         Exception: If the event name is not handled.
     """
     # currently we use children to replay type events
-    if event.children and event.name in KEY_EVENTS:
+    if event.children:# and event.name in KEY_EVENTS:
         for child in event.children:
             play_action_event(child, mouse_controller, keyboard_controller)
     else:
-        assert event.name in MOUSE_EVENTS + KEY_EVENTS, event
+        expected_event_names = MOUSE_EVENTS + KEY_EVENTS
+        logger.info(f"{expected_event_names=}")
+        logger.info(f"{event.name=}")
+        try:
+            assert event.name in expected_event_names, (event.name, expected_event_names)
+        except AssertionError as exc:
+            logger.error(exc)
+            import ipdb; ipdb.set_trace()
+            raise
         if event.name in MOUSE_EVENTS:
             play_mouse_event(event, mouse_controller)
         elif event.name in KEY_EVENTS:

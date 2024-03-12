@@ -13,6 +13,7 @@ from pprint import pformat
 
 from loguru import logger
 import deepdiff
+import json
 
 from openadapt import models, strategies, utils
 from openadapt.adapters import openai
@@ -126,7 +127,8 @@ class VisualReplayStrategy(
             instructions,
         )
 
-        active_action_dicts = utils.get_action_dict_from_json(completion)
+        #active_action_dicts = utils.get_action_dict_from_json(completion)
+        active_action_dicts = completion
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
         active_action = models.ActionEvent.from_children(active_action_dicts)
         self.recording_action_idx += 1
@@ -161,9 +163,9 @@ def prompt_for_action(
                 del window_dict[key]
     prompt = utils.render_template_from_file(
         "openadapt/prompts/action.j2",
-        reference_action_dicts=reference_action_dicts,
-        reference_window_dict=reference_window_dict,
-        active_window_dict=active_window_dict,
+        reference_action_jsons=json.dumps(reference_action_dicts),
+        reference_window_json=json.dumps(reference_window_dict),
+        active_window_json=json.dumps(active_window_dict),
     )
     logger.info(f"prompt=\n{prompt}")
     payload = openai.create_payload(
@@ -180,6 +182,10 @@ def prompt_for_action(
     choice = choices[0]
     message = choice["message"]
     content = message["content"]
-    content_dict = utils.parse_json_snippet(content)
+    try:
+        content_dict = utils.parse_code_snippet(content)
+    except Exception as exc:
+        logger.warning(exc)
+        import ipdb; ipdb.set_trace()
     logger.info(f"content_dict=\n{pformat(content_dict)}")
     return content_dict
