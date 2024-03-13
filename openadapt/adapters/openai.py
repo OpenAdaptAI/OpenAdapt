@@ -77,4 +77,29 @@ def get_completion(payload):
         headers=headers,
         json=payload,
     )
-    return response.json()
+    #return response.json()
+    result = response.json()
+    #result = adapter.get_completion(payload)
+    logger.info(f"result=\n{pformat(result)}")
+    choices = result["choices"]
+    choice = choices[0]
+    message = choice["message"]
+    content = message["content"]
+    return content
+
+def prompt(
+    prompt: str,
+    system_prompt: str | None = None,
+    base64_images: list[str] | None = None,
+    max_tokens: int | None = None,
+):
+    payload = create_payload(
+        prompt,
+        system_prompt,
+        base64_images,
+        max_tokens=max_tokens,
+    )
+    logger.info(f"payload=\n{pformat(payload)}")
+    result = get_completion(payload)
+    logger.info(f"result=\n{pformat(result)}")
+    return reuslt

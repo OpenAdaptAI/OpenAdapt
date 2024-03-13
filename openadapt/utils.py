@@ -875,28 +875,32 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
     return template.render(**kwargs)
 
 
+import ast
+
 def parse_code_snippet(snippet):
-    if snippet.startswith("```json"):
-        # Remove Markdown code block syntax
-        json_string = (
-            snippet
-            .replace('```json\n', '')
-            .replace('```', '')
-            .replace('True', 'true')
-            .replace('False', 'false')
-            .strip()
-        )
-        # Parse the JSON string
-        return json.loads(json_string)
-    elif snippet.startswith("```python"):
-        python_code = snippet.replace('```python\n', '').replace('```', '').strip()
-        import ast
-        return ast.literal_eval(python_code)
-    else:
-        msg = "Unsupported {snippet=}"
-        logger.error(msg)
+    try:
+        if snippet.startswith("```json"):
+            # Remove Markdown code block syntax
+            json_string = (
+                snippet
+                .replace('```json\n', '')
+                .replace('```', '')
+                .replace('True', 'true')
+                .replace('False', 'false')
+                .strip()
+            )
+            # Parse the JSON string
+            return json.loads(json_string)
+        elif snippet.startswith("```python"):
+            python_code = snippet.replace('```python\n', '').replace('```', '').strip()
+            return ast.literal_eval(python_code)
+        else:
+            msg = "Unsupported {snippet=}"
+            logger.warning(msg)
+            return None
+    except Exception as exc:
         import ipdb; ipdb.set_trace()
-        raise ValueError(msg)
+        foo = 1
 
 
 if __name__ == "__main__":

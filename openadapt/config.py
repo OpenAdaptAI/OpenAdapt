@@ -20,6 +20,8 @@ import git
 import sentry_sdk
 
 _DEFAULTS = {
+    "DEFAULT_ADAPTER": "anthropic",
+    "ANTHROPIC_API_KEY": "<set your api key in .env>",
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
     "CACHE_VERBOSITY": 0,

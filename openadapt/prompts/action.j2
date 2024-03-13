@@ -21,4 +21,7 @@ Please provide a corresponding action that should be played now (according to th
 state of the system) that will accomplish the task described in the <task_description>
 and modulated by the <instructions>.
 
-Provide valid JSON containing the action, and nothing else:
+Provide valid JSON containing the action, and nothing else. If you do not provide an action,
+the given reference_action will be replayed verbatim instead.
+
+The window states being identical is irrelevant. YOU MUST SUPPLY AN ACTION OR SAY NOTHING.

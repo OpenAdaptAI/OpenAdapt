@@ -15,8 +15,8 @@ from loguru import logger
 import deepdiff
 import json
 
-from openadapt import models, strategies, utils
-from openadapt.adapters import openai
+from openadapt import config, models, strategies, utils
+from openadapt import adapters
 
 
 class VisualReplayStrategy(
@@ -134,10 +134,20 @@ class VisualReplayStrategy(
         self.recording_action_idx += 1
         return active_action
 
+
+MAX_TOKENS = 2**14  # 16384
+
+
+def get_default_adapter():
+    return {
+        "openai": adapters.openai,
+        "anthropic": adapters.anthropic,
+    }[config.DEFAULT_ADAPTER]
+
+
+from typing import Callable
+
 # copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
-MAX_TOKENS = 4096
-
-
 def prompt_for_action(
     reference_screenshot: models.Screenshot,
     reference_window_dict: dict,
@@ -147,6 +157,7 @@ def prompt_for_action(
     recording_task_description: str,
     replay_instructions: str,
     max_tokens: int | None = MAX_TOKENS,
+    adapter: Callable = get_default_adapter(),
 ):
     reference_screenshot_base64 = reference_screenshot.base64
     active_screenshot_base64 = active_screenshot.base64
@@ -168,24 +179,24 @@ def prompt_for_action(
         active_window_json=json.dumps(active_window_dict),
     )
     logger.info(f"prompt=\n{prompt}")
-    payload = openai.create_payload(
+    #payload = adapter.create_payload(
+    #    prompt,
+    #    system_prompt,
+    #    images,
+    #    max_tokens=max_tokens,
+    #)
+    #logger.info(f"payload=\n{pformat(payload)}")
+    #result = adapter.get_completion(payload)
+    content = adapter.prompt(
         prompt,
         system_prompt,
         images,
         max_tokens=max_tokens,
     )
-    #logger.info(f"payload=\n{pformat(payload)}")
-    #import ipdb; ipdb.set_trace()
-    result = openai.get_completion(payload)
-    logger.info(f"result=\n{pformat(result)}")
-    choices = result["choices"]
-    choice = choices[0]
-    message = choice["message"]
-    content = message["content"]
     try:
         content_dict = utils.parse_code_snippet(content)
     except Exception as exc:
         logger.warning(exc)
-        import ipdb; ipdb.set_trace()
+        raise
     logger.info(f"content_dict=\n{pformat(content_dict)}")
     return content_dict

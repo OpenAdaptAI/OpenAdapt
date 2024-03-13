@@ -90,6 +90,7 @@ botocore = "^1.31.30"
 easyocr = "^1.7.0"
 av = "^11.0.0"
 spacy-curated-transformers = "^0.2.0"
+anthropic = "^0.19.2"
 
 [tool.pytest.ini_options]
 filterwarnings = [
