@@ -15,8 +15,11 @@ from loguru import logger
 import deepdiff
 import json
 
-from openadapt import config, models, strategies, utils
+from openadapt import common, config, models, strategies, utils
 from openadapt import adapters
+
+# number of actions to include in context simultaneously
+ACTION_WINDOW_SIZE = 5
 
 
 class VisualReplayStrategy(
@@ -44,14 +47,14 @@ class VisualReplayStrategy(
         self,
         active_screenshot: models.Screenshot,
         active_window: models.WindowEvent,
-        instructions: str,
+        replay_instructions: str,
     ) -> models.ActionEvent:
         """Get the next ActionEvent for replay.
 
         Args:
             active_screenshot (models.Screenshot): The active screenshot object.
             active_window (models.WindowEvent): The active window event object.
-            instructions (str): User-specified replay instructions.
+            replay_instructions (str): User-specified replay instructions.
 
         Returns:
             models.ActionEvent: The next ActionEvent for replay.
@@ -59,50 +62,7 @@ class VisualReplayStrategy(
         logger.debug(f"{self.recording_action_idx=}")
         if self.recording_action_idx == len(self.recording.processed_action_events):
             raise StopIteration()
-        reference_action = self.recording.processed_action_events[
-            self.recording_action_idx
-        ]
-        reference_window = reference_action.window_event
 
-        reference_window_dict = deepcopy(
-            {
-                key: val
-                for key, val in utils.row2dict(reference_window, follow=False).items()
-                if val is not None
-                and not key.endswith("timestamp")
-                and not key.endswith("id")
-                # and not isinstance(getattr(models.WindowEvent, key), property)
-            }
-        )
-        if reference_action.children:
-            reference_action_dicts = [
-                deepcopy(
-                    {
-                        key: val
-                        for key, val in utils.row2dict(child, follow=False).items()
-                        if val is not None
-                        and not key.endswith("timestamp")
-                        and not key.endswith("id")
-                        and not isinstance(getattr(models.ActionEvent, key), property)
-                    }
-                )
-                for child in reference_action.children
-            ]
-        else:
-            reference_action_dicts = [
-                deepcopy(
-                    {
-                        key: val
-                        for key, val in utils.row2dict(
-                            reference_action, follow=False
-                        ).items()
-                        if val is not None
-                        and not key.endswith("timestamp")
-                        and not key.endswith("id")
-                        # and not isinstance(getattr(models.ActionEvent, key), property)
-                    }
-                )
-            ]
         active_window_dict = deepcopy(
             {
                 key: val
@@ -113,19 +73,90 @@ class VisualReplayStrategy(
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        reference_window_dict["state"].pop("data")
         active_window_dict["state"].pop("data")
-        reference_screenshot = reference_action.screenshot
+        active_window_dict["state"].pop("meta")
 
-        completion = prompt_for_action(
-            reference_screenshot,
-            reference_window_dict,
-            reference_action_dicts,
-            active_screenshot,
-            active_window_dict,
-            self.recording.task_description,
-            instructions,
-        )
+        actions = self.recording.processed_action_events
+        prev_window_title = None
+        prompt_frames = []
+        active_action_dict = None
+        num_images = 0
+        screenshots_base64 = []
+        for action_idx, action in enumerate(actions):
+            window = action.window_event
+            window_dict = deepcopy(
+                {
+                    key: val
+                    for key, val in utils.row2dict(window, follow=False).items()
+                    if val is not None
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    # and not isinstance(getattr(models.WindowEvent, key), property)
+                }
+            )
+            window_dict["state"].pop("data")
+            window_title = window_dict["title"]
+            if prev_window_title is None or prev_window_title != window_title:
+                screenshot_base64 = action.screenshot.base64
+                num_images += 1
+                screenshots_base64.append(screenshot_base64)
+            prev_window_title = window_title
+
+            is_keyboard_action = action.name in common.KEY_EVENTS
+            if is_keyboard_action:
+                action_dict = deepcopy(
+                    {
+                        key: val
+                        for key, val in utils.rows2dicts(
+                            [action],# follow=is_keyboard_action,
+                        )[0].items()
+                        if val is not None
+                        and not key.endswith("timestamp")
+                        and not key.endswith("id")
+                        # and not isinstance(getattr(models.ActionEvent, key), property)
+                    }
+                )
+            else:
+                action_dict = deepcopy(
+                    {
+                        key: val
+                        for key, val in utils.row2dict(
+                            action, follow=False
+                        ).items()
+                        if val is not None
+                        and not key.endswith("timestamp")
+                        and not key.endswith("id")
+                        # and not isinstance(getattr(models.ActionEvent, key), property)
+                    }
+                )
+            is_current_action = action_idx == self.recording_action_idx
+            logger.info(f"{is_current_action=}")
+            if is_current_action:
+                active_action_dict = action_dict
+            prompt_frame = {
+                "screenshot_number": num_images,
+                "window": window_dict,
+                "action": action_dict,
+                "action_idx": action_idx,
+                "action_number": action_idx + 1,
+                "is_current_action": is_current_action,
+            }
+            prompt_frames.append(prompt_frame)
+        logger.info(f"prompt_frames=\n{pformat(prompt_frames)}")
+
+        screenshots_base64.append(active_screenshot.base64)
+        prompt_data = {
+            "prompt_frames": prompt_frames,
+            "active_window": active_window_dict,
+            "active_action": active_action_dict,
+            "replay_instructions": replay_instructions,
+            "task_description": self.recording.task_description,
+            "screenshots_base64": screenshots_base64,
+        }
+        completion = prompt_for_action(prompt_data)
+
+        logger.info(f"{completion=}")
+        #import ipdb; ipdb.set_trace()
 
         #active_action_dicts = utils.get_action_dict_from_json(completion)
         active_action_dicts = completion
@@ -147,36 +178,47 @@ def get_default_adapter():
 
 from typing import Callable
 
-# copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
+# modified from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
 def prompt_for_action(
-    reference_screenshot: models.Screenshot,
-    reference_window_dict: dict,
-    reference_action_dicts: list[dict],
-    active_screenshot: models.Screenshot,
-    active_window_dict: dict,
-    recording_task_description: str,
-    replay_instructions: str,
+    prompt_data: dict,
     max_tokens: int | None = MAX_TOKENS,
     adapter: Callable = get_default_adapter(),
 ):
-    reference_screenshot_base64 = reference_screenshot.base64
-    active_screenshot_base64 = active_screenshot.base64
-    images = [reference_screenshot_base64, active_screenshot_base64]
+    prompt_frames = prompt_data["prompt_frames"]
+    active_window = prompt_data["active_window"]
+    active_action = prompt_data["active_action"]
+    replay_instructions = prompt_data["replay_instructions"]
+    task_description = prompt_data["task_description"]
+    images = prompt_data["screenshots_base64"]
+
+    num_actions = len(prompt_frames)
+
+    num_images = len(images)
     system_prompt = utils.render_template_from_file(
         "openadapt/prompts/system.j2",
-        recording_task_description=recording_task_description,
-        replay_instructions=replay_instructions,
+        #recording_task_description=recording_task_description,
+        #replay_instructions=replay_instructions,
+        #action_number,
+        #num_actions=num_actions,
     )
-    #logger.info(f"{action=}")
-    for window_dict in (reference_window_dict, active_window_dict):
-        for key in ("meta", "data"):
-            if key in window_dict:
-                del window_dict[key]
+    logger.info(f"system_prompt=\n{system_prompt}")
+    #for window_dict in (reference_window_dict, active_window_dict):
+    #    for key in ("meta", "data"):
+    #        if key in window_dict:
+    #            del window_dict[key]
+
+    #from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
+    #valid_action_names = KEY_EVENTS + MOUSE_EVENTS
+
     prompt = utils.render_template_from_file(
         "openadapt/prompts/action.j2",
-        reference_action_jsons=json.dumps(reference_action_dicts),
-        reference_window_json=json.dumps(reference_window_dict),
-        active_window_json=json.dumps(active_window_dict),
+        prompt_frames=prompt_frames,
+        active_window=active_window,
+        active_action=active_action,
+        replay_instructions=replay_instructions,
+        task_description=task_description,
+        num_actions=num_actions,
+        num_images=num_images,
     )
     logger.info(f"prompt=\n{prompt}")
     #payload = adapter.create_payload(

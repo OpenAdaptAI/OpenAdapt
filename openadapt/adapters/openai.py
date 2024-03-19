@@ -1,6 +1,6 @@
 """Adapter for GPT4-V API."""
 
-from pprint import pprint
+from pprint import pformat
 import base64
 import json
 import mimetypes
@@ -8,9 +8,11 @@ import os
 import requests
 import sys
 
+from loguru import logger
 
 from openadapt import cache, config
 
+MAX_TOKENS = 4096
 
 def create_payload(
     prompt: str,
@@ -20,6 +22,11 @@ def create_payload(
     detail="high",
     max_tokens=None,
 ):
+    max_tokens = max_tokens or MAX_TOKENS
+	# max_tokens is too large: 16384. This model supports at most 4096 completion tokens, whereas you provided 16384.
+    if max_tokens > MAX_TOKENS:
+        max_tokens = MAX_TOKENS
+
     """Creates the payload for the API request."""
     messages = [
         {
@@ -102,4 +109,4 @@ def prompt(
     logger.info(f"payload=\n{pformat(payload)}")
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
-    return reuslt
+    return result

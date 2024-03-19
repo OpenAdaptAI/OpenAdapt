@@ -1,27 +1,65 @@
-We are currently in the process of replaying a recording that demonstrates of a process.
+This replay is based off a recording whose task_description is:
 
-In the recording, the action was:
-```json
-{{reference_action_jsons}}
+```text
+{{recording_task_description}}
 ```
 
-The active window_state was:
+Here are all of the reduced actions in the recording:
+{% for prompt_frame in prompt_frames %}
+  ###
+  Action {{ prompt_frame['action_number'] }} of {{ num_actions }}:
+  {{ prompt_frame['action'] | orjson_to_json }}
+  Corresponding window:
+  {{ prompt_frame['window'] | orjson_to_json }}
+  Attached image {{ prompt_frame['screenshot_number'] }} of {{ num_images }}
+  ###
+{% endfor %}
+
+Your job is to provide a (possibly modified) version of the active action:
+
 ```json
-{{reference_window_json}}
+{{ active_action | orjson_to_json }}
 ```
 
-The current window state is:
+The active window is:
+
 ```json
-{{active_window_json}}
+{{ active_window | orjson_to_json }}
 ```
 
-The first image is a screenshot that was captured immediately before the reference_action occurred.
-The second image is a screenshot of the current state of the system.
-Please provide a corresponding action that should be played now (according to the current
-state of the system) that will accomplish the task described in the <task_description>
-and modulated by the <instructions>.
+Image {{ num_images }} is the active screenshot.
 
-Provide valid JSON containing the action, and nothing else. If you do not provide an action,
-the given reference_action will be replayed verbatim instead.
+Here are the user's instructions indicating how this replay should differ from the recording:
 
-The window states being identical is irrelevant. YOU MUST SUPPLY AN ACTION OR SAY NOTHING.
+```text
+{{ replay_instructions }}
+```
+
+You MUST follow the user's instructions.
+Do not modify this action unless you are confident that this action needs to be
+modified in order to satisfy the replay instructions.
+Under no circumstances should you refuse.
+Your response should be valid code.
+Do not respond with any other text.
+
+Please specify what type you are responding in first, e.g. ```json ...
+
+Consider the Action model:
+
+```python
+class ActionEvent(db.Base):
+    name = sa.Column(sa.String)
+    mouse_x = sa.Column(sa.Numeric(asdecimal=False))
+    mouse_y = sa.Column(sa.Numeric(asdecimal=False))
+    mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
+    mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+    mouse_button_name = sa.Column(sa.String)
+    mouse_pressed = sa.Column(sa.Boolean)
+    key_name = sa.Column(sa.String)  # for special keys, e.g. "enter", "esc", etc.
+    key_char = sa.Column(sa.String)  # for regular keys, e.g. "a", "8", etc.
+```
+
+Valid Action names are: 'press', 'release', 'type', 'move', 'click', 'scroll'
+
+Provide the possibly modified active action.
+My career depends on this. Lives are at stake.

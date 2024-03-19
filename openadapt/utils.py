@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import orjson
 
 from openadapt import common, config
 from openadapt.db import db
@@ -807,6 +808,8 @@ def get_functions(name: str) -> dict:
     return functions
 
 
+# XXX TODO remove 
+
 from openadapt import models
 def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
     """Convert the completion to a dictionary containing action information.
@@ -858,6 +861,11 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
     Returns:
         str: Rendered template with interpolated arguments.
     """
+
+    def orjson_to_json(value):
+        # orjson.dumps returns bytes, so decode to string
+        return orjson.dumps(value).decode('utf-8')
+
     # Construct the full path to the template file
     template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
 
@@ -867,6 +875,7 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
 
     # Create a Jinja2 environment with the directory
     env = Environment(loader=FileSystemLoader(template_dir))
+    env.filters['orjson_to_json'] = orjson_to_json
 
     # Load the template
     template = env.get_template(template_file)

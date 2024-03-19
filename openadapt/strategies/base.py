@@ -75,18 +75,24 @@ class BaseReplayStrategy(ABC):
                 break
             if self.action_events:
                 prev_action_event = self.action_events[-1]
-                assert prev_action_event.timestamp <= action_event.timestamp, (
-                    prev_action_event,
-                    action_event,
-                )
+                if prev_action_event.timestamp and action_event.timestamp:
+                    assert prev_action_event.timestamp <= action_event.timestamp, (
+                        prev_action_event,
+                        action_event,
+                    )
+                else:
+                    logger.warning(f"{prev_action_event.timestamp=} {action_event.timestamp=}")
             self.log_fps()
             if action_event:
-                self.action_events.append(action_event)
                 action_event_dict = utils.rows2dicts(
                     [action_event],
                     drop_constant=False,
                 )[0]
                 logger.info(f"action_event=\n{pformat(action_event_dict)}")
+                if not action_event_dict:
+                    action_event = prev_action_event
+                    import ipdb; ipdb.set_trace()
+                self.action_events.append(action_event)
                 try:
                     playback.play_action_event(
                         action_event,

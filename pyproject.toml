@@ -91,6 +91,7 @@ easyocr = "^1.7.0"
 av = "^11.0.0"
 spacy-curated-transformers = "^0.2.0"
 anthropic = "^0.19.2"
+orjson = "^3.9.15"
 
 [tool.pytest.ini_options]
 filterwarnings = [
