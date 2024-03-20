@@ -57,6 +57,7 @@ class VisualReplayStrategy(
             screenshot = action_event.screenshot
             screenshot.crop_active_window(action_event)
             original_image = screenshot.image
+            # get segmentation adapter()
             segmented_image = adapters.replicate.fetch_segmented_image(original_image)
             masks = vision.process_image_for_masks(segmented_image)
             refined_masks = vision.refine_masks(masks)
