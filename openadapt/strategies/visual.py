@@ -21,6 +21,11 @@ from openadapt import adapters
 # number of actions to include in context simultaneously
 ACTION_WINDOW_SIZE = 5
 
+DEBUG = False
+
+# throughput hack
+SEGMENT_ONCE_PER_WINDOW_TITLE = True
+
 
 class VisualReplayStrategy(
     strategies.base.BaseReplayStrategy,
@@ -45,26 +50,17 @@ class VisualReplayStrategy(
         self.prepare_screenshots()
 
     def prepare_screenshots(self) -> None:
-
-        # original_image = Image.open('path_to_image.png')
-        # masks = process_image_for_masks(original_image)
-        # refined_masks = refine_masks(masks)
-        # masked_images = extract_masked_images(original_image, refined_masks)
-
-        for action_event in self.recording.processed_action_events:
-            if action_event.name not in common.MOUSE_EVENTS:
-                continue
-            screenshot = action_event.screenshot
-            screenshot.crop_active_window(action_event)
-            original_image = screenshot.image
-            segmented_image = adapters.replicate.fetch_segmented_image(original_image)
-            masks = vision.process_image_for_masks(segmented_image)
-            refined_masks = vision.refine_masks(masks)
-            vision.display_binary_images_grid(refined_masks)
-            masked_images = vision.extract_masked_images(original_image, refined_masks)
-            import ipdb; ipdb.set_trace()
-            foo = 1
-
+        # first get one screenshot per unique window title
+        self.screenshots_by_window_title = get_screenshots_by_window_title(
+            self.recording.processed_action_events
+        )
+        self.window_segmentation_by_title = {}
+        for window_title, screenshots in self.screenshots_by_window_title.items():
+            # just use the first screenshot for now
+            screenshot = screenshots[0]
+            action_event = screenshot.action_event
+            segmentation = get_window_segmentation(action_event)
+            self.window_segmentation_by_title[window_title] = segmentation
 
     def get_next_action_event(
         self,
@@ -105,6 +101,7 @@ class VisualReplayStrategy(
         active_action_dict = None
         num_images = 0
         screenshots_base64 = []
+        #screenshots_by_window_title = get_screenshots_by_window_title(actions)
         for action_idx, action in enumerate(actions):
             window = action.window_event
             window_dict = deepcopy(
@@ -156,6 +153,15 @@ class VisualReplayStrategy(
             logger.info(f"{is_current_action=}")
             if is_current_action:
                 active_action_dict = action_dict
+
+            #if SEGMENT_ONCE_PER_WINDOW_TITLE:
+            #    window_segmentation = self.window_segmentation_by_title[window_title]
+            #else:
+            #    window_segmentation
+
+            masked_images = window_segmentation["masked_imges"]
+            descriptions = window_segmentation["descriptions"]
+            bounding_boxes = window_segmentation["bounding_boxes"]
             prompt_frame = {
                 "screenshot_number": num_images,
                 "window": window_dict,
@@ -168,6 +174,10 @@ class VisualReplayStrategy(
         logger.info(f"prompt_frames=\n{pformat(prompt_frames)}")
 
         screenshots_base64.append(active_screenshot.base64)
+        screenshots_base64 = [
+            screenshot.base64
+            for screenshot in screenshots
+        ]
         prompt_data = {
             "prompt_frames": prompt_frames,
             "active_window": active_window_dict,
@@ -190,6 +200,58 @@ class VisualReplayStrategy(
 
 
 MAX_TOKENS = 2**14  # 16384
+
+from dataclasses import dataclass
+
+from PIL import Image
+
+@dataclass
+class Segmentation:
+    masked_images: list[Image.Image]
+    descriptions: list[str]
+    bounding_boxes: dict[float, float | tuple[float, float]]
+
+
+def get_window_segmentation(
+    action_event: models.ActionEvent
+) -> Segmentation:
+        screenshot.crop_active_window(action_event)
+        original_image = screenshot.image
+        segmented_image = adapters.replicate.fetch_segmented_image(original_image)
+        masks = vision.process_image_for_masks(segmented_image)
+        refined_masks = vision.refine_masks(masks)
+        if DEBUG:
+            vision.display_binary_images_grid(refined_masks)
+        masked_images = vision.extract_masked_images(original_image, refined_masks)
+
+        original_image_base64 = screenshot.base64
+        masked_images_base64 = [
+            utils.image2utf8(masked_image)
+            for masked_image in masked_images
+        ]
+        descriptions = prompt_for_descriptions(
+            original_image_base64, masked_images_base64,
+        )
+        assert len(descriptions) == len(masked_images), (
+            len(descriptions), len(masked_images)
+        )
+        bounding_boxes = vision.calculate_bounding_boxes(refined_masks)
+        assert len(bounding_boxes) == len(descriptions), (
+            len(bounding_boxes), len(descriptions)
+        )
+        return Segmentation(masked_images, descriptions, bounding_boxes)
+
+def get_screenshots_by_window_title(
+    actions: list[models.ActionEvent],
+) -> dict[str, models.Screenshot]:
+    screenshots_by_window_title = {}
+    for action_idx, action in enumerate(actions):
+        window = action.window_event
+        window_title = window.title
+        screenshot = action.screenshot
+        screenshots_by_window_title.setdefault(window_title, [])
+        screenshots_by_window_title[window_title].append(screenshot)
+    return screenshots_by_window_title
 
 
 def get_default_adapter():
@@ -265,3 +327,28 @@ def prompt_for_action(
         raise
     logger.info(f"content_dict=\n{pformat(content_dict)}")
     return content_dict
+
+def prompt_for_descriptions(
+    original_image_base64: str,
+    masked_images_base64: list[str],
+    max_tokens: int | None = MAX_TOKENS,
+    adapter: Callable = get_default_adapter(),
+) -> list[str]:
+    images = [original_image_base64] + masked_images_base64
+    system_prompt = utils.render_template_from_file(
+        "openadapt/prompts/system.j2",
+    )
+    logger.info(f"system_prompt=\n{system_prompt}")
+    prompt = utils.render_template_from_file(
+        "openadapt/prompts/description.j2",
+    )
+    logger.info(f"prompt=\n{prompt}")
+    descriptions_json = adapter.prompt(
+        prompt,
+        system_prompt,
+        images,
+        max_tokens=max_tokens,
+    )
+    descriptions = utils.parse_code_snippet(descriptions_json)["descriptions"]
+    logger.info(f"{descriptions=}")
+    return descriptions
