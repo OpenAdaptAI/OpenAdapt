@@ -57,8 +57,8 @@ class VisualReplayStrategy(
             screenshot = action_event.screenshot
             screenshot.crop_active_window(action_event)
             original_image = screenshot.image
-            # get segmentation adapter()
-            segmented_image = adapters.replicate.fetch_segmented_image(original_image)
+            segmentation_adapter = get_default_segmentation_adapter()
+            segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
             masks = vision.process_image_for_masks(segmented_image)
             refined_masks = vision.refine_masks(masks)
             vision.display_binary_images_grid(refined_masks)
@@ -198,6 +198,13 @@ def get_default_adapter():
         "openai": adapters.openai,
         "anthropic": adapters.anthropic,
     }[config.DEFAULT_ADAPTER]
+
+
+def get_default_segmentation_adapter():
+    return {
+        "som": adapters.som,
+        "replicate": adapters.replicate,
+    }[config.DEFAULT_SEGMENTATION_ADAPTER]
 
 
 from typing import Callable
