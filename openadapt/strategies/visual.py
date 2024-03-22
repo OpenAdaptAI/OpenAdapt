@@ -138,11 +138,11 @@ class VisualReplayStrategy(
                     # and not isinstance(getattr(models.ActionEvent, key), property)
                 }
             )
-            is_current_action = action_idx == self.recording_action_idx
-            logger.info(f"{is_current_action=}")
-            if is_current_action:
-                active_action = action
-                active_action_dict = action_dict
+            is_reference_action = action_idx == self.recording_action_idx
+            logger.info(f"{is_reference_action=}")
+            if is_reference_action:
+                reference_action = action
+                reference_action_dict = action_dict
 
             active_segment_description = None
             active_segment_bounding_box = None
@@ -167,12 +167,20 @@ class VisualReplayStrategy(
                 "action": action_dict,
                 "action_idx": action_idx,
                 "action_number": action_idx + 1,
-                "is_current_action": is_current_action,
+                "is_reference_action": is_reference_action,
                 "active_segment_description": active_segment_description,
                 "active_segment_bounding_box": active_segment_bounding_box,
             }
             prompt_frames.append(prompt_frame)
         logger.info(f"prompt_frames=\n{pformat(prompt_frames)}")
+
+
+        active_window_segmentation = get_window_segmentation(
+            screenshot=active_screenshot,
+            window_event=active_window,
+        )
+
+        # XXX TODO: replace screenshot with active window segmentation
 
         screenshots.append(active_screenshot)
         screenshots_base64 = [
@@ -182,7 +190,7 @@ class VisualReplayStrategy(
         prompt_data = {
             "prompt_frames": prompt_frames,
             "active_window": active_window_dict,
-            "active_action": active_action_dict,
+            "reference_action": reference_action_dict,
             "replay_instructions": replay_instructions,
             "task_description": self.recording.task_description,
             "screenshots_base64": screenshots_base64,
@@ -190,7 +198,7 @@ class VisualReplayStrategy(
         completion = prompt_for_action(prompt_data)
 
         logger.info(f"{completion=}")
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
 
         #active_action_dicts = utils.get_action_dict_from_json(completion)
         active_action_dicts = completion
@@ -240,10 +248,21 @@ def get_active_segment(action: models.ActionEvent, window_segmentation: Segmenta
     return None
 
 def get_window_segmentation(
-    action_event: models.ActionEvent
+    action_event: models.ActionEvent | None = None,
+    screenshot: models.ScreenShot | None = None,
+    window_event: models.WindowEvent | None = None,
 ) -> Segmentation:
-    screenshot = action_event.screenshot
-    screenshot.crop_active_window(action_event)
+    assert action_event or (screenshot and window_event)
+    if action_event:
+        screenshot = action_event.screenshot
+        screenshot.crop_active_window(action_event)
+    else:
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        screenshot.crop_active_window(
+            window_event=window_event, 
+            width_ratio=width_ratio,
+            height_ratio=height_ratio,
+        )
     original_image = screenshot.image
     if DEBUG:
         original_image.show()
@@ -309,7 +328,7 @@ def prompt_for_action(
 ) -> dict:
     prompt_frames = prompt_data["prompt_frames"]
     active_window = prompt_data["active_window"]
-    active_action = prompt_data["active_action"]
+    reference_action = prompt_data["reference_action"]
     replay_instructions = prompt_data["replay_instructions"]
     task_description = prompt_data["task_description"]
     images = prompt_data["screenshots_base64"]
@@ -326,14 +345,14 @@ def prompt_for_action(
         "openadapt/prompts/action.j2",
         prompt_frames=prompt_frames,
         active_window=active_window,
-        active_action=active_action,
+        reference_action=reference_action,
         replay_instructions=replay_instructions,
         task_description=task_description,
         num_actions=num_actions,
         num_images=num_images,
     )
-    import ipdb; ipdb.set_trace()
     logger.info(f"prompt=\n{prompt}")
+    #import ipdb; ipdb.set_trace()
     content = adapter.prompt(
         prompt,
         system_prompt,

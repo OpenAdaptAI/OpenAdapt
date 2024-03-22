@@ -1,6 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from typing import Optional, Union
 import io
 
 from loguru import logger
@@ -246,33 +246,59 @@ class ActionEvent(db.Base):
 
     @classmethod
     def from_dict(cls, action_dict: dict) -> list['ActionEvent']:
-        # TODO: handle both parent and children
-        import ipdb; ipdb.set_trace()
-        text_actions = parent['text'][1:-1].split('>-<')
-        canonical_actions = parent['canonical_text'][1:-1].split('>-<')
-        parent_id = None  # Set this according to your needs, possibly passed in the parent dict
+        # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
         children = []
+        release_events = []
+        try:
+            # Splitting actions based on whether they are special keys or regular characters
+            if action_dict['text'].startswith('<') and action_dict['text'].endswith('>'):
+                # Handling special keys
+                key_names = action_dict['text'][1:-1].split('>-<')
+                canonical_key_names = action_dict['canonical_text'][1:-1].split('>-<')
+                for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+                    press, release = cls._create_key_events(key_name, canonical_key_name)
+                    children.append(press)
+                    release_events.append(release)  # Collect release events to append in reverse order later
+            else:
+                # Handling regular character sequences
+                assert len(config.ACTION_TEXT_SEP) == 1, config.ACTION_TEXT_SEP
+                for key_char in action_dict['text'][::2]:
+                    # Press and release each character one after another
+                    press, release = cls._create_key_events(key_char=key_char)
+                    children.append(press)
+                    children.append(release)
+        except KeyError as exc:
+            # Handle missing key names or canonical text appropriately
+            logger.warning(f"{exc=}")
 
-        for action, canonical_action in zip(text_actions, canonical_actions):
-            # Assuming the action names 'press' and 'release' are adequate for the child events
-            press_event = cls(
-                name='press',
-                key_name=action,
-                canonical_key_name=action if not action.isdigit() else None,
-                canonical_key_vk=canonical_action if action.isdigit() else None,
-                parent_id=parent_id
-            )
-            release_event = cls(
-                name='release',
-                key_name=action,
-                canonical_key_name=action if not action.isdigit() else None,
-                canonical_key_vk=canonical_action if action.isdigit() else None,
-                parent_id=parent_id
-            )
+        children += release_events[::-1]
+        return ActionEvent(children=children)
 
-            children.extend([press_event, release_event])
-
-        return children
+    @classmethod
+    def _create_key_events(
+        cls,
+        key_name: str | None = None,
+        canonical_key_name: str | None = None,
+        key_char: str | None = None,
+        canonical_key_char: str | None = None,
+    ) -> list['ActionEvent']:
+        # This helper function creates press and release events for a given key_name
+        # TODO: remove canonical?
+        press_event = cls(
+            name='press',
+            key_name=key_name,
+            #canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            #canonical_key_char=canonical_key_char,
+        )
+        release_event = cls(
+            name='release',
+            key_name=key_name,
+            #canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            #canonical_key_char=canonical_key_char,
+        )
+        return press_event, release_event
 
     def scale_to_screenshot_image(self):
         """
@@ -382,13 +408,23 @@ class Screenshot(db.Base):
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event: ActionEvent) -> None:
-        """Crop the screenshot to the active window defined by the action event."""
-        # avoid circular import
-        from openadapt import utils
+    #def crop_active_window(self, action_event: ActionEvent) -> None:
+    def crop_active_window(
+        self,
+        action_event: ActionEvent | None = None,
+        window_event: WindowEvent | None = None,
+        width_ratio: float | None = None,
+        height_ratio: float | None = None,
+    ) -> None:
+        assert action_event or (window_event and width_ratio and height_ratio)
 
-        window_event = action_event.window_event
-        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        """Crop the screenshot to the active window defined by the action event."""
+
+        if action_event:
+            # avoid circular import
+            from openadapt import utils
+            window_event = action_event.window_event
+            width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio

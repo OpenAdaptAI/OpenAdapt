@@ -12,16 +12,14 @@ Here are all of the reduced actions in the recording:
   Corresponding window:
   {{ prompt_frame['window'] | orjson_to_json }}
   Attached image {{ prompt_frame['screenshot_number'] }} of {{ num_images }}
-  {% if prompt_frames['active_segment_description'] %}
   Active Segment Description: {{ prompt_frame['active_segment_description'] }}
-  {% endif %}
   ###
 {% endfor %}
 
-Your job is to provide a (possibly modified) version of the active action:
+Your job is to provide a (possibly modified) version of the reference action:
 
 ```json
-{{ active_action | orjson_to_json }}
+{{ reference_action | orjson_to_json }}
 ```
 
 The active window is:
@@ -64,5 +62,5 @@ class ActionEvent(db.Base):
 
 Valid Action names are: 'press', 'release', 'type', 'move', 'click', 'scroll'
 
-Provide the possibly modified active action.
+Provide the possibly modified reference action.
 My career depends on this. Lives are at stake.
