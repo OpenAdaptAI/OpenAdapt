@@ -244,6 +244,58 @@ class ActionEvent(db.Base):
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 
+    @classmethod
+    def from_dict(cls, action_dict: dict) -> list['ActionEvent']:
+        # TODO: handle both parent and children
+        import ipdb; ipdb.set_trace()
+        text_actions = parent['text'][1:-1].split('>-<')
+        canonical_actions = parent['canonical_text'][1:-1].split('>-<')
+        parent_id = None  # Set this according to your needs, possibly passed in the parent dict
+        children = []
+
+        for action, canonical_action in zip(text_actions, canonical_actions):
+            # Assuming the action names 'press' and 'release' are adequate for the child events
+            press_event = cls(
+                name='press',
+                key_name=action,
+                canonical_key_name=action if not action.isdigit() else None,
+                canonical_key_vk=canonical_action if action.isdigit() else None,
+                parent_id=parent_id
+            )
+            release_event = cls(
+                name='release',
+                key_name=action,
+                canonical_key_name=action if not action.isdigit() else None,
+                canonical_key_vk=canonical_action if action.isdigit() else None,
+                parent_id=parent_id
+            )
+
+            children.extend([press_event, release_event])
+
+        return children
+
+    def scale_to_screenshot_image(self):
+        """
+            mouse_x = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_y = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+
+            x = action_event.mouse_x * width_ratio
+            y = action_event.mouse_y * height_ratio
+        """
+        width_ratio, height_ratio = utils.get_scale_ratios(self)
+
+        # TODO: return new ActionEvent
+        return {
+            "mouse_x": self.mouse_x * width_ratio,
+            "mouse_y": self.mouse_y * height_ratio,
+            "mouse_dx": self.mouse_dx * width_ratio,
+            "mouse_dy": self.mouse_dy * height_ratio,
+        }
+
+
+
 
 class Screenshot(db.Base):
     """Class representing a screenshot in the database."""
@@ -266,6 +318,7 @@ class Screenshot(db.Base):
     # TODO: replace prev with prev_timestamp?
     prev = None
     _image = None
+    _image_history = []
     _diff = None
     _diff_mask = None
     _base64 = None
@@ -343,6 +396,7 @@ class Screenshot(db.Base):
         y1 = y0 + window_event.height * height_ratio
 
         box = (x0, y0, x1, y1)
+        self._image_history.append(self._image)
         self._image = self._image.crop(box)
 
     def convert_binary_to_png(self, image_binary: bytes) -> Image:

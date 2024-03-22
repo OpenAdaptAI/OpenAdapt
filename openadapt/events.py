@@ -143,7 +143,8 @@ def make_parent_event(
     extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
-    return models.ActionEvent(**event_dict)
+    action_event = models.ActionEvent(**event_dict)
+    return action_event
 
 
 def merge_consecutive_mouse_move_events(
@@ -730,10 +731,10 @@ def process_events(
     )
     process_fns = [
         remove_invalid_keyboard_events,
+        remove_redundant_mouse_move_events,
         merge_consecutive_keyboard_events,
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,
-        remove_redundant_mouse_move_events,
         merge_consecutive_mouse_click_events,
     ]
     for process_fn in process_fns:

@@ -451,6 +451,16 @@ def draw_rectangle(
 def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
+    <position in image space> = scale_ratio * <position in window/action space>, e.g:
+
+        width_ratio, height_ratio = get_scale_ratios(action_event)
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+        x = action_event.mouse_x * width_ratio
+        y = action_event.mouse_y * height_ratio
+
     Args:
         action_event (ActionEvent): The action event.
 
@@ -828,27 +838,27 @@ def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]
         return action
 
 
-def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
-    """Convert the completion from JSON to a dictionary containing action information.
-
-    Args:
-        completion (str): The JSON string provided by the user.
-
-    Returns:
-        dict: The action dictionary, or None if an error occurs.
-    """
-    try:
-        action = json.loads(completion)
-    except json.JSONDecodeError as exc:
-        logger.warning(f"JSON decode error: {exc=}")
-        return None
-    except Exception as exc:
-        logger.warning(f"Unexpected error: {exc=}")
-        logger.warning(f"{completion=}")
-        return None
-    else:
-        # Assuming the JSON directly maps to models.ActionEvent structure
-        return action
+#def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
+#    """Convert the completion from JSON to a dictionary containing action information.
+#
+#    Args:
+#        completion (str): The JSON string provided by the user.
+#
+#    Returns:
+#        dict: The action dictionary, or None if an error occurs.
+#    """
+#    try:
+#        action = json.loads(completion)
+#    except json.JSONDecodeError as exc:
+#        logger.warning(f"JSON decode error: {exc=}")
+#        return None
+#    except Exception as exc:
+#        logger.warning(f"Unexpected error: {exc=}")
+#        logger.warning(f"{completion=}")
+#        return None
+#    else:
+#        # Assuming the JSON directly maps to models.ActionEvent structure
+#        return action
 
 
 # copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files

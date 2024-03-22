@@ -1,7 +1,7 @@
 This replay is based off a recording whose task_description is:
 
 ```text
-{{recording_task_description}}
+{{task_description}}
 ```
 
 Here are all of the reduced actions in the recording:
@@ -12,6 +12,9 @@ Here are all of the reduced actions in the recording:
   Corresponding window:
   {{ prompt_frame['window'] | orjson_to_json }}
   Attached image {{ prompt_frame['screenshot_number'] }} of {{ num_images }}
+  {% if prompt_frames['active_segment_description'] %}
+  Active Segment Description: {{ prompt_frame['active_segment_description'] }}
+  {% endif %}
   ###
 {% endfor %}
 
