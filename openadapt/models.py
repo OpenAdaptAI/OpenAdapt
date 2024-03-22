@@ -1,6 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from typing import Optional, Union
 import io
 
 from loguru import logger
@@ -233,8 +233,117 @@ class ActionEvent(db.Base):
             ActionEvent: An instance of ActionEvent with the specified child events.
 
         """
+        for child_dict in children_dicts:
+            for key in child_dict:
+                #if isinstance(getattr(type(ActionEvent), key), property):
+                if key == "text":
+                    # TODO: decompose into individual children
+                    import ipdb; ipdb.set_trace()
+                    foo = 1
+
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
+
+    @classmethod
+    def from_dict(cls, action_dict: dict) -> list['ActionEvent']:
+        # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
+        children = []
+        release_events = []
+        try:
+            # Splitting actions based on whether they are special keys or regular characters
+            if action_dict['text'].startswith('<') and action_dict['text'].endswith('>'):
+                # Handling special keys
+                key_names = action_dict['text'][1:-1].split('>-<')
+                canonical_key_names = action_dict['canonical_text'][1:-1].split('>-<')
+                for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+                    press, release = cls._create_key_events(key_name, canonical_key_name)
+                    children.append(press)
+                    release_events.append(release)  # Collect release events to append in reverse order later
+            else:
+                # Handling regular character sequences
+                assert len(config.ACTION_TEXT_SEP) == 1, config.ACTION_TEXT_SEP
+                for key_char in action_dict['text'][::2]:
+                    # Press and release each character one after another
+                    press, release = cls._create_key_events(key_char=key_char)
+                    children.append(press)
+                    children.append(release)
+        except KeyError as exc:
+            # Handle missing key names or canonical text appropriately
+            logger.warning(f"{exc=}")
+
+        children += release_events[::-1]
+        return ActionEvent(children=children)
+
+    @classmethod
+    def _create_key_events(
+        cls,
+        key_name: str | None = None,
+        canonical_key_name: str | None = None,
+        key_char: str | None = None,
+        canonical_key_char: str | None = None,
+    ) -> list['ActionEvent']:
+        # This helper function creates press and release events for a given key_name
+        # TODO: remove canonical?
+        press_event = cls(
+            name='press',
+            key_name=key_name,
+            #canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            #canonical_key_char=canonical_key_char,
+        )
+        release_event = cls(
+            name='release',
+            key_name=key_name,
+            #canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            #canonical_key_char=canonical_key_char,
+        )
+        return press_event, release_event
+
+    def scale_to_screenshot_image(self):
+        """
+            mouse_x = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_y = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
+            mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+
+            x = action_event.mouse_x * width_ratio
+            y = action_event.mouse_y * height_ratio
+        """
+        width_ratio, height_ratio = utils.get_scale_ratios(self)
+
+        # TODO: return new ActionEvent
+        return {
+            "mouse_x": self.mouse_x * width_ratio,
+            "mouse_y": self.mouse_y * height_ratio,
+            "mouse_dx": self.mouse_dx * width_ratio,
+            "mouse_dy": self.mouse_dy * height_ratio,
+        }
+
+
+class WindowEvent(db.Base):
+    """Class representing a window event in the database."""
+
+    __tablename__ = "window_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
+    state = sa.Column(sa.JSON)
+    title = sa.Column(sa.String)
+    left = sa.Column(sa.Integer)
+    top = sa.Column(sa.Integer)
+    width = sa.Column(sa.Integer)
+    height = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="window_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+
+    @classmethod
+    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
+        """Get the active window event."""
+        return WindowEvent(**window.get_active_window_data())
 
 
 class Screenshot(db.Base):
@@ -258,8 +367,10 @@ class Screenshot(db.Base):
     # TODO: replace prev with prev_timestamp?
     prev = None
     _image = None
+    _image_history = []
     _diff = None
     _diff_mask = None
+    _base64 = None
 
     @property
     def image(self) -> Image:
@@ -276,6 +387,14 @@ class Screenshot(db.Base):
             else:
                 self._image = self.convert_binary_to_png(self.png_data)
         return self._image
+
+    @property
+    def base64(self) -> str:
+        """Return data URI of JPEG encoded base64"""
+        if not self._base64:
+            from openadapt import utils
+            self._base64 = utils.image2utf8(self.image)
+        return self._base64
 
     @property
     def diff(self) -> Image:
@@ -312,13 +431,23 @@ class Screenshot(db.Base):
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    def crop_active_window(self, action_event: ActionEvent) -> None:
-        """Crop the screenshot to the active window defined by the action event."""
-        # avoid circular import
-        from openadapt import utils
+    #def crop_active_window(self, action_event: ActionEvent) -> None:
+    def crop_active_window(
+        self,
+        action_event: ActionEvent | None = None,
+        window_event: WindowEvent | None = None,
+        width_ratio: float | None = None,
+        height_ratio: float | None = None,
+    ) -> None:
+        assert action_event or (window_event and width_ratio and height_ratio)
 
-        window_event = action_event.window_event
-        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        """Crop the screenshot to the active window defined by the action event."""
+
+        if action_event:
+            # avoid circular import
+            from openadapt import utils
+            window_event = action_event.window_event
+            width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio
@@ -326,6 +455,7 @@ class Screenshot(db.Base):
         y1 = y0 + window_event.height * height_ratio
 
         box = (x0, y0, x1, y1)
+        self._image_history.append(self.image)
         self._image = self._image.crop(box)
 
     def convert_binary_to_png(self, image_binary: bytes) -> Image:
@@ -352,31 +482,6 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
-
-
-class WindowEvent(db.Base):
-    """Class representing a window event in the database."""
-
-    __tablename__ = "window_event"
-
-    id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    timestamp = sa.Column(ForceFloat)
-    state = sa.Column(sa.JSON)
-    title = sa.Column(sa.String)
-    left = sa.Column(sa.Integer)
-    top = sa.Column(sa.Integer)
-    width = sa.Column(sa.Integer)
-    height = sa.Column(sa.Integer)
-    window_id = sa.Column(sa.String)
-
-    recording = sa.orm.relationship("Recording", back_populates="window_events")
-    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
-
-    @classmethod
-    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
-        """Get the active window event."""
-        return WindowEvent(**window.get_active_window_data())
 
 
 class PerformanceStat(db.Base):

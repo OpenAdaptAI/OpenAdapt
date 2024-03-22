@@ -9,11 +9,13 @@ from logging import StreamHandler
 from typing import Union
 import base64
 import inspect
+import json
 import os
 import sys
 import threading
 import time
 
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import fire
@@ -21,6 +23,7 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import orjson
 
 from openadapt import common, config
 from openadapt.db import db
@@ -448,6 +451,16 @@ def draw_rectangle(
 def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
+    <position in image space> = scale_ratio * <position in window/action space>, e.g:
+
+        width_ratio, height_ratio = get_scale_ratios(action_event)
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+        x = action_event.mouse_x * width_ratio
+        y = action_event.mouse_y * height_ratio
+
     Args:
         action_event (ActionEvent): The action event.
 
@@ -805,5 +818,110 @@ def get_functions(name: str) -> dict:
     return functions
 
 
+# XXX TODO remove 
+
+from openadapt import models
+def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
+    """Convert the completion to a dictionary containing action information.
+
+    Args:
+        completion (str): The completion provided by the user.
+
+    Returns:
+        dict: The action dictionary.
+    """
+    try:
+        action = eval(completion)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+    else:
+        return action
+
+
+#def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
+#    """Convert the completion from JSON to a dictionary containing action information.
+#
+#    Args:
+#        completion (str): The JSON string provided by the user.
+#
+#    Returns:
+#        dict: The action dictionary, or None if an error occurs.
+#    """
+#    try:
+#        action = json.loads(completion)
+#    except json.JSONDecodeError as exc:
+#        logger.warning(f"JSON decode error: {exc=}")
+#        return None
+#    except Exception as exc:
+#        logger.warning(f"Unexpected error: {exc=}")
+#        logger.warning(f"{completion=}")
+#        return None
+#    else:
+#        # Assuming the JSON directly maps to models.ActionEvent structure
+#        return action
+
+
+# copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
+def render_template_from_file(template_relative_path: str, **kwargs) -> str:
+    """
+    Load a Jinja2 template from a file using the project's root directory and interpolate arguments.
+    Args:
+        template_relative_path (str): Relative path to the Jinja2 template file from the project root.
+        **kwargs: Arguments to interpolate into the template.
+    Returns:
+        str: Rendered template with interpolated arguments.
+    """
+
+    def orjson_to_json(value):
+        # orjson.dumps returns bytes, so decode to string
+        return orjson.dumps(value).decode('utf-8')
+
+    # Construct the full path to the template file
+    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+
+    # Extract the directory and template file name
+    template_dir, template_file = os.path.split(template_path)
+    logger.info(f"{template_dir=} {template_file=}")
+
+    # Create a Jinja2 environment with the directory
+    env = Environment(loader=FileSystemLoader(template_dir))
+    env.filters['orjson_to_json'] = orjson_to_json
+    env.globals.update(zip=zip)
+
+    # Load the template
+    template = env.get_template(template_file)
+
+    # Render the template with provided arguments
+    return template.render(**kwargs)
+
+
+import ast
+
+def parse_code_snippet(snippet):
+    try:
+        if snippet.startswith("```json"):
+            # Remove Markdown code block syntax
+            json_string = (
+                snippet
+                .replace('```json\n', '')
+                .replace('```', '')
+                .replace('True', 'true')
+                .replace('False', 'false')
+                .strip()
+            )
+            # Parse the JSON string
+            return json.loads(json_string)
+        elif snippet.startswith("```python"):
+            python_code = snippet.replace('```python\n', '').replace('```', '').strip()
+            return ast.literal_eval(python_code)
+        else:
+            msg = "Unsupported {snippet=}"
+            logger.warning(msg)
+            return None
+    except Exception as exc:
+        import ipdb; ipdb.set_trace()
+        foo = 1
+
+
 if __name__ == "__main__":
-    fire.Fire(get_functions(__name__))
+    fcompletiooire.Fire(get_functions(__name__))
