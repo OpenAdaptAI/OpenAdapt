@@ -59,26 +59,6 @@ class VisualReplayStrategy(
             # just use the first screenshot for now
             screenshot = screenshots[0]
 
-        # original_image = Image.open('path_to_image.png')
-        # masks = process_image_for_masks(original_image)
-        # refined_masks = refine_masks(masks)
-        # masked_images = extract_masked_images(original_image, refined_masks)
-
-        for action_event in self.recording.processed_action_events:
-            if action_event.name not in common.MOUSE_EVENTS:
-                continue
-            screenshot = action_event.screenshot
-            screenshot.crop_active_window(action_event)
-            original_image = screenshot.image
-            segmentation_adapter = get_default_segmentation_adapter()
-            segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
-            masks = vision.process_image_for_masks(segmented_image)
-            refined_masks = vision.refine_masks(masks)
-            vision.display_binary_images_grid(refined_masks)
-            masked_images = vision.extract_masked_images(original_image, refined_masks)
-            import ipdb; ipdb.set_trace()
-            foo = 1
-
             # XXX why is screenshot.action_event a list?
             action_event = screenshot.action_event[0]
             if action_event.name in common.MOUSE_EVENTS:
