@@ -320,6 +320,13 @@ def get_default_adapter():
     }[config.DEFAULT_ADAPTER]
 
 
+def get_default_segmentation_adapter():
+    return {
+        "som": adapters.som,
+        "replicate": adapters.replicate,
+    }[config.DEFAULT_SEGMENTATION_ADAPTER]
+
+
 from typing import Callable
 
 # modified from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
