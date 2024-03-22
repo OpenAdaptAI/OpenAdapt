@@ -92,6 +92,7 @@ def play_action_event(
     """
     # currently we use children to replay type events
     if event.children:# and event.name in KEY_EVENTS:
+    #if event.children and event.name != "type":  # TODO: hack, remove
         for child in event.children:
             play_action_event(child, mouse_controller, keyboard_controller)
     else:
