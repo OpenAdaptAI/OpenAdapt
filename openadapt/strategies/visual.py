@@ -174,13 +174,14 @@ class VisualReplayStrategy(
             prompt_frames.append(prompt_frame)
         logger.info(f"prompt_frames=\n{pformat(prompt_frames)}")
 
+        active_segmentation = None
+        if reference_action.name in common.MOUSE_EVENTS:
+            active_segmentation = get_window_segmentation(
+                screenshot=active_screenshot,
+                window_event=actions[0].window_event,
+            )
 
-        active_window_segmentation = get_window_segmentation(
-            screenshot=active_screenshot,
-            window_event=active_window,
-        )
-
-        # XXX TODO: replace screenshot with active window segmentation
+        # TODO: replace screenshots with window segmentations?
 
         screenshots.append(active_screenshot)
         screenshots_base64 = [
@@ -194,6 +195,7 @@ class VisualReplayStrategy(
             "replay_instructions": replay_instructions,
             "task_description": self.recording.task_description,
             "screenshots_base64": screenshots_base64,
+            "active_segmentation": active_segmentation,
         }
         completion = prompt_for_action(prompt_data)
 
@@ -249,7 +251,7 @@ def get_active_segment(action: models.ActionEvent, window_segmentation: Segmenta
 
 def get_window_segmentation(
     action_event: models.ActionEvent | None = None,
-    screenshot: models.ScreenShot | None = None,
+    screenshot: models.Screenshot | None = None,
     window_event: models.WindowEvent | None = None,
 ) -> Segmentation:
     assert action_event or (screenshot and window_event)
@@ -257,7 +259,7 @@ def get_window_segmentation(
         screenshot = action_event.screenshot
         screenshot.crop_active_window(action_event)
     else:
-        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        width_ratio, height_ratio = utils.get_scale_ratios(window_event.action_events[0])
         screenshot.crop_active_window(
             window_event=window_event, 
             width_ratio=width_ratio,
@@ -352,7 +354,9 @@ def prompt_for_action(
         num_images=num_images,
     )
     logger.info(f"prompt=\n{prompt}")
-    #import ipdb; ipdb.set_trace()
+    if reference_action['name'] in common.MOUSE_EVENTS:
+        import ipdb; ipdb.set_trace()
+        foo = 1
     content = adapter.prompt(
         prompt,
         system_prompt,

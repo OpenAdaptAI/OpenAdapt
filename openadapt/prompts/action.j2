@@ -22,6 +22,14 @@ Your job is to provide a (possibly modified) version of the reference action:
 {{ reference_action | orjson_to_json }}
 ```
 
+{% if active_segmentation %}
+The Segments for the active window are:
+{% for description, centroid in zip(active_segmentation.descriptions, active_segmentation.centroids) %}
+Description: {{ description }}
+Centroid: {{ centroid }}
+{% endfor %}
+{% endif %}
+
 The active window is:
 
 ```json

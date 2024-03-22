@@ -886,6 +886,7 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
     # Create a Jinja2 environment with the directory
     env = Environment(loader=FileSystemLoader(template_dir))
     env.filters['orjson_to_json'] = orjson_to_json
+    env.globals.update(zip=zip)
 
     # Load the template
     template = env.get_template(template_file)

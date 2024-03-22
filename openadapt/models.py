@@ -321,6 +321,29 @@ class ActionEvent(db.Base):
         }
 
 
+class WindowEvent(db.Base):
+    """Class representing a window event in the database."""
+
+    __tablename__ = "window_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
+    state = sa.Column(sa.JSON)
+    title = sa.Column(sa.String)
+    left = sa.Column(sa.Integer)
+    top = sa.Column(sa.Integer)
+    width = sa.Column(sa.Integer)
+    height = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="window_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+
+    @classmethod
+    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
+        """Get the active window event."""
+        return WindowEvent(**window.get_active_window_data())
 
 
 class Screenshot(db.Base):
@@ -432,7 +455,7 @@ class Screenshot(db.Base):
         y1 = y0 + window_event.height * height_ratio
 
         box = (x0, y0, x1, y1)
-        self._image_history.append(self._image)
+        self._image_history.append(self.image)
         self._image = self._image.crop(box)
 
     def convert_binary_to_png(self, image_binary: bytes) -> Image:
@@ -459,31 +482,6 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
-
-
-class WindowEvent(db.Base):
-    """Class representing a window event in the database."""
-
-    __tablename__ = "window_event"
-
-    id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    timestamp = sa.Column(ForceFloat)
-    state = sa.Column(sa.JSON)
-    title = sa.Column(sa.String)
-    left = sa.Column(sa.Integer)
-    top = sa.Column(sa.Integer)
-    width = sa.Column(sa.Integer)
-    height = sa.Column(sa.Integer)
-    window_id = sa.Column(sa.String)
-
-    recording = sa.orm.relationship("Recording", back_populates="window_events")
-    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
-
-    @classmethod
-    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
-        """Get the active window event."""
-        return WindowEvent(**window.get_active_window_data())
 
 
 class PerformanceStat(db.Base):
