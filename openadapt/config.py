@@ -20,7 +20,7 @@ import git
 import sentry_sdk
 
 _DEFAULTS = {
-    "SOM_SERVER_URL": None,
+    "SOM_SERVER_URL": "<set in .env>",
     "REPLICATE_API_TOKEN": "<set your api key in .env>",
     "DEFAULT_ADAPTER": "openai",
     "DEFAULT_SEGMENTATION_ADAPTER": "som", # "som" or "replicate"
