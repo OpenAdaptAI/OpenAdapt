@@ -70,5 +70,4 @@ def predict_for_image(image: Image.Image):
 
 
 if __name__ == "__main__":
-    image = Image.open("C:/Users/x/Desktop/calc_Screenshot.png")
-    fire.Fire(predict_for_image(image))
+    fire.Fire(predict_for_image)
