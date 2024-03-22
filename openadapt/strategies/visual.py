@@ -65,7 +65,6 @@ class VisualReplayStrategy(
                 segmentation = get_window_segmentation(action_event)
                 self.window_segmentation_by_title[window_title] = segmentation
 
-
     def get_next_action_event(
         self,
         active_screenshot: models.Screenshot,
