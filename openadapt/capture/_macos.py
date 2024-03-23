@@ -111,6 +111,7 @@ class Capture:
         if self.pool:
             del self.pool
 
+
 class MovieCapture:
     """Capture the screen, audio, and camera on macOS."""
 
@@ -203,6 +204,7 @@ class MovieCapture:
         self.session.stopRunning()
         if self.camera_session:
             self.camera_session.stopRunning()
+
 
 if __name__ == "__main__":
     capture = Capture()
