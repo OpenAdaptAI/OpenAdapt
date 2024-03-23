@@ -114,6 +114,8 @@ _DEFAULTS = {
     "RECORD_VIDEO": False,
     "RECORD_IMAGES": True,
     "VIDEO_PIXEL_FORMAT": "rgb24",
+    "DASHBOARD_CLIENT_PORT": 3000,
+    "DASHBOARD_SERVER_PORT": 8000,
 }
 
 # each string in STOP_STRS should only contain strings
