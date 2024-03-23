@@ -1,3 +1,4 @@
+# flake8: noqa # type: ignore # noqa
 """Allows for capturing the screen and audio on macOS.
 
 This is based on: https://gist.github.com/timsutton/0c6439eb6eb1621a5964
@@ -10,13 +11,13 @@ from datetime import datetime
 from sys import platform
 import os
 
-from Foundation import NSObject, NSLog  # type: ignore # noqa
+from Foundation import NSObject, NSLog, NSAutoreleasePool
 from Quartz import CIImage
-from CoreMedia import CMSampleBufferGetImageBuffer  # type: ignore # noqa
-from Quartz.CoreGraphics import CGMainDisplayID  # type: ignore # noqa
-from AppKit import NSBitmapImageRep, NSImage, NSPNGFileType, NSImageCompressionFactor  # type: ignore # noqa
-import AVFoundation as AVF  # type: ignore # noqa
-import objc  # type: ignore # noqa
+from CoreMedia import CMSampleBufferGetImageBuffer
+from Quartz.CoreGraphics import CGMainDisplayID
+from AppKit import NSBitmapImageRep, NSImage, NSPNGFileType, NSImageCompressionFactor
+import AVFoundation as AVF
+import objc
 
 
 NULL_PTR = POINTER(c_int)()
@@ -28,6 +29,7 @@ _dispatch_queue_create.restype = c_void_p
 
 
 def dispatch_queue_create(name):
+    """Creates a new dispatch queue to which you can submit blocks."""
     # https://developer.apple.com/documentation/dispatch/1453030-dispatch_queue_create
     b_name = name.encode("utf-8")
     c_name = c_char_p(b_name)
@@ -42,8 +44,9 @@ class VideoDelegate(NSObject):
     def captureOutput_didOutputSampleBuffer_fromConnection_(
         self, output, sampleBuffer, connection
     ):
-        NSLog("Delegate method called")
+        """Capture the output of the video."""
 
+        # NSLog("Delegate method called")
         imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
         ciImage = CIImage.imageWithCVImageBuffer_options_(imageBuffer, None)
         bitmapRep = NSBitmapImageRep.alloc().initWithCIImage_(ciImage)
@@ -84,7 +87,9 @@ class Capture:
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
             self.display_id
         )
+
         self.delegate = VideoDelegate.alloc().init()
+        self.pool = NSAutoreleasePool.alloc().init()
 
         self.dispatch_queue = dispatch_queue_create("oa_queue")
         self.video_data_output = AVF.AVCaptureVideoDataOutput.alloc().init()
@@ -104,6 +109,8 @@ class Capture:
     def stop(self) -> None:
         """Stop capturing the screen, audio, and camera."""
         self.session.stopRunning()
+        if self.pool:
+            del self.pool
 
 
 if __name__ == "__main__":
