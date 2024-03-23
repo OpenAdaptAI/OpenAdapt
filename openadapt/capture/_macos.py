@@ -64,7 +64,7 @@ class VideoDelegate(NSObject):
 
 
 class Capture:
-    """Capture the screen, audio, and camera on macOS."""
+    """Capture the screen on macOS."""
 
     def __init__(self) -> None:
         """Initialize the capture object."""
@@ -76,12 +76,8 @@ class Capture:
         objc.options.structs_indexable = True
 
     def start(self) -> None:
-        """Start capturing the screen, audio, and camera.
+        """Start capture"""
 
-        Args:
-            audio (bool, optional): Whether to capture audio (default: False).
-            camera (bool, optional): Whether to capture the camera (default: False).
-        """
         self.display_id = CGMainDisplayID()
         self.session = AVF.AVCaptureSession.alloc().init()
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
