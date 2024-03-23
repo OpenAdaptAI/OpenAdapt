@@ -50,16 +50,12 @@ class VideoDelegate(NSObject):
         imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
         ciImage = CIImage.imageWithCVImageBuffer_options_(imageBuffer, None)
         bitmapRep = NSBitmapImageRep.alloc().initWithCIImage_(ciImage)
-        nsImage = NSImage.alloc().init()
-        nsImage.addRepresentation_(bitmapRep)
-        imageData = nsImage.TIFFRepresentation()
-        imageFile = NSBitmapImageRep.imageRepWithData_(imageData)
         dict = {NSImageCompressionFactor: 1.0}
-        pngData = imageFile.representationUsingType_properties_(NSPNGFileType, dict)
+        pngData = bitmapRep.representationUsingType_properties_(NSPNGFileType, dict)
         if not os.path.exists("captures"):
             os.makedirs("captures")
         pngData.writeToFile_atomically_(
-            "captures/frame{}.png".format(datetime.now()), False
+            os.path.join("captures", "frame{}.png".format(datetime.now())), False
         )
 
 
