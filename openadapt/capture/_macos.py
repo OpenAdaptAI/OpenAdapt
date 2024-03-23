@@ -11,32 +11,36 @@ from sys import platform
 import os
 
 from Foundation import NSURL, NSObject, NSLog  # type: ignore # noqa
-from Quartz.CoreVideo import CVImageBufferCreateColorSpaceFromAttachments # type: ignore # noqa 
+from Quartz.CoreVideo import CVImageBufferCreateColorSpaceFromAttachments  # type: ignore # noqa
 from Quartz import CIImage
-from CoreMedia import CMSampleBufferGetImageBuffer # type: ignore # noqa
-from Quartz.CoreGraphics import CGMainDisplayID # type: ignore # noqa
-from AppKit import NSBitmapImageRep, NSImage, NSPNGFileType, NSImageCompressionFactor # type: ignore # noqa
+from CoreMedia import CMSampleBufferGetImageBuffer  # type: ignore # noqa
+from Quartz.CoreGraphics import CGMainDisplayID  # type: ignore # noqa
+from AppKit import NSBitmapImageRep, NSImage, NSPNGFileType, NSImageCompressionFactor  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
 
 
 NULL_PTR = POINTER(c_int)()
 
+
 class dispatch_queue_t(Structure):
     pass
+
 
 _lib = cdll.LoadLibrary("/usr/lib/system/libdispatch.dylib")
 _dispatch_queue_create = _lib.dispatch_queue_create
 _dispatch_queue_create.argtypes = [c_char_p, c_void_p]
 _dispatch_queue_create.restype = c_void_p
 
+
 def dispatch_queue_create(name):
     # https://developer.apple.com/documentation/dispatch/1453030-dispatch_queue_create
-    b_name = name.encode('utf-8')
+    b_name = name.encode("utf-8")
     c_name = c_char_p(b_name)
     queue = _dispatch_queue_create(c_name, NULL_PTR)
 
     return queue
+
 
 class VideoDelegate(NSObject):
     """Delegate for the video capture."""
@@ -57,7 +61,9 @@ class VideoDelegate(NSObject):
         pngData = imageFile.representationUsingType_properties_(NSPNGFileType, dict)
         if not os.path.exists("captures"):
             os.makedirs("captures")
-        pngData.writeToFile_atomically_("captures/frame{}.png".format(datetime.now()), False)
+        pngData.writeToFile_atomically_(
+            "captures/frame{}.png".format(datetime.now()), False
+        )
 
 
 class Capture:
@@ -90,19 +96,21 @@ class Capture:
         self.video_data_output = AVF.AVCaptureVideoDataOutput.alloc().init()
         self.queue_ptr = objc.objc_object(c_void_p=self.dispatch_queue)
 
-        self.video_data_output.setSampleBufferDelegate_queue_(self.delegate, self.queue_ptr)
+        self.video_data_output.setSampleBufferDelegate_queue_(
+            self.delegate, self.queue_ptr
+        )
 
         if self.session.canAddInput_(self.screen_input):
             self.session.addInput_(self.screen_input)
-        
+
         if self.session.canAddOutput_(self.video_data_output):
             self.session.addOutput_(self.video_data_output)
         self.session.startRunning()
 
-
     def stop(self) -> None:
         """Stop capturing the screen, audio, and camera."""
         self.session.stopRunning()
+
 
 if __name__ == "__main__":
     capture = Capture()
