@@ -11,16 +11,17 @@ from datetime import datetime
 from sys import platform
 import os
 
-from Foundation import NSObject, NSLog, NSAutoreleasePool
-from Quartz import CIImage
+from AppKit import NSBitmapImageRep, NSImage, NSImageCompressionFactor, NSPNGFileType
 from CoreMedia import CMSampleBufferGetImageBuffer
+from Foundation import NSAutoreleasePool, NSLog, NSObject
+from Quartz import CIImage
 from Quartz.CoreGraphics import CGMainDisplayID
-from AppKit import NSBitmapImageRep, NSImage, NSPNGFileType, NSImageCompressionFactor
 import AVFoundation as AVF
 import objc
 
-
 NULL_PTR = POINTER(c_int)()
+
+SAVE_IMAGES = None
 
 _lib = cdll.LoadLibrary("/usr/lib/system/libdispatch.dylib")
 _dispatch_queue_create = _lib.dispatch_queue_create
@@ -52,11 +53,13 @@ class VideoDelegate(NSObject):
         bitmapRep = NSBitmapImageRep.alloc().initWithCIImage_(ciImage)
         dict = {NSImageCompressionFactor: 1.0}
         pngData = bitmapRep.representationUsingType_properties_(NSPNGFileType, dict)
-        if not os.path.exists("captures"):
-            os.makedirs("captures")
-        pngData.writeToFile_atomically_(
-            os.path.join("captures", "frame{}.png".format(datetime.now())), False
-        )
+
+        if SAVE_IMAGES:
+            if not os.path.exists("captures"):
+                os.makedirs("captures")
+            pngData.writeToFile_atomically_(
+                os.path.join("captures", "frame{}.png".format(datetime.now())), False
+            )
 
 
 class Capture:
@@ -71,9 +74,10 @@ class Capture:
 
         objc.options.structs_indexable = True
 
-    def start(self) -> None:
+    def start(self, save_images=False) -> None:
         """Start capture"""
-
+        global SAVE_IMAGES
+        SAVE_IMAGES = save_images
         self.display_id = CGMainDisplayID()
         self.session = AVF.AVCaptureSession.alloc().init()
         self.screen_input = AVF.AVCaptureScreenInput.alloc().initWithDisplayID_(
@@ -107,6 +111,6 @@ class Capture:
 
 if __name__ == "__main__":
     capture = Capture()
-    capture.start()
+    capture.start(save_images=False)
     input("Press enter to stop")
     capture.stop()
