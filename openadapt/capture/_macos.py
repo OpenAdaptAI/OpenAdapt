@@ -11,7 +11,6 @@ from sys import platform
 import os
 
 from Foundation import NSURL, NSObject, NSLog  # type: ignore # noqa
-from Quartz.CoreVideo import CVImageBufferCreateColorSpaceFromAttachments  # type: ignore # noqa
 from Quartz import CIImage
 from CoreMedia import CMSampleBufferGetImageBuffer  # type: ignore # noqa
 from Quartz.CoreGraphics import CGMainDisplayID  # type: ignore # noqa
