@@ -5,12 +5,12 @@ This is based on: https://gist.github.com/timsutton/0c6439eb6eb1621a5964
 usage: see bottom of file
 """
 
-from ctypes import POINTER, Structure, c_char_p, c_int, c_void_p, cdll
+from ctypes import POINTER, c_char_p, c_int, c_void_p, cdll
 from datetime import datetime
 from sys import platform
 import os
 
-from Foundation import NSURL, NSObject, NSLog  # type: ignore # noqa
+from Foundation import NSObject, NSLog  # type: ignore # noqa
 from Quartz import CIImage
 from CoreMedia import CMSampleBufferGetImageBuffer  # type: ignore # noqa
 from Quartz.CoreGraphics import CGMainDisplayID  # type: ignore # noqa
@@ -20,11 +20,6 @@ import objc  # type: ignore # noqa
 
 
 NULL_PTR = POINTER(c_int)()
-
-
-class dispatch_queue_t(Structure):
-    pass
-
 
 _lib = cdll.LoadLibrary("/usr/lib/system/libdispatch.dylib")
 _dispatch_queue_create = _lib.dispatch_queue_create
@@ -77,7 +72,7 @@ class Capture:
 
         objc.options.structs_indexable = True
 
-    def start(self, audio: bool = False, camera: bool = False) -> None:
+    def start(self) -> None:
         """Start capturing the screen, audio, and camera.
 
         Args:
