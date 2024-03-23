@@ -1,6 +1,6 @@
 import React from 'react'
 import Home from './page'
-import Screenshots from './screenshots/page'
+import Recordings from './recordings/page'
 
 type Route = {
     name: string
@@ -15,8 +15,8 @@ export const routes: Route[] = [
         component: <Home />,
     },
     {
-        name: 'Screenshots',
-        path: '/screenshots',
-        component: <Screenshots />,
+        name: 'Recordings',
+        path: '/recordings',
+        component: <Recordings />,
     },
 ]

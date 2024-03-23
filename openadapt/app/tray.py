@@ -73,12 +73,13 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.menu.addAction(self.app_action)
 
         self.dashboard_action = QAction("Launch Dashboard")
-        self.dashboard_action.triggered.connect(self.show_dashboard)
+        self.dashboard_action.triggered.connect(self.launch_dashboard)
         self.menu.addAction(self.dashboard_action)
 
         self.quit = QAction("Quit")
 
-        def _quit():
+        def _quit() -> None:
+            """Quit the application."""
             if self.dashboard_thread is not None:
                 cleanup_dashboard(self.dashboard_thread._return)
             self.app.quit()
@@ -186,12 +187,13 @@ class SystemTrayIcon(QSystemTrayIcon):
             menu.addAction(self.recording_actions[action_type][idx])
 
     def show_app(self) -> None:
+        """Show the main application window."""
         if self.app_thread is None or not self.app_thread.is_alive():
             self.app_thread = oaThread(target=start, daemon=True, args=(True,))
             self.app_thread.start()
 
-    def show_dashboard(self) -> None:
-        """Show the main application window."""
+    def launch_dashboard(self) -> None:
+        """Launch the web dashboard."""
         if self.dashboard_thread:
             cleanup_dashboard(self.dashboard_thread._return)
             self.dashboard_thread.join()
