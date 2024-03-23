@@ -1,4 +1,5 @@
 """Allows for capturing the screen and audio on Windows."""
+
 from datetime import datetime
 from sys import platform
 import os

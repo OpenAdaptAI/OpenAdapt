@@ -2,6 +2,7 @@
 
 Module: capture.py
 """
+
 import sys
 
 if sys.platform == "darwin":
