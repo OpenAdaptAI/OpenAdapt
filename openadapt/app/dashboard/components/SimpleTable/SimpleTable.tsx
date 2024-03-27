@@ -1,17 +1,18 @@
-import { Box, Button, Flex, Table } from "@mantine/core"
+import { Button, Flex, Table } from "@mantine/core"
 import { IconRefresh } from '@tabler/icons-react'
+import React from "react"
 
 type Props<T extends Record<string, any>> = {
-    columnNames: string[],
-    // columnIdentifiers, which is an array, which can contain strings, or a function that takes an object and returns a string
-    columnIdentifiers: (string | ((row: T) => string))[],
+    columns: {
+        name: string,
+        accessor: string | ((row: T) => React.ReactNode),
+    }[];
     data: T[],
     refreshData: () => void,
 }
 
 export function SimpleTable<T extends Record<string, any>>({
-    columnNames,
-    columnIdentifiers,
+    columns,
     data,
     refreshData,
 }: Props<T>) {
@@ -23,7 +24,7 @@ export function SimpleTable<T extends Record<string, any>>({
         <Table mt={20}>
             <Table.Thead>
                 <Table.Tr>
-                    {columnNames.map((name) => (
+                    {columns.map(({name}) => (
                         <Table.Th key={name}>{name}</Table.Th>
                     ))}
                 </Table.Tr>
@@ -31,9 +32,9 @@ export function SimpleTable<T extends Record<string, any>>({
             <Table.Tbody>
                 {data.map((row, rowIndex) => (
                     <Table.Tr key={rowIndex}>
-                        {columnIdentifiers.map((identifier, identifierIndex) => (
-                            <Table.Td key={identifierIndex}>
-                                {typeof identifier === 'string' ? row[identifier] : identifier(row)}
+                        {columns.map(({accessor}, accesorIndex) => (
+                            <Table.Td key={accesorIndex} py={20}>
+                                {typeof accessor === 'string' ? row[accessor] : accessor(row)}
                             </Table.Td>
                         ))}
                     </Table.Tr>

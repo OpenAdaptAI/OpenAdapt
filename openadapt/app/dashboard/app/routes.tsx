@@ -1,5 +1,4 @@
 import React from 'react'
-import Home from './page'
 import Recordings from './recordings/page'
 
 type Route = {
@@ -9,11 +8,6 @@ type Route = {
 }
 
 export const routes: Route[] = [
-    {
-        name: 'Home',
-        path: '/',
-        component: <Home />,
-    },
     {
         name: 'Recordings',
         path: '/recordings',

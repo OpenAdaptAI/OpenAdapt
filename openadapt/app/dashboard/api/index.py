@@ -2,23 +2,14 @@
 
 
 from fastapi import FastAPI
-import sqlalchemy as sa
 
 from openadapt.app.cards import is_recording, quick_record, stop_record
+from openadapt.db.crud import get_all_recordings
 from openadapt.db.db import Session
 from openadapt.models import Recording
 
 app = FastAPI()
 db = Session()
-
-
-def get_all_recordings() -> list[Recording]:
-    """Get all recordings.
-
-    Returns:
-        list[Recording]: A list of all recordings.
-    """
-    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
 
 
 @app.get("/api/recordings", response_model=None)

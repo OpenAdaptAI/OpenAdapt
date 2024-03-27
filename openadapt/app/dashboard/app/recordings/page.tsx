@@ -4,6 +4,7 @@ import { SimpleTable } from "@/components/SimpleTable";
 import { Recording, RecordingStatus } from "@/types/recording";
 import { Box, Button } from "@mantine/core";
 import { useEffect, useState } from "react";
+import { timeStampToDateString } from "../utils";
 
 
 export default function Recordings() {
@@ -76,14 +77,13 @@ export default function Recordings() {
                 </Button>
             )}
             <SimpleTable
-                columnNames={['ID', 'Description', 'Start time', 'Timestamp', 'Monitor Width/Height', 'Double Click Interval Seconds/Pixels']}
-                columnIdentifiers={[
-                    'id',
-                    'task_description',
-                    (recording: Recording) => recording.video_start_time ? new Date(recording.video_start_time).toLocaleString() : '',
-                    (recording: Recording) => new Date(recording.timestamp).toLocaleString(),
-                    (recording: Recording) => `${recording.monitor_width}/${recording.monitor_height}`,
-                    (recording: Recording) => `${recording.double_click_interval_seconds}/${recording.double_click_distance_pixels}`,
+                columns={[
+                    {name: 'ID', accessor: 'id'},
+                    {name: 'Description', accessor: 'task_description'},
+                    {name: 'Start time', accessor: (recording: Recording) => recording.video_start_time ? timeStampToDateString(recording.video_start_time) : 'N/A'},
+                    {name: 'Timestamp', accessor: (recording: Recording) => recording.timestamp ? timeStampToDateString(recording.timestamp) : 'N/A'},
+                    {name: 'Monitor Width/Height', accessor: (recording: Recording) => `${recording.monitor_width}/${recording.monitor_height}`},
+                    {name: 'Double Click Interval Seconds/Pixels', accessor: (recording: Recording) => `${recording.double_click_interval_seconds}/${recording.double_click_distance_pixels}`},
                 ]}
                 data={recordings}
                 refreshData={fetchRecordings}

@@ -49,6 +49,7 @@ def get_engine() -> sa.engine:
     """Create and return a database engine."""
     engine = sa.create_engine(
         config.DB_URL,
+        connect_args={"check_same_thread": False},
         echo=config.DB_ECHO,
     )
     return engine

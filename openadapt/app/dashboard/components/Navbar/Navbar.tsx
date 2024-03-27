@@ -5,6 +5,7 @@ import { routes } from '@/app/routes'
 import { Stack } from '@mantine/core'
 import Link from 'next/link'
 import React from 'react'
+import { IconChevronRight } from '@tabler/icons-react'
 
 export const Navbar = () => {
     const currentRoute = usePathname()
@@ -16,10 +17,10 @@ export const Navbar = () => {
                     key={route.path}
                     className={
                         (currentRoute === route.path ? 'bg-gray-200' : '') +
-                        ' p-5 no-underline'
+                        ' p-5 no-underline flex items-center gap-x-1 transition hover:gap-x-2 ease-out'
                     }
                 >
-                    {route.name}
+                    {route.name} <IconChevronRight size={20} />
                 </Link>
             ))}
         </Stack>
