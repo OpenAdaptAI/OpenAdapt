@@ -4,8 +4,11 @@
     "private": true,
     "scripts": {
         "fastapi-dev": "python3 -m uvicorn api.index:app --port $DASHBOARD_SERVER_PORT --reload",
+        "fastapi-dev:windows": "python -m uvicorn api.index:app --port %DASHBOARD_SERVER_PORT% --reload",
         "next-dev": "next dev -p $DASHBOARD_CLIENT_PORT",
+        "next-dev:windows": "next dev -p %DASHBOARD_CLIENT_PORT%",
         "dev": "concurrently \"npm run next-dev\" \"npm run fastapi-dev\"",
+        "dev:windows": "concurrently \"npm run next-dev:windows\" \"npm run fastapi-dev:windows\"",
         "build": "next build",
         "start": "next start",
         "lint": "next lint",

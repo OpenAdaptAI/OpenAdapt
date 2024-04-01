@@ -96,11 +96,7 @@ pip3 install poetry
 poetry install
 poetry shell
 alembic upgrade head
-
-cd openadapt/app/dashboard
-nvm install 21
-nvm use
-npm install
+poetry run dashbaord
 
 pytest
 ```

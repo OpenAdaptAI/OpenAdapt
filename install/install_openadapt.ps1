@@ -16,6 +16,10 @@ $pythonMaxVersion = "3.10.12" # Change this if a different Higher version are su
 $pythonInstaller = "python-3.10.11-amd64.exe"
 $pythonInstallerLoc = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
 
+$nvmCmd = "nvm"
+$nvmInstaller = "nvm-setup.exe"
+$nvmInstallerLoc = "https://github.com/coreybutler/nvm-windows/releases/download/1.1.12/nvm-setup.exe"
+
 $gitCmd = "git"
 $gitInstaller = "Git-2.40.1-64-bit.exe"
 $gitInstallerLoc = "https://github.com/git-for-windows/git/releases/download/v2.40.1.windows.1/Git-2.40.1-64-bit.exe"
@@ -226,6 +230,39 @@ function GetPythonCMD {
     exit
 }
 
+# Check and Install NVM and return the nvm command
+function GetNVMCMD {
+    $nvmExists = CheckCMDExists $nvmCmd
+    if (!$nvmExists) {
+        # Install NVM
+        Write-Host "Downloading NVM installer..."
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $nvmInstallerLoc -OutFile $nvmInstaller
+        $exists = Test-Path -Path $nvmInstaller -PathType Leaf
+        if (!$exists) {
+            Write-Host "Failed to download NVM installer" -ForegroundColor Red
+            exit
+        }
+
+        Write-Host "Installing NVM..."
+        Start-Process -FilePath $nvmInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
+        Remove-Item $nvmInstaller
+
+        RefreshPathVariables
+
+        # Make sure NVM is now available
+        $nvmExists = CheckCMDExists $nvmCmd
+        if (!$nvmExists) {
+            Write-Host "Error after installing NVM. Uninstalling..."
+            Start-Process -FilePath $nvmInstaller -Verb runAs -ArgumentList '/VERYSILENT /NORESTART /NOCANCEL /SP-' -Wait
+            Cleanup
+            exit
+        }
+    }
+    # Return the nvm command
+    return $nvmCmd
+}
+
 
 # Check and Install Git and return the git command
 function GetGitCMD {
@@ -310,6 +347,9 @@ RunAndCheck "$tesseract --version" "check TesseractOCR"
 $python = GetPythonCMD
 RunAndCheck "$python --version" "check Python"
 
+$nvm = GetNVMCMD
+RunAndCheck "$nvm --version" "check NVM"
+
 $git = GetGitCMD
 RunAndCheck "$git --version" "check Git"
 
@@ -321,6 +361,7 @@ Set-Location .\OpenAdapt
 RunAndCheck "pip install poetry" "Run ``pip install poetry``"
 RunAndCheck "poetry install" "Run ``poetry install``"
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
+RunAndCheck "poetry run dashboard" "Install dashboard dependencies" -SkipCleanup:$true
 RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
 Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd'; poetry shell"

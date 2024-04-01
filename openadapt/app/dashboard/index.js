@@ -33,17 +33,30 @@ Promise.all([checkPort(DASHBOARD_CLIENT_PORT), checkPort(DASHBOARD_SERVER_PORT)]
 
 function spawnChildProcess() {
     // Spawn child process to run `npm run dev`
-    const childProcess = spawn('npm', ['run', 'dev'], { stdio: 'inherit' })
-    // wait for 1 second
-    setTimeout(() => {
-        import('open').then(({ default: open }) => {
-            open(`http://localhost:${DASHBOARD_CLIENT_PORT}`)
-        })
-    }, 3000)
+    let childProcess;
 
-    // Handle SIGTERM signal
-    process.on('SIGTERM', () => {
-        childProcess.kill('SIGTERM')
+    if (process.platform === 'win32') {
+        childProcess = spawn('npm', ['run', 'dev:windows'], { stdio: 'inherit', shell: true })
+    } else {
+        childProcess = spawn('npm', ['run', 'dev'], { stdio: 'inherit' })
+    }
+
+    childProcess.on('spawn', () => {
+        // wait for 3 seconds before opening the browser
+        setTimeout(() => {
+            import('open').then(({ default: open }) => {
+                open(`http://localhost:${DASHBOARD_CLIENT_PORT}`)
+            })
+        }, 3000)
+    })
+
+    // Handle SIG signals
+    const signals = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGKILL']
+
+    signals.forEach(signal => {
+        process.on(signal, () => {
+            childProcess.kill(signal)
+        })
     })
 
     // Listen for child process error event

@@ -4,18 +4,16 @@
 from fastapi import FastAPI
 
 from openadapt.app.cards import is_recording, quick_record, stop_record
-from openadapt.db.crud import get_all_recordings
-from openadapt.db.db import Session
+from openadapt.db import crud
 from openadapt.models import Recording
 
 app = FastAPI()
-db = Session()
 
 
 @app.get("/api/recordings", response_model=None)
 def get_recordings() -> dict[str, list[Recording]]:
     """Get all recordings."""
-    recordings = get_all_recordings()
+    recordings = crud.get_all_recordings()
     return {"recordings": recordings}
 
 
