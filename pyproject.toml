@@ -91,6 +91,7 @@ easyocr = "^1.7.0"
 av = "^11.0.0"
 spacy-curated-transformers = "^0.2.0"
 uvicorn = {extras = ["standard"], version = "^0.22"}
+pydantic-settings = "^2.2.1"
 
 [tool.pytest.ini_options]
 filterwarnings = [
