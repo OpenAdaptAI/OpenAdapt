@@ -29,7 +29,8 @@ from tqdm import tqdm
 import fire
 import numpy as np
 
-from openadapt import config, scrub, utils
+from openadapt import scrub, utils
+from openadapt.config import config
 
 
 def _make_frame(

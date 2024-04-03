@@ -5,7 +5,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import os
 import tempfile
 
-from openadapt import config, share
+from openadapt import share
+from openadapt.config import config
 
 
 def test_export_recording_to_folder() -> None:

@@ -11,7 +11,7 @@ from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
 import spacy
 import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 

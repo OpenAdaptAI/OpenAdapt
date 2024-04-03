@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
-from openadapt import config
+from openadapt.config import config
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",

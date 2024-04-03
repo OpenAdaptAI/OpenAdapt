@@ -9,7 +9,7 @@ from PIL import Image
 import easyocr
 import requests
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()

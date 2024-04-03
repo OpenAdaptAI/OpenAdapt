@@ -16,15 +16,15 @@ def run() -> Thread:
 
     def run_client() -> subprocess.Popen:
         """The entry point for the thread that runs the dashboard client."""
-        from openadapt.config import DASHBOARD_CLIENT_PORT, DASHBOARD_SERVER_PORT
+        from openadapt.config import config
 
         return subprocess.Popen(
             ["node", "index.js"],
             cwd=cur_dir,
             env={
                 **os.environ,
-                "DASHBOARD_CLIENT_PORT": str(DASHBOARD_CLIENT_PORT),
-                "DASHBOARD_SERVER_PORT": str(DASHBOARD_SERVER_PORT),
+                "DASHBOARD_CLIENT_PORT": str(config.DASHBOARD_CLIENT_PORT),
+                "DASHBOARD_SERVER_PORT": str(config.DASHBOARD_SERVER_PORT),
             },
         )
 

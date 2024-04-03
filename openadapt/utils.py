@@ -22,7 +22,8 @@ import mss
 import mss.base
 import numpy as np
 
-from openadapt import common, config
+from openadapt import common
+from openadapt.config import config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent

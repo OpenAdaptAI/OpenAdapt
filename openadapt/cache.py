@@ -18,7 +18,7 @@ import time
 from joblib import Memory
 from loguru import logger
 
-from openadapt import config
+from openadapt.config import config
 
 
 def default(val: Optional[Any], default: Any) -> Any:

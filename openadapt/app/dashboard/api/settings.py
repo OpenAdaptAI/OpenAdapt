@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from openadapt.config2 import Config, get_config, persist_config
+from openadapt.config import Config, config, persist_config
 
 
 class SettingsAPI:
@@ -16,7 +16,6 @@ class SettingsAPI:
     @staticmethod
     def get_settings() -> dict[str, Any]:
         """Get all settings."""
-        config = get_config()
         return config.model_dump()
 
     @staticmethod

@@ -13,7 +13,8 @@ from loguru import logger
 import openai
 import tiktoken
 
-from openadapt import cache, config, models
+from openadapt import cache, models
+from openadapt.config import config
 from openadapt.strategies.base import BaseReplayStrategy
 
 # https://github.com/nalgeon/pokitoki/blob/0b6b921d367f693738e7b9bab44e6926171b48d6/bot/ai/chatgpt.py#L78

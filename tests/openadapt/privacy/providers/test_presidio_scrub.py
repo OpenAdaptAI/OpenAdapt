@@ -9,7 +9,7 @@ from PIL import Image
 import pytest
 import spacy
 
-from openadapt import config
+from openadapt.config import config
 
 if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
     pytestmark = pytest.mark.skip(reason="SpaCy model not installed!")

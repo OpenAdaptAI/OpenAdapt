@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from loguru import logger
 import boto3
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 

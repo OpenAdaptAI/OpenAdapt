@@ -8,7 +8,7 @@ from loguru import logger
 from PIL import Image
 import requests
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 

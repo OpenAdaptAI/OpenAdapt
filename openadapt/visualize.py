@@ -13,7 +13,8 @@ from loguru import logger
 from tqdm import tqdm
 import fire
 
-from openadapt import config, video
+from openadapt import video
+from openadapt.config import config
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording

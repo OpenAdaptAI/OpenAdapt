@@ -1,95 +1,122 @@
-"""Script containing configurations for the openadapt application.
-
-Usage:
-
-    from openadapt import config
-    ...
-    config.<setting>
-    ...
-
-"""
-
+from typing import ClassVar
+import json
 import multiprocessing
 import os
 import pathlib
 import shutil
 
-from dotenv import load_dotenv
 from loguru import logger
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import git
 import sentry_sdk
 
-_DEFAULTS = {
-    "CACHE_DIR_PATH": ".cache",
-    "CACHE_ENABLED": True,
-    "CACHE_VERBOSITY": 0,
-    "DB_ECHO": False,
-    "DB_FNAME": "openadapt.db",
-    "ERROR_REPORTING_ENABLED": True,
-    "ERROR_REPORTING_DSN": (
+ENV_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env"
+ENV_EXAMPLE_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env.example"
+ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
+DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
+RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
+
+STOP_STRS = [
+    "oa.stop",
+    # TODO:
+    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
+]
+# each list in SPECIAL_CHAR_STOP_SEQUENCES should contain sequences
+# containing special chars, separated by keys
+SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
+
+if not os.path.isfile(ENV_FILE_PATH):
+    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
+
+
+class Config(BaseSettings):
+    model_config = SettingsConfigDict(env_file=ENV_FILE_PATH, extra="ignore")
+
+    # Privacy
+    AWS_API_KEY: str = ""
+
+    # Segmentation
+    AWS_SEGMENT_API_KEY: str = ""
+    REPLICATE_API_KEY: str = ""
+
+    # Completions
+    ANTHROPIC_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+
+    # OpenAdapt
+    OPENADAPT_API_KEY: str = ""
+
+    # Cache
+    CACHE_DIR_PATH: str = ".cache"
+    CACHE_ENABLED: bool = True
+    CACHE_VERBOSITY: int = 0
+
+    # Database
+    DB_ECHO: bool = False
+    DB_FNAME: str = "openadapt.db"
+
+    DB_FPATH: ClassVar[str]
+    if DB_FNAME == "openadapt.db":  # noqa
+        DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+    else:
+        DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
+    DB_URL: str = f"sqlite:///{DB_FPATH}"
+
+    # Error reporting
+    ERROR_REPORTING_ENABLED: bool = True
+    ERROR_REPORTING_DSN: str = (
         "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
-    ),
-    "ERROR_REPORTING_BRANCH": "main",
-    "OPENAI_API_KEY": "<set your api key in .env>",
-    # "OPENAI_MODEL_NAME": "gpt-4",
-    "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
-    "RECORD_WINDOW_DATA": False,
-    # may incur significant performance penalty
-    "RECORD_READ_ACTIVE_ELEMENT_STATE": False,
-    # TODO: remove?
-    "REPLAY_STRIP_ELEMENT_STATE": True,
-    # IGNORES WARNINGS (PICKLING, ETC.)
-    # TODO: ignore warnings by default on GUI
-    "IGNORE_WARNINGS": False,
-    "MAX_NUM_WARNINGS_PER_SECOND": 5,
-    "WARNING_SUPPRESSION_PERIOD": 1,
-    "MESSAGES_TO_FILTER": ["Cannot pickle Objective-C objects"],
-    # ACTION EVENT CONFIGURATIONS
-    "ACTION_TEXT_SEP": "-",
-    "ACTION_TEXT_NAME_PREFIX": "<",
-    "ACTION_TEXT_NAME_SUFFIX": ">",
-    # PERFORMANCE PLOTTING CONFIGURATION
-    "PLOT_PERFORMANCE": True,
-    # CAPTURE CONFIGURATION
-    "CAPTURE_DIR_PATH": "captures",
-    # APP CONFIGURATIONS
-    "APP_DARK_MODE": False,
-    # SCRUBBING CONFIGURATIONS
-    "SCRUB_ENABLED": False,
-    "SCRUB_CHAR": "*",
-    "SCRUB_LANGUAGE": "en",
-    # TODO support lists in getenv_fallback
-    "SCRUB_FILL_COLOR": 0x0000FF,  # BGR format
-    "SCRUB_CONFIG_TRF": {
+    )
+    ERROR_REPORTING_BRANCH: str = "main"
+
+    # OpenAI
+    OPENAI_API_KEY: str = "<set your api key in .env>"
+    OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
+
+    # Record and replay
+    RECORD_WINDOW_DATA: bool = False
+    RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
+    RECORD_VIDEO: bool = False
+    RECORD_IMAGES: bool = True
+    VIDEO_PIXEL_FORMAT: str = "rgb24"
+    # sequences that when typed, will stop the recording of ActionEvents in record.py
+    STOP_SEQUENCES: list[list[str]] = [
+        list(stop_str) for stop_str in STOP_STRS
+    ] + SPECIAL_CHAR_STOP_SEQUENCES
+
+    # Warning suppression
+    IGNORE_WARNINGS: bool = False
+    MAX_NUM_WARNINGS_PER_SECOND: int = 5
+    WARNING_SUPPRESSION_PERIOD: int = 1
+    MESSAGES_TO_FILTER: list[str] = ["Cannot pickle Objective-C objects"]
+
+    # Action event configurations
+    ACTION_TEXT_SEP: str = "-"
+    ACTION_TEXT_NAME_PREFIX: str = "<"
+    ACTION_TEXT_NAME_SUFFIX: str = ">"
+
+    # Performance plotting
+    PLOT_PERFORMANCE: bool = True
+    DIRNAME_PERFORMANCE_PLOTS: str = "performance"
+
+    # Capture configurations
+    CAPTURE_DIR_PATH: str = "captures"
+
+    # App configurations
+    APP_DARK_MODE: bool = False
+
+    # Scrubbing configurations
+    SCRUB_ENABLED: bool = False
+    SCRUB_CHAR: str = "*"
+    SCRUB_LANGUAGE: str = "en"
+    SCRUB_FILL_COLOR: str = "rgba(0, 0, 0, 0.1)"
+    SCRUB_CONFIG_TRF: dict = {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
-    },
-    "SCRUB_PRESIDIO_IGNORE_ENTITIES": [
-        # 'US_PASSPORT',
-        # 'US_DRIVER_LICENSE',
-        # 'CRYPTO',
-        # 'UK_NHS',
-        # 'PERSON',
-        # 'CREDIT_CARD',
-        # 'US_BANK_NUMBER',
-        # 'PHONE_NUMBER',
-        # 'US_ITIN',
-        # 'AU_ABN',
-        # 'DATE_TIME',
-        # 'NRP',
-        # 'SG_NRIC_FIN',
-        # 'AU_ACN',
-        # 'IP_ADDRESS',
-        # 'EMAIL_ADDRESS',
-        # 'URL',
-        # 'IBAN_CODE',
-        # 'AU_TFN',
-        # 'LOCATION',
-        # 'AU_MEDICARE',
-        # 'US_SSN',
-        # 'MEDICAL_LICENSE'
-    ],
-    "SCRUB_KEYS_HTML": [
+    }
+    SCRUB_PRESIDIO_IGNORE_ENTITIES: list[str] = []
+    SCRUB_KEYS_HTML: list[str] = [
         "text",
         "canonical_text",
         "title",
@@ -99,136 +126,126 @@ _DEFAULTS = {
         "canonical_key_char",
         "key_vk",
         "children",
-    ],
-    # VISUALIZATION CONFIGURATIONS
-    "VISUALIZE_DARK_MODE": False,
-    "VISUALIZE_RUN_NATIVELY": True,
-    "VISUALIZE_DENSE_TREES": True,
-    "VISUALIZE_ANIMATIONS": True,
-    "VISUALIZE_EXPAND_ALL": False,  # not recommended for large trees
-    "VISUALIZE_MAX_TABLE_CHILDREN": 10,
-    # Calculate and save the difference between 2 neighboring screenshots
-    "SAVE_SCREENSHOT_DIFF": False,
-    "SPACY_MODEL_NAME": "en_core_web_trf",
-    "PRIVATE_AI_API_KEY": "<set your api key in .env>",
-    "RECORD_VIDEO": False,
-    "RECORD_IMAGES": True,
-    "VIDEO_PIXEL_FORMAT": "rgb24",
-    "DASHBOARD_CLIENT_PORT": 3000,
-    "DASHBOARD_SERVER_PORT": 8000,
-}
+    ]
 
-# each string in STOP_STRS should only contain strings
-# that don't contain special characters
-STOP_STRS = [
-    "oa.stop",
-    # TODO:
-    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
-]
-# each list in SPECIAL_CHAR_STOP_SEQUENCES should contain sequences
-# containing special chars, separated by keys
-SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
-# sequences that when typed, will stop the recording of ActionEvents in record.py
-STOP_SEQUENCES = [
-    list(stop_str) for stop_str in STOP_STRS
-] + SPECIAL_CHAR_STOP_SEQUENCES
+    # Visualization configurations
+    VISUALIZE_DARK_MODE: bool = False
+    VISUALIZE_RUN_NATIVELY: bool = True
+    VISUALIZE_DENSE_TREES: bool = True
+    VISUALIZE_ANIMATIONS: bool = True
+    VISUALIZE_EXPAND_ALL: bool = False
+    VISUALIZE_MAX_TABLE_CHILDREN: int = 10
 
-ENV_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env"
-ENV_EXAMPLE_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env.example"
+    # Screenshot configurations
+    SAVE_SCREENSHOT_DIFF: bool = False
 
-# Create .env file if it doesn't exist
-if not os.path.isfile(ENV_FILE_PATH):
-    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
+    # Spacy configurations
+    SPACY_MODEL_NAME: str = "en_core_web_trf"
+
+    # Private AI configurations
+    PRIVATE_AI_API_KEY: str = ""
+
+    # Dashboard configurations
+    DASHBOARD_CLIENT_PORT: int = 3000
+    DASHBOARD_SERVER_PORT: int = 8000
+
+    @model_validator(mode="after")
+    @classmethod
+    def validate_requirements(cls, data):
+        if data.OPENADAPT_API_KEY != "":
+            return data
+        if data.AWS_SEGMENT_API_KEY == "" and data.REPLICATE_API_KEY == "":
+            raise ValueError(
+                {
+                    "AWS_SEGMENT_API_KEY": (
+                        "At least one of AWS_SEGMENT_API_KEY or REPLICATE_API_KEY must"
+                        " be defined"
+                    ),
+                    "REPLICATE_API_KEY": (
+                        "At least one of AWS_SEGMENT_API_KEY or REPLICATE_API_KEY must"
+                        " be defined"
+                    ),
+                }
+            )
+        if (
+            data.OPENAI_API_KEY == ""
+            and data.ANTHROPIC_API_KEY == ""
+            and data.GOOGLE_API_KEY == ""
+        ):
+            raise ValueError(
+                {
+                    "OPENAI_API_KEY": (
+                        "At least one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or"
+                        " GOOGLE_API_KEY must be defined"
+                    ),
+                    "ANTHROPIC_API_KEY": (
+                        "At least one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or"
+                        " GOOGLE_API_KEY must be defined"
+                    ),
+                    "GOOGLE_API_KEY": (
+                        "At least one of OPENAI_API_KEY, ANTHROPIC_API_KEY, or"
+                        " GOOGLE_API_KEY must be defined"
+                    ),
+                }
+            )
+        return data
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        persist_config(self)
 
 
-def getenv_fallback(var_name: str) -> str:
-    """Get the value of an environment variable or fallback to the default value.
+class LazyConfig:
+    def __init__(self):
+        self._config = Config()
 
-    Args:
-        var_name (str): The name of the environment variable.
+    def __getattr__(self, key):
+        if key == "_config":
+            return self._config
+        return self._config.__getattribute__(key)
 
-    Returns:
-        str: The value of the environment variable or the default value if not found.
-
-    Raises:
-        ValueError: If the environment variable is not defined.
-    """
-    rval = os.getenv(var_name) or _DEFAULTS.get(var_name)
-    if type(rval) is str and rval.lower() in (
-        "true",
-        "false",
-        "1",
-        "0",
-    ):
-        rval = rval.lower() == "true" or rval == "1"
-    if type(rval) is str and rval.isnumeric():
-        rval = int(rval)
-    if rval is None:
-        raise ValueError(f"{var_name=} not defined")
-    return rval
-
-
-def persist_env(var_name: str, val: str, env_file_path: str = ENV_FILE_PATH) -> None:
-    """Persist an environment variable to a .env file.
-
-    Args:
-        var_name (str): The name of the environment variable.
-        val (str): The value of the environment variable.
-        env_file_path (str, optional): The path to the .env file (default: ".env").
-    """
-    if not os.path.exists(env_file_path):
-        with open(env_file_path, "w") as f:
-            f.write(f"{var_name}={val}")
-    else:
-        # find and replace
-        with open(env_file_path, "r") as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            if line.startswith(f"{var_name}="):
-                lines[i] = f"{var_name}={val}\n"
-                break
+    def __setattr__(self, key, value):
+        if key == "_config":
+            self.__dict__[key] = value
         else:
-            # we didn't find the variable in the file, so append it
-            if lines[-1][-1] != "\n":
-                lines.append("\n")
-            lines.append(f"{var_name}={val}")
-        with open(env_file_path, "w") as f:
-            f.writelines(lines)
+            self._config.__setattr__(key, value)
+
+    def model_dump(self):
+        return self._config.model_dump()
 
 
-load_dotenv()
-
-for key in _DEFAULTS:
-    val = getenv_fallback(key)
-    locals()[key] = val
-
-ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
-RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
-# TODO: clarify why this is necessary (see share.py)
-if DB_FNAME == "openadapt.db":  # noqa
-    DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
-else:
-    DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
-DB_URL = f"sqlite:///{DB_FPATH}"
-DIRNAME_PERFORMANCE_PLOTS = "performance"
+config = LazyConfig()
 
 
-def set_db_url(db_fname: str) -> None:
-    """Set the database URL based on the given database file name.
+def persist_config(new_config: Config) -> None:
+    """Persist the configuration."""
 
-    Args:
-        db_fname (str): The database file name.
-    """
-    # TODO: pass these in as parameters, whose default values are the globals
-    global DB_FNAME, DB_FPATH, DB_URL
-    DB_FNAME = db_fname
-    if DB_FNAME == "openadapt.db":  # noqa
-        DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
-    else:
-        DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
-    DB_URL = f"sqlite:///{DB_FPATH}"
-    logger.info(f"{DB_URL=}")
+    config_variables = new_config.model_dump()
+
+    logger.info(f"Persisting config to {new_config.model_config['env_file']}")
+
+    # clear the file
+    env_lines = []
+    with open(ENV_FILE_PATH, "r") as f:
+        env_lines = f.readlines()
+
+    for key, val in config_variables.items():
+        found = False
+        for i, line in enumerate(env_lines):
+            if line.startswith(f"{key}="):
+                val = val if type(val) is str else f"'{json.dumps(val)}'"
+                env_lines[i] = f"{key}={val}\n"
+                found = True
+                break
+        if not found:
+            val = val if type(val) is str else f"'{json.dumps(val)}'"
+            env_lines.append(f"{key}={val}\n")
+
+    with open(ENV_FILE_PATH, "w") as f:
+        f.writelines(env_lines)
+
+    global config
+    config._config = new_config
 
 
 def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
@@ -248,7 +265,7 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     num_reveal = int(len(val) * pct_reveal)
     num_obfuscate = len(val) - num_reveal
     obfuscated = char * num_obfuscate
-    revealed = val[-num_reveal:]
+    revealed = val[num_obfuscate:]
     rval = f"{obfuscated}{revealed}"
     assert len(rval) == len(val), (val, rval)
     return rval
@@ -256,23 +273,20 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
 
 _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
 if multiprocessing.current_process().name == "MainProcess":
-    for key, val in dict(locals()).items():
+    for key, val in config.model_dump().items():
         if not key.startswith("_") and key.isupper():
             parts = key.split("_")
-            if (
-                any([part in parts for part in _OBFUSCATE_KEY_PARTS])
-                and val != _DEFAULTS[key]
-            ):
+            if any([part in parts for part in _OBFUSCATE_KEY_PARTS]):
                 val = obfuscate(val)
             logger.info(f"{key}={val}")
 
-    if ERROR_REPORTING_ENABLED:  # type: ignore # noqa
+    if config.ERROR_REPORTING_ENABLED:  # type: ignore # noqa
         active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
         logger.info(f"{active_branch_name=}")
-        is_reporting_branch = active_branch_name == ERROR_REPORTING_BRANCH  # type: ignore # noqa
+        is_reporting_branch = active_branch_name == config.ERROR_REPORTING_BRANCH  # type: ignore # noqa
         logger.info(f"{is_reporting_branch=}")
         if is_reporting_branch:
             sentry_sdk.init(
-                dsn=ERROR_REPORTING_DSN,  # type: ignore # noqa
+                dsn=config.ERROR_REPORTING_DSN,  # type: ignore # noqa
                 traces_sample_rate=1.0,
             )

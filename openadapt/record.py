@@ -27,11 +27,11 @@ import fire
 import mss.tools
 import psutil
 
-from openadapt import config, utils, video, window
+from openadapt import utils, video, window
+from openadapt.config import config
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
-
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -1102,4 +1102,5 @@ def start() -> None:
 
 
 if __name__ == "__main__":
-    fire.Fire(record)
+    logger.info(config.model_dump())
+    # fire.Fire(record)

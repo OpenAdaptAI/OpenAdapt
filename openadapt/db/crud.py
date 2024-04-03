@@ -8,7 +8,7 @@ from typing import Any
 from loguru import logger
 import sqlalchemy as sa
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.db.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,

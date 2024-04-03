@@ -13,7 +13,7 @@ from Quartz import CGMainDisplayID  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
 
-from openadapt import config
+from openadapt.config import config
 
 
 class Capture:

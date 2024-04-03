@@ -13,7 +13,8 @@ import subprocess
 from loguru import logger
 import fire
 
-from openadapt import config, db, utils
+from openadapt import db, utils
+from openadapt.config import config
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)

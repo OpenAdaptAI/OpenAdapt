@@ -11,7 +11,7 @@ from notifypy import Notify
 from tqdm import tqdm
 import click
 
-from openadapt import config
+from openadapt.config import config
 from openadapt.db.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
 from openadapt.utils import (
@@ -118,7 +118,7 @@ def toggle_dark_mode(
     global performance_plot_img
     ui_dark.toggle()
     ui_dark.update()
-    config.persist_env("VISUALIZE_DARK_MODE", ui_dark.value)
+    config.VISUALIZE_DARK_MODE = ui_dark.value
     curr_logo.source = images[int(ui_dark.value)]
     curr_logo.update()
     performance_plot_img.source = plots[int(ui_dark.value)]
