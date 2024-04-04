@@ -1,11 +1,8 @@
-"""Large Multimodal Model with user-supplied Replay Instructions
-
-See openadapt/prompts/system.j2 and "openadapt/prompts/action.j2
-for details.
+"""Large Multimodal Model with replay instructions.
 
 Usage:
 
-    $ python -m openadapt.replay VisualReplayStrategy --instructions"<your instructions to the model>"
+    $ python -m openadapt.replay VisualReplayStrategy --instructions "<replay instructions>"
 """
 
 from copy import deepcopy
@@ -21,7 +18,7 @@ from openadapt import adapters
 # number of actions to include in context simultaneously
 ACTION_WINDOW_SIZE = 5
 
-DEBUG = False
+DEBUG = True
 
 # throughput hack
 SEGMENT_ONCE_PER_WINDOW_TITLE = True
@@ -61,7 +58,7 @@ class VisualReplayStrategy(
 
             # XXX why is screenshot.action_event a list?
             action_event = screenshot.action_event[0]
-            if action_event.name in common.MOUSE_EVENTS:
+            if action_event.name in ("click", "singleclick", "doubleclick"):
                 segmentation = get_window_segmentation(action_event)
                 self.window_segmentation_by_title[window_title] = segmentation
 
@@ -147,10 +144,10 @@ class VisualReplayStrategy(
             active_segment_description = None
             active_segment_bounding_box = None
             if action.name in ("click", "doubleclick", "singleclick"):
-                if SEGMENT_ONCE_PER_WINDOW_TITLE:
+                if SEGMENT_ONCE_PER_WINDOW_TITLE and window_title in self.window_segmentation_by_title:
                     window_segmentation = self.window_segmentation_by_title[window_title]
                 else:
-                    window_segmentation = get_window_segmentation(action_event)
+                    window_segmentation = get_window_segmentation(action)
                 masked_images = window_segmentation.masked_images
                 descriptions = window_segmentation.descriptions
                 bounding_boxes = window_segmentation.bounding_boxes
@@ -297,7 +294,7 @@ def get_window_segmentation(
     segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
     if DEBUG:
         vision.display_images_grid_with_titles(masked_images, descriptions)
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
     return segmentation
 
 def get_screenshots_by_window_title(
@@ -369,6 +366,7 @@ def prompt_for_action(
         system_prompt,
         images,
         max_tokens=max_tokens,
+        detail="low",
     )
     try:
         content_dict = utils.parse_code_snippet(content)

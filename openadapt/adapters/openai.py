@@ -1,4 +1,7 @@
-"""Adapter for GPT4-V API."""
+"""Adapter for GPT4-V API.
+
+https://platform.openai.com/docs/guides/vision
+"""
 
 from pprint import pformat
 import base64
@@ -19,7 +22,7 @@ def create_payload(
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
     model="gpt-4-vision-preview",
-    detail="high",
+    detail="high",  # "low" or "high"
     max_tokens=None,
 ):
     max_tokens = max_tokens or MAX_TOKENS
@@ -99,12 +102,14 @@ def prompt(
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
     max_tokens: int | None = None,
+    detail: str = "high",
 ):
     payload = create_payload(
         prompt,
         system_prompt,
         base64_images,
         max_tokens=max_tokens,
+        detail=detail,
     )
     logger.info(f"payload=\n{pformat(payload)}")
     result = get_completion(payload)
