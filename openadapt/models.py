@@ -79,6 +79,8 @@ class ActionEvent(db.Base):
 
     __tablename__ = "action_event"
 
+    _segment_description_separator = ";"
+
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
@@ -89,6 +91,10 @@ class ActionEvent(db.Base):
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+    active_segment_description = sa.Column(sa.String)
+    _available_segment_descriptions = sa.Column(
+        "available_segment_descriptions", sa.String,
+    )
     mouse_button_name = sa.Column(sa.String)
     mouse_pressed = sa.Column(sa.Boolean)
     key_name = sa.Column(sa.String)
@@ -99,6 +105,21 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+
+    @property
+    def available_segment_descriptions(self) -> list[str]:
+        if self._available_segment_descriptions:
+            return self._available_segment_descriptions.split(
+                self._segment_description_separator
+            )
+        else:
+            return []
+
+    @available_segment_descriptions.setter
+    def available_segment_descriptions(self, value: list[str]):
+        self._available_segment_descriptions = self._segment_description_separator.join(
+            value
+        )
 
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
@@ -457,6 +478,12 @@ class Screenshot(db.Base):
         box = (x0, y0, x1, y1)
         self._image_history.append(self.image)
         self._image = self._image.crop(box)
+
+    @property
+    def original_image(self) -> Image:
+        if self._image_history:
+            return self._image_history[0]
+        return self.image
 
     def convert_binary_to_png(self, image_binary: bytes) -> Image:
         """Convert a binary image to a PNG image.

@@ -22,12 +22,15 @@ class BaseReplayStrategy(ABC):
     def __init__(
         self,
         recording: models.Recording,
+        replay_instructions: str | None = None,
         max_frame_times: int = MAX_FRAME_TIMES,
     ) -> None:
         """Initialize the BaseReplayStrategy.
 
         Args:
             recording (models.Recording): The recording to replay.
+            replay_isntructions (str, optional): Natural language instructions
+                for how recording should be replayed.
             max_frame_times (int): The maximum number of frame times to track.
         """
         self.recording = recording
@@ -41,22 +44,18 @@ class BaseReplayStrategy(ABC):
     def get_next_action_event(
         self,
         screenshot: models.Screenshot,
-        instructions: str | None,
     ) -> models.ActionEvent:
         """Get the next action event based on the current screenshot.
 
         Args:
             screenshot (models.Screenshot): The current screenshot.
-            instructions (str, optional): Natural language instructions to the model,
-                e.g. description of what are the parameters in the recording, and how
-                the replay should behave as a function of those parameters.
 
         Returns:
             models.ActionEvent: The next action event.
         """
         pass
 
-    def run(self, instructions: str | None) -> None:
+    def run(self) -> None:
         """Run the replay strategy."""
         keyboard_controller = keyboard.Controller()
         mouse_controller = mouse.Controller()
@@ -69,7 +68,6 @@ class BaseReplayStrategy(ABC):
                 action_event = self.get_next_action_event(
                     screenshot,
                     window_event,
-                    instructions,
                 )
             except StopIteration:
                 break

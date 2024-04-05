@@ -29,13 +29,16 @@ class StatefulReplayStrategy(
     def __init__(
         self,
         recording: models.Recording,
+        replay_instructions: str | None = None,
     ) -> None:
         """Initialize the StatefulReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
+            replay_instructions (str): Natural language instructions
+                for how recording should be replayed.
         """
-        super().__init__(recording)
+        super().__init__(recording, replay_instructions)
         self.recording_window_state_diffs = get_window_state_diffs(
             recording.processed_action_events
         )

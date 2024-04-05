@@ -8,9 +8,9 @@ Here are all of the reduced actions in the recording:
 {% for prompt_frame in prompt_frames %}
   ###
   Action {{ prompt_frame['action_number'] }} of {{ num_actions }}:
-  {{ prompt_frame['action'] | orjson_to_json }}
+  {{ prompt_frame['action'] | orjson }}
   Corresponding window:
-  {{ prompt_frame['window'] | orjson_to_json }}
+  {{ prompt_frame['window'] | orjson }}
   Attached image {{ prompt_frame['screenshot_number'] }} of {{ num_images }}
   Active Segment Description: {{ prompt_frame['active_segment_description'] }}
   ###
@@ -19,7 +19,7 @@ Here are all of the reduced actions in the recording:
 Your job is to provide a (possibly modified) version of the reference action:
 
 ```json
-{{ reference_action | orjson_to_json }}
+{{ reference_action | orjson }}
 ```
 
 {% if active_segmentation %}
@@ -33,7 +33,7 @@ Centroid: {{ centroid }}
 The active window is:
 
 ```json
-{{ active_window | orjson_to_json }}
+{{ active_window | orjson }}
 ```
 
 Image {{ num_images }} is the active screenshot.

@@ -469,7 +469,7 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
         float: The height ratio.
     """
     recording = action_event.recording
-    image = action_event.screenshot.image
+    image = action_event.screenshot.original_image
     width_ratio = image.width / recording.monitor_width
     height_ratio = image.height / recording.monitor_height
     return width_ratio, height_ratio
@@ -874,7 +874,7 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
 
     def orjson_to_json(value):
         # orjson.dumps returns bytes, so decode to string
-        return orjson.dumps(value).decode('utf-8')
+        return orjson.dumps(value).decode("utf-8")
 
     # Construct the full path to the template file
     template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
@@ -885,7 +885,9 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
 
     # Create a Jinja2 environment with the directory
     env = Environment(loader=FileSystemLoader(template_dir))
-    env.filters['orjson_to_json'] = orjson_to_json
+
+    # Add custom filters
+    env.filters['orjson'] = orjson_to_json
     env.globals.update(zip=zip)
 
     # Load the template

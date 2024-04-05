@@ -19,6 +19,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
+        replay_instructions: str | None = None,
         display_events: bool = DISPLAY_EVENTS,
         replay_events: bool = REPLAY_EVENTS,
         process_events: bool = PROCESS_EVENTS,
@@ -28,6 +29,8 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
 
         Args:
             recording (models.Recording): The recording object.
+            replay_instructions (str): Natural language instructions
+                for how recording should be replayed.
             display_events (bool): Flag indicating whether to display the events.
               Defaults to False.
             replay_events (bool): Flag indicating whether to replay the events.

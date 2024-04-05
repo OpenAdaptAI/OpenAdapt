@@ -39,9 +39,9 @@ def replay(
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
         record (bool, optional): Flag indicating whether to record the replay.
-        instructions (str, optional): Natural language instructions to the model, e.g.
-            description of what are the parameters in the recording, and how the replay
-            should behave as a function of those parameters.
+        instructions (str, optional): Natural language instructions to the
+            model, e.g. description of what are the parameters in the recording, and
+            how the replay should behave as a function of those parameters.
 
     Returns:
         bool: True if replay was successful, None otherwise.
@@ -71,7 +71,7 @@ def replay(
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")
 
-    strategy = strategy_class(recording)
+    strategy = strategy_class(recording, instructions)
     logger.info(f"{strategy=}")
 
     handler = None
@@ -87,7 +87,7 @@ def replay(
         logger.info(f"{file_path=}")
         handler = logger.add(open(file_path, "w"))
     try:
-        strategy.run(instructions)
+        strategy.run()
     except Exception as e:
         logger.exception(e)
         rval = False

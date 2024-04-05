@@ -1,9 +1,11 @@
 import os
-import fire
-from gradio_client import Client
+import tempfile
+
 from loguru import logger
 from PIL import Image
-import tempfile
+import fire
+import gradio_client
+
 from openadapt import config
 
 
@@ -17,8 +19,8 @@ def save_image_to_temp_file(img: Image.Image) -> str:
     return temp_file.name
 
 
-def predict(server_url: str = config.SOM_SERVER_URL,
-            file_path: str = None,
+def predict(file_path: str = None,
+            server_url: str = config.SOM_SERVER_URL,
             granularity: float = 2.7, 
             segmentation_mode: str = "Automatic",
             mask_alpha: float = 0.8,
@@ -39,10 +41,12 @@ def predict(server_url: str = config.SOM_SERVER_URL,
         api_name (str): API endpoint name for inference.
     """
 
-    client = Client(server_url)
+    assert server_url, server_url
+    assert server_url.startswith("http"), server_url
+    client = gradio_client.Client(server_url)
     result = client.predict(
         {
-            "background": file_path,
+            "background": gradio_client.file(file_path),
         },
         granularity,
         segmentation_mode,
@@ -56,7 +60,7 @@ def predict(server_url: str = config.SOM_SERVER_URL,
     return result
 
 
-def predict_for_image(image: Image.Image):
+def fetch_segmented_image(image: Image.Image):
     """
     Process an image directly using PIL.Image.Image object and predict using the Gradio client.
 
@@ -64,10 +68,12 @@ def predict_for_image(image: Image.Image):
         image (PIL.Image.Image): A PIL image object.
     """
     img_temp_path = save_image_to_temp_file(image)  # Save the image to a temp file
-    segmented_image = predict(file_path=img_temp_path)  # Perform prediction
+    segmented_image_path = predict(file_path=img_temp_path)  # Perform prediction
     os.remove(img_temp_path)  # Delete the temp file after prediction
-    return segmented_image
+    image = Image.open(segmented_image_path)
+    os.remove(segmented_image_path)
+    return image
 
 
 if __name__ == "__main__":
-    fire.Fire(predict_for_image)
+    fire.Fire(predict)
