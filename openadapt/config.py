@@ -35,12 +35,14 @@ class Config(BaseSettings):
 
     # Privacy
     AWS_API_KEY: str = ""
+    PRIVATE_AI_API_KEY: str = ""
 
     # Segmentation
     AWS_SEGMENT_API_KEY: str = ""
     REPLICATE_API_KEY: str = ""
 
     # Completions
+    OPENAI_API_KEY: str = "<set your api key in .env>"
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
 
@@ -71,7 +73,6 @@ class Config(BaseSettings):
     ERROR_REPORTING_BRANCH: str = "main"
 
     # OpenAI
-    OPENAI_API_KEY: str = "<set your api key in .env>"
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
@@ -142,9 +143,6 @@ class Config(BaseSettings):
     # Spacy configurations
     SPACY_MODEL_NAME: str = "en_core_web_trf"
 
-    # Private AI configurations
-    PRIVATE_AI_API_KEY: str = ""
-
     # Dashboard configurations
     DASHBOARD_CLIENT_PORT: int = 3000
     DASHBOARD_SERVER_PORT: int = 8000
@@ -194,6 +192,32 @@ class Config(BaseSettings):
         super().__setattr__(key, value)
         persist_config(self)
 
+    classifications: ClassVar[dict[str, list[str]]] = {
+        "api_keys": [
+            "AWS_API_KEY",
+            "PRIVATE_AI_API_KEY",
+            "AWS_SEGMENT_API_KEY",
+            "REPLICATE_API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GOOGLE_API_KEY",
+            "OPENADAPT_API_KEY",
+        ],
+        "scrubbing": [
+            "SCRUB_ENABLED",
+            "SCRUB_CHAR",
+            "SCRUB_LANGUAGE",
+            "SCRUB_FILL_COLOR",
+        ],
+        "record_and_replay": [
+            "RECORD_WINDOW_DATA",
+            "RECORD_READ_ACTIVE_ELEMENT_STATE",
+            "RECORD_VIDEO",
+            "RECORD_IMAGES",
+            "VIDEO_PIXEL_FORMAT",
+        ],
+    }
+
 
 class LazyConfig:
     def __init__(self):
@@ -233,13 +257,13 @@ def persist_config(new_config: Config) -> None:
         found = False
         for i, line in enumerate(env_lines):
             if line.startswith(f"{key}="):
-                val = val if type(val) is str else f"'{json.dumps(val)}'"
-                env_lines[i] = f"{key}={val}\n"
+                val = val if type(val) is str else json.dumps(val)
+                env_lines[i] = f"{key}='{val}'\n"
                 found = True
                 break
         if not found:
-            val = val if type(val) is str else f"'{json.dumps(val)}'"
-            env_lines.append(f"{key}={val}\n")
+            val = val if type(val) is str else json.dumps(val)
+            env_lines.append(f"{key}='{val}'\n")
 
     with open(ENV_FILE_PATH, "w") as f:
         f.writelines(env_lines)

@@ -1,24 +1,22 @@
 'use client';
 
-
-import { Button, Fieldset, Flex, Grid, Stack, Text, TextInput } from '@mantine/core'
+import { Button, Fieldset, Flex, Grid, Stack, Text, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import React from 'react'
-import { validateSettings } from './utils';
 import { notifications } from '@mantine/notifications';
-
+import React from 'react'
+import { validateAPIKeysSettings } from '../utils';
 
 type Props = {
     settings: Record<string, string>,
 }
 
-export function SettingsForm ({
+export const Form = ({
     settings,
-}: Props) {
+}: Props) => {
     const form = useForm({
         initialValues: JSON.parse(JSON.stringify(settings)),
         validate: (values) => {
-            return validateSettings(values);
+            return validateAPIKeysSettings(values);
         },
     })
 
@@ -61,11 +59,7 @@ export function SettingsForm ({
         <form onSubmit={form.onSubmit(saveSettings)}>
             <Grid>
                 <Grid.Col span={12}>
-                    <Fieldset legend="OPENADAPT">
-                        <Stack>
-                            <TextInput label="OPENADAPT_API_KEY" placeholder="Please enter your OpenAdapt API key" {...form.getInputProps('OPENADAPT_API_KEY')} />
-                        </Stack>
-                    </Fieldset>
+                    <TextInput label="OPENADAPT_API_KEY" placeholder="Please enter your OpenAdapt API key" {...form.getInputProps('OPENADAPT_API_KEY')} />
                 </Grid.Col>
                 <Grid.Col span={12}>
                     <Text fz={20} mb={10} className='text-center'>

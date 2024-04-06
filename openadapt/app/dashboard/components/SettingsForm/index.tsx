@@ -1,1 +1,0 @@
-export { SettingsForm } from './SettingsForm'

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal, Union
 
 from fastapi import FastAPI
 
@@ -13,10 +13,16 @@ class SettingsAPI:
         self.app.add_api_route("/api/settings", self.get_settings, methods=["GET"])
         self.app.add_api_route("/api/settings", self.set_settings, methods=["POST"])
 
+    Category = Union[Literal["api_keys", "scrubbing", "record_and_replay"]]
+
     @staticmethod
-    def get_settings() -> dict[str, Any]:
+    def get_settings(category: Category) -> dict[str, Any]:
         """Get all settings."""
-        return config.model_dump()
+        settings = config.model_dump()
+        compact_settings = dict()
+        for key in Config.classifications[category]:
+            compact_settings[key] = settings[key]
+        return compact_settings
 
     @staticmethod
     def set_settings(body: Config) -> dict[str, str]:
