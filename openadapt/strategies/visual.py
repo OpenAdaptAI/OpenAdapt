@@ -1,18 +1,21 @@
 """Large Multimodal Model with replay instructions.
 
+TODO:
+- handle tab sequences
+- use https://github.com/CASIA-IVA-Lab/FastSAM
+
 1. Get active element descriptions
 
-For each processed event, if it is a click, scroll, or the last in a sequence of
-isolated <tab> events:
+For each processed event, if it is a mouse event:
     - segment the event's active window
-    - get a natural language description of the active element
+    - get a natural language description of each element
 
 2. Modify actions according to replay instructions
 
 Get a natural language description of what the active element should be given the
 replay instructions.
 
-2. Replay modified events
+3. Replay modified events
 
 For each modified event:
 
@@ -24,7 +27,11 @@ For each modified event:
 
     b. Replay modified event
 
-See openadapt/prompts/system.j2 and openadapt/prompts/action.j2 for details.
+See prmopts for details:
+- openadapt/prompts/system.j2
+- openadapt/prompts/action.j2
+- openadapt/prompts/description.j2
+- openadapt/prompts/apply_replay_instructions.j2
 
 Usage:
 
@@ -44,7 +51,7 @@ from openadapt import common, config, models, strategies, utils, vision
 from openadapt import adapters
 
 
-DEBUG = False
+DEBUG = True
 DEBUG_REPLAY = False
 MAX_TOKENS = 2**14  # 16384
 
@@ -204,12 +211,18 @@ class VisualReplayStrategy(
 
         reference_action = self.recording.processed_action_events[self.recording_action_idx]
         reference_window = reference_action.window_event
-        # XXX HACK
-        while (ref_win_title_prefix := reference_window.title.split(" ")[0]) != (active_win_title_prefix := active_window.title.split(" ")[0]):
+
+        # TODO XXX HACK
+        while (
+            ref_win_title_prefix := reference_window.title.split(" ")[0]
+        ) != (
+            active_win_title_prefix := active_window.title.split(" ")[0]
+        ):
             logger.warning(f"{ref_win_title_prefix=} != {active_win_title_prefix=}")
             import time
             time.sleep(1)
             active_window = models.WindowEvent.get_active_window_event()
+
         active_screenshot = models.Screenshot.take_screenshot()
         logger.info(f"{active_window=}")
 
@@ -239,97 +252,6 @@ class VisualReplayStrategy(
             modified_reference_action.mouse_x = target_mouse_x
             modified_reference_action.mouse_y = target_mouse_y
         return modified_reference_action
-
-
-    def _get_next_action_event():
-        active_window_dict = get_window_prompt_dict(active_window)
-
-        prev_window_title = None
-        prompt_frames = []
-        active_action = None
-        active_action_dict = None
-        num_images = 0
-        screenshots = []
-        for action_idx, action in enumerate(self.modified_actions):
-            window_dict = get_window_prompt_dict(action.window_event)
-            window_title = window_dict["title"]
-            if prev_window_title is None or prev_window_title != window_title:
-                screenshot = action.screenshot
-                num_images += 1
-                screenshots.append(screenshot)
-            prev_window_title = window_title
-
-            action_dict = get_action_prompt_dict(action)
-            is_reference_action = action_idx == self.recording_action_idx
-            logger.info(f"{is_reference_action=}")
-            if is_reference_action:
-                reference_action = action
-                reference_action_dict = action_dict
-
-            active_segment_description = None
-            active_segment_bounding_box = None
-            if action.name in ("click", "doubleclick", "singleclick"):
-                if SEGMENT_ONCE_PER_WINDOW_TITLE and window_title in self.window_segmentation_by_title:
-                    window_segmentation = self.window_segmentation_by_title[window_title]
-                else:
-                    window_segmentation = get_window_segmentation(action)
-                masked_images = window_segmentation.masked_images
-                descriptions = window_segmentation.descriptions
-                bounding_boxes = window_segmentation.bounding_boxes
-                active_segment_idx = get_active_segment(action, window_segmentation)
-                if active_segment_idx:
-                    active_segment_description = window_segmentation.descriptions[active_segment_idx]
-                    active_segment_bounding_box = window_segmentation.bounding_boxes[active_segment_idx]
-                else:
-                    logger.warning(f"{active_segment_idx=} {action=}")
-
-            prompt_frame = {
-                "screenshot_number": num_images,
-                "window": window_dict,
-                "action": action_dict,
-                "action_idx": action_idx,
-                "action_number": action_idx + 1,
-                "is_reference_action": is_reference_action,
-                "active_segment_description": active_segment_description,
-                "active_segment_bounding_box": active_segment_bounding_box,
-            }
-            prompt_frames.append(prompt_frame)
-        logger.info(f"prompt_frames=\n{pformat(prompt_frames)}")
-
-        active_segmentation = None
-        if reference_action.name in common.MOUSE_EVENTS:
-            active_segmentation = get_window_segmentation(
-                screenshot=active_screenshot,
-                window_event=active_window,
-            )
-
-        # TODO: replace screenshots with window segmentations?
-
-        screenshots.append(active_screenshot)
-        screenshots_base64 = [
-            screenshot.base64
-            for screenshot in screenshots
-        ]
-        prompt_data = {
-            "prompt_frames": prompt_frames,
-            "active_window": active_window_dict,
-            "reference_action": reference_action_dict,
-            "replay_instructions": replay_instructions,
-            "task_description": self.recording.task_description,
-            "screenshots_base64": screenshots_base64,
-            "active_segmentation": active_segmentation,
-        }
-        completion = prompt_for_action(prompt_data)
-
-        logger.info(f"{completion=}")
-        #import ipdb; ipdb.set_trace()
-
-        #active_action_dicts = utils.get_action_dict_from_json(completion)
-        active_action_dicts = completion
-        logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
-        active_action = models.ActionEvent.from_dict(active_action_dicts)
-        self.recording_action_idx += 1
-        return active_action
 
 
 def get_active_segment(action, window_segmentation, debug=DEBUG):
@@ -385,29 +307,6 @@ def get_active_segment(action, window_segmentation, debug=DEBUG):
 
     return active_index
 
-def _get_active_segment(action: models.ActionEvent, window_segmentation: Segmentation) -> int | None:
-    """
-    Returns the index of the bounding box within which the action's mouse coordinates fall,
-    adjusted for the scaling of the cropped window and the action coordinates.
-    """
-    # Obtain the scale ratios
-    width_ratio, height_ratio = utils.get_scale_ratios(action)
-
-    # Adjust action coordinates to be relative to the cropped window's top-left corner
-    adjusted_mouse_x = (action.mouse_x - action.window_event.left) * width_ratio
-    adjusted_mouse_y = (action.mouse_y - action.window_event.top) * height_ratio
-
-    for index, box in enumerate(window_segmentation.bounding_boxes):
-        box_left = box['left']# * width_ratio
-        box_top = box['top']# * height_ratio
-        box_right = (box['left'] + box['width'])# * width_ratio
-        box_bottom = (box['top'] + box['height'])# * height_ratio
-
-        # Check if the adjusted action's coordinates are within the bounding box
-        if box_left <= adjusted_mouse_x < box_right and box_top <= adjusted_mouse_y < box_bottom:
-            return index
-
-    return None
 
 def get_window_segmentation(
     action_event: models.ActionEvent | None = None,
@@ -449,18 +348,6 @@ def get_window_segmentation(
         #import ipdb; ipdb.set_trace()
     return segmentation
 
-#def get_screenshots_by_window_title(
-#    actions: list[models.ActionEvent],
-#) -> dict[str, models.Screenshot]:
-#    screenshots_by_window_title = {}
-#    for action_idx, action in enumerate(actions):
-#        window = action.window_event
-#        window_title = window.title
-#        screenshot = action.screenshot
-#        screenshots_by_window_title.setdefault(window_title, [])
-#        screenshots_by_window_title[window_title].append(screenshot)
-#    return screenshots_by_window_title
-
 
 def get_default_prompt_adapter():
     return {
@@ -475,58 +362,6 @@ def get_default_segmentation_adapter():
         "replicate": adapters.replicate,
     }[config.DEFAULT_SEGMENTATION_ADAPTER]
 
-
-from typing import Callable
-
-# modified from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
-def prompt_for_action(
-    prompt_data: dict,
-    max_tokens: int | None = MAX_TOKENS,
-    prompt_adapter: Callable = get_default_prompt_adapter(),
-) -> dict:
-    prompt_frames = prompt_data["prompt_frames"]
-    active_window = prompt_data["active_window"]
-    reference_action = prompt_data["reference_action"]
-    replay_instructions = prompt_data["replay_instructions"]
-    task_description = prompt_data["task_description"]
-    images = prompt_data["screenshots_base64"]
-
-    num_actions = len(prompt_frames)
-
-    num_images = len(images)
-    system_prompt = utils.render_template_from_file(
-        "openadapt/prompts/system.j2",
-    )
-    logger.info(f"system_prompt=\n{system_prompt}")
-
-    prompt = utils.render_template_from_file(
-        "openadapt/prompts/action.j2",
-        prompt_frames=prompt_frames,
-        active_window=active_window,
-        reference_action=reference_action,
-        replay_instructions=replay_instructions,
-        task_description=task_description,
-        num_actions=num_actions,
-        num_images=num_images,
-    )
-    logger.info(f"prompt=\n{prompt}")
-    if reference_action['name'] in common.MOUSE_EVENTS:
-        import ipdb; ipdb.set_trace()
-        foo = 1
-    content = prompt_adapter.prompt(
-        prompt,
-        system_prompt,
-        images,
-        max_tokens=max_tokens,
-        detail="low",
-    )
-    try:
-        content_dict = utils.parse_code_snippet(content)
-    except Exception as exc:
-        logger.warning(exc)
-        raise
-    logger.info(f"content_dict=\n{pformat(content_dict)}")
-    return content_dict
 
 def prompt_for_descriptions(
     original_image_base64: str,
