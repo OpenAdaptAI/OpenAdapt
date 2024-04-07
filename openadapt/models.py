@@ -270,7 +270,7 @@ class ActionEvent(db.Base):
         # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
         children = []
         release_events = []
-        try:
+        if "text" in action_dict:
             # Splitting actions based on whether they are special keys or regular characters
             if action_dict['text'].startswith('<') and action_dict['text'].endswith('>'):
                 # Handling special keys
@@ -288,12 +288,10 @@ class ActionEvent(db.Base):
                     press, release = cls._create_key_events(key_char=key_char)
                     children.append(press)
                     children.append(release)
-        except KeyError as exc:
-            # Handle missing key names or canonical text appropriately
-            logger.warning(f"{exc=}")
-
-        children += release_events[::-1]
-        return ActionEvent(children=children)
+            children += release_events[::-1]
+            return ActionEvent(children=children)
+        else:
+            return ActionEvent(**action_dict)
 
     @classmethod
     def _create_key_events(
@@ -382,16 +380,24 @@ class Screenshot(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
 
-    # TODO: convert to png_data on save
-    sct_img = None
+    def __init__(self, *args, sct_img=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initialize_instance_attributes()
+        self.sct_img = sct_img 
 
-    # TODO: replace prev with prev_timestamp?
-    prev = None
-    _image = None
-    _image_history = []
-    _diff = None
-    _diff_mask = None
-    _base64 = None
+    @sa.orm.reconstructor
+    def initialize_instance_attributes(self):
+        """Initialize attributes for both new and loaded objects."""
+        # TODO: convert to png_data on save
+        self.sct_img = None
+
+        # TODO: replace prev with prev_timestamp?
+        self.prev = None
+        self._image = None
+        self._image_history = []
+        self._diff = None
+        self._diff_mask = None
+        self._base64 = None
 
     @property
     def image(self) -> Image:

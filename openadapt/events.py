@@ -18,6 +18,7 @@ MAX_PROCESS_ITERS = 1
 MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD = 1
 MOUSE_MOVE_EVENT_MERGE_MIN_IDX_DELTA = 5
 KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS = True
+USE_SCREENSHOT_DIFFS = False
 
 
 def get_events(
@@ -148,7 +149,7 @@ def make_parent_event(
 
 
 def merge_consecutive_mouse_move_events(
-    events: list[models.ActionEvent], by_diff_distance: bool = False
+    events: list[models.ActionEvent], by_diff_distance: bool = USE_SCREENSHOT_DIFFS,
 ) -> list[models.ActionEvent]:
     """Merge consecutive mouse move events into a single move event.
 
