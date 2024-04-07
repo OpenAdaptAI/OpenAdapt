@@ -10,8 +10,8 @@ class SettingsAPI:
         self.app = app
 
     def attach_routes(self):
-        self.app.add_api_route("/api/settings", self.get_settings, methods=["GET"])
-        self.app.add_api_route("/api/settings", self.set_settings, methods=["POST"])
+        self.app.add_api_route("/settings", self.get_settings, methods=["GET"])
+        self.app.add_api_route("/settings", self.set_settings, methods=["POST"])
 
     Category = Union[Literal["api_keys", "scrubbing", "record_and_replay"]]
 

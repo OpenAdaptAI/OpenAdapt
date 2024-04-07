@@ -5,6 +5,7 @@ This module provides functions for managing UI cards in the OpenAdapt applicatio
 
 from datetime import datetime
 from subprocess import Popen
+import multiprocessing
 import signal
 
 from nicegui import ui
@@ -12,8 +13,36 @@ from nicegui import ui
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
 from openadapt.db.crud import new_session
+from openadapt.record import record
 
-record_proc = None
+
+class RecordProc:
+    def __init__(self) -> None:
+        self.terminate_event = multiprocessing.Event()
+        self.record_proc: multiprocessing.Process = None
+
+    def set_terminate_event(self) -> multiprocessing.Event:
+        return self.terminate_event.set()
+
+    def terminate(self) -> None:
+        self.record_proc.terminate()
+
+    def reset(self) -> None:
+        self.terminate_event.clear()
+        self.record_proc = None
+
+    def wait(self) -> None:
+        self.record_proc.join()
+
+    def is_running(self) -> bool:
+        return self.record_proc is not None
+
+    def start(self, func: callable, args: tuple) -> None:
+        self.record_proc = multiprocessing.Process(target=func, args=args)
+        self.record_proc.start()
+
+
+record_proc = RecordProc()
 
 
 def settings(dark_mode: bool) -> None:
@@ -68,18 +97,18 @@ def select_import(f: callable) -> None:
 def stop_record() -> None:
     """Stop the current recording session."""
     global record_proc
-    if record_proc is not None:
-        record_proc.send_signal(signal.SIGINT)
+    if record_proc.is_running():
+        record_proc.set_terminate_event()
 
         # wait for process to terminate
         record_proc.wait()
-        record_proc = None
+        record_proc.reset()
 
 
 def is_recording() -> bool:
     """Check if a recording session is currently active."""
     global record_proc
-    return record_proc is not None
+    return record_proc.is_running()
 
 
 def quick_record() -> None:
@@ -87,10 +116,7 @@ def quick_record() -> None:
     global record_proc
     new_session()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    record_proc = Popen(
-        f"python -m openadapt.record '{now}'",
-        shell=True,
-    )
+    record_proc.start(record, (now, record_proc.terminate_event))
 
 
 def recording_prompt(options: list[str], record_button: ui.button) -> None:
@@ -100,7 +126,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         options (list): List of autocomplete options.
         record_button (nicegui.widgets.Button): Record button widget.
     """
-    if record_proc is None:
+    if not record_proc.is_running():
         with ui.dialog() as dialog, ui.card():
             ui.label("Enter a name for the recording: ")
             ui.input(
@@ -119,7 +145,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
 
     def terminate() -> None:
         global record_proc
-        record_proc.send_signal(signal.SIGINT)
+        record_proc.set_terminate_event()
 
         # wait for process to terminate
         record_proc.wait()
@@ -127,7 +153,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         record_button._props["name"] = "radio_button_checked"
         record_button.on("click", lambda: recording_prompt(options, record_button))
 
-        record_proc = None
+        record_proc.reset()
 
     def begin() -> None:
         name = result.text.__getattribute__("value")
@@ -136,16 +162,16 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
             f"Recording {name}... Press CTRL + C in terminal window to cancel",
         )
         new_session()
-        proc = Popen(
-            "python -m openadapt.record " + name,
-            shell=True,
+        global record_proc
+        record_proc.start(
+            record,
+            (name, record_proc.terminate_event),
         )
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())
         record_button.update()
-        return proc
 
     def on_record() -> None:
         global record_proc
         dialog.close()
-        record_proc = begin()
+        begin()

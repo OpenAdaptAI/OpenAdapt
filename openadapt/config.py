@@ -1,21 +1,22 @@
-from typing import ClassVar
+from typing import Any, ClassVar
 import json
 import multiprocessing
-import os
 import pathlib
 import shutil
 
 from loguru import logger
 from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 import git
 import sentry_sdk
 
-ENV_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env"
-ENV_EXAMPLE_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env.example"
-ROOT_DIRPATH = pathlib.Path(__file__).parent.parent.resolve()
-DATA_DIRECTORY_PATH = ROOT_DIRPATH / "data"
-RECORDING_DIRECTORY_PATH = DATA_DIRECTORY_PATH / "recordings"
+CURRENT_DIRPATH = pathlib.Path(__file__).parent
+CONFIG_FILE_PATH = CURRENT_DIRPATH / "config.json"
+LOCAL_CONFIG_FILE_PATH = CURRENT_DIRPATH / "config.local.json"
+ROOT_DIRPATH = CURRENT_DIRPATH.parent
+DATA_DIRECTORY_PATH = CURRENT_DIRPATH / "data"
+RECORDING_DIRECTORY_PATH = CURRENT_DIRPATH / "recordings"
 
 STOP_STRS = [
     "oa.stop",
@@ -26,12 +27,56 @@ STOP_STRS = [
 # containing special chars, separated by keys
 SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 
-if not os.path.isfile(ENV_FILE_PATH):
-    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
+
+if not LOCAL_CONFIG_FILE_PATH.exists():
+    shutil.copy(CONFIG_FILE_PATH, LOCAL_CONFIG_FILE_PATH)
+
+
+def get_json_config_settings_source(
+    file_path: pathlib.Path,
+) -> PydanticBaseSettingsSource:
+    class JsonConfigSettingsSource(PydanticBaseSettingsSource):
+        """A settings source that reads from a JSON file."""
+
+        def get_field_value(
+            self, field: FieldInfo, field_name: str
+        ) -> tuple[Any, str, bool]:
+            """Get the field value from the JSON file."""
+            encoding = self.config.get("env_file_encoding")
+            file_content_json = json.loads(
+                pathlib.Path(file_path).read_text(encoding=encoding)
+            )
+            field_value = file_content_json.get(field_name)
+            return field_value, field_name, False
+
+        def prepare_field_value(
+            self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+        ) -> Any:
+            """Prepare the field value."""
+            return value
+
+        def __call__(self) -> dict[str, Any]:
+            """Return the settings as a dictionary."""
+            d: dict[str, Any] = {}
+
+            for field_name, field in self.settings_cls.model_fields.items():
+                field_value, field_key, value_is_complex = self.get_field_value(
+                    field, field_name
+                )
+                field_value = self.prepare_field_value(
+                    field_name, field, field_value, value_is_complex
+                )
+                if field_value is not None:
+                    d[field_key] = field_value
+
+            return d
+
+    return JsonConfigSettingsSource
 
 
 class Config(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ENV_FILE_PATH, extra="ignore")
+    # Environment
+    ENV: str = "build"
 
     # Privacy
     AWS_API_KEY: str = ""
@@ -42,7 +87,7 @@ class Config(BaseSettings):
     REPLICATE_API_KEY: str = ""
 
     # Completions
-    OPENAI_API_KEY: str = "<set your api key in .env>"
+    OPENAI_API_KEY: str = "<set your api key in config.json>"
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
 
@@ -60,10 +105,9 @@ class Config(BaseSettings):
 
     DB_FPATH: ClassVar[str]
     if DB_FNAME == "openadapt.db":  # noqa
-        DB_FPATH = ROOT_DIRPATH / DB_FNAME  # noqa
+        DB_FPATH = CURRENT_DIRPATH / DB_FNAME  # noqa
     else:
         DB_FPATH = RECORDING_DIRECTORY_PATH / DB_FNAME  # noqa
-    DB_URL: str = f"sqlite:///{DB_FPATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
@@ -147,6 +191,21 @@ class Config(BaseSettings):
     DASHBOARD_CLIENT_PORT: int = 3000
     DASHBOARD_SERVER_PORT: int = 8000
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            get_json_config_settings_source(LOCAL_CONFIG_FILE_PATH)(settings_cls),
+            get_json_config_settings_source(CONFIG_FILE_PATH)(settings_cls),
+        )
+
     @model_validator(mode="after")
     @classmethod
     def validate_requirements(cls, data):
@@ -226,6 +285,9 @@ class LazyConfig:
     def __getattr__(self, key):
         if key == "_config":
             return self._config
+        if key == "DB_URL":  # special case for DB_URL
+            return f"sqlite:///{self._config.DB_FPATH}"
+        self._config = Config()
         return self._config.__getattribute__(key)
 
     def __setattr__(self, key, value):
@@ -235,38 +297,24 @@ class LazyConfig:
             self._config.__setattr__(key, value)
 
     def model_dump(self):
-        return self._config.model_dump()
+        model_dump_dict = {}
+        # access the attributes so they are re-read from the json files
+        for k in self._config.model_fields.keys():
+            model_dump_dict[k] = getattr(self, k)
+        return model_dump_dict
 
 
 config = LazyConfig()
 
 
-def persist_config(new_config: Config) -> None:
+def persist_config(new_config: Config):
     """Persist the configuration."""
-
     config_variables = new_config.model_dump()
 
-    logger.info(f"Persisting config to {new_config.model_config['env_file']}")
+    logger.info(f"Persisting config to {CONFIG_FILE_PATH}")
 
-    # clear the file
-    env_lines = []
-    with open(ENV_FILE_PATH, "r") as f:
-        env_lines = f.readlines()
-
-    for key, val in config_variables.items():
-        found = False
-        for i, line in enumerate(env_lines):
-            if line.startswith(f"{key}="):
-                val = val if type(val) is str else json.dumps(val)
-                env_lines[i] = f"{key}='{val}'\n"
-                found = True
-                break
-        if not found:
-            val = val if type(val) is str else json.dumps(val)
-            env_lines.append(f"{key}='{val}'\n")
-
-    with open(ENV_FILE_PATH, "w") as f:
-        f.writelines(env_lines)
+    with open(LOCAL_CONFIG_FILE_PATH, "w") as f:
+        json.dump(config_variables, f, indent=4)
 
     global config
     config._config = new_config
@@ -295,22 +343,28 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     return rval
 
 
-_OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
-if multiprocessing.current_process().name == "MainProcess":
-    for key, val in config.model_dump().items():
-        if not key.startswith("_") and key.isupper():
-            parts = key.split("_")
-            if any([part in parts for part in _OBFUSCATE_KEY_PARTS]):
-                val = obfuscate(val)
-            logger.info(f"{key}={val}")
+def print_config():
+    _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+    if multiprocessing.current_process().name == "MainProcess":
+        logger.info(f"Reading from {CONFIG_FILE_PATH}")
+        for key, val in config.model_dump().items():
+            if not key.startswith("_") and key.isupper():
+                parts = key.split("_")
+                if any([part in parts for part in _OBFUSCATE_KEY_PARTS]):
+                    val = obfuscate(val)
+                logger.info(f"{key}={val}")
+        logger.info(f"DB_URL={config.DB_URL}")
 
-    if config.ERROR_REPORTING_ENABLED:  # type: ignore # noqa
-        active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
-        logger.info(f"{active_branch_name=}")
-        is_reporting_branch = active_branch_name == config.ERROR_REPORTING_BRANCH  # type: ignore # noqa
-        logger.info(f"{is_reporting_branch=}")
-        if is_reporting_branch:
-            sentry_sdk.init(
-                dsn=config.ERROR_REPORTING_DSN,  # type: ignore # noqa
-                traces_sample_rate=1.0,
-            )
+        if config.ERROR_REPORTING_ENABLED:  # type: ignore # noqa
+            if config.ENV == "build":
+                is_reporting_branch = True
+            else:
+                active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
+                logger.info(f"{active_branch_name=}")
+                is_reporting_branch = active_branch_name == config.ERROR_REPORTING_BRANCH  # type: ignore # noqa
+                logger.info(f"{is_reporting_branch=}")
+            if is_reporting_branch:
+                sentry_sdk.init(
+                    dsn=config.ERROR_REPORTING_DSN,  # type: ignore # noqa
+                    traces_sample_rate=1.0,
+                )

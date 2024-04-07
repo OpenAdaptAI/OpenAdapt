@@ -10,12 +10,10 @@ class RecordingsAPI:
         self.app = app
 
     def attach_routes(self):
-        self.app.add_api_route(
-            "/api/recordings", self.get_recordings, response_model=None
-        )
-        self.app.add_api_route("/api/recordings/start", self.start_recording)
-        self.app.add_api_route("/api/recordings/stop", self.stop_recording)
-        self.app.add_api_route("/api/recordings/status", self.recording_status)
+        self.app.add_api_route("/recordings", self.get_recordings, response_model=None)
+        self.app.add_api_route("/recordings/start", self.start_recording)
+        self.app.add_api_route("/recordings/stop", self.stop_recording)
+        self.app.add_api_route("/recordings/status", self.recording_status)
 
     @staticmethod
     def get_recordings() -> dict[str, list[Recording]]:

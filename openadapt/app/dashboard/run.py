@@ -2,21 +2,31 @@
 
 
 import os
+import pathlib
 import subprocess
+import webbrowser
 
 from loguru import logger
 
+from openadapt.config import config
 from openadapt.extensions.thread import Thread
+
+from .api.index import run_app
 
 
 def run() -> Thread:
     """Run the dashboard web application."""
     # change to the client directory
-    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    cur_dir = pathlib.Path(__file__).parent
 
     def run_client() -> subprocess.Popen:
         """The entry point for the thread that runs the dashboard client."""
-        from openadapt.config import config
+        if config.ENV == "build":
+            run_app()
+            webbrowser.open(
+                f"http://localhost:{config.DASHBOARD_SERVER_PORT}/recordings"
+            )
+            return
 
         return subprocess.Popen(
             ["node", "index.js"],
@@ -28,12 +38,17 @@ def run() -> Thread:
             },
         )
 
-    return Thread(target=run_client, daemon=True, args=())
+    return Thread(
+        target=run_client,
+        daemon=True,
+        args=(),
+    )
 
 
 def cleanup(process: subprocess.Popen) -> None:
     """Cleanup the dashboard web application process."""
     logger.debug("Terminating the dashboard client.")
-    process.terminate()
-    process.wait()
+    if process:
+        process.terminate()
+        process.wait()
     logger.debug("Dashboard client terminated.")

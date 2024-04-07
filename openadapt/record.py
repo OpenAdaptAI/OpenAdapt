@@ -902,6 +902,7 @@ def read_mouse_events(
 @trace(logger)
 def record(
     task_description: str,
+    terminate_event: multiprocessing.Event = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
@@ -925,8 +926,8 @@ def record(
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
-    terminate_event = multiprocessing.Event()
-
+    if terminate_event is None:
+        terminate_event = multiprocessing.Event()
     (
         term_pipe_parent_window,
         term_pipe_child_window,
@@ -1061,7 +1062,7 @@ def record(
     global stop_sequence_detected
 
     try:
-        while not stop_sequence_detected:
+        while not (stop_sequence_detected or terminate_event.is_set()):
             time.sleep(1)
 
         terminate_event.set()
@@ -1102,5 +1103,4 @@ def start() -> None:
 
 
 if __name__ == "__main__":
-    logger.info(config.model_dump())
-    # fire.Fire(record)
+    fire.Fire(record)

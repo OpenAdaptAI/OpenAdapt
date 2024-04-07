@@ -3,7 +3,7 @@
 import { Button, Fieldset, Flex, Grid, Stack, Text, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import React from 'react'
+import React, { useEffect } from 'react'
 import { validateAPIKeysSettings } from '../utils';
 
 type Props = {
@@ -19,6 +19,11 @@ export const Form = ({
             return validateAPIKeysSettings(values);
         },
     })
+
+    useEffect(() => {
+        form.setValues(JSON.parse(JSON.stringify(settings)));
+        form.setInitialValues(JSON.parse(JSON.stringify(settings)));
+    }, [settings]);
 
     function resetForm() {
         form.reset();

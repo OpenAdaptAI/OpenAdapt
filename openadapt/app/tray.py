@@ -18,6 +18,7 @@ from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH, start
+from openadapt.config import config, print_config
 from openadapt.db.crud import get_all_recordings
 from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
@@ -109,7 +110,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             self.populate_menu(self.visualize_menu, self._visualize, "visualize")
             self.populate_menu(self.replay_menu, self._replay, "replay")
 
-            if self.dashboard_thread:
+            if self.dashboard_thread and config.ENV != "build":
                 self.dashboard_action.setText("Reload dashboard")
         except KeyboardInterrupt:
             # the app is probably shutting down, so we can ignore this
@@ -195,6 +196,8 @@ class SystemTrayIcon(QSystemTrayIcon):
     def launch_dashboard(self) -> None:
         """Launch the web dashboard."""
         if self.dashboard_thread:
+            if config.ENV == "build":
+                return
             cleanup_dashboard(self.dashboard_thread._return)
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()
@@ -211,4 +214,5 @@ def _run() -> None:
 
 
 if __name__ == "__main__":
+    print_config()
     _run()

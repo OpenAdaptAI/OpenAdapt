@@ -3,7 +3,7 @@
 import { Button, Checkbox, Flex, Grid, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import React from 'react'
+import React, { useEffect } from 'react'
 import { validateRecordAndReplaySettings } from '../utils';
 
 type Props = {
@@ -19,6 +19,11 @@ export const Form = ({
             return validateRecordAndReplaySettings(values);
         },
     })
+
+    useEffect(() => {
+        form.setValues(JSON.parse(JSON.stringify(settings)));
+        form.setInitialValues(JSON.parse(JSON.stringify(settings)));
+    }, [settings]);
 
     function resetForm() {
         form.reset();
