@@ -3,6 +3,7 @@
 TODO:
 - handle tab sequences
 - use https://github.com/CASIA-IVA-Lab/FastSAM
+- re-use previous segmentations / descriptions
 
 1. Get active element descriptions
 
@@ -216,8 +217,7 @@ class VisualReplayStrategy(
         while (
             ref_win_title_prefix := reference_window.title.split(" ")[0]
         ) != (
-            active_win_title_prefix := active_window.title.split(" ")[0]
-        ):
+            active_win_title_prefix := active_window.title.split(" ")[0]):
             logger.warning(f"{ref_win_title_prefix=} != {active_win_title_prefix=}")
             import time
             time.sleep(1)
