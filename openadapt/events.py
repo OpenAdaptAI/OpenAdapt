@@ -15,7 +15,8 @@ from openadapt import common, models, utils
 from openadapt.db import crud
 
 MAX_PROCESS_ITERS = 1
-MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD = 1
+MOUSE_MOVE_EVENT_MERGE_CLICK_DISTANCE_THRESHOLD = 5
+MOUSE_MOVE_EVENT_MERGE_DIFF_DISTANCE_THRESHOLD = 1
 MOUSE_MOVE_EVENT_MERGE_MIN_IDX_DELTA = 5
 KEYBOARD_EVENTS_MERGE_GROUP_NAMED_KEYS = True
 USE_SCREENSHOT_DIFFS = False
@@ -149,7 +150,8 @@ def make_parent_event(
 
 
 def merge_consecutive_mouse_move_events(
-    events: list[models.ActionEvent], by_diff_distance: bool = USE_SCREENSHOT_DIFFS,
+    events: list[models.ActionEvent],
+    by_diff_distance: bool = USE_SCREENSHOT_DIFFS,
 ) -> list[models.ActionEvent]:
     """Merge consecutive mouse move events into a single move event.
 
@@ -171,7 +173,7 @@ def merge_consecutive_mouse_move_events(
     def get_merged_events(
         to_merge: list[models.ActionEvent],
         state: dict[str, Any],
-        distance_threshold: int = MOUSE_MOVE_EVENT_MERGE_DISTANCE_THRESHOLD,
+        distance_threshold: int = MOUSE_MOVE_EVENT_MERGE_DIFF_DISTANCE_THRESHOLD,
         # Minimum number of consecutive events (in which the distance between
         # the cursor and the nearest non-zero diff pixel is greater than
         # distance_threshold) in order to result in a separate parent event.
@@ -624,6 +626,84 @@ def remove_redundant_mouse_move_events(
     )
 
 
+# TODO: consolidate with remove_redundant_mouse_move_events above
+# these are very similar except for the lines noted below
+def remove_move_before_click(
+    events: list[models.ActionEvent],
+) -> list[models.ActionEvent]:
+    """Remove mouse move move immediately followed by click in the same location."""
+
+    def is_target_event(event: models.ActionEvent, state: dict[str, Any]) -> bool:
+        return event.name in ("move", "click", "singleclick", "doubleclick")
+
+    def is_same_pos(e0: models.ActionEvent, e1: models.ActionEvent) -> bool:
+        if not all([e0, e1]):
+            return False
+        for attr in ("mouse_x", "mouse_y"):
+            val0 = getattr(e0, attr)
+            val1 = getattr(e1, attr)
+            # this line is distinct from remove_redundant_mouse_move_events
+            if abs(val0 - val1) > MOUSE_MOVE_EVENT_MERGE_CLICK_DISTANCE_THRESHOLD:
+                return False
+        return True
+
+    def should_discard(
+        event: models.ActionEvent,
+        prev_event: models.ActionEvent | None,
+        next_event: models.ActionEvent | None,
+    ) -> bool:
+        #import ipdb; ipdb.set_trace()
+        return event.name == "move" and (
+            # this line is distinct from remove_redundant_mouse_move_events
+            is_same_pos(event, next_event)
+        )
+
+    def get_merged_events(
+        to_merge: list[models.ActionEvent], state: dict[str, Any]
+    ) -> list[models.ActionEvent]:
+        to_merge = [None, *to_merge, None]
+        merged_events = []
+        dts = []
+        children = []
+        for idx, (prev_event, event, next_event) in enumerate(
+            zip(
+                to_merge,
+                to_merge[1:],
+                to_merge[2:],
+            )
+        ):
+            if should_discard(event, prev_event, next_event):
+                if prev_event:
+                    dt = event.timestamp - prev_event.timestamp
+                else:
+                    dt = next_event.timestamp - event.timestamp
+                state["dt"] += dt
+                children.append(event)
+            else:
+                dts.append(state["dt"])
+                if children:
+                    event.children = children
+                    children = []
+                merged_events.append(event)
+
+        # update timestamps (doing this in the previous loop double counts)
+        assert len(dts) == len(merged_events), (
+            len(dts),
+            len(merged_events),
+        )
+        for event, dt in zip(merged_events, dts):
+            event.timestamp -= dt
+
+        return merged_events
+
+    return merge_consecutive_action_events(
+        "redundant_mouse_move",
+        events,
+        is_target_event,
+        get_merged_events,
+    )
+
+
 def merge_consecutive_action_events(
     name: str,
     events: list[models.ActionEvent],
@@ -737,6 +817,7 @@ def process_events(
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,
         merge_consecutive_mouse_click_events,
+        remove_move_before_click,
     ]
     for process_fn in process_fns:
         action_events = process_fn(action_events)

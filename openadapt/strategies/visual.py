@@ -4,6 +4,8 @@ TODO:
 - handle tab sequences
 - use https://github.com/CASIA-IVA-Lab/FastSAM
 - re-use previous segmentations / descriptions
+- handle separate UI elements which look identical (e.g. spreadsheet cells)
+    - e.g. include segment mask in prompt
 
 1. Get active element descriptions
 
