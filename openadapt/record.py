@@ -1138,7 +1138,9 @@ def record(
         if started_counter.value >= expected_starts:
             break
         time.sleep(0.1)  # Sleep to reduce busy waiting
-    logger.info("All readers and writers have started. Waiting for input events.")
+    for _ in range(5):
+        logger.info("*" * 40)
+    logger.info("All readers and writers have started. Waiting for input events...")
 
     collect_stats()
     global stop_sequence_detected

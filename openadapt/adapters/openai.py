@@ -91,6 +91,9 @@ def get_completion(payload):
     result = response.json()
     #result = adapter.get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
+    if "error" in result:
+        import ipdb; ipdb.set_trace()
+        error = result["error"]
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]

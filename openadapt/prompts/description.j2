@@ -15,9 +15,18 @@ Respond in JSON, i.e.:
 }
 ```
 {% if active_segment_description %}
-In particular, we are interested in a segment with the following description:
+In particular, we are interested in a segment with the following description
+(i.e. the "active segment description"):
 ```text
 {{ active_segment_description }}
 ```
-If any of the segments EXACTLY match this description, you MUST re-use it verbatim.
+If any of the segments EXACTLY match this description, you MUST re-use this 
+description *VERBATIM*, i.e. without any modifications.
+{% endif %}
+{% if exceptions %}
+Previously when you attempted this, the results generated these exceptions:
+{% for exception in exceptions %}
+{{ exception }}
+{% endfor %}
+YOU MUST RE-USE THE PROVIDED "ACTIVE SEGMENT DESCRIPTION".
 {% endif %}

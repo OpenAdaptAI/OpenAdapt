@@ -23,7 +23,7 @@ _DEFAULTS = {
     "SOM_SERVER_URL": "<set in .env>",
     "REPLICATE_API_TOKEN": "<set your api key in .env>",
     "DEFAULT_ADAPTER": "openai",
-    "DEFAULT_SEGMENTATION_ADAPTER": "replicate", # "som" or "replicate"
+    "DEFAULT_SEGMENTATION_ADAPTER": ("som", "replicate", "ultralytics")[-1],
     "ANTHROPIC_API_KEY": "<set your api key in .env>",
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,

@@ -54,7 +54,7 @@ from openadapt import common, config, models, strategies, utils, vision
 from openadapt import adapters
 
 
-DEBUG = True
+DEBUG = False
 DEBUG_REPLAY = False
 MAX_TOKENS = 2**14  # 16384
 
@@ -212,14 +212,19 @@ class VisualReplayStrategy(
         if self.recording_action_idx == len(self.recording.processed_action_events):
             raise StopIteration()
 
-        reference_action = self.recording.processed_action_events[self.recording_action_idx]
+        try:
+            reference_action = self.recording.processed_action_events[self.recording_action_idx]
+        except Exception as exc:
+            logger.warning(exc)
+            raise StopIteration()
         reference_window = reference_action.window_event
 
         # TODO XXX HACK
         while (
             ref_win_title_prefix := reference_window.title.split(" ")[0]
         ) != (
-            active_win_title_prefix := active_window.title.split(" ")[0]):
+            active_win_title_prefix := active_window.title.split(" ")[0]
+        ):
             logger.warning(f"{ref_win_title_prefix=} != {active_win_title_prefix=}")
             import time
             time.sleep(1)
@@ -235,17 +240,19 @@ class VisualReplayStrategy(
             modified_reference_action.screenshot = active_screenshot
             modified_reference_action.window_event = active_window
             modified_reference_action.recording = self.recording
-            active_window_segmentation = get_window_segmentation(
-                modified_reference_action,
-            )
-            try:
-                target_segment_idx = active_window_segmentation.descriptions.index(
-                    modified_reference_action.active_segment_description
+            exceptions = []
+            while True:
+                active_window_segmentation = get_window_segmentation(
+                    modified_reference_action,
+                    exceptions=exceptions,
                 )
-            except ValueError as exc:
-                logger.error(exc)
-                import ipdb; ipdb.set_trace()
-                # TODO: prompt model to determine closest match
+                try:
+                    target_segment_idx = active_window_segmentation.descriptions.index(
+                        modified_reference_action.active_segment_description
+                    )
+                except ValueError as exc:
+                    logger.warning("{exc=}")
+                    excs.append(exc)
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
             # <position in image space> = scale_ratio * <position in window/action space>
             width_ratio, height_ratio = utils.get_scale_ratios(modified_reference_action)
@@ -311,7 +318,8 @@ def get_active_segment(action, window_segmentation, debug=DEBUG):
 
 
 def get_window_segmentation(
-    action_event: models.ActionEvent | None = None,
+    action_event: models.ActionEvent,
+    exceptions: list[Exception] | None = None,
 ) -> Segmentation:
     screenshot = action_event.screenshot
     screenshot.crop_active_window(action_event)
@@ -339,6 +347,7 @@ def get_window_segmentation(
         original_image_base64,
         masked_images_base64,
         action_event.active_segment_description,
+        exceptions,
     )
     bounding_boxes, centroids = vision.calculate_bounding_boxes(refined_masks)
     assert len(bounding_boxes) == len(descriptions) == len(centroids), (
@@ -362,13 +371,15 @@ def get_default_segmentation_adapter():
     return {
         "som": adapters.som,
         "replicate": adapters.replicate,
+        "ultralytics": adapters.ultralytics,
     }[config.DEFAULT_SEGMENTATION_ADAPTER]
 
 
 def prompt_for_descriptions(
     original_image_base64: str,
     masked_images_base64: list[str],
-    active_segment_description: str | None = None,
+    active_segment_description: str | None,
+    exceptions: list[Exception] | None = None,
     max_tokens: int | None = MAX_TOKENS,
 ) -> list[str]:
     images = [original_image_base64] + masked_images_base64
@@ -381,6 +392,7 @@ def prompt_for_descriptions(
         "openadapt/prompts/description.j2",
         active_segment_description=active_segment_description,
         num_segments=num_segments,
+        exceptions=exceptions,
     )
     logger.info(f"prompt=\n{prompt}")
     prompt_adapter = get_default_prompt_adapter()
