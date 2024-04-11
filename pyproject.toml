@@ -94,6 +94,7 @@ anthropic = "^0.19.2"
 orjson = "^3.9.15"
 replicate = "^0.25.0"
 gradio-client = "0.15.0"
+google-generativeai = "^0.5.0"
 
 [tool.pytest.ini_options]
 filterwarnings = [

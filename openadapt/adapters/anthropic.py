@@ -8,11 +8,15 @@ import os
 import requests
 import sys
 
-from openadapt import cache, config
+from loguru import logger
 import anthropic
+
+from openadapt import cache, config
 
 
 MAX_TOKENS = 4096
+# from https://docs.anthropic.com/claude/docs/vision
+MAX_IMAGES = 20
 
 
 @cache.cache()
@@ -81,8 +85,36 @@ client = anthropic.Anthropic(
 @cache.cache()
 def get_completion(payload):
     """Sends a request to the Anthropic API and returns the response."""
-    response = client.messages.create(**payload)
-    # Message(id='msg_01L55ai2A9q92687mmjMSch3', content=[ContentBlock(text='{"action": [{"name": "press", "key_name": "cmd", "canonical_key_name": "cmd"}, {"name": "press", "key_name": "space", "canonical_key_vk": "49"}, {"name": "release", "key_name": "space", "canonical_key_vk": "49"}, {"name": "release", "key_name": "cmd", "canonical_key_name": "cmd"}]}', type='text')], model='claude-3-opus-20240229', role='assistant', stop_reason='end_turn', stop_sequence=None, type='message', usage=Usage(input_tokens=4379, output_tokens=109))
+    try:
+        response = client.messages.create(**payload)
+    except Exception as exc:
+        logger.exception(exc)
+        import ipdb; ipdb.set_trace()
+    """
+    Message(
+        id='msg_01L55ai2A9q92687mmjMSch3',
+        content=[
+            ContentBlock(
+                text='{
+                    "action": [
+                        {
+                            "name": "press",
+                            "key_name": "cmd",
+                            "canonical_key_name": "cmd"
+                        },
+                        ...
+                    ]
+                }',
+                type='text'
+            )
+        ],
+        model='claude-3-opus-20240229',
+        role='assistant',
+        stop_reason='end_turn',
+        stop_sequence=None,
+        type='message',
+        usage=Usage(input_tokens=4379, output_tokens=109))
+    """
     texts = [
         content_block.text
         for content_block in response.content
@@ -93,10 +125,13 @@ def get_completion(payload):
 def prompt(
     prompt: str,
     system_prompt: str | None = None,
-    base64_images: list[tuple[str, str]] | None = None,
+    base64_images: list[str] | None = None,
     max_tokens: int | None = None,
 ):
     """Public method to get a response from the Anthropic API with image support."""
+    if len(base64_images) > MAX_IMAGES:
+        # XXX TODO handle this
+        raise Exception(f"{len(base64_images)=} > {MAX_IMAGES=}. Use a different adapter.")
     payload = create_payload(
         prompt,
         system_prompt,

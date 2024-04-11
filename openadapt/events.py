@@ -1,8 +1,5 @@
 """This module provides functionality for aggregating events."""
 
-# TODO: rename this file to folds.py as per
-# https://drive.google.com/file/d/1_fYoFncuI0TKghKWiMvP13hHEnIqAHI_/view?usp=drive_link
-
 from pprint import pformat
 from typing import Any, Callable, Optional
 import time

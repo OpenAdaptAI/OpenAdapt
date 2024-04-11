@@ -2,10 +2,10 @@
 
 TODO:
 - handle tab sequences
-- use https://github.com/CASIA-IVA-Lab/FastSAM
 - re-use previous segmentations / descriptions
 - handle separate UI elements which look identical (e.g. spreadsheet cells)
     - e.g. include segment mask in prompt
+    - e.g. annotate grid positions
 
 1. Get active element descriptions
 
@@ -30,15 +30,14 @@ For each modified event:
 
     b. Replay modified event
 
-See prmopts for details:
+See prompts for details:
 - openadapt/prompts/system.j2
-- openadapt/prompts/action.j2
 - openadapt/prompts/description.j2
 - openadapt/prompts/apply_replay_instructions.j2
 
 Usage:
 
-    $ python -m openadapt.replay VisualReplayStrategy --instructions "<replay instructions>"
+    $ python -m openadapt.replay VisualReplayStrategy --instructions "<instructions>"
 """
 
 from copy import deepcopy
@@ -54,9 +53,8 @@ from openadapt import common, config, models, strategies, utils, vision
 from openadapt import adapters
 
 
-DEBUG = False
+DEBUG = True
 DEBUG_REPLAY = False
-MAX_TOKENS = 2**14  # 16384
 
 
 @dataclass
@@ -83,7 +81,9 @@ def add_active_segment_descriptions(
                 logger.warning(f"{active_segment_idx=}")
                 active_segment_description = "(None)"
             else:
-                active_segment_description = window_segmentation.descriptions[active_segment_idx]
+                active_segment_description = window_segmentation.descriptions[
+                    active_segment_idx
+                ]
             action.active_segment_description = active_segment_description
             action.available_segment_descriptions = window_segmentation.descriptions
 
@@ -91,7 +91,6 @@ def add_active_segment_descriptions(
 def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
-    max_tokens: int | None = MAX_TOKENS,
 ) -> None:
     """TODO"""
 
@@ -114,7 +113,6 @@ def apply_replay_instructions(
     content = prompt_adapter.prompt(
         prompt,
         system_prompt,
-        max_tokens=max_tokens,
     )
     content_dict = utils.parse_code_snippet(content)
     action_dicts = content_dict["actions"]
@@ -161,7 +159,9 @@ def get_action_prompt_dict(action: models.ActionEvent) -> dict:
             if key in action_dict:
                 del action_dict[key]
     if action.available_segment_descriptions:
-        action_dict["available_segment_descriptions"] = action.available_segment_descriptions
+        action_dict["available_segment_descriptions"] = (
+            action.available_segment_descriptions
+        )
     return action_dict
 
 
@@ -213,7 +213,9 @@ class VisualReplayStrategy(
             raise StopIteration()
 
         try:
-            reference_action = self.recording.processed_action_events[self.recording_action_idx]
+            reference_action = self.recording.processed_action_events[
+                self.recording_action_idx
+            ]
         except Exception as exc:
             logger.warning(exc)
             raise StopIteration()
@@ -254,8 +256,10 @@ class VisualReplayStrategy(
                     logger.warning("{exc=}")
                     excs.append(exc)
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
-            # <position in image space> = scale_ratio * <position in window/action space>
-            width_ratio, height_ratio = utils.get_scale_ratios(modified_reference_action)
+            # <image space position> = scale_ratio * <window/action space position>
+            width_ratio, height_ratio = utils.get_scale_ratios(
+                modified_reference_action
+            )
             target_mouse_x = target_centroid[0] / width_ratio + active_window.left
             target_mouse_y = target_centroid[1] / height_ratio + active_window.top
             modified_reference_action.mouse_x = target_mouse_x
@@ -265,8 +269,8 @@ class VisualReplayStrategy(
 
 def get_active_segment(action, window_segmentation, debug=DEBUG):
     """
-    Returns the index of the bounding box within which the action's mouse coordinates fall,
-    adjusted for the scaling of the cropped window and the action coordinates.
+    Returns the index of the bounding box within which the action's mouse coordinates
+    fall, adjusted for the scaling of the cropped window and the action coordinates.
     Additionally, visualizes the segments and the mouse position.
     """
     # Obtain the scale ratios
@@ -293,11 +297,22 @@ def get_active_segment(action, window_segmentation, debug=DEBUG):
 
         if debug:
             # Plot each bounding box as a rectangle
-            rect = patches.Rectangle((box_left, box_top), box_right - box_left, box_bottom - box_top, linewidth=1, edgecolor='r', facecolor='none')
+            rect = patches.Rectangle(
+                (box_left, box_top),
+                box_right - box_left,
+                box_bottom - box_top,
+                linewidth=1,
+                edgecolor='r',
+                facecolor='none',
+            )
             ax.add_patch(rect)
 
         # Check if the adjusted action's coordinates are within the bounding box
-        if box_left <= adjusted_mouse_x < box_right and box_top <= adjusted_mouse_y < box_bottom:
+        if (
+            box_left <= adjusted_mouse_x < box_right
+        ) and (
+            box_top <= adjusted_mouse_y < box_bottom
+        ):
             active_index = index
 
     if debug:
@@ -305,8 +320,12 @@ def get_active_segment(action, window_segmentation, debug=DEBUG):
         plt.plot(adjusted_mouse_x, adjusted_mouse_y, 'bo')  # 'bo' creates a blue dot
 
         # Set plot limits and labels for clarity
-        plt.xlim(0, max([box['left'] + box['width'] for box in window_segmentation.bounding_boxes]))
-        plt.ylim(0, max([box['top'] + box['height'] for box in window_segmentation.bounding_boxes]))
+        plt.xlim(0, max([
+            box['left'] + box['width'] for box in window_segmentation.bounding_boxes
+        ]))
+        plt.ylim(0, max([
+            box['top'] + box['height'] for box in window_segmentation.bounding_boxes
+        ]))
         plt.gca().invert_yaxis()  # Invert y-axis to match coordinate system
         plt.xlabel('X coordinate')
         plt.ylabel('Y coordinate')
@@ -356,7 +375,7 @@ def get_window_segmentation(
     segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
     if DEBUG:
         vision.display_images_table_with_titles(masked_images, descriptions)
-        #import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
     return segmentation
 
 
@@ -364,6 +383,7 @@ def get_default_prompt_adapter():
     return {
         "openai": adapters.openai,
         "anthropic": adapters.anthropic,
+        "google": adapters.google,
     }[config.DEFAULT_ADAPTER]
 
 
@@ -380,8 +400,29 @@ def prompt_for_descriptions(
     masked_images_base64: list[str],
     active_segment_description: str | None,
     exceptions: list[Exception] | None = None,
-    max_tokens: int | None = MAX_TOKENS,
 ) -> list[str]:
+    prompt_adapter = get_default_prompt_adapter()
+
+    # TODO: move inside adapters
+    # off by one to account for original image
+    if prompt_adapter.MAX_IMAGES and (
+        len(masked_images_base64) + 1 > prompt_adapter.MAX_IMAGES
+    ):
+        masked_images_base64_batches = utils.split_list(
+            masked_images_base64,
+            prompt_adapter.MAX_IMAGES - 1,
+        )
+        descriptions = []
+        for masked_images_base64_batch in masked_images_base64_batches:
+            descriptions_batch = prompt_for_descriptions(
+                original_image_base64,
+                masked_images_base64_batch,
+                active_segment_description,
+                exceptions,
+            )
+            descriptions += descriptions_batch
+        return descriptions
+
     images = [original_image_base64] + masked_images_base64
     system_prompt = utils.render_template_from_file(
         "openadapt/prompts/system.j2",
@@ -395,12 +436,10 @@ def prompt_for_descriptions(
         exceptions=exceptions,
     )
     logger.info(f"prompt=\n{prompt}")
-    prompt_adapter = get_default_prompt_adapter()
     descriptions_json = prompt_adapter.prompt(
         prompt,
         system_prompt,
         images,
-        max_tokens=max_tokens,
     )
     descriptions = utils.parse_code_snippet(descriptions_json)["descriptions"]
     logger.info(f"{descriptions=}")
@@ -409,6 +448,7 @@ def prompt_for_descriptions(
             len(descriptions), len(masked_images_base64)
         )
     except Exception as exc:
+        # TODO XXX
         logger.error(exc)
         import ipdb; ipdb.set_trace()
         foo = 1

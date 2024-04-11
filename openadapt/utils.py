@@ -597,6 +597,31 @@ def image2utf8(image: Image.Image) -> str:
     return image_utf8
 
 
+def utf82image(image_utf8: str) -> Image.Image:
+    """Convert a UTF-8 encoded image back into a PIL image object.
+
+    Inverts utf82image.
+
+    Args:
+        image_utf8 (str): The UTF-8 encoded image.
+
+    Returns:
+        PIL.Image.Image: The decoded image as a PIL image object.
+    """
+    if not image_utf8:
+        return None
+    
+    # Remove the base64 image prefix
+    base64_data = image_utf8.split(",", 1)[1]
+    
+    # Decode the base64 string
+    image_bytes = base64.b64decode(base64_data)
+    
+    # Convert bytes to image
+    image = Image.open(BytesIO(image_bytes))
+    
+    return image
+
 def set_start_time(value: float = None) -> float:
     """Set the start time for recordings. Required for accurate process-wide timestamps.
 
@@ -924,6 +949,19 @@ def parse_code_snippet(snippet):
         import ipdb; ipdb.set_trace()
         foo = 1
 
+
+def split_list(input_list: list, size: int) -> list[list]:
+    """
+    Splits a list into a list of lists, where each inner list has a maximum given size.
+
+    Parameters:
+        input_list (list): The list to be split.
+        size (int): The maximum size of each inner list.
+
+    Returns:
+        list[list]: A new list containing inner lists of the given size.
+    """
+    return [input_list[i:i + size] for i in range(0, len(input_list), size)]
 
 if __name__ == "__main__":
     fcompletiooire.Fire(get_functions(__name__))

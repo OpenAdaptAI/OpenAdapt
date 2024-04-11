@@ -1,15 +1,9 @@
 """Replay recorded events.
 
 Usage:
-python openadapt/replay.py <strategy_name> [--timestamp=<timestamp>]
-
-Arguments:
-strategy_name Name of the replay strategy to use.
-
-Options:
---timestamp=<timestamp> Timestamp of the recording to replay.
-
+    python -m openadapt.replay.py <strategy_name> [--timestamp=<recording_timestamp>]
 """
+
 from time import sleep
 from typing import Union
 import os

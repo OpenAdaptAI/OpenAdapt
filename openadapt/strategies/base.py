@@ -1,7 +1,4 @@
-"""Implements the base class for implementing replay strategies.
-
-Module: base.py
-"""
+"""Implements the base class for implementing replay strategies."""
 
 from abc import ABC, abstractmethod
 from pprint import pformat

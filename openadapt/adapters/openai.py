@@ -15,13 +15,20 @@ from loguru import logger
 
 from openadapt import cache, config
 
+MODEL_NAME = [
+    "gpt-4-vision-preview",
+    "gpt-4-turbo-2024-04-09",
+][-1]
 MAX_TOKENS = 4096
+# TODO XXX undocumented
+MAX_IMAGES = None
+
 
 def create_payload(
     prompt: str,
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
-    model="gpt-4-vision-preview",
+    model=MODEL_NAME,
     detail="high",  # "low" or "high"
     max_tokens=None,
 ):
@@ -89,9 +96,9 @@ def get_completion(payload):
     )
     #return response.json()
     result = response.json()
-    #result = adapter.get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     if "error" in result:
+        # XXX TODO
         import ipdb; ipdb.set_trace()
         error = result["error"]
     choices = result["choices"]
@@ -99,6 +106,7 @@ def get_completion(payload):
     message = choice["message"]
     content = message["content"]
     return content
+
 
 def prompt(
     prompt: str,
