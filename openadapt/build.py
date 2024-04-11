@@ -9,22 +9,33 @@ Example usage:
 from pathlib import Path
 import os
 import subprocess
+import sys
 
 import nicegui
 import notifypy
 import oa_pynput
+
+if sys.platform == "win32":
+    import screen_recorder_sdk
 
 additional_packages_to_install = [
     nicegui,
     notifypy,
     oa_pynput,
 ]
+if sys.platform == "win32":
+    additional_packages_to_install.append(screen_recorder_sdk)
+packages_to_exclude = [
+    "pytest",
+    "py",
+]
 
 OPENADAPT_DIR = Path(__file__).parent
 
-subprocess.call(
+subprocess.run(
     ["npm", "run", "build"],
     cwd=OPENADAPT_DIR / "app" / "dashboard",
+    shell=True,
 )
 
 spec = [
@@ -54,6 +65,7 @@ ignore_file_extensions = [
     ".db",
     ".db-journal",
     ".md",
+    ".log",
     "config.local.json",
     "openadapt/app/dashboard/.eslintrc.json",
     "openadapt/app/dashboard/.gitignore",
@@ -78,7 +90,10 @@ for root, dirs, files in os.walk(OPENADAPT_DIR):
     for file in files:
         relative_path = Path(root).relative_to(OPENADAPT_DIR) / file
         file_relative_path = f'{Path("openadapt") / relative_path}'
-        if any(file_relative_path.endswith(ext) for ext in ignore_file_extensions):
+        if any(
+            file_relative_path.endswith(str(Path(ext)))
+            for ext in ignore_file_extensions
+        ):
             continue
         spec.append("--add-data")
         file_parent_dir = Path(file_relative_path).parent
@@ -87,6 +102,10 @@ for root, dirs, files in os.walk(OPENADAPT_DIR):
 for package in additional_packages_to_install:
     spec.append("--add-data")
     spec.append(f"{Path(package.__file__).parent}:{Path(package.__name__)}")
+
+for package in packages_to_exclude:
+    spec.append("--exclude-module")
+    spec.append(package)
 
 subprocess.call(spec)
 
@@ -103,5 +122,5 @@ with open("OpenAdapt.spec", "r+") as f:
 proc = subprocess.Popen("pyinstaller OpenAdapt.spec --noconfirm", shell=True)
 proc.wait()
 
-# cleanup
+# # cleanup
 os.remove("OpenAdapt.spec")

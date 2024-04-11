@@ -4,9 +4,9 @@ This module provides functions for managing UI cards in the OpenAdapt applicatio
 """
 
 from datetime import datetime
-from subprocess import Popen
 import multiprocessing
-import signal
+import sys
+import time
 
 from nicegui import ui
 
@@ -19,7 +19,9 @@ from openadapt.record import record
 class RecordProc:
     def __init__(self) -> None:
         self.terminate_event = multiprocessing.Event()
+        self.terminate_recording = multiprocessing.Event()
         self.record_proc: multiprocessing.Process = None
+        self.has_initiated_stop = False
 
     def set_terminate_event(self) -> multiprocessing.Event:
         return self.terminate_event.set()
@@ -29,12 +31,24 @@ class RecordProc:
 
     def reset(self) -> None:
         self.terminate_event.clear()
+        self.terminate_recording.clear()
         self.record_proc = None
 
     def wait(self) -> None:
-        self.record_proc.join()
+        if sys.platform == "win32":
+            # a bug on windows for when `record` runs for a long time, where even when the `record` function
+            # returns a value, `record_proc` refuses to join. this is a workaround to ensure the process is terminated
+            while True:
+                if self.terminate_recording.is_set():
+                    self.record_proc.terminate()
+                    return
+                time.sleep(0.1)
+        else:
+            self.record_proc.join()
 
     def is_running(self) -> bool:
+        if self.record_proc is not None and not self.record_proc.is_alive():
+            self.reset()
         return self.record_proc is not None
 
     def start(self, func: callable, args: tuple) -> None:
@@ -97,7 +111,7 @@ def select_import(f: callable) -> None:
 def stop_record() -> None:
     """Stop the current recording session."""
     global record_proc
-    if record_proc.is_running():
+    if record_proc.is_running() and not record_proc.has_initiated_stop:
         record_proc.set_terminate_event()
 
         # wait for process to terminate
@@ -116,7 +130,9 @@ def quick_record() -> None:
     global record_proc
     new_session()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    record_proc.start(record, (now, record_proc.terminate_event))
+    record_proc.start(
+        record, (now, record_proc.terminate_event, record_proc.terminate_recording)
+    )
 
 
 def recording_prompt(options: list[str], record_button: ui.button) -> None:
@@ -165,7 +181,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         global record_proc
         record_proc.start(
             record,
-            (name, record_proc.terminate_event),
+            (name, record_proc.terminate_event, record_proc.terminate_recording),
         )
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())

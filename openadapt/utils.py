@@ -748,7 +748,10 @@ def plot_performance(
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
-            os.system(f"open {fpath}")
+            if sys.platform == "darwin":
+                os.system(f"open {fpath}")
+            else:
+                os.system(f"start {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
         if view_file:

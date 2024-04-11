@@ -34,3 +34,7 @@ src
 
 *.pyc
 *.pt
+
+dist/
+build/
+*.log

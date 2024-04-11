@@ -903,6 +903,7 @@ def read_mouse_events(
 def record(
     task_description: str,
     terminate_event: multiprocessing.Event = None,
+    terminate_recording: multiprocessing.Event = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
@@ -1094,6 +1095,9 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"Saved {recording_timestamp=}")
+
+    if terminate_recording is not None:
+        terminate_recording.set()
 
 
 # Entry point
