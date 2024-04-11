@@ -58,6 +58,10 @@ jobs:
       - run: poetry install --no-interaction --no-root
         if: steps.cache-deps.outputs.cache-hit != 'true'
 
+      - name: Activate virtualenv
+        run: source .venv/bin/activate
+        if: steps.cache-deps.outputs.cache-hit == 'true'
+
       - name: Check formatting with Black
         run: poetry run black --preview --check .
 

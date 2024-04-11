@@ -15,6 +15,8 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from openadapt.app.cards import quick_record, stop_record
+from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
+from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH, start
 from openadapt.db.crud import get_all_recordings
 from openadapt.extensions.thread import Thread as oaThread
@@ -34,6 +36,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     recording = False
     app_thread = None
+    dashboard_thread = None
 
     # the actions need to be separated by type
     # or else they will be triggered multiple times
@@ -64,12 +67,24 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.replay_menu = self.menu.addMenu("Replay")
         self.populate_menu(self.replay_menu, self._replay, "replay")
 
+        # TODO: Remove this action once dashboard is integrated
         self.app_action = QAction("Show App")
         self.app_action.triggered.connect(self.show_app)
         self.menu.addAction(self.app_action)
 
+        self.dashboard_action = QAction("Launch Dashboard")
+        self.dashboard_action.triggered.connect(self.launch_dashboard)
+        self.menu.addAction(self.dashboard_action)
+
         self.quit = QAction("Quit")
-        self.quit.triggered.connect(self.app.quit)
+
+        def _quit() -> None:
+            """Quit the application."""
+            if self.dashboard_thread is not None:
+                cleanup_dashboard(self.dashboard_thread._return)
+            self.app.quit()
+
+        self.quit.triggered.connect(_quit)
         self.menu.addAction(self.quit)
 
         self.tray.setContextMenu(self.menu)
@@ -93,6 +108,9 @@ class SystemTrayIcon(QSystemTrayIcon):
 
             self.populate_menu(self.visualize_menu, self._visualize, "visualize")
             self.populate_menu(self.replay_menu, self._replay, "replay")
+
+            if self.dashboard_thread:
+                self.dashboard_action.setText("Reload dashboard")
         except KeyboardInterrupt:
             # the app is probably shutting down, so we can ignore this
             pass
@@ -173,6 +191,14 @@ class SystemTrayIcon(QSystemTrayIcon):
         if self.app_thread is None or not self.app_thread.is_alive():
             self.app_thread = oaThread(target=start, daemon=True, args=(True,))
             self.app_thread.start()
+
+    def launch_dashboard(self) -> None:
+        """Launch the web dashboard."""
+        if self.dashboard_thread:
+            cleanup_dashboard(self.dashboard_thread._return)
+            self.dashboard_thread.join()
+        self.dashboard_thread = run_dashboard()
+        self.dashboard_thread.start()
 
     def run(self) -> None:
         """Run the system tray icon."""

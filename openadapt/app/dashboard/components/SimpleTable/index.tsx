@@ -1,0 +1,1 @@
+export { SimpleTable } from './SimpleTable';

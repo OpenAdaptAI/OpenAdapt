@@ -114,6 +114,8 @@ _DEFAULTS = {
     "RECORD_VIDEO": False,
     "RECORD_IMAGES": True,
     "VIDEO_PIXEL_FORMAT": "rgb24",
+    "DASHBOARD_CLIENT_PORT": 3000,
+    "DASHBOARD_SERVER_PORT": 8000,
 }
 
 # each string in STOP_STRS should only contain strings
@@ -131,8 +133,8 @@ STOP_SEQUENCES = [
     list(stop_str) for stop_str in STOP_STRS
 ] + SPECIAL_CHAR_STOP_SEQUENCES
 
-ENV_FILE_PATH = ".env"
-ENV_EXAMPLE_FILE_PATH = ".env.example"
+ENV_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env"
+ENV_EXAMPLE_FILE_PATH = pathlib.Path(__file__).parent.parent / ".env.example"
 
 # Create .env file if it doesn't exist
 if not os.path.isfile(ENV_FILE_PATH):

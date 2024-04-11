@@ -1,0 +1,7 @@
+@layer mantine tailwind;
+
+@import '@mantine/core/styles.layer.css';
+
+@layer tailwind {
+    @tailwind utilities;
+}
