@@ -115,7 +115,7 @@ replay = "openadapt.replay:start"
 app = "openadapt.app.tray:_run"
 reset = "openadapt.scripts.reset_db:reset_db"
 capture = "openadapt.capture:test"
-dashboard = 'openadapt.app.dashboard:entrypoint'
+install-dashboard = 'openadapt.app.dashboard:entrypoint'
 
 
 [tool.black]
