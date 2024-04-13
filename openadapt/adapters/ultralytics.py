@@ -99,14 +99,14 @@ def fetch_segmented_image(
     ann_item.orig_img = np.ones(ann_item.orig_img.shape)
 
     with TemporaryDirectory() as tmp_dir:
-        ann_item.path = ann_item.path.replace('.jpg', '.png')  # Force the output format to PNG
+        # Force the output format to PNG to prevent JPEG compression artefacts
+        ann_item.path = ann_item.path.replace('.jpg', '.png')
         prompt_process.plot(
             [ann_item],
             tmp_dir,
             with_contours=False,
             retina=False,
         )
-        # prevent jpeg compression artefacts
         result_name = os.path.basename(ann_item.path).replace('.jpg', '.png')
         logger.info(f"{ann_item.path=}")
         image_path = Path(tmp_dir) / result_name
