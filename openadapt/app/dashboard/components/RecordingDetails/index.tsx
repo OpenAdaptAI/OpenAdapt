@@ -1,0 +1,1 @@
+export { RecordingDetails } from './RecordingDetails';
