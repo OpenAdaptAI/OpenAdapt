@@ -39,7 +39,27 @@ def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
     return masks
 
 
-def refine_masks(masks: list[np.ndarray], min_mask_size: tuple[int, int] = (15, 15)) -> list[np.ndarray]:
+def filter_masks_by_size(
+    masks: list[np.ndarray],
+    min_mask_size: tuple[int, int] = (15, 15),
+) -> list[np.ndarray]:
+    # Compute convex hull and filter masks based on the minimum size requirements
+    size_filtered_masks = []
+    for mask in masks:
+        hull = morphology.convex_hull_image(mask)
+        # Find the bounding box of the convex hull
+        coords = np.argwhere(hull)
+        if coords.size > 0:
+            y_min, x_min = coords.min(axis=0)
+            y_max, x_max = coords.max(axis=0)
+            hull_height = y_max - y_min + 1
+            hull_width = x_max - x_min + 1
+            if hull_height >= min_mask_size[0] and hull_width >= min_mask_size[1]:
+                size_filtered_masks.append(mask)
+    return size_filtered_masks
+
+
+def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     """
     Refine the list of masks:
     - Fill holes of any size.
@@ -61,19 +81,7 @@ def refine_masks(masks: list[np.ndarray], min_mask_size: tuple[int, int] = (15, 
     # Fill holes in each mask
     filled_masks = [binary_fill_holes(mask).astype(np.uint8) for mask in masks]
 
-    # Compute convex hull and filter masks based on the minimum size requirements
-    size_filtered_masks = []
-    for mask in filled_masks:
-        hull = morphology.convex_hull_image(mask)
-        # Find the bounding box of the convex hull
-        coords = np.argwhere(hull)
-        if coords.size > 0:
-            y_min, x_min = coords.min(axis=0)
-            y_max, x_max = coords.max(axis=0)
-            hull_height = y_max - y_min + 1
-            hull_width = x_max - x_min + 1
-            if hull_height >= min_mask_size[0] and hull_width >= min_mask_size[1]:
-                size_filtered_masks.append(mask)
+    size_filtered_masks = filter_masks_by_size(filled_masks)
 
     # Remove masks completely contained within other masks
     refined_masks = []
