@@ -8,45 +8,47 @@ import cv2
 import numpy as np
 
 
-def process_image_for_masks(original_image: Image.Image) -> list[np.ndarray]:
+def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
     """
     Process the image to find unique masks based on color channels.
 
     Args:
-        original_image: A PIL.Image object of the original image.
+        segmented_image: A PIL.Image object of the segmented image.
 
     Returns:
         A list of numpy.ndarrays, each representing a unique mask.
     """
     logger.info(f"starting...")
-    original_image_np = np.array(original_image)
+    segmented_image_np = np.array(segmented_image)
 
     # Assume the last channel is the alpha channel if the image has 4 channels
-    if original_image_np.shape[2] == 4:
-        original_image_np = original_image_np[:, :, :3]
+    if segmented_image_np.shape[2] == 4:
+        segmented_image_np = segmented_image_np[:, :, :3]
 
     # Find unique colors in the image, each unique color corresponds to a unique mask
-    unique_colors = np.unique(original_image_np.reshape(-1, original_image_np.shape[2]), axis=0)
+    unique_colors = np.unique(segmented_image_np.reshape(-1, segmented_image_np.shape[2]), axis=0)
     logger.info(f"{len(unique_colors)=}")
 
     masks = []
     for color in unique_colors:
         # Create a mask for each unique color
-        mask = np.all(original_image_np == color, axis=-1)
+        mask = np.all(segmented_image_np == color, axis=-1)
         masks.append(mask)
 
     logger.info(f"{len(masks)=}")
     return masks
 
 
-def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
+def refine_masks(masks: list[np.ndarray], min_mask_size: tuple[int, int] = (15, 15)) -> list[np.ndarray]:
     """
     Refine the list of masks:
-    - Fill holes of any size
+    - Fill holes of any size.
     - Remove masks completely contained within other masks.
+    - Exclude masks where the convex hull does not meet a specified minimum size in any dimension.
 
     Args:
         masks: A list of numpy.ndarrays, each representing a mask.
+        min_mask_size: A tuple specifying the minimum dimensions (height, width) that the convex hull of a mask must have to be retained.
 
     Returns:
         A list of numpy.ndarrays, each representing a refined mask.
@@ -59,11 +61,25 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     # Fill holes in each mask
     filled_masks = [binary_fill_holes(mask).astype(np.uint8) for mask in masks]
 
+    # Compute convex hull and filter masks based on the minimum size requirements
+    size_filtered_masks = []
+    for mask in filled_masks:
+        hull = morphology.convex_hull_image(mask)
+        # Find the bounding box of the convex hull
+        coords = np.argwhere(hull)
+        if coords.size > 0:
+            y_min, x_min = coords.min(axis=0)
+            y_max, x_max = coords.max(axis=0)
+            hull_height = y_max - y_min + 1
+            hull_width = x_max - x_min + 1
+            if hull_height >= min_mask_size[0] and hull_width >= min_mask_size[1]:
+                size_filtered_masks.append(mask)
+
     # Remove masks completely contained within other masks
     refined_masks = []
-    for i, mask_i in enumerate(filled_masks):
+    for i, mask_i in enumerate(size_filtered_masks):
         contained = False
-        for j, mask_j in enumerate(filled_masks):
+        for j, mask_j in enumerate(size_filtered_masks):
             if i != j:
                 # Check if mask_i is completely contained in mask_j
                 if np.array_equal(mask_i & mask_j, mask_i):
@@ -169,21 +185,25 @@ def extract_masked_images(
     masked_images = []
 
     for mask in masks:
-        # Find the bounding box of the mask
-        rows = np.any(mask, axis=1)
-        cols = np.any(mask, axis=0)
-        rmin, rmax = np.where(rows)[0][[0, -1]]
-        cmin, cmax = np.where(cols)[0][[0, -1]]
+        try:
+            # Find the bounding box of the mask
+            rows = np.any(mask, axis=1)
+            cols = np.any(mask, axis=0)
+            rmin, rmax = np.where(rows)[0][[0, -1]]
+            cmin, cmax = np.where(cols)[0][[0, -1]]
 
-        # Crop the mask and the image to the bounding box
-        cropped_mask = mask[rmin:rmax+1, cmin:cmax+1]
-        cropped_image = original_image_np[rmin:rmax+1, cmin:cmax+1]
+            # Crop the mask and the image to the bounding box
+            cropped_mask = mask[rmin:rmax+1, cmin:cmax+1]
+            cropped_image = original_image_np[rmin:rmax+1, cmin:cmax+1]
 
-        # Apply the mask
-        masked_image = np.where(
-            cropped_mask[:, :, None], cropped_image, 0
-        ).astype(np.uint8)
-        masked_images.append(Image.fromarray(masked_image))
+            # Apply the mask
+            masked_image = np.where(
+                cropped_mask[:, :, None], cropped_image, 0
+            ).astype(np.uint8)
+            masked_images.append(Image.fromarray(masked_image))
+        except Exception as exc:
+            import ipdb; ipdb.set_trace()
+            foo = 1
 
     logger.info(f"{len(masked_images)=}")
     return masked_images

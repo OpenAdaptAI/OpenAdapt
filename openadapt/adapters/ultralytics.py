@@ -13,14 +13,21 @@ from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 import fire
 
+from openadapt import cache
 
-MODEL_NAMES = ("FastSAM-x.pt", "FastSAM-s.pt")
+
+MODEL_NAMES = (
+    "FastSAM-x.pt",
+    "FastSAM-s.pt",
+)
+MODEL_NAME = MODEL_NAMES[-1]
 
 
 # TODO: rename
+@cache.cache()
 def fetch_segmented_image(
     image: Image,
-    model_name: str = MODEL_NAMES[0],
+    model_name: str = MODEL_NAME,
     # TODO: inject from config
     device='cpu',
     retina_masks=True,

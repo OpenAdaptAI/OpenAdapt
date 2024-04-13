@@ -45,7 +45,7 @@ from dataclasses import dataclass
 from pprint import pformat
 
 from loguru import logger
-from PIL import Image
+from PIL import Image, ImageDraw
 import deepdiff
 import json
 
@@ -53,7 +53,7 @@ from openadapt import common, config, models, strategies, utils, vision
 from openadapt import adapters
 
 
-DEBUG = True
+DEBUG = False
 DEBUG_REPLAY = False
 
 
@@ -115,7 +115,12 @@ def apply_replay_instructions(
         system_prompt,
     )
     content_dict = utils.parse_code_snippet(content)
-    action_dicts = content_dict["actions"]
+    try:
+        action_dicts = content_dict["actions"]
+    except TypeError as exc:
+        logger.warning(exc)
+        # sometimes OpenAI returns a list of dicts directly, so let it slide
+        action_dicts = content_dict
     modified_actions = []
     for action_dict in action_dicts:
         action = models.ActionEvent.from_dict(action_dict)
@@ -221,16 +226,9 @@ class VisualReplayStrategy(
             raise StopIteration()
         reference_window = reference_action.window_event
 
-        # TODO XXX HACK
-        while (
-            ref_win_title_prefix := reference_window.title.split(" ")[0]
-        ) != (
-            active_win_title_prefix := active_window.title.split(" ")[0]
-        ):
-            logger.warning(f"{ref_win_title_prefix=} != {active_win_title_prefix=}")
-            import time
-            time.sleep(1)
-            active_window = models.WindowEvent.get_active_window_event()
+        import time
+        time.sleep(1)
+        active_window = models.WindowEvent.get_active_window_event()
 
         active_screenshot = models.Screenshot.take_screenshot()
         logger.info(f"{active_window=}")
@@ -253,8 +251,11 @@ class VisualReplayStrategy(
                         modified_reference_action.active_segment_description
                     )
                 except ValueError as exc:
-                    logger.warning("{exc=}")
-                    excs.append(exc)
+                    logger.warning(f"{exc=}")
+                    exceptions.append(exc)
+                    import ipdb; ipdb.set_trace()
+                else:
+                    break
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
             # <image space position> = scale_ratio * <window/action space position>
             width_ratio, height_ratio = utils.get_scale_ratios(
@@ -267,11 +268,11 @@ class VisualReplayStrategy(
         return modified_reference_action
 
 
-def get_active_segment(action, window_segmentation, debug=DEBUG):
+def get_active_segment(action, window_segmentation, debug: bool = DEBUG):
     """
     Returns the index of the bounding box within which the action's mouse coordinates
     fall, adjusted for the scaling of the cropped window and the action coordinates.
-    Additionally, visualizes the segments and the mouse position.
+    Additionally, visualizes the segments and the mouse position using PIL.
     """
     # Obtain the scale ratios
     width_ratio, height_ratio = utils.get_scale_ratios(action)
@@ -281,57 +282,38 @@ def get_active_segment(action, window_segmentation, debug=DEBUG):
     adjusted_mouse_x = (action.mouse_x - action.window_event.left) * width_ratio
     adjusted_mouse_y = (action.mouse_y - action.window_event.top) * height_ratio
 
-    # Setup plot
-    if debug:
-        import matplotlib.patches as patches
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-
     active_index = None
+
+    if debug:
+        # Create an empty image with enough space to display all bounding boxes
+        width = int(max(
+            box['left'] + box['width'] for box in window_segmentation.bounding_boxes
+        ))
+        height = int(max(
+            box['top'] + box['height'] for box in window_segmentation.bounding_boxes
+        ))
+        image = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(image)
 
     for index, box in enumerate(window_segmentation.bounding_boxes):
         box_left = box['left']
         box_top = box['top']
-        box_right = (box['left'] + box['width'])
-        box_bottom = (box['top'] + box['height'])
+        box_right = box['left'] + box['width']
+        box_bottom = box['top'] + box['height']
 
         if debug:
-            # Plot each bounding box as a rectangle
-            rect = patches.Rectangle(
-                (box_left, box_top),
-                box_right - box_left,
-                box_bottom - box_top,
-                linewidth=1,
-                edgecolor='r',
-                facecolor='none',
-            )
-            ax.add_patch(rect)
+            # Draw each bounding box as a rectangle
+            draw.rectangle([box_left, box_top, box_right, box_bottom], outline='red', width=1)
 
         # Check if the adjusted action's coordinates are within the bounding box
-        if (
-            box_left <= adjusted_mouse_x < box_right
-        ) and (
-            box_top <= adjusted_mouse_y < box_bottom
-        ):
+        if box_left <= adjusted_mouse_x < box_right and box_top <= adjusted_mouse_y < box_bottom:
             active_index = index
 
     if debug:
-        # Plot the adjusted mouse position
-        plt.plot(adjusted_mouse_x, adjusted_mouse_y, 'bo')  # 'bo' creates a blue dot
-
-        # Set plot limits and labels for clarity
-        plt.xlim(0, max([
-            box['left'] + box['width'] for box in window_segmentation.bounding_boxes
-        ]))
-        plt.ylim(0, max([
-            box['top'] + box['height'] for box in window_segmentation.bounding_boxes
-        ]))
-        plt.gca().invert_yaxis()  # Invert y-axis to match coordinate system
-        plt.xlabel('X coordinate')
-        plt.ylabel('Y coordinate')
-        plt.title('Bounding Boxes and Mouse Position')
-
-        plt.show()
+        # Draw the adjusted mouse position
+        draw.ellipse([adjusted_mouse_x - 5, adjusted_mouse_y - 5, adjusted_mouse_x + 5, adjusted_mouse_y + 5], fill='blue')
+        # Display the image without blocking
+        image.show()
 
     return active_index
 
@@ -375,7 +357,6 @@ def get_window_segmentation(
     segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
     if DEBUG:
         vision.display_images_table_with_titles(masked_images, descriptions)
-        import ipdb; ipdb.set_trace()
     return segmentation
 
 

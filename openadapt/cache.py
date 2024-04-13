@@ -70,6 +70,20 @@ def cache(
             rval = fn(*args, **kwargs)
             duration = time.time() - start_time
             logger.debug(f"{fn=} {duration=}")
+
+            # workaround for `AttributeError: _min_frame` raised when show()ing an Image
+            try:
+                from PIL import Image
+            except ImportError:
+                pass
+            else:
+                if isinstance(rval, Image.Image):
+                    if not hasattr(rval, '_min_frame'):
+                        logger.debug("Image object missing '_min_frame'; refreshing image.")
+                        fresh_image = Image.new(rval.mode, rval.size)
+                        fresh_image.paste(rval)
+                        rval = fresh_image
+
             return rval
 
         return wrapper

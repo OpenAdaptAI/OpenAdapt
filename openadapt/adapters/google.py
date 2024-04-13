@@ -33,12 +33,14 @@ def prompt(
 ):
     """Public method to get a response from the Google API with image support."""
     full_prompt = "\n\n###\n\n".join([s for s in (system_prompt, prompt) if s])
+    # HACK
+    full_prompt += "\nWhen responding in JSON, you MUST use double quotes around keys."
 
     # TODO: modify API across all adapters to accept PIL.Image
     images = [
         utils.utf82image(base64_image)
         for base64_image in base64_images
-    ]
+    ] if base64_images else []
 
     genai.configure(api_key=config.GOOGLE_API_KEY)
     model = genai.GenerativeModel(model_name)
