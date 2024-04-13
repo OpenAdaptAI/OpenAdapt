@@ -12,6 +12,7 @@ from PIL import Image
 from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 import fire
+import numpy as np
 
 from openadapt import cache
 
@@ -94,7 +95,7 @@ def fetch_segmented_image(
     assert len(ann) == 1, len(ann)
     ann_item = ann[0]
 
-    import numpy as np
+    # hide original image
     ann_item.orig_img = np.ones(ann_item.orig_img.shape)
 
     with TemporaryDirectory() as tmp_dir:
@@ -105,7 +106,7 @@ def fetch_segmented_image(
             with_contours=False,
             retina=False,
         )
-        result_name = os.path.basename(ann_item.path)
+        # prevent jpeg compression artefacts
         result_name = os.path.basename(ann_item.path).replace('.jpg', '.png')
         logger.info(f"{ann_item.path=}")
         image_path = Path(tmp_dir) / result_name
