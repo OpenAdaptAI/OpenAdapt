@@ -157,8 +157,11 @@ RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 
 RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
-RunAndCheck "poetry run alembic upgrade head" "Update database"
 RunAndCheck "poetry run install-dashboard" "Install dashboard dependencies"
+
+RunAndCheck "cd openadapt"
+RunAndCheck "poetry run alembic upgrade head" "Update database"
+RunAndCheck "cd .."
 RunAndCheck "poetry run pytest" "Run tests"
 if [ -z "$SKIP_POETRY_SHELL" ]; then
     RunAndCheck "poetry shell" "Activate virtual environment"
