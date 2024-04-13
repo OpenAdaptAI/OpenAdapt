@@ -43,18 +43,26 @@ def filter_masks_by_size(
     masks: list[np.ndarray],
     min_mask_size: tuple[int, int] = (15, 15),
 ) -> list[np.ndarray]:
-    # Compute convex hull and filter masks based on the minimum size requirements
+    """
+    Filter masks based on minimum size using the bounding box of "on" pixels.
+
+    Args:
+        masks: A list of numpy.ndarrays, each representing a mask.
+        min_mask_size: A tuple specifying the minimum dimensions (height, width) that
+            the bounding box of the "on" pixels must have to be retained.
+
+    Returns:
+        A list of numpy.ndarrays, each representing a mask that meets the size criteria.
+    """
     size_filtered_masks = []
     for mask in masks:
-        hull = morphology.convex_hull_image(mask)
-        # Find the bounding box of the convex hull
-        coords = np.argwhere(hull)
+        coords = np.argwhere(mask)  # Get coordinates of all "on" pixels
         if coords.size > 0:
             y_min, x_min = coords.min(axis=0)
             y_max, x_max = coords.max(axis=0)
-            hull_height = y_max - y_min + 1
-            hull_width = x_max - x_min + 1
-            if hull_height >= min_mask_size[0] and hull_width >= min_mask_size[1]:
+            height = y_max - y_min + 1
+            width = x_max - x_min + 1
+            if height >= min_mask_size[0] and width >= min_mask_size[1]:
                 size_filtered_masks.append(mask)
     return size_filtered_masks
 
