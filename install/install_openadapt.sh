@@ -8,6 +8,8 @@ set -x
 pythonCmd="python3.10"
 pythonVerStr="Python 3.10*"
 pythonInstallerLoc="https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg"
+nvmCmd="nvm"
+nvmInstallerLoc="https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh"
 
 # Set default values when no parameters are provided
 BRANCH=${BRANCH:-main}
@@ -93,6 +95,27 @@ CheckPythonExists() {
     exit 1
 }
 
+CheckNVMExists() {
+    if CheckCMDExists $nvmCmd; then
+        return
+    fi
+
+    # Install NVM
+    echo Installing NVM
+
+    curl -o- $nvmInstallerLoc | bash
+
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+    if ! CheckCMDExists $nvmCmd; then
+        echo "Failed to install NVM"
+        Cleanup
+        exit 1
+    fi
+}
+
 ################################ INSTALLATION ################################
 
 # Download brew
@@ -125,6 +148,7 @@ if ! CheckCMDExists "tesseract"; then
 fi
 
 CheckPythonExists
+CheckNVMExists
 
 [ -d "OpenAdapt" ] && mv OpenAdapt OpenAdapt-$(date +%Y-%m-%d_%H-%M-%S)
 RunAndCheck "git clone $REPO_URL" "Clone git repo"
@@ -134,6 +158,7 @@ RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 RunAndCheck "pip3.10 install poetry" "Install Poetry"
 RunAndCheck "poetry install" "Install Python dependencies"
 RunAndCheck "poetry run alembic upgrade head" "Update database"
+RunAndCheck "poetry run dashboard" "Install dashboard dependencies"
 RunAndCheck "poetry run pytest" "Run tests"
 if [ -z "$SKIP_POETRY_SHELL" ]; then
     RunAndCheck "poetry shell" "Activate virtual environment"

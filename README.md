@@ -96,6 +96,8 @@ pip3 install poetry
 poetry install
 poetry shell
 alembic upgrade head
+poetry run install-dashbaord
+
 pytest
 ```
 

@@ -2,6 +2,61 @@
 
 
 
+## v0.17.0 (2024-04-11)
+
+### Documentation
+
+* docs(README): System Overview -&gt; Alpha Architecture
+
+System Overview -&gt; Alpha Architecture ([`dd1c29e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd1c29e05bf27053838668df9d7bf71216276d6f))
+
+* docs(README): update System Overview diagram
+
+Update system overview diagram ([`c08caf7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c08caf75728586c7eedd0a928c380c365d58be81))
+
+* docs(README): update System Overview diagram
+
+Update system overview diagram ([`3b2dfbc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3b2dfbc3021334ecccf74c17da80fd76040a8d73))
+
+* docs(README): update System Overview diagram
+
+Update system overview diagram ([`de9fad2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/de9fad2de7e4bf8e9c965089ba093e59d5013a44))
+
+* docs(README): update System Overview diagram
+
+Update system overview diagram ([`13a9f23`](https://github.com/OpenAdaptAI/OpenAdapt/commit/13a9f236a040d16c04afedb940f0c08a2229f4a9))
+
+* docs(README): update System Overview diagram
+
+Update system overview diagram ([`ff1e4d9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ff1e4d9b39ad472f4269f03df5d6c6de34947aa8))
+
+* docs(README): update System Overview diagram
+
+Update system overview image ([`086e42f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/086e42fe3f040e3f95ed625d6c7138d60e17fb8c))
+
+* docs(README): update System Overview diagram ([`ca5f093`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca5f09321ac162a01f7e7a5afbf8746e305c0141))
+
+* docs(README): update System Overview diagram ([`7ca2086`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7ca2086f4be0f6e02b26c3e9da099ac904811c2a))
+
+* docs(README): update System Overview diagram
+
+Update System Overview diagram ([`aee1078`](https://github.com/OpenAdaptAI/OpenAdapt/commit/aee1078ee82e84d6810dce17e6c26caf94b47d2e))
+
+### Feature
+
+* feat(dashboard): add web dashboard
+
+* feat: Complete initial setup of web dashboard
+
+* feat(recordings): Add simple view to start, stop and list recordings
+
+* fix: Fix sqlite thread issue and a few dashbaord ui improvements
+
+* feat: Add script to download npm dependencies and update installer script
+
+* chore: Code cleanup and workflow fix ([`0050cea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0050cea6df4ea71930b7ee25ab78b03f6bedbafd))
+
+
 ## v0.16.2 (2024-03-08)
 
 ### Documentation

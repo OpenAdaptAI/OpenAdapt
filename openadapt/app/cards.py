@@ -76,6 +76,12 @@ def stop_record() -> None:
         record_proc = None
 
 
+def is_recording() -> bool:
+    """Check if a recording session is currently active."""
+    global record_proc
+    return record_proc is not None
+
+
 def quick_record() -> None:
     """Run a recording session with no option for recording name (uses date instead)."""
     global record_proc
