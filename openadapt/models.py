@@ -6,7 +6,7 @@ import io
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
-import mss
+import mss.base
 import numpy as np
 import sqlalchemy as sa
 
