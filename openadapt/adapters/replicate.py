@@ -22,8 +22,8 @@ def _fetch_segmented_image(image_uri: str):
         "pablodawson/segment-anything-automatic:14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
         input={
             "image": image_uri,
-            #"resize_width": 1080,
-            #"min_mask_region_area": 30
+            # "resize_width": 1080,
+            # "min_mask_region_area": 30
         },
     )
     logger.info(f"{segmented_image_url=}")
@@ -64,7 +64,9 @@ def fetch_segmented_image(image: Image, n: Optional[int] = 100) -> Image:
     segmented_image = _fetch_segmented_image(image_uri)
 
     # Resize the segmented image back to the original dimensions
-    segmented_image = segmented_image.resize((original_width, original_height), Image.NEAREST)
+    segmented_image = segmented_image.resize(
+        (original_width, original_height), Image.NEAREST
+    )
 
     return segmented_image
 
@@ -84,4 +86,4 @@ def fetch_segmented_image_from_path(image_path: str, n: Optional[int] = 100):
 
 
 if __name__ == "__main__":
-	fire.Fire(fetch_segmented_image_from_path)
+    fire.Fire(fetch_segmented_image_from_path)

@@ -610,17 +610,18 @@ def utf82image(image_utf8: str) -> Image.Image:
     """
     if not image_utf8:
         return None
-    
+
     # Remove the base64 image prefix
     base64_data = image_utf8.split(",", 1)[1]
-    
+
     # Decode the base64 string
     image_bytes = base64.b64decode(base64_data)
-    
+
     # Convert bytes to image
     image = Image.open(BytesIO(image_bytes))
-    
+
     return image
+
 
 def set_start_time(value: float = None) -> float:
     """Set the start time for recordings. Required for accurate process-wide timestamps.
@@ -843,9 +844,11 @@ def get_functions(name: str) -> dict:
     return functions
 
 
-# XXX TODO remove 
+# XXX TODO remove
 
 from openadapt import models
+
+
 def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
     """Convert the completion to a dictionary containing action information.
 
@@ -863,7 +866,7 @@ def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]
         return action
 
 
-#def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
+# def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
 #    """Convert the completion from JSON to a dictionary containing action information.
 #
 #    Args:
@@ -912,7 +915,7 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
     env = Environment(loader=FileSystemLoader(template_dir))
 
     # Add custom filters
-    env.filters['orjson'] = orjson_to_json
+    env.filters["orjson"] = orjson_to_json
     env.globals.update(zip=zip)
 
     # Load the template
@@ -924,29 +927,31 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
 
 import ast
 
+
 def parse_code_snippet(snippet):
     try:
         if snippet.startswith("```json"):
             # Remove Markdown code block syntax
             json_string = (
-                snippet
-                .replace('```json\n', '')
-                .replace('```', '')
-                .replace('True', 'true')
-                .replace('False', 'false')
+                snippet.replace("```json\n", "")
+                .replace("```", "")
+                .replace("True", "true")
+                .replace("False", "false")
                 .strip()
             )
             # Parse the JSON string
             return json.loads(json_string)
         elif snippet.startswith("```python"):
-            python_code = snippet.replace('```python\n', '').replace('```', '').strip()
+            python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)
         else:
             msg = "Unsupported {snippet=}"
             logger.warning(msg)
             return None
     except Exception as exc:
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
         foo = 1
 
 
@@ -961,7 +966,8 @@ def split_list(input_list: list, size: int) -> list[list]:
     Returns:
         list[list]: A new list containing inner lists of the given size.
     """
-    return [input_list[i:i + size] for i in range(0, len(input_list), size)]
+    return [input_list[i : i + size] for i in range(0, len(input_list), size)]
+
 
 if __name__ == "__main__":
     fcompletiooire.Fire(get_functions(__name__))

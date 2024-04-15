@@ -41,29 +41,35 @@ def create_payload(
     if base64_images:
         for image_data in base64_images:
             # Extract media type and base64 data
-            media_type, base64_str = image_data.split(';base64,', 1)
-            media_type = media_type.split(':')[-1]  # Remove 'data:' prefix
-            
-            user_message_content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": base64_str,
-                },
-            })
+            media_type, base64_str = image_data.split(";base64,", 1)
+            media_type = media_type.split(":")[-1]  # Remove 'data:' prefix
+
+            user_message_content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": base64_str,
+                    },
+                }
+            )
 
     # Add text prompt
-    user_message_content.append({
-        "type": "text",
-        "text": prompt,
-    })
+    user_message_content.append(
+        {
+            "type": "text",
+            "text": prompt,
+        }
+    )
 
     # Construct user message
-    messages.append({
-        "role": "user",
-        "content": user_message_content,
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": user_message_content,
+        }
+    )
 
     # Prepare the full payload
     payload = {
@@ -78,9 +84,9 @@ def create_payload(
 
     return payload
 
-client = anthropic.Anthropic(
-    api_key=config.ANTHROPIC_API_KEY
-)
+
+client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+
 
 @cache.cache()
 def get_completion(payload):
@@ -89,7 +95,9 @@ def get_completion(payload):
         response = client.messages.create(**payload)
     except Exception as exc:
         logger.exception(exc)
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
     """
     Message(
         id='msg_01L55ai2A9q92687mmjMSch3',
@@ -115,10 +123,7 @@ def get_completion(payload):
         type='message',
         usage=Usage(input_tokens=4379, output_tokens=109))
     """
-    texts = [
-        content_block.text
-        for content_block in response.content
-    ]
+    texts = [content_block.text for content_block in response.content]
     return "\n".join(texts)
 
 
@@ -131,14 +136,16 @@ def prompt(
     """Public method to get a response from the Anthropic API with image support."""
     if len(base64_images) > MAX_IMAGES:
         # XXX TODO handle this
-        raise Exception(f"{len(base64_images)=} > {MAX_IMAGES=}. Use a different adapter.")
+        raise Exception(
+            f"{len(base64_images)=} > {MAX_IMAGES=}. Use a different adapter."
+        )
     payload = create_payload(
         prompt,
         system_prompt,
         base64_images,
         max_tokens=max_tokens,
     )
-    #pprint(f"payload=\n{payload}")  # Log payload for debugging
+    # pprint(f"payload=\n{payload}")  # Log payload for debugging
     result = get_completion(payload)
     pprint(f"result=\n{result}")  # Log result for debugging
     return result

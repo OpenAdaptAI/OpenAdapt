@@ -33,7 +33,7 @@ def create_payload(
     max_tokens=None,
 ):
     max_tokens = max_tokens or MAX_TOKENS
-	# max_tokens is too large: 16384. This model supports at most 4096 completion tokens, whereas you provided 16384.
+    # max_tokens is too large: 16384. This model supports at most 4096 completion tokens, whereas you provided 16384.
     if max_tokens > MAX_TOKENS:
         max_tokens = MAX_TOKENS
 
@@ -52,13 +52,15 @@ def create_payload(
 
     base64_images = base64_images or []
     for base64_image in base64_images:
-        messages[0]["content"].append({
-            "type": "image_url",
-            "image_url": {
-                "url": base64_image,
-                "detail": detail,
+        messages[0]["content"].append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": base64_image,
+                    "detail": detail,
+                },
             }
-        })
+        )
 
     if system_prompt:
         messages = [
@@ -87,7 +89,7 @@ def get_response(payload: dict) -> requests.Response:
     """Sends a request to the OpenAI API and returns the response."""
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.OPENAI_API_KEY}"
+        "Authorization": f"Bearer {config.OPENAI_API_KEY}",
     }
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -109,7 +111,9 @@ def get_completion(payload: dict) -> str:
         if "retry your request" in message:
             return get_completion(payload)
         else:
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
             # TODO: handle more errors
     choices = result["choices"]
     choice = choices[0]

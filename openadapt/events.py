@@ -649,7 +649,7 @@ def remove_move_before_click(
         prev_event: models.ActionEvent | None,
         next_event: models.ActionEvent | None,
     ) -> bool:
-        #import ipdb; ipdb.set_trace()
+        # import ipdb; ipdb.set_trace()
         return event.name == "move" and (
             # this line is distinct from remove_redundant_mouse_move_events
             is_same_pos(event, next_event)

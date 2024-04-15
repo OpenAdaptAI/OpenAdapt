@@ -78,8 +78,10 @@ def cache(
                 pass
             else:
                 if isinstance(rval, Image.Image):
-                    if not hasattr(rval, '_min_frame'):
-                        logger.debug("Image object missing '_min_frame'; refreshing image.")
+                    if not hasattr(rval, "_min_frame"):
+                        logger.debug(
+                            "Image object missing '_min_frame'; refreshing image."
+                        )
                         fresh_image = Image.new(rval.mode, rval.size)
                         fresh_image.paste(rval)
                         rval = fresh_image

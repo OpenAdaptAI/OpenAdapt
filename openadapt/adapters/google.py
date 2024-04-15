@@ -28,7 +28,7 @@ def prompt(
     prompt: str,
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
-    #max_tokens: int | None = None,
+    # max_tokens: int | None = None,
     model_name: str = MODEL_NAME,
 ):
     """Public method to get a response from the Google API with image support."""
@@ -37,10 +37,11 @@ def prompt(
     full_prompt += "\nWhen responding in JSON, you MUST use double quotes around keys."
 
     # TODO: modify API across all adapters to accept PIL.Image
-    images = [
-        utils.utf82image(base64_image)
-        for base64_image in base64_images
-    ] if base64_images else []
+    images = (
+        [utils.utf82image(base64_image) for base64_image in base64_images]
+        if base64_images
+        else []
+    )
 
     genai.configure(api_key=config.GOOGLE_API_KEY)
     model = genai.GenerativeModel(model_name)
@@ -50,15 +51,19 @@ def prompt(
     pprint(f"response=\n{response}")  # Log response for debugging
     return response.text
 
+
 from PIL import Image
 import openadapt.utils
 import io
+
 
 def main(text, image_path=None):
     if image_path:
         with Image.open(image_path) as img:
             # Convert image to RGB if it's RGBA (to remove alpha channel)
-            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            if img.mode in ("RGBA", "LA") or (
+                img.mode == "P" and "transparency" in img.info
+            ):
                 img = img.convert("RGB")
             base64_image = openadapt.utils.image2utf8(img)
     else:
@@ -68,5 +73,6 @@ def main(text, image_path=None):
     output = prompt(text, base64_images=base64_images)
     print(output)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     fire.Fire(main)

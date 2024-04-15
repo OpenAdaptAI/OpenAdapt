@@ -65,15 +65,13 @@ class Segmentation:
     centroids: list[tuple[float, float]]
 
 
-def add_active_segment_descriptions(
-    action_events: list[models.ActionEvent]
-) -> None:
+def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> None:
     """Set the ActionEvent.active_segment_description where appropriate"""
 
     logical_events = []
     for action in action_events:
         # TODO: handle terminal <tab> event
-        #if action.name in ("click", "doubleclick", "singleclick", "scroll"):
+        # if action.name in ("click", "doubleclick", "singleclick", "scroll"):
         if action.name in common.MOUSE_EVENTS:
             window_segmentation = get_window_segmentation(action)
             active_segment_idx = get_active_segment(action, window_segmentation)
@@ -94,13 +92,8 @@ def apply_replay_instructions(
 ) -> None:
     """TODO"""
 
-    action_dicts = [
-        get_action_prompt_dict(action)
-        for action in action_events
-    ]
-    actions_dict = {
-        "actions": action_dicts
-    }
+    action_dicts = [get_action_prompt_dict(action) for action in action_events]
+    actions_dict = {"actions": action_dicts}
     system_prompt = utils.render_template_from_file(
         "openadapt/prompts/system.j2",
     )
@@ -150,9 +143,7 @@ def get_action_prompt_dict(action: models.ActionEvent) -> dict:
     action_dict = deepcopy(
         {
             key: val
-            for key, val in utils.row2dict(
-                action, follow=False
-            ).items()
+            for key, val in utils.row2dict(action, follow=False).items()
             if val is not None
             and not key.endswith("timestamp")
             and not key.endswith("id")
@@ -191,7 +182,8 @@ class VisualReplayStrategy(
         self.recording_action_idx = 0
         add_active_segment_descriptions(recording.processed_action_events)
         self.modified_actions = apply_replay_instructions(
-            recording.processed_action_events, replay_instructions,
+            recording.processed_action_events,
+            replay_instructions,
         )
         global DEBUG
         DEBUG = DEBUG_REPLAY
@@ -227,6 +219,7 @@ class VisualReplayStrategy(
         reference_window = reference_action.window_event
 
         import time
+
         time.sleep(1)
         active_window = models.WindowEvent.get_active_window_event()
 
@@ -253,7 +246,9 @@ class VisualReplayStrategy(
                 except ValueError as exc:
                     logger.warning(f"{exc=}")
                     exceptions.append(exc)
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
+
+                    ipdb.set_trace()
                 else:
                     break
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
@@ -286,32 +281,49 @@ def get_active_segment(action, window_segmentation, debug: bool = DEBUG):
 
     if debug:
         # Create an empty image with enough space to display all bounding boxes
-        width = int(max(
-            box['left'] + box['width'] for box in window_segmentation.bounding_boxes
-        ))
-        height = int(max(
-            box['top'] + box['height'] for box in window_segmentation.bounding_boxes
-        ))
-        image = Image.new('RGB', (width, height), 'white')
+        width = int(
+            max(
+                box["left"] + box["width"] for box in window_segmentation.bounding_boxes
+            )
+        )
+        height = int(
+            max(
+                box["top"] + box["height"] for box in window_segmentation.bounding_boxes
+            )
+        )
+        image = Image.new("RGB", (width, height), "white")
         draw = ImageDraw.Draw(image)
 
     for index, box in enumerate(window_segmentation.bounding_boxes):
-        box_left = box['left']
-        box_top = box['top']
-        box_right = box['left'] + box['width']
-        box_bottom = box['top'] + box['height']
+        box_left = box["left"]
+        box_top = box["top"]
+        box_right = box["left"] + box["width"]
+        box_bottom = box["top"] + box["height"]
 
         if debug:
             # Draw each bounding box as a rectangle
-            draw.rectangle([box_left, box_top, box_right, box_bottom], outline='red', width=1)
+            draw.rectangle(
+                [box_left, box_top, box_right, box_bottom], outline="red", width=1
+            )
 
         # Check if the adjusted action's coordinates are within the bounding box
-        if box_left <= adjusted_mouse_x < box_right and box_top <= adjusted_mouse_y < box_bottom:
+        if (
+            box_left <= adjusted_mouse_x < box_right
+            and box_top <= adjusted_mouse_y < box_bottom
+        ):
             active_index = index
 
     if debug:
         # Draw the adjusted mouse position
-        draw.ellipse([adjusted_mouse_x - 5, adjusted_mouse_y - 5, adjusted_mouse_x + 5, adjusted_mouse_y + 5], fill='blue')
+        draw.ellipse(
+            [
+                adjusted_mouse_x - 5,
+                adjusted_mouse_y - 5,
+                adjusted_mouse_x + 5,
+                adjusted_mouse_y + 5,
+            ],
+            fill="blue",
+        )
         # Display the image without blocking
         image.show()
 
@@ -341,8 +353,7 @@ def get_window_segmentation(
 
     original_image_base64 = screenshot.base64
     masked_images_base64 = [
-        utils.image2utf8(masked_image)
-        for masked_image in masked_images
+        utils.image2utf8(masked_image) for masked_image in masked_images
     ]
     descriptions = prompt_for_descriptions(
         original_image_base64,
@@ -352,7 +363,9 @@ def get_window_segmentation(
     )
     bounding_boxes, centroids = vision.calculate_bounding_boxes(refined_masks)
     assert len(bounding_boxes) == len(descriptions) == len(centroids), (
-        len(bounding_boxes), len(descriptions), len(centroids),
+        len(bounding_boxes),
+        len(descriptions),
+        len(centroids),
     )
     segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
     if DEBUG:
@@ -426,12 +439,15 @@ def prompt_for_descriptions(
     logger.info(f"{descriptions=}")
     try:
         assert len(descriptions) == len(masked_images_base64), (
-            len(descriptions), len(masked_images_base64)
+            len(descriptions),
+            len(masked_images_base64),
         )
     except Exception as exc:
         # TODO XXX
         logger.error(exc)
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
         foo = 1
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]

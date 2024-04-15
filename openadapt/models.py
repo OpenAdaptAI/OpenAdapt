@@ -93,7 +93,8 @@ class ActionEvent(db.Base):
     mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
     active_segment_description = sa.Column(sa.String)
     _available_segment_descriptions = sa.Column(
-        "available_segment_descriptions", sa.String,
+        "available_segment_descriptions",
+        sa.String,
     )
     mouse_button_name = sa.Column(sa.String)
     mouse_pressed = sa.Column(sa.Boolean)
@@ -256,34 +257,42 @@ class ActionEvent(db.Base):
         """
         for child_dict in children_dicts:
             for key in child_dict:
-                #if isinstance(getattr(type(ActionEvent), key), property):
+                # if isinstance(getattr(type(ActionEvent), key), property):
                 if key == "text":
                     # TODO: decompose into individual children
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
+
+                    ipdb.set_trace()
                     foo = 1
 
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 
     @classmethod
-    def from_dict(cls, action_dict: dict) -> list['ActionEvent']:
+    def from_dict(cls, action_dict: dict) -> list["ActionEvent"]:
         # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
         children = []
         release_events = []
         if "text" in action_dict:
             # Splitting actions based on whether they are special keys or regular characters
-            if action_dict['text'].startswith('<') and action_dict['text'].endswith('>'):
+            if action_dict["text"].startswith("<") and action_dict["text"].endswith(
+                ">"
+            ):
                 # Handling special keys
-                key_names = action_dict['text'][1:-1].split('>-<')
-                canonical_key_names = action_dict['canonical_text'][1:-1].split('>-<')
+                key_names = action_dict["text"][1:-1].split(">-<")
+                canonical_key_names = action_dict["canonical_text"][1:-1].split(">-<")
                 for key_name, canonical_key_name in zip(key_names, canonical_key_names):
-                    press, release = cls._create_key_events(key_name, canonical_key_name)
+                    press, release = cls._create_key_events(
+                        key_name, canonical_key_name
+                    )
                     children.append(press)
-                    release_events.append(release)  # Collect release events to append in reverse order later
+                    release_events.append(
+                        release
+                    )  # Collect release events to append in reverse order later
             else:
                 # Handling regular character sequences
                 assert len(config.ACTION_TEXT_SEP) == 1, config.ACTION_TEXT_SEP
-                for key_char in action_dict['text'][::2]:
+                for key_char in action_dict["text"][::2]:
                     # Press and release each character one after another
                     press, release = cls._create_key_events(key_char=key_char)
                     children.append(press)
@@ -300,34 +309,34 @@ class ActionEvent(db.Base):
         canonical_key_name: str | None = None,
         key_char: str | None = None,
         canonical_key_char: str | None = None,
-    ) -> list['ActionEvent']:
+    ) -> list["ActionEvent"]:
         # This helper function creates press and release events for a given key_name
         # TODO: remove canonical?
         press_event = cls(
-            name='press',
+            name="press",
             key_name=key_name,
-            #canonical_key_name=canonical_key_name,
+            # canonical_key_name=canonical_key_name,
             key_char=key_char,
-            #canonical_key_char=canonical_key_char,
+            # canonical_key_char=canonical_key_char,
         )
         release_event = cls(
-            name='release',
+            name="release",
             key_name=key_name,
-            #canonical_key_name=canonical_key_name,
+            # canonical_key_name=canonical_key_name,
             key_char=key_char,
-            #canonical_key_char=canonical_key_char,
+            # canonical_key_char=canonical_key_char,
         )
         return press_event, release_event
 
     def scale_to_screenshot_image(self):
         """
-            mouse_x = sa.Column(sa.Numeric(asdecimal=False))
-            mouse_y = sa.Column(sa.Numeric(asdecimal=False))
-            mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
-            mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+        mouse_x = sa.Column(sa.Numeric(asdecimal=False))
+        mouse_y = sa.Column(sa.Numeric(asdecimal=False))
+        mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
+        mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
 
-            x = action_event.mouse_x * width_ratio
-            y = action_event.mouse_y * height_ratio
+        x = action_event.mouse_x * width_ratio
+        y = action_event.mouse_y * height_ratio
         """
         width_ratio, height_ratio = utils.get_scale_ratios(self)
 
@@ -383,7 +392,7 @@ class Screenshot(db.Base):
     def __init__(self, *args, sct_img=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.initialize_instance_attributes()
-        self.sct_img = sct_img 
+        self.sct_img = sct_img
 
     @sa.orm.reconstructor
     def initialize_instance_attributes(self):
@@ -420,6 +429,7 @@ class Screenshot(db.Base):
         """Return data URI of JPEG encoded base64"""
         if not self._base64:
             from openadapt import utils
+
             self._base64 = utils.image2utf8(self.image)
         return self._base64
 
@@ -458,7 +468,7 @@ class Screenshot(db.Base):
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    #def crop_active_window(self, action_event: ActionEvent) -> None:
+    # def crop_active_window(self, action_event: ActionEvent) -> None:
     def crop_active_window(
         self,
         action_event: ActionEvent | None = None,
@@ -473,6 +483,7 @@ class Screenshot(db.Base):
         if action_event:
             # avoid circular import
             from openadapt import utils
+
             window_event = action_event.window_event
             width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 

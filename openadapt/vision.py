@@ -26,7 +26,9 @@ def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
         segmented_image_np = segmented_image_np[:, :, :3]
 
     # Find unique colors in the image, each unique color corresponds to a unique mask
-    unique_colors = np.unique(segmented_image_np.reshape(-1, segmented_image_np.shape[2]), axis=0)
+    unique_colors = np.unique(
+        segmented_image_np.reshape(-1, segmented_image_np.shape[2]), axis=0
+    )
     logger.info(f"{len(unique_colors)=}")
 
     masks = []
@@ -108,7 +110,9 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     return refined_masks
 
 
-def filter_thin_ragged_masks(masks: list[np.ndarray], kernel_size: int = 3, iterations: int = 5) -> list[np.ndarray]:
+def filter_thin_ragged_masks(
+    masks: list[np.ndarray], kernel_size: int = 3, iterations: int = 5
+) -> list[np.ndarray]:
     """
     Applies morphological operations to filter out thin and ragged masks.
 
@@ -131,10 +135,10 @@ def filter_thin_ragged_masks(masks: list[np.ndarray], kernel_size: int = 3, iter
         eroded_mask = cv2.erode(mask_uint8, kernel, iterations=iterations)
         # Perform dilation
         dilated_mask = cv2.dilate(eroded_mask, kernel, iterations=iterations)
-        
+
         # Convert back to boolean mask and add to the filtered list
         filtered_masks.append(dilated_mask > 0)
-    
+
     logger.info(f"{len(filtered_masks)=}")
     return filtered_masks
 
@@ -145,7 +149,7 @@ def remove_border_masks(
 ) -> list[np.ndarray]:
     """
     Removes masks whose "on" pixels are close to the mask borders on all four sides.
-    
+
     Parameters:
         masks: A list of ndarrays, where each ndarray is a binary mask.
         threshold_percent: A float indicating how close the "on" pixels can be to
@@ -154,28 +158,29 @@ def remove_border_masks(
     Returns:
     - A list of ndarrays with the border masks removed.
     """
+
     def is_close_to_all_borders(mask: np.ndarray, threshold: float) -> bool:
         # Determine actual threshold in pixels based on the percentage
         threshold_rows = int(mask.shape[0] * (threshold_percent / 100))
         threshold_cols = int(mask.shape[1] * (threshold_percent / 100))
-        
+
         # Check for "on" pixels close to each border
         top = np.any(mask[:threshold_rows, :])
         bottom = np.any(mask[-threshold_rows:, :])
         left = np.any(mask[:, :threshold_cols])
         right = np.any(mask[:, -threshold_cols:])
-        
+
         # If "on" pixels are close to all borders, return True
         return top and bottom and left and right
 
-    logger.info(f"{len(masks)=}") 
+    logger.info(f"{len(masks)=}")
 
     filtered_masks = []
     for mask in masks:
         # Only add mask if it is not close to all borders
         if not is_close_to_all_borders(mask, threshold_percent):
             filtered_masks.append(mask)
-    
+
     logger.info(f"{len(filtered_masks)=}")
     return filtered_masks
 
@@ -209,25 +214,27 @@ def extract_masked_images(
             cmin, cmax = np.where(cols)[0][[0, -1]]
 
             # Crop the mask and the image to the bounding box
-            cropped_mask = mask[rmin:rmax+1, cmin:cmax+1]
-            cropped_image = original_image_np[rmin:rmax+1, cmin:cmax+1]
+            cropped_mask = mask[rmin : rmax + 1, cmin : cmax + 1]
+            cropped_image = original_image_np[rmin : rmax + 1, cmin : cmax + 1]
 
             # Apply the mask
-            masked_image = np.where(
-                cropped_mask[:, :, None], cropped_image, 0
-            ).astype(np.uint8)
+            masked_image = np.where(cropped_mask[:, :, None], cropped_image, 0).astype(
+                np.uint8
+            )
             masked_images.append(Image.fromarray(masked_image))
         except Exception as exc:
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
             foo = 1
 
     logger.info(f"{len(masked_images)=}")
     return masked_images
 
 
-def calculate_bounding_boxes(masks: list[np.ndarray]) -> tuple[
-    list[dict[str, float]], list[tuple[float, float]]
-]:
+def calculate_bounding_boxes(
+    masks: list[np.ndarray],
+) -> tuple[list[dict[str, float]], list[tuple[float, float]]]:
     """
     Calculate bounding boxes and centers for each mask in the list separately.
 
@@ -248,7 +255,7 @@ def calculate_bounding_boxes(masks: list[np.ndarray]) -> tuple[
         rows, cols = np.where(mask)
         if len(rows) == 0 or len(cols) == 0:  # In case of an empty mask
             bounding_boxes.append({})
-            centroids.append((float('nan'), float('nan')))
+            centroids.append((float("nan"), float("nan")))
             continue
 
         # Calculate bounding box
@@ -259,28 +266,28 @@ def calculate_bounding_boxes(masks: list[np.ndarray]) -> tuple[
         center_x, center_y = left + width / 2, top + height / 2
 
         # Append data to the lists
-        bounding_boxes.append({
-            "top": float(top),
-            "left": float(left),
-            "height": float(height),
-            "width": float(width),
-        })
+        bounding_boxes.append(
+            {
+                "top": float(top),
+                "left": float(left),
+                "height": float(height),
+                "width": float(width),
+            }
+        )
         centroids.append((float(center_x), float(center_y)))
 
     return bounding_boxes, centroids
 
 
 def display_binary_images_grid(
-    images: list[np.ndarray],
-    grid_size: tuple[int, int] | None = None,
-    margin: int = 10
+    images: list[np.ndarray], grid_size: tuple[int, int] | None = None, margin: int = 10
 ):
     """
     Display binary arrays as images on a grid with clear separation between grid cells.
 
     Args:
         images: A list of binary numpy.ndarrays.
-        grid_size: Optional tuple (rows, cols) indicating the grid size. 
+        grid_size: Optional tuple (rows, cols) indicating the grid size.
             If not provided, a square grid size will be calculated.
         margin: The margin size between images in the grid.
     """
@@ -290,23 +297,23 @@ def display_binary_images_grid(
     # Determine max dimensions of images in the list
     max_width = max(image.shape[1] for image in images) + margin
     max_height = max(image.shape[0] for image in images) + margin
-    
+
     # Create a new image with a white background
     total_width = max_width * grid_size[1] + margin
     total_height = max_height * grid_size[0] + margin
-    grid_image = Image.new('1', (total_width, total_height), 1)
-    
+    grid_image = Image.new("1", (total_width, total_height), 1)
+
     for index, binary_image in enumerate(images):
         # Convert ndarray to PIL Image
-        img = Image.fromarray(binary_image.astype(np.uint8) * 255, 'L').convert('1')
-        img_with_margin = Image.new('1', (img.width + margin, img.height + margin), 1)
+        img = Image.fromarray(binary_image.astype(np.uint8) * 255, "L").convert("1")
+        img_with_margin = Image.new("1", (img.width + margin, img.height + margin), 1)
         img_with_margin.paste(img, (margin // 2, margin // 2))
-        
+
         # Calculate the position on the grid
         row, col = divmod(index, grid_size[1])
         x = col * max_width + margin // 2
         y = row * max_height + margin // 2
-        
+
         # Paste the image into the grid
         grid_image.paste(img_with_margin, (x, y))
 
@@ -316,9 +323,9 @@ def display_binary_images_grid(
 
 def display_images_table_with_titles(
     images: list[Image.Image],
-    titles: list[str] | None = None, 
+    titles: list[str] | None = None,
     margin: int = 10,
-    fontsize: int = 20
+    fontsize: int = 20,
 ):
     """
     Display RGB PIL.Images in a table layout with titles to the right of each image.
@@ -330,32 +337,33 @@ def display_images_table_with_titles(
         fontsize: The size of the title font.
     """
     if titles is None:
-        titles = [''] * len(images)
+        titles = [""] * len(images)
     elif len(titles) != len(images):
         raise ValueError("The length of titles must match the length of images.")
-    
+
     # Assuming a mono-spaced font for simplicity in calculation
-    #font = ImageFont.truetype("arial.ttf", fontsize)
+    # font = ImageFont.truetype("arial.ttf", fontsize)
     from openadapt import utils
+
     font = utils.get_font("Arial.ttf", fontsize)
-    
+
     # Calculate the width and height required for the composite image
     max_image_width = max(image.width for image in images)
     total_height = sum(image.height for image in images) + margin * (len(images) - 1)
     max_title_height = fontsize + margin  # simple approach to calculating title height
     max_title_width = max(font.getsize(title)[0] for title in titles) + margin
-    
+
     composite_image_width = max_image_width + max_title_width + margin * 3
     composite_image_height = max(
         total_height, max_title_height * len(images) + margin * (len(images) - 1)
     )
-    
+
     # Create a new image to composite everything onto
     composite_image = Image.new(
-        'RGB', (composite_image_width, composite_image_height), 'white'
+        "RGB", (composite_image_width, composite_image_height), "white"
     )
     draw = ImageDraw.Draw(composite_image)
-    
+
     current_y = 0
     for image, title in zip(images, titles):
         # Paste the image
@@ -364,27 +372,27 @@ def display_images_table_with_titles(
         draw.text(
             (
                 max_image_width + 2 * margin,
-                current_y + image.height // 2 - fontsize // 2
-            ), 
+                current_y + image.height // 2 - fontsize // 2,
+            ),
             title,
             fill="black",
             font=font,
         )
         current_y += image.height + margin
-    
+
     composite_image.show()
 
 
 # XXX TODO broken, unused
 
+
 def filter_ui_components(
-    masks: list[np.ndarray], 
-    area_threshold: tuple[float, float] | None = None, 
+    masks: list[np.ndarray],
+    area_threshold: tuple[float, float] | None = None,
     aspect_ratio_threshold: tuple[float, float] | None = None,
     extent_threshold: float | None = None,
-    solidity_threshold: float | None = None
+    solidity_threshold: float | None = None,
 ) -> list[np.ndarray]:
-    
     filtered_masks = []
 
     for mask in masks:
@@ -392,7 +400,7 @@ def filter_ui_components(
         contours, _ = cv2.findContours(
             mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        
+
         for contour in contours:
             area = cv2.contourArea(contour)
 
@@ -405,8 +413,8 @@ def filter_ui_components(
             aspect_ratio = float(w) / h
 
             if aspect_ratio_threshold is not None and (
-                aspect_ratio < aspect_ratio_threshold[0] or
-                aspect_ratio > aspect_ratio_threshold[1]
+                aspect_ratio < aspect_ratio_threshold[0]
+                or aspect_ratio > aspect_ratio_threshold[1]
             ):
                 continue
 

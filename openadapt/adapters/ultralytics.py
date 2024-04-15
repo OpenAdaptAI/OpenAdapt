@@ -30,7 +30,7 @@ def fetch_segmented_image(
     image: Image,
     model_name: str = MODEL_NAME,
     # TODO: inject from config
-    device='cpu',
+    device="cpu",
     retina_masks=True,
     imgsz=1024,
     conf=0.4,
@@ -50,7 +50,7 @@ def fetch_segmented_image(
     assert model_name in MODEL_NAMES, (model_name, MODEL_NAMES)
 
     model = FastSAM(model_name)
-    
+
     # Run inference on image
     everything_results = model(
         image,
@@ -62,7 +62,7 @@ def fetch_segmented_image(
     )
 
     # Prepare a Prompt Process object
-    prompt_process = FastSAMPrompt(image, everything_results, device='cpu')
+    prompt_process = FastSAMPrompt(image, everything_results, device="cpu")
 
     # Everything prompt
     annotations = prompt_process.everything_prompt()
@@ -70,15 +70,15 @@ def fetch_segmented_image(
     # TODO: support other modes:
 
     # Bbox default shape [0,0,0,0] -> [x1,y1,x2,y2]
-    #annotations = prompt_process.box_prompt(bbox=[200, 200, 300, 300])
+    # annotations = prompt_process.box_prompt(bbox=[200, 200, 300, 300])
 
     # Text prompt
-    #annotations = prompt_process.text_prompt(text='a photo of a dog')
+    # annotations = prompt_process.text_prompt(text='a photo of a dog')
 
     # Point prompt
     # points default [[0,0]] [[x1,y1],[x2,y2]]
     # point_label default [0] [1,0] 0:background, 1:foreground
-    #annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
+    # annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
 
     assert len(annotations) == 1, len(annotations)
     annotation = annotations[0]
@@ -89,7 +89,7 @@ def fetch_segmented_image(
     # TODO: in memory, e.g. with prompt_process.fast_show_mask()
     with TemporaryDirectory() as tmp_dir:
         # Force the output format to PNG to prevent JPEG compression artefacts
-        annotation.path = annotation.path.replace('.jpg', '.png')
+        annotation.path = annotation.path.replace(".jpg", ".png")
         prompt_process.plot(
             [annotation],
             tmp_dir,
@@ -114,4 +114,4 @@ def fetch_segmented_image_from_path(image_path: str):
 
 
 if __name__ == "__main__":
-	fire.Fire(fetch_segmented_image_from_path)
+    fire.Fire(fetch_segmented_image_from_path)

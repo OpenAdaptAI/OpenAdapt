@@ -19,14 +19,16 @@ def save_image_to_temp_file(img: Image.Image) -> str:
     return temp_file.name
 
 
-def predict(file_path: str = None,
-            server_url: str = config.SOM_SERVER_URL,
-            granularity: float = 2.7, 
-            segmentation_mode: str = "Automatic",
-            mask_alpha: float = 0.8,
-            mark_mode: str = "Number",
-            annotation_mode: list = ["Mask"],
-            api_name: str = "/inference"):
+def predict(
+    file_path: str = None,
+    server_url: str = config.SOM_SERVER_URL,
+    granularity: float = 2.7,
+    segmentation_mode: str = "Automatic",
+    mask_alpha: float = 0.8,
+    mark_mode: str = "Number",
+    annotation_mode: list = ["Mask"],
+    api_name: str = "/inference",
+):
     """
     Makes a prediction using the Gradio client with the provided IP address and other parameters.
 
@@ -53,7 +55,7 @@ def predict(file_path: str = None,
         mask_alpha,
         mark_mode,
         annotation_mode,
-        api_name=api_name
+        api_name=api_name,
     )
     logger.info(result)
 
