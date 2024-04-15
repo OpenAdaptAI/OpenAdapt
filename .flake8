@@ -4,4 +4,4 @@ exclude =
     .venv
 docstring-convention = google
 max-line-length = 88
-extend-ignore = ANN101
+extend-ignore = ANN101, E203

@@ -256,15 +256,7 @@ class ActionEvent(db.Base):
 
         Returns:
             ActionEvent: An instance of ActionEvent with the specified child events.
-
         """
-        for child_dict in children_dicts:
-            for key in child_dict:
-                # if isinstance(getattr(type(ActionEvent), key), property):
-                if key == "text":
-                    import ipdb; ipdb.set_trace()  # noqa
-                    # TODO: decompose into individual children
-
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 

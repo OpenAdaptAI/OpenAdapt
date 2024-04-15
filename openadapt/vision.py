@@ -214,8 +214,8 @@ def extract_masked_images(
         cmin, cmax = np.where(cols)[0][[0, -1]]
 
         # Crop the mask and the image to the bounding box
-        cropped_mask = mask[rmin:rmax + 1, cmin:cmax + 1]
-        cropped_image = original_image_np[rmin:rmax + 1, cmin:cmax + 1]
+        cropped_mask = mask[rmin : rmax + 1, cmin : cmax + 1]
+        cropped_image = original_image_np[rmin : rmax + 1, cmin : cmax + 1]
 
         # Apply the mask
         masked_image = np.where(cropped_mask[:, :, None], cropped_image, 0).astype(

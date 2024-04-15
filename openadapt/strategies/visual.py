@@ -71,6 +71,7 @@ class Segmentation:
         centroids: A list of tuples, each containing the x and y coordinates of the
             centroid of each segmented region.
     """
+
     masked_images: list[Image.Image]
     descriptions: list[str]
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
@@ -268,9 +269,6 @@ class VisualReplayStrategy(
                 except ValueError as exc:
                     logger.warning(f"{exc=}")
                     exceptions.append(exc)
-                    import ipdb
-
-                    ipdb.set_trace()
                 else:
                     break
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
@@ -368,8 +366,7 @@ def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
 ) -> Segmentation:
-    """
-    Segments the active window from the action event's screenshot.
+    """Segments the active window from the action event's screenshot.
 
     Args:
         action_event: action event containing the screenshot data.
@@ -423,8 +420,7 @@ def prompt_for_descriptions(
     active_segment_description: str | None,
     exceptions: list[Exception] | None = None,
 ) -> list[str]:
-    """
-    Generates descriptions for given image segments using a prompt adapter.
+    """Generates descriptions for given image segments using a prompt adapter.
 
     Args:
         original_image_base64: Base64 encoding of the original image.
@@ -483,9 +479,8 @@ def prompt_for_descriptions(
             len(masked_images_base64),
         )
     except Exception as exc:
-        logger.error(exc)
-        import ipdb; ipdb.set_trace()  # noqa
         # TODO XXX
+        raise exc
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
     return descriptions

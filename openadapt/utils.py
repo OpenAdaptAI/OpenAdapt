@@ -938,9 +938,8 @@ def parse_code_snippet(snippet: str) -> dict:
             logger.warning(msg)
             return None
     except Exception as exc:
-        logger.error(exc)
-        import ipdb; ipdb.set_trace()  # noqa
         # TODO
+        raise exc
 
 
 def split_list(input_list: list, size: int) -> list[list]:
@@ -953,7 +952,7 @@ def split_list(input_list: list, size: int) -> list[list]:
     Returns:
         A new list containing inner lists of the given size.
     """
-    return [input_list[i:i + size] for i in range(0, len(input_list), size)]
+    return [input_list[i : i + size] for i in range(0, len(input_list), size)]
 
 
 if __name__ == "__main__":

@@ -37,4 +37,4 @@ def get_default_segmentation_adapter() -> ModuleType:
     }[config.DEFAULT_SEGMENTATION_ADAPTER]
 
 
-__all__ = ['anthropic', 'openai', 'replicate', 'som', 'ultralytics', 'google']
+__all__ = ["anthropic", "openai", "replicate", "som", "ultralytics", "google"]
