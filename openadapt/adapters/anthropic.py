@@ -127,7 +127,7 @@ def prompt(
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
     max_tokens: int | None = None,
-):
+) -> str:
     """Public method to get a response from the Anthropic API with image support."""
     if len(base64_images) > MAX_IMAGES:
         # XXX TODO handle this

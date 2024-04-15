@@ -26,7 +26,7 @@ class BaseReplayStrategy(ABC):
 
         Args:
             recording (models.Recording): The recording to replay.
-            replay_isntructions (str, optional): Natural language instructions
+            replay_instructions (str, optional): Natural language instructions
                 for how recording should be replayed.
             max_frame_times (int): The maximum number of frame times to track.
         """

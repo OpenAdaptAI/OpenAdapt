@@ -1,3 +1,8 @@
+"""Adapter for segmenting images via Set-of-Mark server.
+
+See https://github.com/microsoft/SoM for server implementation.
+"""
+
 import os
 import tempfile
 
@@ -9,8 +14,15 @@ import gradio_client
 from openadapt import config
 
 
-# Function to save PIL.Image to a temporary file and return the file path
 def save_image_to_temp_file(img: Image.Image) -> str:
+    """Save PIL.Image to a temporary file and return the file path.
+
+    Args:
+        img: the PIL Image to save
+
+    Returns:
+        Name of temporary file containing saved image.
+    """
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
     img.save(temp_file, format="PNG")
     temp_file.close()  # Important to close the file so others can access it
@@ -28,21 +40,22 @@ def predict(
     mark_mode: str = "Number",
     annotation_mode: list = ["Mask"],
     api_name: str = "/inference",
-):
-    """
-    Makes a prediction using the Gradio client with the provided IP address and other parameters.
+) -> str:
+    """Make a prediction using the Gradio client with the provided IP address.
 
     Args:
         server_url (str): The URL of the SoM Gradio server.
         file_path (str): File path of temp image (.png) copy of a PIL image object.
         granularity (float): Granularity value for the operation.
-        segmentation_mode (str): Mode of segmentation, either 'Automatic' or 'Interactive'.
+        segmentation_mode (str): Mode of segmentation ('Automatic' or 'Interactive').
         mask_alpha (float): Alpha value for the mask.
         mark_mode (str): Mark mode, either 'Number' or 'Alphabet'.
         annotation_mode (list): List of annotation modes.
         api_name (str): API endpoint name for inference.
-    """
 
+    Returns:
+        Path to segmented image.
+    """
     assert server_url, server_url
     assert server_url.startswith("http"), server_url
     client = gradio_client.Client(server_url)
@@ -62,12 +75,14 @@ def predict(
     return result
 
 
-def fetch_segmented_image(image: Image.Image):
-    """
-    Process an image directly using PIL.Image.Image object and predict using the Gradio client.
+def fetch_segmented_image(image: Image.Image) -> Image.Image:
+    """Process an image using PIL.Image.Image object and predict using Gradio client.
 
     Args:
-        image (PIL.Image.Image): A PIL image object.
+        image: The PIL Image to segment.
+
+    Returns:
+        The segmented PIL Image.
     """
     img_temp_path = save_image_to_temp_file(image)  # Save the image to a temp file
     segmented_image_path = predict(file_path=img_temp_path)  # Perform prediction

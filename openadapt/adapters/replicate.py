@@ -1,4 +1,5 @@
-from typing import Optional
+"""Adapter for getting segmentation via Replicate API."""
+
 import io
 import os
 
@@ -13,13 +14,24 @@ from openadapt import cache, config, utils
 
 @cache.cache()
 def _fetch_segmented_image(image_uri: str) -> Image.Image:
-    """
+    """Fetch segmented image.
+
+    For details, see:
     https://replicate.com/pablodawson/segment-anything-automatic/api?tab=python#run
+
+    Args:
+        image_uri: URI of image to segment
+
+    Returns:
+        PIL Image containing segmented image
     """
     os.environ["REPLICATE_API_TOKEN"] = config.REPLICATE_API_TOKEN
     logger.info("segmenting image...")
     segmented_image_url = replicate.run(
-        "pablodawson/segment-anything-automatic:14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
+        (
+            "pablodawson/segment-anything-automatic:"
+            "14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0"
+        ),
         input={
             "image": image_uri,
             # "resize_width": 1080,
@@ -32,9 +44,8 @@ def _fetch_segmented_image(image_uri: str) -> Image.Image:
     return image
 
 
-def fetch_segmented_image(image: Image, n: Optional[int] = 100) -> Image:
-    """Fetch a segmented image from Segment Anything on Replicate, with an
-    option to adjust the resolution before fetching.
+def fetch_segmented_image(image: Image, n: int | None = 100) -> Image:
+    """Fetch a segmented image from Segment Anything on Replicate.
 
     The image resolution is modified by a percent ratio before the segmentation
     request, and the segmented image is resized back to the original
@@ -52,7 +63,7 @@ def fetch_segmented_image(image: Image, n: Optional[int] = 100) -> Image:
     original_width, original_height = image.size
 
     # Adjust resolution if necessary
-    if n != 100:
+    if n is not None and n != 100:
         new_width = int(original_width * n / 100)
         new_height = int(original_height * n / 100)
         image = image.resize((new_width, new_height), Image.ANTIALIAS)
@@ -71,10 +82,15 @@ def fetch_segmented_image(image: Image, n: Optional[int] = 100) -> Image:
     return segmented_image
 
 
-def fetch_segmented_image_from_path(image_path: str, n: Optional[int] = 100) -> None:
-    """
-    Fetches a segmented image and saves it to the same directory with
-    '-segmented' before the file extension.
+def fetch_segmented_image_from_path(image_path: str, n: int | None = 100) -> None:
+    """Fetch a segmented image and save it to the same directory.
+
+    '-segmented' is added before the file extension.
+
+    Args:
+        image_path: string containing path to image
+        n: Optional; The percent ratio to adjust the resolution of the input
+            image before segmentation. Default is 100 (no adjustment).
     """
     with Image.open(image_path) as image:
         segmented_image = fetch_segmented_image(image, n)

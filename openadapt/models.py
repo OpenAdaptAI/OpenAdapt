@@ -1,11 +1,12 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Optional, Union
+from typing import Type
 import io
 
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
+import mss
 import numpy as np
 import sqlalchemy as sa
 
@@ -109,6 +110,7 @@ class ActionEvent(db.Base):
 
     @property
     def available_segment_descriptions(self) -> list[str]:
+        """Gets the available segment descriptions."""
         if self._available_segment_descriptions:
             return self._available_segment_descriptions.split(
                 self._segment_description_separator
@@ -117,7 +119,8 @@ class ActionEvent(db.Base):
             return []
 
     @available_segment_descriptions.setter
-    def available_segment_descriptions(self, value: list[str]):
+    def available_segment_descriptions(self, value: list[str]) -> None:
+        """Sets the available segment descriptions."""
         self._available_segment_descriptions = self._segment_description_separator.join(
             value
         )
@@ -140,7 +143,7 @@ class ActionEvent(db.Base):
 
     def _key(
         self, key_name: str, key_char: str, key_vk: str
-    ) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    ) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
@@ -154,7 +157,7 @@ class ActionEvent(db.Base):
         return key
 
     @property
-    def key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    def key(self) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Get the key associated with the action event."""
         logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
@@ -164,7 +167,7 @@ class ActionEvent(db.Base):
         )
 
     @property
-    def canonical_key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    def canonical_key(self) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Get the canonical key associated with the action event."""
         logger.trace(
             f"{self.name=} "
@@ -245,7 +248,7 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls: list, children_dicts: list) -> "ActionEvent":
+    def from_children(cls: Type["ActionEvent"], children_dicts: list) -> "ActionEvent":
         """Create an ActionEvent instance from a list of child event dictionaries.
 
         Args:
@@ -259,22 +262,20 @@ class ActionEvent(db.Base):
             for key in child_dict:
                 # if isinstance(getattr(type(ActionEvent), key), property):
                 if key == "text":
+                    import ipdb; ipdb.set_trace()  # noqa
                     # TODO: decompose into individual children
-                    import ipdb
-
-                    ipdb.set_trace()
-                    foo = 1
 
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
 
     @classmethod
-    def from_dict(cls, action_dict: dict) -> list["ActionEvent"]:
+    def from_dict(cls: Type["ActionEvent"], action_dict: dict) -> "ActionEvent":
+        """Get an ActionEvent from a dict."""
         # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
         children = []
         release_events = []
         if "text" in action_dict:
-            # Splitting actions based on whether they are special keys or regular characters
+            # Splitting actions based on whether they are special keys or characters
             if action_dict["text"].startswith("<") and action_dict["text"].endswith(
                 ">"
             ):
@@ -304,7 +305,7 @@ class ActionEvent(db.Base):
 
     @classmethod
     def _create_key_events(
-        cls,
+        cls: Type["ActionEvent"],
         key_name: str | None = None,
         canonical_key_name: str | None = None,
         key_char: str | None = None,
@@ -327,26 +328,6 @@ class ActionEvent(db.Base):
             # canonical_key_char=canonical_key_char,
         )
         return press_event, release_event
-
-    def scale_to_screenshot_image(self):
-        """
-        mouse_x = sa.Column(sa.Numeric(asdecimal=False))
-        mouse_y = sa.Column(sa.Numeric(asdecimal=False))
-        mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
-        mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
-
-        x = action_event.mouse_x * width_ratio
-        y = action_event.mouse_y * height_ratio
-        """
-        width_ratio, height_ratio = utils.get_scale_ratios(self)
-
-        # TODO: return new ActionEvent
-        return {
-            "mouse_x": self.mouse_x * width_ratio,
-            "mouse_y": self.mouse_y * height_ratio,
-            "mouse_dx": self.mouse_dx * width_ratio,
-            "mouse_dy": self.mouse_dy * height_ratio,
-        }
 
 
 class WindowEvent(db.Base):
@@ -389,13 +370,19 @@ class Screenshot(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
 
-    def __init__(self, *args, sct_img=None, **kwargs):
+    def __init__(
+        self,
+        *args: tuple,
+        sct_img: mss.base.ScreenShot | None = None,
+        **kwargs: dict,
+    ) -> None:
+        """Initialize."""
         super().__init__(*args, **kwargs)
         self.initialize_instance_attributes()
         self.sct_img = sct_img
 
     @sa.orm.reconstructor
-    def initialize_instance_attributes(self):
+    def initialize_instance_attributes(self) -> None:
         """Initialize attributes for both new and loaded objects."""
         # TODO: convert to png_data on save
         self.sct_img = None
@@ -426,7 +413,7 @@ class Screenshot(db.Base):
 
     @property
     def base64(self) -> str:
-        """Return data URI of JPEG encoded base64"""
+        """Return data URI of JPEG encoded base64."""
         if not self._base64:
             from openadapt import utils
 
@@ -468,24 +455,13 @@ class Screenshot(db.Base):
         screenshot = Screenshot(sct_img=sct_img)
         return screenshot
 
-    # def crop_active_window(self, action_event: ActionEvent) -> None:
-    def crop_active_window(
-        self,
-        action_event: ActionEvent | None = None,
-        window_event: WindowEvent | None = None,
-        width_ratio: float | None = None,
-        height_ratio: float | None = None,
-    ) -> None:
-        assert action_event or (window_event and width_ratio and height_ratio)
-
+    def crop_active_window(self, action_event: ActionEvent) -> None:
         """Crop the screenshot to the active window defined by the action event."""
+        # avoid circular import
+        from openadapt import utils
 
-        if action_event:
-            # avoid circular import
-            from openadapt import utils
-
-            window_event = action_event.window_event
-            width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+        window_event = action_event.window_event
+        width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
         x0 = window_event.left * width_ratio
         y0 = window_event.top * height_ratio
@@ -498,6 +474,7 @@ class Screenshot(db.Base):
 
     @property
     def original_image(self) -> Image:
+        """Get the original image (before any cropping)."""
         if self._image_history:
             return self._image_history[0]
         return self.image

@@ -30,11 +30,11 @@ def fetch_segmented_image(
     image: Image,
     model_name: str = MODEL_NAME,
     # TODO: inject from config
-    device="cpu",
-    retina_masks=True,
-    imgsz=1024,
-    conf=0.4,
-    iou=0.9,
+    device: str = "cpu",
+    retina_masks: bool = True,
+    imgsz: int = 1024,
+    conf: float = 0.4,
+    iou: float = 0.9,
 ) -> Image:
     """Segment a PIL.Image using ultralytics Fast Segment Anything.
 
@@ -46,7 +46,6 @@ def fetch_segmented_image(
     Returns:
         The segmented image as a PIL Image.
     """
-
     assert model_name in MODEL_NAMES, (model_name, MODEL_NAMES)
 
     model = FastSAM(model_name)
@@ -104,9 +103,11 @@ def fetch_segmented_image(
     return image
 
 
-def fetch_segmented_image_from_path(image_path: str):
-    """
-    Gets a segmented image and displays it.
+def fetch_segmented_image_from_path(image_path: str) -> None:
+    """Gets a segmented image and displays it.
+
+    Args:
+        image_path: path to image to segment
     """
     with Image.open(image_path) as image:
         segmented_image = fetch_segmented_image(image)

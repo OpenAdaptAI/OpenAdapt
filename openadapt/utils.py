@@ -6,7 +6,8 @@ This module provides various utility functions used throughout OpenAdapt.
 from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
-from typing import Union
+from typing import Any
+import ast
 import base64
 import inspect
 import json
@@ -72,7 +73,7 @@ def configure_logging(logger: logger, log_level: str) -> None:
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
+def row2dict(row: dict | db.BaseModel, follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
@@ -576,6 +577,7 @@ def display_event(
     return image
 
 
+# TODO: png
 def image2utf8(image: Image.Image) -> str:
     """Convert an image to UTF-8 format.
 
@@ -844,12 +846,7 @@ def get_functions(name: str) -> dict:
     return functions
 
 
-# XXX TODO remove
-
-from openadapt import models
-
-
-def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
+def get_action_dict_from_completion(completion: str) -> dict[ActionEvent]:
     """Convert the completion to a dictionary containing action information.
 
     Args:
@@ -866,41 +863,20 @@ def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]
         return action
 
 
-# def get_action_dict_from_json(completion: str) -> dict[models.ActionEvent]:
-#    """Convert the completion from JSON to a dictionary containing action information.
-#
-#    Args:
-#        completion (str): The JSON string provided by the user.
-#
-#    Returns:
-#        dict: The action dictionary, or None if an error occurs.
-#    """
-#    try:
-#        action = json.loads(completion)
-#    except json.JSONDecodeError as exc:
-#        logger.warning(f"JSON decode error: {exc=}")
-#        return None
-#    except Exception as exc:
-#        logger.warning(f"Unexpected error: {exc=}")
-#        logger.warning(f"{completion=}")
-#        return None
-#    else:
-#        # Assuming the JSON directly maps to models.ActionEvent structure
-#        return action
-
-
 # copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
-def render_template_from_file(template_relative_path: str, **kwargs) -> str:
-    """
-    Load a Jinja2 template from a file using the project's root directory and interpolate arguments.
+def render_template_from_file(template_relative_path: str, **kwargs: dict) -> str:
+    """Load a Jinja2 template from a file and interpolate arguments.
+
     Args:
-        template_relative_path (str): Relative path to the Jinja2 template file from the project root.
+        template_relative_path (str): Relative path to the Jinja2 template file
+            from the project root.
         **kwargs: Arguments to interpolate into the template.
+
     Returns:
         str: Rendered template with interpolated arguments.
     """
 
-    def orjson_to_json(value):
+    def orjson_to_json(value: Any) -> str:
         # orjson.dumps returns bytes, so decode to string
         return orjson.dumps(value).decode("utf-8")
 
@@ -925,10 +901,23 @@ def render_template_from_file(template_relative_path: str, **kwargs) -> str:
     return template.render(**kwargs)
 
 
-import ast
+def parse_code_snippet(snippet: str) -> dict:
+    """Parse a text code snippet into a dict.
 
+    e.g.
+        ```json
+        { "foo": true }
+        ```
+    Returns:
 
-def parse_code_snippet(snippet):
+        { "foo": True }
+
+    Args:
+        snippet: text snippet
+
+    Returns:
+        dict representation of what was in the text snippet
+    """
     try:
         if snippet.startswith("```json"):
             # Remove Markdown code block syntax
@@ -949,25 +938,23 @@ def parse_code_snippet(snippet):
             logger.warning(msg)
             return None
     except Exception as exc:
-        import ipdb
-
-        ipdb.set_trace()
-        foo = 1
+        logger.error(exc)
+        import ipdb; ipdb.set_trace()  # noqa
+        # TODO
 
 
 def split_list(input_list: list, size: int) -> list[list]:
-    """
-    Splits a list into a list of lists, where each inner list has a maximum given size.
+    """Splits a list into a list of lists, where each inner list has a maximum size.
 
-    Parameters:
-        input_list (list): The list to be split.
-        size (int): The maximum size of each inner list.
+    Args:
+        input_list: The list to be split.
+        size: The maximum size of each inner list.
 
     Returns:
-        list[list]: A new list containing inner lists of the given size.
+        A new list containing inner lists of the given size.
     """
-    return [input_list[i : i + size] for i in range(0, len(input_list), size)]
+    return [input_list[i:i + size] for i in range(0, len(input_list), size)]
 
 
 if __name__ == "__main__":
-    fcompletiooire.Fire(get_functions(__name__))
+    fire.Fire(get_functions(__name__))

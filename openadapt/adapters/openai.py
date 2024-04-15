@@ -30,9 +30,16 @@ def create_payload(
     """Create payload for prompting.
 
     Args:
-        TODO
-    """
+        prompt: the prompt
+        system_prompt: the system prompt
+        base64_images: list of base64 encoded images
+        model: name of OpenAI model
+        detail: detail level of images, "low" or "high"
+        max_tokens: maximum number of tokens
 
+    Returns:
+        dict containing prompt payload
+    """
     max_tokens = max_tokens or MAX_TOKENS
     if max_tokens > MAX_TOKENS:
         logger.warning(f"{max_tokens=} {MAX_TOKENS=}")
@@ -90,7 +97,10 @@ def get_response(payload: dict) -> requests.Response:
     """Sends a request to the OpenAI API and returns the response.
 
     Args:
-        TODO
+        payload: dictionary returned by create_payload
+
+    Returns:
+        response from OpenAI API
     """
     headers = {
         "Content-Type": "application/json",
@@ -108,7 +118,10 @@ def get_completion(payload: dict) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
     Args:
-        TODO
+        pyalod: dictionary returned by create_payload
+
+    Returns:
+        string containing the first message from the response
     """
     response = get_response(payload)
     result = response.json()
@@ -141,9 +154,16 @@ def prompt(
     """Get prompt completion from OpenAI.
 
     Args:
-        TODO
-    """
+        prompt: the prompt
+        system_prompt: the system prompt
+        base64_images: list of base64 encoded images
+        model: name of OpenAI model
+        detail: detail level of images, "low" or "high"
+        max_tokens: maximum number of tokens
 
+    Returns:
+        string containing the first message from the response
+    """
     payload = create_payload(
         prompt,
         system_prompt,

@@ -52,8 +52,8 @@ def prompt(
     return response.text
 
 
-def main(text: str, image_path: str | None = None):
-    """Prompt with a path to an image"""
+def main(text: str, image_path: str | None = None) -> None:
+    """Prompt Google Gemini with text and a path to an image."""
     if image_path:
         with Image.open(image_path) as img:
             # Convert image to RGB if it's RGBA (to remove alpha channel)

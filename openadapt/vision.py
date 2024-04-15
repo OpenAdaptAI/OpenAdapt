@@ -1,16 +1,16 @@
 """Computer vision module."""
 
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from scipy.ndimage import binary_fill_holes
-from skimage import measure, morphology
 import cv2
 import numpy as np
 
+from openadapt import utils
+
 
 def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
-    """
-    Process the image to find unique masks based on color channels.
+    """Process the image to find unique masks based on color channels.
 
     Args:
         segmented_image: A PIL.Image object of the segmented image.
@@ -18,7 +18,7 @@ def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
     Returns:
         A list of numpy.ndarrays, each representing a unique mask.
     """
-    logger.info(f"starting...")
+    logger.info("starting...")
     segmented_image_np = np.array(segmented_image)
 
     # Assume the last channel is the alpha channel if the image has 4 channels
@@ -45,8 +45,7 @@ def filter_masks_by_size(
     masks: list[np.ndarray],
     min_mask_size: tuple[int, int] = (15, 15),
 ) -> list[np.ndarray]:
-    """
-    Filter masks based on minimum size using the bounding box of "on" pixels.
+    """Filter masks based on minimum size using the bounding box of "on" pixels.
 
     Args:
         masks: A list of numpy.ndarrays, each representing a mask.
@@ -70,15 +69,17 @@ def filter_masks_by_size(
 
 
 def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
-    """
-    Refine the list of masks:
+    """Refine the list of masks.
+
     - Fill holes of any size.
     - Remove masks completely contained within other masks.
-    - Exclude masks where the convex hull does not meet a specified minimum size in any dimension.
+    - Exclude masks where the convex hull does not meet a specified minimum
+      size in any dimension.
 
     Args:
         masks: A list of numpy.ndarrays, each representing a mask.
-        min_mask_size: A tuple specifying the minimum dimensions (height, width) that the convex hull of a mask must have to be retained.
+        min_mask_size: A tuple specifying the minimum dimensions (height,
+            width) that the convex hull of a mask must have to be retained.
 
     Returns:
         A list of numpy.ndarrays, each representing a refined mask.
@@ -111,12 +112,13 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
 
 
 def filter_thin_ragged_masks(
-    masks: list[np.ndarray], kernel_size: int = 3, iterations: int = 5
+    masks: list[np.ndarray],
+    kernel_size: int = 3,
+    iterations: int = 5,
 ) -> list[np.ndarray]:
-    """
-    Applies morphological operations to filter out thin and ragged masks.
+    """Applies morphological operations to filter out thin and ragged masks.
 
-    Parameters:
+    Args:
         masks: A list of ndarrays, where each ndarray is a binary mask.
         kernel_size: Size of the structuring element.
         iterations: Number of times the operation is applied.
@@ -147,10 +149,9 @@ def remove_border_masks(
     masks: list[np.ndarray],
     threshold_percent: float = 5.0,
 ) -> list[np.ndarray]:
-    """
-    Removes masks whose "on" pixels are close to the mask borders on all four sides.
+    """Removes masks whose "on" pixels are close to the mask borders on all four sides.
 
-    Parameters:
+    Args:
         masks: A list of ndarrays, where each ndarray is a binary mask.
         threshold_percent: A float indicating how close the "on" pixels can be to
               the border, represented as a percentage of the mask's dimensions.
@@ -189,9 +190,9 @@ def extract_masked_images(
     original_image: Image.Image,
     masks: list[np.ndarray],
 ) -> list[Image.Image]:
-    """
-    Apply each mask to the original image and resize the image to fit the
-    mask's bounding box, discarding pixels outside the mask.
+    """Apply each mask to the original image.
+
+    Resize the image to fit the mask's bounding box, discarding pixels outside the mask.
 
     Args:
         original_image: A PIL.Image object of the original image.
@@ -206,27 +207,21 @@ def extract_masked_images(
     masked_images = []
 
     for mask in masks:
-        try:
-            # Find the bounding box of the mask
-            rows = np.any(mask, axis=1)
-            cols = np.any(mask, axis=0)
-            rmin, rmax = np.where(rows)[0][[0, -1]]
-            cmin, cmax = np.where(cols)[0][[0, -1]]
+        # Find the bounding box of the mask
+        rows = np.any(mask, axis=1)
+        cols = np.any(mask, axis=0)
+        rmin, rmax = np.where(rows)[0][[0, -1]]
+        cmin, cmax = np.where(cols)[0][[0, -1]]
 
-            # Crop the mask and the image to the bounding box
-            cropped_mask = mask[rmin : rmax + 1, cmin : cmax + 1]
-            cropped_image = original_image_np[rmin : rmax + 1, cmin : cmax + 1]
+        # Crop the mask and the image to the bounding box
+        cropped_mask = mask[rmin:rmax + 1, cmin:cmax + 1]
+        cropped_image = original_image_np[rmin:rmax + 1, cmin:cmax + 1]
 
-            # Apply the mask
-            masked_image = np.where(cropped_mask[:, :, None], cropped_image, 0).astype(
-                np.uint8
-            )
-            masked_images.append(Image.fromarray(masked_image))
-        except Exception as exc:
-            import ipdb
-
-            ipdb.set_trace()
-            foo = 1
+        # Apply the mask
+        masked_image = np.where(cropped_mask[:, :, None], cropped_image, 0).astype(
+            np.uint8
+        )
+        masked_images.append(Image.fromarray(masked_image))
 
     logger.info(f"{len(masked_images)=}")
     return masked_images
@@ -235,8 +230,7 @@ def extract_masked_images(
 def calculate_bounding_boxes(
     masks: list[np.ndarray],
 ) -> tuple[list[dict[str, float]], list[tuple[float, float]]]:
-    """
-    Calculate bounding boxes and centers for each mask in the list separately.
+    """Calculate bounding boxes and centers for each mask in the list separately.
 
     Args:
         masks: A list of numpy.ndarrays, each representing a mask.
@@ -280,10 +274,11 @@ def calculate_bounding_boxes(
 
 
 def display_binary_images_grid(
-    images: list[np.ndarray], grid_size: tuple[int, int] | None = None, margin: int = 10
-):
-    """
-    Display binary arrays as images on a grid with clear separation between grid cells.
+    images: list[np.ndarray],
+    grid_size: tuple[int, int] | None = None,
+    margin: int = 10,
+) -> None:
+    """Display binary arrays as images on a grid with separation between grid cells.
 
     Args:
         images: A list of binary numpy.ndarrays.
@@ -326,9 +321,8 @@ def display_images_table_with_titles(
     titles: list[str] | None = None,
     margin: int = 10,
     fontsize: int = 20,
-):
-    """
-    Display RGB PIL.Images in a table layout with titles to the right of each image.
+) -> None:
+    """Display RGB PIL.Images in a table layout with titles to the right of each image.
 
     Args:
         images: A list of RGB PIL.Images.
@@ -340,10 +334,6 @@ def display_images_table_with_titles(
         titles = [""] * len(images)
     elif len(titles) != len(images):
         raise ValueError("The length of titles must match the length of images.")
-
-    # Assuming a mono-spaced font for simplicity in calculation
-    # font = ImageFont.truetype("arial.ttf", fontsize)
-    from openadapt import utils
 
     font = utils.get_font("Arial.ttf", fontsize)
 
@@ -383,9 +373,8 @@ def display_images_table_with_titles(
     composite_image.show()
 
 
+"""
 # XXX TODO broken, unused
-
-
 def filter_ui_components(
     masks: list[np.ndarray],
     area_threshold: tuple[float, float] | None = None,
@@ -437,3 +426,4 @@ def filter_ui_components(
             )
             filtered_masks.append(contour_mask)
     return filtered_masks
+"""

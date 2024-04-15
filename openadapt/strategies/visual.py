@@ -1,12 +1,5 @@
 """Large Multimodal Model with replay instructions.
 
-TODO:
-- handle tab sequences
-- re-use previous segmentations / descriptions
-- handle separate UI elements which look identical (e.g. spreadsheet cells)
-    - e.g. include segment mask in prompt
-    - e.g. annotate grid positions
-
 1. Get active element descriptions
 
 For each processed event, if it is a mouse event:
@@ -35,6 +28,14 @@ See prompts for details:
 - openadapt/prompts/description.j2
 - openadapt/prompts/apply_replay_instructions.j2
 
+Todo:
+- handle tab sequences
+- re-use previous segmentations / descriptions
+- handle separate UI elements which look identical (e.g. spreadsheet cells)
+    - e.g. include segment mask in prompt
+    - e.g. annotate grid positions
+
+
 Usage:
 
     $ python -m openadapt.replay VisualReplayStrategy --instructions "<instructions>"
@@ -42,15 +43,12 @@ Usage:
 
 from copy import deepcopy
 from dataclasses import dataclass
-from pprint import pformat
+import time
 
 from loguru import logger
 from PIL import Image, ImageDraw
-import deepdiff
-import json
 
-from openadapt import common, config, models, strategies, utils, vision
-from openadapt import adapters
+from openadapt import adapters, common, models, strategies, utils, vision
 
 
 DEBUG = False
@@ -59,6 +57,20 @@ DEBUG_REPLAY = False
 
 @dataclass
 class Segmentation:
+    """A data class to encapsulate segmentation data of images.
+
+    Attributes:
+        masked_images: A list of PIL Image objects that have been masked based on
+            segmentation.
+        descriptions: Descriptions of each segmented region, correlating with each
+            image in `masked_images`.
+        bounding_boxes: A list of dictionaries containing bounding box
+            coordinates for each segmented region.  Each dictionary should have the
+            keys "top", "left", "height", and "width" with float values indicating
+            the position and size of the box.
+        centroids: A list of tuples, each containing the x and y coordinates of the
+            centroid of each segmented region.
+    """
     masked_images: list[Image.Image]
     descriptions: list[str]
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
@@ -66,9 +78,11 @@ class Segmentation:
 
 
 def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> None:
-    """Set the ActionEvent.active_segment_description where appropriate"""
+    """Set the ActionEvent.active_segment_description where appropriate.
 
-    logical_events = []
+    Args:
+        action_events: list of ActionEvents to modify in-place.
+    """
     for action in action_events:
         # TODO: handle terminal <tab> event
         # if action.name in ("click", "doubleclick", "singleclick", "scroll"):
@@ -90,8 +104,12 @@ def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
 ) -> None:
-    """TODO"""
+    """Modify the given ActionEvents according to the given replay instructions.
 
+    Args:
+        action_events: list of action events to be modified in place.
+        replay_instructions: instructions for how action events should be modified.
+    """
     action_dicts = [get_action_prompt_dict(action) for action in action_events]
     actions_dict = {"actions": action_dicts}
     system_prompt = utils.render_template_from_file(
@@ -102,7 +120,7 @@ def apply_replay_instructions(
         actions=actions_dict,
         replay_instructions=replay_instructions,
     )
-    prompt_adapter = get_default_prompt_adapter()
+    prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
         prompt,
         system_prompt,
@@ -122,7 +140,14 @@ def apply_replay_instructions(
 
 
 def get_window_prompt_dict(active_window: models.WindowEvent) -> dict:
-    """TODO"""
+    """Convert a WindowEvent into a dict, excluding unnecessary properties.
+
+    Args:
+        active_window: the WindowEvent to convert
+
+    Returns:
+        dictionary containing relevant properties from the given WindowEvent.
+    """
     active_window_dict = deepcopy(
         {
             key: val
@@ -139,7 +164,14 @@ def get_window_prompt_dict(active_window: models.WindowEvent) -> dict:
 
 
 def get_action_prompt_dict(action: models.ActionEvent) -> dict:
-    """TODO"""
+    """Convert an ActionEvent into a dict, excluding unnecessary properties.
+
+    Args:
+        action: the ActionEvent to convert
+
+    Returns:
+        dictionary containing relevant properties from the given ActionEvent.
+    """
     action_dict = deepcopy(
         {
             key: val
@@ -164,7 +196,7 @@ def get_action_prompt_dict(action: models.ActionEvent) -> dict:
 class VisualReplayStrategy(
     strategies.base.BaseReplayStrategy,
 ):
-    """ReplayStrategy using Large Multimodal Model"""
+    """ReplayStrategy using Large Multimodal Model and replay instructions."""
 
     def __init__(
         self,
@@ -206,20 +238,10 @@ class VisualReplayStrategy(
             models.ActionEvent: The next ActionEvent for replay.
         """
         logger.debug(f"{self.recording_action_idx=}")
-        if self.recording_action_idx == len(self.recording.processed_action_events):
+        if self.recording_action_idx >= len(self.modified_actions):
             raise StopIteration()
 
-        try:
-            reference_action = self.recording.processed_action_events[
-                self.recording_action_idx
-            ]
-        except Exception as exc:
-            logger.warning(exc)
-            raise StopIteration()
-        reference_window = reference_action.window_event
-
-        import time
-
+        # TODO: hack
         time.sleep(1)
         active_window = models.WindowEvent.get_active_window_event()
 
@@ -263,11 +285,23 @@ class VisualReplayStrategy(
         return modified_reference_action
 
 
-def get_active_segment(action, window_segmentation, debug: bool = DEBUG):
-    """
-    Returns the index of the bounding box within which the action's mouse coordinates
-    fall, adjusted for the scaling of the cropped window and the action coordinates.
-    Additionally, visualizes the segments and the mouse position using PIL.
+def get_active_segment(
+    action: models.ActionEvent,
+    window_segmentation: Segmentation,
+    debug: bool = DEBUG,
+) -> int:
+    """Get the index of the bounding box within the action's mouse coordinates.
+
+    Adjust for the scaling of the cropped window and the action coordinates.
+    Additionally, visualizes the segments and the mouse position.
+
+    Args:
+        action: the ActionEvent
+        window_segmentation: the Segmentation
+        debug: whether to display images useful in debugging
+
+    Returns:
+        index of active segment in Segmentation
     """
     # Obtain the scale ratios
     width_ratio, height_ratio = utils.get_scale_ratios(action)
@@ -334,12 +368,22 @@ def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
 ) -> Segmentation:
+    """
+    Segments the active window from the action event's screenshot.
+
+    Args:
+        action_event: action event containing the screenshot data.
+        exceptions: list of exceptions previously raised, added to prompt.
+
+    Returns:
+        Segmnetation object containing detailed segmentation information.
+    """
     screenshot = action_event.screenshot
     screenshot.crop_active_window(action_event)
     original_image = screenshot.image
     if DEBUG:
         original_image.show()
-    segmentation_adapter = get_default_segmentation_adapter()
+    segmentation_adapter = adapters.get_default_segmentation_adapter()
     segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
     if DEBUG:
         segmented_image.show()
@@ -373,29 +417,25 @@ def get_window_segmentation(
     return segmentation
 
 
-def get_default_prompt_adapter():
-    return {
-        "openai": adapters.openai,
-        "anthropic": adapters.anthropic,
-        "google": adapters.google,
-    }[config.DEFAULT_ADAPTER]
-
-
-def get_default_segmentation_adapter():
-    return {
-        "som": adapters.som,
-        "replicate": adapters.replicate,
-        "ultralytics": adapters.ultralytics,
-    }[config.DEFAULT_SEGMENTATION_ADAPTER]
-
-
 def prompt_for_descriptions(
     original_image_base64: str,
     masked_images_base64: list[str],
     active_segment_description: str | None,
     exceptions: list[Exception] | None = None,
 ) -> list[str]:
-    prompt_adapter = get_default_prompt_adapter()
+    """
+    Generates descriptions for given image segments using a prompt adapter.
+
+    Args:
+        original_image_base64: Base64 encoding of the original image.
+        masked_images_base64: List of base64 encoded masked images.
+        active_segment_description: Description of the active segment.
+        exceptions: List of exceptions previously raised, added to prompts.
+
+    Returns:
+        list of descriptions for each masked image.
+    """
+    prompt_adapter = adapters.get_default_prompt_adapter()
 
     # TODO: move inside adapters
     # off by one to account for original image
@@ -443,12 +483,9 @@ def prompt_for_descriptions(
             len(masked_images_base64),
         )
     except Exception as exc:
-        # TODO XXX
         logger.error(exc)
-        import ipdb
-
-        ipdb.set_trace()
-        foo = 1
+        import ipdb ipdb.set_trace()  # noqa
+        # TODO XXX
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
     return descriptions
