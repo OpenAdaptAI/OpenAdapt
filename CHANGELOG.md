@@ -2,6 +2,21 @@
 
 
 
+## v0.17.1 (2024-04-15)
+
+### Fix
+
+* fix(ci): dashboard -&gt; install-dashboard
+
+* Update install_openadapt.sh
+
+dashboard -&gt; install-dashboard
+
+* dashboard -&gt; install-dashboard (win)
+
+* pull_request_target -&gt; pull_request ([`e3834ed`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e3834edddaffcf37c774cacbf2c521edf0ee3d43))
+
+
 ## v0.17.0 (2024-04-11)
 
 ### Documentation
