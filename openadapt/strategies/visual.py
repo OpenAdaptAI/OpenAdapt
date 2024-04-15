@@ -484,7 +484,7 @@ def prompt_for_descriptions(
         )
     except Exception as exc:
         logger.error(exc)
-        import ipdb ipdb.set_trace()  # noqa
+        import ipdb; ipdb.set_trace()  # noqa
         # TODO XXX
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
