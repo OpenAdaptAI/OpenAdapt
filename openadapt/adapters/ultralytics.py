@@ -21,7 +21,7 @@ MODEL_NAMES = (
     "FastSAM-x.pt",
     "FastSAM-s.pt",
 )
-MODEL_NAME = MODEL_NAMES[-1]
+MODEL_NAME = MODEL_NAMES[0]
 
 
 # TODO: rename
@@ -65,50 +65,39 @@ def fetch_segmented_image(
     prompt_process = FastSAMPrompt(image, everything_results, device='cpu')
 
     # Everything prompt
-    ann = prompt_process.everything_prompt()
+    annotations = prompt_process.everything_prompt()
 
     # TODO: support other modes:
 
     # Bbox default shape [0,0,0,0] -> [x1,y1,x2,y2]
-    #ann = prompt_process.box_prompt(bbox=[200, 200, 300, 300])
+    #annotations = prompt_process.box_prompt(bbox=[200, 200, 300, 300])
 
     # Text prompt
-    #ann = prompt_process.text_prompt(text='a photo of a dog')
+    #annotations = prompt_process.text_prompt(text='a photo of a dog')
 
     # Point prompt
     # points default [[0,0]] [[x1,y1],[x2,y2]]
     # point_label default [0] [1,0] 0:background, 1:foreground
-    #ann = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
+    #annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
 
-    """
-    fig, ax = plt.subplots()
-    prompt_process.fast_show_mask(
-        annotation=ann[0].masks,
-        ax=ax,
-        random_color=random_color,
-        bbox=bbox,
-        points=points,
-        pointlabel=pointlabel,
-        retinamask=retinamask
-    )
-    """
-    assert len(ann) == 1, len(ann)
-    ann_item = ann[0]
+    assert len(annotations) == 1, len(annotations)
+    annotation = annotations[0]
 
     # hide original image
-    ann_item.orig_img = np.ones(ann_item.orig_img.shape)
+    annotation.orig_img = np.ones(annotation.orig_img.shape)
 
+    # TODO: in memory, e.g. with prompt_process.fast_show_mask()
     with TemporaryDirectory() as tmp_dir:
         # Force the output format to PNG to prevent JPEG compression artefacts
-        ann_item.path = ann_item.path.replace('.jpg', '.png')
+        annotation.path = annotation.path.replace('.jpg', '.png')
         prompt_process.plot(
-            [ann_item],
+            [annotation],
             tmp_dir,
             with_contours=False,
             retina=False,
         )
-        result_name = os.path.basename(ann_item.path).replace('.jpg', '.png')
-        logger.info(f"{ann_item.path=}")
+        result_name = os.path.basename(annotation.path)
+        logger.info(f"{annotation.path=}")
         image_path = Path(tmp_dir) / result_name
         image = Image.open(image_path)
         os.remove(image_path)

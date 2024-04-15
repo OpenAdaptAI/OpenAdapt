@@ -83,8 +83,8 @@ def create_payload(
 
 
 @cache.cache()
-def get_completion(payload):
-    """Sends a request to the OpenAI API and prints the response."""
+def get_response(payload: dict) -> requests.Response:
+    """Sends a request to the OpenAI API and returns the response."""
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.OPENAI_API_KEY}"
@@ -94,13 +94,23 @@ def get_completion(payload):
         headers=headers,
         json=payload,
     )
-    #return response.json()
+    return response
+
+
+def get_completion(payload: dict) -> str:
+    """Sends a request to the OpenAI API and returns the first message."""
+    response = get_response(payload)
     result = response.json()
     logger.info(f"result=\n{pformat(result)}")
     if "error" in result:
-        # XXX TODO
-        import ipdb; ipdb.set_trace()
         error = result["error"]
+        message = error["message"]
+        # TODO: fail after maximum number of attempts
+        if "retry your request" in message:
+            return get_completion(payload)
+        else:
+            import ipdb; ipdb.set_trace()
+            # TODO: handle more errors
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]
