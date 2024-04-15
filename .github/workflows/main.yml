@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ env.BRANCH }}
+          repository: ${{ env.REPO }}
 
       - name: Set up Python
         uses: actions/setup-python@v3
@@ -34,12 +37,6 @@ jobs:
       - name: Run tests using the shell script (macOS compatible).
         if: matrix.os == 'macos-latest'
         run: sh install/install_openadapt.sh
-
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ env.BRANCH }}
-          repository: ${{ env.REPO }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1
