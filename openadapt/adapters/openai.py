@@ -4,12 +4,7 @@ https://platform.openai.com/docs/guides/vision
 """
 
 from pprint import pformat
-import base64
-import json
-import mimetypes
-import os
 import requests
-import sys
 
 from loguru import logger
 
@@ -28,13 +23,19 @@ def create_payload(
     prompt: str,
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
-    model=MODEL_NAME,
-    detail="high",  # "low" or "high"
-    max_tokens=None,
-):
+    model: str = MODEL_NAME,
+    detail: str = "high",  # "low" or "high"
+    max_tokens: int | None = None,
+) -> dict:
+    """Create payload for prompting.
+
+    Args:
+        TODO
+    """
+
     max_tokens = max_tokens or MAX_TOKENS
-    # max_tokens is too large: 16384. This model supports at most 4096 completion tokens, whereas you provided 16384.
     if max_tokens > MAX_TOKENS:
+        logger.warning(f"{max_tokens=} {MAX_TOKENS=}")
         max_tokens = MAX_TOKENS
 
     """Creates the payload for the API request."""
@@ -86,7 +87,11 @@ def create_payload(
 
 @cache.cache()
 def get_response(payload: dict) -> requests.Response:
-    """Sends a request to the OpenAI API and returns the response."""
+    """Sends a request to the OpenAI API and returns the response.
+
+    Args:
+        TODO
+    """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.OPENAI_API_KEY}",
@@ -100,7 +105,11 @@ def get_response(payload: dict) -> requests.Response:
 
 
 def get_completion(payload: dict) -> str:
-    """Sends a request to the OpenAI API and returns the first message."""
+    """Sends a request to the OpenAI API and returns the first message.
+
+    Args:
+        TODO
+    """
     response = get_response(payload)
     result = response.json()
     logger.info(f"result=\n{pformat(result)}")
@@ -128,7 +137,13 @@ def prompt(
     base64_images: list[str] | None = None,
     max_tokens: int | None = None,
     detail: str = "high",
-):
+) -> str:
+    """Get prompt completion from OpenAI.
+
+    Args:
+        TODO
+    """
+
     payload = create_payload(
         prompt,
         system_prompt,

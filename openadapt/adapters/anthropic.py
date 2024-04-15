@@ -1,12 +1,6 @@
 """Adapter for Anthropic API with vision support."""
 
 from pprint import pprint
-import base64
-import json
-import mimetypes
-import os
-import requests
-import sys
 
 from loguru import logger
 import anthropic
@@ -17,6 +11,7 @@ from openadapt import cache, config
 MAX_TOKENS = 4096
 # from https://docs.anthropic.com/claude/docs/vision
 MAX_IMAGES = 20
+MODEL_NAME = "claude-3-opus-20240229"
 
 
 @cache.cache()
@@ -24,17 +19,17 @@ def create_payload(
     prompt: str,
     system_prompt: str | None = None,
     base64_images: list[tuple[str, str]] | None = None,
-    model="claude-3-opus-20240229",
-    max_tokens=None,
-):
+    model: str = MODEL_NAME,
+    max_tokens: int | None = None,
+) -> dict:
     """Creates the payload for the Anthropic API request with image support."""
     messages = []
 
     user_message_content = []
 
     max_tokens = max_tokens or MAX_TOKENS
-    # max_tokens: 16384 > 4096, which is the maximum allowed number of output tokens for claude-3-opus-20240229
     if max_tokens > MAX_TOKENS:
+        logger.warning(f"{max_tokens=} > {MAX_TOKENS=}")
         max_tokens = MAX_TOKENS
 
     # Add base64 encoded images to the user message content
@@ -89,7 +84,7 @@ client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 
 @cache.cache()
-def get_completion(payload):
+def get_completion(payload: dict) -> str:
     """Sends a request to the Anthropic API and returns the response."""
     try:
         response = client.messages.create(**payload)

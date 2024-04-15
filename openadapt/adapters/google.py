@@ -4,8 +4,8 @@ See https://ai.google.dev/tutorials/python_quickstart for documentation.
 """
 
 from pprint import pprint
-import base64
 
+from PIL import Image
 import fire
 import google.generativeai as genai
 
@@ -24,13 +24,14 @@ MAX_IMAGES = {
 }[MODEL_NAME]
 
 
+@cache.cache()
 def prompt(
     prompt: str,
     system_prompt: str | None = None,
     base64_images: list[str] | None = None,
     # max_tokens: int | None = None,
     model_name: str = MODEL_NAME,
-):
+) -> str:
     """Public method to get a response from the Google API with image support."""
     full_prompt = "\n\n###\n\n".join([s for s in (system_prompt, prompt) if s])
     # HACK
@@ -47,17 +48,12 @@ def prompt(
     model = genai.GenerativeModel(model_name)
     response = model.generate_content([full_prompt] + images)
     response.resolve()
-    result = response.text
     pprint(f"response=\n{response}")  # Log response for debugging
     return response.text
 
 
-from PIL import Image
-import openadapt.utils
-import io
-
-
-def main(text, image_path=None):
+def main(text: str, image_path: str | None = None):
+    """Prompt with a path to an image"""
     if image_path:
         with Image.open(image_path) as img:
             # Convert image to RGB if it's RGBA (to remove alpha channel)
@@ -65,7 +61,7 @@ def main(text, image_path=None):
                 img.mode == "P" and "transparency" in img.info
             ):
                 img = img.convert("RGB")
-            base64_image = openadapt.utils.image2utf8(img)
+            base64_image = utils.image2utf8(img)
     else:
         base64_image = None
 

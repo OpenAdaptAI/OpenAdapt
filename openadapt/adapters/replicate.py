@@ -12,7 +12,7 @@ from openadapt import cache, config, utils
 
 
 @cache.cache()
-def _fetch_segmented_image(image_uri: str):
+def _fetch_segmented_image(image_uri: str) -> Image.Image:
     """
     https://replicate.com/pablodawson/segment-anything-automatic/api?tab=python#run
     """
@@ -28,7 +28,7 @@ def _fetch_segmented_image(image_uri: str):
     )
     logger.info(f"{segmented_image_url=}")
     image_data = requests.get(segmented_image_url).content
-    image: Image.Image = Image.open(io.BytesIO(image_data))
+    image = Image.open(io.BytesIO(image_data))
     return image
 
 
@@ -71,7 +71,7 @@ def fetch_segmented_image(image: Image, n: Optional[int] = 100) -> Image:
     return segmented_image
 
 
-def fetch_segmented_image_from_path(image_path: str, n: Optional[int] = 100):
+def fetch_segmented_image_from_path(image_path: str, n: Optional[int] = 100) -> None:
     """
     Fetches a segmented image and saves it to the same directory with
     '-segmented' before the file extension.
