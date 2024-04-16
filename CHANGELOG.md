@@ -2,6 +2,53 @@
 
 
 
+## v0.18.0 (2024-04-16)
+
+### Feature
+
+* feat(VisualReplayStrategy): adapters: ultralytics, som, anthropic, google; remove_move_before_click; vision.py
+
+* add prompts/, adapters/openai.py, strategies/visual.py (wip)
+
+* adapters.anthropic
+
+* add anthropic.py
+
+* prompt with active segment descriptions
+
+* Set-of-Mark Prompting Adapter (#612)
+
+* Update openadapt/config.py
+
+* remove_move_before_click
+
+* started_counter; adapters.ultralytics
+
+* add vision.py
+
+* add openadapt/adapters/google.py
+
+* filter_masks_by_size
+
+* documentation
+
+* update README
+
+* add ultralytics
+
+* exclude alembic in black/flake8
+
+* exclude .venv in black/flake8
+
+* disable som adapter; remove logging
+
+* add adapters.google
+
+---------
+
+Co-authored-by: Cody DeVilliers &lt;devilliers.cody@gmail.com&gt; ([`250943f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/250943fa14fe58a261890db7fa4d54b1f7a64945))
+
+
 ## v0.17.1 (2024-04-15)
 
 ### Fix
