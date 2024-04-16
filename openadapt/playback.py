@@ -97,8 +97,6 @@ def play_action_event(
             play_action_event(child, mouse_controller, keyboard_controller)
     else:
         expected_event_names = MOUSE_EVENTS + KEY_EVENTS
-        logger.info(f"{expected_event_names=}")
-        logger.info(f"{event.name=}")
         try:
             assert event.name in expected_event_names, (
                 event.name,

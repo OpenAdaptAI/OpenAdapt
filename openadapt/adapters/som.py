@@ -84,6 +84,10 @@ def fetch_segmented_image(image: Image.Image) -> Image.Image:
     Returns:
         The segmented PIL Image.
     """
+    raise NotImplementedError(
+        "SoM server currently compresses the segmented image, "
+        "resulting in many more colors than masks."
+    )
     img_temp_path = save_image_to_temp_file(image)  # Save the image to a temp file
     segmented_image_path = predict(file_path=img_temp_path)  # Perform prediction
     os.remove(img_temp_path)  # Delete the temp file after prediction
