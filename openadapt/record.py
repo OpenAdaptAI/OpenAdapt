@@ -169,6 +169,7 @@ def process_events(
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -181,6 +182,7 @@ def process_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
 
@@ -192,8 +194,13 @@ def process_events(
     prev_window_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+    started = False
     while not terminate_event.is_set() or not event_q.empty():
         event = event_q.get()
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
         if prev_event is not None:
@@ -320,6 +327,7 @@ def write_events(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
     term_pipe: multiprocessing.Pipe,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Write events of a specific type to the db using the provided write function.
 
@@ -330,8 +338,8 @@ def write_events(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
-        term_pipe: A pipe for communicating \
-            the number of events left to be written.
+        term_pipe: A pipe for communicating the number of events left to be written.
+        started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
 
@@ -340,6 +348,7 @@ def write_events(
 
     num_left = 0
     progress = None
+    started = False
     while not terminate_event.is_set() or not write_q.empty():
         if term_pipe.poll():
             num_left = term_pipe.recv()
@@ -353,6 +362,10 @@ def write_events(
                 )
         if terminate_event.is_set() and num_left != 0 and progress is not None:
             progress.update()
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         try:
             event = write_q.get_nowait()
         except queue.Empty:
@@ -372,6 +385,7 @@ def write_video(
     video_write_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Writes video frames from a synchronized queue to a video file until termination.
 
@@ -395,6 +409,7 @@ def write_video(
             video writing should be terminated. The function will continue to
             process events in the queue until it is empty, even after the terminate
             event is set.
+        started_counter: Value to increment once started.
 
     Returns:
         None
@@ -415,7 +430,12 @@ def write_video(
     crud.update_video_start_time(recording_timestamp, video_start_time)
 
     last_pts = 0
+    started = False
     while not terminate_event.is_set() or not video_write_q.empty():
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         try:
             event = video_write_q.get_nowait()
         except queue.Empty:
@@ -584,6 +604,7 @@ def read_screen_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    started_counter: multiprocessing.Value,
     # TODO: throttle
     # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
     # max_memory_percent: float = 50.0,  # Maximum allowed memory percent
@@ -595,15 +616,21 @@ def read_screen_events(
         event_q: A queue for adding screen events.
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
+        started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
 
     logger.info("Starting")
+    started = False
     while not terminate_event.is_set():
         screenshot = utils.take_screenshot()
         if screenshot is None:
             logger.warning("Screenshot was None")
             continue
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("Done")
 
@@ -613,6 +640,7 @@ def read_window_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -620,15 +648,22 @@ def read_window_events(
         event_q: A queue for adding window events.
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
+        started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
 
     logger.info("Starting")
     prev_window_data = {}
+    started = False
     while not terminate_event.is_set():
         window_data = window.get_active_window_data()
         if not window_data:
             continue
+
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
 
         if window_data["title"] != prev_window_data.get("title") or window_data[
             "window_id"
@@ -660,6 +695,7 @@ def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Write performance stats to the database.
 
@@ -669,12 +705,18 @@ def performance_stats_writer(
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_event: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
 
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    started = False
     while not terminate_event.is_set() or not perf_q.empty():
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         try:
             event_type, start_time, end_time = perf_q.get_nowait()
         except queue.Empty:
@@ -693,6 +735,7 @@ def memory_writer(
     recording_timestamp: float,
     terminate_event: multiprocessing.Event,
     record_pid: int,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Writes memory usage statistics to the database.
 
@@ -701,6 +744,7 @@ def memory_writer(
         terminate_event (multiprocessing.Event): The event used to terminate
           the process.
         record_pid (int): The process ID to monitor memory usage for.
+        started_counter: Value to increment once started.
 
     Returns:
         None
@@ -711,7 +755,12 @@ def memory_writer(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
 
+    started = False
     while not terminate_event.is_set():
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
         memory_usage_bytes = 0
 
         memory_info = process.memory_info()
@@ -772,6 +821,7 @@ def read_keyboard_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Reads keyboard events and adds them to the event queue.
 
@@ -780,6 +830,7 @@ def read_keyboard_events(
         terminate_event (multiprocessing.Event): The event to signal termination
           of event reading.
         recording_timestamp (float): The timestamp of the recording.
+        started_counter: Value to increment once started.
 
     Returns:
         None
@@ -867,6 +918,12 @@ def read_keyboard_events(
         on_release=partial(on_release, event_q),
     )
     keyboard_listener.start()
+
+    # NOTE: listener may not have actually started by now
+    # TODO: handle race condition, e.g. by sending synthetic events from main thread
+    with started_counter.get_lock():
+        started_counter.value += 1
+
     terminate_event.wait()
     keyboard_listener.stop()
 
@@ -875,6 +932,7 @@ def read_mouse_events(
     event_q: queue.Queue,
     terminate_event: multiprocessing.Event,
     recording_timestamp: float,
+    started_counter: multiprocessing.Value,
 ) -> None:
     """Reads mouse events and adds them to the event queue.
 
@@ -882,6 +940,7 @@ def read_mouse_events(
         event_q: The event queue to add the mouse events to.
         terminate_event: The event to signal termination of event reading.
         recording_timestamp: The timestamp of the recording.
+        started_counter: Value to increment once started.
 
     Returns:
         None
@@ -894,6 +953,12 @@ def read_mouse_events(
         on_scroll=partial(on_scroll, event_q),
     )
     mouse_listener.start()
+
+    # NOTE: listener may not have actually started by now
+    # TODO: handle race condition, e.g. by sending synthetic events from main thread
+    with started_counter.get_lock():
+        started_counter.value += 1
+
     terminate_event.wait()
     mouse_listener.stop()
 
@@ -926,6 +991,8 @@ def record(
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     terminate_event = multiprocessing.Event()
+    started_counter = multiprocessing.Value("i", 0)
+    expected_starts = 9
 
     (
         term_pipe_parent_window,
@@ -942,25 +1009,25 @@ def record(
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_event, recording_timestamp, started_counter),
     )
     window_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_event, recording_timestamp, started_counter),
     )
     screen_event_reader.start()
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_event, recording_timestamp, started_counter),
     )
     keyboard_event_reader.start()
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_event, recording_timestamp, started_counter),
     )
     mouse_event_reader.start()
 
@@ -975,6 +1042,7 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_event,
+            started_counter,
         ),
     )
     event_processor.start()
@@ -989,6 +1057,7 @@ def record(
             recording_timestamp,
             terminate_event,
             term_pipe_child_screen,
+            started_counter,
         ),
     )
     screen_event_writer.start()
@@ -1003,6 +1072,7 @@ def record(
             recording_timestamp,
             terminate_event,
             term_pipe_child_action,
+            started_counter,
         ),
     )
     action_event_writer.start()
@@ -1017,17 +1087,20 @@ def record(
             recording_timestamp,
             terminate_event,
             term_pipe_child_window,
+            started_counter,
         ),
     )
     window_event_writer.start()
 
     if config.RECORD_VIDEO:
+        expected_starts += 1
         video_writer = multiprocessing.Process(
             target=write_video,
             args=(
                 video_write_q,
                 recording_timestamp,
                 terminate_event,
+                started_counter,
             ),
         )
         video_writer.start()
@@ -1039,11 +1112,13 @@ def record(
             perf_q,
             recording_timestamp,
             terminate_perf_event,
+            started_counter,
         ),
     )
     perf_stat_writer.start()
 
     if PLOT_PERFORMANCE:
+        expected_starts += 1
         record_pid = os.getpid()
         mem_plotter = multiprocessing.Process(
             target=memory_writer,
@@ -1051,11 +1126,21 @@ def record(
                 recording_timestamp,
                 terminate_perf_event,
                 record_pid,
+                started_counter,
             ),
         )
         mem_plotter.start()
 
     # TODO: discard events until everything is ready
+
+    # Wait for all to signal they've started
+    while True:
+        if started_counter.value >= expected_starts:
+            break
+        time.sleep(0.1)  # Sleep to reduce busy waiting
+    for _ in range(5):
+        logger.info("*" * 40)
+    logger.info("All readers and writers have started. Waiting for input events...")
 
     collect_stats()
     global stop_sequence_detected

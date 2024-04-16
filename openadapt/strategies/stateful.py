@@ -29,13 +29,16 @@ class StatefulReplayStrategy(
     def __init__(
         self,
         recording: models.Recording,
+        replay_instructions: str | None = None,
     ) -> None:
         """Initialize the StatefulReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
+            replay_instructions (str): Natural language instructions
+                for how recording should be replayed.
         """
-        super().__init__(recording)
+        super().__init__(recording, replay_instructions)
         self.recording_window_state_diffs = get_window_state_diffs(
             recording.processed_action_events
         )
@@ -146,28 +149,11 @@ class StatefulReplayStrategy(
             "Do not respond with any other text. "
         )
         completion = self.get_completion(prompt, system_message)
-        active_action_dicts = get_action_dict_from_completion(completion)
+        active_action_dicts = utils.get_action_dict_from_completion(completion)
         logger.debug(f"active_action_dicts=\n{pformat(active_action_dicts)}")
         active_action = models.ActionEvent.from_children(active_action_dicts)
         self.recording_action_idx += 1
         return active_action
-
-
-def get_action_dict_from_completion(completion: str) -> dict[models.ActionEvent]:
-    """Convert the completion to a dictionary containing action information.
-
-    Args:
-        completion (str): The completion provided by the user.
-
-    Returns:
-        dict: The action dictionary.
-    """
-    try:
-        action = eval(completion)
-    except Exception as exc:
-        logger.warning(f"{exc=}")
-    else:
-        return action
 
 
 def get_window_state_diffs(

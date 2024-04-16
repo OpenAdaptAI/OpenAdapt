@@ -1,11 +1,12 @@
 """This module defines the models used in the OpenAdapt system."""
 
-from typing import Union
+from typing import Type
 import io
 
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
+import mss.base
 import numpy as np
 import sqlalchemy as sa
 
@@ -79,6 +80,8 @@ class ActionEvent(db.Base):
 
     __tablename__ = "action_event"
 
+    _segment_description_separator = ";"
+
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
@@ -89,6 +92,11 @@ class ActionEvent(db.Base):
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dy = sa.Column(sa.Numeric(asdecimal=False))
+    active_segment_description = sa.Column(sa.String)
+    _available_segment_descriptions = sa.Column(
+        "available_segment_descriptions",
+        sa.String,
+    )
     mouse_button_name = sa.Column(sa.String)
     mouse_pressed = sa.Column(sa.Boolean)
     key_name = sa.Column(sa.String)
@@ -99,6 +107,23 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+
+    @property
+    def available_segment_descriptions(self) -> list[str]:
+        """Gets the available segment descriptions."""
+        if self._available_segment_descriptions:
+            return self._available_segment_descriptions.split(
+                self._segment_description_separator
+            )
+        else:
+            return []
+
+    @available_segment_descriptions.setter
+    def available_segment_descriptions(self, value: list[str]) -> None:
+        """Sets the available segment descriptions."""
+        self._available_segment_descriptions = self._segment_description_separator.join(
+            value
+        )
 
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
@@ -118,7 +143,7 @@ class ActionEvent(db.Base):
 
     def _key(
         self, key_name: str, key_char: str, key_vk: str
-    ) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    ) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Helper method to determine the key attribute based on available data."""
         if key_name:
             key = keyboard.Key[key_name]
@@ -132,7 +157,7 @@ class ActionEvent(db.Base):
         return key
 
     @property
-    def key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    def key(self) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Get the key associated with the action event."""
         logger.trace(f"{self.name=} {self.key_name=} {self.key_char=} {self.key_vk=}")
         return self._key(
@@ -142,7 +167,7 @@ class ActionEvent(db.Base):
         )
 
     @property
-    def canonical_key(self) -> Union[keyboard.Key, keyboard.KeyCode, str, None]:
+    def canonical_key(self) -> keyboard.Key | keyboard.KeyCode | str | None:
         """Get the canonical key associated with the action event."""
         logger.trace(
             f"{self.name=} "
@@ -223,7 +248,7 @@ class ActionEvent(db.Base):
         return rval
 
     @classmethod
-    def from_children(cls: list, children_dicts: list) -> "ActionEvent":
+    def from_children(cls: Type["ActionEvent"], children_dicts: list) -> "ActionEvent":
         """Create an ActionEvent instance from a list of child event dictionaries.
 
         Args:
@@ -231,10 +256,105 @@ class ActionEvent(db.Base):
 
         Returns:
             ActionEvent: An instance of ActionEvent with the specified child events.
-
         """
         children = [ActionEvent(**child_dict) for child_dict in children_dicts]
         return ActionEvent(children=children)
+
+    @classmethod
+    def from_dict(
+        cls: Type["ActionEvent"],
+        action_dict: dict,
+    ) -> "ActionEvent":
+        """Get an ActionEvent from a dict."""
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
+        children = []
+        release_events = []
+        if "text" in action_dict:
+            # Splitting actions based on whether they are special keys or characters
+            if action_dict["text"].startswith(name_prefix) and action_dict[
+                "text"
+            ].endswith(name_suffix):
+                # Handling special keys
+                sep = "".join([name_suffix, sep, name_prefix])
+                prefix_len = len(name_prefix)
+                suffix_len = len(name_suffix)
+                key_names = action_dict["text"][prefix_len:-suffix_len].split(sep)
+                canonical_key_names = action_dict["canonical_text"][
+                    prefix_len:-suffix_len
+                ].split(sep)
+                for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+                    press, release = cls._create_key_events(
+                        key_name, canonical_key_name
+                    )
+                    children.append(press)
+                    release_events.append(
+                        release
+                    )  # Collect release events to append in reverse order later
+            else:
+                # Handling regular character sequences
+                sep_len = len(sep)
+                for key_char in action_dict["text"][:: sep_len + 1]:
+                    # Press and release each character one after another
+                    press, release = cls._create_key_events(key_char=key_char)
+                    children.append(press)
+                    children.append(release)
+            children += release_events[::-1]
+            return ActionEvent(children=children)
+        else:
+            return ActionEvent(**action_dict)
+
+    @classmethod
+    def _create_key_events(
+        cls: Type["ActionEvent"],
+        key_name: str | None = None,
+        canonical_key_name: str | None = None,
+        key_char: str | None = None,
+        canonical_key_char: str | None = None,
+    ) -> list["ActionEvent"]:
+        # This helper function creates press and release events for a given key_name
+        # TODO: remove canonical?
+        press_event = cls(
+            name="press",
+            key_name=key_name,
+            # canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            # canonical_key_char=canonical_key_char,
+        )
+        release_event = cls(
+            name="release",
+            key_name=key_name,
+            # canonical_key_name=canonical_key_name,
+            key_char=key_char,
+            # canonical_key_char=canonical_key_char,
+        )
+        return press_event, release_event
+
+
+class WindowEvent(db.Base):
+    """Class representing a window event in the database."""
+
+    __tablename__ = "window_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    timestamp = sa.Column(ForceFloat)
+    state = sa.Column(sa.JSON)
+    title = sa.Column(sa.String)
+    left = sa.Column(sa.Integer)
+    top = sa.Column(sa.Integer)
+    width = sa.Column(sa.Integer)
+    height = sa.Column(sa.Integer)
+    window_id = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="window_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+
+    @classmethod
+    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
+        """Get the active window event."""
+        return WindowEvent(**window.get_active_window_data())
 
 
 class Screenshot(db.Base):
@@ -252,14 +372,30 @@ class Screenshot(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
 
-    # TODO: convert to png_data on save
-    sct_img = None
+    def __init__(
+        self,
+        *args: tuple,
+        sct_img: mss.base.ScreenShot | None = None,
+        **kwargs: dict,
+    ) -> None:
+        """Initialize."""
+        super().__init__(*args, **kwargs)
+        self.initialize_instance_attributes()
+        self.sct_img = sct_img
 
-    # TODO: replace prev with prev_timestamp?
-    prev = None
-    _image = None
-    _diff = None
-    _diff_mask = None
+    @sa.orm.reconstructor
+    def initialize_instance_attributes(self) -> None:
+        """Initialize attributes for both new and loaded objects."""
+        # TODO: convert to png_data on save
+        self.sct_img = None
+
+        # TODO: replace prev with prev_timestamp?
+        self.prev = None
+        self._image = None
+        self._image_history = []
+        self._diff = None
+        self._diff_mask = None
+        self._base64 = None
 
     @property
     def image(self) -> Image:
@@ -276,6 +412,15 @@ class Screenshot(db.Base):
             else:
                 self._image = self.convert_binary_to_png(self.png_data)
         return self._image
+
+    @property
+    def base64(self) -> str:
+        """Return data URI of JPEG encoded base64."""
+        if not self._base64:
+            from openadapt import utils
+
+            self._base64 = utils.image2utf8(self.image)
+        return self._base64
 
     @property
     def diff(self) -> Image:
@@ -326,7 +471,15 @@ class Screenshot(db.Base):
         y1 = y0 + window_event.height * height_ratio
 
         box = (x0, y0, x1, y1)
+        self._image_history.append(self.image)
         self._image = self._image.crop(box)
+
+    @property
+    def original_image(self) -> Image:
+        """Get the original image (before any cropping)."""
+        if self._image_history:
+            return self._image_history[0]
+        return self.image
 
     def convert_binary_to_png(self, image_binary: bytes) -> Image:
         """Convert a binary image to a PNG image.
@@ -352,31 +505,6 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
-
-
-class WindowEvent(db.Base):
-    """Class representing a window event in the database."""
-
-    __tablename__ = "window_event"
-
-    id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    timestamp = sa.Column(ForceFloat)
-    state = sa.Column(sa.JSON)
-    title = sa.Column(sa.String)
-    left = sa.Column(sa.Integer)
-    top = sa.Column(sa.Integer)
-    width = sa.Column(sa.Integer)
-    height = sa.Column(sa.Integer)
-    window_id = sa.Column(sa.String)
-
-    recording = sa.orm.relationship("Recording", back_populates="window_events")
-    action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
-
-    @classmethod
-    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
-        """Get the active window event."""
-        return WindowEvent(**window.get_active_window_data())
 
 
 class PerformanceStat(db.Base):

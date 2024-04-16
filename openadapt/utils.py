@@ -6,14 +6,17 @@ This module provides various utility functions used throughout OpenAdapt.
 from collections import defaultdict
 from io import BytesIO
 from logging import StreamHandler
-from typing import Union
+from typing import Any
+import ast
 import base64
 import inspect
+import json
 import os
 import sys
 import threading
 import time
 
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import fire
@@ -21,6 +24,7 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import orjson
 
 from openadapt import common, config
 from openadapt.db import db
@@ -69,7 +73,7 @@ def configure_logging(logger: logger, log_level: str) -> None:
         logger.debug(f"{log_level=}")
 
 
-def row2dict(row: Union[dict, db.BaseModel], follow: bool = True) -> dict:
+def row2dict(row: dict | db.BaseModel, follow: bool = True) -> dict:
     """Convert a row object to a dictionary.
 
     Args:
@@ -448,6 +452,16 @@ def draw_rectangle(
 def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
+    <position in image space> = scale_ratio * <position in window/action space>, e.g:
+
+        width_ratio, height_ratio = get_scale_ratios(action_event)
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+        x = action_event.mouse_x * width_ratio
+        y = action_event.mouse_y * height_ratio
+
     Args:
         action_event (ActionEvent): The action event.
 
@@ -456,7 +470,7 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
         float: The height ratio.
     """
     recording = action_event.recording
-    image = action_event.screenshot.image
+    image = action_event.screenshot.original_image
     width_ratio = image.width / recording.monitor_width
     height_ratio = image.height / recording.monitor_height
     return width_ratio, height_ratio
@@ -563,6 +577,7 @@ def display_event(
     return image
 
 
+# TODO: png
 def image2utf8(image: Image.Image) -> str:
     """Convert an image to UTF-8 format.
 
@@ -582,6 +597,32 @@ def image2utf8(image: Image.Image) -> str:
     image_base64 = base64_prefix + image_str
     image_utf8 = image_base64.decode("utf-8")
     return image_utf8
+
+
+def utf82image(image_utf8: str) -> Image.Image:
+    """Convert a UTF-8 encoded image back into a PIL image object.
+
+    Inverts utf82image.
+
+    Args:
+        image_utf8 (str): The UTF-8 encoded image.
+
+    Returns:
+        PIL.Image.Image: The decoded image as a PIL image object.
+    """
+    if not image_utf8:
+        return None
+
+    # Remove the base64 image prefix
+    base64_data = image_utf8.split(",", 1)[1]
+
+    # Decode the base64 string
+    image_bytes = base64.b64decode(base64_data)
+
+    # Convert bytes to image
+    image = Image.open(BytesIO(image_bytes))
+
+    return image
 
 
 def set_start_time(value: float = None) -> float:
@@ -803,6 +844,115 @@ def get_functions(name: str) -> dict:
         if inspect.isfunction(obj) and not name.startswith("_"):
             functions[name] = obj
     return functions
+
+
+def get_action_dict_from_completion(completion: str) -> dict[ActionEvent]:
+    """Convert the completion to a dictionary containing action information.
+
+    Args:
+        completion (str): The completion provided by the user.
+
+    Returns:
+        dict: The action dictionary.
+    """
+    try:
+        action = eval(completion)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+    else:
+        return action
+
+
+# copied from https://github.com/OpenAdaptAI/OpenAdapt/pull/560/files
+def render_template_from_file(template_relative_path: str, **kwargs: dict) -> str:
+    """Load a Jinja2 template from a file and interpolate arguments.
+
+    Args:
+        template_relative_path (str): Relative path to the Jinja2 template file
+            from the project root.
+        **kwargs: Arguments to interpolate into the template.
+
+    Returns:
+        str: Rendered template with interpolated arguments.
+    """
+
+    def orjson_to_json(value: Any) -> str:
+        # orjson.dumps returns bytes, so decode to string
+        return orjson.dumps(value).decode("utf-8")
+
+    # Construct the full path to the template file
+    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+
+    # Extract the directory and template file name
+    template_dir, template_file = os.path.split(template_path)
+    logger.info(f"{template_dir=} {template_file=}")
+
+    # Create a Jinja2 environment with the directory
+    env = Environment(loader=FileSystemLoader(template_dir))
+
+    # Add custom filters
+    env.filters["orjson"] = orjson_to_json
+    env.globals.update(zip=zip)
+
+    # Load the template
+    template = env.get_template(template_file)
+
+    # Render the template with provided arguments
+    return template.render(**kwargs)
+
+
+def parse_code_snippet(snippet: str) -> dict:
+    """Parse a text code snippet into a dict.
+
+    e.g.
+        ```json
+        { "foo": true }
+        ```
+    Returns:
+
+        { "foo": True }
+
+    Args:
+        snippet: text snippet
+
+    Returns:
+        dict representation of what was in the text snippet
+    """
+    try:
+        if snippet.startswith("```json"):
+            # Remove Markdown code block syntax
+            json_string = (
+                snippet.replace("```json\n", "")
+                .replace("```", "")
+                .replace("True", "true")
+                .replace("False", "false")
+                .strip()
+            )
+            # Parse the JSON string
+            return json.loads(json_string)
+        elif snippet.startswith("```python"):
+            python_code = snippet.replace("```python\n", "").replace("```", "").strip()
+            return ast.literal_eval(python_code)
+        else:
+            msg = "Unsupported {snippet=}"
+            logger.warning(msg)
+            return None
+    except Exception as exc:
+        # TODO
+        raise exc
+
+
+def split_list(input_list: list, size: int) -> list[list]:
+    """Splits a list into a list of lists, where each inner list has a maximum size.
+
+    Args:
+        input_list: The list to be split.
+        size: The maximum size of each inner list.
+
+    Returns:
+        A new list containing inner lists of the given size.
+    """
+    return [input_list[i : i + size] for i in range(0, len(input_list), size)]
 
 
 if __name__ == "__main__":

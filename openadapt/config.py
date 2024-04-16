@@ -20,6 +20,16 @@ import git
 import sentry_sdk
 
 _DEFAULTS = {
+    "GOOGLE_API_KEY": "<set in .env>",
+    "SOM_SERVER_URL": "<set in .env>",
+    "REPLICATE_API_TOKEN": "<set your api key in .env>",
+    "DEFAULT_ADAPTER": (
+        "openai",
+        "anthropic",
+        "google",
+    )[0],
+    "DEFAULT_SEGMENTATION_ADAPTER": ("som", "replicate", "ultralytics")[-1],
+    "ANTHROPIC_API_KEY": "<set your api key in .env>",
     "CACHE_DIR_PATH": ".cache",
     "CACHE_ENABLED": True,
     "CACHE_VERBOSITY": 0,
