@@ -261,19 +261,30 @@ class ActionEvent(db.Base):
         return ActionEvent(children=children)
 
     @classmethod
-    def from_dict(cls: Type["ActionEvent"], action_dict: dict) -> "ActionEvent":
+    def from_dict(
+        cls: Type["ActionEvent"],
+        action_dict: dict,
+    ) -> "ActionEvent":
         """Get an ActionEvent from a dict."""
-        # TODO: use config.ACTION_TEXT_SEP, ACTION_TEXT_NAME_PREFIX/SUFFIX
+        sep = config.ACTION_TEXT_SEP
+        name_prefix = config.ACTION_TEXT_NAME_PREFIX
+        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         children = []
         release_events = []
         if "text" in action_dict:
             # Splitting actions based on whether they are special keys or characters
-            if action_dict["text"].startswith("<") and action_dict["text"].endswith(
-                ">"
+            if (
+                action_dict["text"].startswith(name_prefix) and
+                action_dict["text"].endswith(name_suffix)
             ):
                 # Handling special keys
-                key_names = action_dict["text"][1:-1].split(">-<")
-                canonical_key_names = action_dict["canonical_text"][1:-1].split(">-<")
+                sep = "".join([name_suffix, sep, name_prefix])
+                prefix_len = len(name_prefix)
+                suffix_len = len(name_suffix)
+                key_names = action_dict["text"][prefix_len:-suffix_len].split(sep)
+                canonical_key_names = (
+                    action_dict["canonical_text"][prefix_len:-suffix_len].split(sep)
+                )
                 for key_name, canonical_key_name in zip(key_names, canonical_key_names):
                     press, release = cls._create_key_events(
                         key_name, canonical_key_name
@@ -284,8 +295,8 @@ class ActionEvent(db.Base):
                     )  # Collect release events to append in reverse order later
             else:
                 # Handling regular character sequences
-                assert len(config.ACTION_TEXT_SEP) == 1, config.ACTION_TEXT_SEP
-                for key_char in action_dict["text"][::2]:
+                sep_len = len(sep)
+                for key_char in action_dict["text"][::sep_len + 1]:
                     # Press and release each character one after another
                     press, release = cls._create_key_events(key_char=key_char)
                     children.append(press)
