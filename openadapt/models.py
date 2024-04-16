@@ -273,18 +273,17 @@ class ActionEvent(db.Base):
         release_events = []
         if "text" in action_dict:
             # Splitting actions based on whether they are special keys or characters
-            if (
-                action_dict["text"].startswith(name_prefix) and
-                action_dict["text"].endswith(name_suffix)
-            ):
+            if action_dict["text"].startswith(name_prefix) and action_dict[
+                "text"
+            ].endswith(name_suffix):
                 # Handling special keys
                 sep = "".join([name_suffix, sep, name_prefix])
                 prefix_len = len(name_prefix)
                 suffix_len = len(name_suffix)
                 key_names = action_dict["text"][prefix_len:-suffix_len].split(sep)
-                canonical_key_names = (
-                    action_dict["canonical_text"][prefix_len:-suffix_len].split(sep)
-                )
+                canonical_key_names = action_dict["canonical_text"][
+                    prefix_len:-suffix_len
+                ].split(sep)
                 for key_name, canonical_key_name in zip(key_names, canonical_key_names):
                     press, release = cls._create_key_events(
                         key_name, canonical_key_name
@@ -296,7 +295,7 @@ class ActionEvent(db.Base):
             else:
                 # Handling regular character sequences
                 sep_len = len(sep)
-                for key_char in action_dict["text"][::sep_len + 1]:
+                for key_char in action_dict["text"][:: sep_len + 1]:
                     # Press and release each character one after another
                     press, release = cls._create_key_events(key_char=key_char)
                     children.append(press)
