@@ -1,6 +1,6 @@
 """Adapter for Anthropic API with vision support."""
 
-from pprint import pprint
+from pprint import pformat
 
 from loguru import logger
 import anthropic
@@ -129,18 +129,14 @@ def prompt(
     max_tokens: int | None = None,
 ) -> str:
     """Public method to get a response from the Anthropic API with image support."""
-    if len(base64_images) > MAX_IMAGES:
-        # XXX TODO handle this
-        raise Exception(
-            f"{len(base64_images)=} > {MAX_IMAGES=}. Use a different adapter."
-        )
+    if base64_images and len(base64_images) > MAX_IMAGES:
+        raise Exception(f"{len(base64_images)=} > {MAX_IMAGES=}.")
     payload = create_payload(
         prompt,
         system_prompt,
         base64_images,
         max_tokens=max_tokens,
     )
-    # pprint(f"payload=\n{payload}")  # Log payload for debugging
     result = get_completion(payload)
-    pprint(f"result=\n{result}")  # Log result for debugging
+    logger.info(f"result=\n{pformat(result)}")
     return result

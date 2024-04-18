@@ -918,28 +918,94 @@ def parse_code_snippet(snippet: str) -> dict:
     Returns:
         dict representation of what was in the text snippet
     """
+    def parse_json(s):
+        # Remove Markdown code block syntax
+        s = strip_backticks(s)
+        json_string = (
+            s.replace("```json\n", "")
+            .replace("```", "")
+            .replace("True", "true")
+            .replace("False", "false")
+            .strip()
+        )
+        # Parse the JSON string
+        return json.loads(json_string)
+
+    def parse_python(s):
+        python_code = s.replace("```python\n", "").replace("```", "").strip()
+        return ast.literal_eval(python_code)
+
     try:
         if snippet.startswith("```json"):
-            # Remove Markdown code block syntax
-            json_string = (
-                snippet.replace("```json\n", "")
-                .replace("```", "")
-                .replace("True", "true")
-                .replace("False", "false")
-                .strip()
-            )
-            # Parse the JSON string
-            return json.loads(json_string)
+            return parse_json(snippet)
         elif snippet.startswith("```python"):
-            python_code = snippet.replace("```python\n", "").replace("```", "").strip()
-            return ast.literal_eval(python_code)
+            return parse_python(snippet)
         else:
-            msg = "Unsupported {snippet=}"
-            logger.warning(msg)
-            return None
+            try:
+                return parse_json(snippet)
+            except Exception as exc:
+                logger.warning(exc)
+                return parse_python(snippet)
+            except Exception as exc:
+                logger.warning(exc)
+                msg = f"Unsupported {snippet=}"
+                logger.warning(msg)
+                return None
     except Exception as exc:
         # TODO
         raise exc
+
+
+def strip_backticks(
+    s: str,
+) -> tuple(str, str, str):
+    """Remove text before and after pairs of lines starting with triple backticks.
+
+    Params:
+        s: The string to strip
+
+    Returns:
+        Tuple of (stripped string, discarded prefix, discarded suffix)
+    """
+    BACKTICKS = "```"
+
+    lines = s.splitlines()
+    backtick_idxs = [
+        idx
+        for idx, line in enumerate(lines)
+        if line.startswith(BACKTICKS)
+    ]
+    logger.info(f"{backtick_idxs=} {len(backtick_idxs)=}")
+    logger.info(f"{len(backtick_idxs)=}")
+    if len(backtick_idxs) % 2 != 0:
+        logger.warning(f"{len(backtick_idxs)=} is uneven")
+    if len(backtick_idxs) < 2:
+        keep_lines = [
+            line
+            for line in lines
+            if not line.startswith(BACKTICKS)
+        ]
+        # TODO: discard suffix?
+        discarded_prefix = None
+        discarded_suffix = None
+    else:
+        start_idx = backtick_idxs[0]
+        end_idx = backtick_idxs[-1]
+        keep_lines = [
+            line for idx, line in enumerate(lines)
+            if idx > start_idx and idx < end_idx
+            and not line.startswith(BACKTICKS)
+        ]
+        discarded_prefix = "\n".join(lines[:start_idx])
+        discarded_suffix = "\n".join(lines[end_idx:])
+    keep = "\n".join(keep_lines)
+    if return_discarded:
+        logger.info(
+            f"{return_discarded=} {discarded_prefix=} {discarded_suffix=}"
+        )
+        return keep, discarded_prefix, discarded_suffix
+    else:
+        return keep
 
 
 def split_list(input_list: list, size: int) -> list[list]:

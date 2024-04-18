@@ -43,6 +43,7 @@ Usage:
 
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 import time
 
 from loguru import logger
@@ -52,7 +53,7 @@ from openadapt import adapters, common, models, strategies, utils, vision
 
 
 DEBUG = False
-DEBUG_REPLAY = False
+DEBUG_REPLAY = True
 
 
 @dataclass
@@ -431,6 +432,7 @@ def prompt_for_descriptions(
     Returns:
         list of descriptions for each masked image.
     """
+    logger.info(f"{len(masked_images_base64)=}")
     prompt_adapter = adapters.get_default_prompt_adapter()
 
     # TODO: move inside adapters
@@ -479,8 +481,20 @@ def prompt_for_descriptions(
             len(masked_images_base64),
         )
     except Exception as exc:
-        # TODO XXX
-        raise exc
+        logger.warning(exc)
+        descriptions = []
+        batch_size = math.ceil(len(masked_images_base64) / 2)
+        logger.info(f"{batch_size=}")
+        masked_images_base64_batches = utils.split_list(masked_images_base64, batch_size)
+        logger.info(f"{len(masked_images_base64_batches)=}")
+        for masked_images_base64_batch in masked_images_base64_batches:
+            descriptions += prompt_for_descriptions(
+                original_image_base64,
+                masked_images_base64_batch,
+                active_segment_description,
+                exceptions,
+            )
+        return descriptions
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
     return descriptions
