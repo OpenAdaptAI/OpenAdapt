@@ -48,15 +48,17 @@ class Capture:
 
         # Start video recording
         self.video_out = os.path.join(
-            config.CAPTURES_DIR,
+            config.CAPTURE_DIR_PATH,
             datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
         )
-        screen_recorder.start_video_recording(self.video_out, 30, 8000000, True)
+        if not os.path.exists(config.CAPTURE_DIR_PATH):
+            os.mkdir(config.CAPTURE_DIR_PATH)
+        screen_recorder.start_video_recording(self.video_out, 30, 8000000, False)
 
         # Start audio recording
         if audio:
             self.audio_out = os.path.join(
-                config.CAPTURES_DIR,
+                config.CAPTURE_DIR_PATH,
                 datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".wav",
             )
             self.audio_stream = self.audio.open(
