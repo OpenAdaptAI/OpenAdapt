@@ -26,6 +26,16 @@ import mss.base
 import numpy as np
 import orjson
 
+try:
+    import mss.windows
+    # fix cursor flicker on windows; see:
+    # https://github.com/BoboTiG/python-mss/issues/179#issuecomment-673292002
+    mss.windows.CAPTUREBLT = 0
+except Exception as exc:
+    pass
+
+
+
 from openadapt import common, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
