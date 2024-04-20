@@ -8,7 +8,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from openadapt.config import DB_URL
+from openadapt.config import config
 from openadapt.db import db
 
 # This is the Alembic Config object, which provides
@@ -33,8 +33,8 @@ def get_url() -> str:
     Returns:
         str: The database URL.
     """
-    print(f"DB_URL={DB_URL}")
-    return DB_URL
+    print(f"DB_URL={config.DB_URL}")
+    return config.DB_URL
 
 
 def run_migrations_offline() -> None:

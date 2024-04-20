@@ -4,7 +4,7 @@ usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
 from functools import partial
-from subprocess import Popen
+import multiprocessing
 import os
 import sys
 
@@ -18,10 +18,12 @@ from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH, start
+from openadapt.build_utils import is_running_from_executable
 from openadapt.db.crud import get_all_recordings
 from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
+from openadapt.visualize import main as visualize
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -109,7 +111,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             self.populate_menu(self.visualize_menu, self._visualize, "visualize")
             self.populate_menu(self.replay_menu, self._replay, "replay")
 
-            if self.dashboard_thread:
+            if self.dashboard_thread and not is_running_from_executable():
                 self.dashboard_action.setText("Reload dashboard")
         except KeyboardInterrupt:
             # the app is probably shutting down, so we can ignore this
@@ -141,10 +143,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         try:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
-            self.visualize_proc = Popen(
-                f"python -m openadapt.visualize --timestamp {recording.timestamp}",
-                shell=True,
+            self.visualize_proc = multiprocessing.Process(
+                target=visualize, args=(recording,)
             )
+            self.visualize_proc.start()
 
         except Exception as e:
             logger.error(e)
@@ -157,7 +159,11 @@ class SystemTrayIcon(QSystemTrayIcon):
             recording (Recording): The recording to replay.
         """
         Notify("Status", "Starting replay...", "OpenAdapt").send()
-        rthread = oaThread(target=replay, args=("NaiveReplayStrategy", None, recording))
+        rthread = oaThread(
+            target=replay,
+            args=("NaiveReplayStrategy", False, None, recording, None),
+            daemon=True,
+        )
         rthread.run()
         if rthread.join():
             Notify("Status", "Replay finished", "OpenAdapt").send()
@@ -195,6 +201,8 @@ class SystemTrayIcon(QSystemTrayIcon):
     def launch_dashboard(self) -> None:
         """Launch the web dashboard."""
         if self.dashboard_thread:
+            if is_running_from_executable():
+                return
             cleanup_dashboard(self.dashboard_thread._return)
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()

@@ -1,37 +1,51 @@
 """API endpoints for the dashboard."""
 
 
-from fastapi import FastAPI
+from pathlib import Path
+import os
 
-from openadapt.app.cards import is_recording, quick_record, stop_record
-from openadapt.db import crud
-from openadapt.models import Recording
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+import uvicorn
+
+from openadapt import config
+from openadapt.app.dashboard.api.recordings import RecordingsAPI
+from openadapt.app.dashboard.api.settings import SettingsAPI
+from openadapt.build_utils import is_running_from_executable
 
 app = FastAPI()
 
+api = FastAPI()
 
-@app.get("/api/recordings", response_model=None)
-def get_recordings() -> dict[str, list[Recording]]:
-    """Get all recordings."""
-    recordings = crud.get_all_recordings()
-    return {"recordings": recordings}
+RecordingsAPI(api).attach_routes()
+SettingsAPI(api).attach_routes()
 
-
-@app.get("/api/recordings/start")
-def start_recording() -> dict[str, str]:
-    """Start a recording session."""
-    quick_record()
-    return {"message": "Recording started"}
+app.mount("/api", api)
 
 
-@app.get("/api/recordings/stop")
-def stop_recording() -> dict[str, str]:
-    """Stop a recording session."""
-    stop_record()
-    return {"message": "Recording stopped"}
+def run_app() -> None:
+    """Run the dashboard."""
+    if is_running_from_executable():
+        build_directory = Path(__file__).parent.parent / "out"
 
+        def add_route(path: str) -> None:
+            """Add a route to the dashboard."""
 
-@app.get("/api/recordings/status")
-def recording_status() -> dict[str, bool]:
-    """Get the recording status."""
-    return {"recording": is_recording()}
+            def route() -> FileResponse:
+                return FileResponse(build_directory / path)
+
+            stripped_path = f'/{path.replace(".html", "")}'
+            logger.info(f"Adding route: {stripped_path}")
+            app.get(stripped_path)(route)
+
+        for root, _, files in os.walk(build_directory):
+            for file in files:
+                if file.endswith(".html"):
+                    path = os.path.relpath(os.path.join(root, file), build_directory)
+                    add_route(path)
+
+        app.mount("/", StaticFiles(directory=build_directory), name="static")
+
+    uvicorn.run(app, port=config.DASHBOARD_SERVER_PORT)

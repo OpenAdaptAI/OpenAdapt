@@ -97,8 +97,12 @@ cd OpenAdapt
 pip3 install poetry
 poetry install
 poetry shell
-alembic upgrade head
 poetry run install-dashbaord
+
+cd openadapt
+alembic upgrade head
+cd ..
+
 pytest
 ```
 

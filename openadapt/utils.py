@@ -19,7 +19,12 @@ import time
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
-import fire
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    import fire
+
 import matplotlib.pyplot as plt
 import mss
 import mss.base
@@ -798,7 +803,10 @@ def plot_performance(
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
-            os.system(f"open {fpath}")
+            if sys.platform == "darwin":
+                os.system(f"open {fpath}")
+            else:
+                os.system(f"start {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
         if view_file:

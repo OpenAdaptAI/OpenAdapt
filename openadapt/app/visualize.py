@@ -8,7 +8,12 @@ from pprint import pformat
 from loguru import logger
 from nicegui import events, ui
 from notifypy import Notify
-from tqdm import tqdm
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    from tqdm import tqdm
+
 import click
 
 from openadapt import config
@@ -289,115 +294,116 @@ def main(timestamp: str, notify: bool = True) -> None:
         )
     )
 
-    with tqdm(
-        total=num_events,
-        desc="Generating Visualization" if not SCRUB else "Scrubbing Visualization",
-        unit="event",
-        colour="green",
-        dynamic_ncols=True,
-    ) as progress:
-        for idx, action_event in enumerate(action_events):
-            if idx == MAX_EVENTS:
-                break
+    with override_stdout_stderr():
+        with tqdm(
+            total=num_events,
+            desc="Generating Visualization" if not SCRUB else "Scrubbing Visualization",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
+            for idx, action_event in enumerate(action_events):
+                if idx == MAX_EVENTS:
+                    break
 
-            image = display_event(action_event)
-            # diff = display_event(action_event, diff=True)
-            # mask = action_event.screenshot.diff_mask
+                image = display_event(action_event)
+                # diff = display_event(action_event, diff=True)
+                # mask = action_event.screenshot.diff_mask
 
-            if SCRUB:
-                image = scrub.scrub_image(image)
-            #    diff = scrub.scrub_image(diff)
-            #    mask = scrub.scrub_image(mask)
+                if SCRUB:
+                    image = scrub.scrub_image(image)
+                #    diff = scrub.scrub_image(diff)
+                #    mask = scrub.scrub_image(mask)
 
-            image_utf8 = image2utf8(image)
-            # diff_utf8 = image2utf8(diff)
-            # mask_utf8 = image2utf8(mask)
-            width, height = image.size
+                image_utf8 = image2utf8(image)
+                # diff_utf8 = image2utf8(diff)
+                # mask_utf8 = image2utf8(mask)
+                width, height = image.size
 
-            action_event_dict = row2dict(action_event)
-            window_event_dict = row2dict(action_event.window_event)
+                action_event_dict = row2dict(action_event)
+                window_event_dict = row2dict(action_event.window_event)
 
-            if SCRUB:
-                action_event_dict = scrub.scrub_dict(action_event_dict)
-                window_event_dict = scrub.scrub_dict(window_event_dict)
+                if SCRUB:
+                    action_event_dict = scrub.scrub_dict(action_event_dict)
+                    window_event_dict = scrub.scrub_dict(window_event_dict)
 
-            with ui.column():
-                with ui.row():
-                    interactive_images.append(
-                        ui.interactive_image(
-                            source=image_utf8,
-                        ).classes("drop-shadow-md rounded")
-                    )
-            with ui.splitter(value=60) as splitter:
-                splitter.classes("w-full h-full")
-                with splitter.after:
-                    ui.label("action_event_dict").style("font-weight: bold;")
+                with ui.column():
+                    with ui.row():
+                        interactive_images.append(
+                            ui.interactive_image(
+                                source=image_utf8,
+                            ).classes("drop-shadow-md rounded")
+                        )
+                with ui.splitter(value=60) as splitter:
+                    splitter.classes("w-full h-full")
+                    with splitter.after:
+                        ui.label("action_event_dict").style("font-weight: bold;")
 
-                    def on_change_closure(
-                        e: events.ValueChangeEventArguments, idx: int
-                    ) -> None:
-                        return set_filter(
-                            e.value,
-                            action_event_trees[idx],
+                        def on_change_closure(
+                            e: events.ValueChangeEventArguments, idx: int
+                        ) -> None:
+                            return set_filter(
+                                e.value,
+                                action_event_trees[idx],
+                            )
+
+                        text_inputs.append(
+                            ui.input(
+                                label="search",
+                                placeholder="filter",
+                                on_change=partial(
+                                    on_change_closure,
+                                    idx=idx,
+                                ),
+                            )
+                        )
+                        ui.html("<br/>")
+                        action_event_tree = create_tree(action_event_dict)
+                        action_event_trees.append(
+                            ui.tree(
+                                action_event_tree,
+                                label_key="id",
+                                # on_select=lambda e: ui.notify(e.value),
+                            )
+                        )
+                        set_tree_props(action_event_trees[idx])
+                    with splitter.before:
+                        ui.label("window_event_dict").style("font-weight: bold;")
+
+                        def on_change_closure(
+                            e: events.ValueChangeEventArguments, idx: int
+                        ) -> None:
+                            return set_filter(
+                                e.value,
+                                window_event_trees[idx],
+                            )
+
+                        text_inputs.append(
+                            ui.input(
+                                label="search",
+                                placeholder="filter",
+                                on_change=partial(
+                                    on_change_closure,
+                                    idx=idx,
+                                ),
+                            )
+                        )
+                        ui.html("<br/>")
+                        window_event_tree = create_tree(window_event_dict, None)
+
+                        window_event_trees.append(
+                            ui.tree(
+                                window_event_tree,
+                                label_key="id",
+                                # on_select=lambda e: ui.notify(e.value),
+                            )
                         )
 
-                    text_inputs.append(
-                        ui.input(
-                            label="search",
-                            placeholder="filter",
-                            on_change=partial(
-                                on_change_closure,
-                                idx=idx,
-                            ),
-                        )
-                    )
-                    ui.html("<br/>")
-                    action_event_tree = create_tree(action_event_dict)
-                    action_event_trees.append(
-                        ui.tree(
-                            action_event_tree,
-                            label_key="id",
-                            # on_select=lambda e: ui.notify(e.value),
-                        )
-                    )
-                    set_tree_props(action_event_trees[idx])
-                with splitter.before:
-                    ui.label("window_event_dict").style("font-weight: bold;")
+                        set_tree_props(window_event_trees[idx])
 
-                    def on_change_closure(
-                        e: events.ValueChangeEventArguments, idx: int
-                    ) -> None:
-                        return set_filter(
-                            e.value,
-                            window_event_trees[idx],
-                        )
+                progress.update()
 
-                    text_inputs.append(
-                        ui.input(
-                            label="search",
-                            placeholder="filter",
-                            on_change=partial(
-                                on_change_closure,
-                                idx=idx,
-                            ),
-                        )
-                    )
-                    ui.html("<br/>")
-                    window_event_tree = create_tree(window_event_dict, None)
-
-                    window_event_trees.append(
-                        ui.tree(
-                            window_event_tree,
-                            label_key="id",
-                            # on_select=lambda e: ui.notify(e.value),
-                        )
-                    )
-
-                    set_tree_props(window_event_trees[idx])
-
-            progress.update()
-
-        progress.close()
+            progress.close()
 
     if notify:
         Notify("Status", "Visualization finished", "OpenAdapt").send()

@@ -50,13 +50,8 @@ function spawnChildProcess() {
         }, 3000)
     })
 
-    // Handle SIG signals
-    const signals = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGKILL']
-
-    signals.forEach(signal => {
-        process.on(signal, () => {
-            childProcess.kill(signal)
-        })
+    process.on('SIGTERM', () => {
+        childProcess.kill('SIGTERM')
     })
 
     // Listen for child process error event

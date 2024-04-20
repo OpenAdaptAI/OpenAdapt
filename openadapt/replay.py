@@ -9,7 +9,11 @@ from typing import Union
 import os
 
 from loguru import logger
-import fire
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    import fire
 
 from openadapt import capture, utils
 from openadapt.db import crud

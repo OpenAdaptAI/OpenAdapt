@@ -1,5 +1,6 @@
 # Envirionment
 .env
+config.local.json
 
 # Python
 __pycache__
@@ -33,3 +34,6 @@ src
 
 *.pyc
 *.pt
+
+dist/
+build/

@@ -25,8 +25,13 @@ import math
 from loguru import logger
 from moviepy.editor import VideoClip, VideoFileClip
 from PIL import Image
-from tqdm import tqdm
-import fire
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    from tqdm import tqdm
+    import fire
+
 import numpy as np
 
 from openadapt import config, scrub, utils
@@ -107,28 +112,31 @@ def scrub_mp4(
         "| {bar} | "
         "{n_fmt}/{total_fmt} | {rate_fmt} | [{elapsed}<{remaining}] |"
     )
-    progress_bar = tqdm(
-        total=frame_count,
-        desc="Processing",
-        unit="frame",
-        bar_format=progress_bar_format,
-        colour="green",
-        dynamic_ncols=True,
-    )
-    progress_interval = 0.1  # Print progress every 10% of frames
-    progress_threshold = math.floor(frame_count * progress_interval)
+    with override_stdout_stderr():
+        progress_bar = tqdm(
+            total=frame_count,
+            desc="Processing",
+            unit="frame",
+            bar_format=progress_bar_format,
+            colour="green",
+            dynamic_ncols=True,
+        )
+        progress_interval = 0.1  # Print progress every 10% of frames
+        progress_threshold = math.floor(frame_count * progress_interval)
 
-    redacted_clip = VideoClip(
-        make_frame=lambda t: _make_frame(t, final, progress_bar, progress_threshold),
-        duration=final.duration,
-    )  # Redact the clip
+        redacted_clip = VideoClip(
+            make_frame=lambda t: _make_frame(
+                t, final, progress_bar, progress_threshold
+            ),
+            duration=final.duration,
+        )  # Redact the clip
 
-    scrubbed_file = mp4_file[:-4] + "_scrubbed.mp4"
-    redacted_clip.write_videofile(
-        scrubbed_file, fps=final.fps, logger=None
-    )  # Write the redacted clip to a file
+        scrubbed_file = mp4_file[:-4] + "_scrubbed.mp4"
+        redacted_clip.write_videofile(
+            scrubbed_file, fps=final.fps, logger=None
+        )  # Write the redacted clip to a file
 
-    progress_bar.close()
+        progress_bar.close()
     return "Scrubbed File Saved at: " + scrubbed_file
 
 

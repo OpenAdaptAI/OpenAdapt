@@ -25,9 +25,11 @@ export default function Recordings() {
         if (recordingStatus === RecordingStatus.STOPPED) {
             return;
         }
+        setRecordingStatus(RecordingStatus.UNKNOWN);
         fetch('/api/recordings/stop').then(res => {
             if (res.ok) {
                 setRecordingStatus(RecordingStatus.STOPPED);
+                fetchRecordings();
             }
         });
     }

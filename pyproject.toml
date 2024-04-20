@@ -21,7 +21,7 @@ homepage = "https://openadapt.ai/"
 [tool.poetry.dependencies]
 python = "3.10.x"
 alembic = "1.8.1"
-black = "23.3.0"
+black = "23.7.0"
 pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
 pywin32 = { version = "306", markers = "sys_platform == 'win32'" }
 ascii-magic = "2.3.0"
@@ -50,7 +50,7 @@ torch = "^2.0.0"
 tqdm = "4.64.0"
 transformers = "4.29.2"
 python-dotenv = "1.0.0"
-pyinstaller = "^5.12.0"
+pyinstaller = "6.5.0"
 setuptools-lint = "^0.6.0"
 sphinx = "7.0.1"
 nicegui = "^1.2.24"
@@ -98,6 +98,7 @@ google-generativeai = "^0.5.0"
 uvicorn = {extras = ["standard"], version = "^0.22"}
 ultralytics = "^8.1.47"
 imagehash = "^4.3.1"
+pydantic-settings = "^2.2.1"
 
 [tool.pytest.ini_options]
 filterwarnings = [

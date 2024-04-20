@@ -4,20 +4,30 @@ from typing import List
 
 from loguru import logger
 from PIL import Image
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
-from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_anonymizer import AnonymizerEngine
+    from presidio_image_redactor import ImageAnalyzerEngine, ImageRedactorEngine
+
 import spacy
 import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
 from openadapt import config
+from openadapt.build_utils import is_running_from_executable
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 
 if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
-    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
-    spacy.cli.download(config.SPACY_MODEL_NAME)
+    if not is_running_from_executable():
+        logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+        spacy.cli.download(config.SPACY_MODEL_NAME)
+    else:
+        # this is running from inside a pyinstaller build
+        logger.warning(f"Download {config.SPACY_MODEL_NAME} model manually.")
 
 
 class PresidioScrubbingProvider(

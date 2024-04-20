@@ -23,15 +23,20 @@ from loguru import logger
 from notifypy import Notify
 from oa_pynput import keyboard, mouse
 from pympler import tracker
-from tqdm import tqdm
-import fire
+
+from openadapt.build_utils import override_stdout_stderr
+
+with override_stdout_stderr():
+    from tqdm import tqdm
+    import fire
+
+import mss.tools
 import psutil
 
 from openadapt import config, utils, video, window
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
 from openadapt.models import ActionEvent
-
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
@@ -355,13 +360,14 @@ def write_events(
         if term_pipe.poll():
             num_left = term_pipe.recv()
             if num_left != 0 and progress is None:
-                progress = tqdm(
-                    total=num_left,
-                    desc="Writing to Database",
-                    unit="event",
-                    colour="green",
-                    dynamic_ncols=True,
-                )
+                with override_stdout_stderr():
+                    progress = tqdm(
+                        total=num_left,
+                        desc="Writing to Database",
+                        unit="event",
+                        colour="green",
+                        dynamic_ncols=True,
+                    )
         if terminate_event.is_set() and num_left != 0 and progress is not None:
             progress.update()
         if not started:
@@ -969,11 +975,15 @@ def read_mouse_events(
 @trace(logger)
 def record(
     task_description: str,
+    terminate_event: multiprocessing.Event = None,
+    terminate_recording: multiprocessing.Event = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
     Args:
         task_description: A text description of the task to be recorded.
+        terminate_event: An event to signal the termination of the recording process.
+        terminate_recording: An event to signal the termination of the recording.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
@@ -992,10 +1002,10 @@ def record(
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
-    terminate_event = multiprocessing.Event()
+    if terminate_event is None:
+        terminate_event = multiprocessing.Event()
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
-
     (
         term_pipe_parent_window,
         term_pipe_child_window,
@@ -1148,7 +1158,7 @@ def record(
     global stop_sequence_detected
 
     try:
-        while not stop_sequence_detected:
+        while not (stop_sequence_detected or terminate_event.is_set()):
             time.sleep(1)
 
         terminate_event.set()
@@ -1180,6 +1190,9 @@ def record(
         utils.plot_performance(recording_timestamp)
 
     logger.info(f"Saved {recording_timestamp=}")
+
+    if terminate_recording is not None:
+        terminate_recording.set()
 
 
 # Entry point
