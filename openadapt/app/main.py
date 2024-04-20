@@ -12,16 +12,18 @@ from functools import partial
 from subprocess import Popen
 import base64
 import os
+import pathlib
 
 from nicegui import app, ui
 
-from openadapt import config, replay
+from openadapt import replay
 from openadapt.app.cards import recording_prompt, select_import, settings
 from openadapt.app.objects.console import Console
 from openadapt.app.util import clear_db, on_export, on_import
+from openadapt.config import config
 
 SERVER = "127.0.0.1:8000/upload"
-FPATH = os.path.dirname(__file__)
+FPATH = pathlib.Path(__file__).parent
 
 # Recording description autocomplete
 OPTIONS = ["test"]

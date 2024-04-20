@@ -16,8 +16,8 @@ with override_stdout_stderr():
 import spacy
 import spacy_transformers  # pylint: disable=unused-import # noqa: F401
 
-from openadapt import config
 from openadapt.build_utils import is_running_from_executable
+from openadapt.config import config
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 

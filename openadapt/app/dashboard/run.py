@@ -8,8 +8,8 @@ import webbrowser
 
 from loguru import logger
 
-from openadapt import config
 from openadapt.build_utils import is_running_from_executable
+from openadapt.config import config
 from openadapt.extensions.thread import Thread
 
 from .api.index import run_app

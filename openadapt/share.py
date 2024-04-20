@@ -17,7 +17,8 @@ from openadapt.build_utils import override_stdout_stderr
 with override_stdout_stderr():
     import fire
 
-from openadapt import config, db, utils
+from openadapt import db, utils
+from openadapt.config import RECORDING_DIRECTORY_PATH
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
@@ -36,7 +37,7 @@ def export_recording_to_folder(recording_id: int) -> None:
 
     assert recording_db_path, recording_db_path
     # Create the directory if it doesn't exist
-    os.makedirs(config.RECORDING_DIRECTORY_PATH, exist_ok=True)
+    os.makedirs(RECORDING_DIRECTORY_PATH, exist_ok=True)
 
     # Get the timestamp from the recording_db_path
     timestamp = extract_timestamp_from_filename(os.path.basename(recording_db_path))
@@ -46,7 +47,7 @@ def export_recording_to_folder(recording_id: int) -> None:
 
     # Path to the compressed file
     zip_filename = f"recording_{recording_id}_{timestamp}.zip"
-    zip_path = os.path.join(config.RECORDING_DIRECTORY_PATH, zip_filename)
+    zip_path = os.path.join(RECORDING_DIRECTORY_PATH, zip_filename)
 
     # Create an in-memory zip file and add the db file
     with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
@@ -125,7 +126,7 @@ def receive_recording(wormhole_code: str) -> None:
         wormhole_code (str): The wormhole code to receive the recording.
     """
     # Set the output directory path
-    output_directory = config.RECORDING_DIRECTORY_PATH
+    output_directory = RECORDING_DIRECTORY_PATH
 
     # Create the output directory if it doesn't exist
     os.makedirs(output_directory, exist_ok=True)

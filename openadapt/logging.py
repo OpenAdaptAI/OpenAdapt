@@ -3,7 +3,7 @@
 from collections import defaultdict
 import time
 
-from openadapt import config
+from openadapt.config import config
 
 MESSAGE_TIMESTAMPS = defaultdict(list)
 

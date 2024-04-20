@@ -11,7 +11,7 @@ from PIL import Image
 import fire
 import gradio_client
 
-from openadapt import config
+from openadapt.config import config
 
 
 def save_image_to_temp_file(img: Image.Image) -> str:

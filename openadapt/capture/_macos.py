@@ -13,7 +13,7 @@ from Quartz import CGMainDisplayID  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
 
-from openadapt import config
+from openadapt.config import CAPTURE_DIR_PATH
 
 
 class Capture:
@@ -48,11 +48,11 @@ class Capture:
             AVF.AVCaptureDevice.defaultDeviceWithMediaType_(AVF.AVMediaTypeAudio), None
         )
 
-        if not os.path.exists(config.CAPTURE_DIR_PATH):
-            os.mkdir(config.CAPTURE_DIR_PATH)
+        if not os.path.exists(CAPTURE_DIR_PATH):
+            os.mkdir(CAPTURE_DIR_PATH)
         self.file_url = NSURL.fileURLWithPath_(
             os.path.join(
-                config.CAPTURE_DIR_PATH,
+                CAPTURE_DIR_PATH,
                 datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
             )
         )
@@ -95,7 +95,7 @@ class Capture:
             self.camera_file_output.startRecordingToOutputFileURL_recordingDelegate_(
                 NSURL.fileURLWithPath_(
                     os.path.join(
-                        config.CAPTURE_DIR_PATH,
+                        CAPTURE_DIR_PATH,
                         datetime.now().strftime("camera.%Y-%m-%d-%H-%M-%S") + ".mov",
                     )
                 ),

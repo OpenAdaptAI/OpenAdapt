@@ -10,10 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 import uvicorn
 
-from openadapt import config
 from openadapt.app.dashboard.api.recordings import RecordingsAPI
 from openadapt.app.dashboard.api.settings import SettingsAPI
 from openadapt.build_utils import is_running_from_executable
+from openadapt.config import config
 
 app = FastAPI()
 

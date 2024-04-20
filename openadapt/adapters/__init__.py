@@ -2,13 +2,9 @@
 
 from types import ModuleType
 
-from openadapt import config
-from . import anthropic
-from . import openai
-from . import replicate
-from . import som
-from . import ultralytics
-from . import google
+from openadapt.config import config
+
+from . import anthropic, google, openai, replicate, som, ultralytics
 
 
 def get_default_prompt_adapter() -> ModuleType:

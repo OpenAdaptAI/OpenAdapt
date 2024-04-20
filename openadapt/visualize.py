@@ -17,7 +17,8 @@ with override_stdout_stderr():
     from tqdm import tqdm
     import fire
 
-from openadapt import config, video
+from openadapt import video
+from openadapt.config import RECORDING_DIRECTORY_PATH, config
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
@@ -353,8 +354,9 @@ def main(
 
     title = f"recording-{recording.id}"
 
-    fname_out = f"recording-{recording.id}.html"
+    fname_out = RECORDING_DIRECTORY_PATH / f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
+    os.makedirs(RECORDING_DIRECTORY_PATH, exist_ok=True)
     output_file(fname_out, title=title)
 
     result = show(  # noqa: F841

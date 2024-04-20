@@ -7,8 +7,11 @@ import threading
 from loguru import logger
 from PIL import Image
 import av
+import mss
+import numpy as np
 
-from openadapt import config, utils
+from openadapt import utils
+from openadapt.config import config
 
 
 def get_video_file_name(recording_timestamp: float) -> str:

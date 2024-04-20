@@ -40,7 +40,8 @@ if sys.platform == "win32":
     mss.windows.CAPTUREBLT = 0
 
 
-from openadapt import common, config
+from openadapt import common
+from openadapt.config import DIRNAME_PERFORMANCE_PLOTS_DIR, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
@@ -798,8 +799,8 @@ def plot_performance(
     if save_file:
         fname_parts = ["performance", str(recording_timestamp)]
         fname = "-".join(fname_parts) + ".png"
-        os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-        fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
+        os.makedirs(DIRNAME_PERFORMANCE_PLOTS_DIR, exist_ok=True)
+        fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS_DIR, fname)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:

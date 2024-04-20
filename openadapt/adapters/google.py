@@ -9,8 +9,8 @@ from PIL import Image
 import fire
 import google.generativeai as genai
 
-from openadapt import cache, config, utils
-
+from openadapt import cache, utils
+from openadapt.config import config
 
 MAX_TOKENS = 2**20  # 1048576
 MODEL_NAME = [

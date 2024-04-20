@@ -3,8 +3,8 @@
 See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
 
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import os
 
 from loguru import logger
@@ -15,7 +15,6 @@ import fire
 import numpy as np
 
 from openadapt import cache
-
 
 MODEL_NAMES = (
     "FastSAM-x.pt",

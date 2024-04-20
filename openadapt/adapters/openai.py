@@ -4,11 +4,12 @@ https://platform.openai.com/docs/guides/vision
 """
 
 from pprint import pformat
-import requests
 
 from loguru import logger
+import requests
 
-from openadapt import cache, config
+from openadapt import cache
+from openadapt.config import config
 
 MODEL_NAME = [
     "gpt-4-vision-preview",
