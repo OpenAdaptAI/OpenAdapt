@@ -2,6 +2,17 @@
 
 
 
+## v0.18.2 (2024-04-22)
+
+### Fix
+
+* fix: video recording
+
+* screenshot_to_np Image.Image argument
+
+* remove unused import; update documentation/types ([`9a0501d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9a0501dd711f62f9d6e07857e1f40cfc4738eab5))
+
+
 ## v0.18.1 (2024-04-22)
 
 ### Fix
