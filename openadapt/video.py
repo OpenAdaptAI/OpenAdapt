@@ -7,7 +7,6 @@ import threading
 from loguru import logger
 from PIL import Image
 import av
-import numpy as np
 
 from openadapt import config, utils
 
@@ -73,11 +72,10 @@ def write_video_frame(
     timestamp: float,
     base_timestamp: float,
     last_pts: int,
-    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
 ) -> int:
     """Encodes and writes a video frame to the output container from a given screenshot.
 
-    This function converts a screenshot to a numpy array, then to an AVFrame,
+    This function converts a PIL.Image to an AVFrame,
     and encodes it for writing to the video stream. It calculates the
     presentation timestamp (PTS) for each frame based on the elapsed time since
     the base timestamp, ensuring monotonically increasing PTS values.
@@ -91,8 +89,6 @@ def write_video_frame(
         base_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts (int): The PTS of the last written frame.
-        pix_fmt (str, optional): The pixel format of the video. Defaults to the
-            value specified in the configuration ('VIDEO_PIXEL_FORMAT').
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
@@ -105,11 +101,8 @@ def write_video_frame(
     """
     logger.debug(f"{timestamp=} {base_timestamp=}")
 
-    # Convert PIL Image to np.ndarray
-    frame = screenshot_to_np(screenshot)
-
-    # Convert the numpy array to an AVFrame
-    av_frame = av.VideoFrame.from_ndarray(frame, format=pix_fmt)
+    # Convert the PIL Image to an AVFrame
+    av_frame = av.VideoFrame.from_image(screenshot)
 
     # Calculate the time difference in seconds
     time_diff = timestamp - base_timestamp
@@ -166,25 +159,6 @@ def finalize_video_writer(
     # Wait for the thread to finish execution
     close_thread.join()
     logger.info("done")
-
-
-def screenshot_to_np(screenshot: Image.Image) -> np.ndarray:
-    """Converts a PIL Image screenshot to a NumPy array.
-
-    Args:
-        screenshot (PIL.Image.Image): The screenshot object from PIL.
-
-    Returns:
-        np.ndarray: The screenshot as a NumPy array in RGB format.
-    """
-    # Ensure the image is in RGB format (in case it is not)
-    if screenshot.mode != "RGB":
-        screenshot = screenshot.convert("RGB")
-
-    # Convert the PIL Image to a NumPy array
-    frame = np.array(screenshot)
-
-    return frame
 
 
 def extract_frames(
