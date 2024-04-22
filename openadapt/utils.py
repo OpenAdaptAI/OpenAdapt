@@ -29,6 +29,7 @@ import orjson
 
 if sys.platform == "win32":
     import mss.windows
+
     # fix cursor flicker on windows; see:
     # https://github.com/BoboTiG/python-mss/issues/179#issuecomment-673292002
     mss.windows.CAPTUREBLT = 0
@@ -695,7 +696,7 @@ def take_screenshot() -> Image.Image:
     # monitor 0 is all in one
     monitor = SCT.monitors[0]
     sct_img = SCT.grab(monitor)
-    image = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+    image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
     return image
 
 

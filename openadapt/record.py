@@ -295,7 +295,7 @@ def write_screen_event(
     image = event.data
     if config.RECORD_IMAGES:
         with io.BytesIO() as output:
-            image.save(output, format='PNG')
+            image.save(output, format="PNG")
             png_data = output.getvalue()
         event_data = {"png_data": png_data}
     else:
