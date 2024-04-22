@@ -25,7 +25,6 @@ from oa_pynput import keyboard, mouse
 from pympler import tracker
 from tqdm import tqdm
 import fire
-import mss.tools
 import psutil
 
 from openadapt import config, utils, video, window
