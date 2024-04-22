@@ -8,7 +8,6 @@ from loguru import logger
 from PIL import Image
 import av
 import numpy as np
-import mss
 
 from openadapt import config, utils
 
@@ -70,7 +69,7 @@ def initialize_video_writer(
 def write_video_frame(
     container: av.container.OutputContainer,
     stream: av.stream.Stream,
-    screenshot: mss.base.ScreenShot,
+    screenshot: Image.Image,
     timestamp: float,
     base_timestamp: float,
     last_pts: int,
@@ -87,7 +86,7 @@ def write_video_frame(
         container (av.container.OutputContainer): The output container to which
             the frame is written.
         stream (av.stream.Stream): The video stream within the container.
-        screenshot (mss.base.ScreenShot): The screenshot to be written as a video frame.
+        screenshot (Image.Image): The screenshot to be written as a video frame.
         timestamp (float): The timestamp of the current frame.
         base_timestamp (float): The base timestamp from which the video
             recording started.
@@ -99,8 +98,6 @@ def write_video_frame(
         int: The updated last_pts value, to be used for writing the next frame.
 
     Note:
-        - This function assumes the screenshot is in the correct pixel format
-              and dimensions as specified in the video stream settings.
         - It is crucial to maintain monotonically increasing PTS values for the
               video stream's consistency and playback.
         - The function logs the current timestamp, base timestamp, and
@@ -108,7 +105,7 @@ def write_video_frame(
     """
     logger.debug(f"{timestamp=} {base_timestamp=}")
 
-    # Convert MSS ScreenShot to np.ndarray
+    # Convert PIL Image to np.ndarray
     frame = screenshot_to_np(screenshot)
 
     # Convert the numpy array to an AVFrame
@@ -171,23 +168,22 @@ def finalize_video_writer(
     logger.info("done")
 
 
-def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
-    """Converts an MSS screenshot to a NumPy array.
+def screenshot_to_np(screenshot: Image.Image) -> np.ndarray:
+    """Converts a PIL Image screenshot to a NumPy array.
 
     Args:
-        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
+        screenshot (PIL.Image.Image): The screenshot object from PIL.
 
     Returns:
         np.ndarray: The screenshot as a NumPy array in RGB format.
     """
-    # Convert the screenshot to an RGB PIL Image
-    img = screenshot.rgb
-    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
-    frame = np.frombuffer(img, dtype=np.uint8).reshape(
-        screenshot.height,
-        screenshot.width,
-        3,
-    )
+    # Ensure the image is in RGB format (in case it is not)
+    if screenshot.mode != "RGB":
+        screenshot = screenshot.convert("RGB")
+
+    # Convert the PIL Image to a NumPy array
+    frame = np.array(screenshot)
+
     return frame
 
 
