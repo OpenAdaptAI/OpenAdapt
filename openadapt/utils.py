@@ -27,21 +27,7 @@ import numpy as np
 import orjson
 
 
-# Windows only for now
-# XXX not working
-SCREENSHOTS_HARDWARE_ACCELERATED = False
-SCREENSHOTS_HARDWARE_ACCELERATED_ATTEMPTS = 5
-if sys.platform == "win32" and SCREENSHOTS_HARDWARE_ACCELERATED:
-    from screen_recorder_sdk import screen_recorder
-    screen_recorder.enable_dev_log()
-    params = screen_recorder.RecorderParams()
-    # params.pid = 0 # use it to set process Id to capture
-    # params.desktop_num = 0 # use it to set desktop num, counting from 0
-    screen_recorder.init_resources(params)
-
-
 if sys.platform == "win32":
-    from screen_recorder_sdk import screen_recorder
     import mss.windows
     # fix cursor flicker on windows; see:
     # https://github.com/BoboTiG/python-mss/issues/179#issuecomment-673292002
@@ -704,16 +690,13 @@ def take_screenshot() -> Image.Image:
     """Take a screenshot.
 
     Returns:
-        PIL.Image: The screenshot.
+        PIL.Image: The screenshot image.
     """
-    if sys.platform == "win32" and SCREENSHOTS_HARDWARE_ACCELERATED:
-        return screen_recorder.get_screenshot(SCREENSHOTS_HARDWARE_ACCELERATED_ATTEMPTS)
-    else:
-        # monitor 0 is all in one
-        monitor = SCT.monitors[0]
-        sct_img = SCT.grab(monitor)
-        image = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-        return image
+    # monitor 0 is all in one
+    monitor = SCT.monitors[0]
+    sct_img = SCT.grab(monitor)
+    image = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+    return image
 
 
 def get_strategy_class_by_name() -> dict:
