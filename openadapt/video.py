@@ -171,23 +171,22 @@ def finalize_video_writer(
     logger.info("done")
 
 
-def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
-    """Converts an MSS screenshot to a NumPy array.
+def screenshot_to_np(screenshot: Image.Image) -> np.ndarray:
+    """Converts a PIL Image screenshot to a NumPy array.
 
     Args:
-        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
+        screenshot (PIL.Image.Image): The screenshot object from PIL.
 
     Returns:
         np.ndarray: The screenshot as a NumPy array in RGB format.
     """
-    # Convert the screenshot to an RGB PIL Image
-    img = screenshot.rgb
-    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
-    frame = np.frombuffer(img, dtype=np.uint8).reshape(
-        screenshot.height,
-        screenshot.width,
-        3,
-    )
+    # Ensure the image is in RGB format (in case it is not)
+    if screenshot.mode != 'RGB':
+        screenshot = screenshot.convert('RGB')
+
+    # Convert the PIL Image to a NumPy array
+    frame = np.array(screenshot)
+
     return frame
 
 
