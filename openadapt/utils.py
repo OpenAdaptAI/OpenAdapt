@@ -26,6 +26,15 @@ import mss.base
 import numpy as np
 import orjson
 
+
+if sys.platform == "win32":
+    import mss.windows
+
+    # fix cursor flicker on windows; see:
+    # https://github.com/BoboTiG/python-mss/issues/179#issuecomment-673292002
+    mss.windows.CAPTUREBLT = 0
+
+
 from openadapt import common, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
@@ -678,16 +687,17 @@ def evenly_spaced(arr: list, N: list) -> list:
     return [val for idx, val in enumerate(arr) if idx in idxs]
 
 
-def take_screenshot() -> mss.base.ScreenShot:
+def take_screenshot() -> Image.Image:
     """Take a screenshot.
 
     Returns:
-        mss.base.ScreenShot: The screenshot.
+        PIL.Image: The screenshot image.
     """
     # monitor 0 is all in one
     monitor = SCT.monitors[0]
     sct_img = SCT.grab(monitor)
-    return sct_img
+    image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+    return image
 
 
 def get_strategy_class_by_name() -> dict:

@@ -9,6 +9,7 @@ Usage:
 from collections import namedtuple
 from functools import partial, wraps
 from typing import Any, Callable, Union
+import io
 import multiprocessing
 import os
 import queue
@@ -24,7 +25,6 @@ from oa_pynput import keyboard, mouse
 from pympler import tracker
 from tqdm import tqdm
 import fire
-import mss.tools
 import psutil
 
 from openadapt import config, utils, video, window
@@ -291,9 +291,11 @@ def write_screen_event(
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "screen", event
-    screenshot = event.data
+    image = event.data
     if config.RECORD_IMAGES:
-        png_data = mss.tools.to_png(screenshot.rgb, screenshot.size)
+        with io.BytesIO() as output:
+            image.save(output, format="PNG")
+            png_data = output.getvalue()
         event_data = {"png_data": png_data}
     else:
         event_data = {}
