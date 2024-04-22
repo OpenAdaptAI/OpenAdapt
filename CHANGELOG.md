@@ -2,6 +2,15 @@
 
 
 
+## v0.18.3 (2024-04-22)
+
+### Fix
+
+* fix: video performance
+
+* remove screenshot_to_np ([`943adb7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/943adb7be0ce18295dce8923f5bb91fcb2ae4a88))
+
+
 ## v0.18.2 (2024-04-22)
 
 ### Fix
