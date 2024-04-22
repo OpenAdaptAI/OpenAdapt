@@ -74,11 +74,10 @@ def write_video_frame(
     timestamp: float,
     base_timestamp: float,
     last_pts: int,
-    pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
 ) -> int:
     """Encodes and writes a video frame to the output container from a given screenshot.
 
-    This function converts a screenshot to a numpy array, then to an AVFrame,
+    This function converts a PIL.Image to an AVFrame,
     and encodes it for writing to the video stream. It calculates the
     presentation timestamp (PTS) for each frame based on the elapsed time since
     the base timestamp, ensuring monotonically increasing PTS values.
@@ -92,8 +91,6 @@ def write_video_frame(
         base_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts (int): The PTS of the last written frame.
-        pix_fmt (str, optional): The pixel format of the video. Defaults to the
-            value specified in the configuration ('VIDEO_PIXEL_FORMAT').
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
@@ -108,11 +105,8 @@ def write_video_frame(
     """
     logger.debug(f"{timestamp=} {base_timestamp=}")
 
-    # Convert MSS ScreenShot to np.ndarray
-    frame = screenshot_to_np(screenshot)
-
-    # Convert the numpy array to an AVFrame
-    av_frame = av.VideoFrame.from_ndarray(frame, format=pix_fmt)
+    # Convert the PIL Image to an AVFrame
+    av_frame = av.VideoFrame.from_image(screenshot)
 
     # Calculate the time difference in seconds
     time_diff = timestamp - base_timestamp
@@ -169,26 +163,6 @@ def finalize_video_writer(
     # Wait for the thread to finish execution
     close_thread.join()
     logger.info("done")
-
-
-def screenshot_to_np(screenshot: mss.base.ScreenShot) -> np.ndarray:
-    """Converts an MSS screenshot to a NumPy array.
-
-    Args:
-        screenshot (mss.base.ScreenShot): The screenshot object from MSS.
-
-    Returns:
-        np.ndarray: The screenshot as a NumPy array in RGB format.
-    """
-    # Convert the screenshot to an RGB PIL Image
-    img = screenshot.rgb
-    # Convert the RGB data to a NumPy array and reshape it to the correct dimensions
-    frame = np.frombuffer(img, dtype=np.uint8).reshape(
-        screenshot.height,
-        screenshot.width,
-        3,
-    )
-    return frame
 
 
 def extract_frames(
