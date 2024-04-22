@@ -178,8 +178,8 @@ def screenshot_to_np(screenshot: Image.Image) -> np.ndarray:
         np.ndarray: The screenshot as a NumPy array in RGB format.
     """
     # Ensure the image is in RGB format (in case it is not)
-    if screenshot.mode != 'RGB':
-        screenshot = screenshot.convert('RGB')
+    if screenshot.mode != "RGB":
+        screenshot = screenshot.convert("RGB")
 
     # Convert the PIL Image to a NumPy array
     frame = np.array(screenshot)
