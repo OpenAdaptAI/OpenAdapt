@@ -2,6 +2,21 @@
 
 
 
+## v0.18.1 (2024-04-22)
+
+### Fix
+
+* fix: performance, windows cursor flicker
+
+* CAPTURES_DIR -&gt; CAPTURE_DIR_PATH; add capture/__main__.py
+
+* save as mp4
+
+* mss.windows.CAPTUREBLT = 0
+
+* return PIL.image in utils.take_screenshot() ([`d354b94`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d354b94846e99a8911b4f748b3a01b72cd5d1a10))
+
+
 ## v0.18.0 (2024-04-16)
 
 ### Feature
