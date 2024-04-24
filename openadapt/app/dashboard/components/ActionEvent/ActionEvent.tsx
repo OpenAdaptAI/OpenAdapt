@@ -16,7 +16,7 @@ export const ActionEvent = ({
     values,
     level,
 }: Props) => {
-    const content = (
+    let content = (
         <Grid>
             <Grid.Col span={level === 0 ? 4 : 12}>
                 <Table w={400} withTableBorder withColumnBorders my={20}>
@@ -120,32 +120,32 @@ export const ActionEvent = ({
 
     const displayChild = event.children && event.children.length > 0 && event.children[0].id;
 
-    if (!displayChild) {
-        return (
-            <Box className='border-0 border-b-2 border-gray-100 border-solid'>
-                {content}
-            </Box>
+    if (displayChild) {
+        content = (
+            <Accordion.Item value={event.id.toString()}>
+                <Accordion.Control p={0} classNames={{
+                    label: 'p-0',
+                }}>
+                    {content}
+                </Accordion.Control>
+                {displayChild && values.includes(event.id.toString()) && (
+                    <Accordion.Panel ml={(level + 1) * 100}>
+                        {/* @ts-ignore */}
+                        {event.children.map((child) => (
+                            <Box key={child.id}>
+                                <ActionEvent event={child} values={values} level={level + 1} />
+                            </Box>
+                        ))}
+                    </Accordion.Panel>
+                )}
+            </Accordion.Item>
         )
     }
 
 
     return (
-        <Accordion.Item value={event.id.toString()}>
-            <Accordion.Control p={0} classNames={{
-                label: 'p-0',
-            }}>
-                {content}
-            </Accordion.Control>
-            {displayChild && values.includes(event.id.toString()) && (
-                <Accordion.Panel>
-                    {/* @ts-ignore */}
-                    {event.children.map((child) => (
-                        <Box key={child.id}>
-                            <ActionEvent event={child} values={values} level={level + 1} />
-                        </Box>
-                    ))}
-                </Accordion.Panel>
-            )}
-        </Accordion.Item>
+        <Box className='border-2 border-black border-solid' my={10} px={10}>
+            {content}
+        </Box>
     )
 }

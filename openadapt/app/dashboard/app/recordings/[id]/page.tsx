@@ -30,7 +30,8 @@ async function fetchRecordingInfo(id: string): Promise<{
     action_events: ActionEventType[],
 }> {
     return get(`/api/recordings/${id}`, {
-        // dont cache the response
+        // add a no-store cache policy to prevent nextjs
+        // from creating a static page at build time
         cache: "no-store",
     }).then((res) => res.json());
 }
@@ -38,6 +39,9 @@ async function fetchRecordingInfo(id: string): Promise<{
 function addIdsToNullActionEvents(actionEvents: ActionEventType[]): ActionEventType[] {
     return actionEvents.map((event) => {
         if (!event.id) {
+            // this is usually the case, when new events like 'singleclick'
+            // or 'doubleclick' are created while merging several events together,
+            // but they are not saved in the database
             return {
                 ...event,
                 id: crypto.randomUUID(),
