@@ -11,9 +11,9 @@ from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
@@ -260,7 +260,7 @@ def main(
         if MAX_EVENTS is not None
         else len(action_events)
     )
-    with override_stdout_stderr():
+    with redirect_stdout_stderr():
         with tqdm(
             total=num_events,
             desc="Preparing HTML",

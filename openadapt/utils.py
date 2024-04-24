@@ -20,9 +20,9 @@ from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     import fire
 
 import matplotlib.pyplot as plt
@@ -30,7 +30,6 @@ import mss
 import mss.base
 import numpy as np
 import orjson
-
 
 if sys.platform == "win32":
     import mss.windows
@@ -900,7 +899,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         return orjson.dumps(value).decode("utf-8")
 
     # Construct the full path to the template file
-    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+    template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
 
     # Extract the directory and template file name
     template_dir, template_file = os.path.split(template_path)

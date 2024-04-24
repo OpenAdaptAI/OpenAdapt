@@ -24,13 +24,12 @@ from notifypy import Notify
 from oa_pynput import keyboard, mouse
 from pympler import tracker
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
-import mss.tools
 import psutil
 
 from openadapt import utils, video, window
@@ -361,7 +360,7 @@ def write_events(
         if term_pipe.poll():
             num_left = term_pipe.recv()
             if num_left != 0 and progress is None:
-                with override_stdout_stderr():
+                with redirect_stdout_stderr():
                     progress = tqdm(
                         total=num_left,
                         desc="Writing to Database",

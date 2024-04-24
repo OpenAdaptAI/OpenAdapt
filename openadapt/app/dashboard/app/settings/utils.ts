@@ -1,3 +1,7 @@
+import { UseFormReturnType } from '@mantine/form';
+import { notifications } from '@mantine/notifications';
+
+
 export function validateScrubbingSettings(settings: Record<string, string>) {
     const errors: Record<string, string> = {}
     if (settings.SCRUB_ENABLED) {
@@ -29,4 +33,42 @@ export function validateRecordAndReplaySettings(settings: Record<string, string>
         errors.VIDEO_PIXEL_FORMAT = 'Video pixel format is required'
     }
     return errors
+}
+
+
+export function saveSettings(
+    form: UseFormReturnType<any>,
+) {
+    return function(values: Record<string, string>) {
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(values),
+        }).then(resp => {
+            if (resp.ok) {
+                notifications.show({
+                    title: 'Settings saved',
+                    message: 'Your settings have been saved',
+                    color: 'green',
+                });
+                return resp.json();
+            } else {
+                notifications.show({
+                    title: 'Failed to save settings',
+                    message: 'Please try again',
+                    color: 'red',
+                })
+                return null;
+            }
+
+        }).then((resp) => {
+            if (!resp) {
+                return;
+            }
+            form.setInitialValues(values);
+            form.setDirty({});
+        });
+    }
 }

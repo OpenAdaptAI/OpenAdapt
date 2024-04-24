@@ -16,14 +16,14 @@ def get_path_to_preferences_folder(
         # and set the path for all user preferences
         path = pathlib.Path.home() / "Library" / "Preferences" / "openadapt"
         if not path.exists():
-            path.mkdir()
+            path.mkdir(parents=True, exist_ok=True)
         return path
     else:
         # if windows, get the path to the %APPDATA% directory and set the path
         # for all user preferences
         path = pathlib.Path.home() / "AppData" / "Roaming" / "openadapt"
         if not path.exists():
-            path.mkdir()
+            path.mkdir(parents=True, exist_ok=True)
         return path
 
 
@@ -32,26 +32,27 @@ def is_running_from_executable() -> bool:
     return getattr(sys, "frozen", False)
 
 
-def override_stdout_stderr() -> object:
-    """Override stdout and stderr to /dev/null when running from an executable."""
+class RedirectOutput:
+    """Context manager to redirect stdout and stderr to /dev/null."""
 
-    class StdoutStderrOverride:
-        def __init__(self) -> None:
-            self.stdout = None
-            self.stderr = None
+    def __enter__(self) -> "RedirectOutput":
+        """Redirect stdout and stderr to /dev/null."""
+        if is_running_from_executable():
+            self.old_stdout = sys.stdout
+            self.old_stderr = sys.stderr
+            null_stream = open(os.devnull, "a")
+            sys.stdout = sys.stderr = null_stream
+            return self
 
-        def __enter__(self) -> None:
-            if is_running_from_executable():
-                self.old_stdout = sys.stdout
-                self.old_stderr = sys.stderr
-                sys.stdout = open(os.devnull, "a")
-                sys.stderr = open(os.devnull, "a")
+    def __exit__(self, exc_type: type, exc_value: Exception, traceback: type) -> None:
+        """Restore stdout and stderr."""
+        if is_running_from_executable():
+            sys.stdout.close()
+            sys.stderr.close()
+            sys.stdout = self.old_stdout
+            sys.stderr = self.old_stderr
 
-        def __exit__(self, *args: tuple, **kwargs: dict) -> None:
-            if is_running_from_executable():
-                sys.stdout.close()
-                sys.stderr.close()
-                sys.stdout = self.old_stdout
-                sys.stderr = self.old_stderr
 
-    return StdoutStderrOverride()
+def redirect_stdout_stderr() -> RedirectOutput:
+    """Get the RedirectOutput instance for use as a context manager."""
+    return RedirectOutput()

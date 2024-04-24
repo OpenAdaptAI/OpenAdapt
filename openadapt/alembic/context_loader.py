@@ -1,3 +1,6 @@
+"""Context loader for alembic migrations."""
+
+
 import pathlib
 
 from alembic.config import Config

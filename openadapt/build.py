@@ -122,15 +122,6 @@ for package in packages_to_exclude:
 
 subprocess.call(spec)
 
-# add import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
-#  to line 2 of OpenAdapt.spec
-with open("OpenAdapt.spec", "r+") as f:
-    lines = f.readlines()
-    lines[1] = "import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 50)\n"
-    f.seek(0)
-    f.truncate()
-    f.writelines(lines)
-
 # building
 proc = subprocess.Popen("pyinstaller OpenAdapt.spec --noconfirm", shell=True)
 proc.wait()

@@ -7,8 +7,6 @@ import threading
 from loguru import logger
 from PIL import Image
 import av
-import mss
-import numpy as np
 
 from openadapt import utils
 from openadapt.config import config

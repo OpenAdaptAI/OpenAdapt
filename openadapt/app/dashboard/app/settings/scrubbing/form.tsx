@@ -4,7 +4,7 @@ import { Button, Checkbox, Flex, Grid, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import React, { useEffect } from 'react'
-import { validateScrubbingSettings } from '../utils';
+import { saveSettings, validateScrubbingSettings } from '../utils';
 
 type Props = {
     settings: Record<string, string>,
@@ -28,41 +28,9 @@ export const Form = ({
     function resetForm() {
         form.reset();
     }
-    function saveSettings(values: Record<string, string>) {
-        fetch('/api/settings', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(values),
-        }).then(resp => {
-            if (resp.ok) {
-                notifications.show({
-                    title: 'Settings saved',
-                    message: 'Your settings have been saved',
-                    color: 'green',
-                });
-                return resp.json();
-            } else {
-                notifications.show({
-                    title: 'Failed to save settings',
-                    message: 'Please try again',
-                    color: 'red',
-                })
-                return null;
-            }
-
-        }).then((resp) => {
-            if (!resp) {
-                return;
-            }
-            form.setInitialValues(values);
-            form.setDirty({});
-        });
-    }
 
     return (
-        <form onSubmit={form.onSubmit(saveSettings)}>
+        <form onSubmit={form.onSubmit(saveSettings(form))}>
             <Grid>
                 <Grid.Col span={6}>
                     <Checkbox label="Scrubbing Enabled" {...form.getInputProps('SCRUB_ENABLED')} checked={form.values.SCRUB_ENABLED} />

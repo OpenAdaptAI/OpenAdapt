@@ -12,9 +12,9 @@ import subprocess
 
 from loguru import logger
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     import fire
 
 from openadapt import db, utils

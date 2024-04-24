@@ -5,7 +5,7 @@ import os
 from sqlalchemy import create_engine, engine, text
 import pytest
 
-from openadapt.config import RECORDING_DIRECTORY_PATH, ROOT_DIRPATH
+from openadapt.config import RECORDING_DIRECTORY_PATH, ROOT_DIR_PATH
 from openadapt.db.db import Base
 
 
@@ -20,7 +20,7 @@ def setup_database(request: pytest.FixtureRequest) -> engine:
     Base.metadata.create_all(bind=engine)
 
     # Read the SQL file and split the content into individual statements
-    with open(ROOT_DIRPATH / "assets/fixtures.sql", "r") as file:
+    with open(ROOT_DIR_PATH / "assets/fixtures.sql", "r") as file:
         statements = file.read().split(";")
 
     # Remove any empty statements from the list

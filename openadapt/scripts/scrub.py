@@ -26,9 +26,9 @@ from loguru import logger
 from moviepy.editor import VideoClip, VideoFileClip
 from PIL import Image
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
@@ -113,7 +113,7 @@ def scrub_mp4(
         "| {bar} | "
         "{n_fmt}/{total_fmt} | {rate_fmt} | [{elapsed}<{remaining}] |"
     )
-    with override_stdout_stderr():
+    with redirect_stdout_stderr():
         progress_bar = tqdm(
             total=frame_count,
             desc="Processing",

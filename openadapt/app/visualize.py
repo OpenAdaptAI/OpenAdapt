@@ -9,9 +9,9 @@ from loguru import logger
 from nicegui import events, ui
 from notifypy import Notify
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     from tqdm import tqdm
 
 import click
@@ -294,7 +294,7 @@ def main(timestamp: str, notify: bool = True) -> None:
         )
     )
 
-    with override_stdout_stderr():
+    with redirect_stdout_stderr():
         with tqdm(
             total=num_events,
             desc="Generating Visualization" if not SCRUB else "Scrubbing Visualization",

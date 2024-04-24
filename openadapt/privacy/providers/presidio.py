@@ -5,9 +5,9 @@ from typing import List
 from loguru import logger
 from PIL import Image
 
-from openadapt.build_utils import override_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
-with override_stdout_stderr():
+with redirect_stdout_stderr():
     from presidio_analyzer import AnalyzerEngine
     from presidio_analyzer.nlp_engine import NlpEngineProvider
     from presidio_anonymizer import AnonymizerEngine
@@ -26,6 +26,7 @@ if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-mem
         logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
         spacy.cli.download(config.SPACY_MODEL_NAME)
     else:
+        # TODO: devise some method to download this automatically
         # this is running from inside a pyinstaller build
         logger.warning(f"Download {config.SPACY_MODEL_NAME} model manually.")
 

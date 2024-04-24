@@ -2,7 +2,7 @@
 
 
 from enum import Enum
-from typing import Any, ClassVar, Union
+from typing import Any, ClassVar, Type, Union
 import json
 import multiprocessing
 import pathlib
@@ -20,14 +20,14 @@ from openadapt.build_utils import (
     is_running_from_executable,
 )
 
-CURRENT_DIRPATH = pathlib.Path(__file__).parent
-PREFERENCES_DIRPATH = get_path_to_preferences_folder(CURRENT_DIRPATH)
-CONFIG_FILE_PATH = CURRENT_DIRPATH / "config.json"
-LOCAL_CONFIG_FILE_PATH = (PREFERENCES_DIRPATH / "config.local.json").absolute()
-ROOT_DIRPATH = CURRENT_DIRPATH.parent
-RECORDING_DIRECTORY_PATH = (PREFERENCES_DIRPATH / "recordings").absolute()
-DIRNAME_PERFORMANCE_PLOTS_DIR = (PREFERENCES_DIRPATH / "performance").absolute()
-CAPTURE_DIR_PATH = (PREFERENCES_DIRPATH / "captures").absolute()
+CURRENT_DIR_PATH = pathlib.Path(__file__).parent
+PREFERENCES_DIR_PATH = get_path_to_preferences_folder(CURRENT_DIR_PATH)
+CONFIG_FILE_PATH = CURRENT_DIR_PATH / "config.json"
+LOCAL_CONFIG_FILE_PATH = (PREFERENCES_DIR_PATH / "config.local.json").absolute()
+ROOT_DIR_PATH = CURRENT_DIR_PATH.parent
+RECORDING_DIRECTORY_PATH = (PREFERENCES_DIR_PATH / "recordings").absolute()
+DIRNAME_PERFORMANCE_PLOTS_DIR = (PREFERENCES_DIR_PATH / "performance").absolute()
+CAPTURE_DIR_PATH = (PREFERENCES_DIR_PATH / "captures").absolute()
 
 STOP_STRS = [
     "oa.stop",
@@ -117,7 +117,7 @@ class Config(BaseSettings):
     # Database
     DB_ECHO: bool = False
     DB_URL: ClassVar[str] = (
-        f"sqlite:///{(PREFERENCES_DIRPATH / 'openadapt.db').absolute()}"
+        f"sqlite:///{(PREFERENCES_DIR_PATH / 'openadapt.db').absolute()}"
     )
 
     # Error reporting
@@ -224,7 +224,7 @@ class Config(BaseSettings):
 
     @classmethod
     def settings_customise_sources(
-        cls,  # noqa: F821,ANN102
+        cls: Type["Config"],
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
@@ -235,8 +235,10 @@ class Config(BaseSettings):
 
         The order of preference is as follows:
         1. settings with which the class is initialized
-        2. settings from the local config json file
-        3. settings from the config json file
+        2. settings from the local config json file, which can be managed by the user to
+           override the default settings
+        3. settings from the config json file, which is shipped in the executable with
+           the default settings
         """
         return (
             init_settings,
@@ -361,16 +363,18 @@ def print_config() -> None:
                     val = obfuscate(val)
                 logger.info(f"{key}={val}")
 
-        if config.ERROR_REPORTING_ENABLED:  # type: ignore # noqa
+        if config.ERROR_REPORTING_ENABLED:
             if is_running_from_executable():
                 is_reporting_branch = True
             else:
-                active_branch_name = git.Repo(ROOT_DIRPATH).active_branch.name
+                active_branch_name = git.Repo(ROOT_DIR_PATH).active_branch.name
                 logger.info(f"{active_branch_name=}")
-                is_reporting_branch = active_branch_name == config.ERROR_REPORTING_BRANCH  # type: ignore # noqa
+                is_reporting_branch = (
+                    active_branch_name == config.ERROR_REPORTING_BRANCH
+                )
                 logger.info(f"{is_reporting_branch=}")
             if is_reporting_branch:
                 sentry_sdk.init(
-                    dsn=config.ERROR_REPORTING_DSN,  # type: ignore # noqa
+                    dsn=config.ERROR_REPORTING_DSN,
                     traces_sample_rate=1.0,
                 )
