@@ -9,6 +9,7 @@ import asyncio
 from loguru import logger
 import sqlalchemy as sa
 
+from openadapt import utils
 from openadapt.config import config
 from openadapt.db.db import Session
 from openadapt.models import (
@@ -17,8 +18,11 @@ from openadapt.models import (
     PerformanceStat,
     Recording,
     Screenshot,
+    ScrubbedRecording,
     WindowEvent,
+    copy_sa_instance,
 )
+from openadapt.privacy.base import ScrubbingProvider
 
 BATCH_SIZE = 1
 
@@ -73,7 +77,9 @@ def _insert(
 
 
 def insert_action_event(
-    recording: Recording, event_timestamp: int, event_data: dict[str, Any]
+    recording: Recording,
+    event_timestamp: int,
+    event_data: dict[str, Any],
 ) -> None:
     """Insert an action event into the database.
 
@@ -92,7 +98,9 @@ def insert_action_event(
 
 
 def insert_screenshot(
-    recording: Recording, event_timestamp: int, event_data: dict[str, Any]
+    recording: Recording,
+    event_timestamp: int,
+    event_data: dict[str, Any],
 ) -> None:
     """Insert a screenshot into the database.
 
@@ -177,7 +185,9 @@ def get_perf_stats(
 
 
 def insert_memory_stat(
-    recording: Recording, memory_usage_bytes: int, timestamp: int
+    recording: Recording,
+    memory_usage_bytes: int,
+    timestamp: int,
 ) -> None:
     """Insert memory stat into db."""
     memory_stat = {
@@ -190,7 +200,7 @@ def insert_memory_stat(
 
 
 def get_memory_stats(
-    recording: Recording, session: sa.orm.Session = list[MemoryStat]
+    recording: Recording, session: sa.orm.Session = None
 ) -> list[MemoryStat]:
     """Return memory stats for a given recording.
 
@@ -233,10 +243,28 @@ def get_all_recordings(session: sa.orm.Session = None) -> list[Recording]:
         session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
-        list[Recording]: A list of all recordings.
+        list[Recording]: A list of all original recordings.
     """
     _db = session or db
-    return _db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
+    return (
+        _db.query(Recording)
+        .filter(Recording.original_recording_id == None)
+        .order_by(sa.desc(Recording.timestamp))
+        .all()
+    )
+
+
+def get_all_scrubbed_recordings(session=None) -> list[ScrubbedRecording]:
+    """Get all scrubbed recordings.
+
+    Args:
+        session (sa.orm.Session, optional): The database session. Defaults to None.
+
+    Returns:
+        list[ScrubbedRecording]: A list of all scrubbed recordings.
+    """
+    _db = session or db
+    return _db.query(ScrubbedRecording).all()
 
 
 def get_latest_recording(session: sa.orm.Session = None) -> Recording:
@@ -324,6 +352,24 @@ def get_action_events(
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
+
+
+def get_top_level_action_events(
+    recording: Recording, session=None
+) -> list[ActionEvent]:
+    """Get top level action events for a given recording.
+
+    Args:
+        recording (Recording): The recording object.
+
+    Returns:
+        list[ActionEvent]: A list of top level action events for the recording.
+    """
+    return [
+        action_event
+        for action_event in get_action_events(recording, session=session)
+        if not action_event.parent_id
+    ]
 
 
 def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
@@ -506,7 +552,7 @@ def update_video_start_time(recording: Recording, video_start_time: float) -> No
     )
 
 
-def post_process_events(recording):
+def post_process_events(recording: Recording):
     screenshots = _get(Screenshot, recording.id)
     action_events = _get(ActionEvent, recording.id)
     window_events = _get(WindowEvent, recording.id)
@@ -529,6 +575,117 @@ def post_process_events(recording):
     db.commit()
 
 
+def get_action_event_children(action_event_id: int, session=None) -> list[ActionEvent]:
+    """Get the children of an action event.
+
+    Args:
+        action_event (ActionEvent): The action event to get children for.
+        session (Session, optional): The database session to use. Defaults to None.
+
+    Returns:
+        list[ActionEvent]: A list of children action events.
+    """
+    _db = session or db
+    return _db.query(ActionEvent).filter(ActionEvent.parent_id == action_event_id).all()
+
+
+def copy_recording(recording_id: int) -> int:
+    """Copy a recording.
+
+    Args:
+        recording_id (int): The recording id to copy.
+
+    Returns:
+        Recording: The copied recording.
+    """
+    from openadapt.events import get_events
+
+    try:
+        recording = db.query(Recording).get(recording_id)
+        new_recording = copy_sa_instance(recording, original_recording_id=recording.id)
+        db.add(new_recording)
+        db.commit()
+        db.refresh(new_recording)
+
+        def copy_action_event(
+            action_event: ActionEvent, recording_id: int
+        ) -> ActionEvent:
+            new_action_event = copy_sa_instance(action_event, recording_id=recording_id)
+            for child in action_event.children:
+                new_child = copy_action_event(child, recording_id=recording_id)
+                new_action_event.children.append(new_child)
+            return new_action_event
+
+        action_events = get_events(recording)
+        new_action_events = [
+            copy_action_event(action_event, recording_id=new_recording.id)
+            for action_event in action_events
+        ]
+
+        screenshots = [action_event.screenshot for action_event in action_events]
+        window_events = [action_event.window_event for action_event in action_events]
+
+        for i, action_event in enumerate(new_action_events):
+            action_event.screenshot = copy_sa_instance(
+                screenshots[i], recording_id=new_recording.id
+            )
+            action_event.window_event = copy_sa_instance(
+                window_events[i], recording_id=new_recording.id
+            )
+            db.add(action_event)
+
+        db.commit()
+
+        return new_recording.id
+    except Exception as e:
+        logger.error(f"Error copying recording: {e}")
+        db.rollback()
+        return None
+
+
+def scrub_item(item_id: int, table: sa.Table, scrubber: ScrubbingProvider) -> None:
+    """Scrub an item in the database.
+
+    Args:
+        item_id (int): The item id to scrub.
+        table (sa.Table): The table to scrub the item from.
+        scrubber (ScrubbingProvider): The scrubbing provider to use.
+    """
+    session = get_new_session()
+    item = session.query(table).get(item_id)
+    item.scrub(scrubber)
+    session.commit()
+    session.close()
+
+
+def insert_scrubbed_recording(recording_id: int, provider: str) -> int:
+    """Insert a scrubbed recording into the database.
+
+    Args:
+        recording_id (int): The recording id to scrub.
+        provider (str): The scrubbing provider to use.
+    """
+    scrubbed_recording = ScrubbedRecording(
+        recording_id=recording_id,
+        provider=provider,
+        timestamp=utils.set_start_time(),
+    )
+    db.add(scrubbed_recording)
+    db.commit()
+    db.refresh(scrubbed_recording)
+    scrubbed_recording_id = scrubbed_recording.id
+    return scrubbed_recording_id
+
+
+def mark_scrubbing_complete(scrubbed_recording_id: int) -> None:
+    """Mark scrubbing as complete for a recording."""
+    session = get_new_session()
+    scrubbed_recording = session.query(ScrubbedRecording).get(scrubbed_recording_id)
+    scrubbed_recording.scrubbed = True
+    session.commit()
+    session.close()
+
+
 async def acquire_db_lock() -> bool:
     """Check if the database is locked.
 
@@ -543,7 +700,7 @@ async def acquire_db_lock() -> bool:
     return True
 
 
-async def release_db_lock() -> None:
+def release_db_lock() -> None:
     """Release the database lock."""
     global lock
     lock.set()

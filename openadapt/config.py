@@ -269,6 +269,7 @@ class Config(BaseSettings):
             "SCRUB_ENABLED",
             "SCRUB_CHAR",
             "SCRUB_LANGUAGE",
+            "SCRUB_FILL_COLOR",
         ],
         "record_and_replay": [
             "RECORD_WINDOW_DATA",

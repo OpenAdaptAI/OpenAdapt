@@ -1,19 +1,14 @@
 'use client';
 
-import { SimpleTable } from "@/components/SimpleTable";
-import { Recording, RecordingStatus } from "@/types/recording";
-import { Box, Button } from "@mantine/core";
+import { Box, Button, Tabs } from "@mantine/core";
+import { RegularRecordings } from "./RegularRecordings";
 import { useEffect, useState } from "react";
-import { timeStampToDateString } from "../utils";
-import { useRouter } from "next/navigation";
+import { RecordingStatus } from "@/types/recording";
+import { ScrubbedRecordings } from "./ScrubbedRecordings";
 
 
 export default function Recordings() {
     const [recordingStatus, setRecordingStatus] = useState(RecordingStatus.UNKNOWN);
-    const [recordings, setRecordings] = useState<Recording[]>([]);
-
-    const router = useRouter();
-
     function startRecording() {
         if (recordingStatus === RecordingStatus.RECORDING) {
             return;
@@ -32,19 +27,10 @@ export default function Recordings() {
         fetch('/api/recordings/stop').then(res => {
             if (res.ok) {
                 setRecordingStatus(RecordingStatus.STOPPED);
-                fetchRecordings();
             }
         });
     }
-    function fetchRecordings() {
-        fetch('/api/recordings').then(res => {
-            if (res.ok) {
-                res.json().then((data) => {
-                    setRecordings(data.recordings);
-                });
-            }
-        })
-    }
+
     function fetchRecordingStatus() {
         fetch('/api/recordings/status').then(res => {
             if (res.ok) {
@@ -59,17 +45,9 @@ export default function Recordings() {
         });
     }
 
-    function goToRecording(recording: Recording) {
-        return function() {
-            router.push(`/recordings/detail?id=${recording.id}`);
-        }
-    }
-
     useEffect(() => {
-        fetchRecordings();
         fetchRecordingStatus();
     }, []);
-
     return (
         <Box>
             {recordingStatus === RecordingStatus.RECORDING && (
@@ -87,19 +65,23 @@ export default function Recordings() {
                     Loading recording status...
                 </Button>
             )}
-            <SimpleTable
-                columns={[
-                    {name: 'ID', accessor: 'id'},
-                    {name: 'Description', accessor: 'task_description'},
-                    {name: 'Start time', accessor: (recording: Recording) => recording.video_start_time ? timeStampToDateString(recording.video_start_time) : 'N/A'},
-                    {name: 'Timestamp', accessor: (recording: Recording) => recording.timestamp ? timeStampToDateString(recording.timestamp) : 'N/A'},
-                    {name: 'Monitor Width/Height', accessor: (recording: Recording) => `${recording.monitor_width}/${recording.monitor_height}`},
-                    {name: 'Double Click Interval Seconds/Pixels', accessor: (recording: Recording) => `${recording.double_click_interval_seconds}/${recording.double_click_distance_pixels}`},
-                ]}
-                data={recordings}
-                refreshData={fetchRecordings}
-                onClickRow={goToRecording}
-            />
+            <Tabs defaultValue="regular" mt={40}>
+                <Tabs.List>
+                    <Tabs.Tab value="regular">
+                        Recordings
+                    </Tabs.Tab>
+                    <Tabs.Tab value="scrubbed">
+                        Scrubbed recordings
+                    </Tabs.Tab>
+                </Tabs.List>
+
+                <Tabs.Panel value="regular" mt={40}>
+                    <RegularRecordings />
+                </Tabs.Panel>
+                <Tabs.Panel value="scrubbed" mt={40}>
+                    <ScrubbedRecordings />
+                </Tabs.Panel>
+            </Tabs>
         </Box>
     )
 }

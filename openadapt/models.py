@@ -1,7 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type
+from typing import Type, Union
 import io
 
 from loguru import logger
@@ -13,6 +13,8 @@ import sqlalchemy as sa
 from openadapt import window
 from openadapt.config import config
 from openadapt.db import db
+from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
+from openadapt.privacy.providers import ScrubProvider
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -49,6 +51,17 @@ class Recording(db.Base):
     video_start_time = sa.Column(ForceFloat)
     config = sa.Column(sa.JSON)
 
+    original_recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    original_recording = sa.orm.relationship(
+        "Recording",
+        back_populates="copies",
+        remote_side=[id],
+    )
+    copies = sa.orm.relationship(
+        "Recording",
+        back_populates="original_recording",
+    )
+
     action_events = sa.orm.relationship(
         "ActionEvent",
         back_populates="recording",
@@ -64,6 +77,10 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    scrubbed_recordings = sa.orm.relationship(
+        "ScrubbedRecording",
+        back_populates="recording",
+    )
 
     _processed_action_events = None
 
@@ -75,6 +92,9 @@ class Recording(db.Base):
         if not self._processed_action_events:
             self._processed_action_events = events.get_events(self)
         return self._processed_action_events
+
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        self.task_description = scrubber.scrub_text(self.task_description)
 
 
 class ActionEvent(db.Base):
@@ -112,6 +132,9 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+
+    scrubbed_text = sa.Column(sa.String)
+    scrubbed_canonical_text = sa.Column(sa.String)
 
     def __new__(cls, *args: tuple, **kwargs: dict) -> "ActionEvent":
         """Create a new instance; also called when loading from db."""
@@ -222,17 +245,10 @@ class ActionEvent(db.Base):
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
-        if canonical:
-            key_attr = self.canonical_key
-            key_name_attr = self.canonical_key_name
-        else:
-            key_attr = self.key
-            key_name_attr = self.key_name
         if self.children:
             parts = [
-                child._text(canonical=canonical)
-                for child in self.children
-                if child.name == "press"
+                child.canonical_text if canonical else child.text
+                for child in [child for child in self.children if child.name == "press"]
             ]
             if any(parts):
                 # str is necessary for canonical=True named keys
@@ -241,6 +257,12 @@ class ActionEvent(db.Base):
             else:
                 text = None
         else:
+            if canonical:
+                key_attr = self.canonical_key
+                key_name_attr = self.canonical_key_name
+            else:
+                key_attr = self.key
+                key_name_attr = self.key_name
             if key_name_attr:
                 text = f"{name_prefix}{key_attr}{name_suffix}".replace(
                     "Key.",
@@ -248,11 +270,15 @@ class ActionEvent(db.Base):
                 )
             else:
                 text = key_attr
-        return text
+        if text is None:
+            text = ""
+        return str(text)
 
     @property
     def text(self) -> str:
         """Get the text representation of the action event."""
+        if self.scrubbed_text:
+            return self.scrubbed_text
         return self._text()
 
     @text.setter
@@ -264,6 +290,8 @@ class ActionEvent(db.Base):
     @property
     def canonical_text(self) -> str:
         """Get the canonical text representation of the action event."""
+        if self.scrubbed_canonical_text:
+            return self.scrubbed_canonical_text
         return self._text(canonical=True)
 
     @canonical_text.setter
@@ -378,6 +406,18 @@ class ActionEvent(db.Base):
         )
         return press_event, release_event
 
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the action event."""
+        logger.info(f" -> Scrubbing action event id: {self.id}")
+        self.scrubbed_text = scrubber.scrub_text(self.text, is_separated=True)
+        self.scrubbed_canonical_text = scrubber.scrub_text(
+            self.canonical_text, is_separated=True
+        )
+        self.key_char = scrubber.scrub_text(self.key_char)
+        self.canonical_key_char = scrubber.scrub_text(self.canonical_key_char)
+        self.key_vk = scrubber.scrub_text(self.key_vk)
+        logger.info(f" <- Scrubbed action event id: {self.id}")
+
 
 class WindowEvent(db.Base):
     """Class representing a window event in the database."""
@@ -403,6 +443,14 @@ class WindowEvent(db.Base):
     def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
+
+    def scrub(self, scrubber: Union[ScrubbingProvider, TextScrubbingMixin]) -> None:
+        """Scrub the window event."""
+        logger.info(f" -> Scrubbing window event id: {self.id}")
+        self.title = scrubber.scrub_text(self.title)
+        if self.state is not None:
+            self.state = scrubber.scrub_dict(self.state)
+        logger.info(f" <- Scrubbed window event id: {self.id}")
 
 
 class FrameCache:
@@ -523,6 +571,22 @@ class Screenshot(db.Base):
         super().__init__(*args, **kwargs)
         self.initialize_instance_attributes()
         self._image = image
+
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the screenshot."""
+        logger.info(f" -> Scrubbing screenshot id: {self.id}")
+
+        def save_scrubbed_image(image: Image, setattr_name: str) -> None:
+            """Save the scrubbed image."""
+            scrubbed_image = scrubber.scrub_image(image)
+            setattr(self, setattr_name, self.convert_png_to_binary(scrubbed_image))
+
+        save_scrubbed_image(self.image, "png_data")
+        if self.png_diff_data:
+            save_scrubbed_image(self.diff, "png_diff_data")
+        if self.png_diff_mask_data:
+            save_scrubbed_image(self.diff_mask, "png_diff_mask_data")
+        logger.info(f" <- Scrubbed screenshot id: {self.id}")
 
     @sa.orm.reconstructor
     def initialize_instance_attributes(self) -> None:
@@ -684,6 +748,38 @@ class MemoryStat(db.Base):
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+class ScrubbedRecording(db.Base):
+    """Class representing a scrubbed recording in the database."""
+
+    __tablename__ = "scrubbed_recording"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    recording = sa.orm.relationship("Recording", back_populates="scrubbed_recordings")
+
+    provider = sa.Column(sa.String)
+    scrubbed = sa.Column(sa.Boolean)
+
+    def get_provider_name(self) -> str:
+        """Get the name of the scrubbing provider."""
+        return ScrubProvider.as_options()[self.provider]
+
+    def asdict(self) -> dict:
+        return {
+            **super().asdict(),
+            "provider": self.get_provider_name(),
+            "recording": {
+                "task_description": self.recording.task_description,
+            },
+            "original_recording": {
+                "id": self.recording.original_recording_id,
+                "task_description": self.recording.original_recording.task_description,
+            },
+        }
 
 
 # avoid circular import
