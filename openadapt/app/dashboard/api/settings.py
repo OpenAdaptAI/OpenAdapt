@@ -1,6 +1,6 @@
 """API endpoints for settings."""
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from fastapi import FastAPI
 
@@ -19,7 +19,7 @@ class SettingsAPI:
         self.app.add_api_route("/settings", self.get_settings, methods=["GET"])
         self.app.add_api_route("/settings", self.set_settings, methods=["POST"])
 
-    Category = Union[Literal["api_keys", "scrubbing", "record_and_replay"]]
+    Category = Literal["api_keys", "scrubbing", "record_and_replay"]
 
     @staticmethod
     def get_settings(category: Category) -> dict[str, Any]:

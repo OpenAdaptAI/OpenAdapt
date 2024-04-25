@@ -21,14 +21,14 @@ class RecordProc:
 
     def __init__(self) -> None:
         """Initialize the RecordProc class."""
-        self.terminate_event = multiprocessing.Event()
+        self.terminate_processing = multiprocessing.Event()
         self.terminate_recording = multiprocessing.Event()
         self.record_proc: multiprocessing.Process = None
         self.has_initiated_stop = False
 
-    def set_terminate_event(self) -> multiprocessing.Event:
+    def set_terminate_processing(self) -> multiprocessing.Event:
         """Set the terminate event."""
-        return self.terminate_event.set()
+        return self.terminate_processing.set()
 
     def terminate(self) -> None:
         """Terminate the recording process."""
@@ -36,7 +36,7 @@ class RecordProc:
 
     def reset(self) -> None:
         """Reset the recording process."""
-        self.terminate_event.clear()
+        self.terminate_processing.clear()
         self.terminate_recording.clear()
         self.record_proc = None
         record_proc.has_initiated_stop = False
@@ -123,7 +123,7 @@ def stop_record() -> None:
     """Stop the current recording session."""
     global record_proc
     if record_proc.is_running() and not record_proc.has_initiated_stop:
-        record_proc.set_terminate_event()
+        record_proc.set_terminate_processing()
 
         # wait for process to terminate
         record_proc.wait()
@@ -142,7 +142,7 @@ def quick_record() -> None:
     new_session()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc.start(
-        record, (now, record_proc.terminate_event, record_proc.terminate_recording)
+        record, (now, record_proc.terminate_processing, record_proc.terminate_recording)
     )
 
 
@@ -172,7 +172,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
 
     def terminate() -> None:
         global record_proc
-        record_proc.set_terminate_event()
+        record_proc.set_terminate_processing()
 
         # wait for process to terminate
         record_proc.wait()
@@ -192,7 +192,7 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         global record_proc
         record_proc.start(
             record,
-            (name, record_proc.terminate_event, record_proc.terminate_recording),
+            (name, record_proc.terminate_processing, record_proc.terminate_recording),
         )
         record_button._props["name"] = "stop"
         record_button.on("click", lambda: terminate())
