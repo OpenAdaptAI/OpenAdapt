@@ -373,7 +373,7 @@ def get_window_segmentation(
         exceptions: list of exceptions previously raised, added to prompt.
 
     Returns:
-        Segmnetation object containing detailed segmentation information.
+        Segmentation object containing detailed segmentation information.
     """
     screenshot = action_event.screenshot
     screenshot.crop_active_window(action_event)

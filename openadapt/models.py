@@ -6,7 +6,6 @@ import io
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
-import mss.base
 import numpy as np
 import sqlalchemy as sa
 
@@ -375,20 +374,18 @@ class Screenshot(db.Base):
     def __init__(
         self,
         *args: tuple,
-        sct_img: mss.base.ScreenShot | None = None,
+        image: Image.Image | None = None,
         **kwargs: dict,
     ) -> None:
         """Initialize."""
         super().__init__(*args, **kwargs)
         self.initialize_instance_attributes()
-        self.sct_img = sct_img
+        self._image = image
 
     @sa.orm.reconstructor
     def initialize_instance_attributes(self) -> None:
         """Initialize attributes for both new and loaded objects."""
         # TODO: convert to png_data on save
-        self.sct_img = None
-
         # TODO: replace prev with prev_timestamp?
         self.prev = None
         self._image = None
@@ -401,16 +398,7 @@ class Screenshot(db.Base):
     def image(self) -> Image:
         """Get the image associated with the screenshot."""
         if not self._image:
-            if self.sct_img:
-                self._image = Image.frombytes(
-                    "RGB",
-                    self.sct_img.size,
-                    self.sct_img.bgra,
-                    "raw",
-                    "BGRX",
-                )
-            else:
-                self._image = self.convert_binary_to_png(self.png_data)
+            self._image = self.convert_binary_to_png(self.png_data)
         return self._image
 
     @property
@@ -454,7 +442,7 @@ class Screenshot(db.Base):
         from openadapt import utils
 
         sct_img = utils.take_screenshot()
-        screenshot = Screenshot(sct_img=sct_img)
+        screenshot = Screenshot(image=image)
         return screenshot
 
     def crop_active_window(self, action_event: ActionEvent) -> None:
