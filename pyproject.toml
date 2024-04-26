@@ -97,6 +97,7 @@ gradio-client = "0.15.0"
 google-generativeai = "^0.5.0"
 uvicorn = {extras = ["standard"], version = "^0.22"}
 ultralytics = "^8.1.47"
+imagehash = "^4.3.1"
 
 [tool.pytest.ini_options]
 filterwarnings = [
