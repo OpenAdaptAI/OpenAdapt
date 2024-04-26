@@ -379,16 +379,22 @@ def get_window_segmentation(
     original_image = screenshot.cropped_image
     if DEBUG:
         original_image.show()
+
+    # TODO XXX: find similar cropped images and re-use their segments
+
     segmentation_adapter = adapters.get_default_segmentation_adapter()
     segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
     if DEBUG:
         segmented_image.show()
+
     masks = vision.process_image_for_masks(segmented_image)
     if DEBUG:
         vision.display_binary_images_grid(masks)
+
     refined_masks = vision.refine_masks(masks)
     if DEBUG:
         vision.display_binary_images_grid(refined_masks)
+
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
     original_image_base64 = screenshot.base64
@@ -410,6 +416,7 @@ def get_window_segmentation(
     segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
     if DEBUG:
         vision.display_images_table_with_titles(masked_images, descriptions)
+
     return segmentation
 
 
