@@ -479,7 +479,7 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
         float: The height ratio.
     """
     recording = action_event.recording
-    image = action_event.screenshot.original_image
+    image = action_event.screenshot.image
     width_ratio = image.width / recording.monitor_width
     height_ratio = image.height / recording.monitor_height
     return width_ratio, height_ratio

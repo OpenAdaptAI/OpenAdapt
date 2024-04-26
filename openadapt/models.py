@@ -367,6 +367,7 @@ class Screenshot(db.Base):
     png_data = sa.Column(sa.LargeBinary)
     png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
     png_diff_mask_data = sa.Column(sa.LargeBinary, nullable=True)
+    #cropped_png_data = sa.Column(sa.LargeBinary, nullable=True)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
@@ -389,29 +390,42 @@ class Screenshot(db.Base):
         # TODO: replace prev with prev_timestamp?
         self.prev = None
         self._image = None
-        self._image_history = []
+        self._cropped_image = None
         self._diff = None
         self._diff_mask = None
         self._base64 = None
 
     @property
-    def image(self) -> Image:
+    def image(self) -> Image.Image:
         """Get the image associated with the screenshot."""
         if not self._image:
             self._image = self.convert_binary_to_png(self.png_data)
         return self._image
 
     @property
+    def cropped_image(self) -> Image.Image:
+        if not self._cropped_image:
+            # if events have been merged, the last event will be the parent, e.g.
+            #   ipdb> [(action.name, action.timestamp) for action in self.action_event]
+            #   [('move', 1714142176.1630979), ('click', 1714142174.4848516),
+            #   ('singleclick', 1714142174.4537418)]
+            # TODO: verify (e.g. assert)
+            # TODO: rename action_event -> action_events?
+            action_event = self.action_event[-1]
+            self._cropped_image = self.crop_active_window(action_event)
+            # TODO: save?
+            #self.cropped_png_data = self.convert_png_to_binary(self._cropped_image)
+        return self._cropped_image
+
+    @property
     def base64(self) -> str:
         """Return data URI of JPEG encoded base64."""
         if not self._base64:
-            from openadapt import utils
-
             self._base64 = utils.image2utf8(self.image)
         return self._base64
 
     @property
-    def diff(self) -> Image:
+    def diff(self) -> Image.Image:
         """Get the difference between the current and previous screenshot."""
         if self.png_diff_data:
             return self.convert_binary_to_png(self.png_diff_data)
@@ -421,7 +435,7 @@ class Screenshot(db.Base):
         return self._diff
 
     @property
-    def diff_mask(self) -> Image:
+    def diff_mask(self) -> Image.Image:
         """Get the difference mask between the current and previous screenshot."""
         if self.png_diff_mask_data:
             return self.convert_binary_to_png(self.png_diff_mask_data)
@@ -438,18 +452,12 @@ class Screenshot(db.Base):
     @classmethod
     def take_screenshot(cls: "Screenshot") -> "Screenshot":
         """Capture a screenshot."""
-        # avoid circular import
-        from openadapt import utils
-
         sct_img = utils.take_screenshot()
         screenshot = Screenshot(image=image)
         return screenshot
 
     def crop_active_window(self, action_event: ActionEvent) -> None:
         """Crop the screenshot to the active window defined by the action event."""
-        # avoid circular import
-        from openadapt import utils
-
         window_event = action_event.window_event
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
@@ -459,17 +467,10 @@ class Screenshot(db.Base):
         y1 = y0 + window_event.height * height_ratio
 
         box = (x0, y0, x1, y1)
-        self._image_history.append(self.image)
-        self._image = self._image.crop(box)
+        cropped_image = self._image.crop(box)
+        return cropped_image
 
-    @property
-    def original_image(self) -> Image:
-        """Get the original image (before any cropping)."""
-        if self._image_history:
-            return self._image_history[0]
-        return self.image
-
-    def convert_binary_to_png(self, image_binary: bytes) -> Image:
+    def convert_binary_to_png(self, image_binary: bytes) -> Image.Image:
         """Convert a binary image to a PNG image.
 
         Args:
@@ -481,7 +482,7 @@ class Screenshot(db.Base):
         buffer = io.BytesIO(image_binary)
         return Image.open(buffer)
 
-    def convert_png_to_binary(self, image: Image) -> bytes:
+    def convert_png_to_binary(self, image: Image.Image) -> bytes:
         """Convert a PNG image to binary image data.
 
         Args:
@@ -517,3 +518,7 @@ class MemoryStat(db.Base):
     recording_timestamp = sa.Column(sa.Integer)
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+# avoid circular import
+from openadapt import utils

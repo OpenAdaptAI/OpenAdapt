@@ -357,13 +357,13 @@ def merge_consecutive_mouse_click_events(
             "double_click_distance_pixels",
             utils.get_double_click_distance_pixels,
         )
-        logger.info(f"{double_click_distance=}")
+        logger.debug(f"{double_click_distance=}")
         double_click_interval = get_recording_attr(
             to_merge[0],
             "double_click_interval_seconds",
             utils.get_double_click_interval_seconds,
         )
-        logger.info(f"{double_click_interval=}")
+        logger.debug(f"{double_click_interval=}")
         press_to_press_t = {}
         press_to_release_t = {}
         prev_pressed_event = None
@@ -770,7 +770,7 @@ def discard_unused_events(
     ]
     num_referred_events_after = len(referred_events)
     num_referred_events_removed = num_referred_events_before - num_referred_events_after
-    logger.info(f"{referred_timestamp_key=} {num_referred_events_removed=}")
+    logger.debug(f"{referred_timestamp_key=} {num_referred_events_removed=}")
     return referred_events
 
 

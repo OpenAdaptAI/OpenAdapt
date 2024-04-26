@@ -376,8 +376,7 @@ def get_window_segmentation(
         Segmentation object containing detailed segmentation information.
     """
     screenshot = action_event.screenshot
-    screenshot.crop_active_window(action_event)
-    original_image = screenshot.image
+    original_image = screenshot.cropped_image
     if DEBUG:
         original_image.show()
     segmentation_adapter = adapters.get_default_segmentation_adapter()
