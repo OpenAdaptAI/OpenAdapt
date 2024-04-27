@@ -371,8 +371,8 @@ def get_active_segment(
 def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
     """Calculate the structural similarity index (SSIM) between two images.
 
-    This function first resizes the images to a common size maintaining their aspect ratios.
-    It then converts the resized images to grayscale and computes the SSIM.
+    This function first resizes the images to a common size maintaining their aspect
+    ratios. It then converts the resized images to grayscale and computes the SSIM.
 
     Args:
         im1 (Image.Image): The first image to compare.
