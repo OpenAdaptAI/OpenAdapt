@@ -367,7 +367,7 @@ class Screenshot(db.Base):
     png_data = sa.Column(sa.LargeBinary)
     png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
     png_diff_mask_data = sa.Column(sa.LargeBinary, nullable=True)
-    #cropped_png_data = sa.Column(sa.LargeBinary, nullable=True)
+    # cropped_png_data = sa.Column(sa.LargeBinary, nullable=True)
 
     recording = sa.orm.relationship("Recording", back_populates="screenshots")
     action_event = sa.orm.relationship("ActionEvent", back_populates="screenshot")
@@ -414,7 +414,7 @@ class Screenshot(db.Base):
             action_event = self.action_event[-1]
             self._cropped_image = self.crop_active_window(action_event)
             # TODO: save?
-            #self.cropped_png_data = self.convert_png_to_binary(self._cropped_image)
+            # self.cropped_png_data = self.convert_png_to_binary(self._cropped_image)
         return self._cropped_image
 
     @property

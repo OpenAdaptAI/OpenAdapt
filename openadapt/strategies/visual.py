@@ -397,8 +397,8 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.
     im2 = im2.resize((base_width, base_height), Image.LANCZOS)
 
     # Convert images to grayscale
-    im1_gray = np.array(im1.convert('L'))
-    im2_gray = np.array(im2.convert('L'))
+    im1_gray = np.array(im1.convert("L"))
+    im2_gray = np.array(im2.convert("L"))
 
     data_range = im2_gray.max() - im2_gray.min()
     mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
@@ -499,7 +499,11 @@ def get_window_segmentation(
         len(centroids),
     )
     segmentation = Segmentation(
-        original_image, masked_images, descriptions, bounding_boxes, centroids,
+        original_image,
+        masked_images,
+        descriptions,
+        bounding_boxes,
+        centroids,
     )
     if DEBUG:
         vision.display_images_table_with_titles(masked_images, descriptions)

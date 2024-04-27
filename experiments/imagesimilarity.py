@@ -41,8 +41,8 @@ def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
     im2 = im2.resize((base_width, base_height), Image.LANCZOS)
 
     # Convert images to grayscale
-    im1_gray = np.array(im1.convert('L'))
-    im2_gray = np.array(im2.convert('L'))
+    im1_gray = np.array(im1.convert("L"))
+    im2_gray = np.array(im2.convert("L"))
 
     mssim, grad, S = ssim(
         im1_gray,
@@ -53,7 +53,6 @@ def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
     )
 
     if SHOW_SSIM:
-
         # Normalize the gradient for visualization
         grad_normalized = (grad - grad.min()) / (grad.max() - grad.min())
         im_grad = Image.fromarray((grad_normalized * 255).astype(np.uint8))
@@ -65,21 +64,21 @@ def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
         fig, axs = plt.subplots(1, 4, figsize=(20, 5))  # 1 row, 4 columns
 
         # Display each image in the subplot
-        axs[0].imshow(im1, cmap='gray')
-        axs[0].set_title('Image 1')
-        axs[0].axis('off')
+        axs[0].imshow(im1, cmap="gray")
+        axs[0].set_title("Image 1")
+        axs[0].axis("off")
 
-        axs[1].imshow(im2, cmap='gray')
-        axs[1].set_title('Image 2')
-        axs[1].axis('off')
+        axs[1].imshow(im2, cmap="gray")
+        axs[1].set_title("Image 2")
+        axs[1].axis("off")
 
-        axs[2].imshow(im_grad, cmap='gray')
-        axs[2].set_title('Gradient of SSIM')
-        axs[2].axis('off')
+        axs[2].imshow(im_grad, cmap="gray")
+        axs[2].set_title("Gradient of SSIM")
+        axs[2].axis("off")
 
-        axs[3].imshow(im_S, cmap='gray')
-        axs[3].set_title('SSIM Image')
-        axs[3].axis('off')
+        axs[3].imshow(im_S, cmap="gray")
+        axs[3].set_title("SSIM Image")
+        axs[3].axis("off")
 
         plt.show(block=False)
 
@@ -158,7 +157,7 @@ def prepare_image(
     img: Image.Image,
     size: tuple[int, int] = (128, 128),
     border: int = 2,
-    color: str = 'red',
+    color: str = "red",
 ) -> Image.Image:
     """
     Resize an image to a common size, add a border to it.
@@ -202,7 +201,7 @@ def plot_images_with_mds(
     hash_values = [str(hash_func(img)) if hash_func else "" for img in images]
 
     # Initialize MDS and fit the distance matrix to get the 2D embedding
-    mds = MDS(n_components=2, dissimilarity='precomputed', random_state=0)
+    mds = MDS(n_components=2, dissimilarity="precomputed", random_state=0)
     positions = mds.fit_transform(distance_matrix)
 
     # Create a scatter plot with the MDS results
@@ -216,11 +215,15 @@ def plot_images_with_mds(
     for img, hash_val, (x, y) in zip(prepared_images, hash_values, positions):
         im = OffsetImage(np.array(img), zoom=0.5)
         ab = AnnotationBbox(
-            im, (x, y), xycoords='data', frameon=True, bboxprops=bbox_props,
+            im,
+            (x, y),
+            xycoords="data",
+            frameon=True,
+            bboxprops=bbox_props,
         )
         ax.add_artist(ab)
         # Display the hash value beside the image
-        ax.text(x, y - 0.05, hash_val, fontsize=9, ha='center')
+        ax.text(x, y - 0.05, hash_val, fontsize=9, ha="center")
 
     # Remove the x and y ticks
     ax.set_xticks([])
@@ -231,10 +234,10 @@ def plot_images_with_mds(
 
 
 def display_distance_matrix_with_images(
-    distance_matrix: np.ndarray, 
-    images: list[Image.Image], 
+    distance_matrix: np.ndarray,
+    images: list[Image.Image],
     func_name: str,
-    thumbnail_size: tuple[int, int] = (32, 32)
+    thumbnail_size: tuple[int, int] = (32, 32),
 ):
     """Display the distance matrix as an image with thumbnails along the top and left.
 
@@ -248,32 +251,32 @@ def display_distance_matrix_with_images(
     # Create a figure with subplots
     fig = plt.figure(figsize=(10, 10))
     # GridSpec layout for the thumbnails and the distance matrix
-    gs = gridspec.GridSpec(n+1, n+1, figure=fig)
+    gs = gridspec.GridSpec(n + 1, n + 1, figure=fig)
 
     # Place the distance matrix
     ax_matrix = fig.add_subplot(gs[1:, 1:])
-    ax_matrix.imshow(distance_matrix, cmap='viridis')
+    ax_matrix.imshow(distance_matrix, cmap="viridis")
     ax_matrix.set_xticks([])
     ax_matrix.set_yticks([])
 
     # Annotate each cell with the distance value
     for (i, j), val in np.ndenumerate(distance_matrix):
-        ax_matrix.text(j, i, f'{val:.4f}', ha='center', va='center', color='white')
+        ax_matrix.text(j, i, f"{val:.4f}", ha="center", va="center", color="white")
 
     # Resize images to thumbnails
     thumbnails = [img.resize(thumbnail_size, Image.ANTIALIAS) for img in images]
 
     # Plot images on the top row
     for i, img in enumerate(thumbnails):
-        ax_img_top = fig.add_subplot(gs[0, i+1])
+        ax_img_top = fig.add_subplot(gs[0, i + 1])
         ax_img_top.imshow(np.array(img))
-        ax_img_top.axis('off')  # Hide axes
+        ax_img_top.axis("off")  # Hide axes
 
     # Plot images on the left column
     for i, img in enumerate(thumbnails):
-        ax_img_left = fig.add_subplot(gs[i+1, 0])
+        ax_img_left = fig.add_subplot(gs[i + 1, 0])
         ax_img_left.imshow(np.array(img))
-        ax_img_left.axis('off')  # Hide axes
+        ax_img_left.axis("off")  # Hide axes
 
     plt.suptitle(func_name)
     plt.show()
@@ -290,12 +293,8 @@ def main():
         "average_hash": lambda im1, im2: (
             imagehash.average_hash(im1) - imagehash.average_hash(im2)
         ),
-        "dhash": lambda im1, im2: (
-            imagehash.dhash(im1) - imagehash.dhash(im2)
-        ),
-        "phash": lambda im1, im2: (
-            imagehash.phash(im1) - imagehash.phash(im2)
-        ),
+        "dhash": lambda im1, im2: (imagehash.dhash(im1) - imagehash.dhash(im2)),
+        "phash": lambda im1, im2: (imagehash.phash(im1) - imagehash.phash(im2)),
         "crop_resistant_hash": lambda im1, im2: (
             imagehash.crop_resistant_hash(im1) - imagehash.crop_resistant_hash(im2)
         ),
@@ -307,14 +306,13 @@ def main():
 
     # Process each similarity function
     for func_name, func in similarity_funcs.items():
-
         hash_func = {
-            'average_hash': imagehash.average_hash,
-            'dhash': imagehash.dhash,
-            'phash': imagehash.phash,
-            'crop_resistant_hash': imagehash.crop_resistant_hash,
-            'colorhash': imagehash.colorhash,
-            'whash': imagehash.whash,
+            "average_hash": imagehash.average_hash,
+            "dhash": imagehash.dhash,
+            "phash": imagehash.phash,
+            "crop_resistant_hash": imagehash.crop_resistant_hash,
+            "colorhash": imagehash.colorhash,
+            "whash": imagehash.whash,
         }.get(func_name, None)
 
         # Create a matrix to store all pairwise distances
