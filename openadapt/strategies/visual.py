@@ -47,12 +47,16 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw
+from skimage.metrics import structural_similarity as ssim
+import numpy as np
 
 from openadapt import adapters, common, models, strategies, utils, vision
 
 
 DEBUG = False
 DEBUG_REPLAY = False
+SEGMENTATIONS = []  # TODO: store to db
+MAX_SSIM = 0.9  # threshold for considering an image as similar
 
 
 @dataclass
@@ -60,6 +64,7 @@ class Segmentation:
     """A data class to encapsulate segmentation data of images.
 
     Attributes:
+        image: The original image used to generate segments.
         masked_images: A list of PIL Image objects that have been masked based on
             segmentation.
         descriptions: Descriptions of each segmented region, correlating with each
@@ -72,6 +77,7 @@ class Segmentation:
             centroid of each segmented region.
     """
 
+    image: Image.Image
     masked_images: list[Image.Image]
     descriptions: list[str]
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
@@ -362,6 +368,78 @@ def get_active_segment(
     return active_index
 
 
+def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
+    """Calculate the structural similarity index (SSIM) between two images.
+
+    This function first resizes the images to a common size maintaining their aspect
+    ratios. It then converts the resized images to grayscale and computes the SSIM.
+
+    Args:
+        im1 (Image.Image): The first image to compare.
+        im2 (Image.Image): The second image to compare.
+
+    Returns:
+        tuple[float, np.array]: A tuple containing the SSIM and the difference image.
+    """
+    # Calculate aspect ratios
+    aspect_ratio1 = im1.width / im1.height
+    aspect_ratio2 = im2.width / im2.height
+    # Use the smaller image as the base for resizing to maintain the aspect ratio
+    if aspect_ratio1 < aspect_ratio2:
+        base_width = min(im1.width, im2.width)
+        base_height = int(base_width / aspect_ratio1)
+    else:
+        base_height = min(im1.height, im2.height)
+        base_width = int(base_height * aspect_ratio2)
+
+    # Resize images to a common base while maintaining aspect ratio
+    im1 = im1.resize((base_width, base_height), Image.LANCZOS)
+    im2 = im2.resize((base_width, base_height), Image.LANCZOS)
+
+    # Convert images to grayscale
+    im1_gray = np.array(im1.convert("L"))
+    im2_gray = np.array(im2.convert("L"))
+
+    data_range = im2_gray.max() - im2_gray.min()
+    mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
+
+    return mssim, diff_image
+
+
+def find_similar_image_segmentation(
+    image: Image.Image,
+    max_ssim: float = MAX_SSIM,
+) -> tuple[Segmentation, np.ndarray] | tuple[None, None]:
+    """Identify a similar image in the cache based on the SSIM comparison.
+
+    This function iterates through a global list of image segmentations,
+    comparing each against a given image using the SSIM index calculated by
+    get_image_similarity.
+    It logs and updates the best match found above a specified SSIM threshold.
+
+    Args:
+        image (Image.Image): The image to compare against the cache.
+        max_ssim (float): The minimum SSIM threshold for considering a match.
+
+    Returns:
+        tuple[Segmentation, np.ndarray] | tuple[None, None]: The best matching
+        segmentation and its difference image if a match is found;
+        otherwise, None for both.
+    """
+    similar_segmentation = None
+    similar_segmentation_diff = None
+
+    for segmentation in SEGMENTATIONS:
+        similarity_index, ssim_image = get_image_similarity(image, segmentation.image)
+        if similarity_index > max_ssim:
+            logger.info(f"{similarity_index=}")
+            max_ssim = similarity_index
+            similar_segmentation = segmentation
+            similar_segmentation_diff = ssim_image
+
+    return similar_segmentation, similar_segmentation_diff
+
+
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
@@ -373,23 +451,35 @@ def get_window_segmentation(
         exceptions: list of exceptions previously raised, added to prompt.
 
     Returns:
-        Segmnetation object containing detailed segmentation information.
+        Segmentation object containing detailed segmentation information.
     """
     screenshot = action_event.screenshot
-    screenshot.crop_active_window(action_event)
-    original_image = screenshot.image
+    original_image = screenshot.cropped_image
     if DEBUG:
         original_image.show()
+
     segmentation_adapter = adapters.get_default_segmentation_adapter()
     segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
     if DEBUG:
         segmented_image.show()
+
+    similar_segmentation, similar_segmentation_diff = find_similar_image_segmentation(
+        original_image,
+    )
+    if similar_segmentation:
+        # TODO XXX: create copy of similar_segmentation, but overwrite with segments of
+        # regions of new image where segments of similar_segmentation overlap non-zero
+        # regions of similar_segmentation_diff
+        return similar_segmentation
+
     masks = vision.process_image_for_masks(segmented_image)
     if DEBUG:
         vision.display_binary_images_grid(masks)
+
     refined_masks = vision.refine_masks(masks)
     if DEBUG:
         vision.display_binary_images_grid(refined_masks)
+
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
     original_image_base64 = screenshot.base64
@@ -408,9 +498,17 @@ def get_window_segmentation(
         len(descriptions),
         len(centroids),
     )
-    segmentation = Segmentation(masked_images, descriptions, bounding_boxes, centroids)
+    segmentation = Segmentation(
+        original_image,
+        masked_images,
+        descriptions,
+        bounding_boxes,
+        centroids,
+    )
     if DEBUG:
         vision.display_images_table_with_titles(masked_images, descriptions)
+
+    SEGMENTATIONS.append(segmentation)
     return segmentation
 
 

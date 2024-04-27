@@ -97,7 +97,6 @@ poetry install
 poetry shell
 alembic upgrade head
 poetry run install-dashbaord
-
 pytest
 ```
 
