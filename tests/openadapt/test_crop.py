@@ -41,9 +41,9 @@ def test_crop_active_window() -> None:
         original_size = screenshot._image.size
 
         # Perform the cropping operation
-        screenshot.crop_active_window(action_event=action_event_mock)
+        cropped_image = screenshot.crop_active_window(action_event=action_event_mock)
 
         # Verify that the image size has been reduced
-        assert (screenshot._image.size[0] < original_size[0]) or (
-            screenshot._image.size[1] < original_size[1]
+        assert (cropped_image.size[0] < original_size[0]) or (
+            cropped_image.size[1] < original_size[1]
         )
