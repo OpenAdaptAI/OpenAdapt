@@ -2,6 +2,25 @@
 
 
 
+## v0.19.0 (2024-04-27)
+
+### Feature
+
+* feat(VisualReplayStrategy): compute image similarity to avoid unnecessary segmentation
+
+* remove sct_image from Screenshot; fix typo
+
+* add Image.cropped_image
+
+* add experiments/imagesimilarity.py
+
+* bugfix: sct_image -&gt; image
+
+* find_similar_image_segmentation
+
+* fix test_crop_active_window ([`3c185e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3c185e880483aeb26ef46381b3a1e2164534cb31))
+
+
 ## v0.18.3 (2024-04-22)
 
 ### Fix
