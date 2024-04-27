@@ -452,7 +452,7 @@ class Screenshot(db.Base):
     @classmethod
     def take_screenshot(cls: "Screenshot") -> "Screenshot":
         """Capture a screenshot."""
-        sct_img = utils.take_screenshot()
+        image = utils.take_screenshot()
         screenshot = Screenshot(image=image)
         return screenshot
 
