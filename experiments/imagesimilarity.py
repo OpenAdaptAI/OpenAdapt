@@ -1,3 +1,5 @@
+"""This module calculates image similarities using various methods."""
+
 from typing import Callable
 import time
 
@@ -22,6 +24,7 @@ def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
     Args:
         im1 (Image.Image): The first image.
         im2 (Image.Image): The second image.
+
     Returns:
         float: The SSIM index between the two images.
     """
@@ -120,9 +123,7 @@ def calculate_dynamic_threshold(
 
 
 def thresholded_difference(im1: Image.Image, im2: Image.Image, k: float = 1.0) -> int:
-    """
-    Return the difference between two images by computing the number of pixels
-    differing by a dynamically calculated threshold based on the standard deviation.
+    """Return number of pixels differing by at least a dynamically calculated threshold.
 
     Args:
         im1 (Image.Image): The first image.
@@ -159,8 +160,7 @@ def prepare_image(
     border: int = 2,
     color: str = "red",
 ) -> Image.Image:
-    """
-    Resize an image to a common size, add a border to it.
+    """Resize an image to a common size, add a border to it.
 
     Args:
         img (Image.Image): The original image to prepare.
@@ -185,7 +185,7 @@ def plot_images_with_mds(
     distance_matrix: np.ndarray,
     title: str,
     hash_func: Callable,
-):
+) -> None:
     """Plot images on a scatter plot based on the provided distance matrix.
 
     Args:
@@ -193,6 +193,9 @@ def plot_images_with_mds(
         distance_matrix (np.ndarray): A distance matrix of image differences.
         title (str): Title of the plot.
         hash_func (Callable): The hashing function to compute hash values.
+
+    Returns:
+        None
     """
     # Prepare images by resizing and adding a border
     prepared_images = [prepare_image(img) for img in images]
@@ -238,13 +241,16 @@ def display_distance_matrix_with_images(
     images: list[Image.Image],
     func_name: str,
     thumbnail_size: tuple[int, int] = (32, 32),
-):
+) -> None:
     """Display the distance matrix as an image with thumbnails along the top and left.
 
     Args:
         distance_matrix (np.ndarray): A square matrix with distance values.
         images (list[Image.Image]): list of images corresponding to matrix rows/cols.
         thumbnail_size (tuple[int, int]): Size to which thumbnails will be resized.
+
+    Returns:
+        None
     """
     # Number of images
     n = len(images)
@@ -282,7 +288,8 @@ def display_distance_matrix_with_images(
     plt.show()
 
 
-def main():
+def main() -> None:
+    """Main function to process images and display similarity metrics."""
     recording = crud.get_latest_recording()
     action_events = recording.processed_action_events
     images = [action_event.screenshot.cropped_image for action_event in action_events]

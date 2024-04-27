@@ -404,6 +404,7 @@ class Screenshot(db.Base):
 
     @property
     def cropped_image(self) -> Image.Image:
+        """Return screenshot image cropped to corresponding action's active window."""
         if not self._cropped_image:
             # if events have been merged, the last event will be the parent, e.g.
             #   ipdb> [(action.name, action.timestamp) for action in self.action_event]
@@ -521,4 +522,4 @@ class MemoryStat(db.Base):
 
 
 # avoid circular import
-from openadapt import utils
+from openadapt import utils  # noqa
