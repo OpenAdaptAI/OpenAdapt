@@ -24,8 +24,10 @@ See also:
 
 <img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/82814cdb-f0d5-4a6b-9d44-a4628fca1590">
 
+Early demos (more coming soon!):
 
-Early demo: https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0 (more coming soon!)
+- https://twitter.com/abrichr/status/1784307190062342237
+- https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0
 
 Welcome to OpenAdapt! This Python library implements AI-First Process Automation
 with the power of Large Multimodal Modals (LMMs) by:
