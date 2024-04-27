@@ -13,6 +13,9 @@ import numpy as np
 from openadapt.db import crud
 
 
+SHOW_SSIM = False
+
+
 def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
     """Calculate the Structural Similarity Index (SSIM) between two images.
 
@@ -41,8 +44,46 @@ def calculate_ssim(im1: Image.Image, im2: Image.Image) -> float:
     im1_gray = np.array(im1.convert('L'))
     im2_gray = np.array(im2.convert('L'))
 
-    # Calculate SSIM
-    return 1 - ssim(im1_gray, im2_gray, data_range=im2_gray.max() - im2_gray.min())
+    mssim, grad, S = ssim(
+        im1_gray,
+        im2_gray,
+        data_range=im2_gray.max() - im2_gray.min(),
+        gradient=True,
+        full=True,
+    )
+
+    if SHOW_SSIM:
+
+        # Normalize the gradient for visualization
+        grad_normalized = (grad - grad.min()) / (grad.max() - grad.min())
+        im_grad = Image.fromarray((grad_normalized * 255).astype(np.uint8))
+
+        # Convert full SSIM image to uint8
+        im_S = Image.fromarray((S * 255).astype(np.uint8))
+
+        # Create a figure to display the images
+        fig, axs = plt.subplots(1, 4, figsize=(20, 5))  # 1 row, 4 columns
+
+        # Display each image in the subplot
+        axs[0].imshow(im1, cmap='gray')
+        axs[0].set_title('Image 1')
+        axs[0].axis('off')
+
+        axs[1].imshow(im2, cmap='gray')
+        axs[1].set_title('Image 2')
+        axs[1].axis('off')
+
+        axs[2].imshow(im_grad, cmap='gray')
+        axs[2].set_title('Gradient of SSIM')
+        axs[2].axis('off')
+
+        axs[3].imshow(im_S, cmap='gray')
+        axs[3].set_title('SSIM Image')
+        axs[3].axis('off')
+
+        plt.show(block=False)
+
+    return 1 - mssim
 
 
 def calculate_dynamic_threshold(
