@@ -1,19 +1,33 @@
+'use client';
+
 import { get } from "@/api";
 import { ActionEvents } from "@/components/ActionEvent/ActionEvents";
 import { RecordingDetails } from "@/components/RecordingDetails";
 import { ActionEvent as ActionEventType } from "@/types/action-event";
 import { Recording as RecordingType } from "@/types/recording";
 import { Box } from "@mantine/core";
+import { useEffect, useState } from "react";
 
 type Props = {
     id: string;
 }
 
 
-export default async function Recording({
+export default function Recording({
     params: { id },
 }: {params: Props}) {
-    const recording = await fetchRecordingInfo(id);
+    const [recording, setRecording] = useState<{
+        recording: RecordingType,
+        action_events: ActionEventType[],
+    } | null>(null);
+    useEffect(() => {
+        fetchRecordingInfo(id).then((data) => {
+            setRecording(data);
+        });
+    }, [id]);
+    if (!recording) {
+        return null;
+    }
     const actionEvents = addIdsToNullActionEvents(recording.action_events);
 
     return (
