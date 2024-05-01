@@ -168,8 +168,11 @@ def process_event(
 def process_events(
     event_q: queue.Queue,
     screen_write_q: sq.SynchronizedQueue,
+    num_screen_events: multiprocessing.Value,
     action_write_q: sq.SynchronizedQueue,
+    num_action_events: multiprocessing.Value,
     window_write_q: sq.SynchronizedQueue,
+    num_window_events: multiprocessing.Value,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
@@ -181,8 +184,11 @@ def process_events(
     Args:
         event_q: A queue with events to be processed.
         screen_write_q: A queue for writing screen events.
+        num_screen_events: A counter for the number of screen events.
         action_write_q: A queue for writing action events.
+        num_action_events: A counter for the number of action events.
         window_write_q: A queue for writing window events.
+        num_window_events: A counter for the number of window events.
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
@@ -240,6 +246,7 @@ def process_events(
                 recording_timestamp,
                 perf_q,
             )
+            num_action_events.value += 1
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
                     prev_screen_event,
@@ -248,6 +255,7 @@ def process_events(
                     recording_timestamp,
                     perf_q,
                 )
+                num_screen_events.value += 1
                 prev_saved_screen_timestamp = prev_screen_event.timestamp
             if prev_saved_window_timestamp < prev_window_event.timestamp:
                 process_event(
@@ -257,6 +265,7 @@ def process_events(
                     recording_timestamp,
                     perf_q,
                 )
+                num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
@@ -330,10 +339,10 @@ def write_events(
     event_type: str,
     write_fn: Callable,
     write_q: sq.SynchronizedQueue,
+    num_events: multiprocessing.Value,
     perf_q: sq.SynchronizedQueue,
     recording_timestamp: float,
     terminate_processing: multiprocessing.Event,
-    term_pipe: multiprocessing.Pipe,
     started_counter: multiprocessing.Value,
 ) -> None:
     """Write events of a specific type to the db using the provided write function.
@@ -342,10 +351,10 @@ def write_events(
         event_type: The type of events to be written.
         write_fn: A function to write events to the database.
         write_q: A queue with events to be written.
+        num_events: A counter for the number of events.
         perf_q: A queue for collecting performance data.
         recording_timestamp: The timestamp of the recording.
         terminate_processing: An event to signal the termination of the process.
-        term_pipe: A pipe for communicating the number of events left to be written.
         started_counter: Value to increment once started.
     """
     utils.set_start_time(recording_timestamp)
@@ -353,23 +362,25 @@ def write_events(
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    num_left = 0
+    num_processed = 0
     progress = None
     started = False
     while not terminate_processing.is_set() or not write_q.empty():
-        if term_pipe.poll():
-            num_left = term_pipe.recv()
-            if num_left != 0 and progress is None:
-                with redirect_stdout_stderr():
-                    progress = tqdm(
-                        total=num_left,
-                        desc="Writing to Database",
-                        unit="event",
-                        colour="green",
-                        dynamic_ncols=True,
-                    )
-        if terminate_processing.is_set() and num_left != 0 and progress is not None:
-            progress.update()
+        if terminate_processing.is_set() and progress is None:
+            # if processing is over, create a progress bar
+            with redirect_stdout_stderr():
+                total_events = num_events.value
+                progress = tqdm(
+                    total=total_events,
+                    desc=f"Writing {event_type} events to database...",
+                    unit="event",
+                    colour="green",
+                    dynamic_ncols=True,
+                )
+                # update the progress bar with the number of events that have already
+                # been processed
+                for _ in range(num_processed):
+                    progress.update()
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -380,6 +391,14 @@ def write_events(
             continue
         assert event.type == event_type, (event_type, event)
         write_fn(recording_timestamp, event, perf_q)
+        num_processed += 1
+        with num_events.get_lock():
+            if progress is not None:
+                if progress.total < num_events.value:
+                    # update the total number of events in the progress bar
+                    progress.total = num_events.value
+                    progress.refresh()
+                progress.update()
         logger.debug(f"{event_type=} written")
 
     if progress is not None:
@@ -1007,18 +1026,6 @@ def record(
         terminate_processing = multiprocessing.Event()
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
-    (
-        term_pipe_parent_window,
-        term_pipe_child_window,
-    ) = multiprocessing.Pipe()
-    (
-        term_pipe_parent_screen,
-        term_pipe_child_screen,
-    ) = multiprocessing.Pipe()
-    (
-        term_pipe_parent_action,
-        term_pipe_child_action,
-    ) = multiprocessing.Pipe()
 
     window_event_reader = threading.Thread(
         target=read_window_events,
@@ -1044,13 +1051,20 @@ def record(
     )
     mouse_event_reader.start()
 
+    num_action_events = multiprocessing.Value("i", 0)
+    num_screen_events = multiprocessing.Value("i", 0)
+    num_window_events = multiprocessing.Value("i", 0)
+
     event_processor = threading.Thread(
         target=process_events,
         args=(
             event_q,
             screen_write_q,
+            num_screen_events,
             action_write_q,
+            num_action_events,
             window_write_q,
+            num_window_events,
             video_write_q,
             perf_q,
             recording_timestamp,
@@ -1066,10 +1080,10 @@ def record(
             "screen",
             write_screen_event,
             screen_write_q,
+            num_screen_events,
             perf_q,
             recording_timestamp,
             terminate_processing,
-            term_pipe_child_screen,
             started_counter,
         ),
     )
@@ -1081,10 +1095,10 @@ def record(
             "action",
             write_action_event,
             action_write_q,
+            num_action_events,
             perf_q,
             recording_timestamp,
             terminate_processing,
-            term_pipe_child_action,
             started_counter,
         ),
     )
@@ -1096,10 +1110,10 @@ def record(
             "window",
             write_window_event,
             window_write_q,
+            num_window_events,
             perf_q,
             recording_timestamp,
             terminate_processing,
-            term_pipe_child_window,
             started_counter,
         ),
     )
@@ -1168,10 +1182,6 @@ def record(
 
     collect_stats()
     log_memory_usage()
-
-    term_pipe_parent_window.send(window_write_q.qsize())
-    term_pipe_parent_action.send(action_write_q.qsize())
-    term_pipe_parent_screen.send(screen_write_q.qsize())
 
     logger.info("joining...")
     keyboard_event_reader.join()
