@@ -8,7 +8,8 @@ from loguru import logger
 from PIL import Image
 import av
 
-from openadapt import config, utils
+from openadapt import utils
+from openadapt.config import config
 
 
 def get_video_file_name(recording_timestamp: float) -> str:

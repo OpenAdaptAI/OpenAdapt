@@ -1,0 +1,86 @@
+{
+    "PRIVATE_AI_API_KEY": "<PRIVATE_AI_API_KEY>",
+    "REPLICATE_API_TOKEN": "<REPLICATE_API_TOKEN>",
+    "DEFAULT_ADAPTER": "openai",
+    "DEFAULT_SEGMENTATION_ADAPTER": "ultralytics",
+    "OPENAI_API_KEY": "<OPENAI_API_KEY>",
+    "ANTHROPIC_API_KEY": "<ANTHROPIC_API_KEY>",
+    "GOOGLE_API_KEY": "<GOOGLE_API_KEY>",
+    "SOM_SERVER_URL": "<SOM_SERVER_URL>",
+    "CACHE_DIR_PATH": ".cache",
+    "CACHE_ENABLED": true,
+    "CACHE_VERBOSITY": 0,
+    "DB_ECHO": false,
+    "ERROR_REPORTING_ENABLED": true,
+    "ERROR_REPORTING_DSN": "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798",
+    "ERROR_REPORTING_BRANCH": "main",
+    "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
+    "RECORD_WINDOW_DATA": false,
+    "RECORD_READ_ACTIVE_ELEMENT_STATE": false,
+    "REPLAY_STRIP_ELEMENT_STATE": true,
+    "RECORD_VIDEO": false,
+    "RECORD_IMAGES": true,
+    "VIDEO_PIXEL_FORMAT": "rgb24",
+    "STOP_SEQUENCES": [
+        [
+            "o",
+            "a",
+            ".",
+            "s",
+            "t",
+            "o",
+            "p"
+        ],
+        [
+            "ctrl",
+            "ctrl",
+            "ctrl"
+        ]
+    ],
+    "IGNORE_WARNINGS": false,
+    "MAX_NUM_WARNINGS_PER_SECOND": 5,
+    "WARNING_SUPPRESSION_PERIOD": 1,
+    "MESSAGES_TO_FILTER": [
+        "Cannot pickle Objective-C objects"
+    ],
+    "ACTION_TEXT_SEP": "-",
+    "ACTION_TEXT_NAME_PREFIX": "<",
+    "ACTION_TEXT_NAME_SUFFIX": ">",
+    "PLOT_PERFORMANCE": true,
+    "APP_DARK_MODE": false,
+    "SCRUB_ENABLED": false,
+    "SCRUB_CHAR": "*",
+    "SCRUB_LANGUAGE": "en",
+    "SCRUB_FILL_COLOR": "0x0000FF",
+    "SCRUB_CONFIG_TRF": {
+        "nlp_engine_name": "spacy",
+        "models": [
+            {
+                "lang_code": "en",
+                "model_name": "en_core_web_trf"
+            }
+        ]
+    },
+    "SCRUB_PRESIDIO_IGNORE_ENTITIES": [],
+    "SCRUB_KEYS_HTML": [
+        "text",
+        "canonical_text",
+        "title",
+        "state",
+        "task_description",
+        "key_char",
+        "canonical_key_char",
+        "key_vk",
+        "children"
+    ],
+    "VISUALIZE_DARK_MODE": false,
+    "VISUALIZE_RUN_NATIVELY": true,
+    "VISUALIZE_DENSE_TREES": true,
+    "VISUALIZE_ANIMATIONS": true,
+    "VISUALIZE_EXPAND_ALL": false,
+    "VISUALIZE_MAX_TABLE_CHILDREN": 10,
+    "SAVE_SCREENSHOT_DIFF": false,
+    "SPACY_MODEL_NAME": "en_core_web_trf",
+    "DASHBOARD_CLIENT_PORT": 5173,
+    "DASHBOARD_SERVER_PORT": 8080
+}

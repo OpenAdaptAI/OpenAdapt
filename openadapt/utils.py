@@ -19,13 +19,17 @@ import time
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
-import fire
+
+from openadapt.build_utils import redirect_stdout_stderr
+
+with redirect_stdout_stderr():
+    import fire
+
 import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
 import orjson
-
 
 if sys.platform == "win32":
     import mss.windows
@@ -35,7 +39,8 @@ if sys.platform == "win32":
     mss.windows.CAPTUREBLT = 0
 
 
-from openadapt import common, config
+from openadapt import common
+from openadapt.config import DIRNAME_PERFORMANCE_PLOTS_DIR, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
@@ -793,12 +798,15 @@ def plot_performance(
     if save_file:
         fname_parts = ["performance", str(recording_timestamp)]
         fname = "-".join(fname_parts) + ".png"
-        os.makedirs(config.DIRNAME_PERFORMANCE_PLOTS, exist_ok=True)
-        fpath = os.path.join(config.DIRNAME_PERFORMANCE_PLOTS, fname)
+        os.makedirs(DIRNAME_PERFORMANCE_PLOTS_DIR, exist_ok=True)
+        fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS_DIR, fname)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
-            os.system(f"open {fpath}")
+            if sys.platform == "darwin":
+                os.system(f"open {fpath}")
+            else:
+                os.system(f"start {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
         if view_file:
@@ -891,7 +899,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         return orjson.dumps(value).decode("utf-8")
 
     # Construct the full path to the template file
-    template_path = os.path.join(config.ROOT_DIRPATH, template_relative_path)
+    template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
 
     # Extract the directory and template file name
     template_dir, template_file = os.path.split(template_path)

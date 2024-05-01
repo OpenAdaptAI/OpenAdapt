@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
-from openadapt import config
+from openadapt.config import RECORDING_DIRECTORY_PATH, config
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -204,7 +204,7 @@ def export_recording(recording_id: int) -> str:
     """
     timestamp = int(time.time())
     db_fname = f"recording_{recording_id}_{timestamp}.db"
-    target_path = config.RECORDING_DIRECTORY_PATH / db_fname
+    target_path = RECORDING_DIRECTORY_PATH / db_fname
     target_db_url = f"sqlite:///{target_path}"
 
     target_engine = create_engine(target_db_url, future=True)

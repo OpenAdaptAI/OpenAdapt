@@ -5,8 +5,8 @@ from pprint import pprint
 from loguru import logger
 import anthropic
 
-from openadapt import cache, config
-
+from openadapt import cache
+from openadapt.config import config
 
 MAX_TOKENS = 4096
 # from https://docs.anthropic.com/claude/docs/vision

@@ -4,7 +4,8 @@ import time
 
 from loguru import logger
 
-from openadapt import config, models, strategies, utils
+from openadapt import models, strategies, utils
+from openadapt.config import config
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True

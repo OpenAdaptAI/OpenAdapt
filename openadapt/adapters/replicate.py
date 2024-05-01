@@ -9,7 +9,8 @@ import fire
 import replicate
 import requests
 
-from openadapt import cache, config, utils
+from openadapt import cache, utils
+from openadapt.config import config
 
 
 @cache.cache()
@@ -28,10 +29,8 @@ def _fetch_segmented_image(image_uri: str) -> Image.Image:
     os.environ["REPLICATE_API_TOKEN"] = config.REPLICATE_API_TOKEN
     logger.info("segmenting image...")
     segmented_image_url = replicate.run(
-        (
-            "pablodawson/segment-anything-automatic:"
-            "14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0"
-        ),
+        "pablodawson/segment-anything-automatic:"
+        "14fbb04535964b3d0c7fad03bb4ed272130f15b956cbedb7b2f20b5b8a2dbaa0",
         input={
             "image": image_uri,
             # "resize_width": 1080,

@@ -52,7 +52,6 @@ import numpy as np
 
 from openadapt import adapters, common, models, strategies, utils, vision
 
-
 DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db

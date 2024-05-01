@@ -19,8 +19,8 @@ import sys
 
 from nicegui import elements, ui
 
-from openadapt import config
 from openadapt.app.objects import console
+from openadapt.config import config
 from openadapt.scripts.reset_db import reset_db
 
 
@@ -108,7 +108,6 @@ def set_scrub(value: bool) -> None:
         value: The value to set.
     """
     if config.SCRUB_ENABLED != value:
-        config.persist_env("SCRUB_ENABLED", value)
         config.SCRUB_ENABLED = value
         ui.notify("Scrubbing enabled." if value else "Scrubbing disabled.")
         ui.notify("You may need to restart the app for this to take effect.")
@@ -132,4 +131,4 @@ def set_dark(dark_mode: ui.dark_mode, value: bool) -> None:
     """
     if dark_mode.value != value:
         dark_mode.value = value
-        config.persist_env("APP_DARK_MODE", value)
+        config.APP_DARK_MODE = value

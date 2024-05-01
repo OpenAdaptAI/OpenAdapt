@@ -97,8 +97,8 @@ cd OpenAdapt
 pip3 install poetry
 poetry install
 poetry shell
-alembic upgrade head
 poetry run install-dashbaord
+cd openadapt && alembic upgrade head && cd ..
 pytest
 ```
 
@@ -364,6 +364,8 @@ In summary (from https://stackoverflow.com/a/69673312):
 ## Developing
 
 ### Generate migration (after editing a model)
+
+From inside the `openadapt` directory (containing `alembic.ini`):
 
 ```
 alembic revision --autogenerate -m "<msg>"

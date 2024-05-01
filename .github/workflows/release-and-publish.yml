@@ -1,4 +1,4 @@
-name: Semantic Release and PyPI Publish
+name: Release and PyPI Publish
 
 on:
   push:
@@ -6,33 +6,122 @@ on:
       - main
 
 jobs:
+  build-macos-executables:
+    name: Build macOS app
+    runs-on: macos-latest
+    steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+          with:
+              fetch-depth: 0
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+              python-version: '3.10'
+        - name: Install dependencies
+          run: |
+              pip install poetry
+              poetry install
+              brew install nvm
+              poetry run install-dashboard
+              brew install python-tk@3.10
+        - name: Build executables
+          run: |
+              poetry run python -m openadapt.build
+              cd dist
+              zip -r ../OpenAdapt.app.zip OpenAdapt.app
+              cd ..
+        - name: Upload executables
+          uses: actions/upload-artifact@v4
+          with:
+              name: OpenAdapt.app
+              path: OpenAdapt.app.zip
+
+  build-windows-executables:
+    name: Build Windows app
+    runs-on: windows-latest
+    steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+          with:
+              fetch-depth: 0
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+              python-version: '3.10'
+        - name: Set up Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: 21
+        - name: Install dependencies
+          run: |
+              pip install poetry
+              poetry install
+              cd openadapt/app/dashboard
+              npm install
+              cd ../../../
+        - name: Build executables
+          run: |
+              poetry run python -m openadapt.build
+              cd dist
+              7z a -tzip ../OpenAdapt.zip OpenAdapt
+              cd ..
+        - name: Upload executables
+          uses: actions/upload-artifact@v4
+          with:
+              name: OpenAdapt
+              path: OpenAdapt.zip
+
   release:
     runs-on: ubuntu-latest
+    needs: [build-macos-executables, build-windows-executables]
     concurrency: release
+    permissions:
+      id-token: write
+      contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+      - name: Download macOS executable
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt.app
+          path: dist/
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt
+          path: dist/
       - name: Python Semantic Release
         id: semantic_release
         uses: relekang/python-semantic-release@master
         with:
-          github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
-
+      - name: Install the latest version of the project
+        run: |
+          git pull
+          pip install poetry
+          poetry install
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./build_scripts/upload_release_artifacts.sh
   publish:
+    name: Publish to PyPI
     needs: release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: main
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
       - name: Publish to PyPI

@@ -10,10 +10,15 @@ from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
 from loguru import logger
-from tqdm import tqdm
-import fire
 
-from openadapt import config, video
+from openadapt.build_utils import redirect_stdout_stderr
+
+with redirect_stdout_stderr():
+    from tqdm import tqdm
+    import fire
+
+from openadapt import video
+from openadapt.config import RECORDING_DIRECTORY_PATH, config
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
@@ -255,98 +260,103 @@ def main(
         if MAX_EVENTS is not None
         else len(action_events)
     )
-    with tqdm(
-        total=num_events,
-        desc="Preparing HTML",
-        unit="event",
-        colour="green",
-        dynamic_ncols=True,
-    ) as progress:
-        for idx, action_event in enumerate(action_events):
-            if idx == MAX_EVENTS:
-                break
+    with redirect_stdout_stderr():
+        with tqdm(
+            total=num_events,
+            desc="Preparing HTML",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
+            for idx, action_event in enumerate(action_events):
+                if idx == MAX_EVENTS:
+                    break
 
-            try:
-                image = display_event(action_event)
-            except TypeError as exc:
-                # https://github.com/moses-palmer/pynput/issues/481
-                logger.warning(exc)
-                continue
+                try:
+                    image = display_event(action_event)
+                except TypeError as exc:
+                    # https://github.com/moses-palmer/pynput/issues/481
+                    logger.warning(exc)
+                    continue
 
-            if diff_video:
-                frame_image = frames[idx]
-                diff_image = compute_diff(frame_image, action_event.screenshot.image)
+                if diff_video:
+                    frame_image = frames[idx]
+                    diff_image = compute_diff(
+                        frame_image, action_event.screenshot.image
+                    )
 
-                # TODO: rename
-                diff = frame_image
-                mask = diff_image
-            else:
-                diff = display_event(action_event, diff=True)
-                mask = action_event.screenshot.diff_mask
+                    # TODO: rename
+                    diff = frame_image
+                    mask = diff_image
+                else:
+                    diff = display_event(action_event, diff=True)
+                    mask = action_event.screenshot.diff_mask
 
-            if SCRUB:
-                image = scrub.scrub_image(image)
-                diff = scrub.scrub_image(diff)
-                mask = scrub.scrub_image(mask)
+                if SCRUB:
+                    image = scrub.scrub_image(image)
+                    diff = scrub.scrub_image(diff)
+                    mask = scrub.scrub_image(mask)
 
-            image_utf8 = image2utf8(image)
-            diff_utf8 = image2utf8(diff)
-            mask_utf8 = image2utf8(mask)
-            width, height = image.size
+                image_utf8 = image2utf8(image)
+                diff_utf8 = image2utf8(diff)
+                mask_utf8 = image2utf8(mask)
+                width, height = image.size
 
-            action_event_dict = row2dict(action_event)
-            window_event_dict = row2dict(action_event.window_event)
+                action_event_dict = row2dict(action_event)
+                window_event_dict = row2dict(action_event.window_event)
 
-            if SCRUB:
-                action_event_dict = scrub.scrub_dict(action_event_dict)
-                window_event_dict = scrub.scrub_dict(window_event_dict)
+                if SCRUB:
+                    action_event_dict = scrub.scrub_dict(action_event_dict)
+                    window_event_dict = scrub.scrub_dict(window_event_dict)
 
-            rows.append(
-                [
-                    row(
-                        Div(
-                            text=f"""
-                            <div class="screenshot">
-                                <img
-                                    src="{image_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                                <img
-                                    src="{diff_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                                <img
-                                    src="{mask_utf8}"
-                                    style="
-                                        aspect-ratio: {width}/{height};
-                                    "
-                                >
-                            </div>
-                            <table>
-                                {dict2html(window_event_dict , None)}
-                            </table>
-                        """,
+                rows.append(
+                    [
+                        row(
+                            Div(
+                                text=f"""
+                                <div class="screenshot">
+                                    <img
+                                        src="{image_utf8}"
+                                        style="
+                                            aspect-ratio: {width}/{height};
+                                        "
+                                    >
+                                    <img
+                                        src="{diff_utf8}"
+                                        style="
+                                            aspect-ratio: {width}/{height};
+                                        "
+                                    >
+                                    <img
+                                        src="{mask_utf8}"
+                                        style="
+                                            aspect-ratio: {width}/{height};
+                                        "
+                                    >
+                                </div>
+                                <table>
+                                    {dict2html(window_event_dict , None)}
+                                </table>
+                            """,
+                            ),
+                            Div(text=f"""
+                                <table>
+                                    {dict2html(action_event_dict)}
+                                </table>
+                            """),
                         ),
-                        Div(text=f"""
-                            <table>
-                                {dict2html(action_event_dict)}
-                            </table>
-                        """),
-                    ),
-                ]
-            )
+                    ]
+                )
 
-            progress.update()
+                progress.update()
 
-        progress.close()
+            progress.close()
 
     title = f"recording-{recording.id}"
-    fname_out = f"recording-{recording.id}.html"
+
+    fname_out = RECORDING_DIRECTORY_PATH / f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
+    os.makedirs(RECORDING_DIRECTORY_PATH, exist_ok=True)
     output_file(fname_out, title=title)
 
     result = show(  # noqa: F841

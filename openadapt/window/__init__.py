@@ -8,7 +8,7 @@ import sys
 
 from loguru import logger
 
-from openadapt import config
+from openadapt.config import config
 
 if sys.platform == "darwin":
     from . import _macos as impl
