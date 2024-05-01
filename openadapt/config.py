@@ -284,6 +284,7 @@ class LazyConfig:
     def __init__(self) -> None:
         """Initialize the LazyConfig class."""
         self._config = Config()
+        self._dirty = set()
 
     def __getattr__(self, key: str) -> Any:
         """Get the attribute from the inner Config object.
@@ -291,17 +292,20 @@ class LazyConfig:
         This method reloads the configuration from the json files if the key
         is not _config. So that the configuration is always up-to-date.
         """
-        if key == "_config":
-            return self._config
-        # Create a new Config object to read the latest values from the json files
+        if key.startswith("_"):
+            return self.__dict__[key]
+        if key not in self._dirty:
+            return self._config.__getattribute__(key)
+        self._dirty.remove(key)
         self._config = Config()
         return self._config.__getattribute__(key)
 
     def __setattr__(self, key: str, value: Any) -> None:
         """Set the attribute."""
-        if key == "_config":
+        if key.startswith("_"):
             self.__dict__[key] = value
         else:
+            self._dirty.add(key)
             self._config.__setattr__(key, value)
 
     def model_dump(self) -> dict[str, Any]:

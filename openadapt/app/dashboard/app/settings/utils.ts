@@ -19,9 +19,6 @@ export function validateScrubbingSettings(settings: Record<string, string>) {
     if (settings.SCRUB_LANGUAGE.length > 2) {
         errors.SCRUB_LANGUAGE = 'Scrubbing language must be a two character language code'
     }
-    if (settings.SCRUB_FILL_COLOR.length === 0) {
-        errors.SCRUB_FILL_COLOR = 'Scrubbing fill color is required'
-    }
 
     return errors
 }
