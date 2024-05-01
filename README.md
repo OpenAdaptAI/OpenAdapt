@@ -365,6 +365,8 @@ In summary (from https://stackoverflow.com/a/69673312):
 
 ### Generate migration (after editing a model)
 
+From inside the `openadapt` directory (containing `alembic.ini`):
+
 ```
 alembic revision --autogenerate -m "<msg>"
 ```
