@@ -98,7 +98,7 @@ jobs:
         id: semantic_release
         uses: relekang/python-semantic-release@master
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
       - name: Install the latest version of the project
