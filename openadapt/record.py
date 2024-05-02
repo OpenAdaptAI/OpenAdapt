@@ -922,6 +922,7 @@ def create_recording(
         "double_click_interval_seconds": double_click_interval_seconds,
         "platform": sys.platform,
         "task_description": task_description,
+        "config": config.model_dump(),
     }
     recording = crud.insert_recording(recording_data)
     logger.info(f"{recording=}")

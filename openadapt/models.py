@@ -46,6 +46,7 @@ class Recording(db.Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
     video_start_time = sa.Column(ForceFloat)
+    config = sa.Column(sa.JSON)
 
     action_events = sa.orm.relationship(
         "ActionEvent",
@@ -400,7 +401,19 @@ class Screenshot(db.Base):
     def image(self) -> Image.Image:
         """Get the image associated with the screenshot."""
         if not self._image:
-            self._image = self.convert_binary_to_png(self.png_data)
+            if self.png_data:
+                self._image = self.convert_binary_to_png(self.png_data)
+            else:
+                # TODO: extract all recording frames on first read
+
+                # avoid circular import
+                from openadapt import video
+
+                video_file_name = video.get_video_file_name(self.recording_timestamp)
+                self._image = video.extract_frames(
+                    video_file_name,
+                    [self.timestamp - self.recording.video_start_time]
+                )[0]
         return self._image
 
     @property

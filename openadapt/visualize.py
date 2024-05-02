@@ -215,6 +215,14 @@ def main(
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
 
+    if diff_video:
+        assert recording.config["RECORD_VIDEO"], (
+            "Can't diff video against images because video was not saved."
+        )
+        assert recording.config["RECORD_IMAGES"], (
+            "Can't diff video against images because images were not saved."
+        )
+
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
