@@ -2,6 +2,41 @@
 
 
 
+## v0.20.0 (2024-05-02)
+
+### Documentation
+
+* docs(README): add link to calculator demo ([`54c2b16`](https://github.com/OpenAdaptAI/OpenAdapt/commit/54c2b16773ce7b94f7f6bb433b8069f719626d0f))
+
+### Feature
+
+* feat(config, build): refactor config; build executables
+
+* feat(config): Make changes to config to use pydantic settings
+
+* chore: Refactor all uses of config to use the config object from the config module
+
+* refactor(config): Remove unused code, fix typos and add comments for clearer information
+
+* refactor: Add more comments and change variable names
+
+* fix(record): Fix progress bar
+
+* feature(config): Re-read config value only if it changes
+
+* update README
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ee506f09e24cad80914ab1d1d7c9f8a8429b5f37))
+
+### Fix
+
+* fix(release): Revert to use admin token for release checkout action (#648) ([`1d80f33`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1d80f33dd4b94e0033475b957b475665b73d8a0e))
+
+* fix(release): Revert to use admin token for semantic release action (#646) ([`64cd483`](https://github.com/OpenAdaptAI/OpenAdapt/commit/64cd483624302e77b8fb746c41d2d4ec61db78f3))
+
+
 ## v0.19.0 (2024-04-27)
 
 ### Feature
