@@ -366,41 +366,41 @@ class FrameCache:
         # Nested dictionary to store frames by video filename and timestamp
         self.frames = {}
 
-    def get_frame(self, video_filename: str, timestamp: float) -> Image.Image:
+    def get_frame(self, video_file_path: str, timestamp: float) -> Image.Image:
         # Check if the frame is cached
         if not (
-            video_filename in self.frames and
-            timestamp in self.frames[video_filename]
+            video_file_path in self.frames and
+            timestamp in self.frames[video_file_path]
         ):
             # Issue a warning if the frame needs to be loaded without prior caching
             logger.warning(
-                f"Frame at timestamp {timestamp} from {video_filename} was not "
+                f"Frame at timestamp {timestamp} from {video_file_path} was not "
                 "pre-cached. Loading it now, but consider using cache_frames to load "
                 "batches."
             )
             # Load the frame since it wasn't cached
-            self.cache_frames(video_filename, [timestamp])
-        return self.frames[video_filename][timestamp]
+            self.cache_frames(video_file_path, [timestamp])
+        return self.frames[video_file_path][timestamp]
 
-    def cache_frames(self, video_filename: str, timestamps: list[float]) -> None:
+    def cache_frames(self, video_file_path: str, timestamps: list[float]) -> None:
         # avoid circular import
         from openadapt import video
 
         # Ensure the dictionary for this video file is initialized
-        if video_filename not in self.frames:
-            self.frames[video_filename] = OrderedDict()
+        if video_file_path not in self.frames:
+            self.frames[video_file_path] = OrderedDict()
 
         # Load only the frames that have not been loaded yet
         uncached_timestamps = [
-            t for t in timestamps if t not in self.frames[video_filename]
+            t for t in timestamps if t not in self.frames[video_file_path]
         ]
-        frames = video.extract_frames(video_filename, uncached_timestamps)
+        frames = video.extract_frames(video_file_path, uncached_timestamps)
         # Add loaded frames to cache, respecting capacity if not infinite
         for timestamp, frame in zip(uncached_timestamps, frames):
-            if self.capacity > 0 and len(self.frames[video_filename]) >= self.capacity:
+            if self.capacity > 0 and len(self.frames[video_file_path]) >= self.capacity:
                 # Remove oldest frame if capacity is exceeded
-                self.frames[video_filename].popitem(last=False)
-            self.frames[video_filename][timestamp] = frame
+                self.frames[video_file_path].popitem(last=False)
+            self.frames[video_file_path][timestamp] = frame
 
 
 # for use in Screenshot.image
@@ -457,21 +457,21 @@ class Screenshot(db.Base):
                 # avoid circular import
                 from openadapt import video
 
-                video_file_name = video.get_video_file_name(self.recording_timestamp)
+                video_file_path = video.get_video_file_path(self.recording_timestamp)
                 if CACHE_FRAMES:
-                    if video_file_name not in frame_cache.frames:
+                    if video_file_path not in frame_cache.frames:
                         screenshot_timestamps = [
                             screenshot.timestamp - self.recording.video_start_time
                             for screenshot in self.recording.screenshots
                         ]
-                        frame_cache.cache_frames(video_file_name, screenshot_timestamps)
+                        frame_cache.cache_frames(video_file_path, screenshot_timestamps)
                     self._image = frame_cache.get_frame(
-                        video_file_name,
+                        video_file_path,
                         self.timestamp - self.recording.video_start_time,
                     )
                 else:
                     self._image = video.extract_frames(
-                        video_file_name,
+                        video_file_path,
                         [self.timestamp - self.recording.video_start_time]
                     )[0]
         return self._image

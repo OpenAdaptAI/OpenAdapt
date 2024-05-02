@@ -133,10 +133,11 @@ class Config(BaseSettings):
     # Record and replay
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
-    RECORD_VIDEO: bool = False
+    RECORD_VIDEO: bool = True
     RECORD_IMAGES: bool = False
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_PIXEL_FORMAT: str = "rgb24"
+    VIDEO_DIR_PATH: str
     # sequences that when typed, will stop the recording of ActionEvents in record.py
     STOP_SEQUENCES: list[list[str]] = [
         list(stop_str) for stop_str in STOP_STRS
@@ -308,11 +309,14 @@ class LazyConfig:
             self._dirty.add(key)
             self._config.__setattr__(key, value)
 
-    def model_dump(self) -> dict[str, Any]:
+    def model_dump(self, obfuscated=False) -> dict[str, Any]:
         """Dump the model as a dictionary."""
         model_dump_dict = {}
         for k in self._config.model_fields.keys():
-            model_dump_dict[k] = getattr(self, k)
+            val = getattr(self, k)
+            if obfuscated:
+                val = maybe_obfuscate(k, val)
+            model_dump_dict[k] = val
         return model_dump_dict
 
 
@@ -355,16 +359,21 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     return rval
 
 
+def maybe_obfuscate(key: str, val: Any):
+    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+    parts = key.split("_")
+    if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
+        val = obfuscate(val)
+    return val
+
+
 def print_config() -> None:
     """Print the configuration."""
-    _OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     if multiprocessing.current_process().name == "MainProcess":
         logger.info(f"Reading from {LOCAL_CONFIG_FILE_PATH}")
         for key, val in config.model_dump().items():
             if not key.startswith("_") and key.isupper():
-                parts = key.split("_")
-                if any([part in parts for part in _OBFUSCATE_KEY_PARTS]):
-                    val = obfuscate(val)
+                val = maybe_obfuscate(key, val)
                 logger.info(f"{key}={val}")
 
         if config.ERROR_REPORTING_ENABLED:

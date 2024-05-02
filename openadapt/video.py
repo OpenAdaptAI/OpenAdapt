@@ -2,6 +2,7 @@
 
 from fractions import Fraction
 from pprint import pformat
+import os
 import threading
 
 from loguru import logger
@@ -12,8 +13,8 @@ from openadapt import utils
 from openadapt.config import config
 
 
-def get_video_file_name(recording_timestamp: float) -> str:
-    """Generates a file name for a video recording based on a timestamp.
+def get_video_file_path(recording_timestamp: float) -> str:
+    """Generates a file path for a video recording based on a timestamp.
 
     Args:
         recording_timestamp (float): The timestamp of the recording.
@@ -21,7 +22,10 @@ def get_video_file_name(recording_timestamp: float) -> str:
     Returns:
         str: The generated file name for the video recording.
     """
-    return f"oa_recording-{recording_timestamp}.mp4"
+    os.makedirs(config.VIDEO_DIR_PATH, exist_ok=True)
+    return os.path.join(
+        config.VIDEO_DIR_PATH, f"oa_recording-{recording_timestamp}.mp4"
+    )
 
 
 def initialize_video_writer(
