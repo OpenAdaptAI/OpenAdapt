@@ -54,24 +54,24 @@ def initialize_video_writer(
             container, stream, and base timestamp.
     """
     logger.info("initializing video stream...")
-    container = av.open(output_path, mode="w")
-    stream = container.add_stream(codec, rate=fps)
-    stream.width = width
-    stream.height = height
-    stream.pix_fmt = pix_fmt
-    stream.options = {"crf": str(crf), "preset": preset}
+    video_container = av.open(output_path, mode="w")
+    video_stream = video_container.add_stream(codec, rate=fps)
+    video_stream.width = width
+    video_stream.height = height
+    video_stream.pix_fmt = pix_fmt
+    video_stream.options = {"crf": str(crf), "preset": preset}
 
     base_timestamp = utils.get_timestamp()
 
-    return container, stream, base_timestamp
+    return video_container, video_stream, base_timestamp
 
 
 def write_video_frame(
-    container: av.container.OutputContainer,
-    stream: av.stream.Stream,
+    video_container: av.container.OutputContainer,
+    video_stream: av.stream.Stream,
     screenshot: Image.Image,
     timestamp: float,
-    base_timestamp: float,
+    video_start_timestamp: float,
     last_pts: int,
 ) -> int:
     """Encodes and writes a video frame to the output container from a given screenshot.
@@ -82,12 +82,12 @@ def write_video_frame(
     the base timestamp, ensuring monotonically increasing PTS values.
 
     Args:
-        container (av.container.OutputContainer): The output container to which
+        video_container (av.container.OutputContainer): The output container to which
             the frame is written.
-        stream (av.stream.Stream): The video stream within the container.
+        video_stream (av.stream.Stream): The video stream within the container.
         screenshot (Image.Image): The screenshot to be written as a video frame.
         timestamp (float): The timestamp of the current frame.
-        base_timestamp (float): The base timestamp from which the video
+        video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts (int): The PTS of the last written frame.
 
@@ -100,18 +100,18 @@ def write_video_frame(
         - The function logs the current timestamp, base timestamp, and
               calculated PTS values for debugging purposes.
     """
-    logger.debug(f"{timestamp=} {base_timestamp=}")
+    logger.debug(f"{timestamp=} {video_start_timestamp=}")
 
     # Convert the PIL Image to an AVFrame
     av_frame = av.VideoFrame.from_image(screenshot)
 
     # Calculate the time difference in seconds
-    time_diff = timestamp - base_timestamp
+    time_diff = timestamp - video_start_timestamp
 
     # Calculate PTS, taking into account the fractional average rate
-    pts = int(time_diff * float(Fraction(stream.average_rate)))
+    pts = int(time_diff * float(Fraction(video_stream.average_rate)))
 
-    logger.debug(f"{time_diff=} {pts=} {stream.average_rate=}")
+    logger.debug(f"{time_diff=} {pts=} {video_stream.average_rate=}")
 
     # Ensure monotonically increasing PTS
     if pts <= last_pts:
@@ -121,22 +121,22 @@ def write_video_frame(
     last_pts = pts  # Update the last_pts
 
     # Encode and write the frame
-    for packet in stream.encode(av_frame):
+    for packet in video_stream.encode(av_frame):
         packet.pts = pts
-        container.mux(packet)
+        video_container.mux(packet)
 
     return last_pts  # Return the updated last_pts for the next call
 
 
 def finalize_video_writer(
-    container: av.container.OutputContainer,
-    stream: av.stream.Stream,
+    video_container: av.container.OutputContainer,
+    video_stream: av.stream.Stream,
 ) -> None:
     """Finalizes the video writer, ensuring all buffered frames are encoded and written.
 
     Args:
-        container (av.container.OutputContainer): The AV container to finalize.
-        stream (av.stream.Stream): The AV stream to finalize.
+        video_container (av.container.OutputContainer): The AV container to finalize.
+        video_stream (av.stream.Stream): The AV stream to finalize.
     """
     # Closing the container in the main thread leads to a GIL deadlock.
     # https://github.com/PyAV-Org/PyAV/issues/1053
@@ -144,15 +144,15 @@ def finalize_video_writer(
     # Define a function to close the container
     def close_container() -> None:
         logger.info("closing video container...")
-        container.close()
+        video_container.close()
 
     # Create a new thread to close the container
     close_thread = threading.Thread(target=close_container)
 
     # Flush stream
     logger.info("flushing video stream...")
-    for packet in stream.encode():
-        container.mux(packet)
+    for packet in video_stream.encode():
+        video_container.mux(packet)
 
     # Start the thread to close the container
     close_thread.start()
@@ -173,7 +173,7 @@ def extract_frames(
         video_filename (str): The path to the video file.
         timestamps (list): A list of timestamps (in seconds) at which to extract frames.
         tolerance (float, optional): The maximum difference in seconds between
-            th timestamp and the actual frame timestamp. Defaults to 0.1.
+            the timestamp and the actual frame timestamp. Defaults to 0.1.
 
     Returns:
         list: A list of extracted frames as PIL Image objects.
@@ -183,8 +183,8 @@ def extract_frames(
         Exception: If no frame is found within the tolerance for any of the timestamps.
     """
     # Open the video file
-    container = av.open(video_filename)
-    stream = container.streams.video[0]  # Assuming the first video stream
+    video_container = av.open(video_filename)
+    video_stream = video_container.streams.video[0]  # Assuming the first video stream
 
     # To store matched frames
     timestamp_frames = {t: None for t in timestamps}
@@ -192,9 +192,9 @@ def extract_frames(
     frame_differences = {t: float("inf") for t in timestamps}
 
     # Prepare to convert PTS to seconds
-    time_base = float(stream.time_base)
+    time_base = float(video_stream.time_base)
 
-    for frame in container.decode(stream):
+    for frame in video_container.decode(video_stream):
         frame_timestamp = frame.pts * time_base  # Convert to float
         # Find the closest timestamp within tolerance
         for timestamp in timestamps:
@@ -210,7 +210,7 @@ def extract_frames(
                 timestamp_frames[timestamp] = frame
                 frame_differences[timestamp] = difference
 
-    container.close()
+    video_container.close()
 
     logger.info(f"frame_differences=\n{pformat(frame_differences)}")
 
