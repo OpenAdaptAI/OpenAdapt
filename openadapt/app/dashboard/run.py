@@ -53,3 +53,7 @@ def cleanup(process: subprocess.Popen) -> None:
         process.terminate()
         process.wait()
     logger.debug("Dashboard client terminated.")
+
+
+if __name__ == "__main__":
+    run().start()
