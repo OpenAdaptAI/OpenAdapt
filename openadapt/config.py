@@ -134,7 +134,7 @@ class Config(BaseSettings):
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool = False
-    RECORD_IMAGES: bool = True
+    RECORD_IMAGES: bool = False
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_PIXEL_FORMAT: str = "rgb24"
     # sequences that when typed, will stop the recording of ActionEvents in record.py
