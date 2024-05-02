@@ -317,7 +317,6 @@ def write_screen_event(
         event_data = {"png_data": png_data}
     else:
         event_data = {}
-    print(f"{len(event_data)=}")
     crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
