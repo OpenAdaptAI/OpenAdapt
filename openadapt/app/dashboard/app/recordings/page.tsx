@@ -61,7 +61,7 @@ export default function Recordings() {
 
     function goToRecording(recording: Recording) {
         return function() {
-            router.push(`/recordings/${recording.id}`);
+            router.push(`/recordings/detail?id=${recording.id}`);
         }
     }
 
