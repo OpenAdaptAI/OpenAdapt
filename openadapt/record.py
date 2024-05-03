@@ -461,7 +461,7 @@ def write_video_event(
     video_start_timestamp: float,
     last_pts: int = 0,
 ) -> dict[str, Any]:
-    """Write a screen event to the database and update the performance queue.
+    """Write a screen event to the video file and update the performance queue.
 
     Args:
         recording_timestamp: The timestamp of the recording.
@@ -485,6 +485,7 @@ def write_video_event(
         video_start_timestamp,
         last_pts,
     )
+    perf_q.put((f"{event.type}(video)", event.timestamp, utils.get_timestamp()))
     return {
         "video_container": video_container,
         "video_stream": video_stream,
