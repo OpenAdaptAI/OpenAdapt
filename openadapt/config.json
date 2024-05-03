@@ -18,7 +18,7 @@
     "RECORD_WINDOW_DATA": false,
     "RECORD_READ_ACTIVE_ELEMENT_STATE": false,
     "REPLAY_STRIP_ELEMENT_STATE": true,
-    "RECORD_VIDEO": false,
+    "RECORD_VIDEO": true,
     "RECORD_IMAGES": false,
     "VIDEO_PIXEL_FORMAT": "rgb24",
     "VIDEO_DIR_PATH": "./videos",

@@ -360,13 +360,44 @@ class WindowEvent(db.Base):
 
 
 class FrameCache:
-    """Cache for storing video frames to minimize IO operations."""
+    """Provide a caching mechanism for video frames to minimize IO operations.
+
+    This class maintains a nested dictionary to store video frames by video
+    filename and their respective timestamps. It offers functionalities to get
+    frames from the cache or load them if they are not available in the cache.
+
+    Attributes:
+        capacity (int): The maximum number of frames that can be stored per video.
+            If set to 0, the capacity is considered infinite.
+        frames (dict): A nested dictionary to store frames by video filename and
+            timestamp.
+    """
+
+    ENABLED = True
+
     def __init__(self, capacity: int = 0):
+        """Initialize a new FrameCache instance with specified capacity.
+
+        Args:
+            capacity (int): The maximum number of frames to cache per video file.
+        """
         self.capacity = capacity
         # Nested dictionary to store frames by video filename and timestamp
         self.frames = {}
 
     def get_frame(self, video_file_path: str, timestamp: float) -> Image.Image:
+        """Retrieve a frame by video file path and timestamp from the cache.
+
+        If the frame is not available in the cache, it logs a warning and loads
+        the frame into the cache before returning it.
+
+        Args:
+            video_file_path (str): The path to the video file.
+            timestamp (float): The timestamp of the frame in the video.
+
+        Returns:
+            Image.Image: The requested video frame.
+        """
         # Check if the frame is cached
         if not (
             video_file_path in self.frames and
@@ -383,6 +414,19 @@ class FrameCache:
         return self.frames[video_file_path][timestamp]
 
     def cache_frames(self, video_file_path: str, timestamps: list[float]) -> None:
+        """Cache multiple frames from a video file at specified timestamps.
+
+        This method checks which frames are not already cached and loads them.
+        It respects the capacity limit of the cache, potentially evicting the oldest
+        cached frame to make room for new ones if the capacity is exceeded.
+
+        Args:
+            video_file_path (str): The path to the video file.
+            timestamps (list[float]): A list of timestamps of frames to cache.
+
+        Returns:
+            None
+        """
         # avoid circular import
         from openadapt import video
 
@@ -404,7 +448,6 @@ class FrameCache:
 
 
 # for use in Screenshot.image
-CACHE_FRAMES = True
 frame_cache = FrameCache()
 
 
@@ -458,7 +501,7 @@ class Screenshot(db.Base):
                 from openadapt import video
 
                 video_file_path = video.get_video_file_path(self.recording_timestamp)
-                if CACHE_FRAMES:
+                if FrameCache.ENABLED:
                     if video_file_path not in frame_cache.frames:
                         screenshot_timestamps = [
                             screenshot.timestamp - self.recording.video_start_time

@@ -8,7 +8,7 @@ Usage:
 
 from collections import namedtuple
 from functools import partial, wraps
-from typing import Any, Callable, Union
+from typing import Any, Callable
 import io
 import multiprocessing
 import os
@@ -460,7 +460,7 @@ def write_video_event(
     video_stream: av.stream.Stream,
     video_start_timestamp: float,
     last_pts: int = 0,
-) -> None:
+) -> dict[str, Any]:
     """Write a screen event to the database and update the performance queue.
 
     Args:
@@ -882,7 +882,7 @@ def read_keyboard_events(
 
     def on_press(
         event_q: queue.Queue,
-        key: Union[keyboard.Key, keyboard.KeyCode],
+        key: keyboard.Key | keyboard.KeyCode,
         injected: bool,
     ) -> None:
         """Event handler for key press events.
@@ -933,7 +933,7 @@ def read_keyboard_events(
 
     def on_release(
         event_q: queue.Queue,
-        key: Union[keyboard.Key, keyboard.KeyCode],
+        key: keyboard.Key | keyboard.KeyCode,
         injected: bool,
     ) -> None:
         """Event handler for key release events.
