@@ -56,4 +56,10 @@ def cleanup(process: subprocess.Popen) -> None:
 
 
 if __name__ == "__main__":
-    run().start()
+    dashboard_thread = run()
+    dashboard_thread.start()
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        cleanup(dashboard_thread._return)
