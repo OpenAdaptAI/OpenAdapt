@@ -10,9 +10,10 @@ import sys
 
 from loguru import logger
 from notifypy import Notify
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
+from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtGui import QAction, QIcon, QFont, QPixmap
+from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QSystemTrayIcon
 
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
@@ -24,6 +25,10 @@ from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
+
+
+ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
+
 
 # hide dock icon on macos
 if sys.platform == "darwin":
@@ -49,7 +54,13 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.app = QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
 
-        self.icon = QIcon(f"{FPATH}{os.sep}assets{os.sep}logo.png")
+        # required for notifypy
+        self.main_window = QMainWindow()
+        self.main_window.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+        self.main_window.resize(1, 1)  # Minimal size
+        self.main_window.move(0, 0)  # Position on the screen
+
+        self.icon = QIcon(ICON_PATH)
 
         self.tray = QSystemTrayIcon()
         self.tray.setIcon(self.icon)
@@ -98,7 +109,35 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.visualize_proc = None
 
+        # TODO XXX: replace notifypy with pyqttoast
         Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
+        self.show_toast("OpenAdapt", "OpenAdapt is running in the background")
+
+    def show_toast(self, title, message):
+        """Show toast message."""
+        toast = Toast(self.main_window)
+        toast.setDuration(10000)  # Hide after 5 seconds
+        toast.setTitle(title)
+        toast.setText(message)
+        toast.applyPreset(ToastPreset.SUCCESS)  # Apply style preset
+        title_font = QFont()
+        title_font.setFamily('Arial')
+        title_font.setPointSize(20)
+        title_font.setBold(True)
+
+        text_font = QFont()
+        text_font.setFamily('Arial')
+        text_font.setPointSize(15)
+        #text_font.setBold(True)
+
+        # Set fonts
+        toast.setTitleFont(title_font)
+        toast.setTextFont(text_font)
+        toast.setIconSize(QSize(32, 32))
+
+        toast.setIcon(QPixmap("/Users/abrichr/oa/OpenAdapt/openadapt/app/assets/logo.png"))
+
+        toast.show()
 
     def update_tray_icon(self) -> None:
         """Update the tray icon."""
