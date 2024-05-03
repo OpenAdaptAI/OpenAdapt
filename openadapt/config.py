@@ -24,7 +24,6 @@ CURRENT_DIR_PATH = pathlib.Path(__file__).parent
 PREFERENCES_DIR_PATH = get_path_to_preferences_folder(CURRENT_DIR_PATH)
 CONFIG_FILE_PATH = CURRENT_DIR_PATH / "config.json"
 LOCAL_CONFIG_FILE_PATH = (PREFERENCES_DIR_PATH / "config.local.json").absolute()
-ROOT_DIR_PATH = CURRENT_DIR_PATH.parent
 RECORDING_DIRECTORY_PATH = (PREFERENCES_DIR_PATH / "recordings").absolute()
 DIRNAME_PERFORMANCE_PLOTS_DIR = (PREFERENCES_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (PREFERENCES_DIR_PATH / "captures").absolute()
@@ -89,6 +88,8 @@ def get_json_config_settings_source(
 class Config(BaseSettings):
     """Configuration class for OpenAdapt."""
 
+    ROOT_DIR_PATH: str = str(CURRENT_DIR_PATH.parent)
+
     # Privacy
     PRIVATE_AI_API_KEY: str = ""
 
@@ -105,7 +106,7 @@ class Config(BaseSettings):
     DEFAULT_SEGMENTATION_ADAPTER: SegmentationAdapter = SegmentationAdapter.ULTRALYTICS
 
     # Completions
-    OPENAI_API_KEY: str = "<OPENAI_API_KEY>"
+    OPENAI_API_KEY: str
     ANTHROPIC_API_KEY: str = "<ANTHROPIC_API_KEY>"
     GOOGLE_API_KEY: str = "<GOOGLE_API_KEY>"
 
@@ -129,6 +130,9 @@ class Config(BaseSettings):
 
     # OpenAI
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
+
+    # Cohere
+    COHERE_API_KEY: str
 
     # Record and replay
     RECORD_WINDOW_DATA: bool = False

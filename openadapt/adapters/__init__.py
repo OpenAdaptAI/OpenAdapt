@@ -4,7 +4,7 @@ from types import ModuleType
 
 from openadapt.config import config
 
-from . import anthropic, google, openai, replicate, som, ultralytics
+from . import anthropic, cohere, google, openai, replicate, som, ultralytics
 
 
 def get_default_prompt_adapter() -> ModuleType:
@@ -17,6 +17,7 @@ def get_default_prompt_adapter() -> ModuleType:
         "openai": openai,
         "anthropic": anthropic,
         "google": google,
+        "cohere": cohere,
     }[config.DEFAULT_ADAPTER]
 
 
