@@ -99,6 +99,7 @@ uvicorn = {extras = ["standard"], version = "^0.22"}
 ultralytics = "^8.1.47"
 imagehash = "^4.3.1"
 pydantic-settings = "^2.2.1"
+pyqt-toast-notification = "^1.1.0"
 
 [tool.pytest.ini_options]
 filterwarnings = [

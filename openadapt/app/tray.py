@@ -9,10 +9,9 @@ import os
 import sys
 
 from loguru import logger
-from notifypy import Notify
 from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QAction, QIcon, QFont, QPixmap
+from PySide6.QtCore import Qt, QMargins, QSize, QTimer
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QSystemTrayIcon
 
 from openadapt.app.cards import quick_record, stop_record
@@ -54,11 +53,15 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.app = QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
 
-        # required for notifypy
+        # currently required for pyqttoast
+        # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
+        # is addressed
         self.main_window = QMainWindow()
-        self.main_window.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+        self.main_window.setWindowFlags(
+            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+        )
         self.main_window.resize(1, 1)  # Minimal size
-        self.main_window.move(0, 0)  # Position on the screen
+        self.main_window.move(0, 0)
 
         self.icon = QIcon(ICON_PATH)
 
@@ -109,35 +112,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.visualize_proc = None
 
-        # TODO XXX: replace notifypy with pyqttoast
-        Notify("Status", "OpenAdapt is running in the background.", "OpenAdapt").send()
-        self.show_toast("OpenAdapt", "OpenAdapt is running in the background")
-
-    def show_toast(self, title, message):
-        """Show toast message."""
-        toast = Toast(self.main_window)
-        toast.setDuration(10000)  # Hide after 5 seconds
-        toast.setTitle(title)
-        toast.setText(message)
-        toast.applyPreset(ToastPreset.SUCCESS)  # Apply style preset
-        title_font = QFont()
-        title_font.setFamily('Arial')
-        title_font.setPointSize(20)
-        title_font.setBold(True)
-
-        text_font = QFont()
-        text_font.setFamily('Arial')
-        text_font.setPointSize(15)
-        #text_font.setBold(True)
-
-        # Set fonts
-        toast.setTitleFont(title_font)
-        toast.setTextFont(text_font)
-        toast.setIconSize(QSize(32, 32))
-
-        toast.setIcon(QPixmap("/Users/abrichr/oa/OpenAdapt/openadapt/app/assets/logo.png"))
-
-        toast.show()
+        self.show_toast("OpenAdapt is running in the background")
 
     def update_tray_icon(self) -> None:
         """Update the tray icon."""
@@ -159,7 +134,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     def _quick_record(self) -> None:
         """Wrapper for the quick_record function."""
         if not self.recording:
-            Notify("Status", "Starting recording...", "OpenAdapt").send()
+            self.show_toast("Starting a recording...")
             self.recording = True
             try:
                 quick_record()
@@ -167,10 +142,10 @@ class SystemTrayIcon(QSystemTrayIcon):
                 self.recording = False
                 stop_record()
         else:
-            Notify("Status", "Stopping recording...", "OpenAdapt").send()
+            self.show_toast("Stopping recording...")
             self.recording = False
             stop_record()
-            Notify("Status", "Recording stopped", "OpenAdapt").send()
+            self.show_toast("Recording stopped.")
 
     def _visualize(self, recording: Recording) -> None:
         """Visualize a recording.
@@ -178,7 +153,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         Args:
             recording (Recording): The recording to visualize.
         """
-        Notify("Status", "Starting visualization...", "OpenAdapt").send()
+        self.show_toast("Starting visualization...")
         try:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
@@ -189,7 +164,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         except Exception as e:
             logger.error(e)
-            Notify("Status", "Visualization failed", "OpenAdapt").send()
+            self.show_toast("Visualization failed.")
 
     def _replay(self, recording: Recording) -> None:
         """Replay a recording.
@@ -197,7 +172,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         Args:
             recording (Recording): The recording to replay.
         """
-        Notify("Status", "Starting replay...", "OpenAdapt").send()
+        self.show_toast("Starting replay...")
         rthread = oaThread(
             target=replay,
             args=("NaiveReplayStrategy", False, None, recording, None),
@@ -205,9 +180,9 @@ class SystemTrayIcon(QSystemTrayIcon):
         )
         rthread.run()
         if rthread.join():
-            Notify("Status", "Replay finished", "OpenAdapt").send()
+            self.show_toast("Replay finished.")
         else:
-            Notify("Status", "Replay failed", "OpenAdapt").send()
+            self.show_toast("Replay failed.")
 
     def populate_menu(self, menu: QMenu, action: QAction, action_type: str) -> None:
         """Populate a menu.
@@ -251,6 +226,197 @@ class SystemTrayIcon(QSystemTrayIcon):
         """Run the system tray icon."""
         self.app.exec()
 
+    def show_toast(
+        self, 
+        message: str, 
+        title: str = "OpenAdapt",
+        duration: int = 10000,
+        icon_path: str = ICON_PATH,
+        show_icon: bool = True,
+        icon_size: QSize = QSize(32, 32),
+        position: ToastPosition = ToastPosition.TOP_RIGHT,
+        maximum_on_screen: int = 3,
+        spacing: int = 10,
+        offset_x: int = 20,
+        offset_y: int = 45,
+        always_on_main_screen: bool = False,
+        show_duration_bar: bool = True,
+        preset: ToastPreset = ToastPreset.INFORMATION,
+        title_font: QFont = QFont("Arial", 20, QFont.Weight.Bold),
+        text_font: QFont = QFont("Arial", 15),
+        close_button_alignment: ToastButtonAlignment = ToastButtonAlignment.TOP,
+        show_close_button: bool = True,
+        fade_in_duration: int = 250,
+        fade_out_duration: int = 250,
+        reset_duration_on_hover: bool = True,
+        border_radius: int = 0,
+        background_color: QColor = QColor('#E7F4F9'),
+        title_color: QColor = QColor('#000000'),
+        text_color: QColor = QColor('#5C5C5C'),
+        duration_bar_color: QColor = QColor('#5C5C5C'),
+        icon_color: QColor = QColor('#5C5C5C'),
+        icon_separator_color: QColor = QColor('#D9D9D9'),
+        close_button_icon_color: QColor = QColor('#000000'),
+        minimum_width: int = 100,
+        maximum_width: int = 350,
+        minimum_height: int = 50,
+        maximum_height: int = 120,
+        fixed_size: QSize = None,
+        close_button_icon: QIcon = ToastIcon.CLOSE,
+        close_button_icon_size: QSize = QSize(10, 10),
+        close_button_size: QSize = QSize(24, 24),
+        stay_on_top: bool = True,
+        text_section_spacing: int = 8,
+        margins: QMargins = QMargins(20, 18, 10, 18),
+        icon_margins: QMargins = QMargins(0, 0, 15, 0),
+        icon_section_margins: QMargins = QMargins(0, 0, 15, 0),
+        text_section_margins: QMargins = QMargins(0, 0, 15, 0),
+        close_button_margins: QMargins = QMargins(0, -8, 0, -8),
+    ):
+        """Show a configurable toast message.
+
+        Args:
+            message (str): The main message of the toast.
+            title (str): The title of the toast. Defaults to 'OpenAdapt'.
+            duration (int): Duration in milliseconds before the toast hides.
+                Set to 0 for persistent. Defaults to 10000.
+            icon_path (str): Path to the icon image file. Defaults to
+                'path/to/icon.png'.
+            show_icon (bool): Whether to show the icon. Defaults to True.
+            icon_size (QSize): Size of the icon. Defaults to QSize(32, 32).
+            position (ToastPosition): Screen position of the toast. Defaults to
+                ToastPosition.BOTTOM_RIGHT.
+            maximum_on_screen (int): Maximum number of toasts displayed at
+                once. Defaults to 3.
+            spacing (int): Vertical spacing between toasts. Defaults to 10.
+            offset_x (int): Horizontal offset of the toast. Defaults to 20.
+            offset_y (int): Vertical offset of the toast. Defaults to 45.
+            always_on_main_screen (bool): Whether the toast should always be
+                displayed on the main screen. Defaults to False.
+            show_duration_bar (bool): Whether to show the duration bar.
+                Defaults to True.
+            preset (ToastPreset): Preset style to apply to the toast. None
+                means no preset is applied.
+            title_font (QFont): Font settings for the title. Defaults to bold
+                Arial size 20.
+            text_font (QFont): Font settings for the text. Defaults to Arial size 15.
+            close_button_alignment (ToastButtonAlignment): Alignment of the
+                close button. Defaults to ToastButtonAlignment.TOP.
+            show_close_button (bool): Whether to show the close button.
+                Defaults to True.
+            fade_in_duration (int): Duration of the fade-in animation in
+                milliseconds. Defaults to 250.
+            fade_out_duration (int): Duration of the fade-out animation in
+                milliseconds. Defaults to 250.
+            reset_duration_on_hover (bool): Whether the duration resets on
+                mouse hover. Defaults to True.
+            border_radius (int): Radius of the toast's border corners. Defaults to 0.
+            background_color (QColor): Background color of the toast. Defaults
+                to #E7F4F9.
+            title_color (QColor): Color of the title text. Defaults to #000000.
+            text_color (QColor): Color of the main text. Defaults to #5C5C5C.
+            duration_bar_color (QColor): Color of the duration bar. Defaults to #5C5C5C.
+            icon_color (QColor): Color of the icon. Defaults to #5C5C5C.
+            icon_separator_color (QColor): Color of the icon separator.
+                Defaults to #D9D9D9.
+            close_button_icon_color (QColor): Color of the close button icon.
+                Defaults to #000000.
+            minimum_width (int): Minimum width of the toast. Defaults to 100.
+            maximum_width (int): Maximum width of the toast. Defaults to 350.
+            minimum_height (int): Minimum height of the toast. Defaults to 50.
+            maximum_height (int): Maximum height of the toast. Defaults to 120.
+            fixed_size (QSize): Fixed size of the toast. None means not fixed.
+                Defaults to None.
+            close_button_icon (QIcon): Icon of the close button. Defaults to
+                ToastIcon.CLOSE.
+            close_button_icon_size (QSize): Size of the close button icon.
+                Defaults to QSize(10, 10).
+            close_button_size (QSize): Size of the close button. Defaults to
+                QSize(24, 24).
+            stay_on_top (bool): Whether the toast stays on top even when other
+                windows are focused. Defaults to True.
+            text_section_spacing (int): Vertical spacing between the title and
+                the text. Defaults to 8.
+            margins (QMargins): Margins around the whole toast content.
+                Defaults to QMargins(20, 18, 10, 18).
+            icon_margins (QMargins): Margins around the icon. Defaults to
+                QMargins(0, 0, 15, 0).
+            icon_section_margins (QMargins): Margins around the icon section.
+                Defaults to QMargins(0, 0, 15, 0).
+            text_section_margins (QMargins): Margins around the text section.
+                Defaults to QMargins(0, 0, 15, 0).
+            close_button_margins (QMargins): Margins around the close button.
+                Defaults to QMargins(0, -8, 0, -8).
+
+        """
+        toast = Toast(self.main_window)
+        toast.setDuration(duration)
+        toast.setTitle(title)
+        toast.setText(message)
+
+        # Apply the preset, if any, which sets various properties
+        if preset:
+            toast.applyPreset(preset)
+
+        # Only set these if no preset has been applied
+        if not preset:
+            toast.setBackgroundColor(background_color)
+            toast.setCloseButtonIconColor(close_button_icon_color)
+            toast.setTitleColor(title_color)
+            toast.setTextColor(text_color)
+            toast.setDurationBarColor(duration_bar_color)
+            toast.setIconColor(icon_color)
+            toast.setIconSeparatorColor(icon_separator_color)
+            toast.setShowDurationBar(show_duration_bar)
+
+        # Font settings are typically safe to apply regardless of preset
+        toast.setTitleFont(title_font)
+        toast.setTextFont(text_font)
+
+        # Icon setup
+        if show_icon:
+            toast.setIcon(QPixmap(icon_path))
+            toast.setShowIcon(True)
+
+        # Size settings
+        toast.setIconSize(icon_size)
+        if fixed_size:
+            toast.setFixedSize(fixed_size)
+        else:
+            toast.setMinimumWidth(minimum_width)
+            toast.setMaximumWidth(maximum_width)
+            toast.setMinimumHeight(minimum_height)
+            toast.setMaximumHeight(maximum_height)
+
+        # Other UI configurations
+        Toast.setPosition(position)
+        Toast.setMaximumOnScreen(maximum_on_screen)
+        Toast.setSpacing(spacing)
+        Toast.setOffset(offset_x, offset_y)
+        Toast.setAlwaysOnMainScreen(always_on_main_screen)
+        toast.setCloseButtonAlignment(close_button_alignment)
+        toast.setShowCloseButton(show_close_button)
+        toast.setFadeInDuration(fade_in_duration)
+        toast.setFadeOutDuration(fade_out_duration)
+        toast.setResetDurationOnHover(reset_duration_on_hover)
+        toast.setBorderRadius(border_radius)
+
+        # Close button customization
+        toast.setCloseButtonIcon(close_button_icon)
+        toast.setCloseButtonIconSize(close_button_icon_size)
+        toast.setCloseButtonSize(close_button_size)
+        toast.setStayOnTop(stay_on_top)
+
+        # Spacing and margin settings
+        toast.setTextSectionSpacing(text_section_spacing)
+        toast.setMargins(margins)
+        toast.setIconMargins(icon_margins)
+        toast.setIconSectionMargins(icon_section_margins)
+        toast.setTextSectionMargins(text_section_margins)
+        toast.setCloseButtonMargins(close_button_margins)
+
+        # Display the toast
+        toast.show()
 
 def _run() -> None:
     tray = SystemTrayIcon()
