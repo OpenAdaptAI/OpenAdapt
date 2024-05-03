@@ -15,10 +15,11 @@
         "format": "prettier --write ."
     },
     "dependencies": {
-        "@mantine/core": "^7.6.2",
-        "@mantine/form": "^7.7.1",
-        "@mantine/hooks": "^7.6.2",
-        "@mantine/notifications": "^7.7.1",
+        "@mantine/carousel": "7.7.1",
+        "@mantine/core": "7.7.1",
+        "@mantine/form": "7.7.1",
+        "@mantine/hooks": "7.7.1",
+        "@mantine/notifications": "7.7.1",
         "@tabler/icons-react": "^3.1.0",
         "@types/node": "20.2.4",
         "@types/react": "18.2.7",

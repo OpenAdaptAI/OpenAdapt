@@ -2,116 +2,136 @@
 
 import { timeStampToDateString } from '@/app/utils';
 import { ActionEvent as ActionEventType } from '@/types/action-event'
-import { Accordion, Box, Grid, Table } from '@mantine/core'
-import Image from 'next/image';
+import { Accordion, Box, Grid, Image, Table } from '@mantine/core'
+import { useHover } from '@mantine/hooks';
 
 type Props = {
-    event: ActionEventType,
-    values: string[],
-    level: number,
+    event: ActionEventType;
+    values: string[];
+    level: number;
+    openScreenshotModal: () => void;
 }
+
+const TableRowWithBorder = ({ children }: { children: React.ReactNode }) => (
+    <Table.Tr className='border-2 border-gray-300 border-solid'>
+        {children}
+    </Table.Tr>
+)
+
+const TableCellWithBorder = ({ children }: { children: React.ReactNode }) => (
+    <Table.Td className='border-2 border-gray-300 border-solid'>
+        {children}
+    </Table.Td>
+)
 
 export const ActionEvent = ({
     event,
     values,
     level,
+    openScreenshotModal: _openScreenshotModal,
 }: Props) => {
+    const {ref: screenshotRef, hovered: hoveredOverScreenshot } = useHover<HTMLImageElement>();
+    const openScreenshotModal = (e: React.MouseEvent<HTMLImageElement>) => {
+        e.stopPropagation();
+        _openScreenshotModal();
+    }
+
     let content = (
         <Grid>
             <Grid.Col span={level === 0 ? 4 : 12}>
-                <Table w={400} withTableBorder withColumnBorders my={20}>
+                <Table w={400} withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
                     <Table.Tbody>
                         {typeof event.id === 'number' && (
-                            <Table.Tr>
-                                <Table.Td>id</Table.Td>
-                                <Table.Td>{event.id}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>id</TableCellWithBorder>
+                                <TableCellWithBorder>{event.id}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.name && (
-                            <Table.Tr>
-                                <Table.Td>name</Table.Td>
-                                <Table.Td>{event.name}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>name</TableCellWithBorder>
+                                <TableCellWithBorder>{event.name}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
-                        <Table.Tr>
-                            <Table.Td>timestamp</Table.Td>
-                            <Table.Td>{timeStampToDateString(event.timestamp)}</Table.Td>
-                        </Table.Tr>
+                        <TableRowWithBorder>
+                            <TableCellWithBorder>timestamp</TableCellWithBorder>
+                            <TableCellWithBorder>{timeStampToDateString(event.timestamp)}</TableCellWithBorder>
+                        </TableRowWithBorder>
                         {event.screenshot_timestamp && (
-                            <Table.Tr>
-                                <Table.Td>screenshot timestamp</Table.Td>
-                                <Table.Td>{timeStampToDateString(event.screenshot_timestamp)}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>screenshot timestamp</TableCellWithBorder>
+                                <TableCellWithBorder>{timeStampToDateString(event.screenshot_timestamp)}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
-                        <Table.Tr>
-                            <Table.Td>window event timestamp</Table.Td>
-                            <Table.Td>{timeStampToDateString(event.window_event_timestamp)}</Table.Td>
-                        </Table.Tr>
+                        <TableRowWithBorder>
+                            <TableCellWithBorder>window event timestamp</TableCellWithBorder>
+                            <TableCellWithBorder>{timeStampToDateString(event.window_event_timestamp)}</TableCellWithBorder>
+                        </TableRowWithBorder>
                         {event.mouse_x && (
-                            <Table.Tr>
-                                <Table.Td>mouse x</Table.Td>
-                                <Table.Td>{event.mouse_x}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>mouse x</TableCellWithBorder>
+                                <TableCellWithBorder>{event.mouse_x}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.mouse_y && (
-                            <Table.Tr>
-                                <Table.Td>mouse y</Table.Td>
-                                <Table.Td>{event.mouse_y}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>mouse y</TableCellWithBorder>
+                                <TableCellWithBorder>{event.mouse_y}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.mouse_button_name && (
-                            <Table.Tr>
-                                <Table.Td>mouse button name</Table.Td>
-                                <Table.Td>{event.mouse_button_name}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>mouse button name</TableCellWithBorder>
+                                <TableCellWithBorder>{event.mouse_button_name}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.mouse_pressed && (
-                            <Table.Tr>
-                                <Table.Td>mouse pressed</Table.Td>
-                                <Table.Td>{event.mouse_pressed.toString()}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>mouse pressed</TableCellWithBorder>
+                                <TableCellWithBorder>{event.mouse_pressed.toString()}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.text && (
-                            <Table.Tr>
-                                <Table.Td>text</Table.Td>
-                                <Table.Td>{event.text}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>text</TableCellWithBorder>
+                                <TableCellWithBorder>{event.text}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.canonical_text && (
-                            <Table.Tr>
-                                <Table.Td>canonical text</Table.Td>
-                                <Table.Td>{event.canonical_text}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>canonical text</TableCellWithBorder>
+                                <TableCellWithBorder>{event.canonical_text}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.key_name && (
-                            <Table.Tr>
-                                <Table.Td>key name</Table.Td>
-                                <Table.Td>{event.key_name}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>key name</TableCellWithBorder>
+                                <TableCellWithBorder>{event.key_name}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.canonical_key_vk && (
-                            <Table.Tr>
-                                <Table.Td>canonical key vk</Table.Td>
-                                <Table.Td>{event.canonical_key_vk}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>canonical key vk</TableCellWithBorder>
+                                <TableCellWithBorder>{event.canonical_key_vk}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
                         {event.parent_id && (
-                            <Table.Tr>
-                                <Table.Td>parent id</Table.Td>
-                                <Table.Td>{event.parent_id}</Table.Td>
-                            </Table.Tr>
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>parent id</TableCellWithBorder>
+                                <TableCellWithBorder>{event.parent_id}</TableCellWithBorder>
+                            </TableRowWithBorder>
                         )}
-                        <Table.Tr>
-                            <Table.Td>children</Table.Td>
-                            <Table.Td>{event.children?.length || 0}</Table.Td>
-                        </Table.Tr>
+                        <TableRowWithBorder>
+                            <TableCellWithBorder>children</TableCellWithBorder>
+                            <TableCellWithBorder>{event.children?.length || 0}</TableCellWithBorder>
+                        </TableRowWithBorder>
                     </Table.Tbody>
                 </Table>
             </Grid.Col>
             {level === 0 && (
-                <Grid.Col span={8}>
+                <Grid.Col span={12}>
                     {event.screenshot !== null && (
-                        <Image src={event.screenshot} alt={`Screenshot of ${event.name}`} width={800} height={600} className='py-4' />
+                        <Image onClick={openScreenshotModal} ref={screenshotRef} src={(hoveredOverScreenshot ? event.diff : event.screenshot) || ''} alt={`Screenshot of ${event.name}`} w="100%" h="auto" pb={40} mr="auto" />
                     )}
                 </Grid.Col>
             )}
@@ -128,12 +148,11 @@ export const ActionEvent = ({
                 }}>
                     {content}
                 </Accordion.Control>
-                {displayChild && values.includes(event.id.toString()) && (
-                    <Accordion.Panel ml={(level + 1) * 100}>
-                        {/* @ts-ignore */}
+                {displayChild && values.includes(event.id.toString()) && event.children && (
+                    <Accordion.Panel ml={100}>
                         {event.children.map((child) => (
                             <Box key={child.id}>
-                                <ActionEvent event={child} values={values} level={level + 1} />
+                                <ActionEvent event={child} values={values} level={level + 1} openScreenshotModal={_openScreenshotModal} />
                             </Box>
                         ))}
                     </Accordion.Panel>
@@ -144,7 +163,7 @@ export const ActionEvent = ({
 
 
     return (
-        <Box className='border-2 border-black border-solid' my={10} px={10}>
+        <Box className='border-2 border-gray-300 border-solid' my={10} px={10}>
             {content}
         </Box>
     )

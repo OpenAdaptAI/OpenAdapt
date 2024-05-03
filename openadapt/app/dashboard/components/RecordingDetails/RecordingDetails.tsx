@@ -9,48 +9,60 @@ type Props = {
     recording: Recording;
 }
 
+const TableRowWithBorder = ({ children }: { children: React.ReactNode }) => (
+    <Table.Tr className='border-2 border-gray-300 border-solid'>
+        {children}
+    </Table.Tr>
+)
+
+const TableCellWithBorder = ({ children }: { children: React.ReactNode }) => (
+    <Table.Td className='border-2 border-gray-300 border-solid'>
+        {children}
+    </Table.Td>
+)
+
 export const RecordingDetails = ({
     recording
 }: Props) => {
   return (
         <Table withTableBorder withColumnBorders w={600} mb={50}>
             <Table.Tbody>
-                <Table.Tr>
-                    <Table.Td>Recording ID</Table.Td>
-                    <Table.Td>{recording.id}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>timestamp</Table.Td>
-                    <Table.Td>{timeStampToDateString(recording.timestamp)}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>monitor width</Table.Td>
-                    <Table.Td>{recording.monitor_width}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>monitor height</Table.Td>
-                    <Table.Td>{recording.monitor_height}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>double click interval seconds</Table.Td>
-                    <Table.Td>{recording.double_click_interval_seconds}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>double click distance pixels</Table.Td>
-                    <Table.Td>{recording.double_click_distance_pixels}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>platform</Table.Td>
-                    <Table.Td>{recording.platform}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>task description</Table.Td>
-                    <Table.Td>{recording.task_description}</Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                    <Table.Td>video start time</Table.Td>
-                    <Table.Td>{recording.video_start_time}</Table.Td>
-                </Table.Tr>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>Recording ID</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.id}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>timestamp</TableCellWithBorder>
+                    <TableCellWithBorder>{timeStampToDateString(recording.timestamp)}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>monitor width</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.monitor_width}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>monitor height</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.monitor_height}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>double click interval seconds</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.double_click_interval_seconds}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>double click distance pixels</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.double_click_distance_pixels}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>platform</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.platform}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>task description</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.task_description}</TableCellWithBorder>
+                </TableRowWithBorder>
+                <TableRowWithBorder>
+                    <TableCellWithBorder>video start time</TableCellWithBorder>
+                    <TableCellWithBorder>{recording.video_start_time}</TableCellWithBorder>
+                </TableRowWithBorder>
             </Table.Tbody>
         </Table>
   )

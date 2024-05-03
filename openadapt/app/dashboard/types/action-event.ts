@@ -22,5 +22,8 @@ export type ActionEvent = {
     parent_id?: number;
     element_state: Record<string, any>;
     screenshot: string | null;
+    diff: string | null;
+    mask: string | null;
+    dimensions?: { width: number, height: number };
     children?: ActionEvent[];
 }

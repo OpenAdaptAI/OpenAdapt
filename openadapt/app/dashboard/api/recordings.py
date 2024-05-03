@@ -69,11 +69,21 @@ class RecordingsAPI:
             for action_event in action_events:
                 event_dict = row2dict(action_event)
                 try:
-                    image = image2utf8(display_event(action_event))
+                    image = display_event(action_event)
+                    width, height = image.size
+                    image = image2utf8(image)
+                    diff = image2utf8(display_event(action_event, diff=True))
+                    mask = image2utf8(action_event.screenshot.diff_mask)
                 except Exception as e:
                     logger.exception("Failed to display event: {}", e)
                     image = None
+                    diff = None
+                    mask = None
+                    width, height = 0, 0
                 event_dict["screenshot"] = image
+                event_dict["diff"] = diff
+                event_dict["mask"] = mask
+                event_dict["dimensions"] = {"width": width, "height": height}
                 if event_dict["key"]:
                     event_dict["key"] = str(event_dict["key"])
                 if event_dict["canonical_key"]:
