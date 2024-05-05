@@ -136,13 +136,19 @@ def is_recording() -> bool:
     return record_proc.is_running()
 
 
-def quick_record() -> None:
+def quick_record(on_ready: multiprocessing.connection.Connection | None = None) -> None:
     """Run a recording session with no option for recording name (uses date instead)."""
     global record_proc
     new_session()
     now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc.start(
-        record, (now, record_proc.terminate_processing, record_proc.terminate_recording)
+        record,
+        (
+            now,
+            record_proc.terminate_processing,
+            record_proc.terminate_recording,
+            on_ready,
+        )
     )
 
 

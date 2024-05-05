@@ -10,7 +10,7 @@ import sys
 
 from loguru import logger
 from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QMargins, QSize, QTimer
+from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QSystemTrayIcon
 
@@ -112,7 +112,25 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.visualize_proc = None
 
+        self.parent_conn, self.child_conn = multiprocessing.Pipe()
+        # Set up QSocketNotifier to monitor the read end of the pipe
+        notifier = QSocketNotifier(self.parent_conn.fileno(), QSocketNotifier.Read)
+        notifier_callback = lambda: self.handle_recording_started(
+            notifier, self.parent_conn,
+        )
+        notifier.activated.connect(notifier_callback)
+
         self.show_toast("OpenAdapt is running in the background")
+
+    def handle_recording_started(
+        self, notifier: QSocketNotifier, conn: multiprocessing.connection.Connection,
+    ) -> None:
+        """Callback function to handle the signal from the recording process."""
+        signal = conn.recv()
+        logger.info(f"Received signal: {signal}")
+        self.show_toast("Recording started.")
+        # disable notifier if no more data is expected
+        notifier.setEnabled(False)
 
     def update_tray_icon(self) -> None:
         """Update the tray icon."""
@@ -137,7 +155,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             self.show_toast("Starting a recording...")
             self.recording = True
             try:
-                quick_record()
+                quick_record(self.child_conn)
             except KeyboardInterrupt:
                 self.recording = False
                 stop_record()

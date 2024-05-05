@@ -20,7 +20,6 @@ import time
 import tracemalloc
 
 from loguru import logger
-from notifypy import Notify
 from oa_pynput import keyboard, mouse
 from pympler import tracker
 import av
@@ -201,7 +200,6 @@ def process_events(
     utils.set_start_time(recording_timestamp)
 
     logger.info("Starting")
-    Notify("Status", "Starting recording...", "OpenAdapt").send()
 
     prev_event = None
     prev_screen_event = None
@@ -276,7 +274,6 @@ def process_events(
         del prev_event
         prev_event = event
     logger.info("Done")
-    Notify("Status", "Writing to database...", "OpenAdapt").send()
 
 
 def write_action_event(
@@ -423,7 +420,6 @@ def write_events(
 
     if progress is not None:
         progress.close()
-        Notify("Status", "Recording complete.", "OpenAdapt").send()
 
     logger.info(f"{event_type=} done")
 
@@ -1009,8 +1005,13 @@ def read_mouse_events(
 @trace(logger)
 def record(
     task_description: str,
+    # these should be Event | None, but this raises:
+    #   TypeError: unsupported operand type(s) for |: 'method' and 'NoneType'
+    # type(multiprocessing.Event) appears to be <class 'method'>
+    # TODO: fix this
     terminate_processing: multiprocessing.Event = None,
     terminate_recording: multiprocessing.Event = None,
+    on_ready: multiprocessing.connection.Connection | None = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
@@ -1019,6 +1020,7 @@ def record(
         terminate_processing: An event to signal the termination of the events
         processing.
         terminate_recording: An event to signal the termination of the recording.
+        on_ready: A connection to communicate that all readers and writers are started.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
@@ -1191,6 +1193,7 @@ def record(
         time.sleep(0.1)  # Sleep to reduce busy waiting
     for _ in range(5):
         logger.info("*" * 40)
+    on_ready.send(True)
     logger.info("All readers and writers have started. Waiting for input events...")
 
     collect_stats()
