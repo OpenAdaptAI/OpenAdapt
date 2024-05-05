@@ -2459,21 +2459,6 @@ qa = ["flake8 (==5.0.4)", "mypy (==0.971)", "types-setuptools (==67.2.0.1)"]
 testing = ["Django", "attrs", "colorama", "docopt", "pytest (<7.0.0)"]
 
 [[package]]
-name = "jeepney"
-version = "0.8.0"
-description = "Low-level, pure Python DBus protocol wrapper."
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "jeepney-0.8.0-py3-none-any.whl", hash = "sha256:c0a454ad016ca575060802ee4d590dd912e35c122fa04e70306de3d076cce755"},
-    {file = "jeepney-0.8.0.tar.gz", hash = "sha256:5efe48d255973902f6badc3ce55e2aa6c5c3b3bc642059ef3a91247bcfcc5806"},
-]
-
-[package.extras]
-test = ["async-timeout", "pytest", "pytest-asyncio (>=0.17)", "pytest-trio", "testpath", "trio"]
-trio = ["async_generator", "trio"]
-
-[[package]]
 name = "jinja2"
 version = "3.1.3"
 description = "A very fast and expressive template engine."
@@ -3520,21 +3505,6 @@ files = [
 
 [package.dependencies]
 setuptools = "*"
-
-[[package]]
-name = "notify-py"
-version = "0.3.42"
-description = "Cross-platform desktop notification library for Python"
-optional = false
-python-versions = ">=3.6,<4.0"
-files = [
-    {file = "notify_py-0.3.42-py3-none-any.whl", hash = "sha256:184e1ddb81edfd5e3830784f31203e88f0cb9018f2d9d7aa04f5f540876c0f27"},
-    {file = "notify_py-0.3.42.tar.gz", hash = "sha256:f49457f1d0577a150df5c3fd58ed2892ce3106a517f8e2083f61743d1c05be36"},
-]
-
-[package.dependencies]
-jeepney = {version = "*", markers = "sys_platform == \"linux\""}
-loguru = ">=0.5.3,<=0.6.0"
 
 [[package]]
 name = "numpy"
@@ -8069,4 +8039,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "23e858644f062e7bdd231633100ca6ecf83fc86700987852842d20b95be15f23"
+content-hash = "1c241548dcd3a336fbdb7a17170b7cf10dc06f3f29f29e737d9464f32ecfbaf5"
