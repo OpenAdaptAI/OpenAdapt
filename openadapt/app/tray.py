@@ -389,11 +389,11 @@ class SystemTrayIcon(QSystemTrayIcon):
             toast.setMaximumHeight(maximum_height)
 
         # Other UI configurations
-        Toast.setPosition(position)
-        Toast.setMaximumOnScreen(maximum_on_screen)
-        Toast.setSpacing(spacing)
-        Toast.setOffset(offset_x, offset_y)
-        Toast.setAlwaysOnMainScreen(always_on_main_screen)
+        toast.setPosition(position)
+        toast.setMaximumOnScreen(maximum_on_screen)
+        toast.setSpacing(spacing)
+        toast.setOffset(offset_x, offset_y)
+        toast.setAlwaysOnMainScreen(always_on_main_screen)
         toast.setCloseButtonAlignment(close_button_alignment)
         toast.setShowCloseButton(show_close_button)
         toast.setFadeInDuration(fade_in_duration)
