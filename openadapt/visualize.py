@@ -22,7 +22,6 @@ from openadapt.config import RECORDING_DIRECTORY_PATH, config
 from openadapt.db.crud import get_latest_recording
 from openadapt.events import get_events
 from openadapt.models import Recording
-from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
     compute_diff,
@@ -35,8 +34,6 @@ from openadapt.utils import (
 )
 
 SCRUB = config.SCRUB_ENABLED
-if SCRUB:
-    scrub = PresidioScrubbingProvider()
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -44,43 +41,6 @@ MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template("""
-    table {
-        outline: 1px solid black;
-    }
-    table th {
-        vertical-align: top;
-    }
-    .screenshot img {
-        display: none;
-        width: ${IMG_WIDTH_PCT}vw;
-    }
-    .screenshot img:nth-child(1) {
-        display: block;
-    }
-
-    .screenshot:hover img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:hover img:nth-child(2) {
-        display: block;
-    }
-    .screenshot:hover img:nth-child(3) {
-        display: none;
-    }
-
-    .screenshot:active img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(2) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(3) {
-        display: block;
-    }
-""").substitute(
-    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
-)
 
 
 def recursive_len(lst: list, key: str) -> int:
@@ -211,6 +171,9 @@ def main(
     if recording is None:
         recording = get_latest_recording()
     if SCRUB:
+        from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+        scrub = PresidioScrubbingProvider()
         scrub.scrub_text(recording.task_description)
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
@@ -234,6 +197,44 @@ def main(
     recording_dict = row2dict(recording)
     if SCRUB:
         recording_dict = scrub.scrub_dict(recording_dict)
+
+    CSS = string.Template("""
+        table {
+            outline: 1px solid black;
+        }
+        table th {
+            vertical-align: top;
+        }
+        .screenshot img {
+            display: none;
+            width: ${IMG_WIDTH_PCT}vw;
+        }
+        .screenshot img:nth-child(1) {
+            display: block;
+        }
+
+        .screenshot:hover img:nth-child(1) {
+            display: none;
+        }
+        .screenshot:hover img:nth-child(2) {
+            display: block;
+        }
+        .screenshot:hover img:nth-child(3) {
+            display: none;
+        }
+
+        .screenshot:active img:nth-child(1) {
+            display: none;
+        }
+        .screenshot:active img:nth-child(2) {
+            display: none;
+        }
+        .screenshot:active img:nth-child(3) {
+            display: block;
+        }
+    """).substitute(
+        IMG_WIDTH_PCT=IMG_WIDTH_PCT,
+    )
 
     rows = [
         row(
