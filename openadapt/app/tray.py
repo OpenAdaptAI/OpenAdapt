@@ -12,7 +12,9 @@ from loguru import logger
 from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
 from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QMenu, QInputDialog, QSystemTrayIcon,
+)
 
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
@@ -37,7 +39,7 @@ if sys.platform == "darwin":
     info["LSBackgroundOnly"] = "1"
 
 
-class SystemTrayIcon(QSystemTrayIcon):
+class SystemTrayIcon():
     """System tray icon for OpenAdapt."""
 
     recording = False
@@ -50,16 +52,16 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
-        self.app = QApplication([])
+        self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
         # is addressed
         self.main_window = QMainWindow()
-        self.main_window.setWindowFlags(
-            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-        )
+        #self.main_window.setWindowFlags(
+        #    Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+        #)
         self.main_window.resize(1, 1)  # Minimal size
         self.main_window.move(0, 0)
 
@@ -69,12 +71,11 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.tray.setIcon(self.icon)
         self.tray.setVisible(True)
 
-        super().__init__(self.icon, self.app)
-
         self.menu = QMenu()
 
         self.record_action = QAction("Record")
-        self.record_action.triggered.connect(self._quick_record)
+        #self.record_action.triggered.connect(self._quick_record)
+        self.record_action.triggered.connect(self.on_record_action)
         self.menu.addAction(self.record_action)
 
         self.visualize_menu = self.menu.addMenu("Visualize")
@@ -105,10 +106,12 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.tray.setContextMenu(self.menu)
 
+        """
         self.timer = QTimer()
         self.timer.setInterval(1000)  # update every second
         self.timer.timeout.connect(self.update_tray_icon)
         self.timer.start()
+        """
 
         self.visualize_proc = None
 
@@ -132,22 +135,62 @@ class SystemTrayIcon(QSystemTrayIcon):
         # disable notifier if no more data is expected
         notifier.setEnabled(False)
 
-    def update_tray_icon(self) -> None:
-        """Update the tray icon."""
-        try:
-            if self.recording:
-                self.record_action.setText("Stop recording")
+    #def update_tray_icon(self) -> None:
+    #    """Update the tray icon."""
+    #    try:
+    #        if self.recording:
+    #            self.record_action.setText("Stop recording")
+    #        else:
+    #            self.record_action.setText("Record")
+
+    #        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
+    #        self.populate_menu(self.replay_menu, self._replay, "replay")
+#
+#            if self.dashboard_thread and not is_running_from_executable():
+#                self.dashboard_action.setText("Reload dashboard")
+#        except KeyboardInterrupt:
+#            # the app is probably shutting down, so we can ignore this
+#            pass
+
+    def on_record_action(self) -> None:
+        """Handle click on Record / Stop Recording menu item."""
+
+        if not self.recording:
+            if 1:
+                # XXX text does not appear when typing here, even though the cursor flashes.
+                # instead the text appears in the terminal from which this file was run,
+                # regardless of whether self.main_window is passed in
+                task_description, ok = QInputDialog.getText(
+                    #self.main_window,
+                    None,
+                    "New Recording",
+                    "Briefly describe the task to be recorded:",
+                )
+                if not ok:
+                    return
             else:
-                self.record_action.setText("Record")
+                input_dialog = QInputDialog(self.main_window)
+                input_dialog.setWindowTitle("New Recording")
+                input_dialog.setLabelText("Briefly describe the task to be recorded:")
+                input_dialog.setModal(True)
+                ok = input_dialog.exec()
+                if not ok:
+                    return
+                task_description = input_dialog.textValue()
+            logger.info(f"{task_description=}")
+            self.show_toast("Starting a recording...")
+            self.recording = True
+            try:
+                quick_record(self.child_conn, task_description)
+            except KeyboardInterrupt:
+                self.recording = False
+                stop_record()
+        else:
+            self.show_toast("Stopping recording...")
+            self.recording = False
+            stop_record()
+            self.show_toast("Recording stopped.")
 
-            self.populate_menu(self.visualize_menu, self._visualize, "visualize")
-            self.populate_menu(self.replay_menu, self._replay, "replay")
-
-            if self.dashboard_thread and not is_running_from_executable():
-                self.dashboard_action.setText("Reload dashboard")
-        except KeyboardInterrupt:
-            # the app is probably shutting down, so we can ignore this
-            pass
 
     def _quick_record(self) -> None:
         """Wrapper for the quick_record function."""
