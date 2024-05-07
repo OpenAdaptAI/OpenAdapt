@@ -10,7 +10,7 @@ import sys
 
 from loguru import logger
 from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier, QTimer
+from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier,
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMenu, QInputDialog, QSystemTrayIcon,
@@ -31,15 +31,7 @@ from openadapt.visualize import main as visualize
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
 
 
-# hide dock icon on macos
-if sys.platform == "darwin":
-    import AppKit
-
-    info = AppKit.NSBundle.mainBundle().infoDictionary()
-    info["LSBackgroundOnly"] = "1"
-
-
-class SystemTrayIcon():
+class SystemTrayIcon:
     """System tray icon for OpenAdapt."""
 
     recording = False
@@ -52,37 +44,43 @@ class SystemTrayIcon():
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
-        self.app = QApplication(sys.argv)
+        self.app = QApplication([])
+
+        if sys.platform == "darwin":
+            # hide Dock icon while allowing focus on dialogs
+            # (must come after QApplication())
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            NSApplication.sharedApplication().setActivationPolicy_(
+                NSApplicationActivationPolicyAccessory,
+            )
+
         self.app.setQuitOnLastWindowClosed(False)
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
         # is addressed
         self.main_window = QMainWindow()
-        #self.main_window.setWindowFlags(
-        #    Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
-        #)
+        self.main_window.setWindowFlags(
+            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+        )
         self.main_window.resize(1, 1)  # Minimal size
         self.main_window.move(0, 0)
 
         self.icon = QIcon(ICON_PATH)
 
-        self.tray = QSystemTrayIcon()
+        self.tray = QSystemTrayIcon(self.icon, self.app)
         self.tray.setIcon(self.icon)
         self.tray.setVisible(True)
 
         self.menu = QMenu()
 
         self.record_action = QAction("Record")
-        #self.record_action.triggered.connect(self._quick_record)
         self.record_action.triggered.connect(self.on_record_action)
         self.menu.addAction(self.record_action)
 
         self.visualize_menu = self.menu.addMenu("Visualize")
-        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
-
         self.replay_menu = self.menu.addMenu("Replay")
-        self.populate_menu(self.replay_menu, self._replay, "replay")
+        self.update_menus()
 
         # TODO: Remove this action once dashboard is integrated
         self.app_action = QAction("Show App")
@@ -106,107 +104,69 @@ class SystemTrayIcon():
 
         self.tray.setContextMenu(self.menu)
 
-        """
-        self.timer = QTimer()
-        self.timer.setInterval(1000)  # update every second
-        self.timer.timeout.connect(self.update_tray_icon)
-        self.timer.start()
-        """
-
         self.visualize_proc = None
 
         self.parent_conn, self.child_conn = multiprocessing.Pipe()
         # Set up QSocketNotifier to monitor the read end of the pipe
-        notifier = QSocketNotifier(self.parent_conn.fileno(), QSocketNotifier.Read)
-        notifier_callback = lambda: self.handle_recording_started(
-            notifier, self.parent_conn,
+        self.notifier = QSocketNotifier(
+            self.parent_conn.fileno(), QSocketNotifier.Read,
         )
-        notifier.activated.connect(notifier_callback)
+        self.notifier.activated.connect(lambda: self.handle_recording_signal(
+            self.notifier, self.parent_conn,
+        ))
 
         self.show_toast("OpenAdapt is running in the background")
 
-    def handle_recording_started(
-        self, notifier: QSocketNotifier, conn: multiprocessing.connection.Connection,
+
+    def handle_recording_signal(
+        self,
+        notifier: QSocketNotifier,
+        conn: multiprocessing.connection.Connection,
     ) -> None:
         """Callback function to handle the signal from the recording process."""
         signal = conn.recv()
         logger.info(f"Received signal: {signal}")
-        self.show_toast("Recording started.")
-        # disable notifier if no more data is expected
-        notifier.setEnabled(False)
 
-    #def update_tray_icon(self) -> None:
-    #    """Update the tray icon."""
-    #    try:
-    #        if self.recording:
-    #            self.record_action.setText("Stop recording")
-    #        else:
-    #            self.record_action.setText("Record")
+        if signal["type"] == "start":
+            self.show_toast("Recording started.")
+        elif signal["type"] == "stop":
+            self.show_toast("Recording stopped.")
 
-    #        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
-    #        self.populate_menu(self.replay_menu, self._replay, "replay")
-#
-#            if self.dashboard_thread and not is_running_from_executable():
-#                self.dashboard_action.setText("Reload dashboard")
-#        except KeyboardInterrupt:
-#            # the app is probably shutting down, so we can ignore this
-#            pass
+        # Refresh the menus regardless of the type of signal
+        self.update_menus()
+
+    def update_menus(self) -> None:
+        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
+        self.populate_menu(self.replay_menu, self._replay, "replay")
 
     def on_record_action(self) -> None:
         """Handle click on Record / Stop Recording menu item."""
-
-        if not self.recording:
-            if 1:
-                # XXX text does not appear when typing here, even though the cursor flashes.
-                # instead the text appears in the terminal from which this file was run,
-                # regardless of whether self.main_window is passed in
-                task_description, ok = QInputDialog.getText(
-                    #self.main_window,
-                    None,
-                    "New Recording",
-                    "Briefly describe the task to be recorded:",
-                )
-                if not ok:
-                    return
-            else:
-                input_dialog = QInputDialog(self.main_window)
-                input_dialog.setWindowTitle("New Recording")
-                input_dialog.setLabelText("Briefly describe the task to be recorded:")
-                input_dialog.setModal(True)
-                ok = input_dialog.exec()
-                if not ok:
-                    return
-                task_description = input_dialog.textValue()
-            logger.info(f"{task_description=}")
-            self.show_toast("Starting a recording...")
-            self.recording = True
-            try:
-                quick_record(self.child_conn, task_description)
-            except KeyboardInterrupt:
-                self.recording = False
-                stop_record()
+        if self.recording:
+            self.stop_recording()
         else:
-            self.show_toast("Stopping recording...")
-            self.recording = False
-            stop_record()
-            self.show_toast("Recording stopped.")
+            self.start_recording()
 
+    def start_recording(self):
+        task_description, ok = QInputDialog.getText(
+            None,
+            "New Recording",
+            "Briefly describe the task to be recorded:",
+        )
+        logger.info(f"{task_description=} {ok=}")
+        if not ok:
+            return
+        self.recording = True
+        self.record_action.setText("Stop Recording")
+        try:
+            quick_record(task_description, on_ready=self.child_conn)
+        except KeyboardInterrupt:
+            self.stop_recording()
 
-    def _quick_record(self) -> None:
-        """Wrapper for the quick_record function."""
-        if not self.recording:
-            self.show_toast("Starting a recording...")
-            self.recording = True
-            try:
-                quick_record(self.child_conn)
-            except KeyboardInterrupt:
-                self.recording = False
-                stop_record()
-        else:
-            self.show_toast("Stopping recording...")
-            self.recording = False
-            stop_record()
-            self.show_toast("Recording stopped.")
+    def stop_recording(self):
+        self.show_toast("Stopping recording...")
+        stop_record()
+        self.recording = False
+        self.record_action.setText("Record")
 
     def _visualize(self, recording: Recording) -> None:
         """Visualize a recording.
@@ -282,6 +242,7 @@ class SystemTrayIcon():
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()
         self.dashboard_thread.start()
+        self.dashboard_action.setText("Reload dashboard")
 
     def run(self) -> None:
         """Run the system tray icon."""

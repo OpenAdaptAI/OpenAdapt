@@ -1193,7 +1193,7 @@ def record(
         time.sleep(0.1)  # Sleep to reduce busy waiting
     for _ in range(5):
         logger.info("*" * 40)
-    on_ready.send(True)
+    on_ready.send({"type": "start"})
     logger.info("All readers and writers have started. Waiting for input events...")
 
     collect_stats()
@@ -1231,6 +1231,10 @@ def record(
 
     if terminate_recording is not None:
         terminate_recording.set()
+
+    # TODO: rename on_ready
+    # TODO: consolidate terminate_recording and on_ready
+    on_ready.send({"type": "stop"})
 
 
 # Entry point
