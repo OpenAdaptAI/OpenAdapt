@@ -37,7 +37,7 @@ export default function Recording() {
                     if (!prev) return prev;
                     return {
                         ...prev,
-                        "action_events": [...prev.action_events, data.value],
+                        "action_events": [...prev.action_events, addIdToNullActionEvent(data.value)],
                     }
                 });
             }
@@ -50,7 +50,7 @@ export default function Recording() {
     if (!recordingInfo) {
         return <Loader />;
     }
-    const actionEvents = addIdsToNullActionEvents(recordingInfo.action_events);
+    const actionEvents = recordingInfo.action_events;
 
     return (
         <Box>
@@ -60,17 +60,21 @@ export default function Recording() {
     )
 }
 
-function addIdsToNullActionEvents(actionEvents: ActionEventType[]): ActionEventType[] {
-    return actionEvents.map((event) => {
-        if (!event.id) {
-            // this is usually the case, when new events like 'singleclick'
-            // or 'doubleclick' are created while merging several events together,
-            // but they are not saved in the database
-            return {
-                ...event,
-                id: crypto.randomUUID(),
-            };
-        }
-        return event;
-    });
+function addIdToNullActionEvent(actionEvent: ActionEventType): ActionEventType {
+    let children = actionEvent.children;
+    if (actionEvent.children) {
+        children = actionEvent.children.map(addIdToNullActionEvent);
+    }
+    let id = actionEvent.id;
+    if (!id) {
+        // this is usually the case, when new events like 'singleclick'
+        // or 'doubleclick' are created while merging several events together,
+        // but they are not saved in the database
+        id = crypto.randomUUID();
+    }
+    return {
+        ...actionEvent,
+        id,
+        children,
+    }
 }

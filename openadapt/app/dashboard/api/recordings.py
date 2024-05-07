@@ -58,16 +58,15 @@ class RecordingsAPI:
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
             await websocket.accept()
+            session = crud.get_new_session()
 
-            await crud.acquire_db_lock()
-
-            recording = crud.get_recording_by_id(recording_id)
+            recording = crud.get_recording_by_id(recording_id, session)
 
             await websocket.send_json(
                 {"type": "recording", "value": recording.asdict()}
             )
 
-            action_events = get_events(recording)
+            action_events = get_events(recording, session=session)
 
             for action_event in action_events:
                 event_dict = row2dict(action_event)
@@ -94,6 +93,4 @@ class RecordingsAPI:
                 await websocket.send_json({"type": "action_event", "value": event_dict})
 
             await websocket.close()
-            await crud.release_db_lock()
-            crud.new_session()
             return

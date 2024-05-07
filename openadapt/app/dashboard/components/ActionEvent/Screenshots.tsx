@@ -28,6 +28,7 @@ export const Screenshots = ({
                     width={width}
                     height={height}
                     mx={20}
+                    key={event.id}
                 />
             ))}
         </Carousel>

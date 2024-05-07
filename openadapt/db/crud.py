@@ -527,4 +527,5 @@ async def release_db_lock() -> None:
 
     global lock
     lock.set()
+    new_session()
     logger.info("Database lock released.")
