@@ -4,7 +4,7 @@ import { ActionEvents } from "@/components/ActionEvent/ActionEvents";
 import { RecordingDetails } from "@/components/RecordingDetails";
 import { ActionEvent as ActionEventType } from "@/types/action-event";
 import { Recording as RecordingType } from "@/types/recording";
-import { Box, Loader } from "@mantine/core";
+import { Box, Loader, Progress } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -14,6 +14,7 @@ export default function Recording() {
     const [recordingInfo, setRecordingInfo] = useState<{
         recording: RecordingType,
         action_events: ActionEventType[],
+        num_events: number,
     }>();
     useEffect(() => {
         if (!id) {
@@ -28,6 +29,7 @@ export default function Recording() {
                         return {
                             "recording": data.value,
                             "action_events": [],
+                            "num_events": 0,
                         }
                     }
                     return prev;
@@ -38,6 +40,14 @@ export default function Recording() {
                     return {
                         ...prev,
                         "action_events": [...prev.action_events, addIdToNullActionEvent(data.value)],
+                    }
+                });
+            } else if (data.type === "num_events") {
+                setRecordingInfo(prev => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        "num_events": data.value,
                     }
                 });
             }
@@ -55,6 +65,13 @@ export default function Recording() {
     return (
         <Box>
             <RecordingDetails recording={recordingInfo.recording} />
+            {actionEvents.length && actionEvents.length < recordingInfo.num_events && (
+                <Progress.Root size={30} my={30}>
+                    <Progress.Section value={(actionEvents.length / recordingInfo.num_events) * 100}>
+                        <Progress.Label>Loading events {actionEvents.length}/{recordingInfo.num_events}</Progress.Label>
+                    </Progress.Section>
+                </Progress.Root>
+            )}
             <ActionEvents events={actionEvents} />
         </Box>
     )

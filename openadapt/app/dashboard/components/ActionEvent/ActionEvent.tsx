@@ -35,6 +35,7 @@ export const ActionEvent = ({
         e.stopPropagation();
         _openScreenshotModal();
     }
+    const imageSrc = (hoveredOverScreenshot ? event.screenshot : event.screenshot) || ''; // change to event.diff to show diff
 
     let content = (
         <Grid>
@@ -131,7 +132,7 @@ export const ActionEvent = ({
             {level === 0 && (
                 <Grid.Col span={12}>
                     {event.screenshot !== null && (
-                        <Image onClick={openScreenshotModal} ref={screenshotRef} src={(hoveredOverScreenshot ? event.diff : event.screenshot) || ''} alt={`Screenshot of ${event.name}`} w="100%" h="auto" pb={40} mr="auto" />
+                        <Image onClick={openScreenshotModal} ref={screenshotRef} src={imageSrc} alt={`Screenshot of ${event.name}`} w="100%" h="auto" pb={40} mr="auto" />
                     )}
                 </Grid.Col>
             )}

@@ -25,7 +25,7 @@ export const RecordingDetails = ({
     recording
 }: Props) => {
   return (
-        <Table withTableBorder withColumnBorders w={600} mb={50}>
+        <Table withTableBorder withColumnBorders w={600}>
             <Table.Tbody>
                 <TableRowWithBorder>
                     <TableCellWithBorder>Recording ID</TableCellWithBorder>

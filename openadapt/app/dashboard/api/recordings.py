@@ -68,6 +68,10 @@ class RecordingsAPI:
 
             action_events = get_events(recording, session=session)
 
+            await websocket.send_json(
+                {"type": "num_events", "value": len(action_events)}
+            )
+
             for action_event in action_events:
                 event_dict = row2dict(action_event)
                 try:
