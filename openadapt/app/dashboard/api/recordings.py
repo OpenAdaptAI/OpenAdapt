@@ -28,19 +28,22 @@ class RecordingsAPI:
     @staticmethod
     def get_recordings() -> dict[str, list[Recording]]:
         """Get all recordings."""
-        recordings = crud.get_all_recordings()
+        session = crud.get_new_session()
+        recordings = crud.get_all_recordings(session)
         return {"recordings": recordings}
 
     @staticmethod
-    def start_recording() -> dict[str, str]:
+    async def start_recording() -> dict[str, str]:
         """Start a recording session."""
+        await crud.acquire_db_lock(begin_transaction=False)
         quick_record()
         return {"message": "Recording started"}
 
     @staticmethod
-    def stop_recording() -> dict[str, str]:
+    async def stop_recording() -> dict[str, str]:
         """Stop a recording session."""
         stop_record()
+        await crud.release_db_lock()
         return {"message": "Recording stopped"}
 
     @staticmethod
@@ -56,7 +59,7 @@ class RecordingsAPI:
             """Get a specific recording and its action events."""
             await websocket.accept()
 
-            crud.new_session()
+            await crud.acquire_db_lock()
 
             recording = crud.get_recording_by_id(recording_id)
 
@@ -91,4 +94,6 @@ class RecordingsAPI:
                 await websocket.send_json({"type": "action_event", "value": event_dict})
 
             await websocket.close()
+            await crud.release_db_lock()
+            crud.new_session()
             return
