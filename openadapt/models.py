@@ -87,9 +87,12 @@ class ActionEvent(db.Base):
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
-    window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    screenshot_timestamp = sa.Column(ForceFloat)
+    screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
+    window_event_timestamp = sa.Column(ForceFloat)
+    window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -382,7 +385,8 @@ class WindowEvent(db.Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
     state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
@@ -498,7 +502,8 @@ class Screenshot(db.Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
     png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
@@ -661,7 +666,8 @@ class PerformanceStat(db.Base):
     __tablename__ = "performance_stat"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     event_type = sa.Column(sa.String)
     start_time = sa.Column(sa.Integer)
     end_time = sa.Column(sa.Integer)
@@ -675,6 +681,7 @@ class MemoryStat(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
 

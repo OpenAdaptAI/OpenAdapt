@@ -33,6 +33,18 @@ STOP_STRS = [
 ]
 SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 
+SCRUB_KEYS_HTML: list[str] = [
+    "text",
+    "canonical_text",
+    "title",
+    "state",
+    "task_description",
+    "key_char",
+    "canonical_key_char",
+    "key_vk",
+    "children",
+]
+
 # Posthog
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
@@ -186,17 +198,6 @@ class Config(BaseSettings):
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     }
     SCRUB_PRESIDIO_IGNORE_ENTITIES: list[str] = []
-    SCRUB_KEYS_HTML: list[str] = [
-        "text",
-        "canonical_text",
-        "title",
-        "state",
-        "task_description",
-        "key_char",
-        "canonical_key_char",
-        "key_vk",
-        "children",
-    ]
 
     # Visualization configurations
     VISUALIZE_DARK_MODE: bool = False

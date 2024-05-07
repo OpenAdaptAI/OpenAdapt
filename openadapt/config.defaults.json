@@ -64,17 +64,6 @@
         ]
     },
     "SCRUB_PRESIDIO_IGNORE_ENTITIES": [],
-    "SCRUB_KEYS_HTML": [
-        "text",
-        "canonical_text",
-        "title",
-        "state",
-        "task_description",
-        "key_char",
-        "canonical_key_char",
-        "key_vk",
-        "children"
-    ],
     "VISUALIZE_DARK_MODE": false,
     "VISUALIZE_RUN_NATIVELY": true,
     "VISUALIZE_DENSE_TREES": true,

@@ -20,6 +20,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.models import Recording
 from openadapt.spacy_model_helpers import download_spacy_model
 
 with redirect_stdout_stderr():
@@ -720,7 +721,7 @@ def get_strategy_class_by_name() -> dict:
 
 
 def plot_performance(
-    recording_timestamp: float = None,
+    recording: Recording = None,
     view_file: bool = False,
     save_file: bool = True,
     dark_mode: bool = False,
@@ -746,9 +747,9 @@ def plot_performance(
     # avoid circular import
     from openadapt.db import crud
 
-    if not recording_timestamp:
-        recording_timestamp = crud.get_latest_recording().timestamp
-    perf_stats = crud.get_perf_stats(recording_timestamp)
+    if not recording:
+        recording = crud.get_latest_recording()
+    perf_stats = crud.get_perf_stats(recording)
     for perf_stat in perf_stats:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
@@ -765,7 +766,7 @@ def plot_performance(
     ax.legend()
     ax.set_ylabel("Duration (seconds)")
 
-    mem_stats = crud.get_memory_stats(recording_timestamp)
+    mem_stats = crud.get_memory_stats(recording)
     timestamps = []
     mem_usages = []
     for mem_stat in mem_stats:
@@ -792,11 +793,11 @@ def plot_performance(
 
         ax.legend(all_handles, all_labels)
 
-    ax.set_title(f"{recording_timestamp=}")
+    ax.set_title(f"{recording.timestamp=}")
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     if save_file:
-        fname_parts = ["performance", str(recording_timestamp)]
+        fname_parts = ["performance", str(recording.timestamp)]
         fname = "-".join(fname_parts) + ".png"
         os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
         fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)

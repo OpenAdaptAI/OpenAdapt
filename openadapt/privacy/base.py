@@ -5,7 +5,7 @@ from typing import List
 from PIL import Image
 from pydantic import BaseModel  # pylint: disable=no-name-in-module
 
-from openadapt.config import config
+from openadapt.config import SCRUB_KEYS_HTML, config
 
 
 class Modality:  # pylint: disable=too-few-public-methods
@@ -125,7 +125,7 @@ class TextScrubbingMixin:
             dict: The scrubbed dict with PII and PHI removed.
         """
         if list_keys is None:
-            list_keys = config.SCRUB_KEYS_HTML  # pylint: disable=E1101
+            list_keys = SCRUB_KEYS_HTML  # pylint: disable=E1101
 
         scrubbed_dict = {}
         for key, value in input_dict.items():
