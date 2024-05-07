@@ -524,7 +524,6 @@ async def acquire_db_lock() -> bool:
 
 async def release_db_lock() -> None:
     """Release the database lock."""
-
     global lock
     lock.set()
     new_session()

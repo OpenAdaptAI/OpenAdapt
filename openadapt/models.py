@@ -546,7 +546,7 @@ def copy_sqlalchemy_object(obj: DBModel, additional_keys: list[str] = []) -> DBM
 
 def update_related_objects(
     new_obj: DBModel, obj: DBModel, relationships: list[tuple[str, dict]]
-):
+) -> None:
     """Update the relationships of a SQLAlchemy object.
 
     Args:
