@@ -20,6 +20,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.spacy_model_helpers import download_spacy_model
 
 with redirect_stdout_stderr():
     import fire
@@ -576,19 +577,12 @@ def display_event(
         if config.SCRUB_ENABLED:
             import spacy
 
-            if spacy.util.is_package(
-                config.SPACY_MODEL_NAME
-            ):  # Check if the model is installed
-                from openadapt.privacy.providers.presidio import (
-                    PresidioScrubbingProvider,
-                )
+            if not spacy.util.is_package(config.SPACY_MODEL_NAME):
+                logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
+                download_spacy_model(config.SPACY_MODEL_NAME)
+            from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
-                text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
-            else:
-                logger.warning(
-                    f"SpaCy model not installed! {config.SPACY_MODEL_NAME=}. Using"
-                    " original text."
-                )
+            text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
 
         image = draw_text(x, y, text, image, outline=True)
     else:
