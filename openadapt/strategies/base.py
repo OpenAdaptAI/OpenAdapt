@@ -19,15 +19,12 @@ class BaseReplayStrategy(ABC):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str | None = None,
         max_frame_times: int = MAX_FRAME_TIMES,
     ) -> None:
         """Initialize the BaseReplayStrategy.
 
         Args:
             recording (models.Recording): The recording to replay.
-            replay_instructions (str, optional): Natural language instructions
-                for how recording should be replayed.
             max_frame_times (int): The maximum number of frame times to track.
         """
         self.recording = recording

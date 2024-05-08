@@ -20,7 +20,6 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str | None = None,
         display_events: bool = DISPLAY_EVENTS,
         replay_events: bool = REPLAY_EVENTS,
         process_events: bool = PROCESS_EVENTS,

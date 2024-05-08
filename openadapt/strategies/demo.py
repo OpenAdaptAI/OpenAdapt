@@ -33,14 +33,11 @@ class DemoReplayStrategy(
     def __init__(
         self,
         recording: Recording,
-        replay_instructions: str | None = None,
     ) -> None:
         """Initialize the DemoReplayStrategy.
 
         Args:
             recording (Recording): The recording to replay.
-            replay_instructions (str): Natural language instructions
-                for how recording should be replayed.
         """
         super().__init__(recording, replay_instructions)
         self.result_history = []

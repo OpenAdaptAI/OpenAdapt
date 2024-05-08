@@ -4,6 +4,7 @@ usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
 from functools import partial
+from pprint import format
 import inspect
 import multiprocessing
 import os
@@ -194,8 +195,6 @@ class SystemTrayIcon:
 
     def _replay(self, recording: Recording) -> None:
         """Dynamically select and configure a replay strategy."""
-        self.show_toast("Configure replay strategy...")
-
         dialog = QDialog()
         dialog.setWindowTitle("Configure Replay Strategy")
         layout = QVBoxLayout(dialog)
@@ -238,11 +237,25 @@ class SystemTrayIcon:
             for param in sig.parameters.values():
                 if param.name != "self" and param.name != "recording":
                     arg_label = QLabel(f"{param.name.replace('_', ' ').capitalize()}:")
-                    arg_input = QLineEdit()
-                    annotation_str = self.format_annotation(param.annotation)
-                    arg_input.setPlaceholderText(
-                        annotation_str if annotation_str else "str"
-                    )
+
+                    # Determine if the parameter is a boolean
+                    if param.annotation is bool:
+                        # Create a combobox for boolean values
+                        arg_input = QComboBox()
+                        arg_input.addItems(["True", "False"])
+                        # Set default value if exists
+                        if param.default is not inspect.Parameter.empty:
+                            default_index = 0 if param.default else 1
+                            arg_input.setCurrentIndex(default_index)
+                    else:
+                        # Create a line edit for non-boolean values
+                        arg_input = QLineEdit()
+                        annotation_str = self.format_annotation(param.annotation)
+                        arg_input.setPlaceholderText(annotation_str if annotation_str else "str")
+                        # Set default text if there is a default value
+                        if param.default is not inspect.Parameter.empty:
+                            arg_input.setText(str(param.default))
+
                     args_layout.addWidget(arg_label)
                     args_layout.addWidget(arg_input)
 
@@ -256,13 +269,29 @@ class SystemTrayIcon:
         # Show dialog and process the result
         if dialog.exec() == QDialog.Accepted:
             selected_strategy = strategies[combo_box.currentText()]
-            kwargs = {
-                # TODO: cast to right type
-                arg: args_layout.itemAt(i*2+1).widget().text()
-                for i, arg in enumerate(sig.parameters)
-                if arg != "self" and arg != "recording"
-            }
-            kwargs["recording"] = recording  # Add the recording to the kwargs
+            sig = inspect.signature(selected_strategy.__init__)
+            kwargs = {}
+            index = 0
+            for param_name, param in sig.parameters.items():
+                if param_name in ["self", "recording"]:
+                    continue
+                widget = args_layout.itemAt(index * 2 + 1).widget()
+                if param.annotation is bool:
+                    # For boolean, get True/False from the combobox selection
+                    value = widget.currentText() == "True"
+                else:
+                    # Convert the text to the annotated type if possible
+                    text = widget.text()
+                    try:
+                        # Cast text to the parameter's annotated type
+                        value = param.annotation(text) if param.annotation != inspect.Parameter.empty else text
+                    except ValueError:
+                        # Handle casting error, perhaps default to None or log an error
+                        value = None
+                kwargs[param_name] = value
+                index += 1
+            kwargs["recording"] = recording  # Ensure the 'recording' argument is correctly passed
+            logger.info(f"kwargs=\n{pformat(kwargs)}")
 
             self.show_toast("Starting replay with selected strategy...")
             rthread = oaThread(
@@ -276,8 +305,6 @@ class SystemTrayIcon:
                 self.show_toast("Replay finished.")
             else:
                 self.show_toast("Replay failed.")
-        else:
-            self.show_toast("Replay configuration cancelled.")
 
     def format_annotation(self, annotation):
         """Format annotation to a readable string."""
