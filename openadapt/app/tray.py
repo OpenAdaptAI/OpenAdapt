@@ -4,7 +4,7 @@ usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
 from functools import partial
-from pprint import format
+from pprint import pformat
 import inspect
 import multiprocessing
 import os
@@ -208,9 +208,22 @@ class SystemTrayIcon:
             if not cls.__name__.endswith("Mixin") and
             cls.__name__ != "DemoReplayStrategy"
         }
-        combo_box.addItems(list(strategies.keys()))
+        strategy_names = list(strategies.keys())
+        logger.info(f"{strategy_names=}")
+        combo_box.addItems(strategy_names)
+
+        # Set default strategy
+        default_strategy = "VisualReplayStrategy"
+        default_index = combo_box.findText(default_strategy)
+        if default_index != -1:  # Ensure the strategy is found in the list
+            combo_box.setCurrentIndex(default_index)
+        else:
+            logger.warning(f"{default_strategy=} not found")
+
+        strategy_label = QLabel()
         layout.addWidget(label)
         layout.addWidget(combo_box)
+        layout.addWidget(strategy_label)
 
         # Container for argument widgets
         args_container = QWidget()
@@ -232,7 +245,11 @@ class SystemTrayIcon:
                     widget_to_remove.setParent(None)
                     widget_to_remove.deleteLater()
 
+
             strategy_class = strategies[combo_box.currentText()]
+
+            strategy_label.setText(strategy_class.__doc__)
+
             sig = inspect.signature(strategy_class.__init__)
             for param in sig.parameters.values():
                 if param.name != "self" and param.name != "recording":
@@ -251,7 +268,7 @@ class SystemTrayIcon:
                         # Create a line edit for non-boolean values
                         arg_input = QLineEdit()
                         annotation_str = self.format_annotation(param.annotation)
-                        arg_input.setPlaceholderText(annotation_str if annotation_str else "str")
+                        arg_input.setPlaceholderText(annotation_str or "str")
                         # Set default text if there is a default value
                         if param.default is not inspect.Parameter.empty:
                             arg_input.setText(str(param.default))
@@ -284,13 +301,17 @@ class SystemTrayIcon:
                     text = widget.text()
                     try:
                         # Cast text to the parameter's annotated type
-                        value = param.annotation(text) if param.annotation != inspect.Parameter.empty else text
-                    except ValueError:
-                        # Handle casting error, perhaps default to None or log an error
-                        value = None
+                        value = (
+                            param.annotation(text)
+                            if param.annotation != inspect.Parameter.empty
+                            else text
+                        )
+                    except ValueError as exc:
+                        logger.warning(f"{exc=}")
+                        value = text
                 kwargs[param_name] = value
                 index += 1
-            kwargs["recording"] = recording  # Ensure the 'recording' argument is correctly passed
+            kwargs["recording"] = recording
             logger.info(f"kwargs=\n{pformat(kwargs)}")
 
             self.show_toast("Starting replay with selected strategy...")
