@@ -4,16 +4,19 @@ usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
 from functools import partial
+import inspect
 import multiprocessing
 import os
 import sys
 
 from loguru import logger
 from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier,
+from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMenu, QInputDialog, QSystemTrayIcon,
+    QDialog, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QDialogButtonBox,
+    QWidget,
 )
 
 from openadapt.app.cards import quick_record, stop_record
@@ -26,6 +29,8 @@ from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
+from openadapt.strategies.base import BaseReplayStrategy
+import openadapt.strategies  # Import this to ensure all strategies are registered
 
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
@@ -188,22 +193,100 @@ class SystemTrayIcon:
             self.show_toast("Visualization failed.")
 
     def _replay(self, recording: Recording) -> None:
-        """Replay a recording.
+        """Dynamically select and configure a replay strategy."""
+        self.show_toast("Configure replay strategy...")
 
-        Args:
-            recording (Recording): The recording to replay.
-        """
-        self.show_toast("Starting replay...")
-        rthread = oaThread(
-            target=replay,
-            args=("NaiveReplayStrategy", False, None, recording, None),
-            daemon=True,
-        )
-        rthread.run()
-        if rthread.join():
-            self.show_toast("Replay finished.")
+        dialog = QDialog()
+        dialog.setWindowTitle("Configure Replay Strategy")
+        layout = QVBoxLayout(dialog)
+
+        # Strategy selection
+        label = QLabel("Select Replay Strategy:")
+        combo_box = QComboBox()
+        strategies = {
+            cls.__name__: cls
+            for cls in BaseReplayStrategy.__subclasses__()
+            if not cls.__name__.endswith("Mixin") and
+            cls.__name__ != "DemoReplayStrategy"
+        }
+        combo_box.addItems(list(strategies.keys()))
+        layout.addWidget(label)
+        layout.addWidget(combo_box)
+
+        # Container for argument widgets
+        args_container = QWidget()
+        args_layout = QVBoxLayout(args_container)
+        args_container.setLayout(args_layout)
+        layout.addWidget(args_container)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        def update_args_inputs():
+            # Clear existing widgets
+            while args_layout.count():
+                widget_to_remove = args_layout.takeAt(0).widget()
+                if widget_to_remove is not None:
+                    widget_to_remove.setParent(None)
+                    widget_to_remove.deleteLater()
+
+            strategy_class = strategies[combo_box.currentText()]
+            sig = inspect.signature(strategy_class.__init__)
+            for param in sig.parameters.values():
+                if param.name != "self" and param.name != "recording":
+                    arg_label = QLabel(f"{param.name.replace('_', ' ').capitalize()}:")
+                    arg_input = QLineEdit()
+                    annotation_str = self.format_annotation(param.annotation)
+                    arg_input.setPlaceholderText(
+                        annotation_str if annotation_str else "str"
+                    )
+                    args_layout.addWidget(arg_label)
+                    args_layout.addWidget(arg_input)
+
+            args_container.adjustSize()
+            dialog.adjustSize()
+            dialog.setMinimumSize(0, 0)  # Reset the minimum size to allow shrinking
+
+        combo_box.currentIndexChanged.connect(update_args_inputs)
+        update_args_inputs()  # Initial update
+
+        # Show dialog and process the result
+        if dialog.exec() == QDialog.Accepted:
+            selected_strategy = strategies[combo_box.currentText()]
+            kwargs = {
+                # TODO: cast to right type
+                arg: args_layout.itemAt(i*2+1).widget().text()
+                for i, arg in enumerate(sig.parameters)
+                if arg != "self" and arg != "recording"
+            }
+            kwargs["recording"] = recording  # Add the recording to the kwargs
+
+            self.show_toast("Starting replay with selected strategy...")
+            rthread = oaThread(
+                target=replay,
+                args=(selected_strategy, False, None, recording, None),
+                kwargs=kwargs,
+                daemon=True,
+            )
+            rthread.start()
+            if rthread.join():
+                self.show_toast("Replay finished.")
+            else:
+                self.show_toast("Replay failed.")
         else:
-            self.show_toast("Replay failed.")
+            self.show_toast("Replay configuration cancelled.")
+
+    def format_annotation(self, annotation):
+        """Format annotation to a readable string."""
+        if hasattr(annotation, '__name__'):
+            return annotation.__name__
+        elif isinstance(annotation, type):
+            return annotation.__name__  # Handle direct type references
+        else:
+            return str(annotation)  # Handle complex types like Union
 
     def populate_menu(self, menu: QMenu, action: QAction, action_type: str) -> None:
         """Populate a menu.
