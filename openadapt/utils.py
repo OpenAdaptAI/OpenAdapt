@@ -721,7 +721,7 @@ def get_strategy_class_by_name() -> dict:
 
 def plot_performance(
     recording_timestamp: float = None,
-    view_file: bool = True,
+    view_file: bool = False,
     save_file: bool = True,
     dark_mode: bool = False,
 ) -> str:

@@ -1,4 +1,5 @@
 """Custom Thread class."""
+# TODO: remove
 
 from threading import Thread
 

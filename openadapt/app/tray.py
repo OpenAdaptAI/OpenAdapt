@@ -6,6 +6,7 @@ usage: `python -m openadapt.app.tray` or `poetry run app`
 from datetime import datetime
 from functools import partial
 from pprint import pformat
+from threading import Thread
 from typing import Callable
 import inspect
 import multiprocessing
@@ -28,7 +29,6 @@ from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH, start
 from openadapt.build_utils import is_running_from_executable
 from openadapt.db import crud
-from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
@@ -82,7 +82,7 @@ class SystemTrayIcon:
         self.menu = QMenu()
 
         self.record_action = QAction("Record")
-        self.record_action.triggered.connect(self.on_record_action)
+        self.record_action.triggered.connect(self._record)
         self.menu.addAction(self.record_action)
 
         self.visualize_menu = self.menu.addMenu("Visualize")
@@ -91,9 +91,9 @@ class SystemTrayIcon:
         self.populate_menus()
 
         # TODO: Remove this action once dashboard is integrated
-        self.app_action = QAction("Show App")
-        self.app_action.triggered.connect(self.show_app)
-        self.menu.addAction(self.app_action)
+        #self.app_action = QAction("Show App")
+        #self.app_action.triggered.connect(self.show_app)
+        #self.menu.addAction(self.app_action)
 
         self.dashboard_action = QAction("Launch Dashboard")
         self.dashboard_action.triggered.connect(self.launch_dashboard)
@@ -123,6 +123,9 @@ class SystemTrayIcon:
             self.notifier, self.parent_conn,
         ))
 
+        # for storing toasts that should be manually removed
+        self.sticky_toasts = {}
+
     def handle_recording_signal(
         self,
         notifier: QSocketNotifier,
@@ -132,14 +135,34 @@ class SystemTrayIcon:
         signal = conn.recv()
         logger.info(f"Received signal: {signal}")
 
-        if signal["type"] == "start":
+        signal_type = signal["type"]
+
+        if signal_type == "starting":
+            self.recording = True
+            self.record_action.setText("Stop Recording")
+            self.sticky_toasts[signal_type] = self.show_toast(
+                "Recording starting, please wait...",
+                show_close_button=False,
+                duration=0,
+            )
+        elif signal_type == "started":
+            self.sticky_toasts["starting"].hide()
             self.show_toast("Recording started.")
-        elif signal["type"] == "stop":
+        elif signal_type == "stopping":
+            self.sticky_toasts[signal_type] = self.show_toast(
+                "Recording stopping, please wait...",
+                show_close_button=False,
+                duration=0,
+            )
+            self.recording = False
+            self.record_action.setText("Record")
+        elif signal_type == "stopped":
+            self.sticky_toasts["stopping"].hide()
             self.show_toast("Recording stopped.")
 
         self.populate_menus()
 
-    def on_record_action(self) -> None:
+    def _record(self) -> None:
         """Handle click on Record / Stop Recording menu item."""
         if self.recording:
             self.stop_recording()
@@ -155,18 +178,13 @@ class SystemTrayIcon:
         logger.info(f"{task_description=} {ok=}")
         if not ok:
             return
-        self.recording = True
-        self.record_action.setText("Stop Recording")
         try:
-            quick_record(task_description, on_ready=self.child_conn)
+            quick_record(task_description, status_pipe=self.child_conn)
         except KeyboardInterrupt:
             self.stop_recording()
 
     def stop_recording(self):
-        self.show_toast("Stopping recording...")
-        stop_record()
-        self.recording = False
-        self.record_action.setText("Record")
+        Thread(target=stop_record).start()
 
     def _visualize(self, recording: Recording) -> None:
         """Visualize a recording.
@@ -310,7 +328,7 @@ class SystemTrayIcon:
             logger.info(f"kwargs=\n{pformat(kwargs)}")
 
             self.show_toast("Starting replay with selected strategy...")
-            rthread = oaThread(
+            rthread = Thread(
                 target=replay,
                 args=(selected_strategy, False, None, recording, None),
                 kwargs=kwargs,
@@ -378,11 +396,11 @@ class SystemTrayIcon:
                 self.recording_actions[action_type].append(recording_action)
                 menu.addAction(recording_action)
 
-    def show_app(self) -> None:
-        """Show the main application window."""
-        if self.app_thread is None or not self.app_thread.is_alive():
-            self.app_thread = oaThread(target=start, daemon=True, args=(True,))
-            self.app_thread.start()
+    #def show_app(self) -> None:
+    #    """Show the main application window."""
+    #    if self.app_thread is None or not self.app_thread.is_alive():
+    #        self.app_thread = Thread(target=start, daemon=True, args=(True,))
+    #        self.app_thread.start()
 
     def launch_dashboard(self) -> None:
         """Launch the web dashboard."""
@@ -590,6 +608,8 @@ class SystemTrayIcon:
 
         # Display the toast
         toast.show()
+
+        return toast
 
 class ConfirmDeleteDialog(QDialog):
     def __init__(self, recording_description, parent=None):

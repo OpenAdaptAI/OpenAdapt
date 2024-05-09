@@ -52,18 +52,15 @@ NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
 
 stop_sequence_detected = False
-performance_snapshots = []
-tracker = tracker.SummaryTracker()
-tracemalloc.start()
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def collect_stats() -> None:
+def collect_stats(performance_snapshots) -> None:
     """Collects and appends performance snapshots using tracemalloc."""
     performance_snapshots.append(tracemalloc.take_snapshot())
 
 
-def log_memory_usage() -> None:
+def log_memory_usage(tracker, performance_snapshots) -> None:
     """Logs memory usage stats and allocation trace based on snapshots."""
     assert len(performance_snapshots) == 2, performance_snapshots
     first_snapshot, last_snapshot = performance_snapshots
@@ -1011,7 +1008,8 @@ def record(
     # TODO: fix this
     terminate_processing: multiprocessing.Event = None,
     terminate_recording: multiprocessing.Event = None,
-    on_ready: multiprocessing.connection.Connection | None = None,
+    status_pipe: multiprocessing.connection.Connection | None = None,
+    log_memory: bool = True,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 
@@ -1020,12 +1018,16 @@ def record(
         terminate_processing: An event to signal the termination of the events
         processing.
         terminate_recording: An event to signal the termination of the recording.
-        on_ready: A connection to communicate that all readers and writers are started.
+        status_pipe: A connection to communicate recording status.
+        log_memory: Whether to log memory usage.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
+
+    if status_pipe:
+        status_pipe.send({"type": "starting"})
 
     logger.info(f"{task_description=}")
 
@@ -1184,6 +1186,12 @@ def record(
         )
         mem_plotter.start()
 
+    if log_memory:
+        performance_snapshots = []
+        _tracker = tracker.SummaryTracker()
+        tracemalloc.start()
+        collect_stats(performance_snapshots)
+
     # TODO: discard events until everything is ready
 
     # Wait for all to signal they've started
@@ -1193,10 +1201,10 @@ def record(
         time.sleep(0.1)  # Sleep to reduce busy waiting
     for _ in range(5):
         logger.info("*" * 40)
-    on_ready.send({"type": "start"})
+    if status_pipe:
+        status_pipe.send({"type": "started"})
     logger.info("All readers and writers have started. Waiting for input events...")
 
-    collect_stats()
     global stop_sequence_detected
 
     try:
@@ -1207,8 +1215,12 @@ def record(
     except KeyboardInterrupt:
         terminate_processing.set()
 
-    collect_stats()
-    log_memory_usage()
+    if status_pipe:
+        status_pipe.send({"type": "stopping"})
+
+    if log_memory:
+        collect_stats(performance_snapshots)
+        log_memory_usage(_tracker, performance_snapshots)
 
     logger.info("joining...")
     keyboard_event_reader.join()
@@ -1232,9 +1244,9 @@ def record(
     if terminate_recording is not None:
         terminate_recording.set()
 
-    # TODO: rename on_ready
-    # TODO: consolidate terminate_recording and on_ready
-    on_ready.send({"type": "stop"})
+    # TODO: consolidate terminate_recording and status_pipe
+    if status_pipe:
+        status_pipe.send({"type": "stopped"})
 
 
 # Entry point

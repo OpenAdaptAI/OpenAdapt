@@ -61,9 +61,11 @@ class RecordProc:
             self.reset()
         return self.record_proc is not None
 
-    def start(self, func: callable, args: tuple) -> None:
+    def start(self, func: callable, args: tuple, kwargs: dict) -> None:
         """Start the recording process."""
-        self.record_proc = multiprocessing.Process(target=func, args=args)
+        self.record_proc = multiprocessing.Process(
+            target=func, args=args, kwargs=kwargs,
+        )
         self.record_proc.start()
 
 
@@ -138,7 +140,7 @@ def is_recording() -> bool:
 
 def quick_record(
     task_description: str | None = None,
-    on_ready: multiprocessing.connection.Connection | None = None
+    status_pipe: multiprocessing.connection.Connection | None = None
 ) -> None:
     """Run a recording session."""
     global record_proc
@@ -150,8 +152,11 @@ def quick_record(
             task_description,
             record_proc.terminate_processing,
             record_proc.terminate_recording,
-            on_ready,
-        )
+            status_pipe,
+        ),
+        {
+            "log_memory": False,
+        }
     )
 
 
