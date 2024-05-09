@@ -5,7 +5,6 @@ Usage:
 """
 
 from time import sleep
-from typing import Union
 import os
 
 from loguru import logger
@@ -26,7 +25,7 @@ LOG_LEVEL = "INFO"
 def replay(
     strategy_name: str,
     record: bool = False,
-    timestamp: Union[str, None] = None,
+    timestamp: str | None = None,
     recording: Recording = None,
     **kwargs,
 ) -> bool:
