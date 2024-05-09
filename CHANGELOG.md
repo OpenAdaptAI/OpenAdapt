@@ -2,6 +2,13 @@
 
 
 
+## v0.20.1 (2024-05-03)
+
+### Fix
+
+* fix(config): restore Config.ROOT_DIR_PATH (#653) ([`b33e454`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b33e454ec3950449a9544e027c25e3b7d9d7d83d))
+
+
 ## v0.20.0 (2024-05-02)
 
 ### Documentation
