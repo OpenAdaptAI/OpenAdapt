@@ -8,6 +8,9 @@ from time import sleep
 import os
 
 from loguru import logger
+import matplotlib
+# required when invoked from tray
+matplotlib.use("Qt5Agg")
 
 from openadapt.build_utils import redirect_stdout_stderr
 

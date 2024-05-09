@@ -82,12 +82,7 @@ class BaseReplayStrategy(ABC):
                     [action_event],
                     drop_constant=False,
                 )[0]
-                logger.info(f"action_event=\n{pformat(action_event_dict)}")
-                if not action_event_dict:
-                    action_event = prev_action_event
-                    import ipdb
-
-                    ipdb.set_trace()
+                logger.debug(f"action_event=\n{pformat(action_event_dict)}")
                 self.action_events.append(action_event)
                 try:
                     playback.play_action_event(

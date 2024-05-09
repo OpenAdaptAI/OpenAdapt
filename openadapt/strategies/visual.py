@@ -48,9 +48,6 @@ import time
 from loguru import logger
 from PIL import Image, ImageDraw
 from skimage.metrics import structural_similarity as ssim
-import matplotlib
-# required when invoked from tray
-matplotlib.use("Qt5Agg")
 import numpy as np
 
 from openadapt import adapters, common, models, strategies, utils, vision
