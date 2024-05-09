@@ -18,8 +18,8 @@ from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMenu, QInputDialog, QSystemTrayIcon,
-    QDialog, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QDialogButtonBox,
-    QWidget,
+    QDialog, QHBoxLayout, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
+    QDialogButtonBox, QWidget,
 )
 
 from openadapt.app.cards import quick_record, stop_record
@@ -27,7 +27,7 @@ from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH, start
 from openadapt.build_utils import is_running_from_executable
-from openadapt.db.crud import get_all_recordings
+from openadapt.db import crud
 from openadapt.extensions.thread import Thread as oaThread
 from openadapt.models import Recording
 from openadapt.replay import replay
@@ -87,6 +87,7 @@ class SystemTrayIcon:
 
         self.visualize_menu = self.menu.addMenu("Visualize")
         self.replay_menu = self.menu.addMenu("Replay")
+        self.delete_menu = self.menu.addMenu("Delete")
         self.populate_menus()
 
         # TODO: Remove this action once dashboard is integrated
@@ -121,9 +122,6 @@ class SystemTrayIcon:
         self.notifier.activated.connect(lambda: self.handle_recording_signal(
             self.notifier, self.parent_conn,
         ))
-
-        self.show_toast("OpenAdapt is running in the background")
-
 
     def handle_recording_signal(
         self,
@@ -191,6 +189,7 @@ class SystemTrayIcon:
 
     def _replay(self, recording: Recording) -> None:
         """Dynamically select and configure a replay strategy."""
+        # TODO: refactor into class, like ConfirmDeleteDialog
         dialog = QDialog()
         dialog.setWindowTitle("Configure Replay Strategy")
         layout = QVBoxLayout(dialog)
@@ -323,6 +322,18 @@ class SystemTrayIcon:
             else:
                 self.show_toast("Replay failed.")
 
+    def _delete(self, recording: Recording) -> None:
+        """Delete a recording after confirmation.
+
+        Args:
+            recording (Recording): The recording to delete.
+        """
+        dialog = ConfirmDeleteDialog(recording.task_description)
+        if dialog.exec_():
+            crud.delete_recording(recording.timestamp)
+            self.show_toast("Recording deleted.")
+            self.populate_menus()
+
     def format_annotation(self, annotation):
         """Format annotation to a readable string."""
         if hasattr(annotation, '__name__'):
@@ -335,6 +346,7 @@ class SystemTrayIcon:
     def populate_menus(self) -> None:
         self.populate_menu(self.visualize_menu, self._visualize, "visualize")
         self.populate_menu(self.replay_menu, self._replay, "replay")
+        self.populate_menu(self.delete_menu, self._delete, "delete")
 
     def populate_menu(self, menu: QMenu, action: Callable, action_type: str) -> None:
         """Populate a menu.
@@ -344,7 +356,7 @@ class SystemTrayIcon:
             action (Callable): The function to call when the menu item is clicked.
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
-        recordings = get_all_recordings()
+        recordings = crud.get_all_recordings()
 
         self.recording_actions[action_type] = []
 
@@ -352,6 +364,7 @@ class SystemTrayIcon:
             no_recordings_action = QAction("No recordings available")
             no_recordings_action.setEnabled(False)
             menu.addAction(no_recordings_action)
+            self.recording_actions[action_type].append(no_recordings_action)
         else:
             for idx, recording in enumerate(recordings):
                 formatted_timestamp = (
@@ -577,6 +590,38 @@ class SystemTrayIcon:
 
         # Display the toast
         toast.show()
+
+class ConfirmDeleteDialog(QDialog):
+    def __init__(self, recording_description, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Confirm Delete")
+        self.build_ui(recording_description)
+
+    def build_ui(self, recording_description):
+        # Setup layout
+        layout = QVBoxLayout(self)
+
+        # Add description text
+        label = QLabel(f"Are you sure you want to delete the recording '{recording_description}'?")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        # Add buttons
+        button_layout = QHBoxLayout()
+        yes_button = QPushButton("Yes")
+        no_button = QPushButton("No")
+        button_layout.addWidget(yes_button)
+        button_layout.addWidget(no_button)
+        layout.addLayout(button_layout)
+
+        # Connect buttons
+        yes_button.clicked.connect(self.accept)
+        no_button.clicked.connect(self.reject)
+
+    def exec_(self):
+        if super().exec_() == QDialog.Accepted:
+            return True
+        return False
 
 def _run() -> None:
     tray = SystemTrayIcon()
