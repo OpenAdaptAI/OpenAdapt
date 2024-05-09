@@ -10,7 +10,6 @@ from typing import Any
 import ast
 import base64
 import inspect
-import json
 import os
 import sys
 import threading
@@ -947,7 +946,9 @@ def parse_code_snippet(snippet: str) -> dict:
                 .strip()
             )
             # Parse the JSON string
-            return json.loads(json_string)
+            rval = ast.literal_eval(json_string)
+            return rval
+
         elif snippet.startswith("```python"):
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)

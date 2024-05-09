@@ -9,6 +9,13 @@ import os
 
 from loguru import logger
 from PIL import Image
+
+# use() required when invoked from tray
+import matplotlib
+# importing is required for use() to work
+from PySide6.QtCore import Qt  # noqa
+matplotlib.use("Qt5Agg")
+
 from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 import fire

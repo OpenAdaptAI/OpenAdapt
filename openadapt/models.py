@@ -110,6 +110,31 @@ class ActionEvent(db.Base):
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
 
+    def __init__(self, **kwargs):
+        """Initialize attributes first, then properties."""
+        super().__init__()
+
+        # Temporary dictionary to hold property values
+        properties = {}
+
+        # Introspect to determine properties
+        prop_keys = [
+            name
+            for name, obj in type(self).__dict__.items()
+            if isinstance(obj, property)
+        ]
+
+        # Set non-property attributes first
+        for key, value in kwargs.items():
+            if key in prop_keys:
+                properties[key] = value
+            else:
+                setattr(self, key, value)
+
+        # Now handle properties
+        for key, value in properties.items():
+            setattr(self, key, value)
+
     @property
     def available_segment_descriptions(self) -> list[str]:
         """Gets the available segment descriptions."""
@@ -221,10 +246,22 @@ class ActionEvent(db.Base):
         """Get the text representation of the action event."""
         return self._text()
 
+    @text.setter
+    def text(self, value: str) -> None:
+        """Validate the text property. Useful for ActionModel(**action_dict)."""
+        if not value == self.text:
+            logger.warning(f"{value=} did not match {self.text=}")
+
     @property
     def canonical_text(self) -> str:
         """Get the canonical text representation of the action event."""
         return self._text(canonical=True)
+
+    @canonical_text.setter
+    def canonical_text(self, value: str) -> None:
+        """Validate the canonical_text property. Useful for ActionModel(**action_dict)."""
+        if not value == self.canonical_text:
+            logger.warning(f"{value=} did not match {self.canonical_text=}")
 
     def __str__(self) -> str:
         """Return a string representation of the action event."""
@@ -303,9 +340,8 @@ class ActionEvent(db.Base):
                     children.append(press)
                     children.append(release)
             children += release_events[::-1]
-            return ActionEvent(children=children)
-        else:
-            return ActionEvent(**action_dict)
+        rval = ActionEvent(**action_dict, children=children)
+        return rval
 
     @classmethod
     def _create_key_events(
