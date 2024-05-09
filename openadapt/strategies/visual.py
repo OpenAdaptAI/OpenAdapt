@@ -48,6 +48,9 @@ import time
 from loguru import logger
 from PIL import Image, ImageDraw
 from skimage.metrics import structural_similarity as ssim
+import matplotlib
+# required when invoked from tray
+matplotlib.use("Qt5Agg")
 import numpy as np
 
 from openadapt import adapters, common, models, strategies, utils, vision
@@ -207,13 +210,13 @@ class VisualReplayStrategy(
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str,
+        instructions: str,
     ) -> None:
         """Initialize the VisualReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
-            replay_instructions (str): Natural language instructions for how recording
+            instructions (str): Natural language instructions for how recording
                 should be replayed.
         """
         super().__init__(recording)
@@ -221,7 +224,7 @@ class VisualReplayStrategy(
         add_active_segment_descriptions(recording.processed_action_events)
         self.modified_actions = apply_replay_instructions(
             recording.processed_action_events,
-            replay_instructions,
+            instructions,
         )
         global DEBUG
         DEBUG = DEBUG_REPLAY

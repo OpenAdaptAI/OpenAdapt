@@ -324,13 +324,15 @@ class SystemTrayIcon:
                         value = text
                 kwargs[param_name] = value
                 index += 1
-            kwargs["recording"] = recording
             logger.info(f"kwargs=\n{pformat(kwargs)}")
 
             self.show_toast("Starting replay with selected strategy...")
+            record_replay = False
+            recording_timestamp = None
+            strategy_name = selected_strategy.__name__
             rthread = Thread(
                 target=replay,
-                args=(selected_strategy, False, None, recording, None),
+                args=(strategy_name, record_replay, recording_timestamp, recording),
                 kwargs=kwargs,
                 daemon=True,
             )

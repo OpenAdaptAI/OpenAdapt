@@ -28,7 +28,7 @@ def replay(
     record: bool = False,
     timestamp: Union[str, None] = None,
     recording: Recording = None,
-    instructions: str | None = None,
+    **kwargs,
 ) -> bool:
     """Replay recorded events.
 
@@ -37,10 +37,7 @@ def replay(
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
         record (bool, optional): Flag indicating whether to record the replay.
-        instructions (str, optional): Natural language instructions to the
-            model, e.g. description of what are the parameters in the recording, and
-            how the replay should behave as a function of those parameters.
-
+        kwargs: Keyword arguments to pass to strategy.
     Returns:
         bool: True if replay was successful, None otherwise.
     """
@@ -69,7 +66,7 @@ def replay(
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")
 
-    strategy = strategy_class(recording, instructions)
+    strategy = strategy_class(recording, **kwargs)
     logger.info(f"{strategy=}")
 
     handler = None

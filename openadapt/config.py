@@ -89,6 +89,8 @@ def get_json_config_settings_source(
 class Config(BaseSettings):
     """Configuration class for OpenAdapt."""
 
+    ROOT_DIR_PATH: str = str(ROOT_DIR_PATH)
+
     # Privacy
     PRIVATE_AI_API_KEY: str = ""
 
