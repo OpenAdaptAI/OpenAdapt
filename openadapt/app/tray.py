@@ -3,8 +3,10 @@
 usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
+from datetime import datetime
 from functools import partial
 from pprint import pformat
+from typing import Callable
 import inspect
 import multiprocessing
 import os
@@ -44,8 +46,7 @@ class SystemTrayIcon:
     app_thread = None
     dashboard_thread = None
 
-    # the actions need to be separated by type
-    # or else they will be triggered multiple times
+    # storing actions is required to prevent garbage collection
     recording_actions = {"visualize": [], "replay": []}
 
     def __init__(self) -> None:
@@ -86,7 +87,7 @@ class SystemTrayIcon:
 
         self.visualize_menu = self.menu.addMenu("Visualize")
         self.replay_menu = self.menu.addMenu("Replay")
-        self.update_menus()
+        self.populate_menus()
 
         # TODO: Remove this action once dashboard is integrated
         self.app_action = QAction("Show App")
@@ -138,12 +139,7 @@ class SystemTrayIcon:
         elif signal["type"] == "stop":
             self.show_toast("Recording stopped.")
 
-        # Refresh the menus regardless of the type of signal
-        self.update_menus()
-
-    def update_menus(self) -> None:
-        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
-        self.populate_menu(self.replay_menu, self._replay, "replay")
+        self.populate_menus()
 
     def on_record_action(self) -> None:
         """Handle click on Record / Stop Recording menu item."""
@@ -336,27 +332,38 @@ class SystemTrayIcon:
         else:
             return str(annotation)  # Handle complex types like Union
 
-    def populate_menu(self, menu: QMenu, action: QAction, action_type: str) -> None:
+    def populate_menus(self) -> None:
+        self.populate_menu(self.visualize_menu, self._visualize, "visualize")
+        self.populate_menu(self.replay_menu, self._replay, "replay")
+
+    def populate_menu(self, menu: QMenu, action: Callable, action_type: str) -> None:
         """Populate a menu.
 
         Args:
             menu (QMenu): The menu to populate.
-            action (QAction): The action to perform when the menu item is clicked.
+            action (Callable): The function to call when the menu item is clicked.
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
         recordings = get_all_recordings()
-        if len(recordings) == len((self.recording_actions[action_type])):
-            return
+
+        self.recording_actions[action_type] = []
+
+        if not recordings:
+            no_recordings_action = QAction("No recordings available")
+            no_recordings_action.setEnabled(False)
+            menu.addAction(no_recordings_action)
         else:
-            self.recording_actions[action_type] = []
-        for idx, recording in enumerate(recordings):
-            self.recording_actions[action_type].append(
-                QAction(f"{recording.task_description}")
-            )
-            self.recording_actions[action_type][idx].triggered.connect(
-                partial(action, recording)
-            )
-            menu.addAction(self.recording_actions[action_type][idx])
+            for idx, recording in enumerate(recordings):
+                formatted_timestamp = (
+                    datetime.fromtimestamp(recording.timestamp).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                )
+                action_text = f"{formatted_timestamp}: {recording.task_description}"
+                recording_action = QAction(action_text)
+                recording_action.triggered.connect(partial(action, recording))
+                self.recording_actions[action_type].append(recording_action)
+                menu.addAction(recording_action)
 
     def show_app(self) -> None:
         """Show the main application window."""
