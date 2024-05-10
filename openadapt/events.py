@@ -694,7 +694,7 @@ def remove_move_before_click(
         return merged_events
 
     return merge_consecutive_action_events(
-        "redundant_mouse_move",
+        "remove_move_before_click",
         events,
         is_target_event,
         get_merged_events,
