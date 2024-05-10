@@ -95,6 +95,10 @@ jobs:
         with:
           name: OpenAdapt
           path: dist/
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+            python-version: '3.10'
       - name: Python Semantic Release
         id: semantic_release
         uses: relekang/python-semantic-release@master
