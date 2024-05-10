@@ -2,6 +2,16 @@
 
 
 
+## v0.22.0 (2024-05-10)
+
+### Feature
+
+* feat: Run ci steps only if not triggered by the bot commit (#666)
+
+Co-authored-by: OpenAdapt Bot &lt;bot@openadapt.ai&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`400a73b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/400a73bb201ee173e408a9eb178aa76519fa3a33))
+
+
 ## v0.21.0 (2024-05-10)
 
 ### Feature
