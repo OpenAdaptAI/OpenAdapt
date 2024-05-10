@@ -111,6 +111,7 @@ def row2dict(row: dict | db.BaseModel, follow: bool = True) -> dict:
         "text",
         "canonical_key",
         "canonical_text",
+        "reducer_names",
     ]
     to_include = [key for key in try_include if hasattr(row, key)]
     row_dict = row.asdict(follow=to_follow, include=to_include)

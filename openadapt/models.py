@@ -110,6 +110,12 @@ class ActionEvent(db.Base):
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
 
+    def __new__(cls, *args, **kwargs):
+        """Create a new instance; also called when loading from db."""
+        instance = super(ActionEvent, cls).__new__(cls)
+        instance.reducer_names = set()
+        return instance
+
     def __init__(self, **kwargs):
         """Initialize attributes first, then properties."""
         super().__init__()

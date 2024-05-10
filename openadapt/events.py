@@ -717,6 +717,8 @@ def merge_consecutive_action_events(
         to_merge: list[models.ActionEvent],
     ) -> None:
         merged_events = get_merged_events(to_merge, state)
+        for merged_event in merged_events:
+            merged_event.reducer_names.add(name)
         rval.extend(merged_events)
         to_merge.clear()
 
