@@ -224,7 +224,7 @@ def process_events(
                 # XXX TODO: mitigate
         if event.type == "screen":
             prev_screen_event = event
-            if config.RECORD_VIDEO:
+            if config.RECORD_VIDEO and config.RECORD_FULL_VIDEO:
                 video_write_q.put(event)
                 num_video_events.value += 1
         elif event.type == "window":
@@ -256,6 +256,9 @@ def process_events(
                 )
                 num_screen_events.value += 1
                 prev_saved_screen_timestamp = prev_screen_event.timestamp
+                if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
+                    video_write_q.put(prev_screen_event)
+                    num_video_events.value += 1
             if prev_saved_window_timestamp < prev_window_event.timestamp:
                 process_event(
                     prev_window_event,
@@ -453,6 +456,7 @@ def write_video_event(
     video_stream: av.stream.Stream,
     video_start_timestamp: float,
     last_pts: int = 0,
+    num_copies: int = 2,
 ) -> dict[str, Any]:
     """Write a screen event to the video file and update the performance queue.
 
@@ -466,18 +470,23 @@ def write_video_event(
         video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts: The last presentation timestamp.
+        num_copies: The number of times to write the first each frame.
 
     Returns:
         dict containing state.
     """
-    last_pts = video.write_video_frame(
-        video_container,
-        video_stream,
-        event.data,
-        event.timestamp,
-        video_start_timestamp,
-        last_pts,
-    )
+    if last_pts != 0:
+        num_copies = 1
+    # ensure that the first frame is available (otherwise occasionally it is not)
+    for _ in range(num_copies):
+        last_pts = video.write_video_frame(
+            video_container,
+            video_stream,
+            event.data,
+            event.timestamp,
+            video_start_timestamp,
+            last_pts,
+        )
     perf_q.put((f"{event.type}(video)", event.timestamp, utils.get_timestamp()))
     return {
         "video_container": video_container,
@@ -1009,7 +1018,7 @@ def record(
     terminate_processing: multiprocessing.Event = None,
     terminate_recording: multiprocessing.Event = None,
     status_pipe: multiprocessing.connection.Connection | None = None,
-    log_memory: bool = True,
+    log_memory: bool = config.LOG_MEMORY,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents.
 

@@ -135,8 +135,12 @@ class Config(BaseSettings):
     # Record and replay
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
-    RECORD_VIDEO: bool = True
-    RECORD_IMAGES: bool = False
+    RECORD_VIDEO: bool
+    # if false, only write video events corresponding to screenshots
+    RECORD_FULL_VIDEO: bool
+    RECORD_IMAGES: bool
+    # useful for debugging but expensive computationally
+    LOG_MEMORY: bool
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_PIXEL_FORMAT: str = "rgb24"
     VIDEO_DIR_PATH: str
