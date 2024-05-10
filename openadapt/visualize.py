@@ -19,7 +19,7 @@ with redirect_stdout_stderr():
 
 from openadapt import video
 from openadapt.config import RECORDING_DIRECTORY_PATH, config
-from openadapt.db.crud import get_latest_recording
+from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.utils import (
@@ -153,6 +153,7 @@ def dict2html(
 @logger.catch
 def main(
     recording: Recording = None,
+    recording_timestamp: float | None = None,
     diff_video: bool = False,
     cleanup: bool = True,
 ) -> bool:
@@ -160,6 +161,8 @@ def main(
 
     Args:
         recording (Recording, optional): The recording to visualize.
+        recording_timestamp (float, optional): The timestamp of the recording to
+            visualize.
         diff_video (bool): Whether to diff Screenshots against video frames.
         cleanup (bool): Whether to remove the HTML file after it is displayed.
 
@@ -168,8 +171,12 @@ def main(
     """
     configure_logging(logger, LOG_LEVEL)
 
-    if recording is None:
-        recording = get_latest_recording()
+    assert not all([recording, recording_timestamp]), "Only one may be specified."
+
+    if recording_timestamp:
+        recording = crud.get_recording(recording_timestamp)
+    elif recording is None:
+        recording = crud.get_latest_recording()
     if SCRUB:
         from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
