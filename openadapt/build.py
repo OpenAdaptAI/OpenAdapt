@@ -18,6 +18,8 @@ import oa_pynput
 import pydicom
 import spacy_alignments
 
+from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY
+
 if sys.platform == "win32":
     import screen_recorder_sdk
 
@@ -46,12 +48,22 @@ def main() -> None:
             ["npm", "run", "build"],
             cwd=OPENADAPT_DIR / "app" / "dashboard",
             shell=True,
+            env={
+                **os.environ,
+                "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
+                "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
+            },
         )
     else:
         subprocess.run(
             "npm run build",
             cwd=OPENADAPT_DIR / "app" / "dashboard",
             shell=True,
+            env={
+                **os.environ,
+                "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
+                "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
+            },
         )
 
     spec = [
