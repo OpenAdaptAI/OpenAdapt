@@ -85,6 +85,15 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install the latest version of the project
+        run: |
+          git pull
+          pip install poetry
+          poetry install
       - name: Download macOS executable
         uses: actions/download-artifact@v4
         with:
@@ -102,11 +111,6 @@ jobs:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
-      - name: Install the latest version of the project
-        run: |
-          git pull
-          pip install poetry
-          poetry install
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

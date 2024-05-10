@@ -146,4 +146,4 @@ upload_to_PyPI = false
 upload_to_release = true
 upload_to_repository = false
 repository_url = "https://upload.pypi.org/legacy/"
-build_command = "pip install poetry && poetry build"
+build_command = "poetry env use python3.10 && poetry build"
