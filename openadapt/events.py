@@ -855,7 +855,7 @@ def process_events(
     pct_total = num_total_ / num_total
     logger.info(
         f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} "
-        f"{num_total=}"
+        f"{num_total_=}"
     )
     logger.info(
         f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
