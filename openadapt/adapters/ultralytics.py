@@ -11,6 +11,7 @@ import os
 from loguru import logger
 from PIL import Image
 
+
 # use() required when invoked from tray
 import matplotlib
 
@@ -19,12 +20,14 @@ from PySide6.QtCore import Qt  # noqa
 
 matplotlib.use("Qt5Agg")
 
+
 from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 import fire
 import numpy as np
 
 from openadapt import cache
+
 
 MODEL_NAMES = (
     "FastSAM-x.pt",

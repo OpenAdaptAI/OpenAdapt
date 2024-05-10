@@ -5,6 +5,7 @@ Usage:
 """
 
 from time import sleep
+import multiprocessing
 import os
 
 from loguru import logger
@@ -26,6 +27,7 @@ def replay(
     record: bool = False,
     timestamp: str | None = None,
     recording: Recording = None,
+    status_pipe: multiprocessing.connection.Connection | None = None,
     **kwargs: dict,
 ) -> bool:
     """Replay recorded events.
@@ -35,12 +37,17 @@ def replay(
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
         record (bool, optional): Flag indicating whether to record the replay.
+        status_pipe: A connection to communicate replay status.
         kwargs: Keyword arguments to pass to strategy.
 
     Returns:
         bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
+
+    if status_pipe:
+        # TODO: move to Strategy?
+        status_pipe.send({"type": "replay.started"})
 
     if timestamp and recording is None:
         recording = crud.get_recording(timestamp)
@@ -85,6 +92,9 @@ def replay(
     except Exception as e:
         logger.exception(e)
         rval = False
+
+    if status_pipe:
+        status_pipe.send({"type": "replay.stopped"})
 
     if record:
         sleep(1)

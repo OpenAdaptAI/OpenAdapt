@@ -155,7 +155,7 @@ class SystemTrayIcon:
 
         signal_type = signal["type"]
 
-        if signal_type == "starting":
+        if signal_type == "record.starting":
             self.recording = True
             self.record_action.setText("Stop Recording")
             self.sticky_toasts[signal_type] = self.show_toast(
@@ -163,10 +163,10 @@ class SystemTrayIcon:
                 show_close_button=False,
                 duration=0,
             )
-        elif signal_type == "started":
+        elif signal_type == "record.started":
             self.sticky_toasts["starting"].hide()
             self.show_toast("Recording started.")
-        elif signal_type == "stopping":
+        elif signal_type == "record.stopping":
             self.sticky_toasts[signal_type] = self.show_toast(
                 "Recording stopping, please wait...",
                 show_close_button=False,
@@ -174,9 +174,16 @@ class SystemTrayIcon:
             )
             self.recording = False
             self.record_action.setText("Record")
-        elif signal_type == "stopped":
+        elif signal_type == "record.stopped":
             self.sticky_toasts["stopping"].hide()
             self.show_toast("Recording stopped.")
+        elif signal_type == "replay.starting":
+            self.show_toast("Replay starting...")
+        elif signal_type == "replay.started":
+            self.show_toast("Replay started.")
+        elif signal_type == "replay.stopped":
+            self.show_toast("Replay stopped.")
+        # TODO: check if failure
 
         self.populate_menus()
 
@@ -346,21 +353,23 @@ class SystemTrayIcon:
                 index += 1
             logger.info(f"kwargs=\n{pformat(kwargs)}")
 
-            self.show_toast("Starting replay with selected strategy...")
+            self.child_conn.send({"type": "replay.starting"})
             record_replay = False
             recording_timestamp = None
             strategy_name = selected_strategy.__name__
-            rthread = Thread(
+            replay_proc = multiprocessing.Process(
                 target=replay,
-                args=(strategy_name, record_replay, recording_timestamp, recording),
+                args=(
+                    strategy_name,
+                    record_replay,
+                    recording_timestamp,
+                    recording,
+                    self.child_conn,
+                ),
                 kwargs=kwargs,
                 daemon=True,
             )
-            rthread.start()
-            if rthread.join():
-                self.show_toast("Replay finished.")
-            else:
-                self.show_toast("Replay failed.")
+            replay_proc.start()
 
     def _delete(self, recording: Recording) -> None:
         """Delete a recording after confirmation.

@@ -1054,13 +1054,15 @@ def record(
         status_pipe: A connection to communicate recording status.
         log_memory: Whether to log memory usage.
     """
+    utils.configure_logging(logger, LOG_LEVEL)
+
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
 
     if status_pipe:
-        status_pipe.send({"type": "starting"})
+        status_pipe.send({"type": "record.starting"})
 
     logger.info(f"{task_description=}")
 
@@ -1235,7 +1237,7 @@ def record(
     for _ in range(5):
         logger.info("*" * 40)
     if status_pipe:
-        status_pipe.send({"type": "started"})
+        status_pipe.send({"type": "record.started"})
     logger.info("All readers and writers have started. Waiting for input events...")
 
     global stop_sequence_detected
@@ -1249,7 +1251,7 @@ def record(
         terminate_processing.set()
 
     if status_pipe:
-        status_pipe.send({"type": "stopping"})
+        status_pipe.send({"type": "record.stopping"})
 
     if log_memory:
         collect_stats(performance_snapshots)
@@ -1279,7 +1281,7 @@ def record(
 
     # TODO: consolidate terminate_recording and status_pipe
     if status_pipe:
-        status_pipe.send({"type": "stopped"})
+        status_pipe.send({"type": "record.stopped"})
 
 
 # Entry point
