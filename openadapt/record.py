@@ -52,10 +52,9 @@ NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
 
 stop_sequence_detected = False
-utils.configure_logging(logger, LOG_LEVEL)
 
 
-def collect_stats(performance_snapshots: list[tracemalloc.Snaphsot]) -> None:
+def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
     """Collects and appends performance snapshots using tracemalloc.
 
     Args:
