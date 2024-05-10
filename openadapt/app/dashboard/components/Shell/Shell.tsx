@@ -1,9 +1,10 @@
 'use client'
 
-import { AppShell, Burger, Text } from '@mantine/core'
+import { AppShell, Burger, Image, Text } from '@mantine/core'
 import React from 'react'
 import { Navbar } from '../Navbar'
 import { useDisclosure } from '@mantine/hooks'
+import logo from '../../assets/logo.png'
 
 type Props = {
     children: React.ReactNode
@@ -29,8 +30,11 @@ export const Shell = ({ children }: Props) => {
                     hiddenFrom="sm"
                     size="sm"
                 />
-                <Text className="h-full flex items-center px-5">
-                    OpenAdapt.AI
+                <Text className="h-full flex items-center px-5 gap-x-2">
+                    <Image src={logo.src} alt="OpenAdapt" w={40} />
+                    <Text>
+                        OpenAdapt AI
+                    </Text>
                 </Text>
             </AppShell.Header>
 
