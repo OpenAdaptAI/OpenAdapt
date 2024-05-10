@@ -38,6 +38,10 @@ STOP_STRS = [
 # containing special chars, separated by keys
 SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 
+# Posthog
+POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
+POSTHOG_HOST = "https://us.i.posthog.com"
+
 if not LOCAL_CONFIG_FILE_PATH.exists():
     shutil.copy(CONFIG_FILE_PATH, LOCAL_CONFIG_FILE_PATH)
 
