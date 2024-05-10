@@ -85,6 +85,15 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install the latest version of the project
+        run: |
+          git pull
+          pip install poetry
+          poetry install
       - name: Download macOS executable
         uses: actions/download-artifact@v4
         with:
@@ -95,19 +104,6 @@ jobs:
         with:
           name: OpenAdapt
           path: dist/
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-            python-version: '3.10'
-      - name: Install the latest version of the project
-        run: |
-          git pull
-          pip install poetry
-          poetry install
-      - name: Ensure correct Python version with Poetry
-        run: poetry env use 3.10
-      - name: Check Python version
-        run: python --version
       - name: Python Semantic Release
         id: semantic_release
         uses: relekang/python-semantic-release@master
