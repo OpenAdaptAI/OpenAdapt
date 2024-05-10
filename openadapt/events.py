@@ -816,7 +816,9 @@ def process_events(
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,
         merge_consecutive_mouse_click_events,
-        remove_move_before_click,
+        # this causes clicks to fail to be registered in NaiveReplayStrategy
+        # TODO: remove
+        #remove_move_before_click,
     ]
     for process_fn in process_fns:
         action_events = process_fn(action_events)
