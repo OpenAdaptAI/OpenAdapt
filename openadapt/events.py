@@ -694,7 +694,7 @@ def remove_move_before_click(
         return merged_events
 
     return merge_consecutive_action_events(
-        "redundant_mouse_move",
+        "remove_move_before_click",
         events,
         is_target_event,
         get_merged_events,
@@ -717,6 +717,8 @@ def merge_consecutive_action_events(
         to_merge: list[models.ActionEvent],
     ) -> None:
         merged_events = get_merged_events(to_merge, state)
+        for merged_event in merged_events:
+            merged_event.reducer_names.add(name)
         rval.extend(merged_events)
         to_merge.clear()
 
@@ -814,7 +816,9 @@ def process_events(
         merge_consecutive_mouse_move_events,
         merge_consecutive_mouse_scroll_events,
         merge_consecutive_mouse_click_events,
-        remove_move_before_click,
+        # this causes clicks to fail to be registered in NaiveReplayStrategy
+        # TODO: remove
+        # remove_move_before_click,
     ]
     for process_fn in process_fns:
         action_events = process_fn(action_events)
@@ -851,7 +855,7 @@ def process_events(
     pct_total = num_total_ / num_total
     logger.info(
         f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} "
-        f"{num_total=}"
+        f"{num_total_=}"
     )
     logger.info(
         f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"

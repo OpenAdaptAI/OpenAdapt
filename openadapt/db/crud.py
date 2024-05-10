@@ -229,11 +229,11 @@ def get_recording_by_id(recording_id: int) -> Recording:
     return db.query(Recording).filter_by(id=recording_id).first()
 
 
-def get_recording(timestamp: int) -> Recording:
+def get_recording(timestamp: float) -> Recording:
     """Get a recording by timestamp.
 
     Args:
-        timestamp (int): The timestamp of the recording.
+        timestamp (float): The timestamp of the recording.
 
     Returns:
         Recording: The recording object.

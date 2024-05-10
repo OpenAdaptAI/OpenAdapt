@@ -10,7 +10,6 @@ from typing import Any
 import ast
 import base64
 import inspect
-import json
 import os
 import sys
 import threading
@@ -112,6 +111,7 @@ def row2dict(row: dict | db.BaseModel, follow: bool = True) -> dict:
         "text",
         "canonical_key",
         "canonical_text",
+        "reducer_names",
     ]
     to_include = [key for key in try_include if hasattr(row, key)]
     row_dict = row.asdict(follow=to_follow, include=to_include)
@@ -139,6 +139,7 @@ def rows2dicts(
     rows: list[ActionEvent],
     drop_empty: bool = True,
     drop_constant: bool = True,
+    drop_cols: list[str] = [],
     num_digits: int = None,
 ) -> list[dict]:
     """Convert a list of rows to a list of dictionaries.
@@ -148,6 +149,7 @@ def rows2dicts(
         drop_empty (bool): Flag indicating whether to drop empty rows. Defaults to True.
         drop_constant (bool): Flag indicating whether to drop rows with constant values.
           Defaults to True.
+        drop_cols (list[str]): The names of columns to drop.
         num_digits (int): The number of digits to round timestamps to. Defaults to None.
 
     Returns:
@@ -179,12 +181,16 @@ def rows2dicts(
                 if len(key_to_values[key]) <= 1 or drop_empty and value in EMPTY:
                     del row_dict[key]
     for row_dict in row_dicts:
+        for key in drop_cols:
+            if key in row_dict:
+                del row_dict[key]
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
                 row_dict["children"],
                 drop_empty,
                 drop_constant,
+                drop_cols,
             )
     return row_dicts
 
@@ -721,7 +727,7 @@ def get_strategy_class_by_name() -> dict:
 
 def plot_performance(
     recording_timestamp: float = None,
-    view_file: bool = True,
+    view_file: bool = False,
     save_file: bool = True,
     dark_mode: bool = False,
 ) -> str:
@@ -947,7 +953,9 @@ def parse_code_snippet(snippet: str) -> dict:
                 .strip()
             )
             # Parse the JSON string
-            return json.loads(json_string)
+            rval = ast.literal_eval(json_string)
+            return rval
+
         elif snippet.startswith("```python"):
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)

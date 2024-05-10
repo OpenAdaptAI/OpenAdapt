@@ -7,7 +7,6 @@ from pprint import pformat
 
 from loguru import logger
 from nicegui import events, ui
-from notifypy import Notify
 
 from openadapt.build_utils import redirect_stdout_stderr
 
@@ -137,7 +136,7 @@ def toggle_dark_mode(
     type=str,
     help="The timestamp of the recording to visualize.",
 )
-def main(timestamp: str, notify: bool = True) -> None:
+def main(timestamp: str) -> None:
     """Visualize a recording."""
     configure_logging(logger, LOG_LEVEL)
 
@@ -404,15 +403,6 @@ def main(timestamp: str, notify: bool = True) -> None:
                 progress.update()
 
             progress.close()
-
-    if notify:
-        Notify("Status", "Visualization finished", "OpenAdapt").send()
-        if not config.VISUALIZE_RUN_NATIVELY:
-            Notify(
-                "Status",
-                "Press Ctrl+C in the terminal to stop the visualization",
-                "OpenAdapt",
-            ).send()
 
     ui.run(
         reload=False,
