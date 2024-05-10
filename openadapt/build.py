@@ -136,7 +136,12 @@ def main():
         # new terminal
         shutil.move(
             ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt",
-            ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt.app",
+            ROOT_DIR
+            / "dist"
+            / "OpenAdapt.app"
+            / "Contents"
+            / "MacOS"
+            / "OpenAdapt.app",
         )
         shutil.copy(
             ROOT_DIR / "build_scripts" / "macos.sh",

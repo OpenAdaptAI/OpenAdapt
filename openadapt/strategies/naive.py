@@ -49,7 +49,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         self.action_event_idx = -1
         # event_dicts = utils.rows2dicts(self.processed_action_events)
         # logger.info(f"event_dicts=\n{pformat(event_dicts)}")
-        #self.double_click_interval_seconds = utils.get_double_click_interval_seconds()
+        # self.double_click_interval_seconds = utils.get_double_click_interval_seconds()
 
     def get_next_action_event(
         self,
@@ -94,7 +94,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
 
             # without this, clicks may occur too quickly to be registered correctly
             # (fixed by disabling remove_move_before_click in events.py)
-            #if action_event.name in common.MOUSE_CLICK_EVENTS:
+            # if action_event.name in common.MOUSE_CLICK_EVENTS:
             #    time.sleep(self.double_click_interval_seconds + 0.01)
 
             return action_event

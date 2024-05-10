@@ -64,7 +64,9 @@ class RecordProc:
     def start(self, func: callable, args: tuple, kwargs: dict) -> None:
         """Start the recording process."""
         self.record_proc = multiprocessing.Process(
-            target=func, args=args, kwargs=kwargs,
+            target=func,
+            args=args,
+            kwargs=kwargs,
         )
         self.record_proc.start()
 
@@ -140,7 +142,7 @@ def is_recording() -> bool:
 
 def quick_record(
     task_description: str | None = None,
-    status_pipe: multiprocessing.connection.Connection | None = None
+    status_pipe: multiprocessing.connection.Connection | None = None,
 ) -> None:
     """Run a recording session."""
     global record_proc
@@ -156,7 +158,7 @@ def quick_record(
         ),
         {
             "log_memory": False,
-        }
+        },
     )
 
 

@@ -18,9 +18,20 @@ from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonA
 from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QMenu, QInputDialog, QSystemTrayIcon,
-    QDialog, QHBoxLayout, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
-    QDialogButtonBox, QWidget,
+    QApplication,
+    QMainWindow,
+    QMenu,
+    QInputDialog,
+    QSystemTrayIcon,
+    QDialog,
+    QHBoxLayout,
+    QVBoxLayout,
+    QLabel,
+    QComboBox,
+    QLineEdit,
+    QPushButton,
+    QDialogButtonBox,
+    QWidget,
 )
 
 from openadapt.app.cards import quick_record, stop_record
@@ -57,6 +68,7 @@ class SystemTrayIcon:
             # hide Dock icon while allowing focus on dialogs
             # (must come after QApplication())
             from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
             NSApplication.sharedApplication().setActivationPolicy_(
                 NSApplicationActivationPolicyAccessory,
             )
@@ -91,9 +103,9 @@ class SystemTrayIcon:
         self.populate_menus()
 
         # TODO: Remove this action once dashboard is integrated
-        #self.app_action = QAction("Show App")
-        #self.app_action.triggered.connect(self.show_app)
-        #self.menu.addAction(self.app_action)
+        # self.app_action = QAction("Show App")
+        # self.app_action.triggered.connect(self.show_app)
+        # self.menu.addAction(self.app_action)
 
         self.dashboard_action = QAction("Launch Dashboard")
         self.dashboard_action.triggered.connect(self.launch_dashboard)
@@ -117,11 +129,15 @@ class SystemTrayIcon:
         self.parent_conn, self.child_conn = multiprocessing.Pipe()
         # Set up QSocketNotifier to monitor the read end of the pipe
         self.notifier = QSocketNotifier(
-            self.parent_conn.fileno(), QSocketNotifier.Read,
+            self.parent_conn.fileno(),
+            QSocketNotifier.Read,
         )
-        self.notifier.activated.connect(lambda: self.handle_recording_signal(
-            self.notifier, self.parent_conn,
-        ))
+        self.notifier.activated.connect(
+            lambda: self.handle_recording_signal(
+                self.notifier,
+                self.parent_conn,
+            )
+        )
 
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
@@ -218,8 +234,8 @@ class SystemTrayIcon:
         strategies = {
             cls.__name__: cls
             for cls in BaseReplayStrategy.__subclasses__()
-            if not cls.__name__.endswith("Mixin") and
-            cls.__name__ != "DemoReplayStrategy"
+            if not cls.__name__.endswith("Mixin")
+            and cls.__name__ != "DemoReplayStrategy"
         }
         strategy_names = list(strategies.keys())
         logger.info(f"{strategy_names=}")
@@ -257,7 +273,6 @@ class SystemTrayIcon:
                 if widget_to_remove is not None:
                     widget_to_remove.setParent(None)
                     widget_to_remove.deleteLater()
-
 
             strategy_class = strategies[combo_box.currentText()]
 
@@ -356,7 +371,7 @@ class SystemTrayIcon:
 
     def format_annotation(self, annotation):
         """Format annotation to a readable string."""
-        if hasattr(annotation, '__name__'):
+        if hasattr(annotation, "__name__"):
             return annotation.__name__
         elif isinstance(annotation, type):
             return annotation.__name__  # Handle direct type references
@@ -387,18 +402,16 @@ class SystemTrayIcon:
             self.recording_actions[action_type].append(no_recordings_action)
         else:
             for idx, recording in enumerate(recordings):
-                formatted_timestamp = (
-                    datetime.fromtimestamp(recording.timestamp).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
-                )
+                formatted_timestamp = datetime.fromtimestamp(
+                    recording.timestamp
+                ).strftime("%Y-%m-%d %H:%M:%S")
                 action_text = f"{formatted_timestamp}: {recording.task_description}"
                 recording_action = QAction(action_text)
                 recording_action.triggered.connect(partial(action, recording))
                 self.recording_actions[action_type].append(recording_action)
                 menu.addAction(recording_action)
 
-    #def show_app(self) -> None:
+    # def show_app(self) -> None:
     #    """Show the main application window."""
     #    if self.app_thread is None or not self.app_thread.is_alive():
     #        self.app_thread = Thread(target=start, daemon=True, args=(True,))
@@ -420,8 +433,8 @@ class SystemTrayIcon:
         self.app.exec()
 
     def show_toast(
-        self, 
-        message: str, 
+        self,
+        message: str,
         title: str = "OpenAdapt",
         duration: int = 10000,
         icon_path: str = ICON_PATH,
@@ -443,13 +456,13 @@ class SystemTrayIcon:
         fade_out_duration: int = 250,
         reset_duration_on_hover: bool = True,
         border_radius: int = 0,
-        background_color: QColor = QColor('#E7F4F9'),
-        title_color: QColor = QColor('#000000'),
-        text_color: QColor = QColor('#5C5C5C'),
-        duration_bar_color: QColor = QColor('#5C5C5C'),
-        icon_color: QColor = QColor('#5C5C5C'),
-        icon_separator_color: QColor = QColor('#D9D9D9'),
-        close_button_icon_color: QColor = QColor('#000000'),
+        background_color: QColor = QColor("#E7F4F9"),
+        title_color: QColor = QColor("#000000"),
+        text_color: QColor = QColor("#5C5C5C"),
+        duration_bar_color: QColor = QColor("#5C5C5C"),
+        icon_color: QColor = QColor("#5C5C5C"),
+        icon_separator_color: QColor = QColor("#D9D9D9"),
+        close_button_icon_color: QColor = QColor("#000000"),
         minimum_width: int = 100,
         maximum_width: int = 350,
         minimum_height: int = 50,
@@ -613,6 +626,7 @@ class SystemTrayIcon:
 
         return toast
 
+
 class ConfirmDeleteDialog(QDialog):
     def __init__(self, recording_description, parent=None):
         super().__init__(parent)
@@ -624,7 +638,9 @@ class ConfirmDeleteDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Add description text
-        label = QLabel(f"Are you sure you want to delete the recording '{recording_description}'?")
+        label = QLabel(
+            f"Are you sure you want to delete the recording '{recording_description}'?"
+        )
         label.setWordWrap(True)
         layout.addWidget(label)
 
@@ -644,6 +660,7 @@ class ConfirmDeleteDialog(QDialog):
         if super().exec_() == QDialog.Accepted:
             return True
         return False
+
 
 def _run() -> None:
     tray = SystemTrayIcon()

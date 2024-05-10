@@ -444,7 +444,8 @@ def video_pre_callback(recording_timestamp: float):
 def video_post_callback(state: dict):
     """Function to call after main loop."""
     video.finalize_video_writer(
-        state["video_container"], state["video_stream"],
+        state["video_container"],
+        state["video_stream"],
     )
 
 
@@ -492,7 +493,7 @@ def write_video_event(
         "video_container": video_container,
         "video_stream": video_stream,
         "video_start_timestamp": video_start_timestamp,
-        "last_pts": last_pts
+        "last_pts": last_pts,
     }
 
 
@@ -1165,7 +1166,7 @@ def record(
                 video_pre_callback,
                 video_post_callback,
                 "(video)",
-            )
+            ),
         )
         video_writer.start()
 

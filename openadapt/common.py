@@ -16,9 +16,7 @@ RAW_KEY_EVENTS = (
     "press",
     "release",
 )
-FUSED_KEY_EVENTS = (
-    "type",
-)
+FUSED_KEY_EVENTS = ("type",)
 KEY_EVENTS = tuple(list(RAW_KEY_EVENTS) + list(FUSED_KEY_EVENTS))
 
 ALL_EVENTS = tuple(list(MOUSE_EVENTS) + list(KEY_EVENTS))

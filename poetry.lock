@@ -4259,6 +4259,26 @@ files = [
 ]
 
 [[package]]
+name = "pudb"
+version = "2024.1"
+description = "A full-screen, console-based Python debugger"
+optional = false
+python-versions = "~=3.8"
+files = [
+    {file = "pudb-2024.1.tar.gz", hash = "sha256:fc9d6a976a59b590764c8379ec200fecd47faa84259b64efd8cd86066a0af338"},
+]
+
+[package.dependencies]
+jedi = ">=0.18,<1"
+packaging = ">=20.0"
+pygments = ">=2.7.4"
+urwid = ">=2.4"
+urwid_readline = "*"
+
+[package.extras]
+completion = ["shtab"]
+
+[[package]]
 name = "pure-eval"
 version = "0.2.2"
 description = "Safely evaluate AST nodes without side effects"
@@ -7537,6 +7557,47 @@ socks = ["pysocks (>=1.5.6,!=1.5.7,<2.0)"]
 zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
+name = "urwid"
+version = "2.6.11"
+description = "A full-featured console (xterm et al.) user interface library"
+optional = false
+python-versions = ">3.7"
+files = [
+    {file = "urwid-2.6.11-py3-none-any.whl", hash = "sha256:7e18c34d416fffd4e39410450347f4637222bd99cb6fb1523ffa50d77a0e22cf"},
+    {file = "urwid-2.6.11.tar.gz", hash = "sha256:52770007d734d7387ae0421e7b7769c4c5ec67e91a5f4df54e858e314062e475"},
+]
+
+[package.dependencies]
+typing-extensions = "*"
+wcwidth = "*"
+
+[package.extras]
+curses = ["windows-curses"]
+glib = ["PyGObject"]
+lcd = ["pyserial"]
+serial = ["pyserial"]
+tornado = ["tornado (>=5.0)"]
+trio = ["exceptiongroup", "trio (>=0.22.0)"]
+twisted = ["twisted"]
+zmq = ["zmq"]
+
+[[package]]
+name = "urwid-readline"
+version = "0.14"
+description = "A textbox edit widget for urwid that supports readline shortcuts"
+optional = false
+python-versions = "*"
+files = [
+    {file = "urwid_readline-0.14.tar.gz", hash = "sha256:8fabd2e501c124a30d38cfb10610b32f119a615ec0b310ae5591c583fb00bd09"},
+]
+
+[package.dependencies]
+urwid = "*"
+
+[package.extras]
+dev = ["black", "pytest"]
+
+[[package]]
 name = "uvicorn"
 version = "0.22.0"
 description = "The lightning-fast ASGI server."
@@ -8039,4 +8100,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "1c241548dcd3a336fbdb7a17170b7cf10dc06f3f29f29e737d9464f32ecfbaf5"
+content-hash = "e96d0e3b1ea3d3882bd117ea1aca380e47ce9658099e11602da584fe0eea46da"

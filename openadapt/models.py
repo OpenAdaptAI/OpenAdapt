@@ -442,8 +442,7 @@ class FrameCache:
         """
         # Check if the frame is cached
         if not (
-            video_file_path in self.frames and
-            timestamp in self.frames[video_file_path]
+            video_file_path in self.frames and timestamp in self.frames[video_file_path]
         ):
             # Issue a warning if the frame needs to be loaded without prior caching
             logger.warning(
@@ -557,7 +556,7 @@ class Screenshot(db.Base):
                 else:
                     self._image = video.extract_frames(
                         video_file_path,
-                        [self.timestamp - self.recording.video_start_time]
+                        [self.timestamp - self.recording.video_start_time],
                     )[0]
         return self._image
 
