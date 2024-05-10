@@ -128,7 +128,7 @@ jobs:
           path: dist/
       - name: Python Semantic Release
         id: semantic_release
-        uses: relekang/python-semantic-release@master
+        uses: python-semantic-release/python-semantic-release@v9.6.0
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
