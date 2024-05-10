@@ -110,13 +110,13 @@ class ActionEvent(db.Base):
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: tuple, **kwargs: dict) -> "ActionEvent":
         """Create a new instance; also called when loading from db."""
         instance = super(ActionEvent, cls).__new__(cls)
         instance.reducer_names = set()
         return instance
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: dict) -> None:
         """Initialize attributes first, then properties."""
         super().__init__()
 
@@ -265,7 +265,7 @@ class ActionEvent(db.Base):
 
     @canonical_text.setter
     def canonical_text(self, value: str) -> None:
-        """Validate the canonical_text property. Useful for ActionModel(**action_dict)."""
+        """Validate canonical_text property. Useful for ActionModel(**action_dict)."""
         if not value == self.canonical_text:
             logger.warning(f"{value=} did not match {self.canonical_text=}")
 
@@ -417,7 +417,7 @@ class FrameCache:
 
     ENABLED = True
 
-    def __init__(self, capacity: int = 0):
+    def __init__(self, capacity: int = 0) -> None:
         """Initialize a new FrameCache instance with specified capacity.
 
         Args:

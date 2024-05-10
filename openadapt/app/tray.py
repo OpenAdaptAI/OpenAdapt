@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import partial
 from pprint import pformat
 from threading import Thread
-from typing import Callable
+from typing import Any, Callable
 import inspect
 import multiprocessing
 import os
@@ -37,14 +37,16 @@ from PySide6.QtWidgets import (
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
-from openadapt.app.main import FPATH, start
+from openadapt.app.main import FPATH  # , start
 from openadapt.build_utils import is_running_from_executable
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.visualize import main as visualize
 from openadapt.strategies.base import BaseReplayStrategy
-import openadapt.strategies  # Import this to ensure all strategies are registered
+
+# ensure all strategies are registered
+import openadapt.strategies  # noqa: F401
 
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
@@ -185,7 +187,8 @@ class SystemTrayIcon:
         else:
             self.start_recording()
 
-    def start_recording(self):
+    def start_recording(self) -> None:
+        """Get task description from user and start a recording."""
         task_description, ok = QInputDialog.getText(
             None,
             "New Recording",
@@ -199,7 +202,8 @@ class SystemTrayIcon:
         except KeyboardInterrupt:
             self.stop_recording()
 
-    def stop_recording(self):
+    def stop_recording(self) -> None:
+        """Stop recording."""
         Thread(target=stop_record).start()
 
     def _visualize(self, recording: Recording) -> None:
@@ -266,7 +270,8 @@ class SystemTrayIcon:
         button_box.rejected.connect(dialog.reject)
         layout.addWidget(button_box)
 
-        def update_args_inputs():
+        def update_args_inputs() -> None:
+            """Update argument inputs."""
             # Clear existing widgets
             while args_layout.count():
                 widget_to_remove = args_layout.takeAt(0).widget()
@@ -369,8 +374,15 @@ class SystemTrayIcon:
             self.show_toast("Recording deleted.")
             self.populate_menus()
 
-    def format_annotation(self, annotation):
-        """Format annotation to a readable string."""
+    def format_annotation(self, annotation: Any) -> str:
+        """Format annotation to a readable string.
+
+        Args:
+            annotation (Any): The annotation to format.
+
+        Returns:
+            str: The formatted annotation.
+        """
         if hasattr(annotation, "__name__"):
             return annotation.__name__
         elif isinstance(annotation, type):
@@ -379,6 +391,7 @@ class SystemTrayIcon:
             return str(annotation)  # Handle complex types like Union
 
     def populate_menus(self) -> None:
+        """Populate menus."""
         self.populate_menu(self.visualize_menu, self._visualize, "visualize")
         self.populate_menu(self.replay_menu, self._replay, "replay")
         self.populate_menu(self.delete_menu, self._delete, "delete")
@@ -478,7 +491,7 @@ class SystemTrayIcon:
         icon_section_margins: QMargins = QMargins(0, 0, 15, 0),
         text_section_margins: QMargins = QMargins(0, 0, 15, 0),
         close_button_margins: QMargins = QMargins(0, -8, 0, -8),
-    ):
+    ) -> Toast:
         """Show a configurable toast message.
 
         Args:
@@ -554,6 +567,8 @@ class SystemTrayIcon:
             close_button_margins (QMargins): Margins around the close button.
                 Defaults to QMargins(0, -8, 0, -8).
 
+        Returns:
+            Toast: the created Toast.
         """
         toast = Toast(self.main_window)
         toast.setDuration(duration)
@@ -628,12 +643,24 @@ class SystemTrayIcon:
 
 
 class ConfirmDeleteDialog(QDialog):
-    def __init__(self, recording_description, parent=None):
-        super().__init__(parent)
+    """Dialog window to confirm recording deletion."""
+
+    def __init__(self, recording_description: str) -> None:
+        """Initialize.
+
+        Args:
+            recording_description (str): The Recording's description.
+        """
+        super().__init__()
         self.setWindowTitle("Confirm Delete")
         self.build_ui(recording_description)
 
-    def build_ui(self, recording_description):
+    def build_ui(self, recording_description: str) -> None:
+        """Build the dialog window.
+
+        Args:
+            recording_description (str): The recording description.
+        """
         # Setup layout
         layout = QVBoxLayout(self)
 
@@ -656,7 +683,12 @@ class ConfirmDeleteDialog(QDialog):
         yes_button.clicked.connect(self.accept)
         no_button.clicked.connect(self.reject)
 
-    def exec_(self):
+    def exec_(self) -> bool:
+        """Show the dialog window and return the user input.
+
+        Returns:
+            bool: The user's input.
+        """
         if super().exec_() == QDialog.Accepted:
             return True
         return False

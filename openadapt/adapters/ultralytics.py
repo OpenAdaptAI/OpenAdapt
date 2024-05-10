@@ -2,6 +2,7 @@
 
 See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
+# flake8: noqa: E402
 
 from pathlib import Path
 from tempfile import TemporaryDirectory

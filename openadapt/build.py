@@ -22,7 +22,8 @@ if sys.platform == "win32":
     import screen_recorder_sdk
 
 
-def main():
+def main() -> None:
+    """Entry point."""
     additional_packages_to_install = [
         nicegui,
         notifypy,
@@ -61,7 +62,8 @@ def main():
         "OpenAdapt",  # name
         # "--onefile", # trade startup speed for smaller file size
         "--onedir",
-        "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
+        # prevent console appearing, only use with ui.run(native=True, ...)
+        "--windowed",
     ]
     ignore_dirs = [
         "__pycache__",
@@ -132,8 +134,8 @@ def main():
     os.remove("OpenAdapt.spec")
 
     if sys.platform == "darwin":
-        # because the app needs a stdout and stderr, we use a shell script to run the app on
-        # new terminal
+        # because the app needs a stdout and stderr, we use a shell script to run the
+        # app on new terminal
         shutil.move(
             ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt",
             ROOT_DIR

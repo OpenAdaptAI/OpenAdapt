@@ -35,7 +35,7 @@ class StatefulReplayStrategy(
         Args:
             recording (models.Recording): The recording object.
         """
-        super().__init__(recording, replay_instructions)
+        super().__init__(recording)
         self.recording_window_state_diffs = get_window_state_diffs(
             recording.processed_action_events
         )

@@ -315,8 +315,15 @@ class LazyConfig:
             self._dirty.add(key)
             self._config.__setattr__(key, value)
 
-    def model_dump(self, obfuscated=False) -> dict[str, Any]:
-        """Dump the model as a dictionary."""
+    def model_dump(self, obfuscated: bool = False) -> dict[str, Any]:
+        """Dump the model as a dictionary.
+
+        Args:
+            obfuscated (bool): Whether to obfuscate where necessary.
+
+        Returns:
+            dict: The dumped configuration.
+        """
         model_dump_dict = {}
         for k in self._config.model_fields.keys():
             val = getattr(self, k)
@@ -365,7 +372,16 @@ def obfuscate(val: str, pct_reveal: float = 0.1, char: str = "*") -> str:
     return rval
 
 
-def maybe_obfuscate(key: str, val: Any):
+def maybe_obfuscate(key: str, val: Any) -> Any:
+    """Obfuscate a configuration parameter's value if necessary.
+
+    Args:
+        key (str): The configuration parameter's key.
+        val (Any): The configuration parameter's value.
+
+    Returns:
+        str: The possibly obfuscated configuration parameter value.
+    """
     OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):

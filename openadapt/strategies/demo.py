@@ -39,7 +39,7 @@ class DemoReplayStrategy(
         Args:
             recording (Recording): The recording to replay.
         """
-        super().__init__(recording, replay_instructions)
+        super().__init__(recording)
         self.result_history = []
         self.screenshots = get_screenshots(recording)
         self.screenshot_idx = 0

@@ -26,7 +26,7 @@ def replay(
     record: bool = False,
     timestamp: str | None = None,
     recording: Recording = None,
-    **kwargs,
+    **kwargs: dict,
 ) -> bool:
     """Replay recorded events.
 
@@ -36,6 +36,7 @@ def replay(
         recording (Recording, optional): Recording to replay.
         record (bool, optional): Flag indicating whether to record the replay.
         kwargs: Keyword arguments to pass to strategy.
+
     Returns:
         bool: True if replay was successful, None otherwise.
     """

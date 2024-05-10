@@ -55,13 +55,25 @@ stop_sequence_detected = False
 utils.configure_logging(logger, LOG_LEVEL)
 
 
-def collect_stats(performance_snapshots) -> None:
-    """Collects and appends performance snapshots using tracemalloc."""
+def collect_stats(performance_snapshots: list[tracemalloc.Snaphsot]) -> None:
+    """Collects and appends performance snapshots using tracemalloc.
+
+    Args:
+        performance_snapshots (list[tracemalloc.Snapshot]): The list of snapshots.
+    """
     performance_snapshots.append(tracemalloc.take_snapshot())
 
 
-def log_memory_usage(tracker, performance_snapshots) -> None:
-    """Logs memory usage stats and allocation trace based on snapshots."""
+def log_memory_usage(
+    tracker: tracker.SummaryTracker,
+    performance_snapshots: list[tracemalloc.Snapshot],
+) -> None:
+    """Logs memory usage stats and allocation trace based on snapshots.
+
+    Args:
+        tracker (tracker.SummaryTracker): The tracker to use.
+        performance_snapshots (list[tracemalloc.Snapshot]): The list of snapshots.
+    """
     assert len(performance_snapshots) == 2, performance_snapshots
     first_snapshot, last_snapshot = performance_snapshots
     stats = last_snapshot.compare_to(first_snapshot, "lineno")
@@ -424,8 +436,15 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def video_pre_callback(recording_timestamp: float):
-    """Function to call before main loop."""
+def video_pre_callback(recording_timestamp: float) -> dict[str, Any]:
+    """Function to call before main loop.
+
+    Args:
+        recording_timestmap(float): The Recording timestamp.
+
+    Returns:
+        dict[str, Any]: The updated state.
+    """
     video_file_path = video.get_video_file_path(recording_timestamp)
     # TODO XXX replace with utils.get_monitor_dims() once fixed
     width, height = utils.take_screenshot().size
@@ -441,8 +460,12 @@ def video_pre_callback(recording_timestamp: float):
     }
 
 
-def video_post_callback(state: dict):
-    """Function to call after main loop."""
+def video_post_callback(state: dict) -> None:
+    """Function to call after main loop.
+
+    Args:
+        state (dict): The current state.
+    """
     video.finalize_video_writer(
         state["video_container"],
         state["video_stream"],
