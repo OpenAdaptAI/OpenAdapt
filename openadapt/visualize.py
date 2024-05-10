@@ -185,6 +185,10 @@ def main(
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
 
+    audio_info = row2dict(crud.get_audio_info(recording))
+    # don't display the FLAC data
+    del audio_info["flac_data"]
+
     if diff_video:
         assert recording.config[
             "RECORD_VIDEO"

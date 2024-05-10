@@ -5,6 +5,7 @@ Module: crud.py
 
 from typing import Any
 import asyncio
+import json
 
 from loguru import logger
 import sqlalchemy as sa
@@ -13,6 +14,7 @@ from openadapt.config import config
 from openadapt.db.db import BaseModel, Session
 from openadapt.models import (
     ActionEvent,
+    AudioInfo,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -507,6 +509,30 @@ def update_video_start_time(
         f"Updated video start time for recording {recording_timestamp} to"
         f" {video_start_time}."
     )
+
+
+def insert_audio_info(
+    audio_data: bytes,
+    transcribed_text: str,
+    recording_timestamp: float,
+    sample_rate: int,
+    word_list: list,
+) -> None:
+    """Create an AudioInfo entry in the database."""
+    audio_info = AudioInfo(
+        flac_data=audio_data,
+        transcribed_text=transcribed_text,
+        recording_timestamp=recording_timestamp,
+        sample_rate=sample_rate,
+        words_with_timestamps=json.dumps(word_list),
+    )
+    db.add(audio_info)
+    db.commit()
+
+
+def get_audio_info(recording_timestamp: float) -> list[AudioInfo]:
+    """Get the audio info for a given recording."""
+    return _get(AudioInfo, recording_timestamp)
 
 
 async def acquire_db_lock() -> bool:
