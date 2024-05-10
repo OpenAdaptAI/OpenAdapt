@@ -1,6 +1,7 @@
 """This module contains the functions to run the dashboard web application."""
 
 
+from threading import Thread
 import os
 import pathlib
 import subprocess
@@ -10,7 +11,6 @@ from loguru import logger
 
 from openadapt.build_utils import is_running_from_executable
 from openadapt.config import config
-from openadapt.extensions.thread import Thread
 
 from .api.index import run_app
 

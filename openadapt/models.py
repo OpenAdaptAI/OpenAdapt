@@ -1,5 +1,6 @@
 """This module defines the models used in the OpenAdapt system."""
 
+from collections import OrderedDict
 from typing import Type
 import io
 
@@ -46,6 +47,7 @@ class Recording(db.Base):
     platform = sa.Column(sa.String)
     task_description = sa.Column(sa.String)
     video_start_time = sa.Column(ForceFloat)
+    config = sa.Column(sa.JSON)
 
     action_events = sa.orm.relationship(
         "ActionEvent",
@@ -107,6 +109,37 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+
+    def __new__(cls, *args: tuple, **kwargs: dict) -> "ActionEvent":
+        """Create a new instance; also called when loading from db."""
+        instance = super(ActionEvent, cls).__new__(cls)
+        instance.reducer_names = set()
+        return instance
+
+    def __init__(self, **kwargs: dict) -> None:
+        """Initialize attributes first, then properties."""
+        super().__init__()
+
+        # Temporary dictionary to hold property values
+        properties = {}
+
+        # Introspect to determine properties
+        prop_keys = [
+            name
+            for name, obj in type(self).__dict__.items()
+            if isinstance(obj, property)
+        ]
+
+        # Set non-property attributes first
+        for key, value in kwargs.items():
+            if key in prop_keys:
+                properties[key] = value
+            else:
+                setattr(self, key, value)
+
+        # Now handle properties
+        for key, value in properties.items():
+            setattr(self, key, value)
 
     @property
     def available_segment_descriptions(self) -> list[str]:
@@ -219,10 +252,22 @@ class ActionEvent(db.Base):
         """Get the text representation of the action event."""
         return self._text()
 
+    @text.setter
+    def text(self, value: str) -> None:
+        """Validate the text property. Useful for ActionModel(**action_dict)."""
+        if not value == self.text:
+            logger.warning(f"{value=} did not match {self.text=}")
+
     @property
     def canonical_text(self) -> str:
         """Get the canonical text representation of the action event."""
         return self._text(canonical=True)
+
+    @canonical_text.setter
+    def canonical_text(self, value: str) -> None:
+        """Validate canonical_text property. Useful for ActionModel(**action_dict)."""
+        if not value == self.canonical_text:
+            logger.warning(f"{value=} did not match {self.canonical_text=}")
 
     def __str__(self) -> str:
         """Return a string representation of the action event."""
@@ -301,9 +346,8 @@ class ActionEvent(db.Base):
                     children.append(press)
                     children.append(release)
             children += release_events[::-1]
-            return ActionEvent(children=children)
-        else:
-            return ActionEvent(**action_dict)
+        rval = ActionEvent(**action_dict, children=children)
+        return rval
 
     @classmethod
     def _create_key_events(
@@ -357,6 +401,97 @@ class WindowEvent(db.Base):
         return WindowEvent(**window.get_active_window_data())
 
 
+class FrameCache:
+    """Provide a caching mechanism for video frames to minimize IO operations.
+
+    This class maintains a nested dictionary to store video frames by video
+    filename and their respective timestamps. It offers functionalities to get
+    frames from the cache or load them if they are not available in the cache.
+
+    Attributes:
+        capacity (int): The maximum number of frames that can be stored per video.
+            If set to 0, the capacity is considered infinite.
+        frames (dict): A nested dictionary to store frames by video filename and
+            timestamp.
+    """
+
+    ENABLED = True
+
+    def __init__(self, capacity: int = 0) -> None:
+        """Initialize a new FrameCache instance with specified capacity.
+
+        Args:
+            capacity (int): The maximum number of frames to cache per video file.
+        """
+        self.capacity = capacity
+        # Nested dictionary to store frames by video filename and timestamp
+        self.frames = {}
+
+    def get_frame(self, video_file_path: str, timestamp: float) -> Image.Image:
+        """Retrieve a frame by video file path and timestamp from the cache.
+
+        If the frame is not available in the cache, it logs a warning and loads
+        the frame into the cache before returning it.
+
+        Args:
+            video_file_path (str): The path to the video file.
+            timestamp (float): The timestamp of the frame in the video.
+
+        Returns:
+            Image.Image: The requested video frame.
+        """
+        # Check if the frame is cached
+        if not (
+            video_file_path in self.frames and timestamp in self.frames[video_file_path]
+        ):
+            # Issue a warning if the frame needs to be loaded without prior caching
+            logger.warning(
+                f"Frame at timestamp {timestamp} from {video_file_path} was not "
+                "pre-cached. Loading it now, but consider using cache_frames to load "
+                "batches."
+            )
+            # Load the frame since it wasn't cached
+            self.cache_frames(video_file_path, [timestamp])
+        return self.frames[video_file_path][timestamp]
+
+    def cache_frames(self, video_file_path: str, timestamps: list[float]) -> None:
+        """Cache multiple frames from a video file at specified timestamps.
+
+        This method checks which frames are not already cached and loads them.
+        It respects the capacity limit of the cache, potentially evicting the oldest
+        cached frame to make room for new ones if the capacity is exceeded.
+
+        Args:
+            video_file_path (str): The path to the video file.
+            timestamps (list[float]): A list of timestamps of frames to cache.
+
+        Returns:
+            None
+        """
+        # avoid circular import
+        from openadapt import video
+
+        # Ensure the dictionary for this video file is initialized
+        if video_file_path not in self.frames:
+            self.frames[video_file_path] = OrderedDict()
+
+        # Load only the frames that have not been loaded yet
+        uncached_timestamps = [
+            t for t in timestamps if t not in self.frames[video_file_path]
+        ]
+        frames = video.extract_frames(video_file_path, uncached_timestamps)
+        # Add loaded frames to cache, respecting capacity if not infinite
+        for timestamp, frame in zip(uncached_timestamps, frames):
+            if self.capacity > 0 and len(self.frames[video_file_path]) >= self.capacity:
+                # Remove oldest frame if capacity is exceeded
+                self.frames[video_file_path].popitem(last=False)
+            self.frames[video_file_path][timestamp] = frame
+
+
+# for use in Screenshot.image
+frame_cache = FrameCache()
+
+
 class Screenshot(db.Base):
     """Class representing a screenshot in the database."""
 
@@ -400,7 +535,29 @@ class Screenshot(db.Base):
     def image(self) -> Image.Image:
         """Get the image associated with the screenshot."""
         if not self._image:
-            self._image = self.convert_binary_to_png(self.png_data)
+            if self.png_data:
+                self._image = self.convert_binary_to_png(self.png_data)
+            else:
+                # avoid circular import
+                from openadapt import video
+
+                video_file_path = video.get_video_file_path(self.recording_timestamp)
+                if FrameCache.ENABLED:
+                    if video_file_path not in frame_cache.frames:
+                        screenshot_timestamps = [
+                            screenshot.timestamp - self.recording.video_start_time
+                            for screenshot in self.recording.screenshots
+                        ]
+                        frame_cache.cache_frames(video_file_path, screenshot_timestamps)
+                    self._image = frame_cache.get_frame(
+                        video_file_path,
+                        self.timestamp - self.recording.video_start_time,
+                    )
+                else:
+                    self._image = video.extract_frames(
+                        video_file_path,
+                        [self.timestamp - self.recording.video_start_time],
+                    )[0]
         return self._image
 
     @property

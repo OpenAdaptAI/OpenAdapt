@@ -5,11 +5,10 @@ Usage:
 """
 
 from time import sleep
-from typing import Union
+import multiprocessing
 import os
 
 from loguru import logger
-
 from openadapt.build_utils import redirect_stdout_stderr
 
 with redirect_stdout_stderr():
@@ -26,9 +25,10 @@ LOG_LEVEL = "INFO"
 def replay(
     strategy_name: str,
     record: bool = False,
-    timestamp: Union[str, None] = None,
+    timestamp: str | None = None,
     recording: Recording = None,
-    instructions: str | None = None,
+    status_pipe: multiprocessing.connection.Connection | None = None,
+    **kwargs: dict,
 ) -> bool:
     """Replay recorded events.
 
@@ -37,14 +37,17 @@ def replay(
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
         record (bool, optional): Flag indicating whether to record the replay.
-        instructions (str, optional): Natural language instructions to the
-            model, e.g. description of what are the parameters in the recording, and
-            how the replay should behave as a function of those parameters.
+        status_pipe: A connection to communicate replay status.
+        kwargs: Keyword arguments to pass to strategy.
 
     Returns:
         bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
+
+    if status_pipe:
+        # TODO: move to Strategy?
+        status_pipe.send({"type": "replay.started"})
 
     if timestamp and recording is None:
         recording = crud.get_recording(timestamp)
@@ -69,7 +72,7 @@ def replay(
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")
 
-    strategy = strategy_class(recording, instructions)
+    strategy = strategy_class(recording, **kwargs)
     logger.info(f"{strategy=}")
 
     handler = None
@@ -89,6 +92,9 @@ def replay(
     except Exception as e:
         logger.exception(e)
         rval = False
+
+    if status_pipe:
+        status_pipe.send({"type": "replay.stopped"})
 
     if record:
         sleep(1)

@@ -2,6 +2,7 @@
 
 See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
+# flake8: noqa: E402
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -9,12 +10,24 @@ import os
 
 from loguru import logger
 from PIL import Image
+
+
+# use() required when invoked from tray
+import matplotlib
+
+# importing is required for use() to work
+from PySide6.QtCore import Qt  # noqa
+
+matplotlib.use("Qt5Agg")
+
+
 from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 import fire
 import numpy as np
 
 from openadapt import cache
+
 
 MODEL_NAMES = (
     "FastSAM-x.pt",

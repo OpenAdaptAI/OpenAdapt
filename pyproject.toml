@@ -68,7 +68,6 @@ moviepy = "1.0.3"
 python-levenshtein = "^0.21.1"
 magic-wormhole = "0.12.0"
 pyside6 = "^6.5.1.1"
-notify-py = "^0.3.42"
 flake8-annotations = "^3.0.1"
 pre-commit = "^3.3.3"
 pympler = "^1.0.1"
@@ -99,6 +98,8 @@ uvicorn = {extras = ["standard"], version = "^0.22"}
 ultralytics = "^8.1.47"
 imagehash = "^4.3.1"
 pydantic-settings = "^2.2.1"
+pyqt-toast-notification = "^1.1.0"
+pudb = "^2024.1"
 
 [tool.pytest.ini_options]
 filterwarnings = [

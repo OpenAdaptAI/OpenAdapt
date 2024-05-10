@@ -4,14 +4,13 @@ import time
 
 from loguru import logger
 
-from openadapt import models, strategies, utils
+from openadapt import models, strategies, utils  # , common
 from openadapt.config import config
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True
 REPLAY_EVENTS = True
-SLEEP = False
-assert PROCESS_EVENTS or not SLEEP, "invalid configuration"
+SLEEP = True
 
 
 class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
@@ -20,7 +19,6 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str | None = None,
         display_events: bool = DISPLAY_EVENTS,
         replay_events: bool = REPLAY_EVENTS,
         process_events: bool = PROCESS_EVENTS,
@@ -42,6 +40,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
               Defaults to False.
         """
         super().__init__(recording)
+        assert process_events or not sleep, "invalid configuration"
         self.display_events = display_events
         self.replay_events = replay_events
         self.process_events = process_events
@@ -50,6 +49,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         self.action_event_idx = -1
         # event_dicts = utils.rows2dicts(self.processed_action_events)
         # logger.info(f"event_dicts=\n{pformat(event_dicts)}")
+        # self.double_click_interval_seconds = utils.get_double_click_interval_seconds()
 
     def get_next_action_event(
         self,
@@ -78,7 +78,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
         action_event = action_events[self.action_event_idx]
         if config.REPLAY_STRIP_ELEMENT_STATE:
             action_event = utils.strip_element_state(action_event)
-        logger.info(
+        logger.debug(
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )
         if self.display_events:
@@ -88,9 +88,15 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
             if self.sleep and self.prev_timestamp:
                 # TODO: subtract processing time
                 sleep_time = action_event.timestamp - self.prev_timestamp
-                logger.debug(f"{sleep_time=}")
+                logger.info(f"{sleep_time=} {action_event.timestamp}")
                 time.sleep(sleep_time)
             self.prev_timestamp = action_event.timestamp
+
+            # without this, clicks may occur too quickly to be registered correctly
+            # (fixed by disabling remove_move_before_click in events.py)
+            # if action_event.name in common.MOUSE_CLICK_EVENTS:
+            #    time.sleep(self.double_click_interval_seconds + 0.01)
+
             return action_event
         else:
             return None
