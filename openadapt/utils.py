@@ -139,6 +139,7 @@ def rows2dicts(
     rows: list[ActionEvent],
     drop_empty: bool = True,
     drop_constant: bool = True,
+    drop_cols: list[str] = [],
     num_digits: int = None,
 ) -> list[dict]:
     """Convert a list of rows to a list of dictionaries.
@@ -148,6 +149,7 @@ def rows2dicts(
         drop_empty (bool): Flag indicating whether to drop empty rows. Defaults to True.
         drop_constant (bool): Flag indicating whether to drop rows with constant values.
           Defaults to True.
+        drop_cols (list[str]): The names of columns to drop.
         num_digits (int): The number of digits to round timestamps to. Defaults to None.
 
     Returns:
@@ -179,12 +181,16 @@ def rows2dicts(
                 if len(key_to_values[key]) <= 1 or drop_empty and value in EMPTY:
                     del row_dict[key]
     for row_dict in row_dicts:
+        for key in drop_cols:
+            if key in row_dict:
+                del row_dict[key]
         # TODO: keep attributes in children which vary across parents
         if "children" in row_dict:
             row_dict["children"] = rows2dicts(
                 row_dict["children"],
                 drop_empty,
                 drop_constant,
+                drop_cols,
             )
     return row_dicts
 

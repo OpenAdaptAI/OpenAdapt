@@ -34,7 +34,11 @@ OVERRIDE_DOUBLE_CLICK_INTERVAL_SECONDS = None
 NUM_TIMESTAMP_DIGITS = 6
 
 
-rows2dicts = partial(rows2dicts, num_digits=NUM_TIMESTAMP_DIGITS)
+rows2dicts = partial(
+    rows2dicts,
+    num_digits=NUM_TIMESTAMP_DIGITS,
+    drop_cols=["reducer_names"],
+)
 _start_time = 0
 timestamp = _start_time
 timestamp_raw = _start_time
