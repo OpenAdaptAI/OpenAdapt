@@ -88,6 +88,7 @@ def get_events(
         )
 
     recording = new_recordings[0]
+    crud.filter_stop_sequences(new_action_events)
     action_events = new_action_events
     window_events = new_window_events
     screenshots = new_screenshots
