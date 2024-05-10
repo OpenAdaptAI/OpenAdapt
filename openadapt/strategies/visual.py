@@ -189,7 +189,7 @@ def get_action_prompt_dict(action: models.ActionEvent) -> dict:
         }
     )
     if action.active_segment_description:
-        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
+        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy", "reducer_names"):
             if key in action_dict:
                 del action_dict[key]
     if action.available_segment_descriptions:
