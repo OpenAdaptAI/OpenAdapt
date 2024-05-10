@@ -13,7 +13,6 @@ import subprocess
 import sys
 
 import nicegui
-import notifypy
 import oa_pynput
 import pydicom
 import spacy_alignments
@@ -26,7 +25,6 @@ def main() -> None:
     """Entry point."""
     additional_packages_to_install = [
         nicegui,
-        notifypy,
         oa_pynput,
         pydicom,
         spacy_alignments,
