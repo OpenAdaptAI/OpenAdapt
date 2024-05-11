@@ -109,10 +109,9 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
-        # TODO: enable once dashboard db access is fixed
-        #self.dashboard_action = QAction("Launch Dashboard")
-        #self.dashboard_action.triggered.connect(self.launch_dashboard)
-        #self.menu.addAction(self.dashboard_action)
+        self.dashboard_action = QAction("Launch Dashboard")
+        self.dashboard_action.triggered.connect(self.launch_dashboard)
+        self.menu.addAction(self.dashboard_action)
 
         self.quit = QAction("Quit")
 

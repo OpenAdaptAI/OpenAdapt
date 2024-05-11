@@ -33,9 +33,7 @@ VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
 STOP_STRS = [
     "oa.stop",
 ]
-SPECIAL_CHAR_STOP_SEQUENCES = [
-    ["ctrl", "ctrl", "ctrl"]
-]
+SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 
 # Posthog
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
@@ -121,9 +119,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: ClassVar[str] = (
-        f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
-    )
+    DB_URL: ClassVar[str] = f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True

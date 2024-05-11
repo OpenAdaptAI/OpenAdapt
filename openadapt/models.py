@@ -1,7 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type, TypeVar
+from typing import Type
 import io
 
 from loguru import logger

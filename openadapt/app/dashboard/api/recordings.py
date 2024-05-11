@@ -61,7 +61,6 @@ class RecordingsAPI:
             await websocket.accept()
             session = crud.get_new_session()
             with session:
-
                 recording = crud.get_recording_by_id(recording_id, session)
 
                 await websocket.send_json(
