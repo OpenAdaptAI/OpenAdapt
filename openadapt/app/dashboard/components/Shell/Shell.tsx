@@ -33,7 +33,7 @@ export const Shell = ({ children }: Props) => {
                 <Text className="h-full flex items-center px-5 gap-x-2">
                     <Image src={logo.src} alt="OpenAdapt" w={40} />
                     <Text>
-                        OpenAdapt AI
+                        OpenAdapt.AI
                     </Text>
                 </Text>
             </AppShell.Header>

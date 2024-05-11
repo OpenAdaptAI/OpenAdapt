@@ -6,7 +6,7 @@ import { Shell } from '@/components/Shell'
 import { CSPostHogProvider } from './providers';
 
 export const metadata = {
-    title: 'OpenAdapt',
+    title: 'OpenAdapt.AI',
 }
 
 export default function RootLayout({

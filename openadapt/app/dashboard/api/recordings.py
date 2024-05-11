@@ -29,8 +29,9 @@ class RecordingsAPI:
     def get_recordings() -> dict[str, list[Recording]]:
         """Get all recordings."""
         session = crud.get_new_session()
-        recordings = crud.get_all_recordings(session)
-        return {"recordings": recordings}
+        with session:
+            recordings = crud.get_all_recordings(session)
+            return {"recordings": recordings}
 
     @staticmethod
     async def start_recording() -> dict[str, str]:
@@ -59,42 +60,46 @@ class RecordingsAPI:
             """Get a specific recording and its action events."""
             await websocket.accept()
             session = crud.get_new_session()
+            with session:
 
-            recording = crud.get_recording_by_id(recording_id, session)
+                recording = crud.get_recording_by_id(recording_id, session)
 
-            await websocket.send_json(
-                {"type": "recording", "value": recording.asdict()}
-            )
+                await websocket.send_json(
+                    {"type": "recording", "value": recording.asdict()}
+                )
 
-            action_events = get_events(recording, session=session)
+                action_events = get_events(recording, session=session)
 
-            await websocket.send_json(
-                {"type": "num_events", "value": len(action_events)}
-            )
+                await websocket.send_json(
+                    {"type": "num_events", "value": len(action_events)}
+                )
 
-            for action_event in action_events:
-                event_dict = row2dict(action_event)
-                try:
-                    image = display_event(action_event)
-                    width, height = image.size
-                    image = image2utf8(image)
-                    diff = image2utf8(display_event(action_event, diff=True))
-                    mask = image2utf8(action_event.screenshot.diff_mask)
-                except Exception as e:
-                    logger.exception("Failed to display event: {}", e)
-                    image = None
-                    diff = None
-                    mask = None
-                    width, height = 0, 0
-                event_dict["screenshot"] = image
-                event_dict["diff"] = diff
-                event_dict["mask"] = mask
-                event_dict["dimensions"] = {"width": width, "height": height}
-                if event_dict["key"]:
-                    event_dict["key"] = str(event_dict["key"])
-                if event_dict["canonical_key"]:
-                    event_dict["canonical_key"] = str(event_dict["canonical_key"])
-                await websocket.send_json({"type": "action_event", "value": event_dict})
+                for action_event in action_events:
+                    event_dict = row2dict(action_event)
+                    try:
+                        image = display_event(action_event)
+                        width, height = image.size
+                        image = image2utf8(image)
+                        diff = image2utf8(display_event(action_event, diff=True))
+                        mask = image2utf8(action_event.screenshot.diff_mask)
+                    except Exception as e:
+                        logger.exception("Failed to display event: {}", e)
+                        image = None
+                        diff = None
+                        mask = None
+                        width, height = 0, 0
+                    event_dict["screenshot"] = image
+                    event_dict["diff"] = diff
+                    event_dict["mask"] = mask
+                    event_dict["dimensions"] = {"width": width, "height": height}
+                    if event_dict["key"]:
+                        event_dict["key"] = str(event_dict["key"])
+                    if event_dict["canonical_key"]:
+                        event_dict["canonical_key"] = str(event_dict["canonical_key"])
+                    if event_dict["reducer_names"]:
+                        event_dict["reducer_names"] = list(event_dict["reducer_names"])
+                    await websocket.send_json(
+                        {"type": "action_event", "value": event_dict}
+                    )
 
-            await websocket.close()
-            return
+                await websocket.close()
