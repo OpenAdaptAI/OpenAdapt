@@ -119,10 +119,10 @@ def apply_replay_instructions(
     action_dicts = [get_action_prompt_dict(action) for action in action_events]
     actions_dict = {"actions": action_dicts}
     system_prompt = utils.render_template_from_file(
-        "openadapt/prompts/system.j2",
+        "prompts/system.j2",
     )
     prompt = utils.render_template_from_file(
-        "openadapt/prompts/apply_replay_instructions.j2",
+        "prompts/apply_replay_instructions.j2",
         actions=actions_dict,
         replay_instructions=replay_instructions,
     )
@@ -553,12 +553,12 @@ def prompt_for_descriptions(
 
     images = [original_image_base64] + masked_images_base64
     system_prompt = utils.render_template_from_file(
-        "openadapt/prompts/system.j2",
+        "prompts/system.j2",
     )
     logger.info(f"system_prompt=\n{system_prompt}")
     num_segments = len(masked_images_base64)
     prompt = utils.render_template_from_file(
-        "openadapt/prompts/description.j2",
+        "prompts/description.j2",
         active_segment_description=active_segment_description,
         num_segments=num_segments,
         exceptions=exceptions,
