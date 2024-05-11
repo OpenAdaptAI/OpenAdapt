@@ -109,9 +109,10 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
-        self.dashboard_action = QAction("Launch Dashboard")
-        self.dashboard_action.triggered.connect(self.launch_dashboard)
-        self.menu.addAction(self.dashboard_action)
+        # TODO: enable once dashboard db access is fixed
+        #self.dashboard_action = QAction("Launch Dashboard")
+        #self.dashboard_action.triggered.connect(self.launch_dashboard)
+        #self.menu.addAction(self.dashboard_action)
 
         self.quit = QAction("Quit")
 
@@ -164,7 +165,7 @@ class SystemTrayIcon:
                 duration=0,
             )
         elif signal_type == "record.started":
-            self.sticky_toasts["starting"].hide()
+            self.sticky_toasts["record.starting"].hide()
             self.show_toast("Recording started.")
         elif signal_type == "record.stopping":
             self.sticky_toasts[signal_type] = self.show_toast(
@@ -175,7 +176,7 @@ class SystemTrayIcon:
             self.recording = False
             self.record_action.setText("Record")
         elif signal_type == "record.stopped":
-            self.sticky_toasts["stopping"].hide()
+            self.sticky_toasts["record.stopping"].hide()
             self.show_toast("Recording stopped.")
         elif signal_type == "replay.starting":
             self.show_toast("Replay starting...")
@@ -204,6 +205,7 @@ class SystemTrayIcon:
         logger.info(f"{task_description=} {ok=}")
         if not ok:
             return
+        self.child_conn.send({"type": "record.starting"})
         try:
             quick_record(task_description, status_pipe=self.child_conn)
         except KeyboardInterrupt:

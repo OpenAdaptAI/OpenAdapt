@@ -16,34 +16,32 @@ import git
 import sentry_sdk
 
 from openadapt.build_utils import (
-    get_path_to_preferences_folder,
+    get_root_dir_path,
     is_running_from_executable,
 )
 
-CURRENT_DIR_PATH = pathlib.Path(__file__).parent
-PREFERENCES_DIR_PATH = get_path_to_preferences_folder(CURRENT_DIR_PATH)
-CONFIG_FILE_PATH = CURRENT_DIR_PATH / "config.json"
-LOCAL_CONFIG_FILE_PATH = (PREFERENCES_DIR_PATH / "config.local.json").absolute()
-ROOT_DIR_PATH = CURRENT_DIR_PATH.parent
-RECORDING_DIRECTORY_PATH = (PREFERENCES_DIR_PATH / "recordings").absolute()
-DIRNAME_PERFORMANCE_PLOTS_DIR = (PREFERENCES_DIR_PATH / "performance").absolute()
-CAPTURE_DIR_PATH = (PREFERENCES_DIR_PATH / "captures").absolute()
+ROOT_DIR_PATH = get_root_dir_path()
+CONFIG_DEFAULTS_FILE_PATH = (ROOT_DIR_PATH / "config.defaults.json").absolute()
+
+DATA_DIR_PATH = (ROOT_DIR_PATH / "data").absolute()
+CONFIG_FILE_PATH = (DATA_DIR_PATH / "config.json").absolute()
+RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
+PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
+CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 
 STOP_STRS = [
     "oa.stop",
-    # TODO:
-    # "<ctrl>+c,<ctrl>+c,<ctrl>+c"
 ]
-# each list in SPECIAL_CHAR_STOP_SEQUENCES should contain sequences
-# containing special chars, separated by keys
-SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
+SPECIAL_CHAR_STOP_SEQUENCES = [
+    ["ctrl", "ctrl", "ctrl"]
+]
 
 # Posthog
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
-if not LOCAL_CONFIG_FILE_PATH.exists():
-    shutil.copy(CONFIG_FILE_PATH, LOCAL_CONFIG_FILE_PATH)
+if not CONFIG_FILE_PATH.exists():
+    shutil.copy(CONFIG_DEFAULTS_FILE_PATH, CONFIG_FILE_PATH)
 
 
 def get_json_config_settings_source(
@@ -93,7 +91,7 @@ def get_json_config_settings_source(
 class Config(BaseSettings):
     """Configuration class for OpenAdapt."""
 
-    ROOT_DIR_PATH: str = str(ROOT_DIR_PATH)
+    ROOT_DIR_PATH: pathlib.Path = ROOT_DIR_PATH
 
     # Privacy
     PRIVATE_AI_API_KEY: str = ""
@@ -123,7 +121,7 @@ class Config(BaseSettings):
     # Database
     DB_ECHO: bool = False
     DB_URL: ClassVar[str] = (
-        f"sqlite:///{(PREFERENCES_DIR_PATH / 'openadapt.db').absolute()}"
+        f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
     )
 
     # Error reporting
@@ -147,7 +145,7 @@ class Config(BaseSettings):
     LOG_MEMORY: bool
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_PIXEL_FORMAT: str = "rgb24"
-    VIDEO_DIR_PATH: str
+    VIDEO_DIR_PATH: pathlib.Path = DATA_DIR_PATH / "videos"
     # sequences that when typed, will stop the recording of ActionEvents in record.py
     STOP_SEQUENCES: list[list[str]] = [
         list(stop_str) for stop_str in STOP_STRS
@@ -253,8 +251,8 @@ class Config(BaseSettings):
         """
         return (
             init_settings,
-            get_json_config_settings_source(LOCAL_CONFIG_FILE_PATH)(settings_cls),
             get_json_config_settings_source(CONFIG_FILE_PATH)(settings_cls),
+            get_json_config_settings_source(CONFIG_DEFAULTS_FILE_PATH)(settings_cls),
         )
 
     def __setattr__(self, key: str, value: Any) -> None:
@@ -346,7 +344,7 @@ def persist_config(new_config: Config) -> None:
 
     logger.info(f"Persisting config to {CONFIG_FILE_PATH}")
 
-    with open(LOCAL_CONFIG_FILE_PATH, "w") as f:
+    with open(CONFIG_FILE_PATH, "w") as f:
         json.dump(config_variables, f, indent=4)
 
     global config
@@ -396,7 +394,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
 def print_config() -> None:
     """Print the configuration."""
     if multiprocessing.current_process().name == "MainProcess":
-        logger.info(f"Reading from {LOCAL_CONFIG_FILE_PATH}")
+        logger.info(f"Reading from {CONFIG_FILE_PATH}")
         for key, val in config.model_dump().items():
             if not key.startswith("_") and key.isupper():
                 val = maybe_obfuscate(key, val)

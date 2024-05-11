@@ -39,7 +39,7 @@ if sys.platform == "win32":
 
 
 from openadapt import common
-from openadapt.config import DIRNAME_PERFORMANCE_PLOTS_DIR, config
+from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
@@ -804,8 +804,8 @@ def plot_performance(
     if save_file:
         fname_parts = ["performance", str(recording_timestamp)]
         fname = "-".join(fname_parts) + ".png"
-        os.makedirs(DIRNAME_PERFORMANCE_PLOTS_DIR, exist_ok=True)
-        fpath = os.path.join(DIRNAME_PERFORMANCE_PLOTS_DIR, fname)
+        os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
+        fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
@@ -905,7 +905,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         return orjson.dumps(value).decode("utf-8")
 
     # Construct the full path to the template file
-    template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
+    template_path = str(config.ROOT_DIR_PATH / template_relative_path)
 
     # Extract the directory and template file name
     template_dir, template_file = os.path.split(template_path)

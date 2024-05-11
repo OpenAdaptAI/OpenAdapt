@@ -18,7 +18,7 @@ with redirect_stdout_stderr():
     import fire
 
 from openadapt import video
-from openadapt.config import RECORDING_DIRECTORY_PATH, config
+from openadapt.config import RECORDING_DIR_PATH, config
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
@@ -370,9 +370,9 @@ def main(
 
     title = f"recording-{recording.id}"
 
-    fname_out = RECORDING_DIRECTORY_PATH / f"recording-{recording.id}.html"
+    fname_out = RECORDING_DIR_PATH / f"recording-{recording.id}.html"
     logger.info(f"{fname_out=}")
-    os.makedirs(RECORDING_DIRECTORY_PATH, exist_ok=True)
+    os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
     output_file(fname_out, title=title)
 
     result = show(  # noqa: F841

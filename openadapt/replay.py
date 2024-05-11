@@ -6,6 +6,7 @@ Usage:
 
 from time import sleep
 import multiprocessing
+import multiprocessing.connection
 import os
 
 from loguru import logger

@@ -1,10 +1,11 @@
 # Envirionment
 .env
-config.local.json
+config.json
+data
 
 # Python
 __pycache__
-cache
+.cache
 *.egg-info
 *~
 .venv
@@ -37,4 +38,3 @@ src
 
 dist/
 build/
-videos/
