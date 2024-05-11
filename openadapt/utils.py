@@ -905,7 +905,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         return orjson.dumps(value).decode("utf-8")
 
     # Construct the full path to the template file
-    template_path = str(config.ROOT_DIR_PATH / template_relative_path)
+    template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
 
     # Extract the directory and template file name
     template_dir, template_file = os.path.split(template_path)

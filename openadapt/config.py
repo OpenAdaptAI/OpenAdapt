@@ -28,6 +28,7 @@ CONFIG_FILE_PATH = (DATA_DIR_PATH / "config.json").absolute()
 RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
+VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
 
 STOP_STRS = [
     "oa.stop",
@@ -91,7 +92,7 @@ def get_json_config_settings_source(
 class Config(BaseSettings):
     """Configuration class for OpenAdapt."""
 
-    ROOT_DIR_PATH: pathlib.Path = ROOT_DIR_PATH
+    ROOT_DIR_PATH: str = str(ROOT_DIR_PATH)
 
     # Privacy
     PRIVATE_AI_API_KEY: str = ""
@@ -145,7 +146,7 @@ class Config(BaseSettings):
     LOG_MEMORY: bool
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_PIXEL_FORMAT: str = "rgb24"
-    VIDEO_DIR_PATH: pathlib.Path = DATA_DIR_PATH / "videos"
+    VIDEO_DIR_PATH: str = str(VIDEO_DIR_PATH)
     # sequences that when typed, will stop the recording of ActionEvents in record.py
     STOP_SEQUENCES: list[list[str]] = [
         list(stop_str) for stop_str in STOP_STRS
