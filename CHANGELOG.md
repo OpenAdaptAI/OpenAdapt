@@ -2,6 +2,133 @@
 
 
 
+## v0.22.0 (2024-05-10)
+
+### Feature
+
+* feat: Run ci steps only if not triggered by the bot commit (#666)
+
+Co-authored-by: OpenAdapt Bot &lt;bot@openadapt.ai&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`400a73b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/400a73bb201ee173e408a9eb178aa76519fa3a33))
+
+
+## v0.21.0 (2024-05-10)
+
+### Feature
+
+* feat: Add posthog analytics (#655)
+
+* feat: Add posthog analytics
+
+* feat: Move posthog config to the python config file ([`294fe71`](https://github.com/OpenAdaptAI/OpenAdapt/commit/294fe716ca84612e28fc047205110f28340bd303))
+
+* feat(tray): performance and UX improvements
+
+* write_video_event; pre_callback/post_callback
+
+* add Recording.config; read Screenshot.image from video; asserts if diff_video
+
+* add FrameCache
+
+* maybe_obfuscate; video_dir_path; event_type_modifier
+
+* update .gitignore
+
+* replace notifypy with pyqttoast
+
+* add video event to perf_q; fix documentation
+
+* add build.py main guard
+
+* reduce visualize import time
+
+* add RedirectOutput.null_stream
+
+* add on_ready argument to record; remove Notify
+
+* add task description input dialog; replace QTimer with Connection
+
+* configure replay strategy
+
+* handle argument types in replay dialog; remove replay_instructions where not used
+
+* show &#34;No recordings available&#34;
+
+* add delete menu
+
+* on_ready -&gt; status_pipe; oaThread -&gt; Thread; disable app action; sticky toasts; log_memory arg; view_file false
+
+* pass args to strategy class; add Config.ROOT_DIR_PATH; matplotlib use Qt5Agg
+
+* remove extensions.thread
+
+* Union -&gt; |
+
+* fix mouse playback bug; sleep in NaiveReplayStrategy
+
+* improve parse_code_snippet; validate ActionEvent properties; fix ActionEvent.from_dict
+
+* fix: timestamp int -&gt; float
+
+* fix: redundant_mouse_move -&gt; remove_move_before_click
+
+* add ActionEvent.reducer_names
+
+* add common.MOUSE_CLICK_EVENTS; remove sleep in naive.py; disable remove_move_before_click
+
+* fix: num_total -&gt; num_total_
+
+* RECORD_FULL_VIDEO; LOG_MEMORY; num_copies
+
+* visualize recording_timestamp
+
+* black
+
+* flake8
+
+* fix tests: add row2dicts drop_cols
+
+* replay status pipe
+
+* ignore reducer_names in get_action_prompt_dict ([`88b9726`](https://github.com/OpenAdaptAI/OpenAdapt/commit/88b9726b0443cf4e4f90daba9654580c71d7e6a9))
+
+### Fix
+
+* fix(build): python-semantic-release@v9.6.0 ([`c3c26e6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c3c26e6d2d3e66ecb1e1526b6729455f7d4daf73))
+
+* fix(build): pip install poetry (#667) ([`0a64d65`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0a64d651f9d513482d4fbe57468cacea8470b22c))
+
+* fix(build): poetry env use python3.10 in pyproject.toml
+
+* Revert &#34;fix(build): poetry install order&#34;
+
+This reverts commit a475ee362efde1983681b570cb62e1037c4bd00e.
+
+* Revert &#34;fix(build): poetry env use 3.10 (#663)&#34;
+
+This reverts commit c6c176879f703530465ac70a0ecd044394c90688.
+
+* Revert &#34;fix(build): add setup-python to release job (#662)&#34;
+
+This reverts commit cc6cab34861032393d0264844d3714c0319ebd03.
+
+* pip install poetry -&gt; poetry env use python3.10 (pyproject.toml) ([`553a29d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/553a29d25d796da82de2414c294463f51cf25055))
+
+* fix(build): poetry install order
+
+* install poetry before poetry env ([`a475ee3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a475ee362efde1983681b570cb62e1037c4bd00e))
+
+* fix(build): poetry env use 3.10 (#663) ([`c6c1768`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c6c176879f703530465ac70a0ecd044394c90688))
+
+* fix(build): add setup-python to release job (#662) ([`cc6cab3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cc6cab34861032393d0264844d3714c0319ebd03))
+
+* fix(build): remove notifypy from build.py ([`abd2d99`](https://github.com/OpenAdaptAI/OpenAdapt/commit/abd2d991a797fe4e50b511ba988c3c3f7c64bea1))
+
+### Unknown
+
+* python-semantic-release@9.6.0 ([`e06bceb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e06bcebd5dcf5d684430846747b572e97b601333))
+
+
 ## v0.20.1 (2024-05-03)
 
 ### Fix

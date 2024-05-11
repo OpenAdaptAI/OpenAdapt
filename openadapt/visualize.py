@@ -19,10 +19,9 @@ with redirect_stdout_stderr():
 
 from openadapt import video
 from openadapt.config import RECORDING_DIRECTORY_PATH, config
-from openadapt.db.crud import get_latest_recording
+from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
-from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 from openadapt.utils import (
     EMPTY,
     compute_diff,
@@ -35,8 +34,6 @@ from openadapt.utils import (
 )
 
 SCRUB = config.SCRUB_ENABLED
-if SCRUB:
-    scrub = PresidioScrubbingProvider()
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -44,43 +41,6 @@ MAX_TABLE_CHILDREN = 5
 MAX_TABLE_STR_LEN = 1024
 PROCESS_EVENTS = True
 IMG_WIDTH_PCT = 60
-CSS = string.Template("""
-    table {
-        outline: 1px solid black;
-    }
-    table th {
-        vertical-align: top;
-    }
-    .screenshot img {
-        display: none;
-        width: ${IMG_WIDTH_PCT}vw;
-    }
-    .screenshot img:nth-child(1) {
-        display: block;
-    }
-
-    .screenshot:hover img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:hover img:nth-child(2) {
-        display: block;
-    }
-    .screenshot:hover img:nth-child(3) {
-        display: none;
-    }
-
-    .screenshot:active img:nth-child(1) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(2) {
-        display: none;
-    }
-    .screenshot:active img:nth-child(3) {
-        display: block;
-    }
-""").substitute(
-    IMG_WIDTH_PCT=IMG_WIDTH_PCT,
-)
 
 
 def recursive_len(lst: list, key: str) -> int:
@@ -193,6 +153,7 @@ def dict2html(
 @logger.catch
 def main(
     recording: Recording = None,
+    recording_timestamp: float | None = None,
     diff_video: bool = False,
     cleanup: bool = True,
 ) -> bool:
@@ -200,6 +161,8 @@ def main(
 
     Args:
         recording (Recording, optional): The recording to visualize.
+        recording_timestamp (float, optional): The timestamp of the recording to
+            visualize.
         diff_video (bool): Whether to diff Screenshots against video frames.
         cleanup (bool): Whether to remove the HTML file after it is displayed.
 
@@ -208,12 +171,27 @@ def main(
     """
     configure_logging(logger, LOG_LEVEL)
 
-    if recording is None:
-        recording = get_latest_recording()
+    assert not all([recording, recording_timestamp]), "Only one may be specified."
+
+    if recording_timestamp:
+        recording = crud.get_recording(recording_timestamp)
+    elif recording is None:
+        recording = crud.get_latest_recording()
     if SCRUB:
+        from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
+
+        scrub = PresidioScrubbingProvider()
         scrub.scrub_text(recording.task_description)
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
+
+    if diff_video:
+        assert recording.config[
+            "RECORD_VIDEO"
+        ], "Can't diff video against images because video was not saved."
+        assert recording.config[
+            "RECORD_IMAGES"
+        ], "Can't diff video against images because images were not saved."
 
     meta = {}
     action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
@@ -226,6 +204,44 @@ def main(
     recording_dict = row2dict(recording)
     if SCRUB:
         recording_dict = scrub.scrub_dict(recording_dict)
+
+    CSS = string.Template("""
+        table {
+            outline: 1px solid black;
+        }
+        table th {
+            vertical-align: top;
+        }
+        .screenshot img {
+            display: none;
+            width: ${IMG_WIDTH_PCT}vw;
+        }
+        .screenshot img:nth-child(1) {
+            display: block;
+        }
+
+        .screenshot:hover img:nth-child(1) {
+            display: none;
+        }
+        .screenshot:hover img:nth-child(2) {
+            display: block;
+        }
+        .screenshot:hover img:nth-child(3) {
+            display: none;
+        }
+
+        .screenshot:active img:nth-child(1) {
+            display: none;
+        }
+        .screenshot:active img:nth-child(2) {
+            display: none;
+        }
+        .screenshot:active img:nth-child(3) {
+            display: block;
+        }
+    """).substitute(
+        IMG_WIDTH_PCT=IMG_WIDTH_PCT,
+    )
 
     rows = [
         row(
@@ -248,12 +264,12 @@ def main(
     logger.info(f"{len(action_events)=}")
 
     if diff_video:
-        video_file_name = video.get_video_file_name(recording.timestamp)
+        video_file_path = video.get_video_file_path(recording.timestamp)
         timestamps = [
             action_event.screenshot.timestamp - recording.video_start_time
             for action_event in action_events
         ]
-        frames = video.extract_frames(video_file_name, timestamps)
+        frames = video.extract_frames(video_file_path, timestamps)
 
     num_events = (
         min(MAX_EVENTS, len(action_events))

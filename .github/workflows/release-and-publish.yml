@@ -6,9 +6,28 @@ on:
       - main
 
 jobs:
+  check_last_commit_author:
+    runs-on: ubuntu-latest
+    outputs:
+      skip_ci: ${{ steps.check_last_commit_author.outputs.skip_ci }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check last commit author
+        id: check_last_commit_author
+        run: |
+          LAST_COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
+          if [ "$LAST_COMMIT_AUTHOR" = "OpenAdapt Bot" ]; then
+            echo "skip_ci=true" >> $GITHUB_OUTPUT
+          fi
+
   build-macos-executables:
     name: Build macOS app
     runs-on: macos-latest
+    needs: check_last_commit_author
+    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
     steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -40,6 +59,8 @@ jobs:
   build-windows-executables:
     name: Build Windows app
     runs-on: windows-latest
+    needs: check_last_commit_author
+    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
     steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -74,7 +95,8 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: [build-macos-executables, build-windows-executables]
+    needs: [check_last_commit_author, build-macos-executables, build-windows-executables]
+    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
     concurrency: release
     permissions:
       id-token: write
@@ -85,6 +107,15 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install the latest version of the project
+        run: |
+          git pull
+          pip install poetry
+          poetry install
       - name: Download macOS executable
         uses: actions/download-artifact@v4
         with:
@@ -97,24 +128,21 @@ jobs:
           path: dist/
       - name: Python Semantic Release
         id: semantic_release
-        uses: relekang/python-semantic-release@master
+        uses: python-semantic-release/python-semantic-release@v9.6.0
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
-      - name: Install the latest version of the project
-        run: |
-          git pull
-          pip install poetry
-          poetry install
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./build_scripts/upload_release_artifacts.sh
+
   publish:
     name: Publish to PyPI
-    needs: release
+    needs: [check_last_commit_author, release]
+    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

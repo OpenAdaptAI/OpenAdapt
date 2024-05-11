@@ -3,6 +3,7 @@ import './globals.css'
 import { ColorSchemeScript, MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications';
 import { Shell } from '@/components/Shell'
+import { CSPostHogProvider } from './providers';
 
 export const metadata = {
     title: 'OpenAdapt',
@@ -18,12 +19,14 @@ export default function RootLayout({
             <head>
                 <ColorSchemeScript />
             </head>
-            <body>
-                <MantineProvider>
-                    <Notifications />
-                    <Shell>{children}</Shell>
-                </MantineProvider>
-            </body>
+            <CSPostHogProvider>
+                <body>
+                    <MantineProvider>
+                        <Notifications />
+                        <Shell>{children}</Shell>
+                    </MantineProvider>
+                </body>
+            </CSPostHogProvider>
         </html>
     )
 }

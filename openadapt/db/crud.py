@@ -261,11 +261,11 @@ def get_recording_by_id(recording_id: int, session: sa.orm.Session = None) -> Re
     return _db.query(Recording).filter_by(id=recording_id).first()
 
 
-def get_recording(timestamp: int, session: sa.orm.Session = None) -> Recording:
+def get_recording(timestamp: float, session: sa.orm.Session = None) -> Recording:
     """Get a recording by timestamp.
 
     Args:
-        timestamp (int): The timestamp of the recording.
+        timestamp (float): The timestamp of the recording.
         session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:

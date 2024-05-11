@@ -1,6 +1,7 @@
 """This module contains the functions to run the dashboard web application."""
 
 
+from threading import Thread
 import os
 import pathlib
 import subprocess
@@ -9,8 +10,7 @@ import webbrowser
 from loguru import logger
 
 from openadapt.build_utils import is_running_from_executable
-from openadapt.config import config
-from openadapt.extensions.thread import Thread
+from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY, config
 
 from .api.index import run_app
 
@@ -36,6 +36,8 @@ def run() -> Thread:
                 **os.environ,
                 "DASHBOARD_CLIENT_PORT": str(config.DASHBOARD_CLIENT_PORT),
                 "DASHBOARD_SERVER_PORT": str(config.DASHBOARD_SERVER_PORT),
+                "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
+                "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
             },
         )
 
