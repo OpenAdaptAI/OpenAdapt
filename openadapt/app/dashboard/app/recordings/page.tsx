@@ -5,11 +5,14 @@ import { Recording, RecordingStatus } from "@/types/recording";
 import { Box, Button } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { timeStampToDateString } from "../utils";
+import { useRouter } from "next/navigation";
 
 
 export default function Recordings() {
     const [recordingStatus, setRecordingStatus] = useState(RecordingStatus.UNKNOWN);
-    const [recordings, setRecordings] = useState<Recording[]>([])
+    const [recordings, setRecordings] = useState<Recording[]>([]);
+
+    const router = useRouter();
 
     function startRecording() {
         if (recordingStatus === RecordingStatus.RECORDING) {
@@ -56,6 +59,12 @@ export default function Recordings() {
         });
     }
 
+    function goToRecording(recording: Recording) {
+        return function() {
+            router.push(`/recordings/detail?id=${recording.id}`);
+        }
+    }
+
     useEffect(() => {
         fetchRecordings();
         fetchRecordingStatus();
@@ -89,6 +98,7 @@ export default function Recordings() {
                 ]}
                 data={recordings}
                 refreshData={fetchRecordings}
+                onClickRow={goToRecording}
             />
         </Box>
     )

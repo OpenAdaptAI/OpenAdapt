@@ -4,6 +4,7 @@ Module: crud.py
 """
 
 from typing import Any
+import asyncio
 
 from loguru import logger
 import sqlalchemy as sa
@@ -22,6 +23,8 @@ from openadapt.models import (
 BATCH_SIZE = 1
 
 db = Session()
+lock = asyncio.Event()
+lock.set()
 action_events = []
 screenshots = []
 window_events = []
@@ -148,17 +151,21 @@ def insert_perf_stat(
     _insert(event_perf_stat, PerformanceStat, performance_stats)
 
 
-def get_perf_stats(recording_timestamp: float) -> list[PerformanceStat]:
+def get_perf_stats(
+    recording_timestamp: float, session: sa.orm.Session = None
+) -> list[PerformanceStat]:
     """Get performance stats for a given recording.
 
     Args:
         recording_timestamp (float): The timestamp of the recording.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[PerformanceStat]: A list of performance stats for the recording.
     """
+    _db = session or db
     return (
-        db.query(PerformanceStat)
+        _db.query(PerformanceStat)
         .filter(PerformanceStat.recording_timestamp == recording_timestamp)
         .order_by(PerformanceStat.start_time)
         .all()
@@ -177,10 +184,22 @@ def insert_memory_stat(
     _insert(memory_stat, MemoryStat, memory_stats)
 
 
-def get_memory_stats(recording_timestamp: float) -> None:
-    """Return memory stats for a given recording."""
+def get_memory_stats(
+    recording_timestamp: float, session: sa.orm.Session = None
+) -> list[MemoryStat]:
+    """Return memory stats for a given recording.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
+
+    Returns:
+        list[MemoryStat]: A list of memory stats for the recording.
+
+    """
+    _db = session or db
     return (
-        db.query(MemoryStat)
+        _db.query(MemoryStat)
         .filter(MemoryStat.recording_timestamp == recording_timestamp)
         .order_by(MemoryStat.timestamp)
         .all()
@@ -202,77 +221,104 @@ def delete_recording(recording_timestamp: float) -> None:
     db.commit()
 
 
-def get_all_recordings() -> list[Recording]:
+def get_all_recordings(session: sa.orm.Session = None) -> list[Recording]:
     """Get all recordings.
+
+    Args:
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[Recording]: A list of all recordings.
     """
-    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
+    _db = session or db
+    return _db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
 
 
-def get_latest_recording() -> Recording:
+def get_latest_recording(session: sa.orm.Session = None) -> Recording:
     """Get the latest recording.
 
+    Args:
+        session (sa.orm.Session, optional): The database session. Defaults to None.
+
     Returns:
         Recording: The latest recording object.
     """
-    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
+    _db = session or db
+    return _db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
 
 
-def get_recording_by_id(recording_id: int) -> Recording:
+def get_recording_by_id(recording_id: int, session: sa.orm.Session = None) -> Recording:
     """Get the recording by an id.
 
+    Args:
+        recording_id (int): The id of the recording.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
+
     Returns:
         Recording: The latest recording object.
     """
-    return db.query(Recording).filter_by(id=recording_id).first()
+    _db = session or db
+    return _db.query(Recording).filter_by(id=recording_id).first()
 
 
-def get_recording(timestamp: float) -> Recording:
+def get_recording(timestamp: float, session: sa.orm.Session = None) -> Recording:
     """Get a recording by timestamp.
 
     Args:
         timestamp (float): The timestamp of the recording.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         Recording: The recording object.
     """
-    return db.query(Recording).filter(Recording.timestamp == timestamp).first()
+    _db = session or db
+    return _db.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
-def _get(table: BaseModel, recording_timestamp: float) -> list[BaseModel]:
+def _get(
+    table: BaseModel, recording_timestamp: float, session: sa.orm.Session = None
+) -> list[BaseModel]:
     """Retrieve records from the database table based on the recording timestamp.
 
     Args:
         table (BaseModel): The database table to query.
         recording_timestamp (float): The recording timestamp to filter the records.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[BaseModel]: A list of records retrieved from the database table,
           ordered by timestamp.
     """
+    _db = session or db
     return (
-        db.query(table)
+        _db.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
         .order_by(table.timestamp)
         .all()
     )
 
 
-def get_action_events(recording: Recording) -> list[ActionEvent]:
+def get_action_events(
+    recording: Recording,
+    filter_stop_sequences: bool = False,
+    session: sa.orm.Session = None,
+) -> list[ActionEvent]:
     """Get action events for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        filter_stop_sequences (bool, optional): Whether to filter out stop sequences.
+          Defaults to False.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    action_events = _get(ActionEvent, recording.timestamp)
-    # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
-    filter_stop_sequences(action_events)
+    action_events = _get(ActionEvent, recording.timestamp, session)
+    if filter_stop_sequences:
+        # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
+        filter_stop_sequences(action_events)
     return action_events
 
 
@@ -377,16 +423,19 @@ def save_screenshot_diff(screenshots: list[Screenshot]) -> list[Screenshot]:
     return screenshots
 
 
-def get_screenshots(recording: Recording) -> list[Screenshot]:
+def get_screenshots(
+    recording: Recording, session: sa.orm.Session = None
+) -> list[Screenshot]:
     """Get screenshots for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = _get(Screenshot, recording.timestamp)
+    screenshots = _get(Screenshot, recording.timestamp, session)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
@@ -398,16 +447,19 @@ def get_screenshots(recording: Recording) -> list[Screenshot]:
     return screenshots
 
 
-def get_window_events(recording: Recording) -> list[WindowEvent]:
+def get_window_events(
+    recording: Recording, session: sa.orm.Session = None
+) -> list[WindowEvent]:
     """Get window events for a given recording.
 
     Args:
         recording (Recording): The recording object.
+        session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
         list[WindowEvent]: A list of window events for the recording.
     """
-    return _get(WindowEvent, recording.timestamp)
+    return _get(WindowEvent, recording.timestamp, session)
 
 
 def new_session() -> None:
@@ -420,6 +472,15 @@ def new_session() -> None:
     if db:
         db.close()
     db = Session()
+
+
+def get_new_session() -> sa.orm.Session:
+    """Get a new database session.
+
+    Returns:
+        sa.orm.Session: A new database session.
+    """
+    return Session()
 
 
 def update_video_start_time(
@@ -450,3 +511,25 @@ def update_video_start_time(
         f"Updated video start time for recording {recording_timestamp} to"
         f" {video_start_time}."
     )
+
+
+async def acquire_db_lock() -> bool:
+    """Check if the database is locked.
+
+    Returns:
+        bool: True if acquired the lock, False otherwise.
+    """
+    global db, lock
+    logger.info("Database is locked. Waiting...")
+    await lock.wait()
+    lock.clear()
+    logger.info("Database lock acquired.")
+    return True
+
+
+async def release_db_lock() -> None:
+    """Release the database lock."""
+    global lock
+    lock.set()
+    new_session()
+    logger.info("Database lock released.")

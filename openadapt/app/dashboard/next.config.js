@@ -6,11 +6,12 @@ const nextConfig = {
     rewrites: async () => {
         return [
             {
+                source: '/',
+                destination: `/recordings`,
+            },
+            {
                 source: '/api/:path*',
-                destination:
-                    process.env.NODE_ENV === 'development'
-                        ? `http://127.0.0.1:${DASHBOARD_SERVER_PORT}/api/:path*`
-                        : '/api/',
+                destination: `http://127.0.0.1:${DASHBOARD_SERVER_PORT}/api/:path*`
             },
             {
                 source: '/docs',
@@ -29,6 +30,7 @@ const nextConfig = {
         ]
     },
     output: 'export',
+    reactStrictMode: false,
 }
 
 module.exports = nextConfig

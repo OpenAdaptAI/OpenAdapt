@@ -1,4 +1,9 @@
+import moment from 'moment';
+
+
 export const timeStampToDateString = (timeStamp: number) => {
-    const date = new Date(timeStamp * 1000);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    if (!timeStamp) {
+        return 'N/A';
+    }
+    return moment.unix(timeStamp).format('DD/MM/YYYY HH:mm:ss');
 }

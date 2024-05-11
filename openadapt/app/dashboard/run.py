@@ -55,3 +55,13 @@ def cleanup(process: subprocess.Popen) -> None:
         process.terminate()
         process.wait()
     logger.debug("Dashboard client terminated.")
+
+
+if __name__ == "__main__":
+    dashboard_thread = run()
+    dashboard_thread.start()
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        cleanup(dashboard_thread._return)
