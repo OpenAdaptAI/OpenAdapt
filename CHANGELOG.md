@@ -2,6 +2,13 @@
 
 
 
+## v0.23.1 (2024-05-11)
+
+### Fix
+
+* fix: Install latest version before deciding which release to upload to (#668) ([`c91efd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c91efd4c5fa8f645ae95742be26dab18b4cdac17))
+
+
 ## v0.23.0 (2024-05-11)
 
 ### Feature
