@@ -2,6 +2,44 @@
 
 
 
+## v0.23.0 (2024-05-11)
+
+### Feature
+
+* feat(dashboard): Add recording detail page with screenshots (#616)
+
+* feat: Add recording detail page with screenshots
+
+* refactor(screenshots): Refactor code to add more comments and improve styling
+
+* refactor: Cleanup of redirects and not found env variables
+
+* feat: Change dynamic route to regular routes with query parameters and use websockets since response is too large
+
+* add main guard to dashboard/run.py
+
+* feat(screenshots): Make changes to screenshots ui, add diff to images and add carousel
+
+* feat(dashboard): Terminate dashboard process on pressing ctrl + c
+
+* feat: Add write locks for endpoints which need to write to database
+
+* feat(screenshots): Add utility functions to copy objects so they are independent of the sa session
+
+* feat(screenshots): Remove diff and add progress loader
+
+* chore: flake8 lint
+
+* fix: Filter out invalid action events after copies are made
+
+* fet: Change favicon and logo on dashboard
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`0ac599c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ac599c71bcee4da87bd563c914a1a805ef523cc))
+
+
 ## v0.22.0 (2024-05-10)
 
 ### Feature
