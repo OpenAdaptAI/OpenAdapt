@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any, ClassVar, Type, Union
 import json
 import multiprocessing
+import os
 import pathlib
 import shutil
 
@@ -40,6 +41,7 @@ POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
 if not CONFIG_FILE_PATH.exists():
+    os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
     shutil.copy(CONFIG_DEFAULTS_FILE_PATH, CONFIG_FILE_PATH)
 
 
