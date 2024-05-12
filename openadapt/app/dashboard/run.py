@@ -38,6 +38,9 @@ def run() -> Thread:
                 "DASHBOARD_SERVER_PORT": str(config.DASHBOARD_SERVER_PORT),
                 "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
                 "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
+                "NEXT_PUBLIC_MODE": (
+                    "production" if is_running_from_executable() else "development"
+                ),
             },
         )
 

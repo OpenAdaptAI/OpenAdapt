@@ -36,7 +36,7 @@ class RecordingsAPI:
     @staticmethod
     async def start_recording() -> dict[str, str]:
         """Start a recording session."""
-        await crud.acquire_db_lock(begin_transaction=False)
+        await crud.acquire_db_lock()
         quick_record()
         return {"message": "Recording started"}
 
@@ -79,17 +79,11 @@ class RecordingsAPI:
                         image = display_event(action_event)
                         width, height = image.size
                         image = image2utf8(image)
-                        diff = image2utf8(display_event(action_event, diff=True))
-                        mask = image2utf8(action_event.screenshot.diff_mask)
-                    except Exception as e:
-                        logger.exception("Failed to display event: {}", e)
+                    except Exception:
+                        logger.info("Failed to display event")
                         image = None
-                        diff = None
-                        mask = None
                         width, height = 0, 0
                     event_dict["screenshot"] = image
-                    event_dict["diff"] = diff
-                    event_dict["mask"] = mask
                     event_dict["dimensions"] = {"width": width, "height": height}
                     if event_dict["key"]:
                         event_dict["key"] = str(event_dict["key"])
