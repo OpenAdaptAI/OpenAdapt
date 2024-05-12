@@ -2,6 +2,29 @@
 
 
 
+## v0.24.0 (2024-05-12)
+
+### Feature
+
+* feat(VisualReplayStrategy): Remove model copy logic; avoid unnecessary segmentations (#669)
+
+* preferences_dir -&gt; root_dir; add data_dir; remove copying logic; disable dashboard from tray; avoid unnecessary segmentations; bugfixes
+
+* fix json serialize error
+
+* with session
+
+* fix template paths
+
+* black; flake8
+
+* make dir if not exists
+
+* fix confest.py: RECORDING_DIRECTORY_PATH -&gt; RECORDING_DIR_PATH
+
+* fix test_share.py: RECORDING_DIRECTORY_PATH -&gt; RECORDING_DIR_PATH ([`45c06c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/45c06c33f977d18b8dd012e1b98d316e114651ca))
+
+
 ## v0.23.1 (2024-05-11)
 
 ### Fix
