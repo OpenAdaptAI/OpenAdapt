@@ -6,7 +6,7 @@ import os
 import tempfile
 
 from openadapt import share
-from openadapt.config import RECORDING_DIRECTORY_PATH
+from openadapt.config import RECORDING_DIR_PATH
 
 
 def test_export_recording_to_folder() -> None:
@@ -77,7 +77,7 @@ def test_send_recording() -> None:
     timestamp = 193994394  # Replace this with the actual timestamp value
     with patch(
         "openadapt.share.export_recording_to_folder",
-        return_value=str(RECORDING_DIRECTORY_PATH / f"recording_1_{timestamp}.zip"),
+        return_value=str(RECORDING_DIR_PATH / f"recording_1_{timestamp}.zip"),
     ):
         # Mock the send_file() function to avoid sending the file
         with patch("openadapt.share.send_file"):
@@ -88,7 +88,7 @@ def test_send_recording() -> None:
             assert share.send_file.called
 
     # Verify that the temporary zip file is deleted after the test
-    assert not os.path.exists(RECORDING_DIRECTORY_PATH / f"recording_1_{timestamp}.zip")
+    assert not os.path.exists(RECORDING_DIR_PATH / f"recording_1_{timestamp}.zip")
 
 
 def test_receive_recording() -> None:
@@ -101,7 +101,7 @@ def test_receive_recording() -> None:
     # Prepare mock data and simulate receiving a recording with a wormhole code
     wormhole_code = "test_wormhole_code"
     temp_zip_path = (
-        RECORDING_DIRECTORY_PATH / "recording.zip"
+        RECORDING_DIR_PATH / "recording.zip"
     )  # Replace with the path where you expect the zip file
 
     # Create a temporary zip file

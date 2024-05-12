@@ -300,15 +300,12 @@ def _get(
 
 def get_action_events(
     recording: Recording,
-    filter_stop_sequences: bool = False,
     session: sa.orm.Session = None,
 ) -> list[ActionEvent]:
     """Get action events for a given recording.
 
     Args:
         recording (Recording): The recording object.
-        filter_stop_sequences (bool, optional): Whether to filter out stop sequences.
-          Defaults to False.
         session (sa.orm.Session, optional): The database session. Defaults to None.
 
     Returns:
@@ -316,9 +313,8 @@ def get_action_events(
     """
     assert recording, "Invalid recording."
     action_events = _get(ActionEvent, recording.timestamp, session)
-    if filter_stop_sequences:
-        # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
-        filter_stop_sequences(action_events)
+    # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
+    filter_stop_sequences(action_events)
     return action_events
 
 

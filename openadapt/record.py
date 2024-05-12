@@ -1060,8 +1060,11 @@ def record(
         config.RECORD_IMAGES,
     )
 
-    if status_pipe:
-        status_pipe.send({"type": "record.starting"})
+    # logically it makes sense to communicate from here, but when running
+    # from the tray it takes too long
+    # TODO: fix this
+    # if status_pipe:
+    #    status_pipe.send({"type": "record.starting"})
 
     logger.info(f"{task_description=}")
 

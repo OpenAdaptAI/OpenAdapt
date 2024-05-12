@@ -23,7 +23,6 @@
     "RECORD_IMAGES": false,
     "LOG_MEMORY": false,
     "VIDEO_PIXEL_FORMAT": "rgb24",
-    "VIDEO_DIR_PATH": "./videos",
     "STOP_SEQUENCES": [
         [
             "o",

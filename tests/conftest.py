@@ -5,7 +5,7 @@ import os
 from sqlalchemy import create_engine, engine, text
 import pytest
 
-from openadapt.config import RECORDING_DIRECTORY_PATH, ROOT_DIR_PATH
+from openadapt.config import RECORDING_DIR_PATH, ROOT_DIR_PATH
 from openadapt.db.db import Base
 
 
@@ -13,7 +13,7 @@ from openadapt.db.db import Base
 def setup_database(request: pytest.FixtureRequest) -> engine:
     """Set up a database for testing."""
     # Create a new database or connect to an existing one
-    db_url = RECORDING_DIRECTORY_PATH / "recording.db"
+    db_url = RECORDING_DIR_PATH / "recording.db"
     engine = create_engine(f"sqlite:///{db_url}")
 
     # Create the database tables (if necessary)

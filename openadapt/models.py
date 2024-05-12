@@ -1,7 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type, TypeVar
+from typing import Type
 import io
 
 from loguru import logger
@@ -677,72 +677,6 @@ class MemoryStat(db.Base):
     recording_timestamp = sa.Column(sa.Integer)
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
-
-
-DBModel = TypeVar("DBModel")
-
-
-def copy_sqlalchemy_object(obj: DBModel, additional_keys: list[str] = []) -> DBModel:
-    """Copy a SQLAlchemy object.
-
-    Args:
-        obj (DBModel): The SQLAlchemy object to copy.
-        additional_keys (list, optional): Additional keys to copy. Defaults to [].
-
-    Returns:
-        Base: The copied SQLAlchemy object.
-    """
-    new_obj = obj.__class__()
-    for key in obj.__mapper__.columns.keys():
-        setattr(new_obj, key, getattr(obj, key))
-    if additional_keys:
-        for key in additional_keys:
-            setattr(new_obj, key, getattr(obj, key))
-    return new_obj
-
-
-def update_related_objects(
-    new_obj: DBModel, obj: DBModel, relationships: list[tuple[str, dict]]
-) -> None:
-    """Update the relationships of a SQLAlchemy object.
-
-    Args:
-        new_obj (DBModel): The new SQLAlchemy object.
-        obj (DBModel): The old SQLAlchemy object.
-        relationships (list): The relationships to update.
-    """
-    for relationship in relationships:
-        relationship_name, old_to_new_mapping = relationship
-        related_objects = getattr(obj, relationship_name)
-        if isinstance(related_objects, list):
-            new_related_objects = []
-            for related_object in related_objects:
-                new_related_object = old_to_new_mapping[related_object]
-                new_related_objects.append(new_related_object)
-        else:
-            new_related_objects = old_to_new_mapping[related_objects]
-        setattr(new_obj, relationship_name, new_related_objects)
-
-
-def copy_sqlalchemy_objects(
-    objs: list[DBModel], additional_keys: list[str] = None
-) -> tuple[list[DBModel], dict[DBModel, DBModel]]:
-    """Copy a list of SQLAlchemy objects.
-
-    Args:
-        objs (list): The list of SQLAlchemy objects to copy.
-        additional_keys (list, optional): Additional keys to copy. Defaults to [].
-
-    Returns:
-        list: The copied list of SQLAlchemy objects.
-    """
-    new_objs = []
-    old_to_new_mapping = {}
-    for obj in objs:
-        new_obj = copy_sqlalchemy_object(obj, additional_keys)
-        old_to_new_mapping[obj] = new_obj
-        new_objs.append(new_obj)
-    return new_objs, old_to_new_mapping
 
 
 # avoid circular import

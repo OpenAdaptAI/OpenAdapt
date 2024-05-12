@@ -43,56 +43,6 @@ def get_events(
     window_events = crud.get_window_events(recording, session=session)
     screenshots = crud.get_screenshots(recording, session=session)
 
-    new_recordings, old_to_new_recording = models.copy_sqlalchemy_objects([recording])
-
-    new_action_events, old_to_new_action_events = models.copy_sqlalchemy_objects(
-        action_events
-    )
-    new_window_events, old_to_new_window_events = models.copy_sqlalchemy_objects(
-        window_events
-    )
-    new_screenshots, old_to_new_screenshots = models.copy_sqlalchemy_objects(
-        screenshots, ["prev"]
-    )
-
-    for action_event in action_events:
-        models.update_related_objects(
-            old_to_new_action_events[action_event],
-            action_event,
-            [
-                ("recording", old_to_new_recording),
-                ("window_event", old_to_new_window_events),
-                ("screenshot", old_to_new_screenshots),
-                ("children", old_to_new_action_events),
-            ],
-        )
-
-    for window_event in window_events:
-        models.update_related_objects(
-            old_to_new_window_events[window_event],
-            window_event,
-            [
-                ("recording", old_to_new_recording),
-                ("action_events", old_to_new_action_events),
-            ],
-        )
-
-    for screenshot in screenshots:
-        models.update_related_objects(
-            old_to_new_screenshots[screenshot],
-            screenshot,
-            [
-                ("recording", old_to_new_recording),
-                ("action_event", old_to_new_action_events),
-            ],
-        )
-
-    recording = new_recordings[0]
-    crud.filter_stop_sequences(new_action_events)
-    action_events = new_action_events
-    window_events = new_window_events
-    screenshots = new_screenshots
-
     raw_action_event_dicts = utils.rows2dicts(action_events)
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 

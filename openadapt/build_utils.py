@@ -5,12 +5,10 @@ import pathlib
 import sys
 
 
-def get_path_to_preferences_folder(
-    current_path: pathlib.Path = None,
-) -> pathlib.Path:
-    """Get the path to the preferences folder."""
+def get_root_dir_path() -> pathlib.Path:
+    """Get the path to the project root directory."""
     if not is_running_from_executable():
-        return current_path
+        return pathlib.Path(__file__).parent
     if sys.platform == "darwin":
         # if macos, get the path to the /Users/username/Library/Preferences
         # and set the path for all user preferences

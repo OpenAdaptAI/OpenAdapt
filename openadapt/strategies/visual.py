@@ -119,10 +119,10 @@ def apply_replay_instructions(
     action_dicts = [get_action_prompt_dict(action) for action in action_events]
     actions_dict = {"actions": action_dicts}
     system_prompt = utils.render_template_from_file(
-        "openadapt/prompts/system.j2",
+        "prompts/system.j2",
     )
     prompt = utils.render_template_from_file(
-        "openadapt/prompts/apply_replay_instructions.j2",
+        "prompts/apply_replay_instructions.j2",
         actions=actions_dict,
         replay_instructions=replay_instructions,
     )
@@ -185,11 +185,12 @@ def get_action_prompt_dict(action: models.ActionEvent) -> dict:
             if val is not None
             and not key.endswith("timestamp")
             and not key.endswith("id")
+            and key not in ["reducer_names"]
             # and not isinstance(getattr(models.ActionEvent, key), property)
         }
     )
     if action.active_segment_description:
-        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy", "reducer_names"):
+        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
             if key in action_dict:
                 del action_dict[key]
     if action.available_segment_descriptions:
@@ -457,11 +458,6 @@ def get_window_segmentation(
     if DEBUG:
         original_image.show()
 
-    segmentation_adapter = adapters.get_default_segmentation_adapter()
-    segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
-    if DEBUG:
-        segmented_image.show()
-
     similar_segmentation, similar_segmentation_diff = find_similar_image_segmentation(
         original_image,
     )
@@ -470,6 +466,11 @@ def get_window_segmentation(
         # regions of new image where segments of similar_segmentation overlap non-zero
         # regions of similar_segmentation_diff
         return similar_segmentation
+
+    segmentation_adapter = adapters.get_default_segmentation_adapter()
+    segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
+    if DEBUG:
+        segmented_image.show()
 
     masks = vision.process_image_for_masks(segmented_image)
     if DEBUG:
@@ -552,12 +553,12 @@ def prompt_for_descriptions(
 
     images = [original_image_base64] + masked_images_base64
     system_prompt = utils.render_template_from_file(
-        "openadapt/prompts/system.j2",
+        "prompts/system.j2",
     )
     logger.info(f"system_prompt=\n{system_prompt}")
     num_segments = len(masked_images_base64)
     prompt = utils.render_template_from_file(
-        "openadapt/prompts/description.j2",
+        "prompts/description.j2",
         active_segment_description=active_segment_description,
         num_segments=num_segments,
         exceptions=exceptions,
