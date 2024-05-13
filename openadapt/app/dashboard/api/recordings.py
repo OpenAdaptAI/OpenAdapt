@@ -83,6 +83,18 @@ class RecordingsAPI:
                     {"type": "num_events", "value": len(action_events)}
                 )
 
+                def convert_to_str(event_dict: dict) -> dict:
+                    """Convert the keys to strings."""
+                    if "key" in event_dict:
+                        event_dict["key"] = str(event_dict["key"])
+                    if "canonical_key" in event_dict:
+                        event_dict["canonical_key"] = str(event_dict["canonical_key"])
+                    if "reducer_names" in event_dict:
+                        event_dict["reducer_names"] = list(event_dict["reducer_names"])
+                    if "children" in event_dict:
+                        for child_event in event_dict["children"]:
+                            convert_to_str(child_event)
+
                 for action_event in action_events:
                     event_dict = row2dict(action_event)
                     try:
@@ -95,12 +107,8 @@ class RecordingsAPI:
                         width, height = 0, 0
                     event_dict["screenshot"] = image
                     event_dict["dimensions"] = {"width": width, "height": height}
-                    if event_dict["key"]:
-                        event_dict["key"] = str(event_dict["key"])
-                    if event_dict["canonical_key"]:
-                        event_dict["canonical_key"] = str(event_dict["canonical_key"])
-                    if event_dict["reducer_names"]:
-                        event_dict["reducer_names"] = list(event_dict["reducer_names"])
+
+                    convert_to_str(event_dict)
                     await websocket.send_json(
                         {"type": "action_event", "value": event_dict}
                     )

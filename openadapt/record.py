@@ -384,7 +384,7 @@ def write_events(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     if pre_callback:
-        state = pre_callback(recording_timestamp)
+        state = pre_callback(recording)
     else:
         state = None
 

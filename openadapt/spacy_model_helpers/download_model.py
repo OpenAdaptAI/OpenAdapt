@@ -7,11 +7,11 @@ import git
 import requests
 
 from openadapt import PROJECT_DIR
-from openadapt.build_utils import get_path_to_preferences_folder
+from openadapt.build_utils import get_root_dir_path
 
 
 def download_spacy_model(model_name: str) -> None:
-    preferences_folder = get_path_to_preferences_folder()
+    preferences_folder = get_root_dir_path()
     version = None
 
     def download_latest_model_version() -> str:

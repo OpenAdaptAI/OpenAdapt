@@ -7,6 +7,7 @@ import { isNotEmpty, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { ScrubbingUpdates } from "./ScrubbingUpdates";
+import Link from "next/link";
 
 
 export default function Recordings() {
@@ -130,6 +131,11 @@ export default function Recordings() {
                                 label="Select scrubbing provider"
                                 {...scrubbingForm.getInputProps('providerId')}
                             />
+                        </Grid.Col>
+                        <Grid.Col span={12}>
+                            <Link href="/settings/scrubbing" className="no-underline">
+                                Configure scrubbing settings before scrubbing
+                            </Link>
                         </Grid.Col>
                     </Grid>
                     <Button mt={20} type="submit">Scrub</Button>

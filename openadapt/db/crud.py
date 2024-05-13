@@ -543,6 +543,7 @@ def update_video_start_time(recording: Recording, video_start_time: float) -> No
     # Update the video start time
     recording.video_start_time = video_start_time
 
+    db.add(recording)
     # Commit the changes to the database
     db.commit()
 

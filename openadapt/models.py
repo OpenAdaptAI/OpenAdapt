@@ -782,5 +782,31 @@ class ScrubbedRecording(db.Base):
         }
 
 
+def copy_sa_instance(sa_instance: db.Base, **kwargs) -> db.Base:
+    """Copy a SQLAlchemy instance.
+
+    Args:
+        sa_instance (Base): The SQLAlchemy instance to copy.
+        **kwargs: Additional keyword arguments to pass to the copied instance.
+
+    Returns:
+        Base: The copied SQLAlchemy instance.
+    """
+    sa_instance.id
+
+    table = sa_instance.__table__
+    pk_columns = [k for k in table.primary_key.columns.keys()]
+    fk_columns = [k.parent.name for k in table.foreign_keys]
+    exclude_columns = pk_columns + fk_columns
+    data = {
+        c: getattr(sa_instance, c)
+        for c in table.columns.keys()
+        if c not in exclude_columns
+    }
+    data.update(kwargs)
+    clone = sa_instance.__class__(**data)
+    return clone
+
+
 # avoid circular import
 from openadapt import utils  # noqa
