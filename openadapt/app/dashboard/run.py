@@ -14,6 +14,8 @@ from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY, config
 
 from .api.index import run_app
 
+dashboard_process = None
+
 
 def run() -> Thread:
     """Run the dashboard web application."""
@@ -29,7 +31,8 @@ def run() -> Thread:
             run_app()
             return
 
-        return subprocess.Popen(
+        global dashboard_process
+        dashboard_process = subprocess.Popen(
             ["node", "index.js"],
             cwd=cur_dir,
             env={
@@ -51,12 +54,13 @@ def run() -> Thread:
     )
 
 
-def cleanup(process: subprocess.Popen) -> None:
+def cleanup() -> None:
     """Cleanup the dashboard web application process."""
     logger.debug("Terminating the dashboard client.")
-    if process:
-        process.terminate()
-        process.wait()
+    global dashboard_process
+    if dashboard_process:
+        dashboard_process.terminate()
+        dashboard_process.wait()
     logger.debug("Dashboard client terminated.")
 
 
@@ -67,4 +71,4 @@ if __name__ == "__main__":
         while True:
             pass
     except KeyboardInterrupt:
-        cleanup(dashboard_thread._return)
+        cleanup()

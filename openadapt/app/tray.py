@@ -118,7 +118,7 @@ class SystemTrayIcon:
         def _quit() -> None:
             """Quit the application."""
             if self.dashboard_thread is not None:
-                cleanup_dashboard(self.dashboard_thread._return)
+                cleanup_dashboard()
             self.app.quit()
 
         self.quit.triggered.connect(_quit)
@@ -445,7 +445,7 @@ class SystemTrayIcon:
         if self.dashboard_thread:
             if is_running_from_executable():
                 return
-            cleanup_dashboard(self.dashboard_thread._return)
+            cleanup_dashboard()
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()
         self.dashboard_thread.start()
