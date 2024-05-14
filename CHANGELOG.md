@@ -2,6 +2,13 @@
 
 
 
+## v0.24.1 (2024-05-14)
+
+### Fix
+
+* fix(dashboard): close dashboard from tray (#671) ([`3f0db86`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3f0db86aed32cc6d71076c8ebaad4f78447546db))
+
+
 ## v0.24.0 (2024-05-12)
 
 ### Feature
