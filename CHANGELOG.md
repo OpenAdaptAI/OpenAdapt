@@ -2,6 +2,15 @@
 
 
 
+## v0.25.0 (2024-05-14)
+
+### Feature
+
+* feat: run posthog in production only (#670)
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bed12ec`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bed12ecde56baa3f6540d2b0399d1e4af43bf050))
+
+
 ## v0.24.1 (2024-05-14)
 
 ### Fix
