@@ -16,10 +16,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 import git
 import sentry_sdk
 
-from openadapt.build_utils import (
-    get_root_dir_path,
-    is_running_from_executable,
-)
+from openadapt.build_utils import get_root_dir_path, is_running_from_executable
 
 ROOT_DIR_PATH = get_root_dir_path()
 CONFIG_DEFAULTS_FILE_PATH = (ROOT_DIR_PATH / "config.defaults.json").absolute()
@@ -403,7 +400,7 @@ def print_config() -> None:
             if is_running_from_executable():
                 is_reporting_branch = True
             else:
-                active_branch_name = git.Repo(ROOT_DIR_PATH).active_branch.name
+                active_branch_name = git.Repo(ROOT_DIR_PATH.parent).active_branch.name
                 logger.info(f"{active_branch_name=}")
                 is_reporting_branch = (
                     active_branch_name == config.ERROR_REPORTING_BRANCH
