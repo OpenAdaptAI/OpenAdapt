@@ -1042,8 +1042,9 @@ def record_audio(
     """Record audio narration during the recording and store data in database.
 
     Args:
-        terminate_processing: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
+        terminate_processing: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
     """
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording_timestamp)
