@@ -94,6 +94,11 @@ class Recording(db.Base):
         return self._processed_action_events
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the recording.
+
+        Args:
+            scrubber (ScrubbingProvider): The scrubbing provider to use.
+        """
         self.task_description = scrubber.scrub_text(self.task_description)
 
 
@@ -769,6 +774,7 @@ class ScrubbedRecording(db.Base):
         return ScrubProvider.as_options()[self.provider]
 
     def asdict(self) -> dict:
+        """Return the scrubbed recording as a dictionary."""
         return {
             **super().asdict(),
             "provider": self.get_provider_name(),
@@ -782,7 +788,7 @@ class ScrubbedRecording(db.Base):
         }
 
 
-def copy_sa_instance(sa_instance: db.Base, **kwargs) -> db.Base:
+def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:
     """Copy a SQLAlchemy instance.
 
     Args:

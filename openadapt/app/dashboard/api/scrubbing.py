@@ -1,5 +1,6 @@
 """API endpoints for scrubbing."""
 
+from typing import Iterator
 import json
 import time
 
@@ -83,11 +84,12 @@ class ScrubbingAPI:
         """Get the updates of the scrubbing process.
 
         Returns:
-            StreamingResponse: A streaming response with the updates of the scrubbing process.
+            StreamingResponse: A streaming response with the updates of
+            the scrubbing process.
         """
         scrubbing_proc = get_scrubbing_process()
 
-        def fetch_scrubbing_data():
+        def fetch_scrubbing_data() -> Iterator[str]:
             while scrubbing_proc.is_running():
                 data = json.dumps(scrubbing_proc.fetch_updated_data())
                 yield data

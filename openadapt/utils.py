@@ -21,7 +21,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from openadapt.build_utils import redirect_stdout_stderr
 from openadapt.models import Recording
-from openadapt.spacy_model_helpers import download_spacy_model
 
 with redirect_stdout_stderr():
     import fire

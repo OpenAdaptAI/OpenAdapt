@@ -12,7 +12,7 @@ class ScrubProvider:
     PRIVATE_AI = "PRIVATE_AI"
 
     @classmethod
-    def as_options(cls):
+    def as_options(cls: "ScrubProvider") -> dict:
         """Return the available options."""
         return {
             cls.PRESIDIO: "Presidio",
@@ -21,12 +21,20 @@ class ScrubProvider:
         }
 
     @classmethod
-    def get_available_providers(cls):
+    def get_available_providers(cls: "ScrubProvider") -> list:
         """Return the available providers."""
         return [cls.PRESIDIO, cls.PRIVATE_AI]
 
     @classmethod
-    def get_scrubber(cls, provider):
+    def get_scrubber(cls: "ScrubProvider", provider: str) -> "ScrubProvider":
+        """Return the scrubber for the provider.
+
+        Args:
+            provider: The provider to get the scrubber for.
+
+        Returns:
+            The scrubber for the provider.
+        """
         if provider not in cls.get_available_providers():
             raise ValueError(f"Provider {provider} is not supported.")
         if provider == cls.PRESIDIO:

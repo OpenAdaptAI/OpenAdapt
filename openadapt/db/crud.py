@@ -248,13 +248,15 @@ def get_all_recordings(session: sa.orm.Session = None) -> list[Recording]:
     _db = session or db
     return (
         _db.query(Recording)
-        .filter(Recording.original_recording_id == None)
+        .filter(Recording.original_recording_id is None)
         .order_by(sa.desc(Recording.timestamp))
         .all()
     )
 
 
-def get_all_scrubbed_recordings(session=None) -> list[ScrubbedRecording]:
+def get_all_scrubbed_recordings(
+    session: sa.orm.Session = None,
+) -> list[ScrubbedRecording]:
     """Get all scrubbed recordings.
 
     Args:
@@ -355,7 +357,7 @@ def get_action_events(
 
 
 def get_top_level_action_events(
-    recording: Recording, session=None
+    recording: Recording, session: sa.orm.Session = None
 ) -> list[ActionEvent]:
     """Get top level action events for a given recording.
 
@@ -553,7 +555,12 @@ def update_video_start_time(recording: Recording, video_start_time: float) -> No
     )
 
 
-def post_process_events(recording: Recording):
+def post_process_events(recording: Recording) -> None:
+    """Post-process events.
+
+    Args:
+        recording (Recording): The recording to post-process.
+    """
     screenshots = _get(Screenshot, recording.id)
     action_events = _get(ActionEvent, recording.id)
     window_events = _get(WindowEvent, recording.id)
@@ -576,7 +583,9 @@ def post_process_events(recording: Recording):
     db.commit()
 
 
-def get_action_event_children(action_event_id: int, session=None) -> list[ActionEvent]:
+def get_action_event_children(
+    action_event_id: int, session: sa.orm.Session = None
+) -> list[ActionEvent]:
     """Get the children of an action event.
 
     Args:

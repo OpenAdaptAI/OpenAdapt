@@ -1,3 +1,6 @@
+"""Download the spacy model."""
+
+
 import json
 import os
 import pathlib
@@ -11,6 +14,11 @@ from openadapt.build_utils import get_root_dir_path
 
 
 def download_spacy_model(model_name: str) -> None:
+    """Download the spacy model.
+
+    Args:
+        model_name: The name of the model to download.
+    """
     preferences_folder = get_root_dir_path()
     version = None
 
@@ -30,7 +38,8 @@ def download_spacy_model(model_name: str) -> None:
         with open(preferences_folder / f"{model_name}/meta.json", "r") as f:
             metadata = json.load(f)
             version = metadata["version"]
-        # copy contents of temp directory to the model_name/model_name-{version} directory
+        # copy contents of temp directory to the
+        # model_name/model_name-{version} directory
         shutil.copytree(
             preferences_folder / f"{model_name}-temp",
             preferences_folder / f"{model_name}/{model_name}-{version}",
@@ -55,7 +64,10 @@ def download_spacy_model(model_name: str) -> None:
                         "./", ""
                     )
                 )
-                url = f"https://huggingface.co/spacy/en_core_web_trf/resolve/main/{relative_path}"
+                url = (
+                    "https://huggingface.co/spacy/en_core_web_trf/resolve/main/"
+                    f"{relative_path}"
+                )
                 # overwrite the file with the contents of the file at the url
                 with open(
                     preferences_folder

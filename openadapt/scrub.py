@@ -1,3 +1,6 @@
+"""Scrubbing module for OpenAdapt."""
+
+
 from queue import Queue
 from threading import Thread
 import multiprocessing
@@ -41,7 +44,7 @@ class ScrubbingProc:
         """
         self._additional_data.update(data)
 
-    def set_on_complete(self, on_complete: callable, *args, **kwargs) -> None:
+    def set_on_complete(self, on_complete: callable, *args: any, **kwargs: any) -> None:
         """Set the on complete callback.
 
         Args:
@@ -84,7 +87,7 @@ class ScrubbingProc:
         scrubbing_proc.copying_recording = False
         existing_threads = [thread for thread in self._threads]
 
-        def closing_thread():
+        def closing_thread() -> None:
             """Close the process."""
             for thread in existing_threads:
                 thread.join()
@@ -116,7 +119,8 @@ def scrub(
     Args:
         recording_id (int): The recording id to scrub.
         provider_id (str): The provider id to use for scrubbing.
-        release_lock (bool, optional): Whether to release the db write lock. Defaults to False.
+        release_lock (bool, optional): Whether to release the db write lock.
+        Defaults to False.
 
     Returns:
         ScrubbingProc: The scrubbing process.
@@ -131,7 +135,8 @@ def scrub(
         {"recording": recording, "provider_id": provider_id}
     )
 
-    def inner():
+    def inner() -> None:
+        """Inner function to scrub a recording."""
         new_recording_id = crud.copy_recording(recording_id)
         if new_recording_id is None:
             if release_lock:
@@ -272,7 +277,7 @@ def scrub(
         scrubbing_proc.set_on_complete(on_complete_scrubbing)
 
         scrubbing_proc.start()
-        return scrubbing_proc
+        return
 
     Thread(target=inner, daemon=True).start()
 
@@ -294,7 +299,7 @@ def start_workers(
         num_workers (int, optional): The number of workers to start. Defaults to 1.
     """
 
-    def thread_target(thread_name) -> None:
+    def thread_target(thread_name: str) -> None:
         """Target function for a worker thread.
 
         Args:
