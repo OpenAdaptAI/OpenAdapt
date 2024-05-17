@@ -18,9 +18,11 @@ import sentry_sdk
 
 from openadapt.build_utils import get_root_dir_path, is_running_from_executable
 
-ROOT_DIR_PATH = get_root_dir_path()
-CONFIG_DEFAULTS_FILE_PATH = (ROOT_DIR_PATH / "config.defaults.json").absolute()
+CONFIG_DEFAULTS_FILE_PATH = (
+    pathlib.Path(__file__).parent / "config.defaults.json"
+).absolute()
 
+ROOT_DIR_PATH = get_root_dir_path()
 DATA_DIR_PATH = (ROOT_DIR_PATH / "data").absolute()
 CONFIG_FILE_PATH = (DATA_DIR_PATH / "config.json").absolute()
 RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
