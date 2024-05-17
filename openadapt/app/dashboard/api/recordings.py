@@ -28,23 +28,20 @@ class RecordingsAPI:
     @staticmethod
     def get_recordings() -> dict[str, list[Recording]]:
         """Get all recordings."""
-        session = crud.get_new_session()
-        with session:
-            recordings = crud.get_all_recordings(session)
-            return {"recordings": recordings}
+        session = crud.get_new_session(read_only=True)
+        recordings = crud.get_all_recordings(session)
+        return {"recordings": recordings}
 
     @staticmethod
-    async def start_recording() -> dict[str, str]:
+    def start_recording() -> dict[str, str]:
         """Start a recording session."""
-        await crud.acquire_db_lock()
         quick_record()
-        return {"message": "Recording started"}
+        return {"message": "Recording started", "status": 200}
 
     @staticmethod
-    async def stop_recording() -> dict[str, str]:
+    def stop_recording() -> dict[str, str]:
         """Stop a recording session."""
         stop_record()
-        await crud.release_db_lock()
         return {"message": "Recording stopped"}
 
     @staticmethod
@@ -59,40 +56,37 @@ class RecordingsAPI:
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
             await websocket.accept()
-            session = crud.get_new_session()
-            with session:
-                recording = crud.get_recording_by_id(recording_id, session)
+            db = crud.get_new_session(read_only=True)
+            recording = crud.get_recording_by_id(db, recording_id)
 
-                await websocket.send_json(
-                    {"type": "recording", "value": recording.asdict()}
-                )
+            await websocket.send_json(
+                {"type": "recording", "value": recording.asdict()}
+            )
 
-                action_events = get_events(recording, session=session)
+            action_events = get_events(db, recording)
 
-                await websocket.send_json(
-                    {"type": "num_events", "value": len(action_events)}
-                )
+            await websocket.send_json(
+                {"type": "num_events", "value": len(action_events)}
+            )
 
-                for action_event in action_events:
-                    event_dict = row2dict(action_event)
-                    try:
-                        image = display_event(action_event)
-                        width, height = image.size
-                        image = image2utf8(image)
-                    except Exception:
-                        logger.info("Failed to display event")
-                        image = None
-                        width, height = 0, 0
-                    event_dict["screenshot"] = image
-                    event_dict["dimensions"] = {"width": width, "height": height}
-                    if event_dict["key"]:
-                        event_dict["key"] = str(event_dict["key"])
-                    if event_dict["canonical_key"]:
-                        event_dict["canonical_key"] = str(event_dict["canonical_key"])
-                    if event_dict["reducer_names"]:
-                        event_dict["reducer_names"] = list(event_dict["reducer_names"])
-                    await websocket.send_json(
-                        {"type": "action_event", "value": event_dict}
-                    )
+            for action_event in action_events:
+                event_dict = row2dict(action_event)
+                try:
+                    image = display_event(action_event)
+                    width, height = image.size
+                    image = image2utf8(image)
+                except Exception:
+                    logger.info("Failed to display event")
+                    image = None
+                    width, height = 0, 0
+                event_dict["screenshot"] = image
+                event_dict["dimensions"] = {"width": width, "height": height}
+                if event_dict["key"]:
+                    event_dict["key"] = str(event_dict["key"])
+                if event_dict["canonical_key"]:
+                    event_dict["canonical_key"] = str(event_dict["canonical_key"])
+                if event_dict["reducer_names"]:
+                    event_dict["reducer_names"] = list(event_dict["reducer_names"])
+                await websocket.send_json({"type": "action_event", "value": event_dict})
 
-                await websocket.close()
+            await websocket.close()

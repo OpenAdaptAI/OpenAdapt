@@ -12,7 +12,6 @@ from nicegui import ui
 
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
-from openadapt.db.crud import new_session
 from openadapt.record import record
 
 
@@ -146,7 +145,6 @@ def quick_record(
 ) -> None:
     """Run a recording session."""
     global record_proc
-    new_session()
     task_description = task_description or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     record_proc.start(
         record,
@@ -204,7 +202,6 @@ def recording_prompt(options: list[str], record_button: ui.button) -> None:
         ui.notify(
             f"Recording {name}... Press CTRL + C in terminal window to cancel",
         )
-        new_session()
         global record_proc
         record_proc.start(
             record,

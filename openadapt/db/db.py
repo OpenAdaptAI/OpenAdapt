@@ -76,6 +76,7 @@ def get_base(engine: sa.engine) -> sa.engine:
 engine = get_engine()
 Base = get_base(engine)
 Session = sessionmaker(bind=engine)
+ReadOnlySession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def copy_recording_data(

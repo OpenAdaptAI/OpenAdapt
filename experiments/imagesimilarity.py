@@ -3,7 +3,7 @@
 from typing import Callable
 import time
 
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from PIL import Image, ImageOps
 from skimage.metrics import structural_similarity as ssim
 from sklearn.manifold import MDS
@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from openadapt.db import crud
-
 
 SHOW_SSIM = False
 
@@ -290,7 +289,8 @@ def display_distance_matrix_with_images(
 
 def main() -> None:
     """Main function to process images and display similarity metrics."""
-    recording = crud.get_latest_recording()
+    db = crud.get_new_session(read_only=True)
+    recording = crud.get_latest_recording(db)
     action_events = recording.processed_action_events
     images = [action_event.screenshot.cropped_image for action_event in action_events]
 
