@@ -2,6 +2,13 @@
 
 
 
+## v0.25.1 (2024-05-17)
+
+### Fix
+
+* fix(config): Fix path of default config file (#675) ([`9ffdf67`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9ffdf677a2db81d4aac901ba582cdcd2a76ad075))
+
+
 ## v0.25.0 (2024-05-14)
 
 ### Feature
