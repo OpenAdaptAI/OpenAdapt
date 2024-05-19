@@ -74,6 +74,8 @@ def main() -> None:
         "--onedir",
         # prevent console appearing, only use with ui.run(native=True, ...)
         "--windowed",
+        "--hidden-import=tiktoken_ext.openai_public",
+        "--hidden-import=tiktoken_ext",
     ]
     ignore_dirs = [
         "__pycache__",
@@ -140,7 +142,7 @@ def main() -> None:
     proc = subprocess.Popen("pyinstaller OpenAdapt.spec --noconfirm", shell=True)
     proc.wait()
 
-    # # cleanup
+    # cleanup
     os.remove("OpenAdapt.spec")
 
     if sys.platform == "darwin":
