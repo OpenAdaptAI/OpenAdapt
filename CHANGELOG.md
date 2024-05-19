@@ -2,6 +2,13 @@
 
 
 
+## v0.25.2 (2024-05-19)
+
+### Fix
+
+* fix(app): add hidden-imports to build spec (#678) ([`d2db305`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d2db30512bc0488df7c250b10fcf45c5025431ec))
+
+
 ## v0.25.1 (2024-05-17)
 
 ### Fix
