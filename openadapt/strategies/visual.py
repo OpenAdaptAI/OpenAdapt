@@ -30,10 +30,13 @@ See prompts for details:
 
 Todo:
 - handle tab sequences
-- re-use previous segmentations / descriptions
-- handle separate UI elements which look identical (e.g. spreadsheet cells)
+- re-use individual segments of previous segmentations
+- handle distinct segments which look identical (e.g. spreadsheet cells)
     - e.g. include segment mask in prompt
     - e.g. annotate grid positions
+    - e.g. describe relative positions
+- update actions during replay
+- handle API failures
 
 
 Usage:
@@ -55,7 +58,7 @@ from openadapt import adapters, common, models, strategies, utils, vision
 DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
-MAX_SSIM = 0.9  # threshold for considering an image as similar
+MIN_SSIM = 0.9  # threshold for considering an image as similar
 
 
 @dataclass
@@ -91,7 +94,6 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
     """
     for action in action_events:
         # TODO: handle terminal <tab> event
-        # if action.name in ("click", "doubleclick", "singleclick", "scroll"):
         if action.name in common.MOUSE_EVENTS:
             window_segmentation = get_window_segmentation(action)
             active_segment_idx = get_active_segment(action, window_segmentation)
@@ -116,7 +118,7 @@ def apply_replay_instructions(
         action_events: list of action events to be modified in place.
         replay_instructions: instructions for how action events should be modified.
     """
-    action_dicts = [get_action_prompt_dict(action) for action in action_events]
+    action_dicts = [action.to_prompt_dict() for action in action_events]
     actions_dict = {"actions": action_dicts}
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
@@ -145,61 +147,6 @@ def apply_replay_instructions(
     return modified_actions
 
 
-def get_window_prompt_dict(active_window: models.WindowEvent) -> dict:
-    """Convert a WindowEvent into a dict, excluding unnecessary properties.
-
-    Args:
-        active_window: the WindowEvent to convert
-
-    Returns:
-        dictionary containing relevant properties from the given WindowEvent.
-    """
-    active_window_dict = deepcopy(
-        {
-            key: val
-            for key, val in utils.row2dict(active_window, follow=False).items()
-            if val is not None
-            and not key.endswith("timestamp")
-            and not key.endswith("id")
-            # and not isinstance(getattr(models.WindowEvent, key), property)
-        }
-    )
-    active_window_dict["state"].pop("data")
-    active_window_dict["state"].pop("meta")
-    return active_window_dict
-
-
-def get_action_prompt_dict(action: models.ActionEvent) -> dict:
-    """Convert an ActionEvent into a dict, excluding unnecessary properties.
-
-    Args:
-        action: the ActionEvent to convert
-
-    Returns:
-        dictionary containing relevant properties from the given ActionEvent.
-    """
-    action_dict = deepcopy(
-        {
-            key: val
-            for key, val in utils.row2dict(action, follow=False).items()
-            if val is not None
-            and not key.endswith("timestamp")
-            and not key.endswith("id")
-            and key not in ["reducer_names"]
-            # and not isinstance(getattr(models.ActionEvent, key), property)
-        }
-    )
-    if action.active_segment_description:
-        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
-            if key in action_dict:
-                del action_dict[key]
-    if action.available_segment_descriptions:
-        action_dict["available_segment_descriptions"] = (
-            action.available_segment_descriptions
-        )
-    return action_dict
-
-
 class VisualReplayStrategy(
     strategies.base.BaseReplayStrategy,
 ):
@@ -224,6 +171,7 @@ class VisualReplayStrategy(
             recording.processed_action_events,
             instructions,
         )
+        # TODO: make this less of a hack
         global DEBUG
         DEBUG = DEBUG_REPLAY
 
@@ -294,15 +242,15 @@ def get_active_segment(
     window_segmentation: Segmentation,
     debug: bool = DEBUG,
 ) -> int:
-    """Get the index of the bounding box within the action's mouse coordinates.
+    """Get the index of the bounding box containing the action's mouse coordinates.
 
     Adjust for the scaling of the cropped window and the action coordinates.
-    Additionally, visualizes the segments and the mouse position.
+    Optionally visualize segments and mouse position.
 
     Args:
         action: the ActionEvent
         window_segmentation: the Segmentation
-        debug: whether to display images useful in debugging
+        debug: whether to display images for debugging
 
     Returns:
         index of active segment in Segmentation
@@ -408,7 +356,7 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.
 
 def find_similar_image_segmentation(
     image: Image.Image,
-    max_ssim: float = MAX_SSIM,
+    min_ssim: float = MIN_SSIM,
 ) -> tuple[Segmentation, np.ndarray] | tuple[None, None]:
     """Identify a similar image in the cache based on the SSIM comparison.
 
@@ -419,7 +367,7 @@ def find_similar_image_segmentation(
 
     Args:
         image (Image.Image): The image to compare against the cache.
-        max_ssim (float): The minimum SSIM threshold for considering a match.
+        min_ssim (float): The minimum SSIM threshold for considering a match.
 
     Returns:
         tuple[Segmentation, np.ndarray] | tuple[None, None]: The best matching
@@ -431,9 +379,9 @@ def find_similar_image_segmentation(
 
     for segmentation in SEGMENTATIONS:
         similarity_index, ssim_image = get_image_similarity(image, segmentation.image)
-        if similarity_index > max_ssim:
+        if similarity_index > min_ssim:
             logger.info(f"{similarity_index=}")
-            max_ssim = similarity_index
+            min_ssim = similarity_index
             similar_segmentation = segmentation
             similar_segmentation_diff = ssim_image
 
@@ -472,7 +420,7 @@ def get_window_segmentation(
     if DEBUG:
         segmented_image.show()
 
-    masks = vision.process_image_for_masks(segmented_image)
+    masks = vision.get_masks_from_segmented_image(segmented_image)
     if DEBUG:
         vision.display_binary_images_grid(masks)
 
@@ -481,6 +429,12 @@ def get_window_segmentation(
         vision.display_binary_images_grid(refined_masks)
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
+
+
+
+    # TODO XXX: find identical masked images and handle them
+
+
 
     original_image_base64 = screenshot.base64
     masked_images_base64 = [

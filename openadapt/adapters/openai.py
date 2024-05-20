@@ -14,7 +14,9 @@ from openadapt.config import config
 MODEL_NAME = [
     "gpt-4-vision-preview",
     "gpt-4-turbo-2024-04-09",
+    "gpt4o",
 ][-1]
+# TODO XXX: per model
 MAX_TOKENS = 4096
 # TODO XXX undocumented
 MAX_IMAGES = None

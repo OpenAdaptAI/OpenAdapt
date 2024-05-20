@@ -1,7 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type
+from typing import Any, Type
 import io
 
 from loguru import logger
@@ -375,6 +375,33 @@ class ActionEvent(db.Base):
         )
         return press_event, release_event
 
+    def to_prompt_dict(self) -> dict[str, Any]:
+        """Convert into a dict, excluding properties not necessary for prompting.
+
+        Returns:
+            dictionary containing relevant properties from the ActionEvent.
+        """
+        action_dict = deepcopy(
+            {
+                key: val
+                for key, val in utils.row2dict(self, follow=False).items()
+                if val is not None
+                and not key.endswith("timestamp")
+                and not key.endswith("id")
+                and key not in ["reducer_names"]
+                # and not isinstance(getattr(models.ActionEvent, key), property)
+            }
+        )
+        if action.active_segment_description:
+            for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
+                if key in action_dict:
+                    del action_dict[key]
+        if action.available_segment_descriptions:
+            action_dict["available_segment_descriptions"] = (
+                action.available_segment_descriptions
+            )
+        return action_dict
+
 
 class WindowEvent(db.Base):
     """Class representing a window event in the database."""
@@ -399,6 +426,26 @@ class WindowEvent(db.Base):
     def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
+
+    def to_prompt_dict(self) -> dict[str, Any]:
+        """Convert into a dict, excluding properties not necessary for prompting.
+
+        Returns:
+            dictionary containing relevant properties from the WindowEvent.
+        """
+        window_dict = deepcopy(
+            {
+                key: val
+                for key, val in utils.row2dict(self, follow=False).items()
+                if val is not None
+                and not key.endswith("timestamp")
+                and not key.endswith("id")
+                # and not isinstance(getattr(models.WindowEvent, key), property)
+            }
+        )
+        window_dict["state"].pop("data")
+        window_dict["state"].pop("meta")
+        return window_dict
 
 
 class FrameCache:
