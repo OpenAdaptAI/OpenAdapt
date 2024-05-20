@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { timeStampToDateString } from '../utils';
 import { useRouter } from 'next/navigation';
 
-export const RegularRecordings = () => {
+export const RawRecordings = () => {
     const [recordings, setRecordings] = useState<Recording[]>([]);
     const router = useRouter();
 

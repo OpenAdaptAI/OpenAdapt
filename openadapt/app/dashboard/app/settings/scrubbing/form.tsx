@@ -63,19 +63,26 @@ export const Form = ({
     )
 }
 
+function toHex(value: number): string {
+    return value.toString(16).padStart(2, '0');
+}
 
-function convertBGRIntToHex(color: number) {
+function toInt(value: string): number {
+    return parseInt(value, 16);
+}
+
+function convertBGRIntToHex(color: number): string {
     const r = color & 255;
     const g = (color >> 8) & 255;
     const b = (color >> 16) & 255;
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-function convertHexToBGRInt(color: string) {
+function convertHexToBGRInt(color: string): number {
     const hex = color.replace('#', '');
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
+    const r = toInt(hex.slice(0, 2));
+    const g = toInt(hex.slice(2, 4));
+    const b = toInt(hex.slice(4, 6));
     return r | (g << 8) | (b << 16);
 }
 

@@ -1,10 +1,10 @@
 'use client';
 
 import { Box, Button, Tabs } from "@mantine/core";
-import { RegularRecordings } from "./RegularRecordings";
 import { useEffect, useState } from "react";
 import { RecordingStatus } from "@/types/recording";
 import { ScrubbedRecordings } from "./ScrubbedRecordings";
+import { RawRecordings } from "./RawRecordings";
 
 
 export default function Recordings() {
@@ -76,7 +76,7 @@ export default function Recordings() {
                 </Tabs.List>
 
                 <Tabs.Panel value="regular" mt={40}>
-                    <RegularRecordings />
+                    <RawRecordings />
                 </Tabs.Panel>
                 <Tabs.Panel value="scrubbed" mt={40}>
                     <ScrubbedRecordings />

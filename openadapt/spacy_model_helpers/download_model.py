@@ -23,7 +23,18 @@ def download_spacy_model(model_name: str) -> None:
     version = None
 
     def download_latest_model_version() -> str:
-        """Download the latest version of the model."""
+        """Download the latest version of the model.
+
+        - Clone the model from the huggingface repository to a temp directory.
+        - Create a directory for the model in the preferences folder.
+        - Copy the meta.json file to the model directory.
+        - Copy the contents of the temp directory to the model directory using the
+        version in the meta.json file as the name of the directory.
+        - Remove the temp directory.
+        - Recursively loop over all files in the model directory and copy the contents,
+        some files are git lfs files and so the contents need to be downloaded
+        separately.
+        """
         git.Repo.clone_from(
             f"https://huggingface.co/spacy/{model_name}",
             preferences_folder / f"{model_name}-temp",

@@ -7,7 +7,7 @@ Usage:
 """
 
 from collections import namedtuple
-from functools import partial, wraps
+from functools import partial
 from typing import Any, Callable
 import io
 import multiprocessing
@@ -91,63 +91,6 @@ def log_memory_usage(
     logger.info(f"trace_str=\n{trace_str}")
 
 
-def args_to_str(*args: tuple) -> str:
-    """Convert positional arguments to a string representation.
-
-    Args:
-        *args: Positional arguments.
-
-    Returns:
-        str: Comma-separated string representation of positional arguments.
-    """
-    return ", ".join(map(str, args))
-
-
-def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
-    """Convert keyword arguments to a string representation.
-
-    Args:
-        **kwargs: Keyword arguments.
-
-    Returns:
-        str: Comma-separated string representation of keyword arguments
-          in form "key=value".
-    """
-    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
-
-
-def trace(logger: logger) -> Any:
-    """Decorator that logs the function entry and exit using the provided logger.
-
-    Args:
-        logger: The logger object to use for logging.
-
-    Returns:
-        A decorator that can be used to wrap functions and log their entry and exit.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
-            func_name = func.__qualname__
-            func_args = args_to_str(*args)
-            func_kwargs = kwargs_to_str(**kwargs)
-
-            if func_kwargs != "":
-                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
-            else:
-                logger.info(f" -> Enter: {func_name}({func_args})")
-
-            result = func(*args, **kwargs)
-
-            logger.info(f" <- Leave: {func_name}({result})")
-            return result
-
-        return wrapper_logging
-
-    return decorator
-
-
 def process_event(
     event: ActionEvent,
     write_q: sq.SynchronizedQueue,
@@ -173,7 +116,7 @@ def process_event(
         write_fn(recording, event, perf_q)
 
 
-@trace(logger)
+@utils.trace(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: sq.SynchronizedQueue,
@@ -347,7 +290,7 @@ def write_window_event(
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
-@trace(logger)
+@utils.trace(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
@@ -702,7 +645,7 @@ def read_screen_events(
     logger.info("Done")
 
 
-@trace(logger)
+@utils.trace(logger)
 def read_window_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
@@ -757,7 +700,7 @@ def read_window_events(
         prev_window_data = window_data
 
 
-@trace(logger)
+@utils.trace(logger)
 def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
@@ -853,7 +796,7 @@ def memory_writer(
     logger.info("Memory writer done")
 
 
-@trace(logger)
+@utils.trace(logger)
 def create_recording(
     task_description: str,
 ) -> dict[str, Any]:
@@ -1032,7 +975,7 @@ def read_mouse_events(
 
 
 @logger.catch
-@trace(logger)
+@utils.trace(logger)
 def record(
     task_description: str,
     # these should be Event | None, but this raises:

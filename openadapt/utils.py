@@ -4,9 +4,10 @@ This module provides various utility functions used throughout OpenAdapt.
 """
 
 from collections import defaultdict
+from functools import wraps
 from io import BytesIO
 from logging import StreamHandler
-from typing import Any
+from typing import Any, Callable
 import ast
 import base64
 import inspect
@@ -962,6 +963,63 @@ def split_list(input_list: list, size: int) -> list[list]:
         A new list containing inner lists of the given size.
     """
     return [input_list[i : i + size] for i in range(0, len(input_list), size)]
+
+
+def args_to_str(*args: tuple) -> str:
+    """Convert positional arguments to a string representation.
+
+    Args:
+        *args: Positional arguments.
+
+    Returns:
+        str: Comma-separated string representation of positional arguments.
+    """
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
+    """Convert keyword arguments to a string representation.
+
+    Args:
+        **kwargs: Keyword arguments.
+
+    Returns:
+        str: Comma-separated string representation of keyword arguments
+          in form "key=value".
+    """
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
+
+
+def trace(logger: logger) -> Any:
+    """Decorator that logs the function entry and exit using the provided logger.
+
+    Args:
+        logger: The logger object to use for logging.
+
+    Returns:
+        A decorator that can be used to wrap functions and log their entry and exit.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
+
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
+
+            result = func(*args, **kwargs)
+
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
+
+        return wrapper_logging
+
+    return decorator
 
 
 if __name__ == "__main__":

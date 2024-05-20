@@ -16,7 +16,7 @@ class ScrubProvider:
         """Return the available options."""
         return {
             cls.PRESIDIO: "Presidio",
-            # cls.COMPREHEND: "Comprehend",
+            # cls.COMPREHEND: "Comprehend", this doesn't have the scrub_image method yet
             cls.PRIVATE_AI: "Private AI",
         }
 

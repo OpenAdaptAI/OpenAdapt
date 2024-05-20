@@ -1,7 +1,7 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type, Union
+from typing import Type
 import io
 
 from loguru import logger
@@ -275,9 +275,7 @@ class ActionEvent(db.Base):
                 )
             else:
                 text = key_attr
-        if text is None:
-            text = ""
-        return str(text)
+        return str(text) if text else ""
 
     @property
     def text(self) -> str:
@@ -413,7 +411,6 @@ class ActionEvent(db.Base):
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:
         """Scrub the action event."""
-        logger.info(f" -> Scrubbing action event id: {self.id}")
         self.scrubbed_text = scrubber.scrub_text(self.text, is_separated=True)
         self.scrubbed_canonical_text = scrubber.scrub_text(
             self.canonical_text, is_separated=True
@@ -421,7 +418,6 @@ class ActionEvent(db.Base):
         self.key_char = scrubber.scrub_text(self.key_char)
         self.canonical_key_char = scrubber.scrub_text(self.canonical_key_char)
         self.key_vk = scrubber.scrub_text(self.key_vk)
-        logger.info(f" <- Scrubbed action event id: {self.id}")
 
 
 class WindowEvent(db.Base):
@@ -449,13 +445,11 @@ class WindowEvent(db.Base):
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 
-    def scrub(self, scrubber: Union[ScrubbingProvider, TextScrubbingMixin]) -> None:
+    def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
         """Scrub the window event."""
-        logger.info(f" -> Scrubbing window event id: {self.id}")
         self.title = scrubber.scrub_text(self.title)
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
-        logger.info(f" <- Scrubbed window event id: {self.id}")
 
 
 class FrameCache:
@@ -579,7 +573,6 @@ class Screenshot(db.Base):
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:
         """Scrub the screenshot."""
-        logger.info(f" -> Scrubbing screenshot id: {self.id}")
 
         def save_scrubbed_image(image: Image, setattr_name: str) -> None:
             """Save the scrubbed image."""
@@ -591,7 +584,6 @@ class Screenshot(db.Base):
             save_scrubbed_image(self.diff, "png_diff_data")
         if self.png_diff_mask_data:
             save_scrubbed_image(self.diff_mask, "png_diff_mask_data")
-        logger.info(f" <- Scrubbed screenshot id: {self.id}")
 
     @sa.orm.reconstructor
     def initialize_instance_attributes(self) -> None:

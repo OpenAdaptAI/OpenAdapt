@@ -4,6 +4,7 @@
 from queue import Queue
 from threading import Thread
 import multiprocessing
+import os
 import time
 
 from loguru import logger
@@ -287,7 +288,7 @@ def start_workers(
     target: callable,
     q: Queue,
     num_items_processed: multiprocessing.Value,
-    num_workers: int = 1,
+    num_workers: int = os.cpu_count(),  # number of CPUs
 ) -> None:
     """Start a pool of workers to run a target function.
 

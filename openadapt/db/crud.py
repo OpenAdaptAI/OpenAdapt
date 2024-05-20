@@ -248,7 +248,7 @@ def get_all_recordings(session: sa.orm.Session = None) -> list[Recording]:
     _db = session or db
     return (
         _db.query(Recording)
-        .filter(Recording.original_recording_id is None)
+        .filter(Recording.original_recording_id == None)  # noqa: E711
         .order_by(sa.desc(Recording.timestamp))
         .all()
     )
@@ -653,6 +653,7 @@ def copy_recording(recording_id: int) -> int:
         return None
 
 
+@utils.trace(logger)
 def scrub_item(item_id: int, table: sa.Table, scrubber: ScrubbingProvider) -> None:
     """Scrub an item in the database.
 

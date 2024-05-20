@@ -33,18 +33,6 @@ STOP_STRS = [
 ]
 SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 
-SCRUB_KEYS_HTML: list[str] = [
-    "text",
-    "canonical_text",
-    "title",
-    "state",
-    "task_description",
-    "key_char",
-    "canonical_key_char",
-    "key_vk",
-    "children",
-]
-
 # Posthog
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
@@ -181,6 +169,17 @@ class Config(BaseSettings):
     SCRUB_CHAR: str = "*"
     SCRUB_LANGUAGE: str = "en"
     SCRUB_FILL_COLOR: Union[str, int] = 0x0000FF
+    SCRUB_KEYS_HTML: list[str] = [
+        "text",
+        "canonical_text",
+        "title",
+        "state",
+        "task_description",
+        "key_char",
+        "canonical_key_char",
+        "key_vk",
+        "children",
+    ]
 
     @field_validator("SCRUB_FILL_COLOR")
     @classmethod
