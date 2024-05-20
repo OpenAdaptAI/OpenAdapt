@@ -1067,6 +1067,7 @@ def record_audio(
         callback=audio_callback, samplerate=16000, channels=1
     )
     logger.info("Audio recording started.")
+    start_timestamp = utils.get_timestamp()
     audio_stream.start()
 
     # NOTE: listener may not have actually started by now
@@ -1124,6 +1125,7 @@ def record_audio(
         compressed_audio_bytes,
         result_info["text"],
         recording_timestamp,
+        start_timestamp,
         int(audio_stream.samplerate),
         word_list,
     )

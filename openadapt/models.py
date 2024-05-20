@@ -662,6 +662,7 @@ class AudioInfo(db.Base):
     __tablename__ = "audio_info"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
     flac_data = sa.Column(sa.LargeBinary)
     transcribed_text = sa.Column(sa.String)
     recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))

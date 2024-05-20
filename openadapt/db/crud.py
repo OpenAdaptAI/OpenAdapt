@@ -515,6 +515,7 @@ def insert_audio_info(
     audio_data: bytes,
     transcribed_text: str,
     recording_timestamp: float,
+    timestamp: float,
     sample_rate: int,
     word_list: list,
 ) -> None:
@@ -523,6 +524,7 @@ def insert_audio_info(
         flac_data=audio_data,
         transcribed_text=transcribed_text,
         recording_timestamp=recording_timestamp,
+        timestamp=timestamp,
         sample_rate=sample_rate,
         words_with_timestamps=json.dumps(word_list),
     )
@@ -530,9 +532,13 @@ def insert_audio_info(
     db.commit()
 
 
-def get_audio_info(recording_timestamp: float) -> list[AudioInfo]:
+# TODO: change to use recording_id once scrubbing PR is merged
+def get_audio_info(
+    recording_timestamp: float, session: sa.orm.Session = None
+) -> list[AudioInfo]:
     """Get the audio info for a given recording."""
-    return _get(AudioInfo, recording_timestamp)
+    _db = session or db
+    return _get(AudioInfo, recording_timestamp, _db)
 
 
 async def acquire_db_lock() -> bool:

@@ -1,5 +1,7 @@
 """API endpoints for recordings."""
 
+import json
+
 from fastapi import FastAPI, WebSocket
 from loguru import logger
 
@@ -84,6 +86,22 @@ class RecordingsAPI:
                         for child in event_dict["children"]:
                             convert_to_str(child)
 
+                try:
+                    # TODO: change to use recording_id once scrubbing PR is merged
+                    audio_info = crud.get_audio_info(recording.timestamp, session)[0]
+                    words_with_timestamps = json.loads(audio_info.words_with_timestamps)
+                    words_with_timestamps = [
+                        {
+                            "word": word["word"],
+                            "start": word["start"] + action_events[0].timestamp,
+                            "end": word["end"] + action_events[0].timestamp,
+                        }
+                        for word in words_with_timestamps
+                    ]
+                except IndexError:
+                    words_with_timestamps = []
+                word_index = 0
+
                 for action_event in action_events:
                     event_dict = row2dict(action_event)
                     try:
@@ -96,6 +114,18 @@ class RecordingsAPI:
                         width, height = 0, 0
                     event_dict["screenshot"] = image
                     event_dict["dimensions"] = {"width": width, "height": height}
+                    words = []
+                    # each word in words_with_timestamp is a dict of word, start, end
+                    # we want to add the word to the event_dict if the start is
+                    # before the event timestamp
+                    while (
+                        word_index < len(words_with_timestamps)
+                        and words_with_timestamps[word_index]["start"]
+                        < event_dict["timestamp"]
+                    ):
+                        words.append(words_with_timestamps[word_index]["word"])
+                        word_index += 1
+                    event_dict["words"] = words
                     convert_to_str(event_dict)
                     await websocket.send_json(
                         {"type": "action_event", "value": event_dict}

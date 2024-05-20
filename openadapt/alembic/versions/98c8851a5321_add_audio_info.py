@@ -29,6 +29,11 @@ def upgrade() -> None:
             openadapt.models.ForceFloat(precision=10, scale=2, asdecimal=False),
             nullable=True,
         ),
+        sa.Column(
+            "timestamp",
+            openadapt.models.ForceFloat(precision=10, scale=2, asdecimal=False),
+            nullable=True,
+        ),
         sa.Column("sample_rate", sa.Integer(), nullable=True),
         sa.Column("words_with_timestamps", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(
