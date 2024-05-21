@@ -433,6 +433,7 @@ def get_window_segmentation(
 
 
     # TODO XXX: find identical masked images and handle them
+    masked_image_groups = vision.get_similar_images(masked_images, 0.95)
 
 
 

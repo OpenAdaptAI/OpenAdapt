@@ -3,6 +3,7 @@
 from loguru import logger
 from PIL import Image, ImageDraw
 from scipy.ndimage import binary_fill_holes
+from skimage.metrics import structural_similarity as ssim
 import cv2
 import numpy as np
 
@@ -371,6 +372,66 @@ def display_images_table_with_titles(
         current_y += image.height + margin
 
     composite_image.show()
+
+
+def get_similar_image_idxs(
+    images: list[Image.Image],
+    min_ssim: float
+) -> tuple[list[list[int]], list[list[float]]]:
+    """
+    Get images having Structural Similarity Index Measure (SSIM) above a threshold,
+    and return the SSIM matrix.
+
+    Args:
+        images: A list of PIL.Image objects to compare.
+        min_ssim: The minimum threshold for the SSIM for images to be considered similar.
+
+    Returns:
+        A tuple containing two elements:
+        - A list of lists, where each sublist contains indices of images in the input
+          list that are similar to each other above the given SSIM threshold.
+        - A matrix of SSIM values between each pair of images.
+
+    Examples:
+        >>> images = [Image.open('image1.png'), Image.open('image2.png'),
+                      Image.open('image3.png')]
+        >>> groups, matrix = get_similar_image_idxs(images, 0.95)
+        >>> groups
+        [[0, 1], [2]]
+        >>> matrix
+        [[1.0, 0.96, 0.85], [0.96, 1.0, 0.87], [0.85, 0.87, 1.0]]
+    """
+    num_images = len(images)
+    already_compared = set()
+    similar_groups = []
+    similarity_matrix = [[0.0] * num_images for _ in range(num_images)]
+
+    # Convert all images to grayscale numpy arrays for SSIM comparison
+    image_arrays = [np.array(img.convert('L')) for img in images]
+
+    for i in range(num_images):
+        similarity_matrix[i][i] = 1.0  # SSIM of an image with itself is always 1
+        for j in range(i + 1, num_images):
+            # Calculate SSIM between images
+            s_ssim, _ = ssim(image_arrays[i], image_arrays[j], full=True)
+            similarity_matrix[i][j] = similarity_matrix[j][i] = s_ssim
+
+    for i in range(num_images):
+        if i in already_compared:
+            continue
+        current_group = [i]
+        for j in range(i + 1, num_images):
+            if j in already_compared:
+                continue
+            if similarity_matrix[i][j] >= min_ssim:
+                current_group.append(j)
+                already_compared.add(j)
+
+        if len(current_group) > 1:
+            similar_groups.append(current_group)
+        already_compared.add(i)
+
+    return similar_groups, similarity_matrix
 
 
 """
