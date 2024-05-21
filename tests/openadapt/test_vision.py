@@ -9,29 +9,29 @@ from openadapt import vision
 
 
 @pytest.fixture
-def synthetic_images():
-    """Generate synthetic images for testing."""
+def identical_images():
+    """Generate synthetic identical images for testing."""
     base_data = np.random.rand(100, 100) * 255  # Base image array
-    images = []
-    
-    # Create images that are identical
-    for _ in range(3):
-        img = Image.fromarray((base_data).astype(np.uint8))
-        images.append(img)
-    
-    # Create images that are slightly different
-    for i in range(3):
-        perturbed_data = base_data + np.random.rand(100, 100) * 10
-        img = Image.fromarray((perturbed_data).astype(np.uint8))
-        images.append(img)
-
+    images = [Image.fromarray((base_data).astype(np.uint8)) for _ in range(3)]
     return images
 
 
-def test_similar_images(synthetic_images):
+@pytest.fixture
+def perturbed_images(identical_images):
+    """Generate synthetic images that are slightly different from the identical ones."""
+    different_images = []
+    for img in identical_images:
+        perturbed_data = np.array(img) + np.random.rand(100, 100) * 10
+        different_img = Image.fromarray(perturbed_data.astype(np.uint8))
+        different_images.append(different_img)
+    return different_images
+
+
+def test_similar_images(identical_images, perturbed_images):
     """Test that the SSIM threshold correctly identifies similar images."""
-    expected_groups = [list(range(3))]  # Expecting only the identical images to form a group
-    result_groups, result_matrix = vision.get_similar_image_idxs(synthetic_images, 0.95)
+    images = identical_images + perturbed_images
+    expected_groups = [list(range(len(identical_images)))]  # Expecting only the identical images to form a group
+    result_groups, result_matrix = vision.get_similar_image_idxs(images, 0.95)
     
     # Sorting sublists and the main list to ensure order in assertions does not matter
     result_sorted = [sorted(group) for group in result_groups]
@@ -44,7 +44,7 @@ def test_similar_images(synthetic_images):
     )
 
     # Verify symmetry and range of values
-    num_images = len(synthetic_images)
+    num_images = len(images)
     assert all(result_matrix[i][i] == 1.0 for i in range(num_images)), (
         result_matrix, "Diagonal values should be 1.0"
     )
