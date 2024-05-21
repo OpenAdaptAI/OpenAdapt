@@ -297,7 +297,7 @@ def start_workers(
         target (function): The function to run.
         q (Queue): The queue of items to process.
         num_items_processed (multiprocessing.Value): The number of items processed.
-        num_workers (int, optional): The number of workers to start. Defaults to 1.
+        num_workers (int, optional): The number of workers to start.
     """
 
     def thread_target(thread_name: str) -> None:

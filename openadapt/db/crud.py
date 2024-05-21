@@ -662,11 +662,10 @@ def scrub_item(item_id: int, table: sa.Table, scrubber: ScrubbingProvider) -> No
         table (sa.Table): The table to scrub the item from.
         scrubber (ScrubbingProvider): The scrubbing provider to use.
     """
-    session = get_new_session()
-    item = session.query(table).get(item_id)
-    item.scrub(scrubber)
-    session.commit()
-    session.close()
+    with get_new_session() as session:
+        item = session.query(table).get(item_id)
+        item.scrub(scrubber)
+        session.commit()
 
 
 def insert_scrubbed_recording(recording_id: int, provider: str) -> int:
