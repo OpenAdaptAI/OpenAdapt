@@ -12,10 +12,12 @@ import shutil
 import subprocess
 import sys
 
+import gradio_client
 import nicegui
 import oa_pynput
 import pydicom
 import spacy_alignments
+import ultralytics
 
 from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY
 
@@ -30,12 +32,18 @@ def main() -> None:
         oa_pynput,
         pydicom,
         spacy_alignments,
+        gradio_client,
+        ultralytics,
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
     packages_to_exclude = [
         "pytest",
         "py",
+    ]
+
+    packages_metadata_to_copy = [
+        "replicate",
     ]
 
     OPENADAPT_DIR = Path(__file__).parent
@@ -135,6 +143,10 @@ def main() -> None:
 
     for package in packages_to_exclude:
         spec.append("--exclude-module")
+        spec.append(package)
+
+    for package in packages_metadata_to_copy:
+        spec.append("--copy-metadata")
         spec.append(package)
 
     subprocess.call(spec)
