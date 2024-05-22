@@ -76,6 +76,8 @@ class SystemTrayIcon:
 
         self.app.setQuitOnLastWindowClosed(False)
 
+        # since the lock is a file, delete it when starting the app so that
+        # new instances can start even if the previous one crashed
         crud.release_db_lock()
 
         # currently required for pyqttoast
@@ -384,8 +386,8 @@ class SystemTrayIcon:
             if not crud.acquire_db_lock():
                 self.show_toast("Failed to delete recording. Try again later.")
                 return
-            db = crud.get_new_session(read_and_write=True)
-            crud.delete_recording(db, recording.timestamp)
+            session = crud.get_new_session(read_and_write=True)
+            crud.delete_recording(session, recording.timestamp)
             self.show_toast("Recording deleted.")
             self.populate_menus()
 
@@ -419,8 +421,8 @@ class SystemTrayIcon:
             action (Callable): The function to call when the menu item is clicked.
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
-        db = crud.get_new_session(read_only=True)
-        recordings = crud.get_all_recordings(db)
+        session = crud.get_new_session(read_only=True)
+        recordings = crud.get_all_recordings(session)
 
         self.recording_actions[action_type] = []
 

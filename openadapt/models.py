@@ -74,8 +74,8 @@ class Recording(db.Base):
         from openadapt.db import crud
 
         if not self._processed_action_events:
-            db = crud.get_new_session(read_only=True)
-            self._processed_action_events = events.get_events(db, self)
+            session = crud.get_new_session(read_only=True)
+            self._processed_action_events = events.get_events(session, self)
         return self._processed_action_events
 
 

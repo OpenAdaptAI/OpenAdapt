@@ -141,19 +141,19 @@ def main(timestamp: str) -> None:
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
-    db = crud.get_new_session(read_only=True)
+    session = crud.get_new_session(read_only=True)
 
     if timestamp is None:
-        recording = crud.get_latest_recording(db)
+        recording = crud.get_latest_recording(session)
     else:
-        recording = crud.get_recording(db, timestamp)
+        recording = crud.get_recording(session, timestamp)
 
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
-    action_events = get_events(db, recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(session, recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
 
     if SCRUB:

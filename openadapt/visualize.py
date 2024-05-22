@@ -173,12 +173,12 @@ def main(
 
     assert not all([recording, recording_timestamp]), "Only one may be specified."
 
-    db = crud.get_new_session(read_only=True)
+    session = crud.get_new_session(read_only=True)
 
     if recording_timestamp:
-        recording = crud.get_recording(db, recording_timestamp)
+        recording = crud.get_recording(session, recording_timestamp)
     elif recording is None:
-        recording = crud.get_latest_recording(db)
+        recording = crud.get_latest_recording(session)
     if SCRUB:
         from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
@@ -196,7 +196,7 @@ def main(
         ], "Can't diff video against images because images were not saved."
 
     meta = {}
-    action_events = get_events(db, recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(session, recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
 
     if SCRUB:

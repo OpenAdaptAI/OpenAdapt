@@ -36,7 +36,7 @@ memory_stats = []
 
 
 def _insert(
-    db: SaSession,
+    session: SaSession,
     event_data: dict[str, Any],
     table: sa.Table,
     buffer: list[dict[str, Any]] | None = None,
@@ -44,7 +44,7 @@ def _insert(
     """Insert using Core API for improved performance (no rows are returned).
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         event_data (dict): The event data to be inserted.
         table (sa.Table): The SQLAlchemy table to insert the data into.
         buffer (list, optional): A buffer list to store the inserted objects
@@ -69,8 +69,8 @@ def _insert(
 
     if buffer is None or len(buffer) >= BATCH_SIZE:
         to_insert = buffer or [db_obj]
-        result = db.execute(sa.insert(table), to_insert)
-        db.commit()
+        result = session.execute(sa.insert(table), to_insert)
+        session.commit()
         if buffer:
             buffer.clear()
         # Note: this does not contain the inserted row(s)
@@ -78,7 +78,7 @@ def _insert(
 
 
 def insert_action_event(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
     event_timestamp: int,
     event_data: dict[str, Any],
@@ -86,7 +86,7 @@ def insert_action_event(
     """Insert an action event into the database.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
         event_timestamp (int): The timestamp of the event.
         event_data (dict): The data of the event.
@@ -96,11 +96,11 @@ def insert_action_event(
         "timestamp": event_timestamp,
         "recording_timestamp": recording_timestamp,
     }
-    _insert(db, event_data, ActionEvent, action_events)
+    _insert(session, event_data, ActionEvent, action_events)
 
 
 def insert_screenshot(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
     event_timestamp: int,
     event_data: dict[str, Any],
@@ -108,7 +108,7 @@ def insert_screenshot(
     """Insert a screenshot into the database.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
         event_timestamp (int): The timestamp of the event.
         event_data (dict): The data of the event.
@@ -118,11 +118,11 @@ def insert_screenshot(
         "timestamp": event_timestamp,
         "recording_timestamp": recording_timestamp,
     }
-    _insert(db, event_data, Screenshot, screenshots)
+    _insert(session, event_data, Screenshot, screenshots)
 
 
 def insert_window_event(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
     event_timestamp: int,
     event_data: dict[str, Any],
@@ -130,7 +130,7 @@ def insert_window_event(
     """Insert a window event into the database.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
         event_timestamp (int): The timestamp of the event.
         event_data (dict): The data of the event.
@@ -140,11 +140,11 @@ def insert_window_event(
         "timestamp": event_timestamp,
         "recording_timestamp": recording_timestamp,
     }
-    _insert(db, event_data, WindowEvent, window_events)
+    _insert(session, event_data, WindowEvent, window_events)
 
 
 def insert_perf_stat(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
     event_type: str,
     start_time: float,
@@ -153,7 +153,7 @@ def insert_perf_stat(
     """Insert an event performance stat into the database.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
         event_type (str): The type of the event.
         start_time (float): The start time of the event.
@@ -165,24 +165,24 @@ def insert_perf_stat(
         "start_time": start_time,
         "end_time": end_time,
     }
-    _insert(db, event_perf_stat, PerformanceStat, performance_stats)
+    _insert(session, event_perf_stat, PerformanceStat, performance_stats)
 
 
 def get_perf_stats(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
 ) -> list[PerformanceStat]:
     """Get performance stats for a given recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
 
     Returns:
         list[PerformanceStat]: A list of performance stats for the recording.
     """
     return (
-        db.query(PerformanceStat)
+        session.query(PerformanceStat)
         .filter(PerformanceStat.recording_timestamp == recording_timestamp)
         .order_by(PerformanceStat.start_time)
         .all()
@@ -190,12 +190,15 @@ def get_perf_stats(
 
 
 def insert_memory_stat(
-    db: SaSession, recording_timestamp: float, memory_usage_bytes: int, timestamp: int
+    session: SaSession,
+    recording_timestamp: float,
+    memory_usage_bytes: int,
+    timestamp: int,
 ) -> None:
     """Insert memory stat into db.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
         memory_usage_bytes (int): The memory usage in bytes.
         timestamp (int): The timestamp of the event.
@@ -205,17 +208,17 @@ def insert_memory_stat(
         "memory_usage_bytes": memory_usage_bytes,
         "timestamp": timestamp,
     }
-    _insert(db, memory_stat, MemoryStat, memory_stats)
+    _insert(session, memory_stat, MemoryStat, memory_stats)
 
 
 def get_memory_stats(
-    db: SaSession,
+    session: SaSession,
     recording_timestamp: float,
 ) -> list[MemoryStat]:
     """Return memory stats for a given recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
 
     Returns:
@@ -223,100 +226,102 @@ def get_memory_stats(
 
     """
     return (
-        db.query(MemoryStat)
+        session.query(MemoryStat)
         .filter(MemoryStat.recording_timestamp == recording_timestamp)
         .order_by(MemoryStat.timestamp)
         .all()
     )
 
 
-def insert_recording(db: SaSession, recording_data: dict) -> Recording:
+def insert_recording(session: SaSession, recording_data: dict) -> Recording:
     """Insert the recording into to the db.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_data (dict): The data of the recording.
 
     Returns:
         Recording: The recording object.
     """
     db_obj = Recording(**recording_data)
-    db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    session.add(db_obj)
+    session.commit()
+    session.refresh(db_obj)
     return db_obj
 
 
-def delete_recording(db: SaSession, recording_timestamp: float) -> None:
+def delete_recording(session: SaSession, recording_timestamp: float) -> None:
     """Remove the recording from the db.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording.
     """
-    db.query(Recording).filter(Recording.timestamp == recording_timestamp).delete()
-    db.commit()
+    session.query(Recording).filter(Recording.timestamp == recording_timestamp).delete()
+    session.commit()
 
 
-def get_all_recordings(db: SaSession) -> list[Recording]:
+def get_all_recordings(session: SaSession) -> list[Recording]:
     """Get all recordings.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
 
     Returns:
         list[Recording]: A list of all recordings.
     """
-    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
+    return session.query(Recording).order_by(sa.desc(Recording.timestamp)).all()
 
 
-def get_latest_recording(db: SaSession) -> Recording:
+def get_latest_recording(session: SaSession) -> Recording:
     """Get the latest recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
 
     Returns:
         Recording: The latest recording object.
     """
-    return db.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
+    return (
+        session.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
+    )
 
 
-def get_recording_by_id(db: SaSession, recording_id: int) -> Recording:
+def get_recording_by_id(session: SaSession, recording_id: int) -> Recording:
     """Get the recording by an id.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_id (int): The id of the recording.
 
     Returns:
         Recording: The latest recording object.
     """
-    return db.query(Recording).filter_by(id=recording_id).first()
+    return session.query(Recording).filter_by(id=recording_id).first()
 
 
-def get_recording(db: SaSession, timestamp: float) -> Recording:
+def get_recording(session: SaSession, timestamp: float) -> Recording:
     """Get a recording by timestamp.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         timestamp (float): The timestamp of the recording.
 
     Returns:
         Recording: The recording object.
     """
-    return db.query(Recording).filter(Recording.timestamp == timestamp).first()
+    return session.query(Recording).filter(Recording.timestamp == timestamp).first()
 
 
 def _get(
-    db: SaSession,
+    session: SaSession,
     table: BaseModel,
     recording_timestamp: float,
 ) -> list[BaseModel]:
     """Retrieve records from the database table based on the recording timestamp.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         table (BaseModel): The database table to query.
         recording_timestamp (float): The recording timestamp to filter the records.
 
@@ -325,7 +330,7 @@ def _get(
           ordered by timestamp.
     """
     return (
-        db.query(table)
+        session.query(table)
         .filter(table.recording_timestamp == recording_timestamp)
         .order_by(table.timestamp)
         .all()
@@ -333,20 +338,20 @@ def _get(
 
 
 def get_action_events(
-    db: SaSession,
+    session: SaSession,
     recording: Recording,
 ) -> list[ActionEvent]:
     """Get action events for a given recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording (Recording): The recording object.
 
     Returns:
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    action_events = _get(db, ActionEvent, recording.timestamp)
+    action_events = _get(session, ActionEvent, recording.timestamp)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
@@ -422,12 +427,12 @@ def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
 
 
 def save_screenshot_diff(
-    db: SaSession, screenshots: list[Screenshot]
+    session: SaSession, screenshots: list[Screenshot]
 ) -> list[Screenshot]:
     """Save screenshot diff data to the database.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         screenshots (list[Screenshot]): A list of screenshots.
 
     Returns:
@@ -450,26 +455,26 @@ def save_screenshot_diff(
 
     if data_updated:
         logger.info("saving screenshot diff data to db...")
-        db.bulk_save_objects(screenshots)
-        db.commit()
+        session.bulk_save_objects(screenshots)
+        session.commit()
 
     return screenshots
 
 
 def get_screenshots(
-    db: SaSession,
+    session: SaSession,
     recording: Recording,
 ) -> list[Screenshot]:
     """Get screenshots for a given recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording (Recording): The recording object.
 
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = _get(db, Screenshot, recording.timestamp)
+    screenshots = _get(session, Screenshot, recording.timestamp)
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
@@ -477,12 +482,12 @@ def get_screenshots(
         screenshots[0].prev = screenshots[0]
 
     if config.SAVE_SCREENSHOT_DIFF:
-        screenshots = save_screenshot_diff(db, screenshots)
+        screenshots = save_screenshot_diff(session, screenshots)
     return screenshots
 
 
 def get_window_events(
-    db: SaSession,
+    session: SaSession,
     recording: Recording,
 ) -> list[WindowEvent]:
     """Get window events for a given recording.
@@ -494,7 +499,7 @@ def get_window_events(
     Returns:
         list[WindowEvent]: A list of window events for the recording.
     """
-    return _get(db, WindowEvent, recording.timestamp)
+    return _get(session, WindowEvent, recording.timestamp)
 
 
 def get_new_session(
@@ -520,18 +525,20 @@ def get_new_session(
 
 
 def update_video_start_time(
-    db: SaSession, recording_timestamp: float, video_start_time: float
+    session: SaSession, recording_timestamp: float, video_start_time: float
 ) -> None:
     """Update the video start time of a specific recording.
 
     Args:
-        db (sa.orm.Session): The database session.
+        session (sa.orm.Session): The database session.
         recording_timestamp (float): The timestamp of the recording to update.
         video_start_time (float): The new video start time to set.
     """
     # Find the recording by its timestamp
     recording = (
-        db.query(Recording).filter(Recording.timestamp == recording_timestamp).first()
+        session.query(Recording)
+        .filter(Recording.timestamp == recording_timestamp)
+        .first()
     )
 
     if not recording:
@@ -540,10 +547,10 @@ def update_video_start_time(
 
     # Update the video start time
     recording.video_start_time = video_start_time
-    db.add(recording)
+    session.add(recording)
 
     # Commit the changes to the database
-    db.commit()
+    session.commit()
 
     logger.info(
         f"Updated video start time for recording {recording_timestamp} to"

@@ -56,14 +56,14 @@ class RecordingsAPI:
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
             await websocket.accept()
-            db = crud.get_new_session(read_only=True)
-            recording = crud.get_recording_by_id(db, recording_id)
+            session = crud.get_new_session(read_only=True)
+            recording = crud.get_recording_by_id(session, recording_id)
 
             await websocket.send_json(
                 {"type": "recording", "value": recording.asdict()}
             )
 
-            action_events = get_events(db, recording)
+            action_events = get_events(session, recording)
 
             await websocket.send_json(
                 {"type": "num_events", "value": len(action_events)}

@@ -387,10 +387,10 @@ def write_events(
 
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    db = crud.get_new_session(read_and_write=True)
+    session = crud.get_new_session(read_and_write=True)
 
     if pre_callback:
-        state = pre_callback(db, recording_timestamp)
+        state = pre_callback(session, recording_timestamp)
     else:
         state = None
 
@@ -422,7 +422,7 @@ def write_events(
         except queue.Empty:
             continue
         assert event.type == event_type, (event_type, event)
-        state = write_fn(db, recording_timestamp, event, perf_q, **(state or {}))
+        state = write_fn(session, recording_timestamp, event, perf_q, **(state or {}))
         num_processed += 1
         with num_events.get_lock():
             if progress is not None:
@@ -789,7 +789,7 @@ def performance_stats_writer(
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     started = False
-    db = crud.get_new_session(read_and_write=True)
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set() or not perf_q.empty():
         if not started:
             with started_counter.get_lock():
@@ -801,7 +801,7 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
-            db,
+            session,
             recording_timestamp,
             event_type,
             start_time,
@@ -835,7 +835,7 @@ def memory_writer(
     process = psutil.Process(record_pid)
 
     started = False
-    db = crud.get_new_session(read_and_write=True)
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set():
         if not started:
             with started_counter.get_lock():
@@ -859,7 +859,7 @@ def memory_writer(
         timestamp = utils.get_timestamp()
 
         crud.insert_memory_stat(
-            db,
+            session,
             recording_timestamp,
             rss,
             timestamp,
@@ -894,8 +894,8 @@ def create_recording(
         "task_description": task_description,
         "config": config.model_dump(obfuscated=True),
     }
-    db = crud.get_new_session(read_and_write=True)
-    recording = crud.insert_recording(db, recording_data)
+    session = crud.get_new_session(read_and_write=True)
+    recording = crud.insert_recording(session, recording_data)
     logger.info(f"{recording=}")
     return recording
 

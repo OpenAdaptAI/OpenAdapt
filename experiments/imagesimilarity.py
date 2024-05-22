@@ -12,7 +12,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
-from openadapt.db import crud
+from openadapt.session import crud
 
 SHOW_SSIM = False
 
@@ -289,8 +289,8 @@ def display_distance_matrix_with_images(
 
 def main() -> None:
     """Main function to process images and display similarity metrics."""
-    db = crud.get_new_session(read_only=True)
-    recording = crud.get_latest_recording(db)
+    session = crud.get_new_session(read_only=True)
+    recording = crud.get_latest_recording(session)
     action_events = recording.processed_action_events
     images = [action_event.screenshot.cropped_image for action_event in action_events]
 

@@ -51,12 +51,12 @@ def replay(
         # TODO: move to Strategy?
         status_pipe.send({"type": "replay.started"})
 
-    db = crud.get_new_session(read_only=True)
+    session = crud.get_new_session(read_only=True)
 
     if timestamp and recording is None:
-        recording = crud.get_recording(db, timestamp)
+        recording = crud.get_recording(session, timestamp)
     elif recording is None:
-        recording = crud.get_latest_recording(db)
+        recording = crud.get_latest_recording(session)
 
     logger.debug(f"{recording=}")
     assert recording, "No recording found"

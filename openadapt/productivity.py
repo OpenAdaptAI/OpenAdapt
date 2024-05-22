@@ -443,15 +443,15 @@ def calculate_productivity() -> None:
     """
     configure_logging(logger, LOG_LEVEL)
 
-    db = crud.get_new_session(read_only=True)
+    session = crud.get_new_session(read_only=True)
 
-    recording = crud.get_latest_recording(db)
+    recording = crud.get_latest_recording(session)
     logger.debug(f"{recording=}")
 
-    action_events = get_events(db, recording, process=PROCESS_EVENTS)
+    action_events = get_events(session, recording, process=PROCESS_EVENTS)
     event_dicts = rows2dicts(action_events)
     logger.info(f"event_dicts=\n{pformat(event_dicts)}")
-    window_events = crud.get_window_events(db, recording)
+    window_events = crud.get_window_events(session, recording)
     filtered_action_events = filter_move_release(action_events)
 
     # overall info first
