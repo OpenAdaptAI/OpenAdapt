@@ -374,15 +374,16 @@ def display_images_table_with_titles(
     composite_image.show()
 
 
-def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
-    """Calculate the structural similarity index (SSIM) between two images.
+def get_image_similarity(im1: Image.Image, im2: Image.Image, grayscale: bool = False) -> tuple[float, np.array]:
+    """Calculate the structural similarity index (SSIM) between two images, optionally in grayscale.
 
-    This function first resizes the images to a common size maintaining their aspect
-    ratios. It then converts the resized images to grayscale and computes the SSIM.
+    This function resizes the images to a common size maintaining their aspect ratios, and computes the SSIM
+    either in grayscale or across each color channel separately.
 
     Args:
         im1 (Image.Image): The first image to compare.
         im2 (Image.Image): The second image to compare.
+        grayscale (bool): If True, convert images to grayscale. Otherwise, compute SSIM on color channels.
 
     Returns:
         tuple[float, np.array]: A tuple containing the SSIM and the difference image.
@@ -390,6 +391,7 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.
     # Calculate aspect ratios
     aspect_ratio1 = im1.width / im1.height
     aspect_ratio2 = im2.width / im2.height
+
     # Use the smaller image as the base for resizing to maintain the aspect ratio
     if aspect_ratio1 < aspect_ratio2:
         base_width = min(im1.width, im2.width)
@@ -402,12 +404,31 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.
     im1 = im1.resize((base_width, base_height), Image.LANCZOS)
     im2 = im2.resize((base_width, base_height), Image.LANCZOS)
 
-    # Convert images to grayscale
-    im1_gray = np.array(im1.convert("L"))
-    im2_gray = np.array(im2.convert("L"))
+    if np.array(im1).ndim == 2 or np.array(im2).ndim == 2 and grayscale:
+        logger.warning(f"{grayscale=} but {im1.size=}, {im2.size=}")
+        grayscale = True
 
-    data_range = im2_gray.max() - im2_gray.min()
-    mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
+    if grayscale:
+        # Convert images to grayscale
+        im1 = np.array(im1.convert("L"))
+        im2 = np.array(im2.convert("L"))
+        data_range = max(im1.max(), im2.max()) - min(im1.min(), im2.min())
+        mssim, diff_image = ssim(im1, im2, data_range=data_range, full=True)
+    else:
+        # Compute SSIM on each channel separately and then average the results
+        mssims = []
+        diff_images = []
+        for c in range(3):  # Assuming RGB images
+            im1_c = np.array(im1)[:, :, c]
+            im2_c = np.array(im2)[:, :, c]
+            data_range = max(im1_c.max(), im2_c.max()) - min(im1_c.min(), im2_c.min())
+            ssim_c, diff_c = ssim(im1_c, im2_c, data_range=data_range, full=True)
+            mssims.append(ssim_c)
+            diff_images.append(diff_c)
+
+        # Average the SSIM and create a mean difference image
+        mssim = np.mean(mssims)
+        diff_image = np.mean(diff_images, axis=0)
 
     return mssim, diff_image
 
