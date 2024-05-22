@@ -64,6 +64,14 @@ def main() -> None:
             },
         )
 
+    # Find package metadata directory for 'replicate'
+    site_packages_dir = next(Path(sys.prefix).rglob('site-packages'))
+    replicate_metadata_dir = next(site_packages_dir.rglob('replicate*.dist-info'), None)
+    if replicate_metadata_dir:
+        replicate_metadata_str = (
+            f"{replicate_metadata_dir}:{site_packages_dir / 'replicate'}"
+        )
+
     spec = [
         "pyi-makespec",
         f"{OPENADAPT_DIR / 'entrypoint.py'}",
@@ -77,6 +85,8 @@ def main() -> None:
         "--hidden-import=tiktoken_ext.openai_public",
         "--hidden-import=tiktoken_ext",
         "--hidden-import=replicate",
+        "--add-data",
+        replicate_metadata_str,
     ]
     ignore_dirs = [
         "__pycache__",
