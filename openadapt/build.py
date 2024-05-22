@@ -76,6 +76,7 @@ def main() -> None:
         "--windowed",
         "--hidden-import=tiktoken_ext.openai_public",
         "--hidden-import=tiktoken_ext",
+        "--hidden-import=replicate",
     ]
     ignore_dirs = [
         "__pycache__",
