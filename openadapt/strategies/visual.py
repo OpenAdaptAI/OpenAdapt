@@ -50,7 +50,6 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw
-from skimage.metrics import structural_similarity as ssim
 import numpy as np
 
 from openadapt import adapters, common, models, strategies, utils, vision
@@ -58,7 +57,8 @@ from openadapt import adapters, common, models, strategies, utils, vision
 DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
-MIN_SSIM = 0.9  # threshold for considering an image as similar
+MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots as similar
+MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments as similar
 
 
 @dataclass
@@ -316,47 +316,9 @@ def get_active_segment(
     return active_index
 
 
-def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
-    """Calculate the structural similarity index (SSIM) between two images.
-
-    This function first resizes the images to a common size maintaining their aspect
-    ratios. It then converts the resized images to grayscale and computes the SSIM.
-
-    Args:
-        im1 (Image.Image): The first image to compare.
-        im2 (Image.Image): The second image to compare.
-
-    Returns:
-        tuple[float, np.array]: A tuple containing the SSIM and the difference image.
-    """
-    # Calculate aspect ratios
-    aspect_ratio1 = im1.width / im1.height
-    aspect_ratio2 = im2.width / im2.height
-    # Use the smaller image as the base for resizing to maintain the aspect ratio
-    if aspect_ratio1 < aspect_ratio2:
-        base_width = min(im1.width, im2.width)
-        base_height = int(base_width / aspect_ratio1)
-    else:
-        base_height = min(im1.height, im2.height)
-        base_width = int(base_height * aspect_ratio2)
-
-    # Resize images to a common base while maintaining aspect ratio
-    im1 = im1.resize((base_width, base_height), Image.LANCZOS)
-    im2 = im2.resize((base_width, base_height), Image.LANCZOS)
-
-    # Convert images to grayscale
-    im1_gray = np.array(im1.convert("L"))
-    im2_gray = np.array(im2.convert("L"))
-
-    data_range = im2_gray.max() - im2_gray.min()
-    mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
-
-    return mssim, diff_image
-
-
 def find_similar_image_segmentation(
     image: Image.Image,
-    min_ssim: float = MIN_SSIM,
+    min_ssim: float = MIN_SCREENSHOT_SSIM,
 ) -> tuple[Segmentation, np.ndarray] | tuple[None, None]:
     """Identify a similar image in the cache based on the SSIM comparison.
 
@@ -378,7 +340,9 @@ def find_similar_image_segmentation(
     similar_segmentation_diff = None
 
     for segmentation in SEGMENTATIONS:
-        similarity_index, ssim_image = get_image_similarity(image, segmentation.image)
+        similarity_index, ssim_image = vision.get_image_similarity(
+            image, segmentation.image,
+        )
         if similarity_index > min_ssim:
             logger.info(f"{similarity_index=}")
             min_ssim = similarity_index
@@ -433,7 +397,9 @@ def get_window_segmentation(
 
 
     # TODO XXX: find identical masked images and handle them
-    masked_image_groups = vision.get_similar_images(masked_images, 0.95)
+    similar_image_groups = vision.get_similar_image_idxs(
+        masked_images, MIN_SEGMENT_SSIM,
+    )
 
 
 

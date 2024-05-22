@@ -33,7 +33,7 @@ MODEL_NAMES = (
     "FastSAM-x.pt",
     "FastSAM-s.pt",
 )
-MODEL_NAME = MODEL_NAMES[0]
+MODEL_NAME = MODEL_NAMES[1]
 
 
 # TODO: rename
@@ -45,8 +45,8 @@ def fetch_segmented_image(
     device: str = "cpu",
     retina_masks: bool = True,
     imgsz: int = 1024,
-    conf: float = 0.4,
-    iou: float = 0.9,
+    conf: float = 0.1,
+    iou: float = 0.5,
 ) -> Image:
     """Segment a PIL.Image using ultralytics Fast Segment Anything.
 

@@ -374,47 +374,83 @@ def display_images_table_with_titles(
     composite_image.show()
 
 
+def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
+    """Calculate the structural similarity index (SSIM) between two images.
+
+    This function first resizes the images to a common size maintaining their aspect
+    ratios. It then converts the resized images to grayscale and computes the SSIM.
+
+    Args:
+        im1 (Image.Image): The first image to compare.
+        im2 (Image.Image): The second image to compare.
+
+    Returns:
+        tuple[float, np.array]: A tuple containing the SSIM and the difference image.
+    """
+    # Calculate aspect ratios
+    aspect_ratio1 = im1.width / im1.height
+    aspect_ratio2 = im2.width / im2.height
+    # Use the smaller image as the base for resizing to maintain the aspect ratio
+    if aspect_ratio1 < aspect_ratio2:
+        base_width = min(im1.width, im2.width)
+        base_height = int(base_width / aspect_ratio1)
+    else:
+        base_height = min(im1.height, im2.height)
+        base_width = int(base_height * aspect_ratio2)
+
+    # Resize images to a common base while maintaining aspect ratio
+    im1 = im1.resize((base_width, base_height), Image.LANCZOS)
+    im2 = im2.resize((base_width, base_height), Image.LANCZOS)
+
+    # Convert images to grayscale
+    im1_gray = np.array(im1.convert("L"))
+    im2_gray = np.array(im2.convert("L"))
+
+    data_range = im2_gray.max() - im2_gray.min()
+    mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
+
+    return mssim, diff_image
+
+
 def get_similar_image_idxs(
     images: list[Image.Image],
-    min_ssim: float
-) -> tuple[list[list[int]], list[list[float]]]:
+    min_ssim: float,
+    size_similarity_threshold: float,
+) -> tuple[list[list[int]], list[list[float]], list[list[float]]]:
     """
     Get images having Structural Similarity Index Measure (SSIM) above a threshold,
-    and return the SSIM matrix.
+    and return the SSIM and size similarity matrices.
 
     Args:
         images: A list of PIL.Image objects to compare.
-        min_ssim: The minimum threshold for the SSIM for images to be considered similar.
+        min_ssim: The minimum threshold for the SSIM for images to be considered
+            similar.
+        size_similarity_threshold: Minimum required similarity in size as a fraction
+            (e.g., 0.9 for 90% similarity required).
 
     Returns:
-        A tuple containing two elements:
+        A tuple containing three elements:
         - A list of lists, where each sublist contains indices of images in the input
-          list that are similar to each other above the given SSIM threshold.
+          list that are similar to each other above the given SSIM and size thresholds.
         - A matrix of SSIM values between each pair of images.
-
-    Examples:
-        >>> images = [Image.open('image1.png'), Image.open('image2.png'),
-                      Image.open('image3.png')]
-        >>> groups, matrix = get_similar_image_idxs(images, 0.95)
-        >>> groups
-        [[0, 1], [2]]
-        >>> matrix
-        [[1.0, 0.96, 0.85], [0.96, 1.0, 0.87], [0.85, 0.87, 1.0]]
+        - A matrix of size similarity values between each pair of images.
     """
     num_images = len(images)
     already_compared = set()
     similar_groups = []
-    similarity_matrix = [[0.0] * num_images for _ in range(num_images)]
-
-    # Convert all images to grayscale numpy arrays for SSIM comparison
-    image_arrays = [np.array(img.convert('L')) for img in images]
+    ssim_matrix = [[0.0] * num_images for _ in range(num_images)]
+    size_similarity_matrix = [[0.0] * num_images for _ in range(num_images)]
 
     for i in range(num_images):
-        similarity_matrix[i][i] = 1.0  # SSIM of an image with itself is always 1
+        # similarity of an image with itself is always 1
+        ssim_matrix[i][i] = 1.0
+        size_similarity_matrix[i][i] = 1.0
         for j in range(i + 1, num_images):
-            # Calculate SSIM between images
-            s_ssim, _ = ssim(image_arrays[i], image_arrays[j], full=True)
-            similarity_matrix[i][j] = similarity_matrix[j][i] = s_ssim
+            size_sim = get_size_similarity(images[i], images[j])
+            size_similarity_matrix[i][j] = size_similarity_matrix[j][i] = size_sim
+
+            s_ssim, _ = get_image_similarity(images[i], images[j])
+            ssim_matrix[i][j] = ssim_matrix[j][i] = s_ssim
 
     for i in range(num_images):
         if i in already_compared:
@@ -423,7 +459,10 @@ def get_similar_image_idxs(
         for j in range(i + 1, num_images):
             if j in already_compared:
                 continue
-            if similarity_matrix[i][j] >= min_ssim:
+            if (
+                ssim_matrix[i][j] >= min_ssim and
+                size_similarity_matrix[i][j] >= size_similarity_threshold
+            ):
                 current_group.append(j)
                 already_compared.add(j)
 
@@ -431,7 +470,31 @@ def get_similar_image_idxs(
             similar_groups.append(current_group)
         already_compared.add(i)
 
-    return similar_groups, similarity_matrix
+    return similar_groups, ssim_matrix, size_similarity_matrix
+
+
+def get_size_similarity(
+    img1: Image.Image,
+    img2: Image.Image,
+) -> float:
+    """
+    Calculate the size similarity between two images, returning a score between 0 and 1.
+
+    1.0 indicates identical dimensions, values closer to 0 indicate greater disparity.
+
+    Args:
+        img1: First image to compare.
+        img2: Second image to compare.
+
+    Returns:
+        A float indicating the similarity in size between the two images.
+    """
+    width1, height1 = img1.size
+    width2, height2 = img2.size
+    width_ratio = min(width1 / width2, width2 / width1)
+    height_ratio = min(height1 / height2, height2 / height1)
+
+    return (width_ratio + height_ratio) / 2
 
 
 """
