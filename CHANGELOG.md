@@ -2,6 +2,13 @@
 
 
 
+## v0.25.4 (2024-05-22)
+
+### Fix
+
+* fix(installer): Fix build failing due to replicate and other issues (#684) ([`fdf286c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fdf286ce69f6c3704dd350e7eff2235026e99bd6))
+
+
 ## v0.25.3 (2024-05-22)
 
 ### Fix
