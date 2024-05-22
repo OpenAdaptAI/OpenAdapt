@@ -2,6 +2,13 @@
 
 
 
+## v0.25.3 (2024-05-22)
+
+### Fix
+
+* fix(installer): add hidden import replicate (#680) ([`6621a04`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6621a04208ab4a076ce0a8175621d1934a0d730e))
+
+
 ## v0.25.2 (2024-05-19)
 
 ### Fix
