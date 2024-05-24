@@ -1,11 +1,12 @@
 """Computer vision module."""
 
+import math
+
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from scipy.ndimage import binary_fill_holes
 from skimage.metrics import structural_similarity as ssim
 import cv2
-import math
 import numpy as np
 
 from openadapt import cache, utils
@@ -282,106 +283,6 @@ def calculate_bounding_boxes(
     return bounding_boxes, centroids
 
 
-def display_binary_images_grid(
-    images: list[np.ndarray],
-    grid_size: tuple[int, int] | None = None,
-    margin: int = 10,
-) -> None:
-    """Display binary arrays as images on a grid with separation between grid cells.
-
-    Args:
-        images: A list of binary numpy.ndarrays.
-        grid_size: Optional tuple (rows, cols) indicating the grid size.
-            If not provided, a square grid size will be calculated.
-        margin: The margin size between images in the grid.
-    """
-    if grid_size is None:
-        grid_size = (int(np.ceil(np.sqrt(len(images)))),) * 2
-
-    # Determine max dimensions of images in the list
-    max_width = max(image.shape[1] for image in images) + margin
-    max_height = max(image.shape[0] for image in images) + margin
-
-    # Create a new image with a white background
-    total_width = max_width * grid_size[1] + margin
-    total_height = max_height * grid_size[0] + margin
-    grid_image = Image.new("1", (total_width, total_height), 1)
-
-    for index, binary_image in enumerate(images):
-        # Convert ndarray to PIL Image
-        img = Image.fromarray(binary_image.astype(np.uint8) * 255, "L").convert("1")
-        img_with_margin = Image.new("1", (img.width + margin, img.height + margin), 1)
-        img_with_margin.paste(img, (margin // 2, margin // 2))
-
-        # Calculate the position on the grid
-        row, col = divmod(index, grid_size[1])
-        x = col * max_width + margin // 2
-        y = row * max_height + margin // 2
-
-        # Paste the image into the grid
-        grid_image.paste(img_with_margin, (x, y))
-
-    # Display the grid image
-    grid_image.show()
-
-
-def display_images_table_with_titles(
-    images: list[Image.Image],
-    titles: list[str] | None = None,
-    margin: int = 10,
-    fontsize: int = 20,
-) -> None:
-    """Display RGB PIL.Images in a table layout with titles to the right of each image.
-
-    Args:
-        images: A list of RGB PIL.Images.
-        titles: An optional list of strings containing titles for each image.
-        margin: The margin size in pixels between images and their titles.
-        fontsize: The size of the title font.
-    """
-    if titles is None:
-        titles = [""] * len(images)
-    elif len(titles) != len(images):
-        raise ValueError("The length of titles must match the length of images.")
-
-    font = utils.get_font("Arial.ttf", fontsize)
-
-    # Calculate the width and height required for the composite image
-    max_image_width = max(image.width for image in images)
-    total_height = sum(image.height for image in images) + margin * (len(images) - 1)
-    max_title_height = fontsize + margin  # simple approach to calculating title height
-    max_title_width = max(font.getsize(title)[0] for title in titles) + margin
-
-    composite_image_width = max_image_width + max_title_width + margin * 3
-    composite_image_height = max(
-        total_height, max_title_height * len(images) + margin * (len(images) - 1)
-    )
-
-    # Create a new image to composite everything onto
-    composite_image = Image.new(
-        "RGB", (composite_image_width, composite_image_height), "white"
-    )
-    draw = ImageDraw.Draw(composite_image)
-
-    current_y = 0
-    for image, title in zip(images, titles):
-        # Paste the image
-        composite_image.paste(image, (margin, current_y))
-        # Draw the title
-        draw.text(
-            (
-                max_image_width + 2 * margin,
-                current_y + image.height // 2 - fontsize // 2,
-            ),
-            title,
-            fill="black",
-            font=font,
-        )
-        current_y += image.height + margin
-
-    composite_image.show()
-
-
 def get_image_similarity(
     im1: Image.Image,
     im2: Image.Image,
@@ -543,107 +444,6 @@ def get_size_similarity(
     height_ratio = min(height1 / height2, height2 / height1)
 
     return (width_ratio + height_ratio) / 2
-
-
-def create_striped_background(
-    width: int,
-    height: int,
-    stripe_width: int = 10,
-    colors: tuple = ("blue", "red"),
-) -> Image.Image:
-    """
-    Create an image with diagonal stripes.
-
-    Args:
-        width (int): Width of the background image.
-        height (int): Height of the background image.
-        stripe_width (int): Width of each stripe.
-        colors (tuple): Tuple containing two colors for the stripes.
-
-    Returns:
-        Image.Image: An image with diagonal stripes.
-    """
-    image = Image.new("RGB", (width, height), "black")
-    draw = ImageDraw.Draw(image)
-    stripe_color = 0
-    for i in range(-height, width + height, stripe_width):
-        draw.polygon(
-            [
-                (i, 0),
-                (i + stripe_width, 0),
-                (i + height + stripe_width, height),
-                (i + height, height)
-            ],
-            fill=colors[stripe_color],
-        )
-        stripe_color = 1 - stripe_color  # Switch between 0 and 1 to alternate colors
-    return image
-
-
-def plot_similar_image_groups(
-    masked_images: list[Image.Image],
-    groups: list[list[int]],
-    ssim_values: list[list[float]],
-    border_size: int = 5,
-    margin: int = 10,
-) -> None:
-    """
-    Create and display a composite image for each group of similar images in a grid layout,
-    with diagonal stripe pattern as background and a border around each image.
-
-    Args:
-        masked_images (list[Image.Image]): list of images to be grouped.
-        groups (list[list[int]]): list of lists, where each sublist contains indices
-                                  of similar images.
-        ssim_values (list[list[float]]): SSIM matrix with the values between images.
-        border_size (int): Size of the border around each image.
-        margin (int): Margin size in pixels between images in the composite.
-    """
-    for group in groups:
-        images_to_combine = [masked_images[idx] for idx in group]
-
-        # Determine the grid size
-        n = len(images_to_combine)
-        grid_size = math.ceil(math.sqrt(n))
-        max_width = max(img.width for img in images_to_combine)
-        max_height = max(img.height for img in images_to_combine)
-
-        # Calculate the dimensions of the composite image
-        composite_width = grid_size * max_width + (grid_size - 1) * margin
-        composite_height = grid_size * max_height + (grid_size - 1) * margin + 50  # Extra space for title
-
-        # Create striped background
-        background = create_striped_background(composite_width, composite_height)
-
-        #composite_image = Image.new('RGB', (composite_width, composite_height), 'black')
-        composite_image = Image.new('RGBA', (composite_width, composite_height), (0, 0, 0, 0))
-        composite_image.paste(background, (0, 0))
-
-        draw = ImageDraw.Draw(composite_image)
-        font = ImageFont.load_default()
-
-        # Calculate min and max SSIM
-        min_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
-        max_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
-        title_lines = [
-            f"{len(group)=}",
-            f"{min_ssim=:.4f}",
-            f"{max_ssim=:.4f}",
-        ]
-        for i, title_line in enumerate(title_lines):
-            draw.text((10, 10*i + 10), title_line, font=font, fill='white')
-
-        # Place images in a grid
-        x, y = 0, 50  # Start below title space
-        for idx, img in enumerate(images_to_combine):
-            composite_image.paste(img, (x, y), mask=img)
-            x += max_width + margin
-            if (idx + 1) % grid_size == 0:
-                x = 0
-                y += max_height + margin
-
-        # Display the composite image
-        composite_image.show()
 
 
 """

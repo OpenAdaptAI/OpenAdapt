@@ -22,11 +22,11 @@ from openadapt.config import RECORDING_DIR_PATH, config
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
+from openadapt.plotting import display_event
 from openadapt.utils import (
     EMPTY,
     compute_diff,
     configure_logging,
-    display_event,
     evenly_spaced,
     image2utf8,
     row2dict,

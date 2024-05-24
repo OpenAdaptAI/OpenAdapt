@@ -52,7 +52,7 @@ from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
 
-from openadapt import adapters, common, models, strategies, utils, vision
+from openadapt import adapters, common, models, plotting, strategies, utils, vision
 
 DEBUG = False
 DEBUG_REPLAY = False
@@ -387,11 +387,11 @@ def get_window_segmentation(
 
     masks = vision.get_masks_from_segmented_image(segmented_image)
     if DEBUG:
-        vision.display_binary_images_grid(masks)
+        plotting.display_binary_images_grid(masks)
 
     refined_masks = vision.refine_masks(masks)
     if DEBUG:
-        vision.display_binary_images_grid(refined_masks)
+        plotting.display_binary_images_grid(refined_masks)
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
@@ -428,7 +428,7 @@ def get_window_segmentation(
         centroids,
     )
     if DEBUG:
-        vision.display_images_table_with_titles(masked_images, descriptions)
+        plotting.display_images_table_with_titles(masked_images, descriptions)
 
     SEGMENTATIONS.append(segmentation)
     return segmentation
