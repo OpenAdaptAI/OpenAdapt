@@ -32,6 +32,7 @@ def prompt(
     images: list[Image.Image] | None = None,
     # max_tokens: int | None = None,
     model_name: str = MODEL_NAME,
+    timeout: int = 10,
 ) -> str:
     """Public method to get a response from the Google API with image support."""
     full_prompt = "\n\n###\n\n".join([s for s in (system_prompt, prompt) if s])
@@ -40,7 +41,10 @@ def prompt(
 
     genai.configure(api_key=config.GOOGLE_API_KEY)
     model = genai.GenerativeModel(model_name)
-    response = model.generate_content([full_prompt] + images)
+    response = model.generate_content(
+        [full_prompt] + images,
+        request_options={"timeout": timeout}
+    )
     response.resolve()
     logger.info(f"response=\n{pformat(response)}")
     return response.text
