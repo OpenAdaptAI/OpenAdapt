@@ -1,10 +1,11 @@
 """Computer vision module."""
 
 from loguru import logger
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from scipy.ndimage import binary_fill_holes
 from skimage.metrics import structural_similarity as ssim
 import cv2
+import math
 import numpy as np
 
 from openadapt import cache, utils
@@ -447,16 +448,18 @@ def get_image_similarity(
 
     return mssim, diff_image
 
-
 @cache.cache()
 def get_similar_image_idxs(
     images: list[Image.Image],
     min_ssim: float,
     size_similarity_threshold: float,
-) -> tuple[list[list[int]], list[list[float]], list[list[float]]]:
+    short_circuit_ssim: bool = True
+) -> tuple[list[list[int]], list[int], list[list[float]], list[list[float]]]:
     """
     Get images having Structural Similarity Index Measure (SSIM) above a threshold,
-    and return the SSIM and size similarity matrices.
+    and return the SSIM and size similarity matrices. Also returns indices of images not
+    in any group. Optionally skips SSIM computation if the size difference exceeds the
+    threshold.
 
     Args:
         images: A list of PIL.Image objects to compare.
@@ -464,11 +467,14 @@ def get_similar_image_idxs(
             similar.
         size_similarity_threshold: Minimum required similarity in size as a fraction
             (e.g., 0.9 for 90% similarity required).
+        short_circuit_ssim: If True, skips SSIM calculation when size similarity is
+            below the threshold.
 
     Returns:
-        A tuple containing three elements:
+        A tuple containing four elements:
         - A list of lists, where each sublist contains indices of images in the input
           list that are similar to each other above the given SSIM and size thresholds.
+        - A list of indices of images not part of any group.
         - A matrix of SSIM values between each pair of images.
         - A matrix of size similarity values between each pair of images.
     """
@@ -477,17 +483,20 @@ def get_similar_image_idxs(
     similar_groups = []
     ssim_matrix = [[0.0] * num_images for _ in range(num_images)]
     size_similarity_matrix = [[0.0] * num_images for _ in range(num_images)]
+    all_indices = set(range(num_images))
 
     for i in range(num_images):
-        # similarity of an image with itself is always 1
         ssim_matrix[i][i] = 1.0
         size_similarity_matrix[i][i] = 1.0
         for j in range(i + 1, num_images):
             size_sim = get_size_similarity(images[i], images[j])
             size_similarity_matrix[i][j] = size_similarity_matrix[j][i] = size_sim
 
-            s_ssim, _ = get_image_similarity(images[i], images[j])
-            ssim_matrix[i][j] = ssim_matrix[j][i] = s_ssim
+            if not short_circuit_ssim or size_sim >= size_similarity_threshold:
+                s_ssim, _ = get_image_similarity(images[i], images[j])
+                ssim_matrix[i][j] = ssim_matrix[j][i] = s_ssim
+            else:
+                ssim_matrix[i][j] = ssim_matrix[j][i] = math.nan
 
     for i in range(num_images):
         if i in already_compared:
@@ -497,8 +506,8 @@ def get_similar_image_idxs(
             if j in already_compared:
                 continue
             if (
-                ssim_matrix[i][j] >= min_ssim
-                and size_similarity_matrix[i][j] >= size_similarity_threshold
+                ssim_matrix[i][j] >= min_ssim and
+                size_similarity_matrix[i][j] >= size_similarity_thresholdi
             ):
                 current_group.append(j)
                 already_compared.add(j)
@@ -507,7 +516,9 @@ def get_similar_image_idxs(
             similar_groups.append(current_group)
         already_compared.add(i)
 
-    return similar_groups, ssim_matrix, size_similarity_matrix
+    not_grouped_indices = list(all_indices - already_compared)
+
+    return similar_groups, not_grouped_indices, ssim_matrix, size_similarity_matrix
 
 
 def get_size_similarity(
@@ -532,6 +543,107 @@ def get_size_similarity(
     height_ratio = min(height1 / height2, height2 / height1)
 
     return (width_ratio + height_ratio) / 2
+
+
+def create_striped_background(
+    width: int,
+    height: int,
+    stripe_width: int = 10,
+    colors: tuple = ("blue", "red"),
+) -> Image.Image:
+    """
+    Create an image with diagonal stripes.
+
+    Args:
+        width (int): Width of the background image.
+        height (int): Height of the background image.
+        stripe_width (int): Width of each stripe.
+        colors (tuple): Tuple containing two colors for the stripes.
+
+    Returns:
+        Image.Image: An image with diagonal stripes.
+    """
+    image = Image.new("RGB", (width, height), "black")
+    draw = ImageDraw.Draw(image)
+    stripe_color = 0
+    for i in range(-height, width + height, stripe_width):
+        draw.polygon(
+            [
+                (i, 0),
+                (i + stripe_width, 0),
+                (i + height + stripe_width, height),
+                (i + height, height)
+            ],
+            fill=colors[stripe_color],
+        )
+        stripe_color = 1 - stripe_color  # Switch between 0 and 1 to alternate colors
+    return image
+
+
+def plot_similar_image_groups(
+    masked_images: list[Image.Image],
+    groups: list[list[int]],
+    ssim_values: list[list[float]],
+    border_size: int = 5,
+    margin: int = 10,
+) -> None:
+    """
+    Create and display a composite image for each group of similar images in a grid layout,
+    with diagonal stripe pattern as background and a border around each image.
+
+    Args:
+        masked_images (list[Image.Image]): list of images to be grouped.
+        groups (list[list[int]]): list of lists, where each sublist contains indices
+                                  of similar images.
+        ssim_values (list[list[float]]): SSIM matrix with the values between images.
+        border_size (int): Size of the border around each image.
+        margin (int): Margin size in pixels between images in the composite.
+    """
+    for group in groups:
+        images_to_combine = [masked_images[idx] for idx in group]
+
+        # Determine the grid size
+        n = len(images_to_combine)
+        grid_size = math.ceil(math.sqrt(n))
+        max_width = max(img.width for img in images_to_combine)
+        max_height = max(img.height for img in images_to_combine)
+
+        # Calculate the dimensions of the composite image
+        composite_width = grid_size * max_width + (grid_size - 1) * margin
+        composite_height = grid_size * max_height + (grid_size - 1) * margin + 50  # Extra space for title
+
+        # Create striped background
+        background = create_striped_background(composite_width, composite_height)
+
+        #composite_image = Image.new('RGB', (composite_width, composite_height), 'black')
+        composite_image = Image.new('RGBA', (composite_width, composite_height), (0, 0, 0, 0))
+        composite_image.paste(background, (0, 0))
+
+        draw = ImageDraw.Draw(composite_image)
+        font = ImageFont.load_default()
+
+        # Calculate min and max SSIM
+        min_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
+        max_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
+        title_lines = [
+            f"{len(group)=}",
+            f"{min_ssim=:.4f}",
+            f"{max_ssim=:.4f}",
+        ]
+        for i, title_line in enumerate(title_lines):
+            draw.text((10, 10*i + 10), title_line, font=font, fill='white')
+
+        # Place images in a grid
+        x, y = 0, 50  # Start below title space
+        for idx, img in enumerate(images_to_combine):
+            composite_image.paste(img, (x, y), mask=img)
+            x += max_width + margin
+            if (idx + 1) % grid_size == 0:
+                x = 0
+                y += max_height + margin
+
+        # Display the composite image
+        composite_image.show()
 
 
 """
