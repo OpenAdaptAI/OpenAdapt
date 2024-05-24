@@ -46,8 +46,10 @@ def test_similar_images(identical_images, perturbed_images):
     images = identical_images + perturbed_images
     # Expecting only the identical images to form a group
     expected_groups = [list(range(len(identical_images)))]
-    result_groups, result_ssim_matrix, result_size_matrix = (
-        vision.get_similar_image_idxs(images, MIN_SSIM, MIN_SIZE_SIM)
+    result_groups, _, result_ssim_matrix, result_size_matrix = (
+        vision.get_similar_image_idxs(
+            images, MIN_SSIM, MIN_SIZE_SIM, short_circuit_ssim=False
+        )
     )
     
     # Sorting sublists and the main list to ensure order in assertions does not matter

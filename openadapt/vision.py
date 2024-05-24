@@ -408,7 +408,7 @@ def get_similar_image_idxs(
                 continue
             if (
                 ssim_matrix[i][j] >= min_ssim and
-                size_similarity_matrix[i][j] >= size_similarity_thresholdi
+                size_similarity_matrix[i][j] >= size_similarity_threshold
             ):
                 current_group.append(j)
                 already_compared.add(j)
