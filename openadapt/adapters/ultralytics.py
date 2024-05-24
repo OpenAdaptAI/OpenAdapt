@@ -46,7 +46,7 @@ def fetch_segmented_image(
     retina_masks: bool = True,
     imgsz: int = 1024,
     conf: float = 0.1,
-    iou: float = 0.5,
+    iou: float = 0.1,
 ) -> Image:
     """Segment a PIL.Image using ultralytics Fast Segment Anything.
 

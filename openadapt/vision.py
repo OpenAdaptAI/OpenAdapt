@@ -7,9 +7,10 @@ from skimage.metrics import structural_similarity as ssim
 import cv2
 import numpy as np
 
-from openadapt import utils
+from openadapt import cache, utils
 
 
+@cache.cache()
 def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndarray]:
     """Process the image to find unique masks based on color channels.
 
@@ -42,6 +43,7 @@ def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndar
     return masks
 
 
+@cache.cache()
 def filter_masks_by_size(
     masks: list[np.ndarray],
     min_mask_size: tuple[int, int] = (15, 15),
@@ -69,6 +71,7 @@ def filter_masks_by_size(
     return size_filtered_masks
 
 
+@cache.cache()
 def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     """Refine the list of masks.
 
@@ -112,6 +115,7 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     return refined_masks
 
 
+@cache.cache()
 def filter_thin_ragged_masks(
     masks: list[np.ndarray],
     kernel_size: int = 3,
@@ -146,6 +150,7 @@ def filter_thin_ragged_masks(
     return filtered_masks
 
 
+@cache.cache()
 def remove_border_masks(
     masks: list[np.ndarray],
     threshold_percent: float = 5.0,
@@ -187,6 +192,7 @@ def remove_border_masks(
     return filtered_masks
 
 
+@cache.cache()
 def extract_masked_images(
     original_image: Image.Image,
     masks: list[np.ndarray],
@@ -228,6 +234,7 @@ def extract_masked_images(
     return masked_images
 
 
+@cache.cache()
 def calculate_bounding_boxes(
     masks: list[np.ndarray],
 ) -> tuple[list[dict[str, float]], list[tuple[float, float]]]:
@@ -374,16 +381,24 @@ def display_images_table_with_titles(
     composite_image.show()
 
 
-def get_image_similarity(im1: Image.Image, im2: Image.Image, grayscale: bool = False) -> tuple[float, np.array]:
-    """Calculate the structural similarity index (SSIM) between two images, optionally in grayscale.
+def get_image_similarity(
+    im1: Image.Image,
+    im2: Image.Image,
+    grayscale: bool = False,
+    win_size: int = 7  # Default window size for SSIM
+) -> tuple[float, np.array]:
+    """Calculate the structural similarity index (SSIM) between two images.
 
-    This function resizes the images to a common size maintaining their aspect ratios, and computes the SSIM
-    either in grayscale or across each color channel separately.
+    This function resizes the images to a common size maintaining their aspect ratios,
+    and computes the SSIM either in grayscale or across each color channel separately.
 
     Args:
         im1 (Image.Image): The first image to compare.
         im2 (Image.Image): The second image to compare.
-        grayscale (bool): If True, convert images to grayscale. Otherwise, compute SSIM on color channels.
+        grayscale (bool): If True, convert images to grayscale. Otherwise, compute
+            SSIM on color channels.
+        win_size (int): Window size for SSIM calculation. Must be odd and less than or
+            equal to the smaller side of the images.
 
     Returns:
         tuple[float, np.array]: A tuple containing the SSIM and the difference image.
@@ -392,28 +407,28 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image, grayscale: bool = F
     aspect_ratio1 = im1.width / im1.height
     aspect_ratio2 = im2.width / im2.height
 
-    # Use the smaller image as the base for resizing to maintain the aspect ratio
-    if aspect_ratio1 < aspect_ratio2:
-        base_width = min(im1.width, im2.width)
-        base_height = int(base_width / aspect_ratio1)
-    else:
-        base_height = min(im1.height, im2.height)
-        base_width = int(base_height * aspect_ratio2)
+    # Determine the minimum dimension size based on win_size, ensuring minimum size to
+    # avoid win_size error
+    min_dim_size = max(2 * win_size + 1, 7)
 
-    # Resize images to a common base while maintaining aspect ratio
-    im1 = im1.resize((base_width, base_height), Image.LANCZOS)
-    im2 = im2.resize((base_width, base_height), Image.LANCZOS)
+    # Calculate scale factors to ensure both dimensions are at least min_dim_size
+    scale_factor1 = max(min_dim_size / im1.width, min_dim_size / im1.height, 1)
+    scale_factor2 = max(min_dim_size / im2.width, min_dim_size / im2.height, 1)
 
-    if np.array(im1).ndim == 2 or np.array(im2).ndim == 2 and grayscale:
-        logger.warning(f"{grayscale=} but {im1.size=}, {im2.size=}")
-        grayscale = True
+    # Calculate common dimensions that accommodate both images
+    target_width = max(int(im1.width * scale_factor1), int(im2.width * scale_factor2))
+    target_height = max(int(im1.height * scale_factor1), int(im2.height * scale_factor2))
+
+    # Resize images to these new common dimensions
+    im1 = im1.resize((target_width, target_height), Image.LANCZOS)
+    im2 = im2.resize((target_width, target_height), Image.LANCZOS)
 
     if grayscale:
         # Convert images to grayscale
         im1 = np.array(im1.convert("L"))
         im2 = np.array(im2.convert("L"))
         data_range = max(im1.max(), im2.max()) - min(im1.min(), im2.min())
-        mssim, diff_image = ssim(im1, im2, data_range=data_range, full=True)
+        mssim, diff_image = ssim(im1, im2, win_size=win_size, data_range=data_range, full=True)
     else:
         # Compute SSIM on each channel separately and then average the results
         mssims = []
@@ -422,7 +437,7 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image, grayscale: bool = F
             im1_c = np.array(im1)[:, :, c]
             im2_c = np.array(im2)[:, :, c]
             data_range = max(im1_c.max(), im2_c.max()) - min(im1_c.min(), im2_c.min())
-            ssim_c, diff_c = ssim(im1_c, im2_c, data_range=data_range, full=True)
+            ssim_c, diff_c = ssim(im1_c, im2_c, win_size=win_size, data_range=data_range, full=True)
             mssims.append(ssim_c)
             diff_images.append(diff_c)
 
@@ -433,6 +448,7 @@ def get_image_similarity(im1: Image.Image, im2: Image.Image, grayscale: bool = F
     return mssim, diff_image
 
 
+@cache.cache()
 def get_similar_image_idxs(
     images: list[Image.Image],
     min_ssim: float,
@@ -481,8 +497,8 @@ def get_similar_image_idxs(
             if j in already_compared:
                 continue
             if (
-                ssim_matrix[i][j] >= min_ssim and
-                size_similarity_matrix[i][j] >= size_similarity_threshold
+                ssim_matrix[i][j] >= min_ssim
+                and size_similarity_matrix[i][j] >= size_similarity_threshold
             ):
                 current_group.append(j)
                 already_compared.add(j)

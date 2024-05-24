@@ -57,8 +57,9 @@ from openadapt import adapters, common, models, strategies, utils, vision
 DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
-MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots as similar
-MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments as similar
+MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
+MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
+MIN_SEGMENT_SIZE_SIM = 0  # threshold for considering segment sizes similar
 
 
 @dataclass
@@ -397,8 +398,8 @@ def get_window_segmentation(
 
 
     # TODO XXX: find identical masked images and handle them
-    similar_image_groups = vision.get_similar_image_idxs(
-        masked_images, MIN_SEGMENT_SSIM,
+    similar_image_groups, _, _ = vision.get_similar_image_idxs(
+        masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
     )
 
 
