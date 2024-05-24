@@ -7,6 +7,8 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
+from openadapt.models import ActionEvent
+
 
 # TODO: move parameters to config
 def draw_ellipse(
@@ -550,6 +552,7 @@ def plot_similar_image_groups(
     masked_images: list[Image.Image],
     groups: list[list[int]],
     ssim_values: list[list[float]],
+    title_params: list[str] = [],
     border_size: int = 5,
     margin: int = 10,
 ) -> None:
@@ -591,18 +594,18 @@ def plot_similar_image_groups(
         font = ImageFont.load_default()
 
         # Calculate min and max SSIM
-        min_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
-        max_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
+        min_group_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
+        max_group_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
         title_lines = [
             f"{len(group)=}",
-            f"{min_ssim=:.4f}",
-            f"{max_ssim=:.4f}",
-        ]
+            f"{min_group_ssim=:.4f}",
+            f"{max_group_ssim=:.4f}",
+        ] + title_params
         for i, title_line in enumerate(title_lines):
-            draw.text((10, 10*i + 10), title_line, font=font, fill='white')
+            draw.text((10, 10*i), title_line, font=font, fill='white')
 
         # Place images in a grid
-        x, y = 0, 50  # Start below title space
+        x, y = 0, len(title_lines) * 10  # Start below title space
         for idx, img in enumerate(images_to_combine):
             composite_image.paste(img, (x, y), mask=img)
             x += max_width + margin

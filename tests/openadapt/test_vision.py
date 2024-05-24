@@ -48,7 +48,7 @@ def test_similar_images(identical_images, perturbed_images):
     expected_groups = [list(range(len(identical_images)))]
     result_groups, _, result_ssim_matrix, result_size_matrix = (
         vision.get_similar_image_idxs(
-            images, MIN_SSIM, MIN_SIZE_SIM, short_circuit_ssim=False
+            images, MIN_SSIM, MIN_SIZE_SIM, short_circuit_ssim=False,
         )
     )
     

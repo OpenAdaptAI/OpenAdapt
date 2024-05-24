@@ -349,16 +349,17 @@ def get_image_similarity(
 
     return mssim, diff_image
 
+
 @cache.cache()
 def get_similar_image_idxs(
     images: list[Image.Image],
     min_ssim: float,
-    size_similarity_threshold: float,
+    min_size_sim: float,
     short_circuit_ssim: bool = True
 ) -> tuple[list[list[int]], list[int], list[list[float]], list[list[float]]]:
-    """
-    Get images having Structural Similarity Index Measure (SSIM) above a threshold,
-    and return the SSIM and size similarity matrices. Also returns indices of images not
+    """Get images having Structural Similarity Index Measure (SSIM) above a threshold.
+
+    Return the SSIM and size similarity matrices. Also returns indices of images not
     in any group. Optionally skips SSIM computation if the size difference exceeds the
     threshold.
 
@@ -366,7 +367,7 @@ def get_similar_image_idxs(
         images: A list of PIL.Image objects to compare.
         min_ssim: The minimum threshold for the SSIM for images to be considered
             similar.
-        size_similarity_threshold: Minimum required similarity in size as a fraction
+        min_size_sim: Minimum required similarity in size as a fraction
             (e.g., 0.9 for 90% similarity required).
         short_circuit_ssim: If True, skips SSIM calculation when size similarity is
             below the threshold.
@@ -393,7 +394,7 @@ def get_similar_image_idxs(
             size_sim = get_size_similarity(images[i], images[j])
             size_similarity_matrix[i][j] = size_similarity_matrix[j][i] = size_sim
 
-            if not short_circuit_ssim or size_sim >= size_similarity_threshold:
+            if not short_circuit_ssim or size_sim >= min_size_sim:
                 s_ssim, _ = get_image_similarity(images[i], images[j])
                 ssim_matrix[i][j] = ssim_matrix[j][i] = s_ssim
             else:
@@ -408,7 +409,7 @@ def get_similar_image_idxs(
                 continue
             if (
                 ssim_matrix[i][j] >= min_ssim and
-                size_similarity_matrix[i][j] >= size_similarity_threshold
+                size_similarity_matrix[i][j] >= min_size_sim
             ):
                 current_group.append(j)
                 already_compared.add(j)
@@ -417,9 +418,9 @@ def get_similar_image_idxs(
             similar_groups.append(current_group)
         already_compared.add(i)
 
-    not_grouped_indices = list(all_indices - already_compared)
+    ungrouped_indices = list(all_indices - already_compared)
 
-    return similar_groups, not_grouped_indices, ssim_matrix, size_similarity_matrix
+    return similar_groups, ungrouped_indices, ssim_matrix, size_similarity_matrix
 
 
 def get_size_similarity(

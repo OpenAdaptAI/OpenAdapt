@@ -398,7 +398,7 @@ def get_window_segmentation(
 
 
     # TODO XXX: find identical masked images and handle them
-    similar_image_groups, _, _ = vision.get_similar_image_idxs(
+    similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
         masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
     )
 
