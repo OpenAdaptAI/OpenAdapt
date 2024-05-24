@@ -2,6 +2,13 @@
 
 
 
+## v0.25.5 (2024-05-24)
+
+### Fix
+
+* fix(docs): fix typo in README.md (#686) ([`320bb88`](https://github.com/OpenAdaptAI/OpenAdapt/commit/320bb88c4ca64d296f8c38806eecebbd87684896))
+
+
 ## v0.25.4 (2024-05-22)
 
 ### Fix
