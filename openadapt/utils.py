@@ -38,7 +38,7 @@ if sys.platform == "win32":
 
 
 from openadapt import common
-from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
+from openadapt.config import config
 from openadapt.db import db
 from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent

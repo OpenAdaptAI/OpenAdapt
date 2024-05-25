@@ -7,6 +7,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
+from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
 
 
@@ -577,10 +578,20 @@ def plot_similar_image_groups(
         max_width = max(img.width for img in images_to_combine)
         max_height = max(img.height for img in images_to_combine)
 
+        min_group_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
+        max_group_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
+        title_lines = [
+            f"{len(group)=}",
+            f"{min_group_ssim=:.4f}",
+            f"{max_group_ssim=:.4f}",
+        ] + title_params
+
         # Calculate the dimensions of the composite image
         composite_width = grid_size * max_width + (grid_size - 1) * margin
         # Extra space for title
-        composite_height = grid_size * max_height + (grid_size - 1) * margin + 50
+        composite_height = (
+            grid_size * max_height + (grid_size - 1) * margin + len(title_lines) * 10
+        )
 
         # Create striped background
         background = create_striped_background(composite_width, composite_height)
@@ -593,16 +604,8 @@ def plot_similar_image_groups(
         draw = ImageDraw.Draw(composite_image)
         font = ImageFont.load_default()
 
-        # Calculate min and max SSIM
-        min_group_ssim = min(ssim_values[i][j] for i in group for j in group if i != j)
-        max_group_ssim = max(ssim_values[i][j] for i in group for j in group if i != j)
-        title_lines = [
-            f"{len(group)=}",
-            f"{min_group_ssim=:.4f}",
-            f"{max_group_ssim=:.4f}",
-        ] + title_params
         for i, title_line in enumerate(title_lines):
-            draw.text((10, 10*i), title_line, font=font, fill='white')
+            draw.text((0, 10*i), title_line, font=font, fill='white')
 
         # Place images in a grid
         x, y = 0, len(title_lines) * 10  # Start below title space
