@@ -404,13 +404,9 @@ def get_window_segmentation(
 
 
 
-    original_image_base64 = screenshot.base64
-    masked_images_base64 = [
-        utils.image2utf8(masked_image) for masked_image in masked_images
-    ]
     descriptions = prompt_for_descriptions(
-        original_image_base64,
-        masked_images_base64,
+        original_image,
+        masked_images,
         action_event.active_segment_description,
         exceptions,
     )
@@ -435,16 +431,16 @@ def get_window_segmentation(
 
 
 def prompt_for_descriptions(
-    original_image_base64: str,
-    masked_images_base64: list[str],
+    original_image: Image.Image,
+    masked_images: list{Image.Image],
     active_segment_description: str | None,
     exceptions: list[Exception] | None = None,
 ) -> list[str]:
     """Generates descriptions for given image segments using a prompt adapter.
 
     Args:
-        original_image_base64: Base64 encoding of the original image.
-        masked_images_base64: List of base64 encoded masked images.
+        original_image: The original image.
+        masked_images: List of masked images.
         active_segment_description: Description of the active segment.
         exceptions: List of exceptions previously raised, added to prompts.
 
@@ -456,29 +452,29 @@ def prompt_for_descriptions(
     # TODO: move inside adapters
     # off by one to account for original image
     if prompt_adapter.MAX_IMAGES and (
-        len(masked_images_base64) + 1 > prompt_adapter.MAX_IMAGES
+        len(masked_images) + 1 > prompt_adapter.MAX_IMAGES
     ):
-        masked_images_base64_batches = utils.split_list(
-            masked_images_base64,
+        masked_images_batches = utils.split_list(
+            masked_images,
             prompt_adapter.MAX_IMAGES - 1,
         )
         descriptions = []
-        for masked_images_base64_batch in masked_images_base64_batches:
+        for masked_images_batch in masked_images_batches:
             descriptions_batch = prompt_for_descriptions(
-                original_image_base64,
-                masked_images_base64_batch,
+                original_image,
+                masked_images_batch,
                 active_segment_description,
                 exceptions,
             )
             descriptions += descriptions_batch
         return descriptions
 
-    images = [original_image_base64] + masked_images_base64
+    images = [original_image] + masked_images
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )
     logger.info(f"system_prompt=\n{system_prompt}")
-    num_segments = len(masked_images_base64)
+    num_segments = len(masked_images)
     prompt = utils.render_template_from_file(
         "prompts/description.j2",
         active_segment_description=active_segment_description,
@@ -494,9 +490,9 @@ def prompt_for_descriptions(
     descriptions = utils.parse_code_snippet(descriptions_json)["descriptions"]
     logger.info(f"{descriptions=}")
     try:
-        assert len(descriptions) == len(masked_images_base64), (
+        assert len(descriptions) == len(masked_images), (
             len(descriptions),
-            len(masked_images_base64),
+            len(masked_images),
         )
     except Exception as exc:
         # TODO XXX

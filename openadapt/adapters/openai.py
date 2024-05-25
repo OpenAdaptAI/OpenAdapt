@@ -6,9 +6,10 @@ https://platform.openai.com/docs/guides/vision
 from pprint import pformat
 
 from loguru import logger
+from PIL import Image
 import requests
 
-from openadapt import cache
+from openadapt import cache, utils
 from openadapt.config import config
 
 MODEL_NAME = [
@@ -25,7 +26,7 @@ MAX_IMAGES = None
 def create_payload(
     prompt: str,
     system_prompt: str | None = None,
-    base64_images: list[str] | None = None,
+    images: list[Image.Image] | None = None,
     model: str = MODEL_NAME,
     detail: str = "high",  # "low" or "high"
     max_tokens: int | None = None,
@@ -35,7 +36,7 @@ def create_payload(
     Args:
         prompt: the prompt
         system_prompt: the system prompt
-        base64_images: list of base64 encoded images
+        images: list of images
         model: name of OpenAI model
         detail: detail level of images, "low" or "high"
         max_tokens: maximum number of tokens
@@ -61,8 +62,9 @@ def create_payload(
         },
     ]
 
-    base64_images = base64_images or []
-    for base64_image in base64_images:
+    images = images or []
+    for image in images:
+        base64_image = utils.image2utf8(image)
         messages[0]["content"].append(
             {
                 "type": "image_url",
@@ -150,7 +152,7 @@ def get_completion(payload: dict) -> str:
 def prompt(
     prompt: str,
     system_prompt: str | None = None,
-    base64_images: list[str] | None = None,
+    images: list[Image.Image] | None = None,
     max_tokens: int | None = None,
     detail: str = "high",
 ) -> str:
@@ -159,7 +161,7 @@ def prompt(
     Args:
         prompt: the prompt
         system_prompt: the system prompt
-        base64_images: list of base64 encoded images
+        images: list of images
         model: name of OpenAI model
         detail: detail level of images, "low" or "high"
         max_tokens: maximum number of tokens
@@ -170,7 +172,7 @@ def prompt(
     payload = create_payload(
         prompt,
         system_prompt,
-        base64_images,
+        images,
         max_tokens=max_tokens,
         detail=detail,
     )

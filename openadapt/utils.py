@@ -295,11 +295,12 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
 
 
 # TODO: png
-def image2utf8(image: Image.Image) -> str:
+def image2utf8(image: Image.Image, include_prefix: bool = True) -> str:
     """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
+        include_prefix (bool): Whether to include the "data:" prefix.
 
     Returns:
         str: The UTF-8 encoded image.
