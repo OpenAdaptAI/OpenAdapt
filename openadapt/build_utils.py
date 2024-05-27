@@ -33,14 +33,13 @@ def is_running_from_executable() -> bool:
 class RedirectOutput:
     """Context manager to redirect stdout and stderr to /dev/null."""
 
-    null_stream = open(os.devnull, "a")
-
     def __enter__(self) -> "RedirectOutput":
         """Redirect stdout and stderr to /dev/null."""
         if is_running_from_executable():
+            null_stream = open(os.devnull, "a")
             self.old_stdout = sys.stdout
             self.old_stderr = sys.stderr
-            sys.stdout = sys.stderr = self.null_stream
+            sys.stdout = sys.stderr = null_stream
             return self
 
     def __exit__(self, exc_type: type, exc_value: Exception, traceback: type) -> None:
