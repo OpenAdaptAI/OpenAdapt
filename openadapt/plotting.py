@@ -1,6 +1,8 @@
 """Plotting utilities."""
 
+from collections import defaultdict
 import math
+import os
 
 import matplotlib.pyplot as plt
 from loguru import logger
@@ -9,6 +11,7 @@ import numpy as np
 
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
+from openadapt import common, utils
 
 
 # TODO: move parameters to config
@@ -245,7 +248,7 @@ def display_event(
         image = screenshot.diff.convert("RGBA")
     else:
         image = screenshot.image.convert("RGBA")
-    width_ratio, height_ratio = get_scale_ratios(action_event)
+    width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
     # dim area outside window event
     x0 = window_event.left * width_ratio
@@ -658,3 +661,63 @@ def highlight_masks(original: Image.Image, masks: list[np.ndarray], darken_facto
     highlighted_image = Image.composite(original, darkened_image, combined_mask)
 
     return highlighted_image
+
+
+import unicodedata
+from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize text to ASCII with fallbacks for non-convertible characters.
+    """
+    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+
+def plot_segments(image: Image.Image, segments: list[dict[str, str, int, int, int, int]]) -> None:
+    """
+    Plot an image with labeled bounding boxes around segments, where bounding box coordinates are given as relative values.
+
+    Args:
+        image (Image.Image): The image to plot.
+        segments (List[Dict]): A list of dictionaries, each representing a segment with:
+            "name" (str): The name of the segment.
+            "description" (str): A description of the segment.
+            "top" (float): The relative top coordinate of the segment's bounding box.
+            "left" (float): The relative left coordinate of the segment's bounding box.
+            "width" (float): The relative width of the segment's bounding box.
+            "height" (float): The relative height of the segment's bounding box.
+
+    Displays:
+        The image with overlaid bounding boxes and labels.
+    """
+    draw = ImageDraw.Draw(image)
+    img_width, img_height = image.size
+
+    try:
+        font = ImageFont.truetype("arial.ttf", 16)
+    except IOError:
+        font = ImageFont.load_default()
+
+    for segment in segments:
+        name = normalize_text(segment["name"])
+        description = normalize_text(segment["description"])
+
+        # Convert relative coordinates to absolute by multiplying by image dimensions
+        top = int(segment["top"] * img_height)
+        left = int(segment["left"] * img_width)
+        width = int(segment["width"] * img_width)
+        height = int(segment["height"] * img_height)
+
+        box = [left, top, left + width, top + height]
+        draw.rectangle(box, outline="red", width=2)
+
+        label = f"{name}: {description}" if description else name
+        text_width, text_height = draw.textsize(label, font=font)
+        text_position = (left, top - text_height) if top - text_height > 0 else (left, top + height)
+        draw.text(text_position, label, fill="white", font=font)
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(image)
+    plt.axis('off')
+    plt.show()

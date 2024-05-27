@@ -18,12 +18,11 @@ import click
 from openadapt.config import config
 from openadapt.db.crud import get_latest_recording, get_recording
 from openadapt.events import get_events
-from openadapt.plotting import display_event
+from openadapt.plotting import display_event, plot_performance
 from openadapt.utils import (
     EMPTY,
     configure_logging,
     image2utf8,
-    plot_performance,
     row2dict,
     rows2dicts,
 )
