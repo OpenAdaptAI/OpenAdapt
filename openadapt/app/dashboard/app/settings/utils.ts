@@ -36,7 +36,7 @@ export function validateRecordAndReplaySettings(settings: Record<string, string>
 export function saveSettings(
     form: UseFormReturnType<any>,
 ) {
-    return function(values: Record<string, string>) {
+    return function(values: Record<string, any>) {
         fetch('/api/settings', {
             method: 'POST',
             headers: {

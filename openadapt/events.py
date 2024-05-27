@@ -43,6 +43,11 @@ def get_events(
     window_events = crud.get_window_events(recording, session=session)
     screenshots = crud.get_screenshots(recording, session=session)
 
+    if recording.original_recording_id:
+        # if recording is a copy, it already has its events processed when it
+        # was created, return only the top level events
+        return [event for event in action_events if event.parent_id is None]
+
     raw_action_event_dicts = utils.rows2dicts(action_events)
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")
 

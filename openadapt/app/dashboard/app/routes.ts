@@ -12,4 +12,8 @@ export const routes: Route[] = [
         name: 'Settings',
         path: '/settings',
     },
+    {
+        name: 'Scrubbing',
+        path: '/scrubbing',
+    }
 ]
