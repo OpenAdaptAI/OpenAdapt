@@ -14,23 +14,23 @@ import os
 import sys
 
 from loguru import logger
-from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier
+from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
+from PySide6.QtCore import QMargins, QSize, QSocketNotifier, Qt
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
     QMainWindow,
     QMenu,
-    QInputDialog,
-    QSystemTrayIcon,
-    QDialog,
-    QHBoxLayout,
-    QVBoxLayout,
-    QLabel,
-    QComboBox,
-    QLineEdit,
     QPushButton,
-    QDialogButtonBox,
+    QSystemTrayIcon,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -42,12 +42,11 @@ from openadapt.build_utils import is_running_from_executable
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
-from openadapt.visualize import main as visualize
 from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.visualize import main as visualize
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
-
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
 
@@ -225,7 +224,7 @@ class SystemTrayIcon:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
             self.visualize_proc = multiprocessing.Process(
-                target=visualize, args=(recording,)
+                target=visualize, args=(recording.id,)
             )
             self.visualize_proc.start()
 

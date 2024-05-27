@@ -6,6 +6,7 @@ from loguru import logger
 from PIL import Image
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.spacy_model_helpers import download_spacy_model
 
 with redirect_stdout_stderr():
     from presidio_analyzer import AnalyzerEngine
@@ -22,13 +23,11 @@ from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMix
 from openadapt.privacy.providers import ScrubProvider
 
 if not spacy.util.is_package(config.SPACY_MODEL_NAME):  # pylint: disable=no-member
+    logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
     if not is_running_from_executable():
-        logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
         spacy.cli.download(config.SPACY_MODEL_NAME)
     else:
-        # TODO: devise some method to download this automatically
-        # this is running from inside a pyinstaller build
-        logger.warning(f"Download {config.SPACY_MODEL_NAME} model manually.")
+        download_spacy_model(config.SPACY_MODEL_NAME)
 
 
 class PresidioScrubbingProvider(
