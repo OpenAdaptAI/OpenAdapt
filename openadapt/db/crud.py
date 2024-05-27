@@ -520,7 +520,17 @@ def get_new_session(
     ), "Cannot be both read-only and read-and-write."
     assert read_only or read_and_write, "Must be either read-only or read-and-write."
     if read_only:
-        return ReadOnlySession()
+        session = ReadOnlySession()
+
+        def raise_error_on_write(*args: Any, **kwargs: Any) -> None:
+            """Raise an error when trying to write to a read-only session."""
+            raise Exception("This session is read-only.")
+
+        session.add = raise_error_on_write
+        session.delete = raise_error_on_write
+        session.commit = raise_error_on_write
+
+        return session
     return Session()
 
 
