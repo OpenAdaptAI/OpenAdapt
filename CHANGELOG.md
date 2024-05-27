@@ -2,6 +2,33 @@
 
 
 
+## v0.26.0 (2024-05-27)
+
+### Feature
+
+* feat(dashboard): Dashboard scrubbing (#672)
+
+* feat: Add ability to download spacy model from within pyinstaller build
+
+* refactor: Add id column as foreign keys instead of timestamp
+
+* feat(scrubbing): Add api endpoints and scrubbing feature
+
+* fix: Fix code after merge with main
+
+* lint: flake8 lint
+
+* refactor: Cleanup code and add comments
+
+* chore: Fix comments
+
+* chore: Add comments on crud.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3083fef9dceb30780f91dd235eea89e6a7b68ebc))
+
+
 ## v0.25.5 (2024-05-24)
 
 ### Fix
