@@ -129,7 +129,7 @@ class Config(BaseSettings):
     ERROR_REPORTING_DSN: ClassVar = (
         "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
     )
-    ERROR_REPORTING_BRANCH: str = "main"
+    ERROR_REPORTING_BRANCH: ClassVar = "main"
 
     # OpenAI
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
