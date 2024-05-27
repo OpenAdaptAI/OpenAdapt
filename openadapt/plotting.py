@@ -80,7 +80,7 @@ def get_font(original_font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
             return ImageFont.truetype(font_name, font_size)
         except OSError as exc:
             logger.debug(f"Unable to load {font_name=}, {exc=}")
-    raise
+    return ImageFont.load_default()
 
 
 def draw_text(
@@ -618,3 +618,43 @@ def plot_similar_image_groups(
 
         # Display the composite image
         composite_image.show()
+
+
+from PIL import Image, ImageEnhance
+import numpy as np
+
+def highlight_masks(original: Image.Image, masks: list[np.ndarray], darken_factor: float = 0.5) -> Image.Image:
+    """
+    Apply masks to an image, highlighting the masked areas by darkening the rest using masks provided as numpy arrays.
+    The numpy array masks should have binary values (0 or 1), where 1 represents the area to highlight.
+
+    Args:
+        original (Image.Image): The original image.
+        masks (list[np.ndarray]): A list of binary mask arrays (0 or 1).
+        darken_factor (float): The factor to darken the non-masked areas (0 to 1, where 1 is completely black).
+
+    Returns:
+        Image.Image: The resulting image with the masks highlighted.
+    """
+    # Ensure darken_factor is within the valid range
+    darken_factor = max(0, min(darken_factor, 1))
+
+    # Convert the original image to a numpy array
+    original_np = np.array(original)
+
+    # Create a combined mask from the list of numpy array masks, scale to 0-255
+    combined_mask_np = np.zeros(original.size[::-1], dtype=np.uint8)  # Note: numpy uses height, width
+    for mask in masks:
+        scaled_mask = mask * 255  # scale binary mask from 1 to 255
+        combined_mask_np = np.maximum(combined_mask_np, scaled_mask)
+
+    # Convert combined mask back to PIL Image for blending
+    combined_mask = Image.fromarray(combined_mask_np)
+
+    # Prepare the darkened image
+    darkened_image = ImageEnhance.Brightness(original).enhance(1 - darken_factor)
+
+    # Apply the combined mask: where the mask is, keep original; where it's not, use darkened
+    highlighted_image = Image.composite(original, darkened_image, combined_mask)
+
+    return highlighted_image

@@ -45,8 +45,8 @@ def fetch_segmented_image(
     device: str = "cpu",
     retina_masks: bool = True,
     imgsz: int = 1024,
-    conf: float = 0.1,
-    iou: float = 0.1,
+    conf: float = 0.5,
+    iou: float = 0.5,
 ) -> Image:
     """Segment a PIL.Image using ultralytics Fast Segment Anything.
 
@@ -109,10 +109,22 @@ def fetch_segmented_image(
         )
         result_name = os.path.basename(annotation.path)
         logger.info(f"{annotation.path=}")
-        image_path = Path(tmp_dir) / result_name
-        image = Image.open(image_path)
-        os.remove(image_path)
-    return image
+        segmented_image_path = Path(tmp_dir) / result_name
+        segmented_image = Image.open(segmented_image_path)
+        os.remove(segmented_image_path)
+
+    # Check if the dimensions of the original and segmented images differ
+    # XXX TODO this is a hack, this plotting code should be refactored, but the
+    # bug may exist in ultralytics, since they seem to resize as well; see:
+    # https://github.com/ultralytics/ultralytics/blob/main/ultralytics/utils/plotting.py#L238
+    # https://github.com/ultralytics/ultralytics/issues/561#issuecomment-1403079910
+    if image.size != segmented_image.size:
+        logger.warning(f"{image.size=} != {segmented_image.size=}, resizing...")
+        # Resize segmented_image to match original using nearest neighbor interpolation
+        segmented_image = segmented_image.resize(image.size, Image.NEAREST)
+
+    assert image.size == segmented_image.size, (image.size, segmented_image.size)
+    return segmented_image
 
 
 def fetch_segmented_image_from_path(image_path: str) -> None:
