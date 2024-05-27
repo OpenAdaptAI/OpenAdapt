@@ -545,6 +545,9 @@ def update_video_start_time(recording: Recording, video_start_time: float) -> No
     # Update the video start time
     recording.video_start_time = video_start_time
 
+    # the function is called from a different process which uses a different
+    # session from the one used to create the recording object, so we need to
+    # add the recording object to the session
     db.add(recording)
     # Commit the changes to the database
     db.commit()
