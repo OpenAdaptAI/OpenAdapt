@@ -50,7 +50,7 @@ def setup_database(request: pytest.FixtureRequest) -> engine:
 
 
 @pytest.fixture(scope="session")
-def test_database(request: pytest.FixtureRequest) -> engine:
+def db_engine(request: pytest.FixtureRequest) -> engine:
     """Return the database engine for testing."""
     db_url = DATA_DIR_PATH / "test.db"
     engine = create_engine(f"sqlite:///{db_url}")

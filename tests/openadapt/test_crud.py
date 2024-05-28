@@ -10,16 +10,16 @@ from openadapt.db import crud, db
 from openadapt.models import Recording
 
 
-def test_get_new_session_read_only(test_database: sa.engine.Engine) -> None:
+def test_get_new_session_read_only(db_engine: sa.engine.Engine) -> None:
     """Test that get_new_session returns a read-only session when read_only=True.
 
     Args:
-        test_database (sa.engine.Engine): The test database engine.
+        db_engine (sa.engine.Engine): The test database engine.
     """
     # patch the ReadOnlySession class to return a mock object
     with patch(
         "openadapt.db.db.get_read_only_session_maker",
-        return_value=db.get_read_only_session_maker(test_database),
+        return_value=db.get_read_only_session_maker(db_engine),
     ):
         session = crud.get_new_session(read_only=True)
         recording = Recording(
