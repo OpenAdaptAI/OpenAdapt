@@ -3,7 +3,7 @@
 Module: db.py
 """
 
-from typing import Any
+from typing import Any, Optional
 import os
 import time
 
@@ -76,7 +76,20 @@ def get_base(engine: sa.engine) -> sa.engine:
 engine = get_engine()
 Base = get_base(engine)
 Session = sessionmaker(bind=engine)
-ReadOnlySession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+def get_read_only_session_maker(_engine: Optional["engine"] = None) -> sessionmaker:
+    """Create a read-only session maker.
+
+    Args:
+        engine (sa.engine): The database engine to bind to the session maker.
+
+    Returns:
+        sessionmaker: The read-only session maker object.
+    """
+    if _engine is None:
+        _engine = engine
+    return sessionmaker(bind=_engine, autoflush=False, autocommit=False)
 
 
 def copy_recording_data(

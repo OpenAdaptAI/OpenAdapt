@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 from openadapt import utils
 from openadapt.config import DATA_DIR_PATH, config
-from openadapt.db.db import ReadOnlySession, Session
+from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
     MemoryStat,
@@ -570,15 +570,16 @@ def get_new_session(
     ), "Cannot be both read-only and read-and-write."
     assert read_only or read_and_write, "Must be either read-only or read-and-write."
     if read_only:
-        session = ReadOnlySession()
+        session = get_read_only_session_maker()()
 
         def raise_error_on_write(*args: Any, **kwargs: Any) -> None:
             """Raise an error when trying to write to a read-only session."""
-            raise Exception("This session is read-only.")
+            raise PermissionError("This session is read-only.")
 
         session.add = raise_error_on_write
         session.delete = raise_error_on_write
         session.commit = raise_error_on_write
+        session.flush = raise_error_on_write
 
         return session
     return Session()
