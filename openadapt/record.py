@@ -232,6 +232,7 @@ def process_events(
 
 
 def write_action_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -239,16 +240,18 @@ def write_action_event(
     """Write an action event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: An action event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "action", event
-    crud.insert_action_event(recording, event.timestamp, event.data)
+    crud.insert_action_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_screen_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -256,6 +259,7 @@ def write_screen_event(
     """Write a screen event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
@@ -269,11 +273,12 @@ def write_screen_event(
         event_data = {"png_data": png_data}
     else:
         event_data = {}
-    crud.insert_screenshot(recording, event.timestamp, event_data)
+    crud.insert_screenshot(db, recording, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_window_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -281,12 +286,13 @@ def write_window_event(
     """Write a window event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: A window event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "window", event
-    crud.insert_window_event(recording, event.timestamp, event.data)
+    crud.insert_window_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -325,9 +331,10 @@ def write_events(
 
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    session = crud.get_new_session(read_and_write=True)
 
     if pre_callback:
-        state = pre_callback(recording)
+        state = pre_callback(session, recording)
     else:
         state = None
 
@@ -359,7 +366,7 @@ def write_events(
         except queue.Empty:
             continue
         assert event.type == event_type, (event_type, event)
-        state = write_fn(recording, event, perf_q, **(state or {}))
+        state = write_fn(session, recording, event, perf_q, **(state or {}))
         num_processed += 1
         with num_events.get_lock():
             if progress is not None:
@@ -379,7 +386,7 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def video_pre_callback(recording: Recording) -> dict[str, Any]:
+def video_pre_callback(db: crud.SaSession, recording: Recording) -> dict[str, Any]:
     """Function to call before main loop.
 
     Args:
@@ -394,7 +401,7 @@ def video_pre_callback(recording: Recording) -> dict[str, Any]:
     video_container, video_stream, video_start_timestamp = (
         video.initialize_video_writer(video_file_path, width, height)
     )
-    crud.update_video_start_time(recording, video_start_timestamp)
+    crud.update_video_start_time(db, recording, video_start_timestamp)
     return {
         "video_container": video_container,
         "video_stream": video_stream,
@@ -416,6 +423,7 @@ def video_post_callback(state: dict) -> None:
 
 
 def write_video_event(
+    db: crud.SaSession,
     recording_timestamp: float,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -428,6 +436,7 @@ def write_video_event(
     """Write a screen event to the video file and update the performance queue.
 
     Args:
+        db: The database session.
         recording_timestamp: The timestamp of the recording.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
@@ -722,6 +731,7 @@ def performance_stats_writer(
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set() or not perf_q.empty():
         if not started:
             with started_counter.get_lock():
@@ -733,6 +743,7 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
+            session,
             recording,
             event_type,
             start_time,
@@ -766,6 +777,7 @@ def memory_writer(
     process = psutil.Process(record_pid)
 
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set():
         if not started:
             with started_counter.get_lock():
@@ -789,6 +801,7 @@ def memory_writer(
         timestamp = utils.get_timestamp()
 
         crud.insert_memory_stat(
+            session,
             recording,
             rss,
             timestamp,
@@ -823,7 +836,8 @@ def create_recording(
         "task_description": task_description,
         "config": config.model_dump(obfuscated=True),
     }
-    recording = crud.insert_recording(recording_data)
+    session = crud.get_new_session(read_and_write=True)
+    recording = crud.insert_recording(session, recording_data)
     logger.info(f"{recording=}")
     return recording
 
@@ -1003,6 +1017,10 @@ def record(
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
+
+    if not crud.acquire_db_lock():
+        logger.error("Failed to acquire DB lock")
+        return
 
     # logically it makes sense to communicate from here, but when running
     # from the tray it takes too long
@@ -1222,7 +1240,8 @@ def record(
 
     logger.info(f"Saved {recording_timestamp=}")
 
-    crud.post_process_events(recording)
+    with crud.get_new_session(read_and_write=True) as session:
+        crud.post_process_events(session, recording)
 
     if terminate_recording is not None:
         terminate_recording.set()
@@ -1230,6 +1249,8 @@ def record(
     # TODO: consolidate terminate_recording and status_pipe
     if status_pipe:
         status_pipe.send({"type": "record.stopped"})
+
+    crud.release_db_lock()
 
 
 # Entry point

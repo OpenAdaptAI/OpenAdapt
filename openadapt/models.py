@@ -88,9 +88,11 @@ class Recording(db.Base):
     def processed_action_events(self) -> list:
         """Get the processed action events for the recording."""
         from openadapt import events
+        from openadapt.db import crud
 
         if not self._processed_action_events:
-            self._processed_action_events = events.get_events(self)
+            session = crud.get_new_session(read_only=True)
+            self._processed_action_events = events.get_events(session, self)
         return self._processed_action_events
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:

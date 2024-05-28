@@ -16,7 +16,7 @@ with redirect_stdout_stderr():
 import click
 
 from openadapt.config import config
-from openadapt.db.crud import get_latest_recording, get_recording
+from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.utils import (
     EMPTY,
@@ -141,18 +141,19 @@ def main(timestamp: str) -> None:
     configure_logging(logger, LOG_LEVEL)
 
     ui_dark = ui.dark_mode(config.VISUALIZE_DARK_MODE)
+    session = crud.get_new_session(read_only=True)
 
     if timestamp is None:
-        recording = get_latest_recording()
+        recording = crud.get_latest_recording(session)
     else:
-        recording = get_recording(timestamp)
+        recording = crud.get_recording(session, timestamp)
 
     if SCRUB:
         scrub.scrub_text(recording.task_description)
     logger.debug(f"{recording=}")
 
     meta = {}
-    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(session, recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
 
     if SCRUB:

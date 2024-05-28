@@ -112,9 +112,7 @@ class ScrubbingProc:
 scrubbing_proc = ScrubbingProc()
 
 
-def scrub(
-    recording_id: int, provider_id: str, release_lock: bool = False
-) -> ScrubbingProc:
+def scrub(recording_id: int, provider_id: str, release_lock: bool = False) -> None:
     """Scrub a recording.
 
     Args:
@@ -122,41 +120,48 @@ def scrub(
         provider_id (str): The provider id to use for scrubbing.
         release_lock (bool, optional): Whether to release the db write lock.
         Defaults to False.
-
-    Returns:
-        ScrubbingProc: The scrubbing process.
     """
     scrubbing_proc.reset()
 
     scrubbing_proc.copying_recording = True
-    session = crud.get_new_session()
-    recording = crud.get_recording_by_id(recording_id, session=session)
+    session = crud.get_new_session(read_only=True)
+    recording = crud.get_recording_by_id(session, recording_id)
     session.close()
     scrubbing_proc.add_additional_data(
         {"recording": recording, "provider_id": provider_id}
     )
 
+    def cleanup(error: str) -> None:
+        """Cleanup function for scrubbing.
+
+        Args:
+            error (str): The error message.
+        """
+        scrubbing_proc.add_additional_data({"error": error})
+        scrubbing_proc.copying_recording = False
+        return
+
     def inner() -> None:
         """Inner function to scrub a recording."""
-        new_recording_id = crud.copy_recording(recording_id)
+        if not crud.acquire_db_lock():
+            cleanup("Failed to acquire db lock.")
+            return
+        write_session = crud.get_new_session(read_and_write=True)
+
+        new_recording_id = crud.copy_recording(write_session, recording_id)
         if new_recording_id is None:
             if release_lock:
                 crud.release_db_lock()
-            scrubbing_proc.add_additional_data(
-                {
-                    "error": f"Failed to copy recording with id {recording_id}.",
-                }
-            )
-            scrubbing_proc.copying_recording = False
+            cleanup("Failed to copy recording.")
             return
 
         logger.info(f"Scrubbing recording with id {new_recording_id}...")
 
         scrubbed_recording_id = crud.insert_scrubbed_recording(
-            new_recording_id, provider_id
+            write_session, new_recording_id, provider_id
         )
 
-        new_recording = crud.get_recording_by_id(new_recording_id)
+        new_recording = crud.get_recording_by_id(write_session, new_recording_id)
 
         scrubber = ScrubProvider.get_scrubber(provider_id)
 
@@ -210,8 +215,6 @@ def scrub(
                 window_event_id (int): The window event id to scrub.
             """
             scrub_item(window_event_id, WindowEvent)
-
-        crud.new_session()
 
         num_action_events_scrubbed = multiprocessing.Value("i", 0)
         num_screenshots_scrubbed = multiprocessing.Value("i", 0)
@@ -271,7 +274,7 @@ def scrub(
         def on_complete_scrubbing() -> None:
             """Callback for when scrubbing is complete."""
             logger.info(f"Finished scrubbing recording with id {new_recording_id}.")
-            crud.mark_scrubbing_complete(scrubbed_recording_id)
+            crud.mark_scrubbing_complete(write_session, scrubbed_recording_id)
             if release_lock:
                 crud.release_db_lock()
 
