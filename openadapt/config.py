@@ -171,6 +171,17 @@ class Config(BaseSettings):
     SCRUB_CHAR: str = "*"
     SCRUB_LANGUAGE: str = "en"
     SCRUB_FILL_COLOR: Union[str, int] = 0x0000FF
+    SCRUB_KEYS_HTML: list[str] = [
+        "text",
+        "canonical_text",
+        "title",
+        "state",
+        "task_description",
+        "key_char",
+        "canonical_key_char",
+        "key_vk",
+        "children",
+    ]
 
     @field_validator("SCRUB_FILL_COLOR")
     @classmethod
@@ -188,17 +199,6 @@ class Config(BaseSettings):
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     }
     SCRUB_PRESIDIO_IGNORE_ENTITIES: list[str] = []
-    SCRUB_KEYS_HTML: list[str] = [
-        "text",
-        "canonical_text",
-        "title",
-        "state",
-        "task_description",
-        "key_char",
-        "canonical_key_char",
-        "key_vk",
-        "children",
-    ]
 
     # Visualization configurations
     VISUALIZE_DARK_MODE: bool = False
@@ -270,6 +270,7 @@ class Config(BaseSettings):
             "SCRUB_ENABLED",
             "SCRUB_CHAR",
             "SCRUB_LANGUAGE",
+            "SCRUB_FILL_COLOR",
         ],
         "record_and_replay": [
             "RECORD_WINDOW_DATA",

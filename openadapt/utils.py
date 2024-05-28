@@ -4,9 +4,10 @@ This module provides various utility functions used throughout OpenAdapt.
 """
 
 from collections import defaultdict
+from functools import wraps
 from io import BytesIO
 from logging import StreamHandler
-from typing import Any
+from typing import Any, Callable
 import ast
 import base64
 import inspect
@@ -20,6 +21,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.models import Recording
 
 with redirect_stdout_stderr():
     import fire
@@ -572,24 +574,6 @@ def display_event(
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
         text = action_event.text
-
-        if config.SCRUB_ENABLED:
-            import spacy
-
-            if spacy.util.is_package(
-                config.SPACY_MODEL_NAME
-            ):  # Check if the model is installed
-                from openadapt.privacy.providers.presidio import (
-                    PresidioScrubbingProvider,
-                )
-
-                text = PresidioScrubbingProvider().scrub_text(text, is_separated=True)
-            else:
-                logger.warning(
-                    f"SpaCy model not installed! {config.SPACY_MODEL_NAME=}. Using"
-                    " original text."
-                )
-
         image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
@@ -726,7 +710,7 @@ def get_strategy_class_by_name() -> dict:
 
 
 def plot_performance(
-    recording_timestamp: float = None,
+    recording: Recording = None,
     view_file: bool = False,
     save_file: bool = True,
     dark_mode: bool = False,
@@ -754,9 +738,9 @@ def plot_performance(
 
     session = crud.get_new_session(read_only=True)
 
-    if not recording_timestamp:
-        recording_timestamp = crud.get_latest_recording(session).timestamp
-    perf_stats = crud.get_perf_stats(session, recording_timestamp)
+    if not recording:
+        recording = crud.get_latest_recording(session)
+    perf_stats = crud.get_perf_stats(session, recording)
     for perf_stat in perf_stats:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
@@ -773,7 +757,7 @@ def plot_performance(
     ax.legend()
     ax.set_ylabel("Duration (seconds)")
 
-    mem_stats = crud.get_memory_stats(session, recording_timestamp)
+    mem_stats = crud.get_memory_stats(session, recording)
     timestamps = []
     mem_usages = []
     for mem_stat in mem_stats:
@@ -800,11 +784,11 @@ def plot_performance(
 
         ax.legend(all_handles, all_labels)
 
-    ax.set_title(f"{recording_timestamp=}")
+    ax.set_title(f"{recording.timestamp=}")
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     if save_file:
-        fname_parts = ["performance", str(recording_timestamp)]
+        fname_parts = ["performance", str(recording.timestamp)]
         fname = "-".join(fname_parts) + ".png"
         os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
         fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
@@ -981,6 +965,63 @@ def split_list(input_list: list, size: int) -> list[list]:
         A new list containing inner lists of the given size.
     """
     return [input_list[i : i + size] for i in range(0, len(input_list), size)]
+
+
+def args_to_str(*args: tuple) -> str:
+    """Convert positional arguments to a string representation.
+
+    Args:
+        *args: Positional arguments.
+
+    Returns:
+        str: Comma-separated string representation of positional arguments.
+    """
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
+    """Convert keyword arguments to a string representation.
+
+    Args:
+        **kwargs: Keyword arguments.
+
+    Returns:
+        str: Comma-separated string representation of keyword arguments
+          in form "key=value".
+    """
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
+
+
+def trace(logger: logger) -> Any:
+    """Decorator that logs the function entry and exit using the provided logger.
+
+    Args:
+        logger: The logger object to use for logging.
+
+    Returns:
+        A decorator that can be used to wrap functions and log their entry and exit.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
+
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
+
+            result = func(*args, **kwargs)
+
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
+
+        return wrapper_logging
+
+    return decorator
 
 
 if __name__ == "__main__":

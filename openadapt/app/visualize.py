@@ -193,10 +193,8 @@ def main(timestamp: str) -> None:
     ]
 
     plots = (
-        plot_performance(recording.timestamp, save_file=False, view_file=False),
-        plot_performance(
-            recording.timestamp, save_file=False, view_file=False, dark_mode=True
-        ),
+        plot_performance(recording, save_file=False, view_file=False),
+        plot_performance(recording, save_file=False, view_file=False, dark_mode=True),
     )
 
     with ui.row():
@@ -249,7 +247,7 @@ def main(timestamp: str) -> None:
 
                 ui.button(
                     on_click=lambda: plot_performance(
-                        recording.timestamp,
+                        recording,
                         save_file=True,
                         view_file=False,
                         dark_mode=ui_dark.value,

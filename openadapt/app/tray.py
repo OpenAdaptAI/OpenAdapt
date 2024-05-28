@@ -78,7 +78,7 @@ class SystemTrayIcon:
 
         # since the lock is a file, delete it when starting the app so that
         # new instances can start even if the previous one crashed
-        crud.release_db_lock()
+        crud.release_db_lock(raise_exception=False)
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
@@ -228,7 +228,7 @@ class SystemTrayIcon:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
             self.visualize_proc = multiprocessing.Process(
-                target=visualize, args=(recording,)
+                target=visualize, args=(recording.id,)
             )
             self.visualize_proc.start()
 
@@ -386,8 +386,9 @@ class SystemTrayIcon:
             if not crud.acquire_db_lock():
                 self.show_toast("Failed to delete recording. Try again later.")
                 return
-            session = crud.get_new_session(read_and_write=True)
-            crud.delete_recording(session, recording.timestamp)
+            with crud.get_new_session(read_and_write=True) as session:
+                crud.delete_recording(session, recording)
+            crud.release_db_lock()
             self.show_toast("Recording deleted.")
             self.populate_menus()
 

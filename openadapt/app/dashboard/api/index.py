@@ -4,25 +4,31 @@
 from pathlib import Path
 import os
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 import uvicorn
 
 from openadapt.app.dashboard.api.recordings import RecordingsAPI
+from openadapt.app.dashboard.api.scrubbing import ScrubbingAPI
 from openadapt.app.dashboard.api.settings import SettingsAPI
 from openadapt.build_utils import is_running_from_executable
 from openadapt.config import config
 
 app = FastAPI()
 
-api = FastAPI()
+api = APIRouter()
 
-RecordingsAPI(api).attach_routes()
-SettingsAPI(api).attach_routes()
+recordings_app = RecordingsAPI().attach_routes()
+scrubbing_app = ScrubbingAPI().attach_routes()
+settings_app = SettingsAPI().attach_routes()
 
-app.mount("/api", api)
+api.include_router(recordings_app, prefix="/recordings")
+api.include_router(scrubbing_app, prefix="/scrubbing")
+api.include_router(settings_app, prefix="/settings")
+
+app.include_router(api, prefix="/api")
 
 
 def run_app() -> None:

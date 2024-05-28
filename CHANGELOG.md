@@ -2,6 +2,61 @@
 
 
 
+## v0.26.0 (2024-05-27)
+
+### Feature
+
+* feat(dashboard): Dashboard scrubbing (#672)
+
+* feat: Add ability to download spacy model from within pyinstaller build
+
+* refactor: Add id column as foreign keys instead of timestamp
+
+* feat(scrubbing): Add api endpoints and scrubbing feature
+
+* fix: Fix code after merge with main
+
+* lint: flake8 lint
+
+* refactor: Cleanup code and add comments
+
+* chore: Fix comments
+
+* chore: Add comments on crud.py
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3083fef9dceb30780f91dd235eea89e6a7b68ebc))
+
+
+## v0.25.5 (2024-05-24)
+
+### Fix
+
+* fix(docs): fix typo in README.md (#686) ([`320bb88`](https://github.com/OpenAdaptAI/OpenAdapt/commit/320bb88c4ca64d296f8c38806eecebbd87684896))
+
+
+## v0.25.4 (2024-05-22)
+
+### Fix
+
+* fix(installer): Fix build failing due to replicate and other issues (#684) ([`fdf286c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fdf286ce69f6c3704dd350e7eff2235026e99bd6))
+
+
+## v0.25.3 (2024-05-22)
+
+### Fix
+
+* fix(installer): add hidden import replicate (#680) ([`6621a04`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6621a04208ab4a076ce0a8175621d1934a0d730e))
+
+
+## v0.25.2 (2024-05-19)
+
+### Fix
+
+* fix(app): add hidden-imports to build spec (#678) ([`d2db305`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d2db30512bc0488df7c250b10fcf45c5025431ec))
+
+
 ## v0.25.1 (2024-05-17)
 
 ### Fix

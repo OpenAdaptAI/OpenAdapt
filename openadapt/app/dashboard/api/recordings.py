@@ -1,9 +1,9 @@
 """API endpoints for recordings."""
 
-from fastapi import FastAPI, WebSocket
+from fastapi import APIRouter, WebSocket
 from loguru import logger
 
-from openadapt.app.cards import is_recording, quick_record, stop_record
+from openadapt.app import cards
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
@@ -13,17 +13,21 @@ from openadapt.utils import display_event, image2utf8, row2dict
 class RecordingsAPI:
     """API endpoints for recordings."""
 
-    def __init__(self, app: FastAPI) -> None:
+    def __init__(self) -> None:
         """Initialize the RecordingsAPI class."""
-        self.app = app
+        self.app = APIRouter()
 
-    def attach_routes(self) -> None:
+    def attach_routes(self) -> APIRouter:
         """Attach routes to the FastAPI app."""
-        self.app.add_api_route("/recordings", self.get_recordings, response_model=None)
-        self.app.add_api_route("/recordings/start", self.start_recording)
-        self.app.add_api_route("/recordings/stop", self.stop_recording)
-        self.app.add_api_route("/recordings/status", self.recording_status)
+        self.app.add_api_route("", self.get_recordings, response_model=None)
+        self.app.add_api_route(
+            "/scrubbed", self.get_scrubbed_recordings, response_model=None
+        )
+        self.app.add_api_route("/start", self.start_recording)
+        self.app.add_api_route("/stop", self.stop_recording)
+        self.app.add_api_route("/status", self.recording_status)
         self.recording_detail_route()
+        return self.app
 
     @staticmethod
     def get_recordings() -> dict[str, list[Recording]]:
@@ -33,26 +37,33 @@ class RecordingsAPI:
         return {"recordings": recordings}
 
     @staticmethod
-    def start_recording() -> dict[str, str]:
+    def get_scrubbed_recordings() -> dict[str, list[Recording]]:
+        """Get all scrubbed recordings."""
+        session = crud.get_new_session(read_only=True)
+        recordings = crud.get_all_scrubbed_recordings(session)
+        return {"recordings": recordings}
+
+    @staticmethod
+    def start_recording() -> dict[str, str | int]:
         """Start a recording session."""
-        quick_record()
+        cards.quick_record()
         return {"message": "Recording started", "status": 200}
 
     @staticmethod
     def stop_recording() -> dict[str, str]:
         """Stop a recording session."""
-        stop_record()
+        cards.stop_record()
         return {"message": "Recording stopped"}
 
     @staticmethod
     def recording_status() -> dict[str, bool]:
         """Get the recording status."""
-        return {"recording": is_recording()}
+        return {"recording": cards.is_recording()}
 
     def recording_detail_route(self) -> None:
         """Add the recording detail route as a websocket."""
 
-        @self.app.websocket("/recordings/{recording_id}")
+        @self.app.websocket("/{recording_id}")
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
             await websocket.accept()
@@ -69,6 +80,18 @@ class RecordingsAPI:
                 {"type": "num_events", "value": len(action_events)}
             )
 
+            def convert_to_str(event_dict: dict) -> dict:
+                """Convert the keys to strings."""
+                if "key" in event_dict:
+                    event_dict["key"] = str(event_dict["key"])
+                if "canonical_key" in event_dict:
+                    event_dict["canonical_key"] = str(event_dict["canonical_key"])
+                if "reducer_names" in event_dict:
+                    event_dict["reducer_names"] = list(event_dict["reducer_names"])
+                if "children" in event_dict:
+                    for child_event in event_dict["children"]:
+                        convert_to_str(child_event)
+
             for action_event in action_events:
                 event_dict = row2dict(action_event)
                 try:
@@ -81,12 +104,8 @@ class RecordingsAPI:
                     width, height = 0, 0
                 event_dict["screenshot"] = image
                 event_dict["dimensions"] = {"width": width, "height": height}
-                if event_dict["key"]:
-                    event_dict["key"] = str(event_dict["key"])
-                if event_dict["canonical_key"]:
-                    event_dict["canonical_key"] = str(event_dict["canonical_key"])
-                if event_dict["reducer_names"]:
-                    event_dict["reducer_names"] = list(event_dict["reducer_names"])
+
+                convert_to_str(event_dict)
                 await websocket.send_json({"type": "action_event", "value": event_dict})
 
             await websocket.close()

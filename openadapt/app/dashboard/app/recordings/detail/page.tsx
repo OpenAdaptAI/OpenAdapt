@@ -6,9 +6,9 @@ import { ActionEvent as ActionEventType } from "@/types/action-event";
 import { Recording as RecordingType } from "@/types/recording";
 import { Box, Loader, Progress } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-export default function Recording() {
+function Recording() {
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
     const [recordingInfo, setRecordingInfo] = useState<{
@@ -94,4 +94,13 @@ function addIdToNullActionEvent(actionEvent: ActionEventType): ActionEventType {
         id,
         children,
     }
+}
+
+
+export default function RecordingPage() {
+    return (
+        <Suspense>
+            <Recording />
+        </Suspense>
+    )
 }
