@@ -12,7 +12,7 @@ Example usage:
 """
 
 from functools import wraps
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 import time
 
 from joblib import Memory
@@ -21,7 +21,7 @@ from loguru import logger
 from openadapt.config import config
 
 
-def default(val: Optional[Any], default: Any) -> Any:
+def default(val: Any, default: Any) -> Any:
     """Set a default value if the given value is None.
 
     Args:
@@ -35,17 +35,19 @@ def default(val: Optional[Any], default: Any) -> Any:
 
 
 def cache(
-    dir_path: Optional[str] = None,
-    enabled: Optional[bool] = None,
-    verbosity: Optional[int] = None,
-    **cache_kwargs: Union[str, int, bool],
+    dir_path: str | None = None,
+    enabled: bool | None = None,
+    verbosity: int | None = None,
+    force_refresh: bool = False,
+    **cache_kwargs: str | int | bool,
 ) -> Callable[[Callable], Callable]:
     """Cache decorator for functions.
 
     Args:
-        dir_path (str): The path to the cache directory.
-        enabled (bool): Whether caching is enabled.
-        verbosity (int): The verbosity level of the cache.
+        dir_path (str | None): The path to the cache directory.
+        enabled (bool | None): Whether caching is enabled.
+        verbosity (int | None): The verbosity level of the cache.
+        force_refresh (bool): If True, the cache will be refreshed.
         **cache_kwargs: Additional keyword arguments to pass to the cache.
 
     Returns:
@@ -63,7 +65,11 @@ def cache(
                 memory = Memory(cache_dir_path, verbose=cache_verbosity)
                 nonlocal fn
                 fn = memory.cache(fn, **cache_kwargs)
-                cache_hit = fn.check_call_in_cache(*args, **kwargs)
+                if force_refresh:
+                    logger.debug(f"{force_refresh=}")
+                    cache_hit = False
+                else:
+                    cache_hit = fn.check_call_in_cache(*args, **kwargs)
                 logger.debug(f"{fn=} {cache_hit=}")
             start_time = time.time()
             logger.debug(f"{fn=} {start_time=}")

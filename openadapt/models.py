@@ -4,6 +4,7 @@ from collections import OrderedDict
 from typing import Any, Type
 import io
 
+from copy import deepcopy
 from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
@@ -443,7 +444,12 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        window_dict["state"].pop("data")
+        key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
+        window_state = window_dict["state"]
+        window_state["data"] = utils.clean_data(utils.filter_keys(
+            window_state["data"],
+            key_suffixes,
+        ))
         window_dict["state"].pop("meta")
         return window_dict
 
@@ -662,9 +668,18 @@ class Screenshot(db.Base):
         screenshot = Screenshot(image=image)
         return screenshot
 
-    def crop_active_window(self, action_event: ActionEvent) -> None:
+    def crop_active_window(
+        self,
+        action_event: ActionEvent | None = None,
+        window_event: WindowEvent | None = None,
+    ) -> None:
         """Crop the screenshot to the active window defined by the action event."""
-        window_event = action_event.window_event
+        assert action_event or window_event
+
+        if action_event:
+            window_event = action_event.window_event
+
+        # action_event may be None, in which case a new screenshot is taken
         width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
         x0 = window_event.left * width_ratio

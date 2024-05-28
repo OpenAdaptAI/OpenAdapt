@@ -266,7 +266,9 @@ def get_monitor_dims() -> tuple[int, int]:
     return monitor_width, monitor_height
 
 
-def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
+def get_scale_ratios(
+    action_event: ActionEvent | None = None,
+) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
     <position in image space> = scale_ratio * <position in window/action space>, e.g:
@@ -286,10 +288,16 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
         float: The width ratio.
         float: The height ratio.
     """
-    recording = action_event.recording
-    image = action_event.screenshot.image
-    width_ratio = image.width / recording.monitor_width
-    height_ratio = image.height / recording.monitor_height
+    if action_event:
+        recording = action_event.recording
+        monitor_width = recording.monitor_width
+        monitor_height = recording.monitor_hefith
+        image = action_event.screenshot.image
+    else:
+        image = take_screenshot()
+        monitor_width, monitor_height = get_monitor_dims()
+    width_ratio = image.width / monitor_width
+    height_ratio = image.height / monitor_height
     return width_ratio, height_ratio
 
 
@@ -556,7 +564,7 @@ def parse_code_snippet(snippet: str) -> dict:
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)
         else:
-            msg = "Unsupported {snippet=}"
+            msg = f"Unsupported {snippet=}"
             logger.warning(msg)
             return None
     except Exception as exc:
@@ -575,6 +583,139 @@ def split_list(input_list: list, size: int) -> list[list]:
         A new list containing inner lists of the given size.
     """
     return [input_list[i : i + size] for i in range(0, len(input_list), size)]
+
+
+def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
+    """Return a dictionary only containing keys that match the given key suffixes.
+
+    Retains nested structures.
+
+    Args:
+        data (dict): The input dictionary to filter.
+        key_suffixes (list[str]): A list of key suffixes to match against the keys in
+            the dictionary.
+
+    Returns:
+        dict: A dictionary with keys filtered by specified suffixes.
+    """
+    suffixes = tuple(suffix.lower() for suffix in key_suffixes)
+
+    def recurse(obj):
+        if isinstance(obj, dict):
+            # Process each child to see if it or its descendants match the suffixes
+            new_dict = {
+                k: recurse(v)
+                for k, v in obj.items()
+                if k.lower().endswith(suffixes) or isinstance(v, (dict, list))
+            }
+            return new_dict
+        elif isinstance(obj, list):
+            # Filter each item in the list based on suffix criteria in their elements
+            return [recurse(item) for item in obj]
+        else:
+            # Return the value directly if it is neither dict nor list
+            return obj
+
+    return recurse(data)
+
+
+def clean_data(data: dict) -> dict:
+    """
+    Clean a dictionary by removing None values and redundant information.
+
+    Args:
+        data (dict): The dictionary to clean.
+
+    Returns:
+        dict: A cleaned dictionary with no None values and redundant data removed.
+    """
+    def remove_none_values(d: dict) -> dict:
+        """Remove keys where the value is None."""
+        return {k: v for k, v in d.items() if v is not None}
+
+    def compare_dicts(d1: dict, d2: dict) -> bool:
+        """Check if all non-None items in d1 are in d2."""
+        for k, v in d1.items():
+            if v is not None and (k not in d2 or d2[k] != v):
+                return False
+        return True
+
+    def recurse(obj):
+        if isinstance(obj, dict):
+            temp_dict = {k: recurse(v) for k, v in obj.items()}
+            # Remove redundant nested keys
+            keys_to_remove = set()
+            keys = list(temp_dict.keys())
+            for i in range(len(keys)):
+                for j in range(i + 1, len(keys)):
+                    if (
+                        isinstance(temp_dict[keys[i]], dict) and
+                        isinstance(temp_dict[keys[j]], dict)
+                    ):
+                        if compare_dicts(temp_dict[keys[i]], temp_dict[keys[j]]):
+                            keys_to_remove.add(keys[i])
+                        elif compare_dicts(temp_dict[keys[j]], temp_dict[keys[i]]):
+                            keys_to_remove.add(keys[j])
+            for key in keys_to_remove:
+                del temp_dict[key]
+
+            return remove_none_values(temp_dict)
+        elif isinstance(obj, list):
+            filtered_list = [recurse(item) for item in obj]
+            return [item for item in filtered_list if item]
+        else:
+            return obj
+
+    return recurse(data)
+
+
+def normalize_positions(
+    data: dict,
+    width_delta: float,
+    height_delta: float,
+    width_keys: list[str] = None,
+    height_keys: list[str] = None,
+) -> dict:
+    """
+    Recursively normalize the position keys in a dictionary by adding deltas.
+
+    This function traverses through all dictionary values. If a key matches
+    those specified in width_keys, it adds width_delta to its value. Similarly,
+    if a key matches those in height_keys, it adds height_delta to its value.
+
+    Args:
+        data (dict): The dictionary to process.
+        width_delta (float): The delta to add to width/x values.
+        height_delta (float): The delta to add to height/y values.
+        width_keys (list[str]): List of keys corresponding to width or x coordinates.
+        height_keys (list[str]): List of keys corresponding to height or y coordinates.
+
+    Returns:
+        dict: A dictionary with normalized position values.
+    """
+    if width_keys is None:
+        width_keys = ["x"]
+    if height_keys is None:
+        height_keys = ["y"]
+
+    for key, value in data.items():
+        if isinstance(value, dict):
+            data[key] = normalize_positions(value, width_delta, height_delta, width_keys, height_keys)
+        elif isinstance(value, list):
+            data[key] = [
+                normalize_positions(val, width_delta, height_delta, width_keys, height_keys)
+                for val in value
+            ]
+        elif key in width_keys and isinstance(value, (int, float)):
+            old_value = value
+            data[key] = value + width_delta
+            logger.debug(f"Normalized '{key}' from {old_value} to {data[key]} using width_delta {width_delta}")
+        elif key in height_keys and isinstance(value, (int, float)):
+            old_value = value
+            data[key] = value + height_delta
+            logger.debug(f"Normalized '{key}' from {old_value} to {data[key]} using height_delta {height_delta}")
+
+    return data
 
 
 if __name__ == "__main__":

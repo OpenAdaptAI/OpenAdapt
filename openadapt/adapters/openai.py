@@ -129,6 +129,7 @@ def get_completion(payload: dict) -> str:
         string containing the first message from the response
     """
     response = get_response(payload)
+    response.raise_for_status()
     result = response.json()
     logger.info(f"result=\n{pformat(result)}")
     if "error" in result:
@@ -169,6 +170,9 @@ def prompt(
     Returns:
         string containing the first message from the response
     """
+    logger.info(f"system_prompt=\n{system_prompt}")
+    logger.info(f"prompt=\n{prompt}")
+    logger.info(f"{len(images)=}")
     payload = create_payload(
         prompt,
         system_prompt,
@@ -176,7 +180,7 @@ def prompt(
         max_tokens=max_tokens,
         detail=detail,
     )
-    logger.info(f"payload=\n{pformat(payload)}")
+    logger.debug(f"payload=\n{pformat(payload)}")
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     return result

@@ -674,19 +674,20 @@ def normalize_text(text: str) -> str:
     return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
 
 
-def plot_segments(image: Image.Image, segments: list[dict[str, str, int, int, int, int]]) -> None:
+def plot_segments(image: Image.Image, segments: list[dict[str, str, float, float, float, float]], relative_coordinates: bool=False) -> None:
     """
-    Plot an image with labeled bounding boxes around segments, where bounding box coordinates are given as relative values.
+    Plot an image with labeled bounding boxes around segments.
 
     Args:
         image (Image.Image): The image to plot.
-        segments (List[Dict]): A list of dictionaries, each representing a segment with:
+        segments (list[dict]): A list of dictionaries, each representing a segment with:
             "name" (str): The name of the segment.
             "description" (str): A description of the segment.
-            "top" (float): The relative top coordinate of the segment's bounding box.
-            "left" (float): The relative left coordinate of the segment's bounding box.
-            "width" (float): The relative width of the segment's bounding box.
-            "height" (float): The relative height of the segment's bounding box.
+            "top" (float): The top coordinate of the segment's bounding box.
+            "left" (float): The left coordinate of the segment's bounding box.
+            "width" (float): The width of the segment's bounding box.
+            "height" (float): The height of the segment's bounding box.
+        relative_coordinates (bool): If True, treats top, left, width, and height as relative to the image size.
 
     Displays:
         The image with overlaid bounding boxes and labels.
@@ -703,11 +704,18 @@ def plot_segments(image: Image.Image, segments: list[dict[str, str, int, int, in
         name = normalize_text(segment["name"])
         description = normalize_text(segment["description"])
 
-        # Convert relative coordinates to absolute by multiplying by image dimensions
-        top = int(segment["top"] * img_height)
-        left = int(segment["left"] * img_width)
-        width = int(segment["width"] * img_width)
-        height = int(segment["height"] * img_height)
+        if relative_coordinates:
+            # Convert relative coordinates to absolute by multiplying by image dimensions
+            top = int(segment["top"] * img_height)
+            left = int(segment["left"] * img_width)
+            width = int(segment["width"] * img_width)
+            height = int(segment["height"] * img_height)
+        else:
+            # Use absolute coordinates directly
+            top = int(segment["top"]) * 2
+            left = int(segment["left"]) * 2
+            width = int(segment["width"]) * 2
+            height = int(segment["height"]) * 2
 
         box = [left, top, left + width, top + height]
         draw.rectangle(box, outline="red", width=2)

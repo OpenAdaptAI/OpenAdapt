@@ -44,7 +44,6 @@ Usage:
     $ python -m openadapt.replay VisualReplayStrategy --instructions "<instructions>"
 """
 
-from copy import deepcopy
 from dataclasses import dataclass
 import time
 
@@ -213,6 +212,7 @@ class VisualReplayStrategy(
             modified_reference_action.recording = self.recording
             exceptions = []
             while True:
+                import ipdb; ipdb.set_trace()
                 active_window_segmentation = get_window_segmentation(
                     modified_reference_action,
                     exceptions=exceptions,

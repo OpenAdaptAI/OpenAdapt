@@ -39,6 +39,7 @@ def get_similar_segment_groups(
     contrast_factor=1000,
 ):
     image = Image.open(image_file_path)
+    image.show()
 
     if contrast_factor:
         image = increase_contrast(image, contrast_factor)
