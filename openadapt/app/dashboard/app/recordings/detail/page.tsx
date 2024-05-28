@@ -39,7 +39,7 @@ function Recording() {
                     if (!prev) return prev;
                     return {
                         ...prev,
-                        "action_events": [...prev.action_events, addIdToNullActionEvent(data.value)],
+                        "action_events": [...prev.action_events, modifyActionEvent(data.value, prev.recording.original_recording_id === null)],
                     }
                 });
             } else if (data.type === "num_events") {
@@ -77,22 +77,26 @@ function Recording() {
     )
 }
 
-function addIdToNullActionEvent(actionEvent: ActionEventType): ActionEventType {
+function modifyActionEvent(actionEvent: ActionEventType, isOriginal: boolean): ActionEventType {
     let children = actionEvent.children;
     if (actionEvent.children) {
-        children = actionEvent.children.map(addIdToNullActionEvent);
+        children = actionEvent.children.map(child => modifyActionEvent(child, isOriginal));
     }
     let id = actionEvent.id;
+    let isComputed = false;
     if (!id) {
         // this is usually the case, when new events like 'singleclick'
         // or 'doubleclick' are created while merging several events together,
         // but they are not saved in the database
         id = crypto.randomUUID();
+        isComputed = true;
     }
     return {
         ...actionEvent,
         id,
         children,
+        isComputed,
+        isOriginal,
     }
 }
 

@@ -383,27 +383,24 @@ def get_action_events(
     """
     assert recording, "Invalid recording."
     action_events = _get(session, ActionEvent, recording.id)
+    action_events = filter_disabled_action_events(action_events)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
 
 
-def get_top_level_action_events(
-    recording: Recording, session: sa.orm.Session = None
+def filter_disabled_action_events(
+    action_events: list[ActionEvent],
 ) -> list[ActionEvent]:
-    """Get top level action events for a given recording.
+    """Filter out disabled action events.
 
     Args:
-        recording (Recording): The recording object.
+        action_events (list[ActionEvent]): A list of action events.
 
     Returns:
-        list[ActionEvent]: A list of top level action events for the recording.
+        list[ActionEvent]: A list of action events with disabled events removed.
     """
-    return [
-        action_event
-        for action_event in get_action_events(recording, session=session)
-        if not action_event.parent_id
-    ]
+    return [event for event in action_events if not event.disabled]
 
 
 def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
@@ -550,6 +547,24 @@ def get_window_events(
         list[WindowEvent]: A list of window events for the recording.
     """
     return _get(session, WindowEvent, recording.id)
+
+
+def disable_action_event(session: SaSession, event_id: int) -> None:
+    """Disable an action event.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        event_id (int): The id of the event.
+    """
+    action_event: ActionEvent = (
+        session.query(ActionEvent).filter(ActionEvent.id == event_id).first()
+    )
+    if action_event.recording.original_recording_id:
+        raise ValueError("Cannot disable action events in a scrubbed recording.")
+    if not action_event:
+        raise ValueError(f"No action event found with id {event_id}.")
+    action_event.disabled = True
+    session.commit()
 
 
 def get_new_session(
@@ -776,11 +791,16 @@ def acquire_db_lock(timeout: int = 60) -> bool:
 
 
 def release_db_lock(raise_exception: bool = True) -> None:
-    """Release the database lock."""
+    """Release the database lock.
+
+    Args:
+        raise_exception (bool): Whether to raise an exception if the lock file is
+        not found.
+    """
     try:
         os.remove(DATA_DIR_PATH / "database.lock")
-    except Exception as e:
+    except FileNotFoundError:
         if raise_exception:
-            logger.error("Failed to release database lock.")
-            raise e
+            logger.error("Database lock file not found.")
+            raise
     logger.info("Database lock released.")

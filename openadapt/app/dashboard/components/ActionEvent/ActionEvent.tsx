@@ -4,6 +4,7 @@ import { timeStampToDateString } from '@/app/utils';
 import { ActionEvent as ActionEventType } from '@/types/action-event'
 import { Accordion, Box, Grid, Image, Table } from '@mantine/core'
 import { useHover } from '@mantine/hooks';
+import { RemoveActionEvent } from './RemoveActionEvent';
 
 type Props = {
     event: ActionEventType;
@@ -38,8 +39,8 @@ export const ActionEvent = ({
     const imageSrc = (hoveredOverScreenshot ? event.screenshot : event.screenshot) || ''; // change to event.diff to show diff
 
     let content = (
-        <Grid>
-            <Grid.Col span={level === 0 ? 4 : 12}>
+        <Grid align='center'>
+            <Grid.Col span={8}>
                 <Table w={400} withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
                     <Table.Tbody>
                         {typeof event.id === 'number' && (
@@ -128,6 +129,9 @@ export const ActionEvent = ({
                         </TableRowWithBorder>
                     </Table.Tbody>
                 </Table>
+            </Grid.Col>
+            <Grid.Col span={4}>
+                <RemoveActionEvent event={event} />
             </Grid.Col>
             {level === 0 && (
                 <Grid.Col span={12}>
