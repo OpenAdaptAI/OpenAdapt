@@ -207,7 +207,7 @@ def insert_memory_stat(
 
     Args:
         session (sa.orm.Session): The database session.
-        recording_timestamp (float): The timestamp of the recording.
+        recording (Recording): The recording object.
         memory_usage_bytes (int): The memory usage in bytes.
         timestamp (int): The timestamp of the event.
     """

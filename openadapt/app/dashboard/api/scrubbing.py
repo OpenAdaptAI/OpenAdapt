@@ -8,7 +8,6 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from openadapt.config import config
-from openadapt.db import crud
 from openadapt.privacy.providers import ScrubProvider
 from openadapt.scrub import get_scrubbing_process, scrub
 

@@ -1,12 +1,21 @@
+"""Tests for the CRUD operations in the openadapt.db.crud module."""
+
+
 from unittest.mock import patch
 
 import pytest
+import sqlalchemy as sa
 
 from openadapt.db import crud, db
 from openadapt.models import Recording
 
 
-def test_get_new_session_read_only(test_database):
+def test_get_new_session_read_only(test_database: sa.engine.Engine) -> None:
+    """Test that get_new_session returns a read-only session when read_only=True.
+
+    Args:
+        test_database (sa.engine.Engine): The test database engine.
+    """
     # patch the ReadOnlySession class to return a mock object
     with patch(
         "openadapt.db.db.get_read_only_session_maker",
