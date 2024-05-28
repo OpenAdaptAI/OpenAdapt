@@ -2,6 +2,29 @@
 
 
 
+## v0.26.1 (2024-05-28)
+
+### Fix
+
+* fix(db): Database access refactor (#676)
+
+* feat: Remove global sessions, and introduce read only sessions for cases where no writing is required
+
+* refactor: Rename db to session
+
+* feat: Raise exceptions if commit/write/delete is attempted on a read-only session
+
+* feat: Add tests for the read only session
+
+* chore: lint using flake8
+
+* rename test_database -&gt; db_engine
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`987f6ac`](https://github.com/OpenAdaptAI/OpenAdapt/commit/987f6acc55c1512805ab0cc31c922cb17c1cc846))
+
+
 ## v0.26.0 (2024-05-27)
 
 ### Feature
