@@ -20,10 +20,10 @@ USE_SCREENSHOT_DIFFS = False
 
 
 def get_events(
+    db: crud.SaSession,
     recording: models.Recording,
     process: bool = True,
     meta: dict = None,
-    session: Any = None,
 ) -> list[models.ActionEvent]:
     """Retrieve events for a recording.
 
@@ -39,9 +39,14 @@ def get_events(
         list: A list of action events.
     """
     start_time = time.time()
-    action_events = crud.get_action_events(recording, session=session)
-    window_events = crud.get_window_events(recording, session=session)
-    screenshots = crud.get_screenshots(recording, session=session)
+    action_events = crud.get_action_events(db, recording)
+    window_events = crud.get_window_events(db, recording)
+    screenshots = crud.get_screenshots(db, recording)
+
+    if recording.original_recording_id:
+        # if recording is a copy, it already has its events processed when it
+        # was created, return only the top level events
+        return [event for event in action_events if event.parent_id is None]
 
     raw_action_event_dicts = utils.rows2dicts(action_events)
     logger.debug(f"raw_action_event_dicts=\n{pformat(raw_action_event_dicts)}")

@@ -15,3 +15,13 @@ export enum RecordingStatus {
     RECORDING = 'RECORDING',
     UNKNOWN = 'UNKNOWN',
 }
+
+
+export type ScrubbedRecording = {
+    id: number;
+    recording_id: number;
+    recording: Pick<Recording, 'task_description'>;
+    provider: string;
+    original_recording: Pick<Recording, 'id' | 'task_description'>;
+    scrubbed: boolean;
+}

@@ -14,23 +14,23 @@ import os
 import sys
 
 from loguru import logger
-from pyqttoast import Toast, ToastPreset, ToastIcon, ToastPosition, ToastButtonAlignment
-from PySide6.QtCore import Qt, QMargins, QSize, QSocketNotifier
+from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
+from PySide6.QtCore import QMargins, QSize, QSocketNotifier, Qt
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
     QMainWindow,
     QMenu,
-    QInputDialog,
-    QSystemTrayIcon,
-    QDialog,
-    QHBoxLayout,
-    QVBoxLayout,
-    QLabel,
-    QComboBox,
-    QLineEdit,
     QPushButton,
-    QDialogButtonBox,
+    QSystemTrayIcon,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -42,12 +42,11 @@ from openadapt.build_utils import is_running_from_executable
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
-from openadapt.visualize import main as visualize
 from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.visualize import main as visualize
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
-
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
 
@@ -76,6 +75,10 @@ class SystemTrayIcon:
             )
 
         self.app.setQuitOnLastWindowClosed(False)
+
+        # since the lock is a file, delete it when starting the app so that
+        # new instances can start even if the previous one crashed
+        crud.release_db_lock(raise_exception=False)
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
@@ -225,7 +228,7 @@ class SystemTrayIcon:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
             self.visualize_proc = multiprocessing.Process(
-                target=visualize, args=(recording,)
+                target=visualize, args=(recording.id,)
             )
             self.visualize_proc.start()
 
@@ -380,7 +383,12 @@ class SystemTrayIcon:
         """
         dialog = ConfirmDeleteDialog(recording.task_description)
         if dialog.exec_():
-            crud.delete_recording(recording.timestamp)
+            if not crud.acquire_db_lock():
+                self.show_toast("Failed to delete recording. Try again later.")
+                return
+            with crud.get_new_session(read_and_write=True) as session:
+                crud.delete_recording(session, recording)
+            crud.release_db_lock()
             self.show_toast("Recording deleted.")
             self.populate_menus()
 
@@ -414,7 +422,8 @@ class SystemTrayIcon:
             action (Callable): The function to call when the menu item is clicked.
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
-        recordings = crud.get_all_recordings()
+        session = crud.get_new_session(read_only=True)
+        recordings = crud.get_all_recordings(session)
 
         self.recording_actions[action_type] = []
 
