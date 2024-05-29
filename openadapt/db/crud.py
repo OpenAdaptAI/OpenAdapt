@@ -643,6 +643,7 @@ def insert_audio_info(
         flac_data=audio_data,
         transcribed_text=transcribed_text,
         recording_timestamp=recording.timestamp,
+        recording_id=recording.id,
         timestamp=timestamp,
         sample_rate=sample_rate,
         words_with_timestamps=json.dumps(word_list),

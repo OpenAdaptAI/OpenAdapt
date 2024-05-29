@@ -1007,6 +1007,8 @@ def record_audio(
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording.timestamp)
 
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     audio_frames = []  # to store audio frames
 
     def audio_callback(
