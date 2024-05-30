@@ -11,6 +11,7 @@ import time
 
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
+import psutil
 import sqlalchemy as sa
 
 from openadapt import utils
@@ -816,8 +817,14 @@ def acquire_db_lock(timeout: int = 60) -> bool:
             logger.error("Failed to acquire database lock.")
             return False
         if os.path.exists(DATA_DIR_PATH / "database.lock"):
-            logger.info("Database is locked. Waiting...")
-            time.sleep(1)
+            with open(DATA_DIR_PATH / "database.lock", "r") as lock_file:
+                lock_info = json.load(lock_file)
+            # check if the process is still running
+            if psutil.pid_exists(lock_info["pid"]):
+                logger.info("Database is locked. Waiting...")
+                time.sleep(1)
+            else:
+                release_db_lock(raise_exception=False)
         else:
             with open(DATA_DIR_PATH / "database.lock", "w") as lock_file:
                 lock_file.write(json.dumps({"pid": os.getpid(), "time": time.time()}))
