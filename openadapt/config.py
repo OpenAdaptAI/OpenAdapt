@@ -29,6 +29,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
     "oa.stop",

@@ -15,7 +15,7 @@ import psutil
 import sqlalchemy as sa
 
 from openadapt import utils
-from openadapt.config import DATA_DIR_PATH, config
+from openadapt.config import DATABASE_LOCK_FILE_PATH, config
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
@@ -816,8 +816,8 @@ def acquire_db_lock(timeout: int = 60) -> bool:
         if timeout > 0 and time.time() - start > timeout:
             logger.error("Failed to acquire database lock.")
             return False
-        if os.path.exists(DATA_DIR_PATH / "database.lock"):
-            with open(DATA_DIR_PATH / "database.lock", "r") as lock_file:
+        if os.path.exists(DATABASE_LOCK_FILE_PATH):
+            with open(DATABASE_LOCK_FILE_PATH, "r") as lock_file:
                 lock_info = json.load(lock_file)
             # check if the process is still running
             if psutil.pid_exists(lock_info["pid"]):
@@ -826,7 +826,7 @@ def acquire_db_lock(timeout: int = 60) -> bool:
             else:
                 release_db_lock(raise_exception=False)
         else:
-            with open(DATA_DIR_PATH / "database.lock", "w") as lock_file:
+            with open(DATABASE_LOCK_FILE_PATH, "w") as lock_file:
                 lock_file.write(json.dumps({"pid": os.getpid(), "time": time.time()}))
                 logger.info("Database lock acquired.")
             break
@@ -836,7 +836,7 @@ def acquire_db_lock(timeout: int = 60) -> bool:
 def release_db_lock(raise_exception: bool = True) -> None:
     """Release the database lock."""
     try:
-        os.remove(DATA_DIR_PATH / "database.lock")
+        os.remove(DATABASE_LOCK_FILE_PATH)
     except Exception as e:
         if raise_exception:
             logger.error("Failed to release database lock.")
