@@ -812,6 +812,21 @@ def plot_performance(
         )
 
 
+def delete_performance_plot(recording_timestamp: float) -> None:
+    """Delete the performance plot for the given recording timestamp.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+    """
+    fname_parts = ["performance", str(recording_timestamp)]
+    fname = "-".join(fname_parts) + ".png"
+    fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+    try:
+        os.remove(fpath)
+    except FileNotFoundError as exc:
+        logger.warning(f"{exc=}")
+
+
 def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     """Strip the element state from the action event and its children.
 

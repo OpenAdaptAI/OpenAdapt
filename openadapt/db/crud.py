@@ -266,8 +266,15 @@ def delete_recording(session: SaSession, recording: Recording) -> None:
         session (sa.orm.Session): The database session.
         recording (Recording): The recording object.
     """
+    recording_timestamp = recording.timestamp
     session.query(Recording).filter(Recording.id == recording.id).delete()
     session.commit()
+
+    utils.delete_performance_plot(recording_timestamp)
+
+    from openadapt.video import delete_video_file
+
+    delete_video_file(recording_timestamp)
 
 
 def get_all_recordings(session: SaSession) -> list[Recording]:

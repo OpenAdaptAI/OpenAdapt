@@ -28,6 +28,20 @@ def get_video_file_path(recording_timestamp: float) -> str:
     )
 
 
+def delete_video_file(recording_timestamp: float) -> None:
+    """Deletes the video file corresponding to the given recording timestamp.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording to delete.
+    """
+    video_file_path = get_video_file_path(recording_timestamp)
+    if os.path.exists(video_file_path):
+        os.remove(video_file_path)
+        logger.info(f"Deleted video file: {video_file_path}")
+    else:
+        logger.error(f"Video file not found: {video_file_path}")
+
+
 def initialize_video_writer(
     output_path: str,
     width: int,
