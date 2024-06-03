@@ -700,20 +700,28 @@ def normalize_positions(
 
     for key, value in data.items():
         if isinstance(value, dict):
-            data[key] = normalize_positions(value, width_delta, height_delta, width_keys, height_keys)
+            data[key] = normalize_positions(
+                value, width_delta, height_delta, width_keys, height_keys,
+            )
         elif isinstance(value, list):
             data[key] = [
-                normalize_positions(val, width_delta, height_delta, width_keys, height_keys)
+                normalize_positions(
+                    val, width_delta, height_delta, width_keys, height_keys,
+                )
                 for val in value
             ]
         elif key in width_keys and isinstance(value, (int, float)):
             old_value = value
             data[key] = value + width_delta
-            logger.debug(f"Normalized '{key}' from {old_value} to {data[key]} using width_delta {width_delta}")
+            logger.debug(
+                f"Normalized {key=} from {old_value} to {data[key]} ({width_delta=})"
+            )
         elif key in height_keys and isinstance(value, (int, float)):
             old_value = value
             data[key] = value + height_delta
-            logger.debug(f"Normalized '{key}' from {old_value} to {data[key]} using height_delta {height_delta}")
+            logger.debug(
+                f"Normalized {key=} from {old_value} to {data[key]} ({height_delta=})"
+            )
 
     return data
 

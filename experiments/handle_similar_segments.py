@@ -36,7 +36,7 @@ def get_similar_segment_groups(
     min_segment_ssim=MIN_SEGMENT_SSIM,
     min_segment_size_sim=MIN_SEGMENT_SIZE_SIM,
     show_images=DEBUG,
-    contrast_factor=1000,
+    contrast_factor=10000,
 ):
     image = Image.open(image_file_path)
     image.show()
@@ -49,6 +49,8 @@ def get_similar_segment_groups(
     segmented_image = segmentation_adapter.fetch_segmented_image(image)
     if show_images:
         segmented_image.show()
+
+    import ipdb; ipdb.set_trace()
 
     masks = vision.get_masks_from_segmented_image(segmented_image)
     logger.info(f"{len(masks)=}")
@@ -77,7 +79,7 @@ def main():
     #image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/calculator.png")
     image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
 
-    MAX_GROUPS = 5
+    MAX_GROUPS = 2
 
     for min_segment_ssim in (MIN_SEGMENT_SSIM, MIN_SEGMENT_SSIM // 3):
         logger.info(f"{min_segment_ssim=}")
@@ -121,8 +123,8 @@ def main():
             ]
             highlighted_image = plotting.highlight_masks(image, similar_masks)
             highlighted_image.show()
-    import ipdb; ipdb.set_trace()
-    foo = 1
+        import ipdb; ipdb.set_trace()
+        foo = 1
 
 
 if __name__ == "__main__":
