@@ -2,6 +2,17 @@
 
 
 
+## v0.26.2 (2024-06-03)
+
+### Documentation
+
+* docs: Create FUNDING.yml (#690) ([`3692416`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3692416d7bfa2eb31784cbcd7b1cc2d18aab9455))
+
+### Fix
+
+* fix(docs): add nvm install info in Readme.md in manual setup section. (#694) ([`4f240b6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4f240b68a1426f57bf74a0fc722baf15100f68cd))
+
+
 ## v0.26.1 (2024-05-28)
 
 ### Fix
