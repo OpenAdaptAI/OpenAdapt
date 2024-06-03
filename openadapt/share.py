@@ -35,7 +35,6 @@ def export_recording_to_folder(recording_id: int) -> None:
     Returns:
         str: The path of the created zip file.
     """
-
     # Create the directory if it doesn't exist
     os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
 
