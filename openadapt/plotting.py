@@ -712,6 +712,7 @@ def plot_segments(image: Image.Image, segments: list[dict[str, str, float, float
             height = int(segment["height"] * img_height)
         else:
             # Use absolute coordinates directly
+            # XXX TODO: fix *2 hack (accounts for retina)
             top = int(segment["top"]) * 2
             left = int(segment["left"]) * 2
             width = int(segment["width"]) * 2

@@ -42,20 +42,13 @@ SAM_MODEL_NAMES = (
     #"mobile_sam.pt",
 )
 MODEL_NAMES = FASTSAM_MODEL_NAMES + SAM_MODEL_NAMES
-DEFAULT_MODEL_NAME = MODEL_NAMES[1]
+DEFAULT_MODEL_NAME = MODEL_NAMES[0]
 
 
 # TODO: rename
-@cache.cache()
 def fetch_segmented_image(
     image: Image.Image,
     model_name: str = DEFAULT_MODEL_NAME,
-    # TODO: inject from config
-    device: str = "cpu",
-    retina_masks: bool = True,
-    imgsz: int = 1024,
-    conf: float = 0.5,
-    iou: float = 0.5,
 ) -> Image.Image:
     """Segment a PIL.Image using ultralytics.
 
@@ -73,6 +66,7 @@ def fetch_segmented_image(
         return do_sam(image, model_name)
 
 
+@cache.cache()
 def do_fastsam(
     image: Image,
     model_name: str,
@@ -80,8 +74,8 @@ def do_fastsam(
     device: str = "cpu",
     retina_masks: bool = True,
     imgsz: int = 1024,
-    conf: float = 0.5,
-    iou: float = 0.5,
+    conf: float = 0.1,
+    iou: float = 0.1,
 ) -> Image:
     model = FastSAM(model_name)
 
@@ -151,9 +145,11 @@ def do_fastsam(
     return segmented_image
 
 
+@cache.cache()
 def do_sam(
     image: Image.Image,
     model_name: str,
+    # TODO: add params
 ) -> Image.Image:
 
     # Create SAMPredictor
