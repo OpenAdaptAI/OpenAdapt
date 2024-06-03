@@ -54,3 +54,12 @@
 
 #### macOS, Ubuntu and Other Operating System:
 - Follow the OS Specific installation here: https://tesseract-ocr.github.io/tessdoc/Installation.html
+
+
+## nvm (Node Version Manager)
+
+#### Windows:
+- Follow this guide: https://www.xda-developers.com/how-install-nvm-windows/
+
+#### macOS, Ubuntu and Other Operating System:
+- Follow the OS Specific installation here: https://collabnix.com/how-to-install-and-configure-nvm-on-mac-os/
