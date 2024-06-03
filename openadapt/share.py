@@ -33,11 +33,13 @@ def export_recording_to_folder(recording_id: int) -> None:
     Returns:
         str: The path of the created zip file.
     """
+
+    # Create the directory if it doesn't exist
+    os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
+
     recording_db_path = db.export_recording(recording_id)
 
     assert recording_db_path, recording_db_path
-    # Create the directory if it doesn't exist
-    os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
 
     # Get the timestamp from the recording_db_path
     timestamp = extract_timestamp_from_filename(os.path.basename(recording_db_path))
