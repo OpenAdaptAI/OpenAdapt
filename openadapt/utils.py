@@ -709,6 +709,22 @@ def get_strategy_class_by_name() -> dict:
     return class_by_name
 
 
+def get_performance_plot_file_path(recording_timestamp: float) -> str:
+    """Get the filename for the performance plot.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+
+    Returns:
+        str: The filename.
+    """
+    os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
+
+    fname_parts = ["performance", str(recording_timestamp)]
+    fname = "-".join(fname_parts) + ".png"
+    return os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+
+
 def plot_performance(
     recording: Recording = None,
     view_file: bool = False,
@@ -788,10 +804,7 @@ def plot_performance(
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     if save_file:
-        fname_parts = ["performance", str(recording.timestamp)]
-        fname = "-".join(fname_parts) + ".png"
-        os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
-        fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+        fpath = get_performance_plot_file_path(recording.timestamp)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
@@ -818,9 +831,7 @@ def delete_performance_plot(recording_timestamp: float) -> None:
     Args:
         recording_timestamp (float): The timestamp of the recording.
     """
-    fname_parts = ["performance", str(recording_timestamp)]
-    fname = "-".join(fname_parts) + ".png"
-    fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+    fpath = get_performance_plot_file_path(recording_timestamp)
     try:
         os.remove(fpath)
     except FileNotFoundError as exc:
