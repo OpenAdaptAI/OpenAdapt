@@ -73,11 +73,15 @@ def do_fastsam(
     # TODO: inject from config
     device: str = "cpu",
     retina_masks: bool = True,
-    imgsz: int = 1024,
-    conf: float = 0.1,
-    iou: float = 0.1,
+    imgsz: int | tuple[int, int] | None = 1024,
+    # threshold below which boxes will be filtered out
+    conf: float = 0,
+    # discards all overlapping boxes with IoU > iou_threshold
+    iou: float = .05,
 ) -> Image:
     model = FastSAM(model_name)
+
+    imgsz = imgsz or image.size
 
     # Run inference on image
     everything_results = model(

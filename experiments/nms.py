@@ -69,8 +69,8 @@ def main():
     image_path = "tests/assets/excel.png"
     image = Image.open(image_path)
     
-    step_ratio = .25
-    window_ratio = (.5, .5)
+    step_ratio = 1
+    window_ratio = (1, 1)
     
     segmentation_adapter = adapters.get_default_segmentation_adapter()
     image_patches = sliding_window(image, step_ratio, window_ratio)
