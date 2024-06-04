@@ -1,4 +1,4 @@
-"""Implements a vainlla playback strategy, replaying ActionEvents without screenshots
+"""Implements a vanilla playback strategy, offloading everything to the model.
 
 Send in a series of screenshots to GPT-4 and then ask GPT-4 to describe what happened.
 Then give it the sequence of actions (in concrete coordinates and keyboard inputs),
