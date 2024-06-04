@@ -22,7 +22,7 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
     """Vanilla replay strategy that replays ActionEvents modified by an LLM directly.
 
     If AGI or GPT6 happens, this script should be able to suddenly do the work.
-		--LunjunZhang
+        --LunjunZhang
     """
 
     def __init__(
@@ -70,7 +70,7 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         """
 
 
-		# TODO XXX: add current screenshot / window to prompt context
+        # TODO XXX: add current screenshot / window to prompt context
 
 
         action_events = self.modified_actions
@@ -85,19 +85,19 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         logger.debug(
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )
-		if self.sleep and self.prev_timestamp:
-			# TODO: subtract processing time
-			sleep_time = action_event.timestamp - self.prev_timestamp
-			logger.info(f"{sleep_time=} {action_event.timestamp}")
-			time.sleep(sleep_time)
-		self.prev_timestamp = action_event.timestamp
+        if self.sleep and self.prev_timestamp:
+            # TODO: subtract processing time
+            sleep_time = action_event.timestamp - self.prev_timestamp
+            logger.info(f"{sleep_time=} {action_event.timestamp}")
+            time.sleep(sleep_time)
+        self.prev_timestamp = action_event.timestamp
 
-		# without this, clicks may occur too quickly to be registered correctly
-		# (fixed by disabling remove_move_before_click in events.py)
-		# if action_event.name in common.MOUSE_CLICK_EVENTS:
-		#    time.sleep(self.double_click_interval_seconds + 0.01)
+        # without this, clicks may occur too quickly to be registered correctly
+        # (fixed by disabling remove_move_before_click in events.py)
+        # if action_event.name in common.MOUSE_CLICK_EVENTS:
+        #    time.sleep(self.double_click_interval_seconds + 0.01)
 
-		return action_event
+        return action_event
 
 
 # TODO XXX copied from visual.py
