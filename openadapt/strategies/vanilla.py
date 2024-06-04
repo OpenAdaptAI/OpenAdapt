@@ -68,6 +68,11 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
             models.ActionEvent or None: The next ActionEvent for replay or None
               if there are no more events.
         """
+
+
+		# TODO XXX: add current screenshot / window to prompt context
+
+
         action_events = self.modified_actions
         self.action_event_idx += 1
         num_action_events = len(action_events)
@@ -80,25 +85,19 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         logger.debug(
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )
-        if self.display_events:
-            image = utils.display_event(action_event)
-            image.show()
-        if self.replay_events:
-            if self.sleep and self.prev_timestamp:
-                # TODO: subtract processing time
-                sleep_time = action_event.timestamp - self.prev_timestamp
-                logger.info(f"{sleep_time=} {action_event.timestamp}")
-                time.sleep(sleep_time)
-            self.prev_timestamp = action_event.timestamp
+		if self.sleep and self.prev_timestamp:
+			# TODO: subtract processing time
+			sleep_time = action_event.timestamp - self.prev_timestamp
+			logger.info(f"{sleep_time=} {action_event.timestamp}")
+			time.sleep(sleep_time)
+		self.prev_timestamp = action_event.timestamp
 
-            # without this, clicks may occur too quickly to be registered correctly
-            # (fixed by disabling remove_move_before_click in events.py)
-            # if action_event.name in common.MOUSE_CLICK_EVENTS:
-            #    time.sleep(self.double_click_interval_seconds + 0.01)
+		# without this, clicks may occur too quickly to be registered correctly
+		# (fixed by disabling remove_move_before_click in events.py)
+		# if action_event.name in common.MOUSE_CLICK_EVENTS:
+		#    time.sleep(self.double_click_interval_seconds + 0.01)
 
-            return action_event
-        else:
-            return None
+		return action_event
 
 
 # TODO XXX copied from visual.py
