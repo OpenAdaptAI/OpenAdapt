@@ -121,14 +121,15 @@ def get_response(payload: dict) -> requests.Response:
     return response
 
 
-def get_completion(payload: dict) -> str:
+def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
     Args:
-        pyalod: dictionary returned by create_payload
+        payload (dict): dictionary returned by create_payload
+        dev_mode (bool): whether to launch a debugger on error
 
     Returns:
-        string containing the first message from the response
+        (str) first message from the response
     """
     response = get_response(payload)
     result = response.json()
@@ -139,7 +140,7 @@ def get_completion(payload: dict) -> str:
         # TODO: fail after maximum number of attempts
         if "retry your request" in message:
             return get_completion(payload)
-        else:
+        elif dev_mode:
             import ipdb
 
             ipdb.set_trace()
