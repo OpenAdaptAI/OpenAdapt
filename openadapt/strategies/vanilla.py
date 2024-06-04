@@ -14,6 +14,7 @@ instructions, the current state, and the actions produced so far, produce the ne
 action.
 """
 
+from pprint import pformat
 from typing import Any
 import time
 
@@ -92,9 +93,18 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
             self.action_history,
             self.replay_instructions,
         )
+        if not action_event:
+            raise StopIteration()
 
         self.action_history.append(action_event)
         return action_event
+
+    def __del__(self):
+        action_history_dicts = [
+            action.to_prompt_dict()
+            for action in self.action_history
+        ]
+        logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
 
 def describe_recording(
@@ -182,6 +192,9 @@ def generate_action_event(
     )
     action_dict = utils.parse_code_snippet(content)
     logger.info(f"{action_dict=}")
+    if not action_dict:
+        # allow early stopping
+        return None
     action = models.ActionEvent.from_dict(action_dict)
     logger.info(f"{action=}")
     return action
