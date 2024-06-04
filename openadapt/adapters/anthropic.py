@@ -134,9 +134,7 @@ def prompt(
     """Public method to get a response from the Anthropic API with image support."""
     if len(images) > MAX_IMAGES:
         # XXX TODO handle this
-        raise Exception(
-            f"{len(images)=} > {MAX_IMAGES=}. Use a different adapter."
-        )
+        raise Exception(f"{len(images)=} > {MAX_IMAGES=}. Use a different adapter.")
     payload = create_payload(
         prompt,
         system_prompt,

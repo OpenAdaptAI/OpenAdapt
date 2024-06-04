@@ -1,12 +1,12 @@
 """Implements a vanilla playback strategy, offloading everything to the model.
 
-	Send in a series of screenshots to GPT-4 and then ask GPT-4 to describe what
+    Send in a series of screenshots to GPT-4 and then ask GPT-4 to describe what
     happened. Then give it the sequence of actions (in concrete coordinates and
     keyboard inputs), as well as your proposed modification in natural language.
-	Ask it to output the new action sequence.
-	...
-	...add [the current state to the prompt at every time step]
-		--LunjunZhang
+    Ask it to output the new action sequence.
+    ...
+    ...add [the current state to the prompt at every time step]
+        --LunjunZhang
 
 1. Given the recorded states, describe what happened
 2. Given the description of what happened, proposed modifications in natural language
@@ -15,13 +15,10 @@ action.
 """
 
 from pprint import pformat
-from typing import Any
-import time
 
 from loguru import logger
 
 from openadapt import adapters, models, strategies, utils
-from openadapt.config import config
 
 
 PROCESS_EVENTS = True
@@ -56,7 +53,8 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         self.action_event_idx = 0
 
         self.recording_description = describe_recording(
-            self.recording, self.process_events,
+            self.recording,
+            self.process_events,
         )
 
     def get_next_action_event(
@@ -74,7 +72,6 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
             models.ActionEvent or None: The next ActionEvent for replay or None
               if there are no more events.
         """
-
         if self.process_events:
             action_events = self.recording.processed_action_events
         else:
@@ -99,10 +96,10 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         self.action_history.append(action_event)
         return action_event
 
-    def __del__(self):
+    def __del__(self) -> None:
+        """Log the action history."""
         action_history_dicts = [
-            action.to_prompt_dict()
-            for action in self.action_history
+            action.to_prompt_dict() for action in self.action_history
         ]
         logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
@@ -118,10 +115,10 @@ def describe_recording(
     Args:
         recording (models.Recording): the recording to describe.
         process_events (bool): Flag indicating whether to process the events.
+
     Returns:
         (str) natural language description of the what happened in the recording.
     """
-
     if process_events:
         action_events = recording.processed_action_events
     else:
@@ -180,6 +177,7 @@ def generate_action_event(
     )
     prompt = utils.render_template_from_file(
         "prompts/generate_action_event.j2",
+        current_window=current_window_dict,
         recorded_actions=recorded_action_dicts,
         replayed_actions=replayed_action_dicts,
         replay_instructions=replay_instructions,

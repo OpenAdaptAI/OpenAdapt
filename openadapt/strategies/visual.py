@@ -44,7 +44,6 @@ Usage:
     $ python -m openadapt.replay VisualReplayStrategy --instructions "<instructions>"
 """
 
-from copy import deepcopy
 from dataclasses import dataclass
 import time
 
@@ -430,14 +429,7 @@ def get_window_segmentation(
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
-
-
     # TODO XXX: find identical masked images and handle them
-    similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
-        masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
-    )
-
-
 
     descriptions = prompt_for_descriptions(
         original_image,

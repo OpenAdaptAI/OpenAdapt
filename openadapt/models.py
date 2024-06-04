@@ -445,7 +445,7 @@ class ActionEvent(db.Base):
                     del action_dict[key]
         if self.available_segment_descriptions:
             action_dict["available_segment_descriptions"] = (
-                action.available_segment_descriptions
+                self.available_segment_descriptions
             )
         return action_dict
 
