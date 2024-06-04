@@ -85,9 +85,7 @@ def create_payload(
 
 @cache.cache()
 def get_completion(
-    payload: dict,
-    dev_mode: bool = False,
-    api_key: str = config.ANTHROPIC_API_KEY
+    payload: dict, dev_mode: bool = False, api_key: str = config.ANTHROPIC_API_KEY
 ) -> str:
     """Sends a request to the Anthropic API and returns the response."""
     client = anthropic.Anthropic(api_key=api_key)

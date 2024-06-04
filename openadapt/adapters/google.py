@@ -42,8 +42,7 @@ def prompt(
     genai.configure(api_key=config.GOOGLE_API_KEY)
     model = genai.GenerativeModel(model_name)
     response = model.generate_content(
-        [full_prompt] + images,
-        request_options={"timeout": timeout}
+        [full_prompt] + images, request_options={"timeout": timeout}
     )
     response.resolve()
     logger.info(f"response=\n{pformat(response)}")
