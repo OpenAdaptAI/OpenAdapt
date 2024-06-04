@@ -7,7 +7,12 @@ from PIL import Image
 from sqlalchemy import create_engine, engine, text
 import pytest
 
-from openadapt.config import DATA_DIR_PATH, RECORDING_DIR_PATH, ROOT_DIR_PATH
+from openadapt.config import (
+    DATA_DIR_PATH,
+    PARENT_DIR_PATH,
+    RECORDING_DIR_PATH,
+    ROOT_DIR_PATH,
+)
 from openadapt.db.db import Base
 
 
@@ -22,7 +27,7 @@ def setup_database(request: pytest.FixtureRequest) -> engine:
     Base.metadata.create_all(bind=engine)
 
     # Read the SQL file and split the content into individual statements
-    with open(DATA_DIR_PATH / "assets/fixtures.sql", "r") as file:
+    with open(PARENT_DIR_PATH / "assets/fixtures.sql", "r") as file:
         statements = file.read().split(";")
 
     # Remove any empty statements from the list
@@ -80,7 +85,7 @@ def db_engine(request: pytest.FixtureRequest) -> engine:
 
 def load_image(filename: str) -> Image.Image:
     """Load an image from a path"""
-    image_file_path = DATA_DIR_PATH / "tests" / "assets" / filename
+    image_file_path = PARENT_DIR_PATH / "tests" / "assets" / filename
     image = Image.open(image_file_path)
     return image
 
