@@ -87,15 +87,18 @@ client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 
 @cache.cache()
-def get_completion(payload: dict) -> str:
+def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the Anthropic API and returns the response."""
     try:
         response = client.messages.create(**payload)
     except Exception as exc:
         logger.exception(exc)
-        import ipdb
+        if dev_mode:
+            import ipdb
 
-        ipdb.set_trace()
+            ipdb.set_trace()
+        else:
+            raise
     """
     Message(
         id='msg_01L55ai2A9q92687mmjMSch3',
