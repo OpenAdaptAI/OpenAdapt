@@ -29,6 +29,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
     "oa.stop",
@@ -136,6 +137,7 @@ class Config(BaseSettings):
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
+    RECORD_AUDIO: bool
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool
     RECORD_IMAGES: bool
