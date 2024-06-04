@@ -519,7 +519,7 @@ def get_window_segmentation(
 
 def prompt_for_descriptions(
     original_image: Image.Image,
-    masked_images: list{Image.Image],
+    masked_images: list[Image.Image],
     active_segment_description: str | None,
     exceptions: list[Exception] | None = None,
 ) -> list[str]:
