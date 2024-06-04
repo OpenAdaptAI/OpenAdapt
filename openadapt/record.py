@@ -31,7 +31,11 @@ with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
+import numpy as np
 import psutil
+import sounddevice
+import soundfile
+import whisper
 
 from openadapt import utils, video, window
 from openadapt.config import config
@@ -232,6 +236,7 @@ def process_events(
 
 
 def write_action_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -239,16 +244,18 @@ def write_action_event(
     """Write an action event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: An action event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "action", event
-    crud.insert_action_event(recording, event.timestamp, event.data)
+    crud.insert_action_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_screen_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -256,6 +263,7 @@ def write_screen_event(
     """Write a screen event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
@@ -269,11 +277,12 @@ def write_screen_event(
         event_data = {"png_data": png_data}
     else:
         event_data = {}
-    crud.insert_screenshot(recording, event.timestamp, event_data)
+    crud.insert_screenshot(db, recording, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_window_event(
+    db: crud.SaSession,
     recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -281,12 +290,13 @@ def write_window_event(
     """Write a window event to the database and update the performance queue.
 
     Args:
+        db: The database session.
         recording: The recording object.
         event: A window event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "window", event
-    crud.insert_window_event(recording, event.timestamp, event.data)
+    crud.insert_window_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -325,9 +335,10 @@ def write_events(
 
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    session = crud.get_new_session(read_and_write=True)
 
     if pre_callback:
-        state = pre_callback(recording)
+        state = pre_callback(session, recording)
     else:
         state = None
 
@@ -359,7 +370,7 @@ def write_events(
         except queue.Empty:
             continue
         assert event.type == event_type, (event_type, event)
-        state = write_fn(recording, event, perf_q, **(state or {}))
+        state = write_fn(session, recording, event, perf_q, **(state or {}))
         num_processed += 1
         with num_events.get_lock():
             if progress is not None:
@@ -379,7 +390,7 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def video_pre_callback(recording: Recording) -> dict[str, Any]:
+def video_pre_callback(db: crud.SaSession, recording: Recording) -> dict[str, Any]:
     """Function to call before main loop.
 
     Args:
@@ -394,7 +405,7 @@ def video_pre_callback(recording: Recording) -> dict[str, Any]:
     video_container, video_stream, video_start_timestamp = (
         video.initialize_video_writer(video_file_path, width, height)
     )
-    crud.update_video_start_time(recording, video_start_timestamp)
+    crud.update_video_start_time(db, recording, video_start_timestamp)
     return {
         "video_container": video_container,
         "video_stream": video_stream,
@@ -416,6 +427,7 @@ def video_post_callback(state: dict) -> None:
 
 
 def write_video_event(
+    db: crud.SaSession,
     recording_timestamp: float,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -428,6 +440,7 @@ def write_video_event(
     """Write a screen event to the video file and update the performance queue.
 
     Args:
+        db: The database session.
         recording_timestamp: The timestamp of the recording.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
@@ -722,6 +735,7 @@ def performance_stats_writer(
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set() or not perf_q.empty():
         if not started:
             with started_counter.get_lock():
@@ -733,6 +747,7 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
+            session,
             recording,
             event_type,
             start_time,
@@ -766,6 +781,7 @@ def memory_writer(
     process = psutil.Process(record_pid)
 
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set():
         if not started:
             with started_counter.get_lock():
@@ -789,6 +805,7 @@ def memory_writer(
         timestamp = utils.get_timestamp()
 
         crud.insert_memory_stat(
+            session,
             recording,
             rss,
             timestamp,
@@ -823,7 +840,8 @@ def create_recording(
         "task_description": task_description,
         "config": config.model_dump(obfuscated=True),
     }
-    recording = crud.insert_recording(recording_data)
+    session = crud.get_new_session(read_and_write=True)
+    recording = crud.insert_recording(session, recording_data)
     logger.info(f"{recording=}")
     return recording
 
@@ -974,6 +992,107 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+def record_audio(
+    recording: Recording,
+    terminate_processing: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Record audio narration during the recording and store data in database.
+
+    Args:
+        recording: The recording object.
+        terminate_processing: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
+    """
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording.timestamp)
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    audio_frames = []  # to store audio frames
+
+    def audio_callback(
+        indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
+    ) -> None:
+        """Callback function used when new audio frames are recorded.
+
+        Note: time is of type cffi.FFI.CData, but since we don't use this argument
+        and we also don't use the cffi library, the Any type annotation is used.
+        """
+        # called whenever there is new audio frames
+        audio_frames.append(indata.copy())
+
+    # open InputStream and start recording while ActionEvents are recorded
+    audio_stream = sounddevice.InputStream(
+        callback=audio_callback, samplerate=16000, channels=1
+    )
+    logger.info("Audio recording started.")
+    start_timestamp = utils.get_timestamp()
+    audio_stream.start()
+
+    # NOTE: listener may not have actually started by now
+    # TODO: handle race condition, e.g. by sending synthetic events from main thread
+    with started_counter.get_lock():
+        started_counter.value += 1
+
+    terminate_processing.wait()
+    audio_stream.stop()
+    audio_stream.close()
+
+    # Concatenate into one Numpy array
+    concatenated_audio = np.concatenate(audio_frames, axis=0)
+    # convert concatenated_audio to format expected by whisper
+    converted_audio = concatenated_audio.flatten().astype(np.float32)
+
+    # Convert audio to text using OpenAI's Whisper
+    logger.info("Transcribing audio...")
+    model = whisper.load_model("base")
+    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+    logger.info(f"The narrated text is: {result_info['text']}")
+    # empty word_list if the user didn't say anything
+    word_list = []
+    # segments could be empty
+    if len(result_info["segments"]) > 0:
+        # there won't be a 'words' list if the user didn't say anything
+        if "words" in result_info["segments"][0]:
+            word_list = result_info["segments"][0]["words"]
+
+    # compress and convert to bytes to save to database
+    logger.info(
+        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
+    )
+    # Create an in-memory file-like object
+    file_obj = io.BytesIO()
+    # Write the audio data using lossless compression
+    soundfile.write(
+        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
+    )
+    # Get the compressed audio data as bytes
+    compressed_audio_bytes = file_obj.getvalue()
+
+    logger.info(
+        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
+    )
+
+    file_obj.close()
+
+    # To decompress the audio and restore it to its original form:
+    # restored_audio, restored_samplerate = sf.read(
+    # io.BytesIO(compressed_audio_bytes))
+
+    with crud.get_new_session(read_and_write=True) as session:
+        # Create AudioInfo entry
+        crud.insert_audio_info(
+            session,
+            compressed_audio_bytes,
+            result_info["text"],
+            recording,
+            start_timestamp,
+            int(audio_stream.samplerate),
+            word_list,
+        )
+
+
 @logger.catch
 @utils.trace(logger)
 def record(
@@ -1003,6 +1122,10 @@ def record(
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
+
+    if not crud.acquire_db_lock():
+        logger.error("Failed to acquire DB lock")
+        return
 
     # logically it makes sense to communicate from here, but when running
     # from the tray it takes too long
@@ -1141,6 +1264,18 @@ def record(
         )
         video_writer.start()
 
+    if config.RECORD_AUDIO:
+        expected_starts += 1
+        audio_recorder = multiprocessing.Process(
+            target=record_audio,
+            args=(
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        audio_recorder.start()
+
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
@@ -1214,6 +1349,8 @@ def record(
     window_event_writer.join()
     if config.RECORD_VIDEO:
         video_writer.join()
+    if config.RECORD_AUDIO:
+        audio_recorder.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
@@ -1222,7 +1359,8 @@ def record(
 
     logger.info(f"Saved {recording_timestamp=}")
 
-    crud.post_process_events(recording)
+    with crud.get_new_session(read_and_write=True) as session:
+        crud.post_process_events(session, recording)
 
     if terminate_recording is not None:
         terminate_recording.set()
@@ -1230,6 +1368,8 @@ def record(
     # TODO: consolidate terminate_recording and status_pipe
     if status_pipe:
         status_pipe.send({"type": "record.stopped"})
+
+    crud.release_db_lock()
 
 
 # Entry point

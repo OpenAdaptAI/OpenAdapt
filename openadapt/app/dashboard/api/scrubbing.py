@@ -8,7 +8,6 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from openadapt.config import config
-from openadapt.db import crud
 from openadapt.privacy.providers import ScrubProvider
 from openadapt.scrub import get_scrubbing_process, scrub
 
@@ -62,7 +61,6 @@ class ScrubbingAPI:
             }
         if provider_id not in ScrubProvider.get_available_providers():
             return {"message": "Provider not supported", "status": "failed"}
-        await crud.acquire_db_lock()
         scrub(recording_id, provider_id, release_lock=True)
         scrubbing_proc = get_scrubbing_process()
         while not scrubbing_proc.is_running():

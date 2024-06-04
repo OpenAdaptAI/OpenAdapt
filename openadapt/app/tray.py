@@ -379,7 +379,12 @@ class SystemTrayIcon:
         """
         dialog = ConfirmDeleteDialog(recording.task_description)
         if dialog.exec_():
-            crud.delete_recording(recording.timestamp)
+            if not crud.acquire_db_lock():
+                self.show_toast("Failed to delete recording. Try again later.")
+                return
+            with crud.get_new_session(read_and_write=True) as session:
+                crud.delete_recording(session, recording)
+            crud.release_db_lock()
             self.show_toast("Recording deleted.")
             self.populate_menus()
 
@@ -413,7 +418,8 @@ class SystemTrayIcon:
             action (Callable): The function to call when the menu item is clicked.
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
-        recordings = crud.get_all_recordings()
+        session = crud.get_new_session(read_only=True)
+        recordings = crud.get_all_recordings(session)
 
         self.recording_actions[action_type] = []
 

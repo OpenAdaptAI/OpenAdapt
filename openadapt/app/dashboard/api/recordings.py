@@ -1,5 +1,7 @@
 """API endpoints for recordings."""
 
+import json
+
 from fastapi import APIRouter, WebSocket
 from loguru import logger
 
@@ -32,29 +34,27 @@ class RecordingsAPI:
     @staticmethod
     def get_recordings() -> dict[str, list[Recording]]:
         """Get all recordings."""
-        session = crud.get_new_session()
+        session = crud.get_new_session(read_only=True)
         recordings = crud.get_all_recordings(session)
         return {"recordings": recordings}
 
     @staticmethod
     def get_scrubbed_recordings() -> dict[str, list[Recording]]:
         """Get all scrubbed recordings."""
-        session = crud.get_new_session()
+        session = crud.get_new_session(read_only=True)
         recordings = crud.get_all_scrubbed_recordings(session)
         return {"recordings": recordings}
 
     @staticmethod
-    async def start_recording() -> dict[str, str]:
+    def start_recording() -> dict[str, str | int]:
         """Start a recording session."""
-        await crud.acquire_db_lock()
         cards.quick_record()
-        return {"message": "Recording started"}
+        return {"message": "Recording started", "status": 200}
 
     @staticmethod
     def stop_recording() -> dict[str, str]:
         """Stop a recording session."""
         cards.stop_record()
-        crud.release_db_lock()
         return {"message": "Recording stopped"}
 
     @staticmethod
@@ -69,48 +69,72 @@ class RecordingsAPI:
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
             await websocket.accept()
-            session = crud.get_new_session()
-            with session:
-                recording = crud.get_recording_by_id(recording_id, session)
+            session = crud.get_new_session(read_only=True)
+            recording = crud.get_recording_by_id(session, recording_id)
 
-                await websocket.send_json(
-                    {"type": "recording", "value": recording.asdict()}
-                )
+            await websocket.send_json(
+                {"type": "recording", "value": recording.asdict()}
+            )
 
-                action_events = get_events(recording, session=session)
+            action_events = get_events(session, recording)
 
-                await websocket.send_json(
-                    {"type": "num_events", "value": len(action_events)}
-                )
+            await websocket.send_json(
+                {"type": "num_events", "value": len(action_events)}
+            )
 
-                def convert_to_str(event_dict: dict) -> dict:
-                    """Convert the keys to strings."""
-                    if "key" in event_dict:
-                        event_dict["key"] = str(event_dict["key"])
-                    if "canonical_key" in event_dict:
-                        event_dict["canonical_key"] = str(event_dict["canonical_key"])
-                    if "reducer_names" in event_dict:
-                        event_dict["reducer_names"] = list(event_dict["reducer_names"])
-                    if "children" in event_dict:
-                        for child_event in event_dict["children"]:
-                            convert_to_str(child_event)
+            try:
+                # TODO: change to use recording_id once scrubbing PR is merged
+                audio_info = crud.get_audio_info(session, recording.timestamp)[0]
+                words_with_timestamps = json.loads(audio_info.words_with_timestamps)
+                words_with_timestamps = [
+                    {
+                        "word": word["word"],
+                        "start": word["start"] + action_events[0].timestamp,
+                        "end": word["end"] + action_events[0].timestamp,
+                    }
+                    for word in words_with_timestamps
+                ]
+            except IndexError:
+                words_with_timestamps = []
+            word_index = 0
 
-                for action_event in action_events:
-                    event_dict = row2dict(action_event)
-                    try:
-                        image = display_event(action_event)
-                        width, height = image.size
-                        image = image2utf8(image)
-                    except Exception:
-                        logger.info("Failed to display event")
-                        image = None
-                        width, height = 0, 0
-                    event_dict["screenshot"] = image
-                    event_dict["dimensions"] = {"width": width, "height": height}
+            def convert_to_str(event_dict: dict) -> dict:
+                """Convert the keys to strings."""
+                if "key" in event_dict:
+                    event_dict["key"] = str(event_dict["key"])
+                if "canonical_key" in event_dict:
+                    event_dict["canonical_key"] = str(event_dict["canonical_key"])
+                if "reducer_names" in event_dict:
+                    event_dict["reducer_names"] = list(event_dict["reducer_names"])
+                if "children" in event_dict:
+                    for child_event in event_dict["children"]:
+                        convert_to_str(child_event)
 
-                    convert_to_str(event_dict)
-                    await websocket.send_json(
-                        {"type": "action_event", "value": event_dict}
-                    )
+            for action_event in action_events:
+                event_dict = row2dict(action_event)
+                try:
+                    image = display_event(action_event)
+                    width, height = image.size
+                    image = image2utf8(image)
+                except Exception:
+                    logger.info("Failed to display event")
+                    image = None
+                    width, height = 0, 0
+                event_dict["screenshot"] = image
+                event_dict["dimensions"] = {"width": width, "height": height}
+                words = []
+                # each word in words_with_timestamp is a dict of word, start, end
+                # we want to add the word to the event_dict if the start is
+                # before the event timestamp
+                while (
+                    word_index < len(words_with_timestamps)
+                    and words_with_timestamps[word_index]["start"]
+                    < event_dict["timestamp"]
+                ):
+                    words.append(words_with_timestamps[word_index]["word"])
+                    word_index += 1
+                event_dict["words"] = words
+                convert_to_str(event_dict)
+                await websocket.send_json({"type": "action_event", "value": event_dict})
 
-                await websocket.close()
+            await websocket.close()

@@ -42,8 +42,8 @@ if sys.platform == "win32":
 
 from openadapt import common
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
+from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
-from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
@@ -736,9 +736,11 @@ def plot_performance(
     # avoid circular import
     from openadapt.db import crud
 
+    session = crud.get_new_session(read_only=True)
+
     if not recording:
-        recording = crud.get_latest_recording()
-    perf_stats = crud.get_perf_stats(recording)
+        recording = crud.get_latest_recording(session)
+    perf_stats = crud.get_perf_stats(session, recording)
     for perf_stat in perf_stats:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
@@ -755,7 +757,7 @@ def plot_performance(
     ax.legend()
     ax.set_ylabel("Duration (seconds)")
 
-    mem_stats = crud.get_memory_stats(recording)
+    mem_stats = crud.get_memory_stats(session, recording)
     timestamps = []
     mem_usages = []
     for mem_stat in mem_stats:

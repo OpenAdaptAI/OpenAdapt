@@ -2,6 +2,63 @@
 
 
 
+## v0.27.0 (2024-06-04)
+
+### Feature
+
+* feat: Audio narration (#673)
+
+* feat: Add audio narration feature while recording
+
+* feat: Remove implicit scrubbing in display_event function and recursively convert reqd properties to str
+
+* feat: Add transcribed text to dashboard visualisation
+
+* feat: Use recording id as foreign key, and add interrupt signal handler in audio recording process
+
+* feat: Check if the lock is stale when acquiring locks
+
+* refactor: Convert database lock path to a constant in config file
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`1e11906`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e1190650ac1f42a725c360dd3f52214adf8847c))
+
+
+## v0.26.2 (2024-06-03)
+
+### Documentation
+
+* docs: Create FUNDING.yml (#690) ([`3692416`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3692416d7bfa2eb31784cbcd7b1cc2d18aab9455))
+
+### Fix
+
+* fix(docs): add nvm install info in Readme.md in manual setup section. (#694) ([`4f240b6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4f240b68a1426f57bf74a0fc722baf15100f68cd))
+
+
+## v0.26.1 (2024-05-28)
+
+### Fix
+
+* fix(db): Database access refactor (#676)
+
+* feat: Remove global sessions, and introduce read only sessions for cases where no writing is required
+
+* refactor: Rename db to session
+
+* feat: Raise exceptions if commit/write/delete is attempted on a read-only session
+
+* feat: Add tests for the read only session
+
+* chore: lint using flake8
+
+* rename test_database -&gt; db_engine
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`987f6ac`](https://github.com/OpenAdaptAI/OpenAdapt/commit/987f6acc55c1512805ab0cc31c922cb17c1cc846))
+
+
 ## v0.26.0 (2024-05-27)
 
 ### Feature

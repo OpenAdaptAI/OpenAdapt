@@ -81,6 +81,7 @@ class Recording(db.Base):
         "ScrubbedRecording",
         back_populates="recording",
     )
+    audio_info = sa.orm.relationship("AudioInfo", back_populates="recording")
 
     _processed_action_events = None
 
@@ -88,9 +89,11 @@ class Recording(db.Base):
     def processed_action_events(self) -> list:
         """Get the processed action events for the recording."""
         from openadapt import events
+        from openadapt.db import crud
 
         if not self._processed_action_events:
-            self._processed_action_events = events.get_events(self)
+            session = crud.get_new_session(read_only=True)
+            self._processed_action_events = events.get_events(session, self)
         return self._processed_action_events
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:
@@ -719,6 +722,23 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
+
+
+class AudioInfo(db.Base):
+    """Class representing the audio from a recording in the database."""
+
+    __tablename__ = "audio_info"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    flac_data = sa.Column(sa.LargeBinary)
+    transcribed_text = sa.Column(sa.String)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    sample_rate = sa.Column(sa.Integer)
+    words_with_timestamps = sa.Column(sa.Text)
+
+    recording = sa.orm.relationship("Recording", back_populates="audio_info")
 
 
 class PerformanceStat(db.Base):
