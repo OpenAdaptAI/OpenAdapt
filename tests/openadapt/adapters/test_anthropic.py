@@ -1,4 +1,4 @@
-"""Tests for adapters.anthropic"""
+"""Tests for adapters.anthropic."""
 
 from PIL import Image
 import pytest
@@ -8,7 +8,8 @@ import anthropic
 from openadapt import adapters
 
 
-def test_prompt(calculator_image: Image):
+def test_prompt(calculator_image: Image) -> None:
+    """Test image prompt."""
     prompt = "What is this a screenshot of?"
     try:
         result = adapters.anthropic.prompt(prompt, images=[calculator_image])

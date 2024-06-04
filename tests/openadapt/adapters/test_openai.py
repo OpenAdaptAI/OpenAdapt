@@ -1,4 +1,4 @@
-"""Tests for adapters.openai"""
+"""Tests for adapters.openai."""
 
 import pytest
 
@@ -7,7 +7,8 @@ from PIL import Image
 from openadapt.adapters import openai
 
 
-def test_prompt(calculator_image: Image):
+def test_prompt(calculator_image: Image) -> None:
+    """Test image prompt."""
     prompt = "What is this a screenshot of?"
     try:
         result = openai.prompt(prompt, images=[calculator_image])

@@ -1,6 +1,5 @@
 """This module contains fixtures and setup for testing."""
 
-from pathlib import Path
 import os
 
 from PIL import Image
@@ -11,7 +10,6 @@ from openadapt.config import (
     DATA_DIR_PATH,
     PARENT_DIR_PATH,
     RECORDING_DIR_PATH,
-    ROOT_DIR_PATH,
 )
 from openadapt.db.db import Base
 
@@ -84,7 +82,7 @@ def db_engine(request: pytest.FixtureRequest) -> engine:
 
 
 def load_image(filename: str) -> Image.Image:
-    """Load an image from a path"""
+    """Load an image from a path."""
     image_file_path = PARENT_DIR_PATH / "tests" / "assets" / filename
     image = Image.open(image_file_path)
     return image
@@ -92,11 +90,11 @@ def load_image(filename: str) -> Image.Image:
 
 @pytest.fixture
 def calculator_image() -> Image.Image:
-    """Get an image of a calculator screenshot"""
+    """Get an image of a calculator screenshot."""
     return load_image("calculator.png")
 
 
 @pytest.fixture
 def excel_image() -> Image.Image:
-    """Get an image of an Excel screenshot"""
+    """Get an image of an Excel screenshot."""
     return load_image("excel.png")

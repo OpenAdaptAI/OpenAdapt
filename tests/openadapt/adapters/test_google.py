@@ -1,4 +1,4 @@
-"""Tests for adapters.google"""
+"""Tests for adapters.google."""
 
 from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from PIL import Image
@@ -7,7 +7,8 @@ import pytest
 from openadapt.adapters import google
 
 
-def test_prompt(calculator_image: Image):
+def test_prompt(calculator_image: Image) -> None:
+    """Test image prompt."""
     try:
         prompt = "What is this a screenshot of?"
         result = google.prompt(prompt, images=[calculator_image])
