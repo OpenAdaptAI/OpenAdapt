@@ -100,18 +100,22 @@ def create_payload(
 
 
 @cache.cache()
-def get_response(payload: dict) -> requests.Response:
+def get_response(
+    payload: dict,
+    api_key: str = config.OPENAI_API_KEY,
+) -> requests.Response:
     """Sends a request to the OpenAI API and returns the response.
 
     Args:
         payload: dictionary returned by create_payload
+        api_key (str): api key
 
     Returns:
         response from OpenAI API
     """
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
     }
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -145,6 +149,8 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
 
             ipdb.set_trace()
             # TODO: handle more errors
+        else:
+            raise ValueError(result["error"]["message"])
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]

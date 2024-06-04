@@ -83,12 +83,14 @@ def create_payload(
     return payload
 
 
-client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-
-
 @cache.cache()
-def get_completion(payload: dict, dev_mode: bool = False) -> str:
+def get_completion(
+    payload: dict,
+    dev_mode: bool = False,
+    api_key: str = config.ANTHROPIC_API_KEY
+) -> str:
     """Sends a request to the Anthropic API and returns the response."""
+    client = anthropic.Anthropic(api_key=api_key)
     try:
         response = client.messages.create(**payload)
     except Exception as exc:

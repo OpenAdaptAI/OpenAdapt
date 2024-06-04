@@ -1,15 +1,22 @@
 """Tests for adapters.openai"""
 
+import pytest
+
 from PIL import Image
 
 from openadapt.adapters import openai
 
 
-# TODO: handle failure
 def test_prompt(calculator_image: Image):
     prompt = "What is this a screenshot of?"
-    result = openai.prompt(prompt, images=[calculator_image])
-    assert "calculator" in result.lower(), result
+    try:
+        result = openai.prompt(prompt, images=[calculator_image])
+        assert "calculator" in result.lower(), result
+    except ValueError as e:
+        if "Incorrect API key" in str(e):
+            pytest.xfail(f"ValueError due to incorrect API key: {e}")
+        else:
+            raise
 
 
 if __name__ == "__main__":
