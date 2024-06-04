@@ -1,17 +1,25 @@
 """Implements a vanilla playback strategy, offloading everything to the model.
 
-Send in a series of screenshots to GPT-4 and then ask GPT-4 to describe what happened.
-Then give it the sequence of actions (in concrete coordinates and keyboard inputs),
-as well as your proposed modification in natural language.
-Ask it to output the new action sequence.
-    --LunjunZhang
+	Send in a series of screenshots to GPT-4 and then ask GPT-4 to describe what
+    happened. Then give it the sequence of actions (in concrete coordinates and
+    keyboard inputs), as well as your proposed modification in natural language.
+	Ask it to output the new action sequence.
+	...
+	...add [the current state to the prompt at every time step]
+		--LunjunZhang
+
+1. Given the recorded states, describe what happened
+2. Given the description of what happened, proposed modifications in natural language
+instructions, the current state, and the actions produced so far, produce the next
+action.
 """
 
+from typing import Any
 import time
 
 from loguru import logger
 
-from openadapt import models, strategies, utils
+from openadapt import adapters, models, strategies, utils
 from openadapt.config import config
 
 
@@ -19,7 +27,7 @@ PROCESS_EVENTS = True
 
 
 class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
-    """Vanilla replay strategy that replays ActionEvents modified by an LLM directly.
+    """Vanilla replay strategy that replays ActionEvents modified by an LMM directly.
 
     If AGI or GPT6 happens, this script should be able to suddenly do the work.
         --LunjunZhang
@@ -28,7 +36,7 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str,
+        replay_instructions: str = "",
         process_events: bool = PROCESS_EVENTS,
     ) -> None:
         """Initialize the VanillaReplayStrategy.
@@ -43,14 +51,11 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
         super().__init__(recording)
         self.replay_instructions = replay_instructions
         self.process_events = process_events
+        self.action_history = []
+        self.action_event_idx = 0
 
-        if self.process_events:
-            action_events = self.recording.processed_action_events
-        else:
-            action_events = self.recording.action_events
-        self.modified_actions = apply_replay_instructions(
-            action_events,
-            self.replay_instructions,
+        self.recording_description = describe_recording(
+            self.recording, self.process_events,
         )
 
     def get_next_action_event(
@@ -69,104 +74,114 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
               if there are no more events.
         """
 
+        if self.process_events:
+            action_events = self.recording.processed_action_events
+        else:
+            action_events = self.recording.action_events
 
-        # TODO XXX: add current screenshot / window to prompt context
-
-
-        action_events = self.modified_actions
         self.action_event_idx += 1
         num_action_events = len(action_events)
         if self.action_event_idx >= num_action_events:
-            # TODO: refactor
             raise StopIteration()
-        action_event = action_events[self.action_event_idx]
-        if config.REPLAY_STRIP_ELEMENT_STATE:
-            action_event = utils.strip_element_state(action_event)
-        logger.debug(
-            f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
+        logger.debug(f"{self.action_event_idx=} of {num_action_events=}")
+
+        action_event = generate_action_event(
+            screenshot,
+            window_event,
+            action_events,
+            self.action_history,
+            self.replay_instructions,
         )
-        if self.sleep and self.prev_timestamp:
-            # TODO: subtract processing time
-            sleep_time = action_event.timestamp - self.prev_timestamp
-            logger.info(f"{sleep_time=} {action_event.timestamp}")
-            time.sleep(sleep_time)
-        self.prev_timestamp = action_event.timestamp
 
-        # without this, clicks may occur too quickly to be registered correctly
-        # (fixed by disabling remove_move_before_click in events.py)
-        # if action_event.name in common.MOUSE_CLICK_EVENTS:
-        #    time.sleep(self.double_click_interval_seconds + 0.01)
-
+        self.action_history.append(action_event)
         return action_event
 
 
-# TODO XXX copied from visual.py
-def apply_replay_instructions(
-    action_events: list[models.ActionEvent],
-    replay_instructions: str,
-) -> None:
-    """Modify the given ActionEvents according to the given replay instructions.
+def describe_recording(
+    recording: models.Recording,
+    process_events: bool,
+) -> str:
+    """Generate a natural language description of the actions in the recording.
+
+    Given the recorded states, describe what happened.
 
     Args:
-        action_events: list of action events to be modified in place.
-        replay_instructions: instructions for how action events should be modified.
+        recording (models.Recording): the recording to describe.
+        process_events (bool): Flag indicating whether to process the events.
+    Returns:
+        (str) natural language description of the what happened in the recording.
     """
-    action_dicts = [get_action_prompt_dict(action) for action in action_events]
-    actions_dict = {"actions": action_dicts}
+
+    if process_events:
+        action_events = recording.processed_action_events
+    else:
+        action_events = recording.action_events
+    action_dicts = [action.to_prompt_dict() for action in action_events]
+    images = [action.screenshot.image for action in action_events]
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )
     prompt = utils.render_template_from_file(
-        "prompts/apply_replay_instructions--vanilla.j2",
-        actions=actions_dict,
+        "prompts/describe_recording.j2",
+        actions=action_dicts,
+    )
+    prompt_adapter = adapters.get_default_prompt_adapter()
+    recording_description = prompt_adapter.prompt(
+        prompt,
+        system_prompt,
+        images,
+    )
+    return recording_description
+
+
+def generate_action_event(
+    current_screenshot: models.Screenshot,
+    current_window_event: models.WindowEvent,
+    recorded_actions: list[models.ActionEvent],
+    replayed_actions: list[models.ActionEvent],
+    replay_instructions: str,
+) -> models.ActionEvent:
+    """Modify the given ActionEvents according to the given replay instructions.
+
+    Given the description of what happened, proposed modifications in natural language
+    instructions, the current state, and the actions produced so far, produce the next
+    action.
+
+    Args:
+        current_screenshot (models.Screenshot): current state screenshot
+        current_window_event (models.WindowEvent): current state window data
+        recorded_actions (list[models.ActionEvent]): list of action events from the
+            recording
+        replayed_actions (list[models.ActionEvent]): list of actions produced during
+            current replay
+        replay_instructions (str): proposed modifications in natural language
+            instructions
+
+    Returns:
+        (models.ActionEvent) the next action event to be played, produced by the model
+    """
+    current_image = current_screenshot.image
+    current_window_dict = current_window_event.to_prompt_dict()
+    recorded_action_dicts = [action.to_prompt_dict() for action in recorded_actions]
+    replayed_action_dicts = [action.to_prompt_dict() for action in replayed_actions]
+
+    system_prompt = utils.render_template_from_file(
+        "prompts/system.j2",
+    )
+    prompt = utils.render_template_from_file(
+        "prompts/generate_action_event.j2",
+        recorded_actions=recorded_action_dicts,
+        replayed_actions=replayed_action_dicts,
         replay_instructions=replay_instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
         prompt,
         system_prompt,
+        [current_image],
     )
-    content_dict = utils.parse_code_snippet(content)
-    try:
-        action_dicts = content_dict["actions"]
-    except TypeError as exc:
-        logger.warning(exc)
-        # sometimes OpenAI returns a list of dicts directly, so let it slide
-        action_dicts = content_dict
-    modified_actions = []
-    for action_dict in action_dicts:
-        action = models.ActionEvent.from_dict(action_dict)
-        modified_actions.append(action)
-    return modified_actions
-
-
-# TODO copied from visual.py
-def get_action_prompt_dict(action: models.ActionEvent) -> dict:
-    """Convert an ActionEvent into a dict, excluding unnecessary properties.
-
-    Args:
-        action: the ActionEvent to convert
-
-    Returns:
-        dictionary containing relevant properties from the given ActionEvent.
-    """
-    action_dict = deepcopy(
-        {
-            key: val
-            for key, val in utils.row2dict(action, follow=False).items()
-            if val is not None
-            and not key.endswith("timestamp")
-            and not key.endswith("id")
-            and key not in ["reducer_names"]
-            # and not isinstance(getattr(models.ActionEvent, key), property)
-        }
-    )
-    if action.active_segment_description:
-        for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
-            if key in action_dict:
-                del action_dict[key]
-    if action.available_segment_descriptions:
-        action_dict["available_segment_descriptions"] = (
-            action.available_segment_descriptions
-        )
-    return action_dict
+    action_dict = utils.parse_code_snippet(content)
+    logger.info(f"{action_dict=}")
+    action = models.ActionEvent.from_dict(action_dict)
+    logger.info(f"{action=}")
+    return action

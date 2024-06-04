@@ -89,6 +89,7 @@ def replay(
         # TODO: make configurable
         dir_name = "captures"
         file_path = os.path.join(dir_name, file_name)
+        os.makedirs(dir_name, exist_ok=True)
         logger.info(f"{file_path=}")
         handler = logger.add(open(file_path, "w"))
     try:

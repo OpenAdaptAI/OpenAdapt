@@ -3,7 +3,9 @@
 https://platform.openai.com/docs/guides/vision
 """
 
+from copy import deepcopy
 from pprint import pformat
+from typing import Any
 
 from loguru import logger
 from PIL import Image
@@ -149,6 +151,19 @@ def get_completion(payload: dict) -> str:
     return content
 
 
+def log_payload(payload: dict[Any, Any]) -> None:
+    """Logs a payload after removing base-64 encoded values recursively."""
+    # TODO: detect base64 encoded strings dynamically
+    # messages["content"][{"image_url": ...
+    # payload["messages"][1]["content"][9]["image_url"]
+    payload_copy = deepcopy(payload)
+    for message in payload_copy["messages"]:
+        for content in message["content"]:
+            if "image_url" in content:
+                content["image_url"]["url"] = "[REDACTED]"
+    logger.info(f"payload=\n{pformat(payload_copy)}")
+
+
 def prompt(
     prompt: str,
     system_prompt: str | None = None,
@@ -176,7 +191,7 @@ def prompt(
         max_tokens=max_tokens,
         detail=detail,
     )
-    logger.info(f"payload=\n{pformat(payload)}")
+    log_payload(payload)
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     return result
