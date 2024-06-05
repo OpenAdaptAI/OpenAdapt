@@ -2,6 +2,59 @@
 
 
 
+## v0.29.0 (2024-06-05)
+
+### Documentation
+
+* docs(README): add dashboard visualization; improve description of VanillaReplayStrategy ([`6df4bb9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6df4bb9e5e69b504fbb745ee1019dbe3d0b47282))
+
+### Feature
+
+* feat(vanilla): Implement vanilla baseline (#702)
+
+* add vanilla.py; update README.md
+
+* update module docstring
+
+* add TODO; remove unused code
+
+* tabs -&gt; spaces
+
+* modify prompt adapter API to accept images instead of base64 images
+
+* fix typo
+
+* add ActionEvent/WindowEvent.to_prompt_dict
+
+* add prompts/describe_recording.j2; prompts/generate_action_event.j2
+
+* fixes; log action history
+
+* fixes; black; flake8
+
+* add tests/openadapt/adapters
+
+* add missing test assets
+
+* DATA_DIR_PATH -&gt; PARENT_DIR_PATH
+
+* get_completion dev_mode
+
+* anthropic dev_mode
+
+* fix tests
+
+* black
+
+* flake8
+
+* ignore .cache in flake8
+
+* vanilla.INCLUDE_WINDOW_DATA; utils.clean_data/filter_keys
+
+* flake8 ([`81074c4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81074c425f27a075ef3d082c9555d2e1ada3df6a))
+
+
 ## v0.28.0 (2024-06-05)
 
 ### Feature
