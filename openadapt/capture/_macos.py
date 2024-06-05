@@ -9,6 +9,7 @@ from sys import platform
 import os
 
 from Foundation import NSURL, NSObject  # type: ignore # noqa
+from loguru import logger
 from Quartz import CGMainDisplayID  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
@@ -56,6 +57,7 @@ class Capture:
                 datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mov",
             )
         )
+        logger.info(f"{self.file_url=}")
         if audio and self.session.canAddInput_(self.audio_input[0]):
             self.session.addInput_(self.audio_input[0])
 

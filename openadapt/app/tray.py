@@ -76,10 +76,6 @@ class SystemTrayIcon:
 
         self.app.setQuitOnLastWindowClosed(False)
 
-        # since the lock is a file, delete it when starting the app so that
-        # new instances can start even if the previous one crashed
-        crud.release_db_lock(raise_exception=False)
-
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
         # is addressed

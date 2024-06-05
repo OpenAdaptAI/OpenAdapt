@@ -9,7 +9,7 @@ import numpy as np
 from openadapt import utils
 
 
-def process_image_for_masks(segmented_image: Image.Image) -> list[np.ndarray]:
+def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndarray]:
     """Process the image to find unique masks based on color channels.
 
     Args:

@@ -1,8 +1,10 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
-from typing import Type
+from copy import deepcopy
+from typing import Any, Type
 import io
+import sys
 
 from loguru import logger
 from oa_pynput import keyboard
@@ -81,6 +83,7 @@ class Recording(db.Base):
         "ScrubbedRecording",
         back_populates="recording",
     )
+    audio_info = sa.orm.relationship("AudioInfo", back_populates="recording")
 
     _processed_action_events = None
 
@@ -422,6 +425,33 @@ class ActionEvent(db.Base):
         self.canonical_key_char = scrubber.scrub_text(self.canonical_key_char)
         self.key_vk = scrubber.scrub_text(self.key_vk)
 
+    def to_prompt_dict(self) -> dict[str, Any]:
+        """Convert into a dict, excluding properties not necessary for prompting.
+
+        Returns:
+            dictionary containing relevant properties from the ActionEvent.
+        """
+        action_dict = deepcopy(
+            {
+                key: val
+                for key, val in utils.row2dict(self, follow=False).items()
+                if val is not None
+                and not key.endswith("timestamp")
+                and not key.endswith("id")
+                and key not in ["reducer_names"]
+                # and not isinstance(getattr(models.ActionEvent, key), property)
+            }
+        )
+        if self.active_segment_description:
+            for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
+                if key in action_dict:
+                    del action_dict[key]
+        if self.available_segment_descriptions:
+            action_dict["available_segment_descriptions"] = (
+                self.available_segment_descriptions
+            )
+        return action_dict
+
 
 class WindowEvent(db.Base):
     """Class representing a window event in the database."""
@@ -453,6 +483,45 @@ class WindowEvent(db.Base):
         self.title = scrubber.scrub_text(self.title)
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
+
+    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+        """Convert into a dict, excluding properties not necessary for prompting.
+
+        Args:
+            include_data (bool): Whether to retain the "data" property of the .state
+                attribute (contains operating system accessibility API data).
+
+        Returns:
+            dictionary containing relevant properties from the WindowEvent.
+        """
+        window_dict = deepcopy(
+            {
+                key: val
+                for key, val in utils.row2dict(self, follow=False).items()
+                if val is not None
+                and not key.endswith("timestamp")
+                and not key.endswith("id")
+                # and not isinstance(getattr(models.WindowEvent, key), property)
+            }
+        )
+        key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
+        if sys.platform == "win32":
+            logger.warning(
+                "key_suffixes have not yet been defined on Windows."
+                "You can help by uncommenting the lines below and pasting window_dict "
+                "into a new GitHub Issue."
+            )
+            # from pprint import pformat
+            # logger.info(f"window_dict=\n{pformat(window_dict)}")
+        window_state = window_dict["state"]
+        window_state["data"] = utils.clean_dict(
+            utils.filter_keys(
+                window_state["data"],
+                key_suffixes,
+            )
+        )
+        window_dict["state"].pop("meta")
+        return window_dict
 
 
 class FrameCache:
@@ -722,6 +791,23 @@ class Screenshot(db.Base):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
+
+
+class AudioInfo(db.Base):
+    """Class representing the audio from a recording in the database."""
+
+    __tablename__ = "audio_info"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    flac_data = sa.Column(sa.LargeBinary)
+    transcribed_text = sa.Column(sa.String)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    sample_rate = sa.Column(sa.Integer)
+    words_with_timestamps = sa.Column(sa.Text)
+
+    recording = sa.orm.relationship("Recording", back_populates="audio_info")
 
 
 class PerformanceStat(db.Base):

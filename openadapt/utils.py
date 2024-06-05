@@ -582,11 +582,12 @@ def display_event(
 
 
 # TODO: png
-def image2utf8(image: Image.Image) -> str:
+def image2utf8(image: Image.Image, include_prefix: bool = True) -> str:
     """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
+        include_prefix (bool): Whether to include the "data:" prefix.
 
     Returns:
         str: The UTF-8 encoded image.
@@ -709,6 +710,22 @@ def get_strategy_class_by_name() -> dict:
     return class_by_name
 
 
+def get_performance_plot_file_path(recording_timestamp: float) -> str:
+    """Get the filename for the performance plot.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+
+    Returns:
+        str: The filename.
+    """
+    os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
+
+    fname_parts = ["performance", str(recording_timestamp)]
+    fname = "-".join(fname_parts) + ".png"
+    return os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+
+
 def plot_performance(
     recording: Recording = None,
     view_file: bool = False,
@@ -788,10 +805,7 @@ def plot_performance(
 
     # TODO: add PROC_WRITE_BY_EVENT_TYPE
     if save_file:
-        fname_parts = ["performance", str(recording.timestamp)]
-        fname = "-".join(fname_parts) + ".png"
-        os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
-        fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+        fpath = get_performance_plot_file_path(recording.timestamp)
         logger.info(f"{fpath=}")
         plt.savefig(fpath)
         if view_file:
@@ -810,6 +824,19 @@ def plot_performance(
                 "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
             )
         )
+
+
+def delete_performance_plot(recording_timestamp: float) -> None:
+    """Delete the performance plot for the given recording timestamp.
+
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+    """
+    fpath = get_performance_plot_file_path(recording_timestamp)
+    try:
+        os.remove(fpath)
+    except FileNotFoundError as exc:
+        logger.warning(f"{exc=}")
 
 
 def strip_element_state(action_event: ActionEvent) -> ActionEvent:
@@ -890,6 +917,9 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         # orjson.dumps returns bytes, so decode to string
         return orjson.dumps(value).decode("utf-8")
 
+    def ppjson(value: Any) -> str:
+        return orjson.dumps(value, option=orjson.OPT_INDENT_2)
+
     # Construct the full path to the template file
     template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
 
@@ -902,6 +932,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
 
     # Add custom filters
     env.filters["orjson"] = orjson_to_json
+    env.filters["ppjson"] = ppjson
     env.globals.update(zip=zip)
 
     # Load the template
@@ -1022,6 +1053,89 @@ def trace(logger: logger) -> Any:
         return wrapper_logging
 
     return decorator
+
+
+def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
+    """Return a dictionary only containing keys that match the given key suffixes.
+
+    Retains nested structures.
+
+    Args:
+        data (dict): The input dictionary to filter.
+        key_suffixes (list[str]): A list of key suffixes to match against the keys in
+            the dictionary.
+
+    Returns:
+        dict: A dictionary with keys filtered by specified suffixes.
+    """
+    suffixes = tuple(suffix.lower() for suffix in key_suffixes)
+
+    def recurse(obj: Any) -> None:
+        if isinstance(obj, dict):
+            # Process each child to see if it or its descendants match the suffixes
+            new_dict = {
+                k: recurse(v)
+                for k, v in obj.items()
+                if k.lower().endswith(suffixes) or isinstance(v, (dict, list))
+            }
+            return new_dict
+        elif isinstance(obj, list):
+            # Filter each item in the list based on suffix criteria in their elements
+            return [recurse(item) for item in obj]
+        else:
+            # Return the value directly if it is neither dict nor list
+            return obj
+
+    return recurse(data)
+
+
+def clean_dict(data: dict) -> dict:
+    """Clean a dictionary by removing None values and redundant information.
+
+    Args:
+        data (dict): The dictionary to clean.
+
+    Returns:
+        dict: A cleaned dictionary with no None values and redundant data removed.
+    """
+
+    def remove_none_values(d: dict) -> dict:
+        """Remove keys where the value is None."""
+        return {k: v for k, v in d.items() if v is not None}
+
+    def compare_dicts(d1: dict, d2: dict) -> bool:
+        """Check if all non-None items in d1 are in d2."""
+        for k, v in d1.items():
+            if v is not None and (k not in d2 or d2[k] != v):
+                return False
+        return True
+
+    def recurse(obj: Any) -> None:
+        if isinstance(obj, dict):
+            temp_dict = {k: recurse(v) for k, v in obj.items()}
+            # Remove redundant nested keys
+            keys_to_remove = set()
+            keys = list(temp_dict.keys())
+            for i in range(len(keys)):
+                for j in range(i + 1, len(keys)):
+                    if isinstance(temp_dict[keys[i]], dict) and isinstance(
+                        temp_dict[keys[j]], dict
+                    ):
+                        if compare_dicts(temp_dict[keys[i]], temp_dict[keys[j]]):
+                            keys_to_remove.add(keys[i])
+                        elif compare_dicts(temp_dict[keys[j]], temp_dict[keys[i]]):
+                            keys_to_remove.add(keys[j])
+            for key in keys_to_remove:
+                del temp_dict[key]
+
+            return remove_none_values(temp_dict)
+        elif isinstance(obj, list):
+            filtered_list = [recurse(item) for item in obj]
+            return [item for item in filtered_list if item]
+        else:
+            return obj
+
+    return recurse(data)
 
 
 if __name__ == "__main__":
