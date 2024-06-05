@@ -12,23 +12,6 @@ MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally simil
 MIN_SEGMENT_SIZE_SIM = 0.95 # threshold for considering segment sizes similar
 
 
-def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image:
-    """
-    Increase the contrast of an image.
-
-    Args:
-        image (Image.Image): The image to enhance.
-        contrast_factor (float): The factor by which to increase the contrast.
-            Values > 1 increase the contrast, while < 1 decrease it.
-
-    Returns:
-        Image.Image: The contrast-enhanced image.
-    """
-    enhancer = ImageEnhance.Contrast(image)
-    enhanced_image = enhancer.enhance(contrast_factor)
-    return enhanced_image
-
-
 # TODO: consolidate with strategies.visual.get_window_segmentation
 @cache.cache(enabled=not DEBUG)
 def get_similar_segment_groups(
@@ -42,7 +25,7 @@ def get_similar_segment_groups(
     image.show()
 
     if contrast_factor:
-        image = increase_contrast(image, contrast_factor)
+        image = utils.increase_contrast(image, contrast_factor)
         image.show()
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()

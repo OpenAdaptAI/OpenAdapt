@@ -13,14 +13,15 @@ from openadapt import cache, utils
 
 
 @cache.cache()
-def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndarray]:
-    """Process the image to find unique masks based on color channels.
+def get_masks_from_segmented_image(segmented_image: Image.Image, sort_by_area: bool = False) -> list[np.ndarray]:
+    """Process the image to find unique masks based on color channels and optionally sort them by area.
 
     Args:
         segmented_image: A PIL.Image object of the segmented image.
+        sort_by_area: A boolean flag to sort masks by their area in descending order.
 
     Returns:
-        A list of numpy.ndarrays, each representing a unique mask.
+        A list of numpy.ndarrays, each representing a unique mask. Sorted by area if specified.
     """
     logger.info("starting...")
     segmented_image_np = np.array(segmented_image)
@@ -40,6 +41,10 @@ def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndar
         # Create a mask for each unique color
         mask = np.all(segmented_image_np == color, axis=-1)
         masks.append(mask)
+
+    if sort_by_area:
+        # Calculate the area of each mask and sort the masks by area in descending order
+        masks.sort(key=np.sum, reverse=True)
 
     logger.info(f"{len(masks)=}")
     return masks
@@ -198,16 +203,14 @@ def remove_border_masks(
 def extract_masked_images(
     original_image: Image.Image,
     masks: list[np.ndarray],
-    sort_by_area: bool = False
 ) -> list[Image.Image]:
-    """Apply each mask to the original image, optionally sorting by the area of the mask.
+    """Apply each mask to the original image.
 
     Resize the image to fit the mask's bounding box, discarding pixels outside the mask.
 
     Args:
         original_image: A PIL.Image object of the original image.
         masks: A list of numpy.ndarrays, each representing a refined mask.
-        sort_by_area: Boolean flag to sort the output images by the area of their corresponding masks.
 
     Returns:
         A list of PIL.Image objects, each cropped to the mask's bounding box and
@@ -216,7 +219,6 @@ def extract_masked_images(
     logger.info(f"{len(masks)=}")
     original_image_np = np.array(original_image)
     masked_images = []
-    areas = []
 
     for mask in masks:
         # Find the bounding box of the mask
@@ -234,16 +236,6 @@ def extract_masked_images(
             np.uint8
         )
         masked_images.append(Image.fromarray(masked_image))
-        # Store the area of the mask for sorting
-        areas.append(np.sum(cropped_mask))
-
-    if sort_by_area:
-        # Sort masked_images by their corresponding mask areas
-        masked_images = [
-            img for _, img in sorted(
-                zip(areas, masked_images), key=lambda x: x[0], reverse=True
-            )
-        ]
 
     logger.info(f"{len(masked_images)=}")
     return masked_images

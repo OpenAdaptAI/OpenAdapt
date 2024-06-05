@@ -18,7 +18,7 @@ import time
 
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from openadapt.build_utils import redirect_stdout_stderr
 from openadapt.models import Recording
@@ -787,6 +787,23 @@ def normalize_positions(
             )
 
     return data
+
+
+def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image:
+    """
+    Increase the contrast of an image.
+
+    Args:
+        image (Image.Image): The image to enhance.
+        contrast_factor (float): The factor by which to increase the contrast.
+            Values > 1 increase the contrast, while < 1 decrease it.
+
+    Returns:
+        Image.Image: The contrast-enhanced image.
+    """
+    enhancer = ImageEnhance.Contrast(image)
+    enhanced_image = enhancer.enhance(contrast_factor)
+    return enhanced_image
 
 
 if __name__ == "__main__":
