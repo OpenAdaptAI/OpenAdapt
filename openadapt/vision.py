@@ -198,14 +198,16 @@ def remove_border_masks(
 def extract_masked_images(
     original_image: Image.Image,
     masks: list[np.ndarray],
+    sort_by_area: bool = False
 ) -> list[Image.Image]:
-    """Apply each mask to the original image.
+    """Apply each mask to the original image, optionally sorting by the area of the mask.
 
     Resize the image to fit the mask's bounding box, discarding pixels outside the mask.
 
     Args:
         original_image: A PIL.Image object of the original image.
         masks: A list of numpy.ndarrays, each representing a refined mask.
+        sort_by_area: Boolean flag to sort the output images by the area of their corresponding masks.
 
     Returns:
         A list of PIL.Image objects, each cropped to the mask's bounding box and
@@ -214,6 +216,7 @@ def extract_masked_images(
     logger.info(f"{len(masks)=}")
     original_image_np = np.array(original_image)
     masked_images = []
+    areas = []
 
     for mask in masks:
         # Find the bounding box of the mask
@@ -231,6 +234,16 @@ def extract_masked_images(
             np.uint8
         )
         masked_images.append(Image.fromarray(masked_image))
+        # Store the area of the mask for sorting
+        areas.append(np.sum(cropped_mask))
+
+    if sort_by_area:
+        # Sort masked_images by their corresponding mask areas
+        masked_images = [
+            img for _, img in sorted(
+                zip(areas, masked_images), key=lambda x: x[0], reverse=True
+            )
+        ]
 
     logger.info(f"{len(masked_images)=}")
     return masked_images
