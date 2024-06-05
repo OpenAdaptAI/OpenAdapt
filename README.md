@@ -205,7 +205,7 @@ Other replay strategies include:
 - *[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
 
 
-* Accepts an "instructions" parameter that is used to modify the recording, e.g.:
+\* Accepts an "instructions" parameter that is used to modify the recording, e.g.:
 
 ```
 python -m openadapt.replay VisualReplayStrategy --instructions "Multiply 9x5 instead of 6x8"
