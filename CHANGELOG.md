@@ -2,6 +2,17 @@
 
 
 
+## v0.30.0 (2024-06-05)
+
+### Feature
+
+* feat(dashboard): Add feature to remove action events (#688)
+
+* feat: Add feature to remove action events
+
+* fix: Fix database revision ([`f33b36d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f33b36d1199b153baa4689ff3c9a1e897f59d55f))
+
+
 ## v0.29.0 (2024-06-05)
 
 ### Documentation
