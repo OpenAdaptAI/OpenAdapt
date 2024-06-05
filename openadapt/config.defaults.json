@@ -12,8 +12,6 @@
     "CACHE_VERBOSITY": 0,
     "DB_ECHO": false,
     "ERROR_REPORTING_ENABLED": true,
-    "ERROR_REPORTING_DSN": "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798",
-    "ERROR_REPORTING_BRANCH": "main",
     "OPENAI_MODEL_NAME": "gpt-3.5-turbo",
     "RECORD_WINDOW_DATA": false,
     "RECORD_READ_ACTIVE_ELEMENT_STATE": false,
