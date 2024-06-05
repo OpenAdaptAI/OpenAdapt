@@ -11,13 +11,15 @@ import time
 
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
+import psutil
 import sqlalchemy as sa
 
 from openadapt import utils
-from openadapt.config import DATA_DIR_PATH, config
+from openadapt.config import DATABASE_LOCK_FILE_PATH, config
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
+    AudioInfo,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -266,8 +268,15 @@ def delete_recording(session: SaSession, recording: Recording) -> None:
         session (sa.orm.Session): The database session.
         recording (Recording): The recording object.
     """
+    recording_timestamp = recording.timestamp
     session.query(Recording).filter(Recording.id == recording.id).delete()
     session.commit()
+
+    utils.delete_performance_plot(recording_timestamp)
+
+    from openadapt.video import delete_video_file
+
+    delete_video_file(recording_timestamp)
 
 
 def get_all_recordings(session: SaSession) -> list[Recording]:
@@ -618,6 +627,56 @@ def update_video_start_time(
     )
 
 
+def insert_audio_info(
+    session: SaSession,
+    audio_data: bytes,
+    transcribed_text: str,
+    recording: Recording,
+    timestamp: float,
+    sample_rate: int,
+    word_list: list,
+) -> None:
+    """Create an AudioInfo entry in the database.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        audio_data (bytes): The audio data.
+        transcribed_text (str): The transcribed text.
+        recording (Recording): The recording object.
+        timestamp (float): The timestamp of the audio.
+        sample_rate (int): The sample rate of the audio.
+        word_list (list): A list of words with timestamps.
+    """
+    audio_info = AudioInfo(
+        flac_data=audio_data,
+        transcribed_text=transcribed_text,
+        recording_timestamp=recording.timestamp,
+        recording_id=recording.id,
+        timestamp=timestamp,
+        sample_rate=sample_rate,
+        words_with_timestamps=json.dumps(word_list),
+    )
+    session.add(audio_info)
+    session.commit()
+
+
+# TODO: change to use recording_id once scrubbing PR is merged
+def get_audio_info(
+    session: SaSession,
+    recording_timestamp: float,
+) -> list[AudioInfo]:
+    """Get the audio info for a given recording.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        recording_timestamp (float): The timestamp of the recording.
+
+    Returns:
+        list[AudioInfo]: A list of audio info for the recording.
+    """
+    return _get(session, AudioInfo, recording_timestamp)
+
+
 def post_process_events(session: SaSession, recording: Recording) -> None:
     """Post-process events.
 
@@ -764,11 +823,17 @@ def acquire_db_lock(timeout: int = 60) -> bool:
         if timeout > 0 and time.time() - start > timeout:
             logger.error("Failed to acquire database lock.")
             return False
-        if os.path.exists(DATA_DIR_PATH / "database.lock"):
-            logger.info("Database is locked. Waiting...")
-            time.sleep(1)
+        if os.path.exists(DATABASE_LOCK_FILE_PATH):
+            with open(DATABASE_LOCK_FILE_PATH, "r") as lock_file:
+                lock_info = json.load(lock_file)
+            # check if the process is still running
+            if psutil.pid_exists(lock_info["pid"]):
+                logger.info("Database is locked. Waiting...")
+                time.sleep(1)
+            else:
+                release_db_lock(raise_exception=False)
         else:
-            with open(DATA_DIR_PATH / "database.lock", "w") as lock_file:
+            with open(DATABASE_LOCK_FILE_PATH, "w") as lock_file:
                 lock_file.write(json.dumps({"pid": os.getpid(), "time": time.time()}))
                 logger.info("Database lock acquired.")
             break
@@ -778,7 +843,7 @@ def acquire_db_lock(timeout: int = 60) -> bool:
 def release_db_lock(raise_exception: bool = True) -> None:
     """Release the database lock."""
     try:
-        os.remove(DATA_DIR_PATH / "database.lock")
+        os.remove(DATABASE_LOCK_FILE_PATH)
     except Exception as e:
         if raise_exception:
             logger.error("Failed to release database lock.")

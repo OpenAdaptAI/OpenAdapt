@@ -1,5 +1,6 @@
 """Module to test share.py."""
 
+from collections import namedtuple
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
@@ -26,12 +27,20 @@ def test_export_recording_to_folder() -> None:
     with open(recording_db_path, "w") as f:
         f.write("Recording data")
 
-    # Mock the db.export_recording() function to return the temporary file path
-    with patch("openadapt.share.db.export_recording", return_value=recording_db_path):
-        zip_file_path = share.export_recording_to_folder(recording_id)
+    # Mock the crud.get_recording_by_id() function to return a recording object
+    Recording = namedtuple("Recording", ["timestamp"])
+    with patch(
+        "openadapt.db.crud.get_recording_by_id",
+        return_value=Recording(timestamp=193994394),
+    ):
+        # Mock the db.export_recording() function to return the temporary file path
+        with patch(
+            "openadapt.share.db.export_recording", return_value=recording_db_path
+        ):
+            zip_file_path = share.export_recording_to_folder(recording_id)
 
-        assert zip_file_path is not None
-        assert os.path.exists(zip_file_path)
+            assert zip_file_path is not None
+            assert os.path.exists(zip_file_path)
 
     # Assert that the file is removed after calling export_recording_to_folder
     assert not os.path.exists(recording_db_path), "Temporary file was not removed."
