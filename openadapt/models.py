@@ -142,6 +142,7 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+    disabled = sa.Column(sa.Boolean, default=False)
 
     scrubbed_text = sa.Column(sa.String)
     scrubbed_canonical_text = sa.Column(sa.String)
