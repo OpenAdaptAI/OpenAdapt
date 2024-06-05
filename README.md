@@ -205,7 +205,7 @@ Other replay strategies include:
 - (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
 
 
-Strategies prefixed with `(*)` accept an "instructions" parameter that is used to modify the recording, e.g.:
+The (*) prefix indicates strategies which accept an "instructions" parameter that is used to modify the recording, e.g.:
 
 ```
 python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
