@@ -505,12 +505,20 @@ class WindowEvent(db.Base):
         )
         key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
         if sys.platform == "win32":
-            logger.warning(f"key_suffixes have not yet been defined for windows")
+            logger.warning(
+                "key_suffixes have not yet been defined on Windows."
+                "You can help by uncommenting the lines below and pasting window_dict "
+                "into a new GitHub Issue."
+            )
+            # from pprint import pformat
+            # logger.info(f"window_dict=\n{pformat(window_dict)}")
         window_state = window_dict["state"]
-        window_state["data"] = utils.clean_dict(utils.filter_keys(
-            window_state["data"],
-            key_suffixes,
-        ))
+        window_state["data"] = utils.clean_dict(
+            utils.filter_keys(
+                window_state["data"],
+                key_suffixes,
+            )
+        )
         window_dict["state"].pop("meta")
         return window_dict
 

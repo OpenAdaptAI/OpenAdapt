@@ -917,7 +917,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         # orjson.dumps returns bytes, so decode to string
         return orjson.dumps(value).decode("utf-8")
 
-    def ppjson(value):
+    def ppjson(value: Any) -> str:
         return orjson.dumps(value, option=orjson.OPT_INDENT_2)
 
     # Construct the full path to the template file
@@ -1070,7 +1070,7 @@ def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
     """
     suffixes = tuple(suffix.lower() for suffix in key_suffixes)
 
-    def recurse(obj):
+    def recurse(obj: Any) -> None:
         if isinstance(obj, dict):
             # Process each child to see if it or its descendants match the suffixes
             new_dict = {
@@ -1090,15 +1090,15 @@ def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
 
 
 def clean_dict(data: dict) -> dict:
-    """
-    Clean a dictionary by removing None values and redundant information.
+    """Clean a dictionary by removing None values and redundant information.
 
-        Args:
-            data (dict): The dictionary to clean.
+    Args:
+        data (dict): The dictionary to clean.
 
-        Returns:
-            dict: A cleaned dictionary with no None values and redundant data removed.
+    Returns:
+        dict: A cleaned dictionary with no None values and redundant data removed.
     """
+
     def remove_none_values(d: dict) -> dict:
         """Remove keys where the value is None."""
         return {k: v for k, v in d.items() if v is not None}
@@ -1110,7 +1110,7 @@ def clean_dict(data: dict) -> dict:
                 return False
         return True
 
-    def recurse(obj):
+    def recurse(obj: Any) -> None:
         if isinstance(obj, dict):
             temp_dict = {k: recurse(v) for k, v in obj.items()}
             # Remove redundant nested keys
@@ -1118,9 +1118,8 @@ def clean_dict(data: dict) -> dict:
             keys = list(temp_dict.keys())
             for i in range(len(keys)):
                 for j in range(i + 1, len(keys)):
-                    if (
-                        isinstance(temp_dict[keys[i]], dict) and
-                        isinstance(temp_dict[keys[j]], dict)
+                    if isinstance(temp_dict[keys[i]], dict) and isinstance(
+                        temp_dict[keys[j]], dict
                     ):
                         if compare_dicts(temp_dict[keys[i]], temp_dict[keys[j]]):
                             keys_to_remove.add(keys[i])
