@@ -10,7 +10,7 @@ from openadapt import adapters, cache, config, plotting, utils, vision, visualiz
 
 
 CONTRAST_FACTOR = 10000
-DEBUG = True
+DEBUG = False
 
 
 def main():
@@ -40,7 +40,7 @@ def main():
     mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
     label_mode = '1'
     alpha = 0.1
-    anno_mode = ['Mask']
+    anno_mode = ['Mask', 'Mark']
     for i, mask in enumerate(masks):
         label = i + 1
         color_mask = np.random.random((1, 3)).tolist()[0]
