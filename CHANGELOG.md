@@ -2,6 +2,35 @@
 
 
 
+## v0.28.0 (2024-06-05)
+
+### Feature
+
+* feat: Delete/transfer video (#696)
+
+* feat: Delete recording files when deleting recording
+
+* fix: Fix share recording feature
+
+* feat: Share related files when transferring recording
+
+* fix: Fix tests and lint code
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`889d48c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/889d48c4cf3362ee87e41b432e0e844ba85d4023))
+
+* feat(alerts): Alert user when any exception occurs, via sentry hooks (#685)
+
+* feat: Alert user when any exception occurs, via sentry hooks
+
+* chore: Turn ERROR_REPORTING_BRANCH to a static config variable
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`6492120`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6492120069ed5b24fadd6c8ae4441ba2c34ccc5e))
+
+
 ## v0.27.0 (2024-06-04)
 
 ### Feature
