@@ -134,7 +134,7 @@ class Config(BaseSettings):
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
-    RECORD_WINDOW_DATA: bool = False
+    RECORD_WINDOW_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     # if false, only write video events corresponding to screenshots

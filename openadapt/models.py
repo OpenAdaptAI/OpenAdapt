@@ -4,6 +4,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from typing import Any, Type
 import io
+import sys
 
 from loguru import logger
 from oa_pynput import keyboard
@@ -481,8 +482,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self) -> dict[str, Any]:
+    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
+
+        Args:
+            include_data (bool): Whether to retain the "data" property of the .state
+                attribute (contains operating system accessibility API data).
 
         Returns:
             dictionary containing relevant properties from the WindowEvent.
@@ -497,7 +502,14 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        window_dict["state"].pop("data")
+        key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
+        if sys.platform == "win32":
+            logger.warning(f"key_suffixes have not yet been defined for windows")
+        window_state = window_dict["state"]
+        window_state["data"] = utils.clean_dict(utils.filter_keys(
+            window_state["data"],
+            key_suffixes,
+        ))
         window_dict["state"].pop("meta")
         return window_dict
 

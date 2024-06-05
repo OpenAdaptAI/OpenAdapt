@@ -22,6 +22,7 @@ from openadapt import adapters, models, strategies, utils
 
 
 PROCESS_EVENTS = True
+INCLUDE_WINDOW_DATA = False
 
 
 class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
@@ -107,6 +108,7 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
 def describe_recording(
     recording: models.Recording,
     process_events: bool,
+    include_window_data: bool = INCLUDE_WINDOW_DATA,
 ) -> str:
     """Generate a natural language description of the actions in the recording.
 
@@ -114,7 +116,9 @@ def describe_recording(
 
     Args:
         recording (models.Recording): the recording to describe.
-        process_events (bool): Flag indicating whether to process the events.
+        process_events (bool): flag indicating whether to process the events.
+        include_window_data (bool): flag indicating whether to incldue accessibility
+            API data in each window event.
 
     Returns:
         (str) natural language description of the what happened in the recording.
@@ -124,13 +128,24 @@ def describe_recording(
     else:
         action_events = recording.action_events
     action_dicts = [action.to_prompt_dict() for action in action_events]
+    window_dicts = [
+        action.window_event.to_prompt_dict(include_window_data)
+        for action in action_events
+    ]
+    action_window_dicts = [
+        {
+            "action": action_dict,
+            "window": window_dict,
+        }
+        for action_dict, window_dict in zip(action_dicts, window_dicts)
+    ]
     images = [action.screenshot.image for action in action_events]
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )
     prompt = utils.render_template_from_file(
         "prompts/describe_recording.j2",
-        actions=action_dicts,
+        action_windows=action_window_dicts,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     recording_description = prompt_adapter.prompt(
