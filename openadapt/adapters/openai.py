@@ -3,18 +3,23 @@
 https://platform.openai.com/docs/guides/vision
 """
 
+from copy import deepcopy
 from pprint import pformat
+from typing import Any
 
 from loguru import logger
+from PIL import Image
 import requests
 
-from openadapt import cache
+from openadapt import cache, utils
 from openadapt.config import config
 
 MODEL_NAME = [
     "gpt-4-vision-preview",
     "gpt-4-turbo-2024-04-09",
+    "gpt-4o",
 ][-1]
+# TODO XXX: per model
 MAX_TOKENS = 4096
 # TODO XXX undocumented
 MAX_IMAGES = None
@@ -23,7 +28,7 @@ MAX_IMAGES = None
 def create_payload(
     prompt: str,
     system_prompt: str | None = None,
-    base64_images: list[str] | None = None,
+    images: list[Image.Image] | None = None,
     model: str = MODEL_NAME,
     detail: str = "high",  # "low" or "high"
     max_tokens: int | None = None,
@@ -33,7 +38,7 @@ def create_payload(
     Args:
         prompt: the prompt
         system_prompt: the system prompt
-        base64_images: list of base64 encoded images
+        images: list of images
         model: name of OpenAI model
         detail: detail level of images, "low" or "high"
         max_tokens: maximum number of tokens
@@ -59,8 +64,9 @@ def create_payload(
         },
     ]
 
-    base64_images = base64_images or []
-    for base64_image in base64_images:
+    images = images or []
+    for image in images:
+        base64_image = utils.image2utf8(image)
         messages[0]["content"].append(
             {
                 "type": "image_url",
@@ -94,18 +100,22 @@ def create_payload(
 
 
 @cache.cache()
-def get_response(payload: dict) -> requests.Response:
+def get_response(
+    payload: dict,
+    api_key: str = config.OPENAI_API_KEY,
+) -> requests.Response:
     """Sends a request to the OpenAI API and returns the response.
 
     Args:
         payload: dictionary returned by create_payload
+        api_key (str): api key
 
     Returns:
         response from OpenAI API
     """
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
     }
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -115,14 +125,15 @@ def get_response(payload: dict) -> requests.Response:
     return response
 
 
-def get_completion(payload: dict) -> str:
+def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
     Args:
-        pyalod: dictionary returned by create_payload
+        payload (dict): dictionary returned by create_payload
+        dev_mode (bool): whether to launch a debugger on error
 
     Returns:
-        string containing the first message from the response
+        (str) first message from the response
     """
     response = get_response(payload)
     result = response.json()
@@ -133,11 +144,13 @@ def get_completion(payload: dict) -> str:
         # TODO: fail after maximum number of attempts
         if "retry your request" in message:
             return get_completion(payload)
-        else:
+        elif dev_mode:
             import ipdb
 
             ipdb.set_trace()
             # TODO: handle more errors
+        else:
+            raise ValueError(result["error"]["message"])
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]
@@ -145,10 +158,23 @@ def get_completion(payload: dict) -> str:
     return content
 
 
+def log_payload(payload: dict[Any, Any]) -> None:
+    """Logs a payload after removing base-64 encoded values recursively."""
+    # TODO: detect base64 encoded strings dynamically
+    # messages["content"][{"image_url": ...
+    # payload["messages"][1]["content"][9]["image_url"]
+    payload_copy = deepcopy(payload)
+    for message in payload_copy["messages"]:
+        for content in message["content"]:
+            if "image_url" in content:
+                content["image_url"]["url"] = "[REDACTED]"
+    logger.info(f"payload=\n{pformat(payload_copy)}")
+
+
 def prompt(
     prompt: str,
     system_prompt: str | None = None,
-    base64_images: list[str] | None = None,
+    images: list[Image.Image] | None = None,
     max_tokens: int | None = None,
     detail: str = "high",
 ) -> str:
@@ -157,7 +183,7 @@ def prompt(
     Args:
         prompt: the prompt
         system_prompt: the system prompt
-        base64_images: list of base64 encoded images
+        images: list of images
         model: name of OpenAI model
         detail: detail level of images, "low" or "high"
         max_tokens: maximum number of tokens
@@ -168,11 +194,11 @@ def prompt(
     payload = create_payload(
         prompt,
         system_prompt,
-        base64_images,
+        images,
         max_tokens=max_tokens,
         detail=detail,
     )
-    logger.info(f"payload=\n{pformat(payload)}")
+    log_payload(payload)
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     return result

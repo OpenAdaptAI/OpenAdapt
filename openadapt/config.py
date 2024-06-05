@@ -25,6 +25,7 @@ CONFIG_DEFAULTS_FILE_PATH = (
 ).absolute()
 
 ROOT_DIR_PATH = get_root_dir_path()
+PARENT_DIR_PATH = ROOT_DIR_PATH.parent
 DATA_DIR_PATH = (ROOT_DIR_PATH / "data").absolute()
 CONFIG_FILE_PATH = (DATA_DIR_PATH / "config.json").absolute()
 RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
@@ -136,7 +137,7 @@ class Config(BaseSettings):
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
-    RECORD_WINDOW_DATA: bool = False
+    RECORD_WINDOW_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
@@ -407,7 +408,7 @@ def print_config() -> None:
             if is_running_from_executable():
                 is_reporting_branch = True
             else:
-                active_branch_name = git.Repo(ROOT_DIR_PATH.parent).active_branch.name
+                active_branch_name = git.Repo(PARENT_DIR_PATH).active_branch.name
                 logger.info(f"{active_branch_name=}")
                 is_reporting_branch = (
                     active_branch_name == config.ERROR_REPORTING_BRANCH
