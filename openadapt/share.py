@@ -19,6 +19,8 @@ with redirect_stdout_stderr():
 
 from openadapt import db, utils
 from openadapt.config import RECORDING_DIR_PATH
+from openadapt.db import crud
+from openadapt.video import get_video_file_path
 
 LOG_LEVEL = "INFO"
 utils.configure_logging(logger, LOG_LEVEL)
@@ -33,11 +35,12 @@ def export_recording_to_folder(recording_id: int) -> None:
     Returns:
         str: The path of the created zip file.
     """
+    # Create the directory if it doesn't exist
+    os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
+
     recording_db_path = db.export_recording(recording_id)
 
     assert recording_db_path, recording_db_path
-    # Create the directory if it doesn't exist
-    os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
 
     # Get the timestamp from the recording_db_path
     timestamp = extract_timestamp_from_filename(os.path.basename(recording_db_path))
@@ -49,9 +52,26 @@ def export_recording_to_folder(recording_id: int) -> None:
     zip_filename = f"recording_{recording_id}_{timestamp}.zip"
     zip_path = os.path.join(RECORDING_DIR_PATH, zip_filename)
 
-    # Create an in-memory zip file and add the db file
-    with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9) as zip_file:
-        zip_file.write(recording_db_path, arcname=db_filename)
+    zipfile = ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=9)
+    zipfile.write(recording_db_path, arcname=db_filename)
+
+    with crud.get_new_session(read_only=True) as session:
+        recording = crud.get_recording_by_id(session, recording_id)
+        recording_timestamp = recording.timestamp
+
+    performance_plot_path = utils.get_performance_plot_file_path(recording_timestamp)
+    if os.path.exists(performance_plot_path):
+        zipfile.write(
+            performance_plot_path, arcname=os.path.basename(performance_plot_path)
+        )
+        logger.info(f"added {performance_plot_path=}")
+
+    video_file_path = get_video_file_path(recording_timestamp)
+    if os.path.exists(video_file_path):
+        zipfile.write(video_file_path, arcname=os.path.basename(video_file_path))
+        logger.info(f"added {video_file_path=}")
+
+    zipfile.close()
 
     logger.info(f"created {zip_path=}")
 

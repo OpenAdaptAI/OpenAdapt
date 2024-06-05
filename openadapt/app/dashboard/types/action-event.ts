@@ -26,4 +26,7 @@ export type ActionEvent = {
     mask: string | null;
     dimensions?: { width: number, height: number };
     children?: ActionEvent[];
+    words?: string[];
+    isComputed?: boolean;
+    isOriginal?: boolean;
 }

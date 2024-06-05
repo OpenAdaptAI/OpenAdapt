@@ -2,6 +2,111 @@
 
 
 
+## v0.29.0 (2024-06-05)
+
+### Documentation
+
+* docs(README): add dashboard visualization; improve description of VanillaReplayStrategy ([`6df4bb9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6df4bb9e5e69b504fbb745ee1019dbe3d0b47282))
+
+### Feature
+
+* feat(vanilla): Implement vanilla baseline (#702)
+
+* add vanilla.py; update README.md
+
+* update module docstring
+
+* add TODO; remove unused code
+
+* tabs -&gt; spaces
+
+* modify prompt adapter API to accept images instead of base64 images
+
+* fix typo
+
+* add ActionEvent/WindowEvent.to_prompt_dict
+
+* add prompts/describe_recording.j2; prompts/generate_action_event.j2
+
+* fixes; log action history
+
+* fixes; black; flake8
+
+* add tests/openadapt/adapters
+
+* add missing test assets
+
+* DATA_DIR_PATH -&gt; PARENT_DIR_PATH
+
+* get_completion dev_mode
+
+* anthropic dev_mode
+
+* fix tests
+
+* black
+
+* flake8
+
+* ignore .cache in flake8
+
+* vanilla.INCLUDE_WINDOW_DATA; utils.clean_data/filter_keys
+
+* flake8 ([`81074c4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81074c425f27a075ef3d082c9555d2e1ada3df6a))
+
+
+## v0.28.0 (2024-06-05)
+
+### Feature
+
+* feat: Delete/transfer video (#696)
+
+* feat: Delete recording files when deleting recording
+
+* fix: Fix share recording feature
+
+* feat: Share related files when transferring recording
+
+* fix: Fix tests and lint code
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`889d48c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/889d48c4cf3362ee87e41b432e0e844ba85d4023))
+
+* feat(alerts): Alert user when any exception occurs, via sentry hooks (#685)
+
+* feat: Alert user when any exception occurs, via sentry hooks
+
+* chore: Turn ERROR_REPORTING_BRANCH to a static config variable
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`6492120`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6492120069ed5b24fadd6c8ae4441ba2c34ccc5e))
+
+
+## v0.27.0 (2024-06-04)
+
+### Feature
+
+* feat: Audio narration (#673)
+
+* feat: Add audio narration feature while recording
+
+* feat: Remove implicit scrubbing in display_event function and recursively convert reqd properties to str
+
+* feat: Add transcribed text to dashboard visualisation
+
+* feat: Use recording id as foreign key, and add interrupt signal handler in audio recording process
+
+* feat: Check if the lock is stale when acquiring locks
+
+* refactor: Convert database lock path to a constant in config file
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`1e11906`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e1190650ac1f42a725c360dd3f52214adf8847c))
+
+
 ## v0.26.2 (2024-06-03)
 
 ### Documentation

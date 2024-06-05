@@ -63,4 +63,4 @@ jobs:
         run: poetry run black --preview --check . --exclude '/(alembic|\.venv)/'
 
       - name: Run Flake8
-        run: poetry run flake8 --exclude=alembic,.venv
+        run: poetry run flake8 --exclude=alembic,.venv,*/.cache

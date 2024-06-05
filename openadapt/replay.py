@@ -17,6 +17,7 @@ with redirect_stdout_stderr():
     import fire
 
 from openadapt import capture, utils
+from openadapt.config import CAPTURE_DIR_PATH
 from openadapt.db import crud
 from openadapt.models import Recording
 
@@ -86,9 +87,8 @@ def replay(
         # TODO: handle this more robustly
         sleep(1)
         file_name = f"log-{strategy_name}-{recording.timestamp}.log"
-        # TODO: make configurable
-        dir_name = "captures"
-        file_path = os.path.join(dir_name, file_name)
+        file_path = os.path.join(CAPTURE_DIR_PATH, file_name)
+        os.makedirs(CAPTURE_DIR_PATH, exist_ok=True)
         logger.info(f"{file_path=}")
         handler = logger.add(open(file_path, "w"))
     try:
