@@ -158,10 +158,30 @@ pointing the cursor and left or right clicking, as described in this
 
 ### Visualize
 
-Visualize the latest recording you created by running the following command:
+Quickly visualize the latest recording you created by running the following command:
 
 ```
 python -m openadapt.visualize
+```
+
+This will generate an HTML file and open a tab in your browser that looks something like this:
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
+
+For a more powerful dashboard, run:
+
+```
+python -m openadapt.app.dashboard.run
+```
+
+This will start a web server locally, and then open a tab in your browser that looks something like this:
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/48d27459-4be8-4b96-beb0-1973953b8a09)
+
+For a desktop app-based visualization, run:
+
+```
+python -m openadapt.app.visualize
 ```
 
 This will open a scrollable window that looks something like this:
@@ -169,16 +189,6 @@ This will open a scrollable window that looks something like this:
 <img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
 
 <img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
-
-For a browser-based visualization, run:
-
-```
-python -m openadapt.deprecated.visualize
-```
-
-This will open up a tab in your browser that looks something like this:
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/5d7253b7-ae12-477c-94a3-b388e4f37587)
 
 ### Playback
 
@@ -191,7 +201,7 @@ python -m openadapt.replay NaiveReplayStrategy
 Other replay strategies include:
 
 - [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
-- [`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): If AGI or GPT6 happens, this script should be able to suddenly do the work.  --LunjunZhang
+- [`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
 - [`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window. Accepts an "instructions" parameter that is used to modify the recording, e.g.:
 
 ```
