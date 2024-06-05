@@ -28,8 +28,6 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
 
         Args:
             recording (models.Recording): The recording object.
-            replay_instructions (str): Natural language instructions
-                for how recording should be replayed.
             display_events (bool): Flag indicating whether to display the events.
               Defaults to False.
             replay_events (bool): Flag indicating whether to replay the events.

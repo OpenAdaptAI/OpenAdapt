@@ -3,7 +3,7 @@
 Module: db.py
 """
 
-from typing import Any
+from typing import Any, Optional
 import os
 import time
 
@@ -78,6 +78,20 @@ Base = get_base(engine)
 Session = sessionmaker(bind=engine)
 
 
+def get_read_only_session_maker(_engine: Optional["engine"] = None) -> sessionmaker:
+    """Create a read-only session maker.
+
+    Args:
+        engine (sa.engine): The database engine to bind to the session maker.
+
+    Returns:
+        sessionmaker: The read-only session maker object.
+    """
+    if _engine is None:
+        _engine = engine
+    return sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+
+
 def copy_recording_data(
     source_engine: sa.engine,
     target_engine: sa.engine,
@@ -145,18 +159,15 @@ def copy_recording_data(
             # Insert the recording into the target recording table
             tgt_conn.execute(tgt_recording_table.insert().values(src_recording))
 
-            # Get the timestamp from the source recording
-            src_timestamp = src_recording["timestamp"]
-
-            # Copy data from tables with the same timestamp
+            # Copy data from tables with the same recording_id
             for table in src_metadata.sorted_tables:
                 if (
                     table.name not in exclude_tables
                     and "recording_timestamp" in table.columns.keys()
                 ):
-                    # Select data from source table with the same timestamp
+                    # Select data from source table with the same recording_id
                     src_select = table.select().where(
-                        table.c.recording_timestamp == src_timestamp
+                        table.c.recording_id == recording_id
                     )
                     src_rows = src_conn.execute(src_select).fetchall()
 

@@ -3,7 +3,9 @@
 https://platform.openai.com/docs/guides/vision
 """
 
+from copy import deepcopy
 from pprint import pformat
+from typing import Any
 
 from loguru import logger
 from PIL import Image
@@ -98,18 +100,22 @@ def create_payload(
 
 
 @cache.cache()
-def get_response(payload: dict) -> requests.Response:
+def get_response(
+    payload: dict,
+    api_key: str = config.OPENAI_API_KEY,
+) -> requests.Response:
     """Sends a request to the OpenAI API and returns the response.
 
     Args:
         payload: dictionary returned by create_payload
+        api_key (str): api key
 
     Returns:
         response from OpenAI API
     """
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
     }
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -119,14 +125,15 @@ def get_response(payload: dict) -> requests.Response:
     return response
 
 
-def get_completion(payload: dict) -> str:
+def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
     Args:
-        pyalod: dictionary returned by create_payload
+        payload (dict): dictionary returned by create_payload
+        dev_mode (bool): whether to launch a debugger on error
 
     Returns:
-        string containing the first message from the response
+        (str) first message from the response
     """
     response = get_response(payload)
     response.raise_for_status()
@@ -138,16 +145,31 @@ def get_completion(payload: dict) -> str:
         # TODO: fail after maximum number of attempts
         if "retry your request" in message:
             return get_completion(payload)
-        else:
+        elif dev_mode:
             import ipdb
 
             ipdb.set_trace()
             # TODO: handle more errors
+        else:
+            raise ValueError(result["error"]["message"])
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]
     content = message["content"]
     return content
+
+
+def log_payload(payload: dict[Any, Any]) -> None:
+    """Logs a payload after removing base-64 encoded values recursively."""
+    # TODO: detect base64 encoded strings dynamically
+    # messages["content"][{"image_url": ...
+    # payload["messages"][1]["content"][9]["image_url"]
+    payload_copy = deepcopy(payload)
+    for message in payload_copy["messages"]:
+        for content in message["content"]:
+            if "image_url" in content:
+                content["image_url"]["url"] = "[REDACTED]"
+    logger.info(f"payload=\n{pformat(payload_copy)}")
 
 
 def prompt(
@@ -180,7 +202,7 @@ def prompt(
         max_tokens=max_tokens,
         detail=detail,
     )
-    logger.debug(f"payload=\n{pformat(payload)}")
+    log_payload(payload)
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     return result

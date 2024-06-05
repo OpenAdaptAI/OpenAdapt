@@ -7,7 +7,7 @@ Usage:
 """
 
 from collections import namedtuple
-from functools import partial, wraps
+from functools import partial
 from typing import Any, Callable
 import io
 import multiprocessing
@@ -25,12 +25,17 @@ from pympler import tracker
 import av
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.models import Recording
 
 with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
+import numpy as np
 import psutil
+import sounddevice
+import soundfile
+import whisper
 
 from openadapt import plotting, utils, video, window
 from openadapt.config import config
@@ -90,68 +95,11 @@ def log_memory_usage(
     logger.info(f"trace_str=\n{trace_str}")
 
 
-def args_to_str(*args: tuple) -> str:
-    """Convert positional arguments to a string representation.
-
-    Args:
-        *args: Positional arguments.
-
-    Returns:
-        str: Comma-separated string representation of positional arguments.
-    """
-    return ", ".join(map(str, args))
-
-
-def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
-    """Convert keyword arguments to a string representation.
-
-    Args:
-        **kwargs: Keyword arguments.
-
-    Returns:
-        str: Comma-separated string representation of keyword arguments
-          in form "key=value".
-    """
-    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
-
-
-def trace(logger: logger) -> Any:
-    """Decorator that logs the function entry and exit using the provided logger.
-
-    Args:
-        logger: The logger object to use for logging.
-
-    Returns:
-        A decorator that can be used to wrap functions and log their entry and exit.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
-            func_name = func.__qualname__
-            func_args = args_to_str(*args)
-            func_kwargs = kwargs_to_str(**kwargs)
-
-            if func_kwargs != "":
-                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
-            else:
-                logger.info(f" -> Enter: {func_name}({func_args})")
-
-            result = func(*args, **kwargs)
-
-            logger.info(f" <- Leave: {func_name}({result})")
-            return result
-
-        return wrapper_logging
-
-    return decorator
-
-
 def process_event(
     event: ActionEvent,
     write_q: sq.SynchronizedQueue,
     write_fn: Callable,
-    recording_timestamp: int,
+    recording: Recording,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Process an event and take appropriate action based on its type.
@@ -160,7 +108,7 @@ def process_event(
         event: The event to process.
         write_q: The queue for writing the event.
         write_fn: The function for writing the event.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         perf_q: The queue for collecting performance statistics.
 
     Returns:
@@ -169,10 +117,10 @@ def process_event(
     if PROC_WRITE_BY_EVENT_TYPE[event.type]:
         write_q.put(event)
     else:
-        write_fn(recording_timestamp, event, perf_q)
+        write_fn(recording, event, perf_q)
 
 
-@trace(logger)
+@utils.trace(logger)
 def process_events(
     event_q: queue.Queue,
     screen_write_q: sq.SynchronizedQueue,
@@ -180,7 +128,7 @@ def process_events(
     window_write_q: sq.SynchronizedQueue,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: float,
+    recording: Recording,
     terminate_processing: multiprocessing.Event,
     started_counter: multiprocessing.Value,
     num_screen_events: multiprocessing.Value,
@@ -197,7 +145,7 @@ def process_events(
         window_write_q: A queue for writing window events.
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
         started_counter: Value to increment once started.
         num_screen_events: A counter for the number of screen events.
@@ -205,7 +153,7 @@ def process_events(
         num_window_events: A counter for the number of window events.
         num_video_events: A counter for the number of video events.
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info("Starting")
 
@@ -253,7 +201,7 @@ def process_events(
                 event,
                 action_write_q,
                 write_action_event,
-                recording_timestamp,
+                recording,
                 perf_q,
             )
             num_action_events.value += 1
@@ -262,7 +210,7 @@ def process_events(
                     prev_screen_event,
                     screen_write_q,
                     write_screen_event,
-                    recording_timestamp,
+                    recording,
                     perf_q,
                 )
                 num_screen_events.value += 1
@@ -275,7 +223,7 @@ def process_events(
                     prev_window_event,
                     window_write_q,
                     write_window_event,
-                    recording_timestamp,
+                    recording,
                     perf_q,
                 )
                 num_window_events.value += 1
@@ -288,31 +236,35 @@ def process_events(
 
 
 def write_action_event(
-    recording_timestamp: float,
+    db: crud.SaSession,
+    recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Write an action event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
+        db: The database session.
+        recording: The recording object.
         event: An action event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "action", event
-    crud.insert_action_event(recording_timestamp, event.timestamp, event.data)
+    crud.insert_action_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_screen_event(
-    recording_timestamp: float,
+    db: crud.SaSession,
+    recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Write a screen event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
+        db: The database session.
+        recording: The recording object.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
     """
@@ -325,35 +277,37 @@ def write_screen_event(
         event_data = {"png_data": png_data}
     else:
         event_data = {}
-    crud.insert_screenshot(recording_timestamp, event.timestamp, event_data)
+    crud.insert_screenshot(db, recording, event.timestamp, event_data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_window_event(
-    recording_timestamp: float,
+    db: crud.SaSession,
+    recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Write a window event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
+        db: The database session.
+        recording: The recording object.
         event: A window event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "window", event
-    crud.insert_window_event(recording_timestamp, event.timestamp, event.data)
+    crud.insert_window_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
-@trace(logger)
+@utils.trace(logger)
 def write_events(
     event_type: str,
     write_fn: Callable,
     write_q: sq.SynchronizedQueue,
     num_events: multiprocessing.Value,
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: float,
+    recording: Recording,
     terminate_processing: multiprocessing.Event,
     started_counter: multiprocessing.Value,
     pre_callback: Callable[[float], dict] | None = None,
@@ -368,7 +322,7 @@ def write_events(
         write_q: A queue with events to be written.
         num_events: A counter for the number of events.
         perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
         started_counter: Value to increment once started.
         pre_callback: Optional function to call before main loop. Takes recording
@@ -377,13 +331,14 @@ def write_events(
             only argument, returns None.
         event_type_modifier: Optional string to differentiate identical event_types
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info(f"{event_type=} starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    session = crud.get_new_session(read_and_write=True)
 
     if pre_callback:
-        state = pre_callback(recording_timestamp)
+        state = pre_callback(session, recording)
     else:
         state = None
 
@@ -415,7 +370,7 @@ def write_events(
         except queue.Empty:
             continue
         assert event.type == event_type, (event_type, event)
-        state = write_fn(recording_timestamp, event, perf_q, **(state or {}))
+        state = write_fn(session, recording, event, perf_q, **(state or {}))
         num_processed += 1
         with num_events.get_lock():
             if progress is not None:
@@ -435,22 +390,22 @@ def write_events(
     logger.info(f"{event_type=} done")
 
 
-def video_pre_callback(recording_timestamp: float) -> dict[str, Any]:
+def video_pre_callback(db: crud.SaSession, recording: Recording) -> dict[str, Any]:
     """Function to call before main loop.
 
     Args:
-        recording_timestmap(float): The Recording timestamp.
+        recording: The recording object.
 
     Returns:
         dict[str, Any]: The updated state.
     """
-    video_file_path = video.get_video_file_path(recording_timestamp)
+    video_file_path = video.get_video_file_path(recording.timestamp)
     # TODO XXX replace with utils.get_monitor_dims() once fixed
     width, height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = (
         video.initialize_video_writer(video_file_path, width, height)
     )
-    crud.update_video_start_time(recording_timestamp, video_start_timestamp)
+    crud.update_video_start_time(db, recording, video_start_timestamp)
     return {
         "video_container": video_container,
         "video_stream": video_stream,
@@ -472,6 +427,7 @@ def video_post_callback(state: dict) -> None:
 
 
 def write_video_event(
+    db: crud.SaSession,
     recording_timestamp: float,
     event: Event,
     perf_q: sq.SynchronizedQueue,
@@ -484,6 +440,7 @@ def write_video_event(
     """Write a screen event to the video file and update the performance queue.
 
     Args:
+        db: The database session.
         recording_timestamp: The timestamp of the recording.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
@@ -669,7 +626,7 @@ def handle_key(
 def read_screen_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
-    recording_timestamp: float,
+    recording: Recording,
     started_counter: multiprocessing.Value,
     # TODO: throttle
     # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
@@ -681,10 +638,10 @@ def read_screen_events(
     Args:
         event_q: A queue for adding screen events.
         terminate_processing: An event to signal the termination of the process.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         started_counter: Value to increment once started.
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info("Starting")
     started = False
@@ -701,11 +658,11 @@ def read_screen_events(
     logger.info("Done")
 
 
-@trace(logger)
+@utils.trace(logger)
 def read_window_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
-    recording_timestamp: float,
+    recording: Recording,
     started_counter: multiprocessing.Value,
 ) -> None:
     """Read window events and add them to the event queue.
@@ -713,10 +670,10 @@ def read_window_events(
     Args:
         event_q: A queue for adding window events.
         terminate_processing: An event to signal the termination of the process.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         started_counter: Value to increment once started.
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info("Starting")
     prev_window_data = {}
@@ -756,10 +713,10 @@ def read_window_events(
         prev_window_data = window_data
 
 
-@trace(logger)
+@utils.trace(logger)
 def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
-    recording_timestamp: float,
+    recording: Recording,
     terminate_processing: multiprocessing.Event,
     started_counter: multiprocessing.Value,
 ) -> None:
@@ -769,15 +726,16 @@ def performance_stats_writer(
 
     Args:
         perf_q: A queue for collecting performance data.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
         started_counter: Value to increment once started.
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info("Performance stats writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set() or not perf_q.empty():
         if not started:
             with started_counter.get_lock():
@@ -789,7 +747,8 @@ def performance_stats_writer(
             continue
 
         crud.insert_perf_stat(
-            recording_timestamp,
+            session,
+            recording,
             event_type,
             start_time,
             end_time,
@@ -798,7 +757,7 @@ def performance_stats_writer(
 
 
 def memory_writer(
-    recording_timestamp: float,
+    recording: Recording,
     terminate_processing: multiprocessing.Event,
     record_pid: int,
     started_counter: multiprocessing.Value,
@@ -806,7 +765,7 @@ def memory_writer(
     """Writes memory usage statistics to the database.
 
     Args:
-        recording_timestamp (float): The timestamp of the recording.
+        recording (Recording): The recording object.
         terminate_processing (multiprocessing.Event): The event used to terminate
           the process.
         record_pid (int): The process ID to monitor memory usage for.
@@ -815,13 +774,14 @@ def memory_writer(
     Returns:
         None
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     logger.info("Memory writer starting")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = psutil.Process(record_pid)
 
     started = False
+    session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set():
         if not started:
             with started_counter.get_lock():
@@ -845,14 +805,15 @@ def memory_writer(
         timestamp = utils.get_timestamp()
 
         crud.insert_memory_stat(
-            recording_timestamp,
+            session,
+            recording,
             rss,
             timestamp,
         )
     logger.info("Memory writer done")
 
 
-@trace(logger)
+@utils.trace(logger)
 def create_recording(
     task_description: str,
 ) -> dict[str, Any]:
@@ -879,7 +840,8 @@ def create_recording(
         "task_description": task_description,
         "config": config.model_dump(obfuscated=True),
     }
-    recording = crud.insert_recording(recording_data)
+    session = crud.get_new_session(read_and_write=True)
+    recording = crud.insert_recording(session, recording_data)
     logger.info(f"{recording=}")
     return recording
 
@@ -887,7 +849,7 @@ def create_recording(
 def read_keyboard_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
-    recording_timestamp: float,
+    recording: Recording,
     started_counter: multiprocessing.Value,
 ) -> None:
     """Reads keyboard events and adds them to the event queue.
@@ -896,7 +858,7 @@ def read_keyboard_events(
         event_q (queue.Queue): The event queue to add the keyboard events to.
         terminate_processing (multiprocessing.Event): The event to signal termination
           of event reading.
-        recording_timestamp (float): The timestamp of the recording.
+        recording (Recording): The recording object.
         started_counter: Value to increment once started.
 
     Returns:
@@ -978,7 +940,7 @@ def read_keyboard_events(
         if not injected:
             handle_key(event_q, "release", key, canonical_key)
 
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     keyboard_listener = keyboard.Listener(
         on_press=partial(on_press, event_q),
@@ -998,7 +960,7 @@ def read_keyboard_events(
 def read_mouse_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
-    recording_timestamp: float,
+    recording: Recording,
     started_counter: multiprocessing.Value,
 ) -> None:
     """Reads mouse events and adds them to the event queue.
@@ -1006,13 +968,13 @@ def read_mouse_events(
     Args:
         event_q: The event queue to add the mouse events to.
         terminate_processing: The event to signal termination of event reading.
-        recording_timestamp: The timestamp of the recording.
+        recording: The recording object.
         started_counter: Value to increment once started.
 
     Returns:
         None
     """
-    utils.set_start_time(recording_timestamp)
+    utils.set_start_time(recording.timestamp)
 
     mouse_listener = mouse.Listener(
         on_move=partial(on_move, event_q),
@@ -1030,8 +992,109 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+def record_audio(
+    recording: Recording,
+    terminate_processing: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Record audio narration during the recording and store data in database.
+
+    Args:
+        recording: The recording object.
+        terminate_processing: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
+    """
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording.timestamp)
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    audio_frames = []  # to store audio frames
+
+    def audio_callback(
+        indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
+    ) -> None:
+        """Callback function used when new audio frames are recorded.
+
+        Note: time is of type cffi.FFI.CData, but since we don't use this argument
+        and we also don't use the cffi library, the Any type annotation is used.
+        """
+        # called whenever there is new audio frames
+        audio_frames.append(indata.copy())
+
+    # open InputStream and start recording while ActionEvents are recorded
+    audio_stream = sounddevice.InputStream(
+        callback=audio_callback, samplerate=16000, channels=1
+    )
+    logger.info("Audio recording started.")
+    start_timestamp = utils.get_timestamp()
+    audio_stream.start()
+
+    # NOTE: listener may not have actually started by now
+    # TODO: handle race condition, e.g. by sending synthetic events from main thread
+    with started_counter.get_lock():
+        started_counter.value += 1
+
+    terminate_processing.wait()
+    audio_stream.stop()
+    audio_stream.close()
+
+    # Concatenate into one Numpy array
+    concatenated_audio = np.concatenate(audio_frames, axis=0)
+    # convert concatenated_audio to format expected by whisper
+    converted_audio = concatenated_audio.flatten().astype(np.float32)
+
+    # Convert audio to text using OpenAI's Whisper
+    logger.info("Transcribing audio...")
+    model = whisper.load_model("base")
+    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+    logger.info(f"The narrated text is: {result_info['text']}")
+    # empty word_list if the user didn't say anything
+    word_list = []
+    # segments could be empty
+    if len(result_info["segments"]) > 0:
+        # there won't be a 'words' list if the user didn't say anything
+        if "words" in result_info["segments"][0]:
+            word_list = result_info["segments"][0]["words"]
+
+    # compress and convert to bytes to save to database
+    logger.info(
+        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
+    )
+    # Create an in-memory file-like object
+    file_obj = io.BytesIO()
+    # Write the audio data using lossless compression
+    soundfile.write(
+        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
+    )
+    # Get the compressed audio data as bytes
+    compressed_audio_bytes = file_obj.getvalue()
+
+    logger.info(
+        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
+    )
+
+    file_obj.close()
+
+    # To decompress the audio and restore it to its original form:
+    # restored_audio, restored_samplerate = sf.read(
+    # io.BytesIO(compressed_audio_bytes))
+
+    with crud.get_new_session(read_and_write=True) as session:
+        # Create AudioInfo entry
+        crud.insert_audio_info(
+            session,
+            compressed_audio_bytes,
+            result_info["text"],
+            recording,
+            start_timestamp,
+            int(audio_stream.samplerate),
+            word_list,
+        )
+
+
 @logger.catch
-@trace(logger)
+@utils.trace(logger)
 def record(
     task_description: str,
     # these should be Event | None, but this raises:
@@ -1060,6 +1123,10 @@ def record(
         config.RECORD_IMAGES,
     )
 
+    if not crud.acquire_db_lock():
+        logger.error("Failed to acquire DB lock")
+        return
+
     # logically it makes sense to communicate from here, but when running
     # from the tray it takes too long
     # TODO: fix this
@@ -1085,25 +1152,25 @@ def record(
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording_timestamp, started_counter),
+        args=(event_q, terminate_processing, recording, started_counter),
     )
     window_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
-        args=(event_q, terminate_processing, recording_timestamp, started_counter),
+        args=(event_q, terminate_processing, recording, started_counter),
     )
     screen_event_reader.start()
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
-        args=(event_q, terminate_processing, recording_timestamp, started_counter),
+        args=(event_q, terminate_processing, recording, started_counter),
     )
     keyboard_event_reader.start()
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
-        args=(event_q, terminate_processing, recording_timestamp, started_counter),
+        args=(event_q, terminate_processing, recording, started_counter),
     )
     mouse_event_reader.start()
 
@@ -1121,7 +1188,7 @@ def record(
             window_write_q,
             video_write_q,
             perf_q,
-            recording_timestamp,
+            recording,
             terminate_processing,
             started_counter,
             num_screen_events,
@@ -1140,7 +1207,7 @@ def record(
             screen_write_q,
             num_screen_events,
             perf_q,
-            recording_timestamp,
+            recording,
             terminate_processing,
             started_counter,
         ),
@@ -1155,7 +1222,7 @@ def record(
             action_write_q,
             num_action_events,
             perf_q,
-            recording_timestamp,
+            recording,
             terminate_processing,
             started_counter,
         ),
@@ -1170,7 +1237,7 @@ def record(
             window_write_q,
             num_window_events,
             perf_q,
-            recording_timestamp,
+            recording,
             terminate_processing,
             started_counter,
         ),
@@ -1187,7 +1254,7 @@ def record(
                 video_write_q,
                 num_video_events,
                 perf_q,
-                recording_timestamp,
+                recording,
                 terminate_processing,
                 started_counter,
                 video_pre_callback,
@@ -1197,12 +1264,24 @@ def record(
         )
         video_writer.start()
 
+    if config.RECORD_AUDIO:
+        expected_starts += 1
+        audio_recorder = multiprocessing.Process(
+            target=record_audio,
+            args=(
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        audio_recorder.start()
+
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
         args=(
             perf_q,
-            recording_timestamp,
+            recording,
             terminate_perf_event,
             started_counter,
         ),
@@ -1215,7 +1294,7 @@ def record(
         mem_plotter = multiprocessing.Process(
             target=memory_writer,
             args=(
-                recording_timestamp,
+                recording,
                 terminate_perf_event,
                 record_pid,
                 started_counter,
@@ -1270,13 +1349,18 @@ def record(
     window_event_writer.join()
     if config.RECORD_VIDEO:
         video_writer.join()
+    if config.RECORD_AUDIO:
+        audio_recorder.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
         mem_plotter.join()
-        plotting.plot_performance(recording_timestamp)
+        plotting.plot_performance(recording)
 
     logger.info(f"Saved {recording_timestamp=}")
+
+    with crud.get_new_session(read_and_write=True) as session:
+        crud.post_process_events(session, recording)
 
     if terminate_recording is not None:
         terminate_recording.set()
@@ -1284,6 +1368,8 @@ def record(
     # TODO: consolidate terminate_recording and status_pipe
     if status_pipe:
         status_pipe.send({"type": "record.stopped"})
+
+    crud.release_db_lock()
 
 
 # Entry point

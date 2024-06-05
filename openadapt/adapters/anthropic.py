@@ -83,19 +83,22 @@ def create_payload(
     return payload
 
 
-client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-
-
 @cache.cache()
-def get_completion(payload: dict) -> str:
+def get_completion(
+    payload: dict, dev_mode: bool = False, api_key: str = config.ANTHROPIC_API_KEY
+) -> str:
     """Sends a request to the Anthropic API and returns the response."""
+    client = anthropic.Anthropic(api_key=api_key)
     try:
         response = client.messages.create(**payload)
     except Exception as exc:
         logger.exception(exc)
-        import ipdb
+        if dev_mode:
+            import ipdb
 
-        ipdb.set_trace()
+            ipdb.set_trace()
+        else:
+            raise
     """
     Message(
         id='msg_01L55ai2A9q92687mmjMSch3',
@@ -134,9 +137,7 @@ def prompt(
     """Public method to get a response from the Anthropic API with image support."""
     if len(images) > MAX_IMAGES:
         # XXX TODO handle this
-        raise Exception(
-            f"{len(images)=} > {MAX_IMAGES=}. Use a different adapter."
-        )
+        raise Exception(f"{len(images)=} > {MAX_IMAGES=}. Use a different adapter.")
     payload = create_payload(
         prompt,
         system_prompt,

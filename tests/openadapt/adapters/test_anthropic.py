@@ -1,15 +1,21 @@
-"""Tests for adapters.anthropic"""
+"""Tests for adapters.anthropic."""
 
 from PIL import Image
+import pytest
 
-from openadapt.adapters import anthropic
+import anthropic
+
+from openadapt import adapters
 
 
-# TODO: handle failure
-def test_prompt(calculator_image: Image):
+def test_prompt(calculator_image: Image) -> None:
+    """Test image prompt."""
     prompt = "What is this a screenshot of?"
-    result = anthropic.prompt(prompt, images=[calculator_image])
-    assert "calculator" in result.lower(), result
+    try:
+        result = adapters.anthropic.prompt(prompt, images=[calculator_image])
+        assert "calculator" in result.lower(), result
+    except anthropic.AuthenticationError as e:
+        pytest.xfail(f"Anthropic AuthenticationError occurred: {e}")
 
 
 if __name__ == "__main__":

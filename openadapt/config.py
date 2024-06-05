@@ -8,11 +8,13 @@ import multiprocessing
 import os
 import pathlib
 import shutil
+import webbrowser
 
 from loguru import logger
 from pydantic import field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from PySide6.QtWidgets import QMessageBox, QPushButton
 import git
 import sentry_sdk
 
@@ -30,6 +32,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
     "oa.stop",
@@ -125,18 +128,19 @@ class Config(BaseSettings):
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
-    ERROR_REPORTING_DSN: str = (
+    ERROR_REPORTING_DSN: ClassVar = (
         "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
     )
-    ERROR_REPORTING_BRANCH: str = "main"
+    ERROR_REPORTING_BRANCH: ClassVar = "main"
 
     # OpenAI
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
-    RECORD_WINDOW_DATA: bool = False
+    RECORD_WINDOW_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
+    RECORD_AUDIO: bool
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool
     RECORD_IMAGES: bool
@@ -172,6 +176,17 @@ class Config(BaseSettings):
     SCRUB_CHAR: str = "*"
     SCRUB_LANGUAGE: str = "en"
     SCRUB_FILL_COLOR: Union[str, int] = 0x0000FF
+    SCRUB_KEYS_HTML: list[str] = [
+        "text",
+        "canonical_text",
+        "title",
+        "state",
+        "task_description",
+        "key_char",
+        "canonical_key_char",
+        "key_vk",
+        "children",
+    ]
 
     @field_validator("SCRUB_FILL_COLOR")
     @classmethod
@@ -189,17 +204,6 @@ class Config(BaseSettings):
         "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
     }
     SCRUB_PRESIDIO_IGNORE_ENTITIES: list[str] = []
-    SCRUB_KEYS_HTML: list[str] = [
-        "text",
-        "canonical_text",
-        "title",
-        "state",
-        "task_description",
-        "key_char",
-        "canonical_key_char",
-        "key_vk",
-        "children",
-    ]
 
     # Visualization configurations
     VISUALIZE_DARK_MODE: bool = False
@@ -271,6 +275,7 @@ class Config(BaseSettings):
             "SCRUB_ENABLED",
             "SCRUB_CHAR",
             "SCRUB_LANGUAGE",
+            "SCRUB_FILL_COLOR",
         ],
         "record_and_replay": [
             "RECORD_WINDOW_DATA",
@@ -410,7 +415,34 @@ def print_config() -> None:
                 )
                 logger.info(f"{is_reporting_branch=}")
             if is_reporting_branch:
+
+                def show_alert() -> None:
+                    """Show an alert to the user."""
+                    msg = QMessageBox()
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setText("""
+                        An error has occurred. The development team has been notified.
+                        Please join the discord server to get help or send an email to
+                        help@openadapt.ai
+                        """)
+                    discord_button = QPushButton("Join the discord server")
+                    discord_button.clicked.connect(
+                        lambda: webbrowser.open("https://discord.gg/yF527cQbDG")
+                    )
+                    msg.addButton(discord_button, QMessageBox.ActionRole)
+                    msg.addButton(QMessageBox.Ok)
+                    msg.exec()
+
+                def before_send_event(event: Any, hint: Any) -> Any:
+                    """Handle the event before sending it to Sentry."""
+                    try:
+                        show_alert()
+                    except Exception:
+                        pass
+                    return event
+
                 sentry_sdk.init(
                     dsn=config.ERROR_REPORTING_DSN,
                     traces_sample_rate=1.0,
+                    before_send=before_send_event,
                 )

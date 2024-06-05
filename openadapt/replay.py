@@ -10,12 +10,14 @@ import multiprocessing.connection
 import os
 
 from loguru import logger
+
 from openadapt.build_utils import redirect_stdout_stderr
 
 with redirect_stdout_stderr():
     import fire
 
 from openadapt import capture, utils
+from openadapt.config import CAPTURE_DIR_PATH
 from openadapt.db import crud
 from openadapt.models import Recording
 
@@ -50,10 +52,12 @@ def replay(
         # TODO: move to Strategy?
         status_pipe.send({"type": "replay.started"})
 
+    session = crud.get_new_session(read_only=True)
+
     if timestamp and recording is None:
-        recording = crud.get_recording(timestamp)
+        recording = crud.get_recording(session, timestamp)
     elif recording is None:
-        recording = crud.get_latest_recording()
+        recording = crud.get_latest_recording(session)
 
     logger.debug(f"{recording=}")
     assert recording, "No recording found"
@@ -83,9 +87,8 @@ def replay(
         # TODO: handle this more robustly
         sleep(1)
         file_name = f"log-{strategy_name}-{recording.timestamp}.log"
-        # TODO: make configurable
-        dir_name = "captures"
-        file_path = os.path.join(dir_name, file_name)
+        file_path = os.path.join(CAPTURE_DIR_PATH, file_name)
+        os.makedirs(CAPTURE_DIR_PATH, exist_ok=True)
         logger.info(f"{file_path=}")
         handler = logger.add(open(file_path, "w"))
     try:

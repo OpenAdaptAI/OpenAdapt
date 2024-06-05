@@ -1,8 +1,10 @@
 """This module defines the models used in the OpenAdapt system."""
 
 from collections import OrderedDict
+from copy import deepcopy
 from typing import Any, Type
 import io
+import sys
 
 from copy import deepcopy
 from loguru import logger
@@ -14,6 +16,8 @@ import sqlalchemy as sa
 from openadapt import window
 from openadapt.config import config
 from openadapt.db import db
+from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
+from openadapt.privacy.providers import ScrubProvider
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -50,6 +54,17 @@ class Recording(db.Base):
     video_start_time = sa.Column(ForceFloat)
     config = sa.Column(sa.JSON)
 
+    original_recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    original_recording = sa.orm.relationship(
+        "Recording",
+        back_populates="copies",
+        remote_side=[id],
+    )
+    copies = sa.orm.relationship(
+        "Recording",
+        back_populates="original_recording",
+    )
+
     action_events = sa.orm.relationship(
         "ActionEvent",
         back_populates="recording",
@@ -65,6 +80,11 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    scrubbed_recordings = sa.orm.relationship(
+        "ScrubbedRecording",
+        back_populates="recording",
+    )
+    audio_info = sa.orm.relationship("AudioInfo", back_populates="recording")
 
     _processed_action_events = None
 
@@ -72,10 +92,20 @@ class Recording(db.Base):
     def processed_action_events(self) -> list:
         """Get the processed action events for the recording."""
         from openadapt import events
+        from openadapt.db import crud
 
         if not self._processed_action_events:
-            self._processed_action_events = events.get_events(self)
+            session = crud.get_new_session(read_only=True)
+            self._processed_action_events = events.get_events(session, self)
         return self._processed_action_events
+
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the recording.
+
+        Args:
+            scrubber (ScrubbingProvider): The scrubbing provider to use.
+        """
+        self.task_description = scrubber.scrub_text(self.task_description)
 
 
 class ActionEvent(db.Base):
@@ -88,9 +118,12 @@ class ActionEvent(db.Base):
     id = sa.Column(sa.Integer, primary_key=True)
     name = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
-    screenshot_timestamp = sa.Column(sa.ForeignKey("screenshot.timestamp"))
-    window_event_timestamp = sa.Column(sa.ForeignKey("window_event.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    screenshot_timestamp = sa.Column(ForceFloat)
+    screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
+    window_event_timestamp = sa.Column(ForceFloat)
+    window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -110,6 +143,9 @@ class ActionEvent(db.Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+
+    scrubbed_text = sa.Column(sa.String)
+    scrubbed_canonical_text = sa.Column(sa.String)
 
     def __new__(cls, *args: tuple, **kwargs: dict) -> "ActionEvent":
         """Create a new instance; also called when loading from db."""
@@ -220,17 +256,10 @@ class ActionEvent(db.Base):
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
-        if canonical:
-            key_attr = self.canonical_key
-            key_name_attr = self.canonical_key_name
-        else:
-            key_attr = self.key
-            key_name_attr = self.key_name
         if self.children:
             parts = [
-                child._text(canonical=canonical)
-                for child in self.children
-                if child.name == "press"
+                child.canonical_text if canonical else child.text
+                for child in [child for child in self.children if child.name == "press"]
             ]
             if any(parts):
                 # str is necessary for canonical=True named keys
@@ -239,6 +268,12 @@ class ActionEvent(db.Base):
             else:
                 text = None
         else:
+            if canonical:
+                key_attr = self.canonical_key
+                key_name_attr = self.canonical_key_name
+            else:
+                key_attr = self.key
+                key_name_attr = self.key_name
             if key_name_attr:
                 text = f"{name_prefix}{key_attr}{name_suffix}".replace(
                     "Key.",
@@ -246,11 +281,13 @@ class ActionEvent(db.Base):
                 )
             else:
                 text = key_attr
-        return text
+        return str(text) if text else ""
 
     @property
     def text(self) -> str:
         """Get the text representation of the action event."""
+        if self.scrubbed_text:
+            return self.scrubbed_text
         return self._text()
 
     @text.setter
@@ -262,6 +299,8 @@ class ActionEvent(db.Base):
     @property
     def canonical_text(self) -> str:
         """Get the canonical text representation of the action event."""
+        if self.scrubbed_canonical_text:
+            return self.scrubbed_canonical_text
         return self._text(canonical=True)
 
     @canonical_text.setter
@@ -376,6 +415,16 @@ class ActionEvent(db.Base):
         )
         return press_event, release_event
 
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the action event."""
+        self.scrubbed_text = scrubber.scrub_text(self.text, is_separated=True)
+        self.scrubbed_canonical_text = scrubber.scrub_text(
+            self.canonical_text, is_separated=True
+        )
+        self.key_char = scrubber.scrub_text(self.key_char)
+        self.canonical_key_char = scrubber.scrub_text(self.canonical_key_char)
+        self.key_vk = scrubber.scrub_text(self.key_vk)
+
     def to_prompt_dict(self) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
@@ -393,13 +442,13 @@ class ActionEvent(db.Base):
                 # and not isinstance(getattr(models.ActionEvent, key), property)
             }
         )
-        if action.active_segment_description:
+        if self.active_segment_description:
             for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
                 if key in action_dict:
                     del action_dict[key]
-        if action.available_segment_descriptions:
+        if self.available_segment_descriptions:
             action_dict["available_segment_descriptions"] = (
-                action.available_segment_descriptions
+                self.available_segment_descriptions
             )
         return action_dict
 
@@ -410,7 +459,8 @@ class WindowEvent(db.Base):
     __tablename__ = "window_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
     state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
@@ -428,8 +478,18 @@ class WindowEvent(db.Base):
         """Get the active window event."""
         return WindowEvent(**window.get_active_window_data())
 
-    def to_prompt_dict(self) -> dict[str, Any]:
+    def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
+        """Scrub the window event."""
+        self.title = scrubber.scrub_text(self.title)
+        if self.state is not None:
+            self.state = scrubber.scrub_dict(self.state)
+
+    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
+
+        Args:
+            include_data (bool): Whether to retain the "data" property of the .state
+                attribute (contains operating system accessibility API data).
 
         Returns:
             dictionary containing relevant properties from the WindowEvent.
@@ -445,11 +505,21 @@ class WindowEvent(db.Base):
             }
         )
         key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
+        if sys.platform == "win32":
+            logger.warning(
+                "key_suffixes have not yet been defined on Windows."
+                "You can help by uncommenting the lines below and pasting window_dict "
+                "into a new GitHub Issue."
+            )
+            # from pprint import pformat
+            # logger.info(f"window_dict=\n{pformat(window_dict)}")
         window_state = window_dict["state"]
-        window_state["data"] = utils.clean_data(utils.filter_keys(
-            window_state["data"],
-            key_suffixes,
-        ))
+        window_state["data"] = utils.clean_dict(
+            utils.filter_keys(
+                window_state["data"],
+                key_suffixes,
+            )
+        )
         window_dict["state"].pop("meta")
         return window_dict
 
@@ -551,7 +621,8 @@ class Screenshot(db.Base):
     __tablename__ = "screenshot"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
     png_data = sa.Column(sa.LargeBinary)
     png_diff_data = sa.Column(sa.LargeBinary, nullable=True)
@@ -571,6 +642,20 @@ class Screenshot(db.Base):
         super().__init__(*args, **kwargs)
         self.initialize_instance_attributes()
         self._image = image
+
+    def scrub(self, scrubber: ScrubbingProvider) -> None:
+        """Scrub the screenshot."""
+
+        def save_scrubbed_image(image: Image, setattr_name: str) -> None:
+            """Save the scrubbed image."""
+            scrubbed_image = scrubber.scrub_image(image)
+            setattr(self, setattr_name, self.convert_png_to_binary(scrubbed_image))
+
+        save_scrubbed_image(self.image, "png_data")
+        if self.png_diff_data:
+            save_scrubbed_image(self.diff, "png_diff_data")
+        if self.png_diff_mask_data:
+            save_scrubbed_image(self.diff_mask, "png_diff_mask_data")
 
     @sa.orm.reconstructor
     def initialize_instance_attributes(self) -> None:
@@ -717,13 +802,31 @@ class Screenshot(db.Base):
         return buffer.getvalue()
 
 
+class AudioInfo(db.Base):
+    """Class representing the audio from a recording in the database."""
+
+    __tablename__ = "audio_info"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    flac_data = sa.Column(sa.LargeBinary)
+    transcribed_text = sa.Column(sa.String)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    sample_rate = sa.Column(sa.Integer)
+    words_with_timestamps = sa.Column(sa.Text)
+
+    recording = sa.orm.relationship("Recording", back_populates="audio_info")
+
+
 class PerformanceStat(db.Base):
     """Class representing a performance statistic in the database."""
 
     __tablename__ = "performance_stat"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.Integer)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     event_type = sa.Column(sa.String)
     start_time = sa.Column(sa.Integer)
     end_time = sa.Column(sa.Integer)
@@ -737,8 +840,68 @@ class MemoryStat(db.Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(sa.Integer)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
     memory_usage_bytes = sa.Column(ForceFloat)
     timestamp = sa.Column(ForceFloat)
+
+
+class ScrubbedRecording(db.Base):
+    """Class representing a scrubbed recording in the database."""
+
+    __tablename__ = "scrubbed_recording"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    recording = sa.orm.relationship("Recording", back_populates="scrubbed_recordings")
+
+    provider = sa.Column(sa.String)
+    scrubbed = sa.Column(sa.Boolean)
+
+    def get_provider_name(self) -> str:
+        """Get the name of the scrubbing provider."""
+        return ScrubProvider.as_options()[self.provider]
+
+    def asdict(self) -> dict:
+        """Return the scrubbed recording as a dictionary."""
+        return {
+            **super().asdict(),
+            "provider": self.get_provider_name(),
+            "recording": {
+                "task_description": self.recording.task_description,
+            },
+            "original_recording": {
+                "id": self.recording.original_recording_id,
+                "task_description": self.recording.original_recording.task_description,
+            },
+        }
+
+
+def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:
+    """Copy a SQLAlchemy instance.
+
+    Args:
+        sa_instance (Base): The SQLAlchemy instance to copy.
+        **kwargs: Additional keyword arguments to pass to the copied instance.
+
+    Returns:
+        Base: The copied SQLAlchemy instance.
+    """
+    sa_instance.id
+
+    table = sa_instance.__table__
+    pk_columns = [k for k in table.primary_key.columns.keys()]
+    fk_columns = [k.parent.name for k in table.foreign_keys]
+    exclude_columns = pk_columns + fk_columns
+    data = {
+        c: getattr(sa_instance, c)
+        for c in table.columns.keys()
+        if c not in exclude_columns
+    }
+    data.update(kwargs)
+    clone = sa_instance.__class__(**data)
+    return clone
 
 
 # avoid circular import

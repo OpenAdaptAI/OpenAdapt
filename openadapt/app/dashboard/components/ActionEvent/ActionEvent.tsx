@@ -122,6 +122,12 @@ export const ActionEvent = ({
                                 <TableCellWithBorder>{event.parent_id}</TableCellWithBorder>
                             </TableRowWithBorder>
                         )}
+                        {event.words && event.words.length > 0 && (
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>transcription</TableCellWithBorder>
+                                <TableCellWithBorder>{event.words.join(' ')}</TableCellWithBorder>
+                            </TableRowWithBorder>
+                        )}
                         <TableRowWithBorder>
                             <TableCellWithBorder>children</TableCellWithBorder>
                             <TableCellWithBorder>{event.children?.length || 0}</TableCellWithBorder>

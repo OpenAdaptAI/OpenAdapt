@@ -3,9 +3,11 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
+from collections import defaultdict
+from functools import wraps
 from io import BytesIO
 from logging import StreamHandler
-from typing import Any
+from typing import Any, Callable
 import ast
 import base64
 import inspect
@@ -19,6 +21,7 @@ from loguru import logger
 from PIL import Image
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.models import Recording
 
 with redirect_stdout_stderr():
     import fire
@@ -37,9 +40,9 @@ if sys.platform == "win32":
 
 
 from openadapt import common
-from openadapt.config import config
+from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
+from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
-from openadapt.logging import filter_log_messages
 from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
@@ -508,6 +511,9 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
         # orjson.dumps returns bytes, so decode to string
         return orjson.dumps(value).decode("utf-8")
 
+    def ppjson(value: Any) -> str:
+        return orjson.dumps(value, option=orjson.OPT_INDENT_2)
+
     # Construct the full path to the template file
     template_path = os.path.join(config.ROOT_DIR_PATH, template_relative_path)
 
@@ -520,6 +526,7 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
 
     # Add custom filters
     env.filters["orjson"] = orjson_to_json
+    env.filters["ppjson"] = ppjson
     env.globals.update(zip=zip)
 
     # Load the template
@@ -585,6 +592,63 @@ def split_list(input_list: list, size: int) -> list[list]:
     return [input_list[i : i + size] for i in range(0, len(input_list), size)]
 
 
+def args_to_str(*args: tuple) -> str:
+    """Convert positional arguments to a string representation.
+
+    Args:
+        *args: Positional arguments.
+
+    Returns:
+        str: Comma-separated string representation of positional arguments.
+    """
+    return ", ".join(map(str, args))
+
+
+def kwargs_to_str(**kwargs: dict[str, Any]) -> str:
+    """Convert keyword arguments to a string representation.
+
+    Args:
+        **kwargs: Keyword arguments.
+
+    Returns:
+        str: Comma-separated string representation of keyword arguments
+          in form "key=value".
+    """
+    return ",".join([f"{k}={v}" for k, v in kwargs.items()])
+
+
+def trace(logger: logger) -> Any:
+    """Decorator that logs the function entry and exit using the provided logger.
+
+    Args:
+        logger: The logger object to use for logging.
+
+    Returns:
+        A decorator that can be used to wrap functions and log their entry and exit.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
+            func_name = func.__qualname__
+            func_args = args_to_str(*args)
+            func_kwargs = kwargs_to_str(**kwargs)
+
+            if func_kwargs != "":
+                logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
+            else:
+                logger.info(f" -> Enter: {func_name}({func_args})")
+
+            result = func(*args, **kwargs)
+
+            logger.info(f" <- Leave: {func_name}({result})")
+            return result
+
+        return wrapper_logging
+
+    return decorator
+
+
 def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
     """Return a dictionary only containing keys that match the given key suffixes.
 
@@ -600,7 +664,7 @@ def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
     """
     suffixes = tuple(suffix.lower() for suffix in key_suffixes)
 
-    def recurse(obj):
+    def recurse(obj: Any) -> None:
         if isinstance(obj, dict):
             # Process each child to see if it or its descendants match the suffixes
             new_dict = {
@@ -619,9 +683,8 @@ def filter_keys(data: dict, key_suffixes: list[str]) -> dict:
     return recurse(data)
 
 
-def clean_data(data: dict) -> dict:
-    """
-    Clean a dictionary by removing None values and redundant information.
+def clean_dict(data: dict) -> dict:
+    """Clean a dictionary by removing None values and redundant information.
 
     Args:
         data (dict): The dictionary to clean.
@@ -629,6 +692,7 @@ def clean_data(data: dict) -> dict:
     Returns:
         dict: A cleaned dictionary with no None values and redundant data removed.
     """
+
     def remove_none_values(d: dict) -> dict:
         """Remove keys where the value is None."""
         return {k: v for k, v in d.items() if v is not None}
@@ -640,7 +704,7 @@ def clean_data(data: dict) -> dict:
                 return False
         return True
 
-    def recurse(obj):
+    def recurse(obj: Any) -> None:
         if isinstance(obj, dict):
             temp_dict = {k: recurse(v) for k, v in obj.items()}
             # Remove redundant nested keys
@@ -648,9 +712,8 @@ def clean_data(data: dict) -> dict:
             keys = list(temp_dict.keys())
             for i in range(len(keys)):
                 for j in range(i + 1, len(keys)):
-                    if (
-                        isinstance(temp_dict[keys[i]], dict) and
-                        isinstance(temp_dict[keys[j]], dict)
+                    if isinstance(temp_dict[keys[i]], dict) and isinstance(
+                        temp_dict[keys[j]], dict
                     ):
                         if compare_dicts(temp_dict[keys[i]], temp_dict[keys[j]]):
                             keys_to_remove.add(keys[i])

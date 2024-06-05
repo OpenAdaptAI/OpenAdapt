@@ -10,7 +10,7 @@ from PIL import Image
 import fire
 import google.generativeai as genai
 
-from openadapt import cache, utils
+from openadapt import cache
 from openadapt.config import config
 
 MAX_TOKENS = 2**20  # 1048576
@@ -42,8 +42,7 @@ def prompt(
     genai.configure(api_key=config.GOOGLE_API_KEY)
     model = genai.GenerativeModel(model_name)
     response = model.generate_content(
-        [full_prompt] + images,
-        request_options={"timeout": timeout}
+        [full_prompt] + images, request_options={"timeout": timeout}
     )
     response.resolve()
     logger.info(f"response=\n{pformat(response)}")

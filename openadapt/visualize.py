@@ -153,7 +153,7 @@ def dict2html(
 @logger.catch
 def main(
     recording: Recording = None,
-    recording_timestamp: float | None = None,
+    recording_id: int = None,
     diff_video: bool = False,
     cleanup: bool = True,
 ) -> bool:
@@ -161,8 +161,7 @@ def main(
 
     Args:
         recording (Recording, optional): The recording to visualize.
-        recording_timestamp (float, optional): The timestamp of the recording to
-            visualize.
+        recording_id (int, optional): The ID of the recording to visualize.
         diff_video (bool): Whether to diff Screenshots against video frames.
         cleanup (bool): Whether to remove the HTML file after it is displayed.
 
@@ -171,12 +170,14 @@ def main(
     """
     configure_logging(logger, LOG_LEVEL)
 
-    assert not all([recording, recording_timestamp]), "Only one may be specified."
+    assert not all([recording, recording_id]), "Only one may be specified."
 
-    if recording_timestamp:
-        recording = crud.get_recording(recording_timestamp)
+    session = crud.get_new_session(read_only=True)
+
+    if recording_id:
+        recording = crud.get_recording_by_id(session, recording_id)
     elif recording is None:
-        recording = crud.get_latest_recording()
+        recording = crud.get_latest_recording(session)
     if SCRUB:
         from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
@@ -184,6 +185,10 @@ def main(
         scrub.scrub_text(recording.task_description)
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
+
+    audio_info = row2dict(crud.get_audio_info(recording))
+    # don't display the FLAC data
+    del audio_info["flac_data"]
 
     if diff_video:
         assert recording.config[
@@ -194,7 +199,7 @@ def main(
         ], "Can't diff video against images because images were not saved."
 
     meta = {}
-    action_events = get_events(recording, process=PROCESS_EVENTS, meta=meta)
+    action_events = get_events(session, recording, process=PROCESS_EVENTS, meta=meta)
     event_dicts = rows2dicts(action_events)
 
     if SCRUB:
