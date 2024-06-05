@@ -85,6 +85,7 @@ Prerequisite:
 - Python 3.10
 - Git
 - Tesseract (for OCR)
+- nvm (node version manager)
 
 For the setup of any/all of the above dependencies, follow the steps [SETUP.md](./SETUP.md).
 

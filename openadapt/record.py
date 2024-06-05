@@ -31,7 +31,11 @@ with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
+import numpy as np
 import psutil
+import sounddevice
+import soundfile
+import whisper
 
 from openadapt import utils, video, window
 from openadapt.config import config
@@ -988,6 +992,107 @@ def read_mouse_events(
     mouse_listener.stop()
 
 
+def record_audio(
+    recording: Recording,
+    terminate_processing: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Record audio narration during the recording and store data in database.
+
+    Args:
+        recording: The recording object.
+        terminate_processing: An event to signal the termination of the process.
+        started_counter: Value to increment once started.
+    """
+    utils.configure_logging(logger, LOG_LEVEL)
+    utils.set_start_time(recording.timestamp)
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    audio_frames = []  # to store audio frames
+
+    def audio_callback(
+        indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
+    ) -> None:
+        """Callback function used when new audio frames are recorded.
+
+        Note: time is of type cffi.FFI.CData, but since we don't use this argument
+        and we also don't use the cffi library, the Any type annotation is used.
+        """
+        # called whenever there is new audio frames
+        audio_frames.append(indata.copy())
+
+    # open InputStream and start recording while ActionEvents are recorded
+    audio_stream = sounddevice.InputStream(
+        callback=audio_callback, samplerate=16000, channels=1
+    )
+    logger.info("Audio recording started.")
+    start_timestamp = utils.get_timestamp()
+    audio_stream.start()
+
+    # NOTE: listener may not have actually started by now
+    # TODO: handle race condition, e.g. by sending synthetic events from main thread
+    with started_counter.get_lock():
+        started_counter.value += 1
+
+    terminate_processing.wait()
+    audio_stream.stop()
+    audio_stream.close()
+
+    # Concatenate into one Numpy array
+    concatenated_audio = np.concatenate(audio_frames, axis=0)
+    # convert concatenated_audio to format expected by whisper
+    converted_audio = concatenated_audio.flatten().astype(np.float32)
+
+    # Convert audio to text using OpenAI's Whisper
+    logger.info("Transcribing audio...")
+    model = whisper.load_model("base")
+    result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
+    logger.info(f"The narrated text is: {result_info['text']}")
+    # empty word_list if the user didn't say anything
+    word_list = []
+    # segments could be empty
+    if len(result_info["segments"]) > 0:
+        # there won't be a 'words' list if the user didn't say anything
+        if "words" in result_info["segments"][0]:
+            word_list = result_info["segments"][0]["words"]
+
+    # compress and convert to bytes to save to database
+    logger.info(
+        "Size of uncompressed audio data: {} bytes".format(converted_audio.nbytes)
+    )
+    # Create an in-memory file-like object
+    file_obj = io.BytesIO()
+    # Write the audio data using lossless compression
+    soundfile.write(
+        file_obj, converted_audio, int(audio_stream.samplerate), format="FLAC"
+    )
+    # Get the compressed audio data as bytes
+    compressed_audio_bytes = file_obj.getvalue()
+
+    logger.info(
+        "Size of compressed audio data: {} bytes".format(len(compressed_audio_bytes))
+    )
+
+    file_obj.close()
+
+    # To decompress the audio and restore it to its original form:
+    # restored_audio, restored_samplerate = sf.read(
+    # io.BytesIO(compressed_audio_bytes))
+
+    with crud.get_new_session(read_and_write=True) as session:
+        # Create AudioInfo entry
+        crud.insert_audio_info(
+            session,
+            compressed_audio_bytes,
+            result_info["text"],
+            recording,
+            start_timestamp,
+            int(audio_stream.samplerate),
+            word_list,
+        )
+
+
 @logger.catch
 @utils.trace(logger)
 def record(
@@ -1159,6 +1264,18 @@ def record(
         )
         video_writer.start()
 
+    if config.RECORD_AUDIO:
+        expected_starts += 1
+        audio_recorder = multiprocessing.Process(
+            target=record_audio,
+            args=(
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        audio_recorder.start()
+
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
         target=performance_stats_writer,
@@ -1232,6 +1349,8 @@ def record(
     window_event_writer.join()
     if config.RECORD_VIDEO:
         video_writer.join()
+    if config.RECORD_AUDIO:
+        audio_recorder.join()
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
