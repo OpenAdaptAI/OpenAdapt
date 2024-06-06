@@ -1,0 +1,37 @@
+Consider the previously recorded actions:
+
+```json
+{{ recorded_actions }}
+```
+
+Consider the actions you've produced (and we have replayed) so far:
+
+```json
+{{ replayed_actions }}
+```
+
+Consider the user's proposed modifications in natural language replay instructions:
+
+```text
+{{ replay_instructions }}
+```
+
+{% if include_active_window %}
+Consider the current active window:
+```json
+{{ current_window }}
+```
+{% endif %}
+
+The attached image is a screenshot of the current state of the system.
+
+Provide the next action to be replayed in order to accomplish the user's replay
+instructions.
+
+Do NOT provide available_segment_descriptions in your response.
+
+Respond with JSON and nothing else.
+
+If you wish to terminate the recording, return an empty object.
+
+My career depends on this. Lives are at stake.
