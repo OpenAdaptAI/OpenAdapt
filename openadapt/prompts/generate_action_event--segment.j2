@@ -1,19 +1,55 @@
+{% if include_raw_recording %}
 Consider the previously recorded actions:
 
 ```json
 {{ recorded_actions }}
 ```
+{% endif %}
+
+
+{% if include_raw_recording_description %}
+Consider the following description of the previously recorded actions:
+
+``json
+{{ recording_description }}
+```
+{% endif %}
+
+
+{% if include_replay_instructions %}
+Consider the user's proposed modifications in natural language replay instructions:
+
+```text
+{{ replay_instructions }}
+```
+{% endif %}
+
+
+{% if include_modified_recording %}
+Consider this updated list of actions that has been modified such that replaying them
+would have accomplished the user's replay instructions:
+
+```json
+{{ modified_actions }}
+```
+{% endif %}
+
+
+{% if include_modified_recording_description %}
+Consider the following description of the updated list of actions that has been
+modified such that replaying them would have accomplished the user's replay
+instructions:
+
+``json
+{{ modified_recording_description }}
+```
+{% endif %}
+
 
 Consider the actions you've produced (and we have replayed) so far:
 
 ```json
 {{ replayed_actions }}
-```
-
-Consider the user's proposed modifications in natural language replay instructions:
-
-```text
-{{ replay_instructions }}
 ```
 
 {% if include_active_window %}

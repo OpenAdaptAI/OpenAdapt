@@ -395,6 +395,8 @@ class ActionEvent(db.Base):
                     action_dict["canonical_text"][prefix_len:-suffix_len],
                     key_seps,
                 )
+                logger.info(f"{key_names=}")
+                logger.info(f"{canonical_key_names=}")
 
                 # Process each key name and canonical key name found
                 children = []
@@ -547,11 +549,12 @@ class WindowEvent(db.Base):
             if sys.platform == "win32":
                 logger.warning(
                     "key_suffixes have not yet been defined on Windows."
-                    "You can help by uncommenting the lines below and pasting window_dict "
-                    "into a new GitHub Issue."
+                    "You can help by uncommenting the lines below and pasting "
+                    "the contents of the window_dict into a new GitHub Issue."
                 )
                 # from pprint import pformat
                 # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                # import ipdb; ipdb.set_trace()
             window_state = window_dict["state"]
             window_state["data"] = utils.clean_dict(
                 utils.filter_keys(

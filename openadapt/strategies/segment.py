@@ -11,10 +11,15 @@ from openadapt import adapters, common, models, strategies, utils
 from openadapt.strategies.visual import (
     add_active_segment_descriptions,
     get_window_segmentation,
+    apply_replay_instructions,
 )
 
 
-PROCESS_EVENTS = True
+INCLUDE_RAW_RECORDING = True
+INCLUDE_RAW_RECORDING_DESCRIPTION = True
+INCLUDE_MODIFIED_RECORDING = True
+INCLUDE_MODIFIED_RECORDING_DESCRIPTION = False
+INCLUDE_REPLAY_INSTRUCTIONS = True
 INCLUDE_WINDOW = False
 INCLUDE_WINDOW_DATA = False
 
@@ -26,7 +31,6 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         self,
         recording: models.Recording,
         replay_instructions: str = "",
-        process_events: bool = PROCESS_EVENTS,
     ) -> None:
         """Initialize the SegmentReplayStrategy.
 
@@ -34,25 +38,31 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             recording (models.Recording): The recording object.
             replay_instructions (str): Natural language instructions
                 for how recording should be replayed.
-            process_events (bool): Flag indicating whether to process the events.
-              Defaults to True.
         """
         super().__init__(recording)
         self.replay_instructions = replay_instructions
-        self.process_events = process_events
         self.action_history = []
         self.action_event_idx = 0
 
         add_active_segment_descriptions(recording.processed_action_events)
-        self.recording_description = describe_recording(
-            self.recording,
-            self.process_events,
+        self.modified_actions = apply_replay_instructions(
+            recording.processed_action_events,
+            replay_instructions,
         )
+        self.recording_description = describe_recording(
+            self.recording.processed_action_events
+        )
+        self.modified_recording_description = describe_recording(self.modified_actions)
+
 
     def get_next_action_event(
         self,
         screenshot: models.Screenshot,
         window_event: models.WindowEvent,
+        include_raw_recording: bool = INCLUDE_RAW_RECORDING,
+        include_raw_recording_description: bool = INCLUDE_RAW_RECORDING_DESCRIPTION,
+        include_modified_recording: bool = INCLUDE_MODIFIED_RECORDING,
+        include_modified_recording_description: bool = INCLUDE_MODIFIED_RECORDING_DESCRIPTION,
         include_active_window: bool = INCLUDE_WINDOW,
         include_active_window_data: bool = INCLUDE_WINDOW_DATA,
     ) -> models.ActionEvent | None:
@@ -61,17 +71,24 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         Args:
             screenshot (models.Screenshot): The screenshot object.
             window_event (models.WindowEvent): The window event object.
-            include_active_window (bool): Whether to include window metadata.
-            include_active_window_data (bool): Whether to retain window a11y data.
+            include_raw_recording (bool): Whether to include the raw recording in the
+                prompt.
+            include_raw_recording_description (bool): Whether to include the raw
+                recording description in the prompt.
+            include_modified_recording (bool): Whether to include the modified
+                recording in the prompt.
+            include_modified_recording_description (bool): Whether to include the
+                modified recording description in the prompt.
+            include_active_window (bool): Whether to include window metadata in the
+                prompt.
+            include_active_window_data (bool): Whether to retain window a11y data in
+                the prompt.
 
         Returns:
             models.ActionEvent or None: The next ActionEvent for replay or None
               if there are no more events.
         """
-        if self.process_events:
-            action_events = self.recording.processed_action_events
-        else:
-            action_events = self.recording.action_events
+        action_events = self.recording.processed_action_events
         self.action_event_idx += 1
         num_action_events = len(action_events)
         if self.action_event_idx >= num_action_events:
@@ -82,8 +99,15 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             screenshot,
             window_event,
             action_events,
+            self.modified_actions,
             self.action_history,
             self.replay_instructions,
+            self.recording_description,
+            self.modified_recording_description,
+            include_raw_recording,
+            include_raw_recording_description,
+            include_modified_recording,
+            include_modified_recording_description,
             include_active_window,
             include_active_window_data,
         )
@@ -140,18 +164,16 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
 
 
 def describe_recording(
-    recording: models.Recording,
-    process_events: bool,
+    action_events: list[models.ActionEvent],
     include_window: bool = INCLUDE_WINDOW,
     include_window_data: bool = INCLUDE_WINDOW_DATA,
 ) -> str:
     """Generate a natural language description of the actions in the recording.
 
-    Given the recorded states, describe what happened.
+    Given the recorded states and actions, describe what happened.
 
     Args:
-        recording (models.Recording): the recording to describe.
-        process_events (bool): flag indicating whether to process the events.
+        action_events (list[models.ActionEvent]): the list of actions to describe.
         include_window (bool): flag indicating whether to include window metadata.
         include_window_data (bool): flag indicating whether to include accessibility
             API data in each window event.
@@ -159,13 +181,10 @@ def describe_recording(
     Returns:
         (str) natural language description of the what happened in the recording.
     """
-    if process_events:
-        action_events = recording.processed_action_events
-    else:
-        action_events = recording.action_events
     action_dicts = [action.to_prompt_dict() for action in action_events]
     window_dicts = [
         action.window_event.to_prompt_dict(include_window_data)
+        if action.window_event else {}
         for action in action_events
     ]
     action_window_dicts = [
@@ -175,7 +194,12 @@ def describe_recording(
         }
         for action_dict, window_dict in zip(action_dicts, window_dicts)
     ]
-    images = [action.screenshot.image for action in action_events]
+    images = [
+        action.screenshot.image
+        if action.screenshot else None
+        for action in action_events
+    ]
+    images = [image for image in images if image]
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )
@@ -196,8 +220,15 @@ def generate_action_event(
     current_screenshot: models.Screenshot,
     current_window_event: models.WindowEvent,
     recorded_actions: list[models.ActionEvent],
+    modified_actions: list[models.ActionEvent],
     replayed_actions: list[models.ActionEvent],
     replay_instructions: str,
+    recording_description: str,
+    modified_recording_description: str,
+    include_raw_recording: bool,
+    include_raw_recording_description: bool,
+    include_modified_recording: bool,
+    include_modified_recording_description: bool,
     include_active_window: bool,
     include_active_window_data: bool,
 ) -> models.ActionEvent:
@@ -216,8 +247,18 @@ def generate_action_event(
             current replay
         replay_instructions (str): proposed modifications in natural language
             instructions
-        include_active_window (bool): Whether to include active window metadata.
-        include_active_window_data (bool): Whether to retain window a11y data.
+        include_raw_recording (bool): Whether to include the raw recording in the
+            prompt.
+        include_raw_recording_description (bool): Whether to include the raw
+            recording description in the prompt.
+        include_modified_recording (bool): Whether to include the modified
+            recording in the prompt.
+        include_modified_recording_description (bool): Whether to include the
+            modified recording description in the prompt.
+        include_active_window (bool): Whether to include window metadata in the
+            prompt.
+        include_active_window_data (bool): Whether to retain window a11y data in
+            the prompt.
 
     Returns:
         (models.ActionEvent) the next action event to be played, produced by the model
@@ -228,6 +269,7 @@ def generate_action_event(
     )
     recorded_action_dicts = [action.to_prompt_dict() for action in recorded_actions]
     replayed_action_dicts = [action.to_prompt_dict() for action in replayed_actions]
+    modified_action_dicts = [action.to_prompt_dict() for action in modified_actions]
 
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
@@ -236,8 +278,15 @@ def generate_action_event(
         "prompts/generate_action_event--segment.j2",
         current_window=current_window_dict,
         recorded_actions=recorded_action_dicts,
+        modified_actions=modified_action_dicts,
         replayed_actions=replayed_action_dicts,
         replay_instructions=replay_instructions,
+        recording_description=recording_description,
+        modified_recording_description=modified_recording_description,
+        include_raw_recording=include_raw_recording,
+        include_raw_recording_description=include_raw_recording_description,
+        include_modified_recording=include_modified_recording,
+        include_modified_recording_description=include_modified_recording_description,
         include_active_window=include_active_window,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
