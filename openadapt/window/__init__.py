@@ -19,14 +19,19 @@ else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 
 
-def get_active_window_data() -> dict[str, Any] | None:
+def get_active_window_data(
+    include_window_data: bool = config.RECORD_WINDOW_DATA,
+) -> dict[str, Any] | None:
     """Get data of the active window.
+
+    Args:
+        include_window_data (bool): whether to include a11y data.
 
     Returns:
         dict or None: A dictionary containing information about the active window,
-        or None if the state is not available.
+            or None if the state is not available.
     """
-    state = get_active_window_state(config.RECORD_WINDOW_DATA)
+    state = get_active_window_state(include_window_data)
     if not state:
         return None
     title = state["title"]

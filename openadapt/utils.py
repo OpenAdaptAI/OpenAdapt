@@ -1138,5 +1138,33 @@ def clean_dict(data: dict) -> dict:
     return recurse(data)
 
 
+def split_by_separators(text: str, seps: list[str]) -> list[str]:
+    """
+    Splits the text by multiple separators specified in the list without using regex.
+
+    Args:
+        text (str): The string to be split.
+        seps (list): A list of string separators.
+
+    Returns:
+        list: A list of substrings split by any of the specified separators.
+    """
+    if not seps:
+        return [text]
+
+    # Initial split with the first separator
+    parts = text.split(seps[0])
+
+    # Process the remaining separators
+    for sep in seps[1:]:
+        new_parts = []
+        for part in parts:
+            new_parts.extend(part.split(sep))
+        parts = new_parts
+
+    # Filter out empty strings which can occur if separators are consecutive
+    return [part for part in parts if part]
+
+
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))
