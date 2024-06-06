@@ -186,7 +186,9 @@ def main(
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
 
-    audio_info = row2dict(crud.get_audio_info(recording))
+
+    session = crud.get_new_session(read_only=True)
+    audio_info = row2dict(crud.get_audio_info(session, recording))
     # don't display the FLAC data
     del audio_info["flac_data"]
 

@@ -675,7 +675,7 @@ def insert_audio_info(
     session.commit()
 
 
-# TODO: change to use recording_id once scrubbing PR is merged
+# XXX TODO: change to use recording_id once scrubbing PR is merged
 def get_audio_info(
     session: SaSession,
     recording_timestamp: float,
