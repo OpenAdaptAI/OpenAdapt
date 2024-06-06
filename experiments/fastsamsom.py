@@ -3,6 +3,9 @@
 python -m pip install 'git+https://github.com/facebookresearch/detectron2.git' --no-build-isolation
 """
 
+from pprint import pformat
+
+from loguru import logger
 from PIL import Image
 import numpy as np
 
@@ -40,7 +43,10 @@ def main():
     mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
     label_mode = '1'
     alpha = 0.1
-    anno_mode = ['Mask', 'Mark']
+    anno_mode = [
+        'Mask',
+        #'Mark',
+    ]
     for i, mask in enumerate(masks):
         label = i + 1
         color_mask = np.random.random((1, 3)).tolist()[0]
@@ -56,6 +62,36 @@ def main():
     im = demo.get_image()
     image_som = Image.fromarray(im)
     image_som.show()
+
+    results = []
+
+    prompt_adapter = adapters.get_default_prompt_adapter()
+    text = "What are the values of the dates in the leftmost column? What about the horizontal column headings?"
+    output = prompt_adapter.prompt(
+        text,
+        images=[
+            # no marks seem to perform just as well as with marks on spreadsheets
+            #image_som,
+            image,
+        ])
+    logger.info(output)
+    results.append((text, output))
+
+    text = "\n".join([
+        f"Consider the dates along the leftmost column and the horizontal column headings:",
+        output,
+        "What are the values in the corresponding cells?"
+    ])
+    output = prompt_adapter.prompt(text, images=[image_som])
+    logger.info(output)
+    results.append((text, output))
+
+    text = "What are the contents of cells A2, B2, and C2?"
+    output = prompt_adapter.prompt(text, images=[image_som])
+    logger.info(output)
+    results.append((text, output))
+
+    logger.info(f"results=\n{pformat(results)}")
 
 
 if __name__ == "__main__":

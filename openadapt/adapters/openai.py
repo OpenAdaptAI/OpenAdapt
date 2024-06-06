@@ -9,6 +9,7 @@ from typing import Any
 
 from loguru import logger
 from PIL import Image
+import fire
 import requests
 
 from openadapt import cache, utils
@@ -206,3 +207,24 @@ def prompt(
     result = get_completion(payload)
     logger.info(f"result=\n{pformat(result)}")
     return result
+
+
+def main(text: str, image_path: str | None = None) -> None:
+    """Prompt Google Gemini with text and a path to an image."""
+    if image_path:
+        image = Image.open(image_path)
+        # Convert image to RGB if it's RGBA (to remove alpha channel)
+        if image.mode in ("RGBA", "LA") or (
+            image.mode == "P" and "transparency" in image.info
+        ):
+            image = image.convert("RGB")
+    else:
+        image = None
+
+    images = [image] if image else None
+    output = prompt(text, images=images)
+    logger.info(output)
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
