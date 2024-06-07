@@ -83,8 +83,7 @@ class RecordingsAPI:
             )
 
             try:
-                # TODO: change to use recording_id once scrubbing PR is merged
-                audio_info = crud.get_audio_info(session, recording.timestamp)[0]
+                audio_info = crud.get_audio_info(session, recording)[0]
                 words_with_timestamps = json.loads(audio_info.words_with_timestamps)
                 words_with_timestamps = [
                     {
