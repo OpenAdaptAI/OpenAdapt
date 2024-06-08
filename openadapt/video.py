@@ -212,7 +212,7 @@ def finalize_video_writer(
     close_thread.join()
 
     # Move moov atom to beginning of file
-    move_moov_atom(video_file_path)
+    #move_moov_atom(video_file_path)
 
     logger.info("done")
 
