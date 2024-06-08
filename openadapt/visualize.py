@@ -186,7 +186,6 @@ def main(
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
 
-
     session = crud.get_new_session(read_only=True)
     audio_info = row2dict(crud.get_audio_info(session, recording))
     if audio_info:
