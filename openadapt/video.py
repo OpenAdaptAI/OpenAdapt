@@ -219,7 +219,7 @@ def finalize_video_writer(
     # Move moov atom to beginning of file
     if fix_moov:
         # TODO: fix this
-        logger.warning("{fix_mov=} will cause extract_frames() to fail!!!")
+        logger.warning(f"{fix_moov=} will cause extract_frames() to fail!!!")
         move_moov_atom(video_file_path)
 
     logger.info("done")
