@@ -423,6 +423,10 @@ def video_post_callback(state: dict) -> None:
     video.finalize_video_writer(
         state["video_container"],
         state["video_stream"],
+        state["video_start_timestamp"],
+        state["last_frame"],
+        state["last_frame_timestamp"],
+        state["last_pts"],
     )
 
 
@@ -436,6 +440,7 @@ def write_video_event(
     video_start_timestamp: float,
     last_pts: int = 0,
     num_copies: int = 2,
+    **kwargs,
 ) -> dict[str, Any]:
     """Write a screen event to the video file and update the performance queue.
 
@@ -457,13 +462,15 @@ def write_video_event(
     """
     if last_pts != 0:
         num_copies = 1
+    screenshot_image = event.data
+    screenshot_timestamp = event.timestamp
     # ensure that the first frame is available (otherwise occasionally it is not)
     for _ in range(num_copies):
         last_pts = video.write_video_frame(
             video_container,
             video_stream,
-            event.data,
-            event.timestamp,
+            screenshot_image,
+            screenshot_timestamp,
             video_start_timestamp,
             last_pts,
         )
@@ -472,6 +479,8 @@ def write_video_event(
         "video_container": video_container,
         "video_stream": video_stream,
         "video_start_timestamp": video_start_timestamp,
+        "last_frame": screenshot_image,
+        "last_frame_timestamp": screenshot_timestamp,
         "last_pts": last_pts,
     }
 

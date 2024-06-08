@@ -91,6 +91,7 @@ def write_video_frame(
     timestamp: float,
     video_start_timestamp: float,
     last_pts: int,
+    force_key_frame: bool = False,
 ) -> int:
     """Encodes and writes a video frame to the output container from a given screenshot.
 
@@ -108,6 +109,7 @@ def write_video_frame(
         video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts (int): The PTS of the last written frame.
+        force_key_frame (bool): Whether to force this frame to be a key frame.
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
@@ -122,6 +124,10 @@ def write_video_frame(
 
     # Convert the PIL Image to an AVFrame
     av_frame = av.VideoFrame.from_image(screenshot)
+
+    # Optionally force a key frame
+    if force_key_frame:
+        av_frame.pict_type = "I"
 
     # Calculate the time difference in seconds
     time_diff = timestamp - video_start_timestamp
@@ -149,15 +155,35 @@ def write_video_frame(
 def finalize_video_writer(
     video_container: av.container.OutputContainer,
     video_stream: av.stream.Stream,
+    video_start_timestamp: float,
+    last_frame: Image.Image,
+    last_frame_timestamp: float,
+    last_pts: int,
 ) -> None:
     """Finalizes the video writer, ensuring all buffered frames are encoded and written.
 
     Args:
         video_container (av.container.OutputContainer): The AV container to finalize.
         video_stream (av.stream.Stream): The AV stream to finalize.
+        video_start_timestamp (float): The base timestamp from which the video
+            recording started.
+        last_frame (Image.Image): The last frame that was written (to be written again).
+        last_frame_timestamp (float): The timestamp of the last frame that was written.
+        last_pts (int): The last presentation timestamp.
     """
     # Closing the container in the main thread leads to a GIL deadlock.
     # https://github.com/PyAV-Org/PyAV/issues/1053
+
+    # Write a final key frame
+    last_pts = write_video_frame(
+        video_container,
+        video_stream,
+        last_frame,
+		last_frame_timestamp,
+        video_start_timestamp,
+        last_pts,
+        force_key_frame=True,
+    )
 
     # Define a function to close the container
     def close_container() -> None:
