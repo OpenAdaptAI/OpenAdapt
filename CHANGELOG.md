@@ -2,6 +2,29 @@
 
 
 
+## v0.30.1 (2024-06-08)
+
+### Chore
+
+* chore: fix typo in test_video.py (#710) ([`57a3376`](https://github.com/OpenAdaptAI/OpenAdapt/commit/57a337628006338a91898842666efd9f3553ada0))
+
+### Fix
+
+* fix(get_audio_info, visualize): replace use of recording timestamp in functions with recording id (#717)
+
+* fix(audio): Replace use of recording timestamp in functions with recording id (#727)
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt;
+
+* fix get_audio_info
+
+* black
+
+---------
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b04fd44c61d276e2aede9a93bb8d2f0c5243029))
+
+
 ## v0.30.0 (2024-06-05)
 
 ### Feature
