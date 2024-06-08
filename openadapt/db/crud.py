@@ -675,21 +675,21 @@ def insert_audio_info(
     session.commit()
 
 
-# TODO: change to use recording_id once scrubbing PR is merged
 def get_audio_info(
     session: SaSession,
-    recording_timestamp: float,
-) -> list[AudioInfo]:
+    recording: Recording,
+) -> AudioInfo:
     """Get the audio info for a given recording.
 
     Args:
         session (sa.orm.Session): The database session.
-        recording_timestamp (float): The timestamp of the recording.
+        recording (Recording): The recording object.
 
     Returns:
-        list[AudioInfo]: A list of audio info for the recording.
+        AudioInfo: Audio info for the recording.
     """
-    return _get(session, AudioInfo, recording_timestamp)
+    audio_infos = _get(session, AudioInfo, recording.id)
+    return audio_infos[0] if audio_infos else None
 
 
 def post_process_events(session: SaSession, recording: Recording) -> None:
