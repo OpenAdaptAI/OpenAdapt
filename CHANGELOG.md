@@ -2,6 +2,25 @@
 
 
 
+## v0.30.2 (2024-06-08)
+
+### Fix
+
+* fix(video): fix video playback with force_key_frame (#726)
+
+* force_key_frame
+
+* fix embedded video playback
+
+* disable fix_moov
+
+* black; flake8
+
+* fix typo
+
+* yuv420p -&gt; yuv444p (lossless) ([`1f67822`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1f67822b710836cb37cfbe578d5d89e4da8412d1))
+
+
 ## v0.30.1 (2024-06-08)
 
 ### Chore
