@@ -441,7 +441,7 @@ def write_video_event(
     video_stream: av.stream.Stream,
     video_start_timestamp: float,
     last_pts: int = 0,
-    **kwargs,
+    **kwargs: dict,
 ) -> dict[str, Any]:
     """Write a screen event to the video file and update the performance queue.
 

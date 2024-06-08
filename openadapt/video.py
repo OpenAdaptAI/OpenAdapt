@@ -189,7 +189,7 @@ def finalize_video_writer(
         video_container,
         video_stream,
         last_frame,
-		last_frame_timestamp,
+        last_frame_timestamp,
         video_start_timestamp,
         last_pts,
         force_key_frame=True,
@@ -225,7 +225,7 @@ def finalize_video_writer(
     logger.info("done")
 
 
-def move_moov_atom(input_file: str, output_file: str = None):
+def move_moov_atom(input_file: str, output_file: str = None) -> None:
     """Moves the moov atom to the beginning of the video file using ffmpeg.
 
     If no output file is specified, modifies the input file in place.
@@ -238,17 +238,22 @@ def move_moov_atom(input_file: str, output_file: str = None):
     if output_file is None:
         # Create a temporary file
         temp_file = tempfile.NamedTemporaryFile(
-            delete=False, suffix='.mp4', dir=os.path.dirname(input_file),
+            delete=False,
+            suffix=".mp4",
+            dir=os.path.dirname(input_file),
         ).name
         output_file = temp_file
 
     command = [
-        'ffmpeg',
-        '-y',  # Automatically overwrite files without asking
-        '-i', input_file,
-        '-codec', 'copy',  # Avoid re-encoding; just copy streams
-        '-movflags', 'faststart',  # Move the moov atom to the start
-        output_file
+        "ffmpeg",
+        "-y",  # Automatically overwrite files without asking
+        "-i",
+        input_file,
+        "-codec",
+        "copy",  # Avoid re-encoding; just copy streams
+        "-movflags",
+        "faststart",  # Move the moov atom to the start
+        output_file,
     ]
     logger.info(f"{command=}")
     subprocess.run(command, check=True)
