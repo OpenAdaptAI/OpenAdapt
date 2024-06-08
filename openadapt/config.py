@@ -148,7 +148,7 @@ class Config(BaseSettings):
     LOG_MEMORY: bool
     REPLAY_STRIP_ELEMENT_STATE: bool = True
     VIDEO_ENCODING: str = "libx264"
-    VIDEO_PIXEL_FORMAT: str = "yuv420p"
+    VIDEO_PIXEL_FORMAT: str = "yuv444p"
     VIDEO_DIR_PATH: str = str(VIDEO_DIR_PATH)
     # sequences that when typed, will stop the recording of ActionEvents in record.py
     STOP_SEQUENCES: list[list[str]] = [
