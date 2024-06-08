@@ -678,7 +678,7 @@ def insert_audio_info(
 def get_audio_info(
     session: SaSession,
     recording: Recording,
-) -> list[AudioInfo]:
+) -> AudioInfo:
     """Get the audio info for a given recording.
 
     Args:
@@ -686,9 +686,10 @@ def get_audio_info(
         recording (Recording): The recording object.
 
     Returns:
-        list[AudioInfo]: A list of audio info for the recording.
+        AudioInfo: Audio info for the recording.
     """
-    return _get(session, AudioInfo, recording.id)
+    audio_infos = _get(session, AudioInfo, recording.id)
+    return audio_infos[0] if audio_infos else None
 
 
 def post_process_events(session: SaSession, recording: Recording) -> None:
