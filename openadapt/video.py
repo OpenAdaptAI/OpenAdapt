@@ -163,6 +163,7 @@ def finalize_video_writer(
     last_frame_timestamp: float,
     last_pts: int,
     video_file_path: str,
+    fix_moov: bool = False,
 ) -> None:
     """Finalizes the video writer, ensuring all buffered frames are encoded and written.
 
@@ -175,6 +176,10 @@ def finalize_video_writer(
         last_frame_timestamp (float): The timestamp of the last frame that was written.
         last_pts (int): The last presentation timestamp.
         video_file_path (str): The path to the video file.
+        fix_moov (bool): Whether to move the moov atom to the beginning of the file.
+            Setting this to True will fix a bug when displaying the video in Github
+            comments causing the video to appear to start a few seconds after 0:00.
+            However, this causes extract_frames to fail.
     """
     # Closing the container in the main thread leads to a GIL deadlock.
     # https://github.com/PyAV-Org/PyAV/issues/1053
@@ -212,7 +217,10 @@ def finalize_video_writer(
     close_thread.join()
 
     # Move moov atom to beginning of file
-    #move_moov_atom(video_file_path)
+    if fix_moov:
+        # TODO: fix this
+        logger.warning("{fix_mov=} will cause extract_frames() to fail!!!")
+        move_moov_atom(video_file_path)
 
     logger.info("done")
 
