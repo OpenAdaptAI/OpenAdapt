@@ -184,6 +184,7 @@ def describe_recording(
     action_dicts = [action.to_prompt_dict() for action in action_events]
     window_dicts = [
         action.window_event.to_prompt_dict(include_window_data)
+        # this may be a modified action, in which case there is no window event
         if action.window_event else {}
         for action in action_events
     ]
@@ -196,10 +197,9 @@ def describe_recording(
     ]
     images = [
         action.screenshot.image
-        if action.screenshot else None
         for action in action_events
+        if action.screenshot
     ]
-    images = [image for image in images if image]
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )
