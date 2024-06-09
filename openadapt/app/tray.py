@@ -128,10 +128,6 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
-        self.dashboard_action = TrackedQAction("Launch Dashboard")
-        self.dashboard_action.triggered.connect(self.launch_dashboard)
-        self.menu.addAction(self.dashboard_action)
-
         self.quit = TrackedQAction("Quit")
 
         def _quit() -> None:
@@ -162,6 +158,8 @@ class SystemTrayIcon:
 
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
+
+        self.launch_dashboard()
 
     def handle_recording_signal(
         self,
@@ -474,7 +472,6 @@ class SystemTrayIcon:
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()
         self.dashboard_thread.start()
-        self.dashboard_action.setText("Reload dashboard")
 
     def run(self) -> None:
         """Run the system tray icon."""

@@ -227,6 +227,7 @@ class Config(BaseSettings):
     SOM_SERVER_URL: str = "<SOM_SERVER_URL>"
 
     UNIQUE_USER_ID: str = ""
+    SHOW_ONBOARDING_MODAL: bool = True
 
     class Adapter(str, Enum):
         """Adapter for the completions API."""
@@ -289,6 +290,7 @@ class Config(BaseSettings):
         ],
         "general": [
             "UNIQUE_USER_ID",
+            "SHOW_ONBOARDING_MODAL",
         ],
     }
 

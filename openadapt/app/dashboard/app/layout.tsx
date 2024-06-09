@@ -5,6 +5,7 @@ import { Notifications } from '@mantine/notifications';
 import { Shell } from '@/components/Shell'
 import { CSPostHogProvider } from './providers';
 import { ModalsProvider } from '@mantine/modals';
+import { Onboarding } from '@/components/Onboarding';
 
 export const metadata = {
     title: 'OpenAdapt.AI',
@@ -25,7 +26,10 @@ export default function RootLayout({
                     <MantineProvider>
                         <Notifications />
                         <ModalsProvider>
-                            <Shell>{children}</Shell>
+                            <Shell>
+                                <Onboarding />
+                                {children}
+                            </Shell>
                         </ModalsProvider>
                     </MantineProvider>
                 </body>
