@@ -21,7 +21,6 @@
     "RECORD_FULL_VIDEO": false,
     "RECORD_IMAGES": false,
     "LOG_MEMORY": false,
-    "VIDEO_PIXEL_FORMAT": "rgb24",
     "STOP_SEQUENCES": [
         [
             "o",

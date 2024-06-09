@@ -17,7 +17,7 @@ Consider the following description of the previously recorded actions:
 
 
 {% if include_replay_instructions %}
-Consider the user's proposed modifications in natural language replay instructions:
+Consider the user's proposed modifications in natural language instructions:
 
 ```text
 {{ replay_instructions }}
@@ -26,8 +26,8 @@ Consider the user's proposed modifications in natural language replay instructio
 
 
 {% if include_modified_recording %}
-Consider this updated list of actions that has been modified such that replaying them
-would have accomplished the user's replay instructions:
+Consider this updated list of actions that have been modified such that replaying them
+would have accomplished the user's instructions:
 
 ```json
 {{ modified_actions }}
@@ -36,9 +36,8 @@ would have accomplished the user's replay instructions:
 
 
 {% if include_modified_recording_description %}
-Consider the following description of the updated list of actions that has been
-modified such that replaying them would have accomplished the user's replay
-instructions:
+Consider the following description of the updated list of actions that have been
+modified such that replaying them would have accomplished the user's instructions:
 
 ``json
 {{ modified_recording_description }}
@@ -46,7 +45,7 @@ instructions:
 {% endif %}
 
 
-Consider the actions you've produced (and we have replayed) so far:
+Consider the actions you've produced (and we have played back) so far:
 
 ```json
 {{ replayed_actions }}
@@ -58,6 +57,7 @@ Consider the current active window:
 {{ current_window }}
 ```
 {% endif %}
+
 
 The attached image is a screenshot of the current state of the system.
 

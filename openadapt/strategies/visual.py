@@ -110,7 +110,7 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
 def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
-    retain_window_events: bool = False,
+    #retain_window_events: bool = False,
 ) -> None:
     """Modify the given ActionEvents according to the given replay instructions.
 

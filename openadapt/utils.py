@@ -98,6 +98,8 @@ def row2dict(row: dict | db.BaseModel, follow: bool = True) -> dict:
     Returns:
         dict: The row object converted to a dictionary.
     """
+    if not row:
+        return {}
     if isinstance(row, dict):
         return row
     try_follow = ["children"] if follow else []
