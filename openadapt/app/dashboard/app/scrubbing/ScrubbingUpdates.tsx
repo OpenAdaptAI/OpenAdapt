@@ -25,7 +25,7 @@ export const ScrubbingUpdates = ({ data, resetScrubbingStatus }: Props) => {
         <Text component='h2'>Scrubbing updates for recording {data.recording.task_description}</Text>
         <Text>Provider: {data.provider}</Text>
         {data.copying_recording ? (
-          <Text>Copying recording first...</Text>
+          <Text>Copying recording (this may take a while if Spacy dependencies need to be downloaded on the first run)...</Text>
         ) : data.error ? (
           <Text c="red">{data.error}</Text>
         ) : (
