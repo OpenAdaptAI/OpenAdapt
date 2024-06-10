@@ -5,7 +5,6 @@ This module provides functions for managing UI cards in the OpenAdapt applicatio
 
 from datetime import datetime
 import multiprocessing
-import sys
 import time
 
 from nicegui import ui
@@ -42,17 +41,11 @@ class RecordProc:
 
     def wait(self) -> None:
         """Wait for the recording process to finish."""
-        if sys.platform == "win32":
-            # a bug on windows for when `record` runs for a long time, where even when
-            # the `record` function returns a value, `record_proc` refuses to join.
-            # this is a workaround to ensure the process is terminated
-            while True:
-                if self.terminate_recording.is_set():
-                    self.record_proc.terminate()
-                    return
-                time.sleep(0.1)
-        else:
-            self.record_proc.join()
+        while True:
+            if self.terminate_recording.is_set():
+                self.record_proc.terminate()
+                return
+            time.sleep(0.1)
 
     def is_running(self) -> bool:
         """Check if the recording process is running."""
