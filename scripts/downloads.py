@@ -1,6 +1,5 @@
 """Plot release downloads over time."""
 
-import json
 import requests
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -29,8 +28,7 @@ def fetch_download_data(api_url: str) -> dict:
 
 
 def plot_downloads(data: dict) -> None:
-    """
-    Plots the number of downloads and cumulative downloads over time using matplotlib.
+    """Plots number of downloads and cumulative downloads over time using matplotlib.
 
     Args:
         data (dict): A dictionary with dates as keys and download counts as values.
