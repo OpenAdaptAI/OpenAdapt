@@ -2,6 +2,13 @@
 
 
 
+## v0.30.4 (2024-06-11)
+
+### Fix
+
+* fix(RecordingsAPI): catch AttributeError if audio_info is None (#729) ([`81b4089`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81b40893d39eebf2c4c4afec60d1ba8f15e473d4))
+
+
 ## v0.30.3 (2024-06-10)
 
 ### Fix
