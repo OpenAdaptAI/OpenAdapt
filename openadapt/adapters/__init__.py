@@ -17,6 +17,7 @@ def get_default_prompt_adapter() -> ModuleType:
     return prompt
 
 
+# TODO: refactor to follow adapters.prompt
 def get_default_segmentation_adapter() -> ModuleType:
     """Returns the default image segmentation adapter module.
 
