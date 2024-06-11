@@ -9,7 +9,8 @@ from openadapt.app import cards
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
-from openadapt.utils import display_event, image2utf8, row2dict
+from openadapt.utils import image2utf8, row2dict
+from openadapt.plotting import display_event
 
 
 class RecordingsAPI:
@@ -93,7 +94,7 @@ class RecordingsAPI:
                     }
                     for word in words_with_timestamps
                 ]
-            except IndexError:
+            except (IndexError, AttributeError):
                 words_with_timestamps = []
             word_index = 0
 

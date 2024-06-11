@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.30.2"
+version = "0.30.4"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
@@ -105,6 +105,8 @@ openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
 
+wheel = "^0.43.0"
+cython = "^3.0.10"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
@@ -128,14 +130,17 @@ replay = "openadapt.replay:start"
 app = "openadapt.app.tray:_run"
 reset = "openadapt.scripts.reset_db:reset_db"
 capture = "openadapt.capture:test"
-install-dashboard = 'openadapt.app.dashboard:entrypoint'
-
+postinstall = "scripts.postinstall:main"
 
 [tool.black]
 extend-exclude = '''
 /(
-  | venv
+    venv
+  | .venv
+  | .cache
   | alembic
+  | contrib
+  | __pycache__
 )/
 '''
 

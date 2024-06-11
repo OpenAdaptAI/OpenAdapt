@@ -2,6 +2,22 @@
 
 
 
+## v0.30.4 (2024-06-11)
+
+### Fix
+
+* fix(RecordingsAPI): catch AttributeError if audio_info is None (#729) ([`81b4089`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81b40893d39eebf2c4c4afec60d1ba8f15e473d4))
+
+
+## v0.30.3 (2024-06-10)
+
+### Fix
+
+* fix(scrubbing): Catch exceptions when download required spacy model (#733) ([`b3f73d8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b3f73d8e8689f24b41617ca896a5c40eb1d0eec8))
+
+* fix(video): add num_copies to write_video_event (#732) ([`ca04b6d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca04b6d737fe17371726437540768ee13979128e))
+
+
 ## v0.30.2 (2024-06-08)
 
 ### Fix

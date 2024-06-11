@@ -366,8 +366,6 @@ class ActionEvent(db.Base):
         Returns:
             (ActionEvent) The ActionEvent.
         """
-        from openadapt import utils
-
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
@@ -381,9 +379,7 @@ class ActionEvent(db.Base):
                 # handle multiple key separators
                 # (each key separator must start and end with a prefix and suffix)
                 default_sep = "".join([name_suffix, sep, name_prefix])
-                variation_seps = [
-                    "".join([name_suffix, name_prefix])
-                ]
+                variation_seps = ["".join([name_suffix, name_prefix])]
                 key_seps = [default_sep]
                 if handle_separator_variations:
                     key_seps += variation_seps
@@ -406,11 +402,16 @@ class ActionEvent(db.Base):
                 children = []
                 release_events = []
                 for key_name, canonical_key_name in zip_longest(
-                    key_names, canonical_key_names,
+                    key_names,
+                    canonical_key_names,
                 ):
-                    press, release = cls._create_key_events(key_name, canonical_key_name)
+                    press, release = cls._create_key_events(
+                        key_name, canonical_key_name
+                    )
                     children.append(press)
-                    release_events.append(release)  # Collect release events to append in reverse order later
+                    release_events.append(
+                        release
+                    )  # Collect release events to append in reverse order later
 
             else:
                 # Handling regular character sequences

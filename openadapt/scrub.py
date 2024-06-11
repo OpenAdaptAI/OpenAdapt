@@ -163,7 +163,15 @@ def scrub(recording_id: int, provider_id: str, release_lock: bool = False) -> No
 
         new_recording = crud.get_recording_by_id(write_session, new_recording_id)
 
-        scrubber = ScrubProvider.get_scrubber(provider_id)
+        try:
+            scrubber = ScrubProvider.get_scrubber(provider_id)
+        except Exception as e:
+            logger.error(e)
+            cleanup(
+                "Failed to download the required spacy model. Please try again after"
+                " some time."
+            )
+            return
 
         crud.scrub_item(new_recording_id, Recording, scrubber)
 

@@ -49,15 +49,16 @@ import time
 
 from loguru import logger
 from PIL import Image, ImageDraw
-from skimage.metrics import structural_similarity as ssim
 import numpy as np
 
-from openadapt import adapters, common, models, strategies, utils, vision
+from openadapt import adapters, common, models, plotting, strategies, utils, vision
 
 DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
-MIN_SSIM = 0.9  # threshold for considering an image as similar
+MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
+MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
+MIN_SEGMENT_SIZE_SIM = 0  # threshold for considering segment sizes similar
 
 
 @dataclass
@@ -318,47 +319,9 @@ def get_active_segment(
     return active_index
 
 
-def get_image_similarity(im1: Image.Image, im2: Image.Image) -> tuple[float, np.array]:
-    """Calculate the structural similarity index (SSIM) between two images.
-
-    This function first resizes the images to a common size maintaining their aspect
-    ratios. It then converts the resized images to grayscale and computes the SSIM.
-
-    Args:
-        im1 (Image.Image): The first image to compare.
-        im2 (Image.Image): The second image to compare.
-
-    Returns:
-        tuple[float, np.array]: A tuple containing the SSIM and the difference image.
-    """
-    # Calculate aspect ratios
-    aspect_ratio1 = im1.width / im1.height
-    aspect_ratio2 = im2.width / im2.height
-    # Use the smaller image as the base for resizing to maintain the aspect ratio
-    if aspect_ratio1 < aspect_ratio2:
-        base_width = min(im1.width, im2.width)
-        base_height = int(base_width / aspect_ratio1)
-    else:
-        base_height = min(im1.height, im2.height)
-        base_width = int(base_height * aspect_ratio2)
-
-    # Resize images to a common base while maintaining aspect ratio
-    im1 = im1.resize((base_width, base_height), Image.LANCZOS)
-    im2 = im2.resize((base_width, base_height), Image.LANCZOS)
-
-    # Convert images to grayscale
-    im1_gray = np.array(im1.convert("L"))
-    im2_gray = np.array(im2.convert("L"))
-
-    data_range = im2_gray.max() - im2_gray.min()
-    mssim, diff_image = ssim(im1_gray, im2_gray, data_range=data_range, full=True)
-
-    return mssim, diff_image
-
-
 def find_similar_image_segmentation(
     image: Image.Image,
-    min_ssim: float = MIN_SSIM,
+    min_ssim: float = MIN_SCREENSHOT_SSIM,
 ) -> tuple[Segmentation, np.ndarray] | tuple[None, None]:
     """Identify a similar image in the cache based on the SSIM comparison.
 
@@ -380,7 +343,10 @@ def find_similar_image_segmentation(
     similar_segmentation_diff = None
 
     for segmentation in SEGMENTATIONS:
-        similarity_index, ssim_image = get_image_similarity(image, segmentation.image)
+        similarity_index, ssim_image = vision.get_image_similarity(
+            image,
+            segmentation.image,
+        )
         if similarity_index > min_ssim:
             logger.info(f"{similarity_index=}")
             min_ssim = similarity_index
@@ -393,12 +359,15 @@ def find_similar_image_segmentation(
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
+    handle_similar_image_groups: bool = False,
 ) -> Segmentation:
     """Segments the active window from the action event's screenshot.
 
     Args:
         action_event: action event containing the screenshot data.
         exceptions: list of exceptions previously raised, added to prompt.
+        handle_similar_image_groups (bool): Whether to distinguish between similar
+            image groups. Work-in-progress.
 
     Returns:
         Segmentation object containing detailed segmentation information.
@@ -424,15 +393,22 @@ def get_window_segmentation(
 
     masks = vision.get_masks_from_segmented_image(segmented_image)
     if DEBUG:
-        vision.display_binary_images_grid(masks)
+        plotting.display_binary_images_grid(masks)
 
     refined_masks = vision.refine_masks(masks)
     if DEBUG:
-        vision.display_binary_images_grid(refined_masks)
+        plotting.display_binary_images_grid(refined_masks)
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
-    # TODO XXX: find identical masked images and handle them
+    if handle_similar_image_groups:
+        similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
+            masked_images,
+            MIN_SEGMENT_SSIM,
+            MIN_SEGMENT_SIZE_SIM,
+        )
+        # TODO XXX: handle similar image groups
+        raise ValueError("Currently unsupported.")
 
     descriptions = prompt_for_descriptions(
         original_image,
@@ -455,7 +431,7 @@ def get_window_segmentation(
         centroids,
     )
     if DEBUG:
-        vision.display_images_table_with_titles(masked_images, descriptions)
+        plotting.display_images_table_with_titles(masked_images, descriptions)
 
     SEGMENTATIONS.append(segmentation)
     return segmentation
