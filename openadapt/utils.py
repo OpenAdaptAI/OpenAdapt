@@ -433,6 +433,32 @@ def get_strategy_class_by_name() -> dict:
     return class_by_name
 
 
+def get_performance_plot_file_path(recording_timestamp: float) -> str:
+    """Get the filename for the performance plot.
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+    Returns:
+        str: The filename.
+    """
+    os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
+
+    fname_parts = ["performance", str(recording_timestamp)]
+    fname = "-".join(fname_parts) + ".png"
+    return os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
+
+
+def delete_performance_plot(recording_timestamp: float) -> None:
+    """Delete the performance plot for the given recording timestamp.
+    Args:
+        recording_timestamp (float): The timestamp of the recording.
+    """
+    fpath = get_performance_plot_file_path(recording_timestamp)
+    try:
+        os.remove(fpath)
+    except FileNotFoundError as exc:
+        logger.warning(f"{exc=}")
+
+
 def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     """Strip the element state from the action event and its children.
 
