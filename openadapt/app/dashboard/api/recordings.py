@@ -93,7 +93,7 @@ class RecordingsAPI:
                     }
                     for word in words_with_timestamps
                 ]
-            except IndexError:
+            except (IndexError, AttributeError):
                 words_with_timestamps = []
             word_index = 0
 
