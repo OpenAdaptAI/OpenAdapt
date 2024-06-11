@@ -7,51 +7,58 @@ import os
 
 def install_detectron2() -> None:
     """Install Detectron2 from its GitHub repository."""
-    subprocess.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "git+https://github.com/facebookresearch/detectron2.git",
-            "--no-build-isolation",
-        ]
-    )
+    try:
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "git+https://github.com/facebookresearch/detectron2.git",
+                "--no-build-isolation",
+            ]
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing Detectron2: {e}")
+        sys.exit(1)
 
 
 def install_dashboard() -> None:
     """Install dashboard dependencies based on the operating system."""
-    # Save the original directory to revert back after operations
     original_directory = os.getcwd()
-    print(f"{original_directory=}")
+    print(f"Original directory: {original_directory}")
 
-    # Path to the dashboard directory containing package.json
-    dashboard_dir = os.path.join("openadapt", "app", "dashboard")
-    print(f"{dashboard_dir=}")
+    dashboard_dir = os.path.join(original_directory, "openadapt", "app", "dashboard")
+    print(f"Dashboard directory: {dashboard_dir}")
 
-    # Ensure the dashboard directory exists and contains package.json
     if not os.path.exists(os.path.join(dashboard_dir, "package.json")):
-        raise FileNotFoundError("package.json not found in the dashboard directory.")
+        print("package.json not found in the dashboard directory.")
+        sys.exit(1)
 
     try:
-        # Change the current working directory to the dashboard directory
         os.chdir(dashboard_dir)
+        print("Changed directory to:", os.getcwd())
 
         if sys.platform.startswith("win"):
-            # For Windows, use PowerShell script
-            subprocess.check_call(["powershell", "entrypoint.ps1"])
+            subprocess.check_call(["powershell", "./entrypoint.ps1"])
         else:
-            # For Unix-like systems, use Bash script
-            subprocess.check_call(["bash", "entrypoint.sh"])
+            subprocess.check_call(["bash", "./entrypoint.sh"])
+    except subprocess.CalledProcessError as e:
+        print(f"Error running entrypoint script: {e}")
+        sys.exit(1)
     finally:
-        # Revert back to the original directory regardless of success or failure
         os.chdir(original_directory)
+        print("Reverted to original directory:", os.getcwd())
 
 
 def main() -> None:
     """Main function to install dependencies."""
-    install_detectron2()
-    install_dashboard()
+    try:
+        install_detectron2()
+        install_dashboard()
+    except Exception as e:
+        print(f"Unhandled error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
