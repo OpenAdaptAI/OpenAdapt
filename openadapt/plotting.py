@@ -573,6 +573,7 @@ def plot_similar_image_groups(
         groups (list[list[int]]): list of lists, where each sublist contains indices
             of similar images.
         ssim_values (list[list[float]]): SSIM matrix with the values between images.
+        title_params (list[str]): List of additional parameters to include in the title.
         border_size (int): Size of the border around each image.
         margin (int): Margin size in pixels between images in the composite.
     """

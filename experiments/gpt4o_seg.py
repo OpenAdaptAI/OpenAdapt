@@ -1,3 +1,5 @@
+"""Generate segmentations directly with LLM."""
+
 from pprint import pformat
 import os
 import sys
@@ -6,12 +8,13 @@ import time
 from loguru import logger
 from PIL import Image
 
-from openadapt import cache, config, models, plotting, utils, window
+from openadapt import cache, config, models, plotting, utils
 from openadapt.adapters import openai
 
 
 @cache.cache(force_refresh=False)
-def get_window_image(window_search_str: str):
+def get_window_image(window_search_str: str) -> tuple:
+    """Get window image."""
     logger.info(f"Waiting for window with title containing {window_search_str=}...")
     while True:
         window_event = models.WindowEvent.get_active_window_event()
@@ -26,7 +29,8 @@ def get_window_image(window_search_str: str):
     return window_event, image
 
 
-def main(window_search_str: str | None):
+def main(window_search_str: str | None) -> None:
+    """Main."""
     if window_search_str:
         window_event, image = get_window_image(window_search_str)
         window_dict = window_event.to_prompt_dict()
@@ -37,7 +41,6 @@ def main(window_search_str: str | None):
         image_file_path = os.path.join(
             config.ROOT_DIR_PATH, "../tests/assets/calculator.png"
         )
-        # image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
         image = Image.open(image_file_path)
         window_dict = None
 
