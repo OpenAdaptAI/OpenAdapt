@@ -66,6 +66,7 @@ class Segmentation:
 
     Attributes:
         image: The original image used to generate segments.
+        marked_image: The marked image (for Set-of-Mark prompting).
         masked_images: A list of PIL Image objects that have been masked based on
             segmentation.
         descriptions: Descriptions of each segmented region, correlating with each
@@ -79,6 +80,7 @@ class Segmentation:
     """
 
     image: Image.Image
+    marked_image: Image.Image
     masked_images: list[Image.Image]
     descriptions: list[str]
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
@@ -446,6 +448,7 @@ def get_window_segmentation(
     )
     segmentation = Segmentation(
         original_image,
+        marked_image,
         masked_images,
         descriptions,
         bounding_boxes,

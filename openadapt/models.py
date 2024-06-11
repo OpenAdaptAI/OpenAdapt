@@ -2,6 +2,7 @@
 
 from collections import OrderedDict
 from copy import deepcopy
+from itertools import zip_longest
 from typing import Any, Type
 import io
 import sys
@@ -17,6 +18,9 @@ from openadapt.config import config
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
+
+
+EMPTY_VALS = [None, "", [], (), {}]
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -401,7 +405,9 @@ class ActionEvent(db.Base):
                 # Process each key name and canonical key name found
                 children = []
                 release_events = []
-                for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+                for key_name, canonical_key_name in zip_longest(
+                    key_names, canonical_key_names,
+                ):
                     press, release = cls._create_key_events(key_name, canonical_key_name)
                     children.append(press)
                     release_events.append(release)  # Collect release events to append in reverse order later
@@ -464,7 +470,7 @@ class ActionEvent(db.Base):
             {
                 key: val
                 for key, val in utils.row2dict(self, follow=False).items()
-                if val is not None
+                if val not in EMPTY_VALS
                 and not key.endswith("timestamp")
                 and not key.endswith("id")
                 and key not in ["reducer_names"]
@@ -538,7 +544,7 @@ class WindowEvent(db.Base):
             {
                 key: val
                 for key, val in utils.row2dict(self, follow=False).items()
-                if val is not None
+                if val not in EMPTY_VALS
                 and not key.endswith("timestamp")
                 and not key.endswith("id")
                 # and not isinstance(getattr(models.WindowEvent, key), property)
