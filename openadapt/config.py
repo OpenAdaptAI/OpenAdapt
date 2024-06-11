@@ -168,6 +168,12 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
+    
+    # Chrome Extension Socket configurations
+    SOCKET_PORT: 6001,
+    SOCKET_AUTHKEY: b"openadapt",
+    SOCKET_ADDRESS: "localhost",
+    SOCKET_RETRY_INTERVAL: 5, # seconds
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -389,7 +395,8 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     Returns:
         str: The possibly obfuscated configuration parameter value.
     """
-    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", 
+                           "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
         val = obfuscate(val)

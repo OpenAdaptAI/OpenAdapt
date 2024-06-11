@@ -360,6 +360,9 @@ def main(
                                 <table>
                                     {dict2html(window_event_dict , None)}
                                 </table>
+                                <table>
+                                    {dict2html(browser_event_dict , None)}
+                                </table>
                             """,
                             ),
                             Div(text=f"""

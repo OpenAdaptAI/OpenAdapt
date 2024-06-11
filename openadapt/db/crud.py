@@ -19,6 +19,7 @@ from openadapt.config import DATABASE_LOCK_FILE_PATH, config
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
+    BrowserEvent,
     AudioInfo,
     MemoryStat,
     PerformanceStat,
@@ -37,6 +38,7 @@ lock.set()
 action_events = []
 screenshots = []
 window_events = []
+browser_events = []
 performance_stats = []
 memory_stats = []
 
@@ -150,6 +152,25 @@ def insert_window_event(
         "recording_timestamp": recording.timestamp,
     }
     _insert(session, event_data, WindowEvent, window_events)
+
+
+def insert_browser_event(
+    recording_timestamp: int,
+    event_timestamp: int,
+    event_data: dict[str, Any] = None
+) -> None:
+    """Insert a browser event into the database.
+    Args:
+        recording_timestamp (int): The timestamp of the recording.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
+    event_data = {
+        **event_data,
+        "timestamp": event_timestamp,
+        "recording_timestamp": recording_timestamp,
+    }
+    _insert(event_data, BrowserEvent, browser_events)
 
 
 def insert_perf_stat(
@@ -396,6 +417,16 @@ def get_action_events(
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
     return action_events
+
+
+def get_browser_events(recording: Recording) -> list[BrowserEvent]:
+    """Get browser events for a given recording.
+    Args:
+        recording (Recording): recording object
+    Returns:
+        List[BrowserEvent]: list of browser events
+    """
+    return _get(BrowserEvent, recording.timestamp)
 
 
 def filter_disabled_action_events(

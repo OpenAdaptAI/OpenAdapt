@@ -79,6 +79,11 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    browser_events = sa.orm.relationship(
+        "BrowserEvent",
+        back_populates="recording",
+        order_by="BrowserEvent.timestamp",
+    )
     scrubbed_recordings = sa.orm.relationship(
         "ScrubbedRecording",
         back_populates="recording",
@@ -123,6 +128,8 @@ class ActionEvent(db.Base):
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
     window_event_timestamp = sa.Column(ForceFloat)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
+    browser_event_timestamp = sa.Column(sa.ForeignKey("browser_event.timestamp"))
+    browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -208,6 +215,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_event")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -522,6 +530,28 @@ class WindowEvent(db.Base):
         )
         window_dict["state"].pop("meta")
         return window_dict
+
+
+class BrowserEvent(db.Base):
+    """Class representing a browser event in the database."""
+
+    __tablename__ = "browser_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    message = sa.Column(sa.JSON)
+    timestamp = sa.Column(ForceFloat)
+    browser_id = sa.Column(sa.String)
+
+    recording = sa.orm.relationship("Recording", back_populates="browser_events")
+    action_event = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    # TODO: implement for extension
+    # @classmethod
+    # def get_active_browser_event(cls: Any) -> Any:
+    #     """Get the active chrome tab window's DOM"""
+    #     return BrowserEvent(**get_active_chrome_data())
 
 
 class FrameCache:

@@ -12,6 +12,8 @@ import ast
 import base64
 import inspect
 import os
+import signal
+import socket
 import sys
 import threading
 import time
@@ -30,6 +32,7 @@ import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
+import psutil
 import orjson
 
 if sys.platform == "win32":
@@ -854,6 +857,49 @@ def strip_element_state(action_event: ActionEvent) -> ActionEvent:
     for child in action_event.children:
         strip_element_state(child)
     return action_event
+
+
+def get_free_port() -> int:
+    """Get a free port number on the local machine.
+    Returns:
+        An available free port number.
+    Raises:
+        OSError: If a free port number cannot be obtained.
+    """
+    # Create a temporary socket to find a free port
+    temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    temp_socket.bind(("localhost", 0))
+    _, port = temp_socket.getsockname()
+    temp_socket.close()
+    return port
+
+
+def send_kill_signal(pid: int) -> None:
+    """Send a kill signal to the process identified by the PID.
+    Args:
+        pid (int): The PID of the process.
+    Raises:
+        OSError: If the kill signal cannot be sent.
+    """
+    try:
+        # Send the kill signal (SIGTERM) to the process identified by the PID
+        os.kill(pid, signal.SIGTERM)
+        logger.info("Kill signal sent successfully.")
+    except OSError as e:
+        logger.info(f"Failed to send kill signal: {e}")
+
+
+def get_pid_by_name(process_name: str) -> int:
+    """Get the PID of the process with the given name.
+    Args:
+        process_name (str): The name of the process.
+    Returns:
+        int: The PID of the process.
+    """
+    for process in psutil.process_iter(["pid", "name"]):
+        if process.info["name"] == process_name:
+            return process.info["pid"]
+    return None
 
 
 def compute_diff(image1: Image.Image, image2: Image.Image) -> Image.Image:
