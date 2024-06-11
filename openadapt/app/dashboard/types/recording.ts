@@ -8,6 +8,7 @@ export type Recording = {
     platform: string;
     task_description: string;
     video_start_time: number | null;
+    original_recording_id: number | null;
 }
 
 export enum RecordingStatus {

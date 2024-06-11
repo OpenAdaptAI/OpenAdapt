@@ -411,6 +411,7 @@ def video_pre_callback(db: crud.SaSession, recording: Recording) -> dict[str, An
         "video_stream": video_stream,
         "video_start_timestamp": video_start_timestamp,
         "last_pts": 0,
+        "video_file_path": video_file_path,
     }
 
 
@@ -423,6 +424,11 @@ def video_post_callback(state: dict) -> None:
     video.finalize_video_writer(
         state["video_container"],
         state["video_stream"],
+        state["video_start_timestamp"],
+        state["last_frame"],
+        state["last_frame_timestamp"],
+        state["last_pts"],
+        state["video_file_path"],
     )
 
 
@@ -436,6 +442,7 @@ def write_video_event(
     video_start_timestamp: float,
     last_pts: int = 0,
     num_copies: int = 2,
+    **kwargs: dict,
 ) -> dict[str, Any]:
     """Write a screen event to the video file and update the performance queue.
 
@@ -450,29 +457,39 @@ def write_video_event(
         video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts: The last presentation timestamp.
-        num_copies: The number of times to write the first each frame.
+        num_copies: The number of times to write the frame.
 
     Returns:
         dict containing state.
     """
+    screenshot_image = event.data
+    screenshot_timestamp = event.timestamp
+    force_key_frame = last_pts == 0
+    # ensure that the first frame is available (otherwise occasionally it is not)
+    # TODO: why isn't force_key_frame sufficient?
     if last_pts != 0:
         num_copies = 1
-    # ensure that the first frame is available (otherwise occasionally it is not)
     for _ in range(num_copies):
         last_pts = video.write_video_frame(
             video_container,
             video_stream,
-            event.data,
-            event.timestamp,
+            screenshot_image,
+            screenshot_timestamp,
             video_start_timestamp,
             last_pts,
+            force_key_frame,
         )
     perf_q.put((f"{event.type}(video)", event.timestamp, utils.get_timestamp()))
     return {
-        "video_container": video_container,
-        "video_stream": video_stream,
-        "video_start_timestamp": video_start_timestamp,
-        "last_pts": last_pts,
+        **kwargs,
+        **{
+            "video_container": video_container,
+            "video_stream": video_stream,
+            "video_start_timestamp": video_start_timestamp,
+            "last_frame": screenshot_image,
+            "last_frame_timestamp": screenshot_timestamp,
+            "last_pts": last_pts,
+        },
     }
 
 

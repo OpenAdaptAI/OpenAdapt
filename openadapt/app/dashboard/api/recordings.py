@@ -84,8 +84,7 @@ class RecordingsAPI:
             )
 
             try:
-                # TODO: change to use recording_id once scrubbing PR is merged
-                audio_info = crud.get_audio_info(session, recording.timestamp)[0]
+                audio_info = crud.get_audio_info(session, recording)
                 words_with_timestamps = json.loads(audio_info.words_with_timestamps)
                 words_with_timestamps = [
                     {
@@ -95,7 +94,7 @@ class RecordingsAPI:
                     }
                     for word in words_with_timestamps
                 ]
-            except IndexError:
+            except (IndexError, AttributeError):
                 words_with_timestamps = []
             word_index = 0
 

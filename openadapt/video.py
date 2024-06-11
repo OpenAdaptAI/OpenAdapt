@@ -3,6 +3,8 @@
 from fractions import Fraction
 from pprint import pformat
 import os
+import subprocess
+import tempfile
 import threading
 
 from loguru import logger
@@ -47,7 +49,7 @@ def initialize_video_writer(
     width: int,
     height: int,
     fps: int = 24,
-    codec: str = "libx264rgb",
+    codec: str = config.VIDEO_ENCODING,
     pix_fmt: str = config.VIDEO_PIXEL_FORMAT,
     crf: int = 0,
     preset: str = "veryslow",
@@ -60,8 +62,8 @@ def initialize_video_writer(
         height (int): Height of the video.
         fps (int, optional): Frames per second of the video. Defaults to 24.
         codec (str, optional): Codec used for encoding the video.
-            Defaults to 'libx264rgb'.
-        pix_fmt (str, optional): Pixel format of the video. Defaults to 'rgb24'.
+            Defaults to 'libx264'.
+        pix_fmt (str, optional): Pixel format of the video. Defaults to 'yuv420p'.
         crf (int, optional): Constant Rate Factor for encoding quality.
             Defaults to 0 for lossless.
         preset (str, optional): Encoding speed/quality trade-off.
@@ -91,6 +93,7 @@ def write_video_frame(
     timestamp: float,
     video_start_timestamp: float,
     last_pts: int,
+    force_key_frame: bool = False,
 ) -> int:
     """Encodes and writes a video frame to the output container from a given screenshot.
 
@@ -108,6 +111,7 @@ def write_video_frame(
         video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts (int): The PTS of the last written frame.
+        force_key_frame (bool): Whether to force this frame to be a key frame.
 
     Returns:
         int: The updated last_pts value, to be used for writing the next frame.
@@ -118,10 +122,13 @@ def write_video_frame(
         - The function logs the current timestamp, base timestamp, and
               calculated PTS values for debugging purposes.
     """
-    logger.debug(f"{timestamp=} {video_start_timestamp=}")
-
     # Convert the PIL Image to an AVFrame
     av_frame = av.VideoFrame.from_image(screenshot)
+
+    # Optionally force a key frame
+    # TODO: force key frames on active window change?
+    if force_key_frame:
+        av_frame.pict_type = "I"
 
     # Calculate the time difference in seconds
     time_diff = timestamp - video_start_timestamp
@@ -129,12 +136,14 @@ def write_video_frame(
     # Calculate PTS, taking into account the fractional average rate
     pts = int(time_diff * float(Fraction(video_stream.average_rate)))
 
-    logger.debug(f"{time_diff=} {pts=} {video_stream.average_rate=}")
+    logger.debug(
+        f"{timestamp=} {video_start_timestamp=} {time_diff=} {pts=} {force_key_frame=}"
+    )
 
     # Ensure monotonically increasing PTS
     if pts <= last_pts:
         pts = last_pts + 1
-        logger.debug("incremented {pts=}")
+        logger.debug(f"incremented {pts=}")
     av_frame.pts = pts
     last_pts = pts  # Update the last_pts
 
@@ -149,15 +158,44 @@ def write_video_frame(
 def finalize_video_writer(
     video_container: av.container.OutputContainer,
     video_stream: av.stream.Stream,
+    video_start_timestamp: float,
+    last_frame: Image.Image,
+    last_frame_timestamp: float,
+    last_pts: int,
+    video_file_path: str,
+    fix_moov: bool = False,
 ) -> None:
     """Finalizes the video writer, ensuring all buffered frames are encoded and written.
 
     Args:
         video_container (av.container.OutputContainer): The AV container to finalize.
         video_stream (av.stream.Stream): The AV stream to finalize.
+        video_start_timestamp (float): The base timestamp from which the video
+            recording started.
+        last_frame (Image.Image): The last frame that was written (to be written again).
+        last_frame_timestamp (float): The timestamp of the last frame that was written.
+        last_pts (int): The last presentation timestamp.
+        video_file_path (str): The path to the video file.
+        fix_moov (bool): Whether to move the moov atom to the beginning of the file.
+            Setting this to True will fix a bug when displaying the video in Github
+            comments causing the video to appear to start a few seconds after 0:00.
+            However, this causes extract_frames to fail.
     """
     # Closing the container in the main thread leads to a GIL deadlock.
     # https://github.com/PyAV-Org/PyAV/issues/1053
+
+    # Write a final key frame
+    last_pts = write_video_frame(
+        video_container,
+        video_stream,
+        last_frame,
+        last_frame_timestamp,
+        video_start_timestamp,
+        last_pts,
+        force_key_frame=True,
+    )
+
+    # Closing in the same thread sometimes hangs, so do it in a different thread:
 
     # Define a function to close the container
     def close_container() -> None:
@@ -177,7 +215,52 @@ def finalize_video_writer(
 
     # Wait for the thread to finish execution
     close_thread.join()
+
+    # Move moov atom to beginning of file
+    if fix_moov:
+        # TODO: fix this
+        logger.warning(f"{fix_moov=} will cause extract_frames() to fail!!!")
+        move_moov_atom(video_file_path)
+
     logger.info("done")
+
+
+def move_moov_atom(input_file: str, output_file: str = None) -> None:
+    """Moves the moov atom to the beginning of the video file using ffmpeg.
+
+    If no output file is specified, modifies the input file in place.
+
+    Args:
+        input_file (str): The path to the input MP4 file.
+        output_file (str, optional): The path to the output MP4 file where the moov
+            atom is at the beginning. If None, modifies the input file in place.
+    """
+    if output_file is None:
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".mp4",
+            dir=os.path.dirname(input_file),
+        ).name
+        output_file = temp_file
+
+    command = [
+        "ffmpeg",
+        "-y",  # Automatically overwrite files without asking
+        "-i",
+        input_file,
+        "-codec",
+        "copy",  # Avoid re-encoding; just copy streams
+        "-movflags",
+        "faststart",  # Move the moov atom to the start
+        output_file,
+    ]
+    logger.info(f"{command=}")
+    subprocess.run(command, check=True)
+
+    if temp_file:
+        # Replace the original file with the modified one
+        os.replace(temp_file, input_file)
 
 
 def extract_frames(

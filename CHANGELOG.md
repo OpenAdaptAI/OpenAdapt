@@ -2,6 +2,75 @@
 
 
 
+## v0.30.4 (2024-06-11)
+
+### Fix
+
+* fix(RecordingsAPI): catch AttributeError if audio_info is None (#729) ([`81b4089`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81b40893d39eebf2c4c4afec60d1ba8f15e473d4))
+
+
+## v0.30.3 (2024-06-10)
+
+### Fix
+
+* fix(scrubbing): Catch exceptions when download required spacy model (#733) ([`b3f73d8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b3f73d8e8689f24b41617ca896a5c40eb1d0eec8))
+
+* fix(video): add num_copies to write_video_event (#732) ([`ca04b6d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca04b6d737fe17371726437540768ee13979128e))
+
+
+## v0.30.2 (2024-06-08)
+
+### Fix
+
+* fix(video): fix video playback with force_key_frame (#726)
+
+* force_key_frame
+
+* fix embedded video playback
+
+* disable fix_moov
+
+* black; flake8
+
+* fix typo
+
+* yuv420p -&gt; yuv444p (lossless) ([`1f67822`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1f67822b710836cb37cfbe578d5d89e4da8412d1))
+
+
+## v0.30.1 (2024-06-08)
+
+### Chore
+
+* chore: fix typo in test_video.py (#710) ([`57a3376`](https://github.com/OpenAdaptAI/OpenAdapt/commit/57a337628006338a91898842666efd9f3553ada0))
+
+### Fix
+
+* fix(get_audio_info, visualize): replace use of recording timestamp in functions with recording id (#717)
+
+* fix(audio): Replace use of recording timestamp in functions with recording id (#727)
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt;
+
+* fix get_audio_info
+
+* black
+
+---------
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b04fd44c61d276e2aede9a93bb8d2f0c5243029))
+
+
+## v0.30.0 (2024-06-05)
+
+### Feature
+
+* feat(dashboard): Add feature to remove action events (#688)
+
+* feat: Add feature to remove action events
+
+* fix: Fix database revision ([`f33b36d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f33b36d1199b153baa4689ff3c9a1e897f59d55f))
+
+
 ## v0.29.0 (2024-06-05)
 
 ### Documentation
