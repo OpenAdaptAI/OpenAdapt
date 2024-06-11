@@ -59,9 +59,6 @@ jobs:
         run: source .venv/bin/activate
         if: steps.cache-deps.outputs.cache-hit == 'true'
 
-      - name: List Python Files
-        run: find . -type f -name "*.py" -print
-
       - name: Check formatting with Black
         run: poetry run black --preview --check . --exclude '/(alembic|\.cache|\.venv|venv|contrib|__pycache__)/'
 
