@@ -141,6 +141,7 @@ extend-exclude = '''
   | .cache
   | alembic
   | contrib
+  | __pycache__
 )/
 '''
 

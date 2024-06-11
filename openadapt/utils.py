@@ -3,7 +3,6 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from collections import defaultdict
 from functools import wraps
 from io import BytesIO
 from logging import StreamHandler
@@ -21,7 +20,6 @@ from loguru import logger
 from PIL import Image, ImageEnhance
 
 from openadapt.build_utils import redirect_stdout_stderr
-from openadapt.models import Recording
 
 with redirect_stdout_stderr():
     import fire
@@ -39,7 +37,6 @@ if sys.platform == "win32":
     mss.windows.CAPTUREBLT = 0
 
 
-from openadapt import common
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
@@ -437,8 +434,10 @@ def get_strategy_class_by_name() -> dict:
 
 def get_performance_plot_file_path(recording_timestamp: float) -> str:
     """Get the filename for the performance plot.
+
     Args:
         recording_timestamp (float): The timestamp of the recording.
+
     Returns:
         str: The filename.
     """
@@ -451,6 +450,7 @@ def get_performance_plot_file_path(recording_timestamp: float) -> str:
 
 def delete_performance_plot(recording_timestamp: float) -> None:
     """Delete the performance plot for the given recording timestamp.
+
     Args:
         recording_timestamp (float): The timestamp of the recording.
     """
@@ -767,8 +767,7 @@ def normalize_positions(
     width_keys: list[str] = None,
     height_keys: list[str] = None,
 ) -> dict:
-    """
-    Recursively normalize the position keys in a dictionary by adding deltas.
+    """Recursively normalize the position keys in a dictionary by adding deltas.
 
     This function traverses through all dictionary values. If a key matches
     those specified in width_keys, it adds width_delta to its value. Similarly,
@@ -826,8 +825,7 @@ def normalize_positions(
 
 
 def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image:
-    """
-    Increase the contrast of an image.
+    """Increase the contrast of an image.
 
     Args:
         image (Image.Image): The image to enhance.
@@ -843,11 +841,12 @@ def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image
 
 
 def split_by_separators(text: str, seps: list[str]) -> list[str]:
-    """
-    Splits the text by multiple separators specified in the list without using regex.
+    """Splits the text by multiple separators specified in the list.
+
     Args:
         text (str): The string to be split.
         seps (list): A list of string separators.
+
     Returns:
         list: A list of substrings split by any of the specified separators.
     """

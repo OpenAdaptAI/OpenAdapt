@@ -1,13 +1,17 @@
 """Plotting utilities."""
 
 from collections import defaultdict
+from io import BytesIO
 import math
 import os
+import unicodedata
+import sys
+
 
 import matplotlib.pyplot as plt
-from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from loguru import logger
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
@@ -410,7 +414,7 @@ def plot_performance(
             plt.show()
         else:
             plt.close()
-        return image2utf8(
+        return utils.image2utf8(
             Image.frombytes(
                 "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
             )
@@ -523,8 +527,7 @@ def create_striped_background(
     stripe_width: int = 10,
     colors: tuple = ("blue", "red"),
 ) -> Image.Image:
-    """
-    Create an image with diagonal stripes.
+    """Create an image with diagonal stripes.
 
     Args:
         width (int): Width of the background image.
@@ -560,14 +563,15 @@ def plot_similar_image_groups(
     border_size: int = 5,
     margin: int = 10,
 ) -> None:
-    """
+    """Plot similar image groups.
+
     Create and display a composite image for each group of similar images in a grid
     layout, with diagonal stripe pattern as background and a border around each image.
 
     Args:
         masked_images (list[Image.Image]): list of images to be grouped.
         groups (list[list[int]]): list of lists, where each sublist contains indices
-                                  of similar images.
+            of similar images.
         ssim_values (list[list[float]]): SSIM matrix with the values between images.
         border_size (int): Size of the border around each image.
         margin (int): Margin size in pixels between images in the composite.
@@ -623,30 +627,27 @@ def plot_similar_image_groups(
         composite_image.show()
 
 
-from PIL import Image, ImageEnhance
-import numpy as np
-
-
 def highlight_masks(
     original: Image.Image, masks: list[np.ndarray], darken_factor: float = 0.5
 ) -> Image.Image:
-    """
-    Apply masks to an image, highlighting the masked areas by darkening the rest using masks provided as numpy arrays.
-    The numpy array masks should have binary values (0 or 1), where 1 represents the area to highlight.
+    """Highlight masks.
+
+    Apply masks to an image, highlighting the masked areas by darkening the rest using
+    masks provided as numpy arrays.
+    The numpy array masks should have binary values (0 or 1), where 1 represents the
+    area to highlight.
 
     Args:
         original (Image.Image): The original image.
         masks (list[np.ndarray]): A list of binary mask arrays (0 or 1).
-        darken_factor (float): The factor to darken the non-masked areas (0 to 1, where 1 is completely black).
+        darken_factor (float): The factor to darken the non-masked areas (0 to 1, where
+            1 is completely black).
 
     Returns:
         Image.Image: The resulting image with the masks highlighted.
     """
     # Ensure darken_factor is within the valid range
     darken_factor = max(0, min(darken_factor, 1))
-
-    # Convert the original image to a numpy array
-    original_np = np.array(original)
 
     # Create a combined mask from the list of numpy array masks, scale to 0-255
     combined_mask_np = np.zeros(
@@ -662,21 +663,15 @@ def highlight_masks(
     # Prepare the darkened image
     darkened_image = ImageEnhance.Brightness(original).enhance(1 - darken_factor)
 
-    # Apply the combined mask: where the mask is, keep original; where it's not, use darkened
+    # Apply the combined mask:
+    # where the mask is, keep original; where it's not, use darkened
     highlighted_image = Image.composite(original, darkened_image, combined_mask)
 
     return highlighted_image
 
 
-import unicodedata
-from PIL import Image, ImageDraw, ImageFont
-import matplotlib.pyplot as plt
-
-
 def normalize_text(text: str) -> str:
-    """
-    Normalize text to ASCII with fallbacks for non-convertible characters.
-    """
+    """Normalize text to ASCII with fallbacks for non-convertible characters."""
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
@@ -685,8 +680,7 @@ def plot_segments(
     segments: list[dict[str, str, float, float, float, float]],
     relative_coordinates: bool = False,
 ) -> None:
-    """
-    Plot an image with labeled bounding boxes around segments.
+    """Plot an image with labeled bounding boxes around segments.
 
     Args:
         image (Image.Image): The image to plot.
@@ -697,7 +691,8 @@ def plot_segments(
             "left" (float): The left coordinate of the segment's bounding box.
             "width" (float): The width of the segment's bounding box.
             "height" (float): The height of the segment's bounding box.
-        relative_coordinates (bool): If True, treats top, left, width, and height as relative to the image size.
+        relative_coordinates (bool): If True, treats top, left, width, and height as
+            relative to the image size.
 
     Displays:
         The image with overlaid bounding boxes and labels.
@@ -715,7 +710,7 @@ def plot_segments(
         description = normalize_text(segment["description"])
 
         if relative_coordinates:
-            # Convert relative coordinates to absolute by multiplying by image dimensions
+            # Convert relative coordinates to absolute by multiplying by image dims
             top = int(segment["top"] * img_height)
             left = int(segment["left"] * img_width)
             width = int(segment["width"] * img_width)

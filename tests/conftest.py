@@ -1,6 +1,5 @@
 """This module contains fixtures and setup for testing."""
 
-from pathlib import Path
 import os
 
 from PIL import Image

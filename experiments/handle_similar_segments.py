@@ -1,10 +1,11 @@
-import math
+"""Handle similar segments."""
+
 import os
 
-from PIL import Image, ImageEnhance
+from PIL import Image
 from loguru import logger
 
-from openadapt import adapters, cache, config, plotting, vision
+from openadapt import adapters, cache, config, plotting, utils, vision
 
 
 DEBUG = True
@@ -15,12 +16,14 @@ MIN_SEGMENT_SIZE_SIM = 0.95  # threshold for considering segment sizes similar
 # TODO: consolidate with strategies.visual.get_window_segmentation
 @cache.cache(enabled=not DEBUG)
 def get_similar_segment_groups(
-    image_file_path,
-    min_segment_ssim=MIN_SEGMENT_SSIM,
-    min_segment_size_sim=MIN_SEGMENT_SIZE_SIM,
-    show_images=DEBUG,
-    contrast_factor=10000,
-):
+    image_file_path: str,
+    min_segment_ssim: float = MIN_SEGMENT_SSIM,
+    min_segment_size_sim: float = MIN_SEGMENT_SIZE_SIM,
+    show_images: bool = DEBUG,
+    contrast_factor: int = 10000,
+) -> tuple:
+    """Get similar segment groups."""
+
     image = Image.open(image_file_path)
     image.show()
 
@@ -69,8 +72,8 @@ def get_similar_segment_groups(
     )
 
 
-def main():
-    # image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/calculator.png")
+def main() -> None:
+    """Main."""
     image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
 
     MAX_GROUPS = 2
@@ -116,10 +119,11 @@ def main():
             similar_masks = [masks[idx] for idx in similar_idx_group]
             highlighted_image = plotting.highlight_masks(image, similar_masks)
             highlighted_image.show()
+
         import ipdb
 
         ipdb.set_trace()
-        foo = 1
+        foo = 1  # noqa
 
 
 if __name__ == "__main__":

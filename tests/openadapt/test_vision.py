@@ -1,4 +1,4 @@
-"""Tests for vision.py"""
+"""Tests for vision.py."""
 
 import pytest
 from PIL import Image
@@ -8,7 +8,7 @@ from openadapt import vision
 
 
 @pytest.fixture
-def identical_images():
+def identical_images() -> list[Image.Image]:
     """Generate synthetic identical RGB images for testing."""
     base_data = np.random.rand(100, 100, 3) * 255  # Base image array for RGB
     images = [Image.fromarray(base_data.astype(np.uint8), "RGB") for _ in range(3)]
@@ -16,7 +16,7 @@ def identical_images():
 
 
 @pytest.fixture
-def perturbed_images(identical_images):
+def perturbed_images(identical_images: list[Image.Image]) -> list[Image.Image]:
     """Generate synthetic RGB images slightly perturbed from the identical ones."""
     perturbed_images = []
     for img in identical_images:
@@ -39,7 +39,10 @@ def perturbed_images(identical_images):
     return perturbed_images
 
 
-def test_similar_images(identical_images, perturbed_images):
+def test_similar_images(
+    identical_images: list[Image.Image],
+    perturbed_images: list[Image.Image],
+) -> None:
     """Test that the SSIM threshold correctly identifies similar images."""
     MIN_SSIM = 0.99
     MIN_SIZE_SIM = 0.9
@@ -98,7 +101,10 @@ def test_similar_images(identical_images, perturbed_images):
                 )
 
 
-def test_size_similarity(identical_images, perturbed_images):
+def test_size_similarity(
+    identical_images: list[Image.Image],
+    perturbed_images: list[Image.Image],
+) -> None:
     """Test the size similarity function for accuracy."""
     # Identical images should have perfect size similarity
     for i in range(len(identical_images) - 1):
@@ -106,7 +112,7 @@ def test_size_similarity(identical_images, perturbed_images):
             assert (
                 vision.get_size_similarity(identical_images[i], identical_images[j])
                 == 1.0
-            ), f"Identical images should have size similarity of 1.0"
+            ), "Identical images should have size similarity of 1.0"
 
     # For perturbed images, ensure the similarity is correctly calculated
     for img1 in identical_images:

@@ -4,8 +4,7 @@ from openadapt import models
 
 
 def test_action_from_dict() -> None:
-    """Test ActionEvent.from_dict()"""
-
+    """Test ActionEvent.from_dict()."""
     texts = [
         # standard
         "<backspace>-<backspace>-<backspace>",

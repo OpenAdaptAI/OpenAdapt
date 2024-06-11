@@ -9,21 +9,25 @@ from skimage.metrics import structural_similarity as ssim
 import cv2
 import numpy as np
 
-from openadapt import cache, utils
+from openadapt import cache
 
 
 @cache.cache()
 def get_masks_from_segmented_image(
     segmented_image: Image.Image, sort_by_area: bool = False
 ) -> list[np.ndarray]:
-    """Process the image to find unique masks based on color channels and optionally sort them by area.
+    """Get masks from a segmented image.
+
+    Process the image to find unique masks based on color channels and optionally sort
+    them by area.
 
     Args:
         segmented_image: A PIL.Image object of the segmented image.
         sort_by_area: A boolean flag to sort masks by their area in descending order.
 
     Returns:
-        A list of numpy.ndarrays, each representing a unique mask. Sorted by area if specified.
+        A list of numpy.ndarrays, each representing a unique mask. Sorted by area if
+            specified.
     """
     logger.info("starting...")
     segmented_image_np = np.array(segmented_image)
@@ -312,10 +316,6 @@ def get_image_similarity(
     Returns:
         tuple[float, np.array]: A tuple containing the SSIM and the difference image.
     """
-    # Calculate aspect ratios
-    aspect_ratio1 = im1.width / im1.height
-    aspect_ratio2 = im2.width / im2.height
-
     # Determine the minimum dimension size based on win_size, ensuring minimum size to
     # avoid win_size error
     min_dim_size = max(2 * win_size + 1, 7)
@@ -440,8 +440,7 @@ def get_size_similarity(
     img1: Image.Image,
     img2: Image.Image,
 ) -> float:
-    """
-    Calculate the size similarity between two images, returning a score between 0 and 1.
+    """Calculate size similarity between two images, returning a score between 0 and 1.
 
     1.0 indicates identical dimensions, values closer to 0 indicate greater disparity.
 

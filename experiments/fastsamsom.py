@@ -6,14 +6,15 @@ from loguru import logger
 from PIL import Image
 import numpy as np
 
-from openadapt import adapters, cache, config, contrib, plotting, utils, vision
+from openadapt import adapters, config, contrib, utils, vision
 
 
 CONTRAST_FACTOR = 10000
 DEBUG = False
 
 
-def main():
+def main() -> None:
+    """Main."""
     image_file_path = config.ROOT_DIR_PATH / "../tests/assets/excel.png"
     image = Image.open(image_file_path)
     if DEBUG:
@@ -42,11 +43,10 @@ def main():
     alpha = 0.1
     anno_mode = [
         "Mask",
-        #'Mark',
+        # 'Mark',
     ]
     for i, mask in enumerate(masks):
         label = i + 1
-        color_mask = np.random.random((1, 3)).tolist()[0]
         demo = visual.draw_binary_mask_with_number(
             mask,
             text=str(label),
@@ -81,8 +81,8 @@ def main():
     text = "\n".join(
         [
             (
-                f"Consider the dates along the leftmost column and the horizontal"
-                f" column headings:"
+                "Consider the dates along the leftmost column and the horizontal"
+                " column headings:"
             ),
             output,
             "What are the values in the corresponding cells?",
