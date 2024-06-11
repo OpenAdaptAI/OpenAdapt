@@ -544,7 +544,7 @@ def create_striped_background(
                 (i, 0),
                 (i + stripe_width, 0),
                 (i + height + stripe_width, height),
-                (i + height, height)
+                (i + height, height),
             ],
             fill=colors[stripe_color],
         )
@@ -608,7 +608,7 @@ def plot_similar_image_groups(
         font = ImageFont.load_default()
 
         for i, title_line in enumerate(title_lines):
-            draw.text((0, 10*i), title_line, font=font, fill='white')
+            draw.text((0, 10 * i), title_line, font=font, fill="white")
 
         # Place images in a grid
         x, y = 0, len(title_lines) * 10  # Start below title space
@@ -626,7 +626,10 @@ def plot_similar_image_groups(
 from PIL import Image, ImageEnhance
 import numpy as np
 
-def highlight_masks(original: Image.Image, masks: list[np.ndarray], darken_factor: float = 0.5) -> Image.Image:
+
+def highlight_masks(
+    original: Image.Image, masks: list[np.ndarray], darken_factor: float = 0.5
+) -> Image.Image:
     """
     Apply masks to an image, highlighting the masked areas by darkening the rest using masks provided as numpy arrays.
     The numpy array masks should have binary values (0 or 1), where 1 represents the area to highlight.
@@ -646,7 +649,9 @@ def highlight_masks(original: Image.Image, masks: list[np.ndarray], darken_facto
     original_np = np.array(original)
 
     # Create a combined mask from the list of numpy array masks, scale to 0-255
-    combined_mask_np = np.zeros(original.size[::-1], dtype=np.uint8)  # Note: numpy uses height, width
+    combined_mask_np = np.zeros(
+        original.size[::-1], dtype=np.uint8
+    )  # Note: numpy uses height, width
     for mask in masks:
         scaled_mask = mask * 255  # scale binary mask from 1 to 255
         combined_mask_np = np.maximum(combined_mask_np, scaled_mask)
@@ -667,14 +672,19 @@ import unicodedata
 from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 
+
 def normalize_text(text: str) -> str:
     """
     Normalize text to ASCII with fallbacks for non-convertible characters.
     """
-    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
-def plot_segments(image: Image.Image, segments: list[dict[str, str, float, float, float, float]], relative_coordinates: bool=False) -> None:
+def plot_segments(
+    image: Image.Image,
+    segments: list[dict[str, str, float, float, float, float]],
+    relative_coordinates: bool = False,
+) -> None:
     """
     Plot an image with labeled bounding boxes around segments.
 
@@ -723,10 +733,12 @@ def plot_segments(image: Image.Image, segments: list[dict[str, str, float, float
 
         label = f"{name}: {description}" if description else name
         text_width, text_height = draw.textsize(label, font=font)
-        text_position = (left, top - text_height) if top - text_height > 0 else (left, top + height)
+        text_position = (
+            (left, top - text_height) if top - text_height > 0 else (left, top + height)
+        )
         draw.text(text_position, label, fill="white", font=font)
 
     plt.figure(figsize=(8, 6))
     plt.imshow(image)
-    plt.axis('off')
+    plt.axis("off")
     plt.show()

@@ -764,12 +764,20 @@ def normalize_positions(
     for key, value in data.items():
         if isinstance(value, dict):
             data[key] = normalize_positions(
-                value, width_delta, height_delta, width_keys, height_keys,
+                value,
+                width_delta,
+                height_delta,
+                width_keys,
+                height_keys,
             )
         elif isinstance(value, list):
             data[key] = [
                 normalize_positions(
-                    val, width_delta, height_delta, width_keys, height_keys,
+                    val,
+                    width_delta,
+                    height_delta,
+                    width_keys,
+                    height_keys,
                 )
                 for val in value
             ]

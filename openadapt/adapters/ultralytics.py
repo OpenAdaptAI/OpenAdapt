@@ -39,7 +39,7 @@ FASTSAM_MODEL_NAMES = (
 SAM_MODEL_NAMES = (
     "sam_b.pt",  # base
     "sam_l.pt",  # large
-    #"mobile_sam.pt",
+    # "mobile_sam.pt",
 )
 MODEL_NAMES = FASTSAM_MODEL_NAMES + SAM_MODEL_NAMES
 DEFAULT_MODEL_NAME = MODEL_NAMES[0]
@@ -77,7 +77,7 @@ def do_fastsam(
     # threshold below which boxes will be filtered out
     conf: float = 0,
     # discards all overlapping boxes with IoU > iou_threshold
-    iou: float = .05,
+    iou: float = 0.05,
 ) -> Image:
     model = FastSAM(model_name)
 
@@ -155,27 +155,30 @@ def do_sam(
     model_name: str,
     # TODO: add params
 ) -> Image.Image:
-
     # Create SAMPredictor
     overrides = dict(
-        conf=0.25, task="segment", mode="predict", imgsz=1024, model=model_name,
+        conf=0.25,
+        task="segment",
+        mode="predict",
+        imgsz=1024,
+        model=model_name,
     )
     predictor = SAMPredictor(overrides=overrides)
 
     # Segment with additional args
-    #results = predictor(source=image, crop_n_layers=1, points_stride=64)
+    # results = predictor(source=image, crop_n_layers=1, points_stride=64)
     results = predictor(
         source=image,
-        #crop_n_layers=3,
-        #crop_overlap_ratio=0.5,
-        #crop_downscale_factor=1,
-        #point_grids=None,
-        #points_stride=12,
-        #points_batch_size=128,
-        #conf_thres=0.8,
-        #stability_score_thresh=0.95,
-        #stability_score_offset=0.95,
-        #crop_nms_thresh=0.8,
+        # crop_n_layers=3,
+        # crop_overlap_ratio=0.5,
+        # crop_downscale_factor=1,
+        # point_grids=None,
+        # points_stride=12,
+        # points_batch_size=128,
+        # conf_thres=0.8,
+        # stability_score_thresh=0.95,
+        # stability_score_offset=0.95,
+        # crop_nms_thresh=0.8,
     )
     mask_ims = results_to_mask_images(results)
     segmented_image = colorize_masks(mask_ims)
@@ -187,18 +190,9 @@ def results_to_mask_images(
 ) -> list[Image.Image]:
     logger.info(f"{len(results)=}")
     masks = results[0].masks
-    mask_arrs = [
-        mask.data.cpu().detach().numpy()
-        for mask in masks
-    ]
-    assert all([
-        mask_arr.shape[0] == 1
-        for mask_arr in mask_arrs
-    ])
-    mask_ims = [
-        Image.fromarray(mask_arr[0, :])
-        for mask_arr in mask_arrs
-    ]
+    mask_arrs = [mask.data.cpu().detach().numpy() for mask in masks]
+    assert all([mask_arr.shape[0] == 1 for mask_arr in mask_arrs])
+    mask_ims = [Image.fromarray(mask_arr[0, :]) for mask_arr in mask_arrs]
     return mask_ims
 
 
@@ -225,9 +219,13 @@ def colorize_masks(masks: list[Image.Image]) -> Image.Image:
     # Generate unique colors using HSV color space
     num_masks = len(masks)
     colors = [
-        tuple(int(c * 255) for c in ImageColor.getcolor(
-            f"hsv({int(i / num_masks * 360)}, 100%, 100%)", "RGB",
-        ))
+        tuple(
+            int(c * 255)
+            for c in ImageColor.getcolor(
+                f"hsv({int(i / num_masks * 360)}, 100%, 100%)",
+                "RGB",
+            )
+        )
         for i in range(num_masks)
     ]
 
@@ -238,9 +236,9 @@ def colorize_masks(masks: list[Image.Image]) -> Image.Image:
         # Apply the color to the mask
         for c in range(3):
             # Only colorize where the mask is True (assuming mask is binary: 0 or 255)
-            result_image[:, :, c] += (
-                mask_array / 255 * colors[idx][c]
-            ).astype(np.uint8)
+            result_image[:, :, c] += (mask_array / 255 * colors[idx][c]).astype(
+                np.uint8
+            )
 
     # Convert the result back to a PIL image
     return Image.fromarray(result_image)

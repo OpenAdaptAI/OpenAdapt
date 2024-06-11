@@ -60,7 +60,7 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit == 'true'
 
       - name: Check formatting with Black
-        run: poetry run black --preview --check . --exclude '/(alembic|\.venv)/'
+        run: poetry run black --preview --check . --exclude '/(alembic|\.cache|\.venv|venv|contrib)/'
 
       - name: Run Flake8
-        run: poetry run flake8 --exclude=alembic,.venv,*/.cache
+        run: poetry run flake8 --exclude=alembic,.venv,venv,contrib,.cache,.git

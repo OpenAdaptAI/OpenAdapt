@@ -341,7 +341,8 @@ def find_similar_image_segmentation(
 
     for segmentation in SEGMENTATIONS:
         similarity_index, ssim_image = vision.get_image_similarity(
-            image, segmentation.image,
+            image,
+            segmentation.image,
         )
         if similarity_index > min_ssim:
             logger.info(f"{similarity_index=}")
@@ -397,16 +398,14 @@ def get_window_segmentation(
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
 
-
-
     if handle_similar_image_groups:
         similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
-            masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
+            masked_images,
+            MIN_SEGMENT_SSIM,
+            MIN_SEGMENT_SIZE_SIM,
         )
         # TODO XXX: handle similar image groups
         raise ValueError("Currently unsupported.")
-
-
 
     descriptions = prompt_for_descriptions(
         original_image,

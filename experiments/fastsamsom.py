@@ -1,7 +1,4 @@
-"""SoM with Ultralytics FastSam
-
-python -m pip install 'git+https://github.com/facebookresearch/detectron2.git' --no-build-isolation
-"""
+"""SoM with Ultralytics FastSAM."""
 
 from pprint import pformat
 
@@ -9,7 +6,7 @@ from loguru import logger
 from PIL import Image
 import numpy as np
 
-from openadapt import adapters, cache, config, plotting, som, utils, vision
+from openadapt import adapters, cache, config, contrib, plotting, utils, vision
 
 
 CONTRAST_FACTOR = 10000
@@ -32,19 +29,19 @@ def main():
         segmented_image.show()
 
     masks = vision.get_masks_from_segmented_image(segmented_image, sort_by_area=True)
-    #refined_masks = vision.refine_masks(masks)
+    # refined_masks = vision.refine_masks(masks)
 
     image_arr = np.asarray(image)
 
     # https://github.com/microsoft/SoM/blob/main/task_adapter/sam/tasks/inference_sam_m2m_auto.py
-    #metadata = MetadataCatalog.get('coco_2017_train_panoptic')
+    # metadata = MetadataCatalog.get('coco_2017_train_panoptic')
     metadata = None
-    visual = som.visualizer.Visualizer(image_arr, metadata=metadata)
+    visual = contrib.som.visualizer.Visualizer(image_arr, metadata=metadata)
     mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
-    label_mode = '1'
+    label_mode = "1"
     alpha = 0.1
     anno_mode = [
-        'Mask',
+        "Mask",
         #'Mark',
     ]
     for i, mask in enumerate(masks):
@@ -66,22 +63,31 @@ def main():
     results = []
 
     prompt_adapter = adapters.get_default_prompt_adapter()
-    text = "What are the values of the dates in the leftmost column? What about the horizontal column headings?"
+    text = (
+        "What are the values of the dates in the leftmost column? What about the"
+        " horizontal column headings?"
+    )
     output = prompt_adapter.prompt(
         text,
         images=[
             # no marks seem to perform just as well as with marks on spreadsheets
-            #image_som,
+            # image_som,
             image,
-        ])
+        ],
+    )
     logger.info(output)
     results.append((text, output))
 
-    text = "\n".join([
-        f"Consider the dates along the leftmost column and the horizontal column headings:",
-        output,
-        "What are the values in the corresponding cells?"
-    ])
+    text = "\n".join(
+        [
+            (
+                f"Consider the dates along the leftmost column and the horizontal"
+                f" column headings:"
+            ),
+            output,
+            "What are the values in the corresponding cells?",
+        ]
+    )
     output = prompt_adapter.prompt(text, images=[image_som])
     logger.info(output)
     results.append((text, output))

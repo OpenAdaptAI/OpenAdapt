@@ -30,10 +30,14 @@ def main(window_search_str: str | None):
     if window_search_str:
         window_event, image = get_window_image(window_search_str)
         window_dict = window_event.to_prompt_dict()
-        window_dict = utils.normalize_positions(window_dict, -window_event.left, -window_event.top)
+        window_dict = utils.normalize_positions(
+            window_dict, -window_event.left, -window_event.top
+        )
     else:
-        image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/calculator.png")
-        #image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
+        image_file_path = os.path.join(
+            config.ROOT_DIR_PATH, "../tests/assets/calculator.png"
+        )
+        # image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
         image = Image.open(image_file_path)
         window_dict = None
 
@@ -71,7 +75,9 @@ Respond with JSON ONLY AND NOTHING ELSE.
     plotting.plot_segments(image, segment_dict)
 
     window_dict = window_event.to_prompt_dict()
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
 
 
 if __name__ == "__main__":

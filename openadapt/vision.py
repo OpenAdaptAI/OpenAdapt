@@ -13,7 +13,9 @@ from openadapt import cache, utils
 
 
 @cache.cache()
-def get_masks_from_segmented_image(segmented_image: Image.Image, sort_by_area: bool = False) -> list[np.ndarray]:
+def get_masks_from_segmented_image(
+    segmented_image: Image.Image, sort_by_area: bool = False
+) -> list[np.ndarray]:
     """Process the image to find unique masks based on color channels and optionally sort them by area.
 
     Args:
@@ -292,7 +294,7 @@ def get_image_similarity(
     im1: Image.Image,
     im2: Image.Image,
     grayscale: bool = False,
-    win_size: int = 7  # Default window size for SSIM
+    win_size: int = 7,  # Default window size for SSIM
 ) -> tuple[float, np.array]:
     """Calculate the structural similarity index (SSIM) between two images.
 
@@ -324,7 +326,9 @@ def get_image_similarity(
 
     # Calculate common dimensions that accommodate both images
     target_width = max(int(im1.width * scale_factor1), int(im2.width * scale_factor2))
-    target_height = max(int(im1.height * scale_factor1), int(im2.height * scale_factor2))
+    target_height = max(
+        int(im1.height * scale_factor1), int(im2.height * scale_factor2)
+    )
 
     # Resize images to these new common dimensions
     im1 = im1.resize((target_width, target_height), Image.LANCZOS)
@@ -335,7 +339,9 @@ def get_image_similarity(
         im1 = np.array(im1.convert("L"))
         im2 = np.array(im2.convert("L"))
         data_range = max(im1.max(), im2.max()) - min(im1.min(), im2.min())
-        mssim, diff_image = ssim(im1, im2, win_size=win_size, data_range=data_range, full=True)
+        mssim, diff_image = ssim(
+            im1, im2, win_size=win_size, data_range=data_range, full=True
+        )
     else:
         # Compute SSIM on each channel separately and then average the results
         mssims = []
@@ -344,7 +350,9 @@ def get_image_similarity(
             im1_c = np.array(im1)[:, :, c]
             im2_c = np.array(im2)[:, :, c]
             data_range = max(im1_c.max(), im2_c.max()) - min(im1_c.min(), im2_c.min())
-            ssim_c, diff_c = ssim(im1_c, im2_c, win_size=win_size, data_range=data_range, full=True)
+            ssim_c, diff_c = ssim(
+                im1_c, im2_c, win_size=win_size, data_range=data_range, full=True
+            )
             mssims.append(ssim_c)
             diff_images.append(diff_c)
 
@@ -360,7 +368,7 @@ def get_similar_image_idxs(
     images: list[Image.Image],
     min_ssim: float,
     min_size_sim: float,
-    short_circuit_ssim: bool = True
+    short_circuit_ssim: bool = True,
 ) -> tuple[list[list[int]], list[int], list[list[float]], list[list[float]]]:
     """Get images having Structural Similarity Index Measure (SSIM) above a threshold.
 
@@ -413,8 +421,8 @@ def get_similar_image_idxs(
             if j in already_compared:
                 continue
             if (
-                ssim_matrix[i][j] >= min_ssim and
-                size_similarity_matrix[i][j] >= min_size_sim
+                ssim_matrix[i][j] >= min_ssim
+                and size_similarity_matrix[i][j] >= min_size_sim
             ):
                 current_group.append(j)
                 already_compared.add(j)

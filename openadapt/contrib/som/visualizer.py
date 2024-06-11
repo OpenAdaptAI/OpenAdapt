@@ -2,43 +2,10 @@
 
 Copied from https://github.com/microsoft/SoM/blob/main/task_adapter/utils/visualizer.py
 
-TODO: git-subtree:
+Requires running `poetry run postinstall`, or:
 
-```
-git remote add som https://github.com/microsoft/SoM.git
-git fetch som
-
-# Create a temporary branch for the subtree
-git checkout -b temp-branch som/main
-
-# Use read-tree to move the specific directory to a new location
-git read-tree --prefix=openadapt/external/som/ -u som/main:task_adapter/utils
-
-# Commit the changes
-git commit -m "Add SoM utils as subtree in specific directory"
-
-# Switch back to your main branch
-git checkout main
-
-# Merge the changes
-git merge temp-branch --allow-unrelated-histories
-
-# Resolve any conflicts and commit them
-
-# Remove the temporary branch
-git branch -d temp-branch
-
-git push origin main
-```
-
-.flake8:
-```
-[flake8]
-exclude =
-    openadapt/external/som/
-```
-
-Adjust build scripts and CI configurations to ignore the new `external/som` directory.
+    python -m pip install 'git+https://github.com/facebookresearch/detectron2.git' \
+        --no-build-isolation
 """
 
 # Copyright (c) Facebook, Inc. and its affiliates.

@@ -21,7 +21,7 @@ from loguru import logger
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import ActionEvent, WindowEvent
-from openadapt.plotting import display_event,
+from openadapt.plotting import display_event
 from openadapt.utils import (
     configure_logging,
     image2utf8,

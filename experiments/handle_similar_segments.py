@@ -9,7 +9,7 @@ from openadapt import adapters, cache, config, plotting, vision
 
 DEBUG = True
 MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
-MIN_SEGMENT_SIZE_SIM = 0.95 # threshold for considering segment sizes similar
+MIN_SEGMENT_SIZE_SIM = 0.95  # threshold for considering segment sizes similar
 
 
 # TODO: consolidate with strategies.visual.get_window_segmentation
@@ -33,7 +33,9 @@ def get_similar_segment_groups(
     if show_images:
         segmented_image.show()
 
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
 
     masks = vision.get_masks_from_segmented_image(segmented_image)
     logger.info(f"{len(masks)=}")
@@ -51,15 +53,24 @@ def get_similar_segment_groups(
         plotting.display_images_table_with_titles(masked_images, descriptions)
 
     similar_idx_groups, ungrouped_idxs, ssim_matrix, _ = vision.get_similar_image_idxs(
-        masked_images, min_segment_ssim, min_segment_size_sim,
+        masked_images,
+        min_segment_ssim,
+        min_segment_size_sim,
     )
     logger.info(f"{len(similar_idx_groups)=}")
 
-    return image, masked_images, refined_masks, similar_idx_groups, ungrouped_idxs, ssim_matrix
+    return (
+        image,
+        masked_images,
+        refined_masks,
+        similar_idx_groups,
+        ungrouped_idxs,
+        ssim_matrix,
+    )
 
 
 def main():
-    #image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/calculator.png")
+    # image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/calculator.png")
     image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
 
     MAX_GROUPS = 2
@@ -70,7 +81,9 @@ def main():
             get_similar_segment_groups(image_file_path)
         )
         similar_idx_groups = sorted(
-            similar_idx_groups, key=lambda group: len(group), reverse=True,
+            similar_idx_groups,
+            key=lambda group: len(group),
+            reverse=True,
         )
         if MAX_GROUPS:
             similar_idx_groups = similar_idx_groups[:MAX_GROUPS]
@@ -81,7 +94,7 @@ def main():
             [
                 f"min_ssim={MIN_SEGMENT_SSIM}",
                 f"min_size_sim={MIN_SEGMENT_SIZE_SIM}",
-            ]
+            ],
         )
 
         """
@@ -100,13 +113,12 @@ def main():
         - one or multiple segments per prompt
         """
         for similar_idx_group in similar_idx_groups:
-            similar_masks = [
-                masks[idx]
-                for idx in similar_idx_group
-            ]
+            similar_masks = [masks[idx] for idx in similar_idx_group]
             highlighted_image = plotting.highlight_masks(image, similar_masks)
             highlighted_image.show()
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
         foo = 1
 
 
