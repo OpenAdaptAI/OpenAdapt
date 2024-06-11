@@ -1,3 +1,5 @@
+"""Plot downloads over time."""
+
 import requests
 import matplotlib.pyplot as plt
 from datetime import datetime
