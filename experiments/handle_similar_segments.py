@@ -23,7 +23,6 @@ def get_similar_segment_groups(
     contrast_factor: int = 10000,
 ) -> tuple:
     """Get similar segment groups."""
-
     image = Image.open(image_file_path)
     image.show()
 

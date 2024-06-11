@@ -130,7 +130,6 @@ replay = "openadapt.replay:start"
 app = "openadapt.app.tray:_run"
 reset = "openadapt.scripts.reset_db:reset_db"
 capture = "openadapt.capture:test"
-install-dashboard = "openadapt.app.dashboard:entrypoint"
 postinstall = "scripts.postinstall:main"
 
 [tool.black]

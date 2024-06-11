@@ -1,15 +1,12 @@
-"""Post-install script.
-
-TODO: consolidate with install-dashbaord.
-"""
-
+"""Consolidated post-install script for OpenAdapt."""
 
 import subprocess
 import sys
+import os
 
 
 def install_detectron2() -> None:
-    """Install detectron2."""
+    """Install Detectron2 from its GitHub repository."""
     subprocess.check_call(
         [
             sys.executable,
@@ -22,9 +19,26 @@ def install_detectron2() -> None:
     )
 
 
+def install_dashboard() -> None:
+    """Install dashboard dependencies based on the operating system."""
+    if sys.platform.startswith("win"):
+        # For Windows, use PowerShell script
+        subprocess.check_call([
+            "powershell",
+            os.path.join("openadapt", "app", "dashboard", "entrypoint.ps1"),
+        ])
+    else:
+        # For Unix-like systems, use Bash script
+        subprocess.check_call([
+            "bash",
+            os.path.join("openadapt", "app", "dashboard", "entrypoint.sh"),
+        ])
+
+
 def main() -> None:
-    """Main."""
+    """Main function to install dependencies."""
     install_detectron2()
+    install_dashboard()
 
 
 if __name__ == "__main__":
