@@ -1,5 +1,3 @@
-"""Plot release downloads over time."""
-
 import requests
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -28,7 +26,7 @@ def fetch_download_data(api_url: str) -> dict:
 
 
 def plot_downloads(data: dict) -> None:
-    """Plots number of downloads and cumulative downloads over time using matplotlib.
+    """Plots number of downloads and cumulative downloads over time using matplotlib, including total cumulative in the title.
 
     Args:
         data (dict): A dictionary with dates as keys and download counts as values.
@@ -36,6 +34,7 @@ def plot_downloads(data: dict) -> None:
     dates = [datetime.strptime(date, "%Y-%m-%d") for date in sorted(data.keys())]
     downloads = [data[date.strftime("%Y-%m-%d")] for date in dates]
     cumulative_downloads = np.cumsum(downloads)
+    total_cumulative_downloads = cumulative_downloads[-1] if cumulative_downloads.size > 0 else 0
 
     plt.figure(figsize=(12, 6))
     plt.plot(
@@ -49,7 +48,7 @@ def plot_downloads(data: dict) -> None:
         color="r",
         label="Cumulative Downloads",
     )
-    plt.title("Downloads Over Time")
+    plt.title(f"Downloads Over Time (Total Cumulative: {total_cumulative_downloads})")
     plt.xlabel("Date")
     plt.ylabel("Number of Downloads")
     plt.grid(True)
