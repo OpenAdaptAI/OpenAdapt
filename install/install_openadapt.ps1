@@ -360,7 +360,7 @@ RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git re
 Set-Location .\OpenAdapt
 RunAndCheck "pip install poetry" "Run ``pip install poetry``"
 RunAndCheck "poetry install" "Run ``poetry install``"
-RunAndCheck "poetry run install-dashboard" "Install dashboard dependencies" -SkipCleanup:$true
+RunAndCheck "poetry run postinstall" "Install other dependencies" -SkipCleanup:$true
 RunAndCheck "cd openadapt"
 RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
 RunAndCheck "cd .."

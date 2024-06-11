@@ -37,7 +37,7 @@ import sounddevice
 import soundfile
 import whisper
 
-from openadapt import utils, video, window
+from openadapt import plotting, utils, video, window
 from openadapt.config import config
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
@@ -1372,7 +1372,7 @@ def record(
 
     if PLOT_PERFORMANCE:
         mem_plotter.join()
-        utils.plot_performance(recording)
+        plotting.plot_performance(recording)
 
     logger.info(f"Saved {recording_timestamp=}")
 

@@ -3,7 +3,6 @@
 This module provides various utility functions used throughout OpenAdapt.
 """
 
-from collections import defaultdict
 from functools import wraps
 from io import BytesIO
 from logging import StreamHandler
@@ -18,15 +17,13 @@ import time
 
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageEnhance
 
 from openadapt.build_utils import redirect_stdout_stderr
-from openadapt.models import Recording
 
 with redirect_stdout_stderr():
     import fire
 
-import matplotlib.pyplot as plt
 import mss
 import mss.base
 import numpy as np
@@ -40,7 +37,6 @@ if sys.platform == "win32":
     mss.windows.CAPTUREBLT = 0
 
 
-from openadapt import common
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
@@ -272,208 +268,9 @@ def get_monitor_dims() -> tuple[int, int]:
     return monitor_width, monitor_height
 
 
-# TODO: move parameters to config
-def draw_ellipse(
-    x: float,
-    y: float,
-    image: Image.Image,
-    width_pct: float = 0.03,
-    height_pct: float = 0.03,
-    fill_transparency: float = 0.25,
-    outline_transparency: float = 0.5,
-    outline_width: int = 2,
-) -> tuple[Image.Image, float, float]:
-    """Draw an ellipse on the image.
-
-    Args:
-        x (float): The x-coordinate of the center of the ellipse.
-        y (float): The y-coordinate of the center of the ellipse.
-        image (Image.Image): The image to draw on.
-        width_pct (float): The percentage of the image width
-          for the width of the ellipse.
-        height_pct (float): The percentage of the image height
-          for the height of the ellipse.
-        fill_transparency (float): The transparency of the ellipse fill.
-        outline_transparency (float): The transparency of the ellipse outline.
-        outline_width (int): The width of the ellipse outline.
-
-    Returns:
-        Image.Image: The image with the ellipse drawn on it.
-        float: The width of the ellipse.
-        float: The height of the ellipse.
-    """
-    overlay = Image.new("RGBA", image.size)
-    draw = ImageDraw.Draw(overlay)
-    max_dim = max(image.size)
-    width = width_pct * max_dim
-    height = height_pct * max_dim
-    x0 = x - width / 2
-    x1 = x + width / 2
-    y0 = y - height / 2
-    y1 = y + height / 2
-    xy = (x0, y0, x1, y1)
-    fill_opacity = int(255 * fill_transparency)
-    outline_opacity = int(255 * outline_transparency)
-    fill = (255, 0, 0, fill_opacity)
-    outline = (0, 0, 0, outline_opacity)
-    draw.ellipse(xy, fill=fill, outline=outline, width=outline_width)
-    image = Image.alpha_composite(image, overlay)
-    return image, width, height
-
-
-def get_font(original_font_name: str, font_size: int) -> ImageFont.FreeTypeFont:
-    """Get a font object.
-
-    Args:
-        original_font_name (str): The original font name.
-        font_size (int): The font size.
-
-    Returns:
-        PIL.ImageFont.FreeTypeFont: The font object.
-    """
-    font_names = [
-        original_font_name,
-        original_font_name.lower(),
-    ]
-    for font_name in font_names:
-        logger.debug(f"Attempting to load {font_name=}...")
-        try:
-            return ImageFont.truetype(font_name, font_size)
-        except OSError as exc:
-            logger.debug(f"Unable to load {font_name=}, {exc=}")
-    raise
-
-
-def draw_text(
-    x: float,
-    y: float,
-    text: str,
-    image: Image.Image,
-    font_size_pct: float = 0.01,
-    font_name: str = "Arial.ttf",
-    fill: tuple = (255, 0, 0),
-    stroke_fill: tuple = (255, 255, 255),
-    stroke_width: int = 3,
-    outline: bool = False,
-    outline_padding: int = 10,
-) -> Image.Image:
-    """Draw text on the image.
-
-    Args:
-        x (float): The x-coordinate of the text anchor point.
-        y (float): The y-coordinate of the text anchor point.
-        text (str): The text to draw.
-        image (PIL.Image.Image): The image to draw on.
-        font_size_pct (float): The percentage of the image size
-          for the font size. Defaults to 0.01.
-        font_name (str): The name of the font. Defaults to "Arial.ttf".
-        fill (tuple): The color of the text. Defaults to (255, 0, 0) (red).
-        stroke_fill (tuple): The color of the text stroke.
-          Defaults to (255, 255, 255) (white).
-        stroke_width (int): The width of the text stroke. Defaults to 3.
-        outline (bool): Flag indicating whether to draw an outline
-          around the text. Defaults to False.
-        outline_padding (int): The padding size for the outline. Defaults to 10.
-
-    Returns:
-        PIL.Image.Image: The image with the text drawn on it.
-    """
-    overlay = Image.new("RGBA", image.size)
-    draw = ImageDraw.Draw(overlay)
-    max_dim = max(image.size)
-    font_size = int(font_size_pct * max_dim)
-    font = get_font(font_name, font_size)
-    fill = (255, 0, 0)
-    stroke_fill = (255, 255, 255)
-    stroke_width = 3
-    text_bbox = font.getbbox(text)
-    bbox_left, bbox_top, bbox_right, bbox_bottom = text_bbox
-    bbox_width = bbox_right - bbox_left
-    bbox_height = bbox_bottom - bbox_top
-    if outline:
-        x0 = x - bbox_width / 2 - outline_padding
-        x1 = x + bbox_width / 2 + outline_padding
-        y0 = y - bbox_height / 2 - outline_padding
-        y1 = y + bbox_height / 2 + outline_padding
-        image = draw_rectangle(x0, y0, x1, y1, image, invert=True)
-    xy = (x, y)
-    draw.text(
-        xy,
-        text=text,
-        font=font,
-        fill=fill,
-        stroke_fill=stroke_fill,
-        stroke_width=stroke_width,
-        # https://pillow.readthedocs.io/en/stable/handbook/text-anchors.html#text-anchors
-        anchor="mm",
-    )
-    image = Image.alpha_composite(image, overlay)
-    return image
-
-
-def draw_rectangle(
-    x0: float,
-    y0: float,
-    x1: float,
-    y1: float,
-    image: Image.Image,
-    bg_color: tuple = (0, 0, 0),
-    fg_color: tuple = (255, 255, 255),
-    outline_color: tuple = (255, 0, 0),
-    bg_transparency: float = 0.25,
-    fg_transparency: float = 0,
-    outline_transparency: float = 0.5,
-    outline_width: int = 2,
-    invert: bool = False,
-) -> Image.Image:
-    """Draw a rectangle on the image.
-
-    Args:
-        x0 (float): The x-coordinate of the top-left corner of the rectangle.
-        y0 (float): The y-coordinate of the top-left corner of the rectangle.
-        x1 (float): The x-coordinate of the bottom-right corner of the rectangle.
-        y1 (float): The y-coordinate of the bottom-right corner of the rectangle.
-        image (PIL.Image.Image): The image to draw on.
-        bg_color (tuple): The background color of the rectangle.
-          Defaults to (0, 0, 0) (black).
-        fg_color (tuple): The foreground color of the rectangle.
-          Defaults to (255, 255, 255) (white).
-        outline_color (tuple): The color of the rectangle outline.
-          Defaults to (255, 0, 0) (red).
-        bg_transparency (float): The transparency of the rectangle
-          background. Defaults to 0.25.
-        fg_transparency (float): The transparency of the rectangle
-          foreground. Defaults to 0.
-        outline_transparency (float): The transparency of the rectangle
-          outline. Defaults to 0.5.
-        outline_width (int): The width of the rectangle outline.
-          Defaults to 2.
-        invert (bool): Flag indicating whether to invert the colors.
-          Defaults to False.
-
-    Returns:
-        PIL.Image.Image: The image with the rectangle drawn on it.
-    """
-    if invert:
-        bg_color, fg_color = fg_color, bg_color
-        bg_transparency, fg_transparency = (
-            fg_transparency,
-            bg_transparency,
-        )
-    bg_opacity = int(255 * bg_transparency)
-    overlay = Image.new("RGBA", image.size, bg_color + (bg_opacity,))
-    draw = ImageDraw.Draw(overlay)
-    xy = (x0, y0, x1, y1)
-    fg_opacity = int(255 * fg_transparency)
-    outline_opacity = int(255 * outline_transparency)
-    fill = fg_color + (fg_opacity,)
-    outline = outline_color + (outline_opacity,)
-    draw.rectangle(xy, fill=fill, outline=outline, width=outline_width)
-    image = Image.alpha_composite(image, overlay)
-    return image
-
-
-def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
+def get_scale_ratios(
+    action_event: ActionEvent | None = None,
+) -> tuple[float, float]:
     """Get the scale ratios for the action event.
 
     <position in image space> = scale_ratio * <position in window/action space>, e.g:
@@ -493,94 +290,17 @@ def get_scale_ratios(action_event: ActionEvent) -> tuple[float, float]:
         float: The width ratio.
         float: The height ratio.
     """
-    recording = action_event.recording
-    image = action_event.screenshot.image
-    width_ratio = image.width / recording.monitor_width
-    height_ratio = image.height / recording.monitor_height
+    if action_event:
+        recording = action_event.recording
+        monitor_width = recording.monitor_width
+        monitor_height = recording.monitor_hefith
+        image = action_event.screenshot.image
+    else:
+        image = take_screenshot()
+        monitor_width, monitor_height = get_monitor_dims()
+    width_ratio = image.width / monitor_width
+    height_ratio = image.height / monitor_height
     return width_ratio, height_ratio
-
-
-def display_event(
-    action_event: ActionEvent,
-    marker_width_pct: float = 0.03,
-    marker_height_pct: float = 0.03,
-    marker_fill_transparency: float = 0.25,
-    marker_outline_transparency: float = 0.5,
-    diff: bool = False,
-) -> Image.Image:
-    """Display an action event on the image.
-
-    Args:
-        action_event (ActionEvent): The action event to display.
-        marker_width_pct (float): The percentage of the image width
-          for the marker width. Defaults to 0.03.
-        marker_height_pct (float): The percentage of the image height
-          for the marker height. Defaults to 0.03.
-        marker_fill_transparency (float): The transparency of the
-          marker fill. Defaults to 0.25.
-        marker_outline_transparency (float): The transparency of the
-          marker outline. Defaults to 0.5.
-        diff (bool): Flag indicating whether to display the diff image.
-          Defaults to False.
-
-    Returns:
-        PIL.Image.Image: The image with the action event displayed on it.
-    """
-    recording = action_event.recording
-    window_event = action_event.window_event
-    screenshot = action_event.screenshot
-    if diff and screenshot.diff:
-        image = screenshot.diff.convert("RGBA")
-    else:
-        image = screenshot.image.convert("RGBA")
-    width_ratio, height_ratio = get_scale_ratios(action_event)
-
-    # dim area outside window event
-    x0 = window_event.left * width_ratio
-    y0 = window_event.top * height_ratio
-    x1 = x0 + window_event.width * width_ratio
-    y1 = y0 + window_event.height * height_ratio
-    image = draw_rectangle(x0, y0, x1, y1, image, outline_width=5)
-
-    # display diff bbox
-    if diff:
-        diff_bbox = screenshot.diff.getbbox()
-        if diff_bbox:
-            x0, y0, x1, y1 = diff_bbox
-            image = draw_rectangle(
-                x0,
-                y0,
-                x1,
-                y1,
-                image,
-                outline_color=(255, 0, 0),
-                bg_transparency=0,
-                fg_transparency=0,
-                # outline_transparency=.75,
-                outline_width=20,
-            )
-
-    # draw click marker
-    if action_event.name in common.MOUSE_EVENTS:
-        x = action_event.mouse_x * width_ratio
-        y = action_event.mouse_y * height_ratio
-        image, ellipse_width, ellipse_height = draw_ellipse(x, y, image)
-
-        # draw text
-        dx = action_event.mouse_dx or 0
-        dy = action_event.mouse_dy or 0
-        d_text = f" {dx=} {dy=}" if dx or dy else ""
-        text = f"{action_event.name}{d_text}"
-        image = draw_text(x, y + ellipse_height / 2, text, image)
-    elif action_event.name in common.KEY_EVENTS:
-        x = recording.monitor_width * width_ratio / 2
-        y = recording.monitor_height * height_ratio / 2
-        text = action_event.text
-        image = draw_text(x, y, text, image, outline=True)
-    else:
-        raise Exception("unhandled {action_event.name=}")
-
-    return image
 
 
 # TODO: png
@@ -726,106 +446,6 @@ def get_performance_plot_file_path(recording_timestamp: float) -> str:
     fname_parts = ["performance", str(recording_timestamp)]
     fname = "-".join(fname_parts) + ".png"
     return os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
-
-
-def plot_performance(
-    recording: Recording = None,
-    view_file: bool = False,
-    save_file: bool = True,
-    dark_mode: bool = False,
-) -> str:
-    """Plot the performance of the event processing and writing.
-
-    Args:
-        recording_timestamp: The timestamp of the recording (defaults to latest)
-        view_file: Whether to view the file after saving it.
-        save_file: Whether to save the file.
-        dark_mode: Whether to use dark mode.
-
-    Returns:
-        str: a base64-encoded image of the plot, if not viewing the file
-    """
-    type_to_proc_times = defaultdict(list)
-    type_to_timestamps = defaultdict(list)
-    event_types = set()
-
-    if dark_mode:
-        plt.style.use("dark_background")
-
-    # avoid circular import
-    from openadapt.db import crud
-
-    session = crud.get_new_session(read_only=True)
-
-    if not recording:
-        recording = crud.get_latest_recording(session)
-    perf_stats = crud.get_perf_stats(session, recording)
-    for perf_stat in perf_stats:
-        event_type = perf_stat.event_type
-        start_time = perf_stat.start_time
-        end_time = perf_stat.end_time
-        type_to_proc_times[event_type].append(end_time - start_time)
-        event_types.add(event_type)
-        type_to_timestamps[event_type].append(start_time)
-
-    fig, ax = plt.subplots(1, 1, figsize=(20, 10))
-    for event_type in type_to_proc_times:
-        x = type_to_timestamps[event_type]
-        y = type_to_proc_times[event_type]
-        ax.scatter(x, y, label=event_type)
-    ax.legend()
-    ax.set_ylabel("Duration (seconds)")
-
-    mem_stats = crud.get_memory_stats(session, recording)
-    timestamps = []
-    mem_usages = []
-    for mem_stat in mem_stats:
-        mem_usages.append(mem_stat.memory_usage_bytes)
-        timestamps.append(mem_stat.timestamp)
-
-    memory_ax = ax.twinx()
-    memory_ax.plot(
-        timestamps,
-        mem_usages,
-        label="memory usage",
-        color="red",
-    )
-    memory_ax.set_ylabel("Memory Usage (bytes)")
-
-    if len(mem_usages) > 0:
-        # Get the handles and labels from both axes
-        handles1, labels1 = ax.get_legend_handles_labels()
-        handles2, labels2 = memory_ax.get_legend_handles_labels()
-
-        # Combine the handles and labels from both axes
-        all_handles = handles1 + handles2
-        all_labels = labels1 + labels2
-
-        ax.legend(all_handles, all_labels)
-
-    ax.set_title(f"{recording.timestamp=}")
-
-    # TODO: add PROC_WRITE_BY_EVENT_TYPE
-    if save_file:
-        fpath = get_performance_plot_file_path(recording.timestamp)
-        logger.info(f"{fpath=}")
-        plt.savefig(fpath)
-        if view_file:
-            if sys.platform == "darwin":
-                os.system(f"open {fpath}")
-            else:
-                os.system(f"start {fpath}")
-    else:
-        plt.savefig(BytesIO(), format="png")  # save fig to void
-        if view_file:
-            plt.show()
-        else:
-            plt.close()
-        return image2utf8(
-            Image.frombytes(
-                "RGB", fig.canvas.get_width_height(), fig.canvas.tostring_rgb()
-            )
-        )
 
 
 def delete_performance_plot(recording_timestamp: float) -> None:
@@ -979,7 +599,7 @@ def parse_code_snippet(snippet: str) -> dict:
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)
         else:
-            msg = "Unsupported {snippet=}"
+            msg = f"Unsupported {snippet=}"
             logger.warning(msg)
             return None
     except Exception as exc:
@@ -1138,6 +758,113 @@ def clean_dict(data: dict) -> dict:
             return obj
 
     return recurse(data)
+
+
+def normalize_positions(
+    data: dict,
+    width_delta: float,
+    height_delta: float,
+    width_keys: list[str] = None,
+    height_keys: list[str] = None,
+) -> dict:
+    """Recursively normalize the position keys in a dictionary by adding deltas.
+
+    This function traverses through all dictionary values. If a key matches
+    those specified in width_keys, it adds width_delta to its value. Similarly,
+    if a key matches those in height_keys, it adds height_delta to its value.
+
+    Args:
+        data (dict): The dictionary to process.
+        width_delta (float): The delta to add to width/x values.
+        height_delta (float): The delta to add to height/y values.
+        width_keys (list[str]): List of keys corresponding to width or x coordinates.
+        height_keys (list[str]): List of keys corresponding to height or y coordinates.
+
+    Returns:
+        dict: A dictionary with normalized position values.
+    """
+    if width_keys is None:
+        width_keys = ["x"]
+    if height_keys is None:
+        height_keys = ["y"]
+
+    for key, value in data.items():
+        if isinstance(value, dict):
+            data[key] = normalize_positions(
+                value,
+                width_delta,
+                height_delta,
+                width_keys,
+                height_keys,
+            )
+        elif isinstance(value, list):
+            data[key] = [
+                normalize_positions(
+                    val,
+                    width_delta,
+                    height_delta,
+                    width_keys,
+                    height_keys,
+                )
+                for val in value
+            ]
+        elif key in width_keys and isinstance(value, (int, float)):
+            old_value = value
+            data[key] = value + width_delta
+            logger.debug(
+                f"Normalized {key=} from {old_value} to {data[key]} ({width_delta=})"
+            )
+        elif key in height_keys and isinstance(value, (int, float)):
+            old_value = value
+            data[key] = value + height_delta
+            logger.debug(
+                f"Normalized {key=} from {old_value} to {data[key]} ({height_delta=})"
+            )
+
+    return data
+
+
+def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image:
+    """Increase the contrast of an image.
+
+    Args:
+        image (Image.Image): The image to enhance.
+        contrast_factor (float): The factor by which to increase the contrast.
+            Values > 1 increase the contrast, while < 1 decrease it.
+
+    Returns:
+        Image.Image: The contrast-enhanced image.
+    """
+    enhancer = ImageEnhance.Contrast(image)
+    enhanced_image = enhancer.enhance(contrast_factor)
+    return enhanced_image
+
+
+def split_by_separators(text: str, seps: list[str]) -> list[str]:
+    """Splits the text by multiple separators specified in the list.
+
+    Args:
+        text (str): The string to be split.
+        seps (list): A list of string separators.
+
+    Returns:
+        list: A list of substrings split by any of the specified separators.
+    """
+    if not seps:
+        return [text]
+
+    # Initial split with the first separator
+    parts = text.split(seps[0])
+
+    # Process the remaining separators
+    for sep in seps[1:]:
+        new_parts = []
+        for part in parts:
+            new_parts.extend(part.split(sep))
+        parts = new_parts
+
+    # Filter out empty strings which can occur if separators are consecutive
+    return [part for part in parts if part]
 
 
 if __name__ == "__main__":
