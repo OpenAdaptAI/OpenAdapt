@@ -9,7 +9,7 @@ from loguru import logger
 from PIL import Image
 import numpy as np
 
-from openadapt import adapters, cache, config, plotting, utils, vision, visualizer
+from openadapt import adapters, cache, config, plotting, som, utils, vision
 
 
 CONTRAST_FACTOR = 10000
@@ -39,7 +39,7 @@ def main():
     # https://github.com/microsoft/SoM/blob/main/task_adapter/sam/tasks/inference_sam_m2m_auto.py
     #metadata = MetadataCatalog.get('coco_2017_train_panoptic')
     metadata = None
-    visual = visualizer.Visualizer(image_arr, metadata=metadata)
+    visual = som.visualizer.Visualizer(image_arr, metadata=metadata)
     mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
     label_mode = '1'
     alpha = 0.1

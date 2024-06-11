@@ -10,7 +10,7 @@ from openadapt import cache, config, models, plotting, utils, window
 from openadapt.adapters import openai
 
 
-@cache.cache(force_refresh=True)
+@cache.cache(force_refresh=False)
 def get_window_image(window_search_str: str):
     logger.info(f"Waiting for window with title containing {window_search_str=}...")
     while True:

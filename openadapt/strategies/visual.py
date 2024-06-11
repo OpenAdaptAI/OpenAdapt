@@ -212,7 +212,6 @@ class VisualReplayStrategy(
             modified_reference_action.recording = self.recording
             exceptions = []
             while True:
-                import ipdb; ipdb.set_trace()
                 active_window_segmentation = get_window_segmentation(
                     modified_reference_action,
                     exceptions=exceptions,
@@ -356,12 +355,15 @@ def find_similar_image_segmentation(
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
+    handle_similar_image_groups: bool = False,
 ) -> Segmentation:
     """Segments the active window from the action event's screenshot.
 
     Args:
         action_event: action event containing the screenshot data.
         exceptions: list of exceptions previously raised, added to prompt.
+        handle_similar_image_groups (bool): Whether to distinguish between similar
+            image groups. Work-in-progress.
 
     Returns:
         Segmentation object containing detailed segmentation information.
@@ -397,10 +399,12 @@ def get_window_segmentation(
 
 
 
-    similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
-        masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
-    )
-    # TODO XXX: handle similar image groups
+    if handle_similar_image_groups:
+        similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
+            masked_images, MIN_SEGMENT_SSIM, MIN_SEGMENT_SIZE_SIM,
+        )
+        # TODO XXX: handle similar image groups
+        raise ValueError("Currently unsupported.")
 
 
 

@@ -111,7 +111,7 @@ def do_fastsam(
     # Point prompt
     # points default [[0,0]] [[x1,y1],[x2,y2]]
     # point_label default [0] [1,0] 0:background, 1:foreground
-    #annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
+    # annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
 
     assert len(annotations) == 1, len(annotations)
     annotation = annotations[0]
