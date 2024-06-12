@@ -21,6 +21,12 @@ def fetch_download_data(api_url: str) -> dict:
     download_data = {}
     for release in releases:
         release_date = release["published_at"][:10]
+        print(
+            release["name"],
+            list(
+                (asset["name"], asset["download_count"]) for asset in release["assets"]
+            ),
+        )
         total_downloads = sum(asset["download_count"] for asset in release["assets"])
         download_data[release_date] = total_downloads
 
@@ -28,7 +34,9 @@ def fetch_download_data(api_url: str) -> dict:
 
 
 def plot_downloads(data: dict) -> None:
-    """Plots number of downloads and cumulative downloads over time using matplotlib, including total cumulative in the title.
+    """Plots number of downloads and cumulative downloads over time using matplotlib.
+
+    Includes total cumulative in the title.
 
     Args:
         data (dict): A dictionary with dates as keys and download counts as values.
@@ -36,7 +44,9 @@ def plot_downloads(data: dict) -> None:
     dates = [datetime.strptime(date, "%Y-%m-%d") for date in sorted(data.keys())]
     downloads = [data[date.strftime("%Y-%m-%d")] for date in dates]
     cumulative_downloads = np.cumsum(downloads)
-    total_cumulative_downloads = cumulative_downloads[-1] if cumulative_downloads.size > 0 else 0
+    total_cumulative_downloads = (
+        cumulative_downloads[-1] if cumulative_downloads.size > 0 else 0
+    )
 
     plt.figure(figsize=(12, 6))
     plt.plot(
