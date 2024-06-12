@@ -1,11 +1,11 @@
-"""Tests for adapters.openai."""
+"""Tests for drivers.openai."""
 
 import pytest
 
 from PIL import Image
 import requests
 
-from openadapt.adapters import openai
+from openadapt.drivers import openai
 
 
 def test_prompt(calculator_image: Image) -> None:
