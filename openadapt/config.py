@@ -226,6 +226,8 @@ class Config(BaseSettings):
 
     SOM_SERVER_URL: str = "<SOM_SERVER_URL>"
 
+    UNIQUE_USER_ID: str = ""
+
     class Adapter(str, Enum):
         """Adapter for the completions API."""
 
@@ -284,6 +286,9 @@ class Config(BaseSettings):
             "RECORD_VIDEO",
             "RECORD_IMAGES",
             "VIDEO_PIXEL_FORMAT",
+        ],
+        "general": [
+            "UNIQUE_USER_ID",
         ],
     }
 
