@@ -81,6 +81,7 @@ jobs:
               cd openadapt/app/dashboard
               npm install
               cd ../../../
+              pip install wheel
               poetry run postinstall
         - name: Build executables
           run: |
