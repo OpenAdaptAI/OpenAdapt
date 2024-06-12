@@ -293,7 +293,7 @@ def get_scale_ratios(
     if action_event:
         recording = action_event.recording
         monitor_width = recording.monitor_width
-        monitor_height = recording.monitor_hefith
+        monitor_height = recording.monitor_height
         image = action_event.screenshot.image
     else:
         image = take_screenshot()
