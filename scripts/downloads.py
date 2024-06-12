@@ -3,11 +3,13 @@
 import requests
 import matplotlib.pyplot as plt
 from datetime import datetime
-import numpy as np  # Import numpy for cumulative sum calculation
+import numpy as np
 
 
 def fetch_download_data(api_url: str) -> dict:
     """Fetches download data from GitHub API and returns it as a dictionary.
+
+    Supports pagination.
 
     Args:
         api_url (str): The URL of the GitHub API endpoint for releases.
@@ -15,20 +17,27 @@ def fetch_download_data(api_url: str) -> dict:
     Returns:
         dict: A dictionary with dates as keys and download counts as values.
     """
-    response = requests.get(api_url)
-    releases = response.json()
-
     download_data = {}
-    for release in releases:
-        release_date = release["published_at"][:10]
-        print(
-            release["name"],
-            list(
-                (asset["name"], asset["download_count"]) for asset in release["assets"]
-            ),
-        )
-        total_downloads = sum(asset["download_count"] for asset in release["assets"])
-        download_data[release_date] = total_downloads
+    page = 1
+    while True:
+        response = requests.get(f"{api_url}?per_page=30&page={page}")
+        releases = response.json()
+        if not releases:  # Break the loop if no more releases are returned
+            break
+        for release in releases:
+            release_date = release["published_at"][:10]
+            print(
+                release["name"],
+                list(
+                    (asset["name"], asset["download_count"])
+                    for asset in release["assets"]
+                ),
+            )
+            total_downloads = sum(
+                asset["download_count"] for asset in release["assets"]
+            )
+            download_data[release_date] = total_downloads
+        page += 1  # Increment page number for the next API request
 
     return download_data
 
