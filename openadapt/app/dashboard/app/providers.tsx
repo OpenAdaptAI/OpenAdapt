@@ -1,6 +1,8 @@
 'use client'
+import { get } from '@/api'
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
+import { useEffect } from 'react'
 
 if (typeof window !== 'undefined') {
   if (process.env.NEXT_PUBLIC_MODE !== "development") {
@@ -10,8 +12,21 @@ if (typeof window !== 'undefined') {
   }
 }
 
+async function getSettings(): Promise<Record<string, string>> {
+  return get('/api/settings?category=general', {
+      cache: 'no-store',
+  })
+}
+
 
 export function CSPostHogProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_MODE !== "development") {
+      getSettings().then((settings) => {
+        posthog.identify(settings['UNIQUE_USER_ID'])
+      })
+    }
+  }, [])
   if (process.env.NEXT_PUBLIC_MODE === "development") {
     return <>{children}</>;
   }

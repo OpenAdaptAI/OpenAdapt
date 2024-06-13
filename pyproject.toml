@@ -104,6 +104,7 @@ numba = "0.57.0"
 openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
+posthog = "^3.5.0"
 
 wheel = "^0.43.0"
 cython = "^3.0.10"

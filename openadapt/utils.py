@@ -18,8 +18,9 @@ import time
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageEnhance
+from posthog import Posthog
 
-from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 
 with redirect_stdout_stderr():
     import fire
@@ -37,7 +38,12 @@ if sys.platform == "win32":
     mss.windows.CAPTUREBLT = 0
 
 
-from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
+from openadapt.config import (
+    PERFORMANCE_PLOTS_DIR_PATH,
+    POSTHOG_HOST,
+    POSTHOG_PUBLIC_KEY,
+    config,
+)
 from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
 from openadapt.models import ActionEvent
@@ -658,6 +664,7 @@ def trace(logger: logger) -> Any:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper_logging(*args: tuple[tuple, ...], **kwargs: dict[str, Any]) -> Any:
+            posthog = get_posthog_instance()
             func_name = func.__qualname__
             func_args = args_to_str(*args)
             func_kwargs = kwargs_to_str(**kwargs)
@@ -666,6 +673,14 @@ def trace(logger: logger) -> Any:
                 logger.info(f" -> Enter: {func_name}({func_args}, {func_kwargs})")
             else:
                 logger.info(f" -> Enter: {func_name}({func_args})")
+            posthog.capture(
+                event="function_trace",
+                properties={
+                    "function_name": func_name,
+                    "function_args": func_args,
+                    "function_kwargs": func_kwargs,
+                },
+            )
 
             result = func(*args, **kwargs)
 
@@ -865,6 +880,26 @@ def split_by_separators(text: str, seps: list[str]) -> list[str]:
 
     # Filter out empty strings which can occur if separators are consecutive
     return [part for part in parts if part]
+
+
+class DistinctIDPosthog(Posthog):
+    """Posthog client with a distinct ID injected into all events."""
+
+    def capture(self, **kwargs: Any) -> None:
+        """Capture an event with the distinct ID.
+
+        Args:
+            **kwargs: The event properties.
+        """
+        super().capture(distinct_id=config.UNIQUE_USER_ID, **kwargs)
+
+
+def get_posthog_instance() -> DistinctIDPosthog:
+    """Get an instance of the Posthog client."""
+    posthog = DistinctIDPosthog(POSTHOG_PUBLIC_KEY, host=POSTHOG_HOST)
+    if not is_running_from_executable():
+        posthog.disabled = True
+    return posthog
 
 
 if __name__ == "__main__":
