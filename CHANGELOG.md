@@ -2,6 +2,15 @@
 
 
 
+## v0.32.0 (2024-06-13)
+
+### Feature
+
+* feat(tray): Add posthog analytics to tray actions (#737)
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc0b7ea2d910c31acfc0eef0eba0b2e252196838))
+
+
 ## v0.31.0 (2024-06-12)
 
 ### Feature
