@@ -2,6 +2,88 @@
 
 
 
+## v0.31.0 (2024-06-12)
+
+### Feature
+
+* feat(contrib.som, postinstall): add contrib.som; postinstall.py; other fixes (#679)
+
+
+* add vision.get_similar_image_idxs and test_vision.py
+
+* refactor fixtures
+
+* add get_size_similarity and tests; update default params in adapters.ultralytics
+
+* get_image_similarity rgb
+
+* add caching; win_size
+
+* short_circuit_ssim; plot_similar_image_groups
+
+* refactor: adding plotting.py
+
+* fix test; typo
+
+* bug fixes; title_params
+
+* add tests/openadapt/adapters
+
+* bugfix: imports
+
+* modify prompt adapter API to accept images instead of base64 images
+
+* add experiments/handle_similar_segments.py
+
+* add highlight_masks; increase_contrast
+
+* add experiments/gpt4o_seg.py; normalize_positions; clean_data; filter_keys; modify get_scale_ratios to accept no arguments; modify crop_active_window to accept window event; fix bugs
+
+* ultralytics sam
+
+* add experiments/nms.py
+
+* add fastsamsom.py, visualizer.py
+
+* working fastsamsom.py
+
+* cleanup
+
+* black; flake8; postinstall.py; test_vision.py
+
+* restore utils.get_performance_plot_file_path/get_performance_plot_file_path
+
+* fix ActionEvent.from_dict
+
+* handle HTTPError in test_openai
+
+* utils.split_by_separators
+
+* other fixes
+
+* remove list python files step
+
+* consolidate install-dashboard and postinstall
+
+* install_dashboard from dashboard_dir
+
+* postinstall error logging ([`588494c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/588494c596b7ac2b3bdbabec40c055b266d632d9))
+
+### Fix
+
+* fix(build): pip install wheel (#738) ([`3640f41`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3640f41ec3a8b956e2e848bc6713d64cb8468b28))
+
+* fix(tests, utils): fix regressions (#736)
+
+* recording.monitor_hefith -&gt; recording.monitor_height
+
+* add test_utils.py
+
+* release-and-publish.yml: poetry run postinstall
+
+* black ([`d28a886`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d28a886462f6cd1840da29307e12d24c86785698))
+
+
 ## v0.30.4 (2024-06-11)
 
 ### Fix
