@@ -3,6 +3,8 @@
 import requests
 import matplotlib.pyplot as plt
 from datetime import datetime
+from pprint import pformat
+
 import numpy as np
 
 
@@ -18,6 +20,7 @@ def fetch_download_data(api_url: str) -> dict:
         dict: A dictionary with dates as keys and download counts as values.
     """
     download_data = {}
+    ignored_names = set()
     page = 1
     while True:
         response = requests.get(f"{api_url}?per_page=30&page={page}")
@@ -33,12 +36,17 @@ def fetch_download_data(api_url: str) -> dict:
                     for asset in release["assets"]
                 ),
             )
+            ignored_names |= set([
+                asset["name"] for asset in release["assets"]
+                if not asset["name"].endswith(".zip")
+            ])
             total_downloads = sum(
                 asset["download_count"] for asset in release["assets"]
+                if asset["name"].endswith(".zip")
             )
             download_data[release_date] = total_downloads
         page += 1  # Increment page number for the next API request
-
+    print(f"ignored_names=\n{pformat(ignored_names)}")
     return download_data
 
 
@@ -69,7 +77,12 @@ def plot_downloads(data: dict) -> None:
         color="r",
         label="Cumulative Downloads",
     )
-    plt.title(f"Downloads Over Time (Total Cumulative: {total_cumulative_downloads})")
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    plt.title(
+        "Downloads Over Time"
+        f"\n(Total Cumulative: {total_cumulative_downloads}) "
+        f"\n{current_time}"
+    )
     plt.xlabel("Date")
     plt.ylabel("Number of Downloads")
     plt.grid(True)
