@@ -44,7 +44,8 @@ def fetch_download_data(api_url: str) -> dict:
                 asset["download_count"] for asset in release["assets"]
                 if asset["name"].endswith(".zip")
             )
-            download_data[release_date] = total_downloads
+            download_data.setdefault(release_date, 0)
+            download_data[release_date] += total_downloads
         page += 1  # Increment page number for the next API request
     print(f"ignored_names=\n{pformat(ignored_names)}")
     return download_data
