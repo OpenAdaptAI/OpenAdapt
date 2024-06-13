@@ -9,6 +9,7 @@ import json
 import os
 import time
 
+from typing import List
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
 import psutil
@@ -279,21 +280,25 @@ def delete_recording(session: SaSession, recording: Recording) -> None:
     delete_video_file(recording_timestamp)
 
 
-def get_all_recordings(session: SaSession) -> list[Recording]:
-    """Get all recordings.
+def get_recordings(session: SaSession, max_rows=None) -> list[Recording]:
+    """Get recordings.
 
     Args:
         session (sa.orm.Session): The database session.
+        max_rows: The number of recordings to return, starting from the most recent. 
+            Defaults to all if max_rows is not specified. 
 
     Returns:
         list[Recording]: A list of all original recordings.
     """
-    return (
+    query = (
         session.query(Recording)
         .filter(Recording.original_recording_id == None)  # noqa: E711
         .order_by(sa.desc(Recording.timestamp))
-        .all()
     )
+    if max_rows:
+        query = query.limit(max_rows)
+    return query.all()
 
 
 def get_all_scrubbed_recordings(
@@ -348,6 +353,23 @@ def get_recording(session: SaSession, timestamp: float) -> Recording:
         Recording: The recording object.
     """
     return session.query(Recording).filter(Recording.timestamp == timestamp).first()
+
+
+def get_recordings_by_desc(session: SaSession, description_str: str) -> List[Recording]:
+    """Get recordings by task description.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        task_description (str): The task description to search for.
+
+    Returns:
+        List[Recording]: A list of recordings whose task descriptions contain the given string.
+    """
+    return (
+        session.query(Recording)
+        .filter(Recording.task_description.contains(description_str))
+        .all()
+    )
 
 
 BaseModelType = TypeVar("BaseModelType")
