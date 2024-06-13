@@ -2,6 +2,27 @@
 
 
 
+## v0.33.0 (2024-06-13)
+
+### Feature
+
+* feat(scripts.downloads): add scripts/downloads.py (#735)
+
+* add scripts/downloads.py
+
+* add total cumulative downloads to title
+
+* add module docstring
+
+* pagination
+
+* add datetime
+
+* accumulate by release_date
+
+* black/flake8 ([`3c20298`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3c2029897e91f3f16b6b929cdec656ceda28459f))
+
+
 ## v0.32.0 (2024-06-13)
 
 ### Feature
