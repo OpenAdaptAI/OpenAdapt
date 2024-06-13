@@ -36,12 +36,16 @@ def fetch_download_data(api_url: str) -> dict:
                     for asset in release["assets"]
                 ),
             )
-            ignored_names |= set([
-                asset["name"] for asset in release["assets"]
-                if not asset["name"].endswith(".zip")
-            ])
+            ignored_names |= set(
+                [
+                    asset["name"]
+                    for asset in release["assets"]
+                    if not asset["name"].endswith(".zip")
+                ]
+            )
             total_downloads = sum(
-                asset["download_count"] for asset in release["assets"]
+                asset["download_count"]
+                for asset in release["assets"]
                 if asset["name"].endswith(".zip")
             )
             download_data.setdefault(release_date, 0)
@@ -78,7 +82,7 @@ def plot_downloads(data: dict) -> None:
         color="r",
         label="Cumulative Downloads",
     )
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     plt.title(
         "Downloads Over Time"
         f"\n(Total Cumulative: {total_cumulative_downloads}) "
