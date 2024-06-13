@@ -23,6 +23,8 @@ from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
 
+posthog = utils.get_posthog_instance()
+
 
 @logger.catch
 def replay(
@@ -47,6 +49,7 @@ def replay(
         bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
+    posthog.capture("replay.started", {"strategy_name": strategy_name})
 
     if status_pipe:
         # TODO: move to Strategy?
@@ -99,6 +102,7 @@ def replay(
 
     if status_pipe:
         status_pipe.send({"type": "replay.stopped"})
+    posthog.capture("replay.stopped", {"strategy_name": strategy_name, "success": rval})
 
     if record:
         sleep(1)

@@ -28,12 +28,14 @@ from openadapt.utils import (
     compute_diff,
     configure_logging,
     evenly_spaced,
+    get_posthog_instance,
     image2utf8,
     row2dict,
     rows2dicts,
 )
 
 SCRUB = config.SCRUB_ENABLED
+posthog = get_posthog_instance()
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -171,6 +173,8 @@ def main(
     configure_logging(logger, LOG_LEVEL)
 
     assert not all([recording, recording_id]), "Only one may be specified."
+
+    posthog.capture("visualize.started", {"recording_id": recording_id})
 
     session = crud.get_new_session(read_only=True)
 
@@ -395,6 +399,7 @@ def main(
 
     if cleanup:
         Timer(1, _cleanup).start()
+    posthog.capture("visualize.completed", {"recording_id": recording.id})
     return True
 
 
