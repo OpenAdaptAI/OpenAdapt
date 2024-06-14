@@ -885,7 +885,7 @@ def split_by_separators(text: str, seps: list[str]) -> list[str]:
 class DistinctIDPosthog(Posthog):
     """Posthog client with a distinct ID injected into all events."""
 
-    def capture(self, *args: Any, **kwargs: Any) -> None:
+    def capture(self, *args: tuple, **kwargs: dict) -> None:
         """Capture an event with the distinct ID.
 
         Args:
