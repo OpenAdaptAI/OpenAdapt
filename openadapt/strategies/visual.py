@@ -45,6 +45,7 @@ Usage:
 """
 
 from dataclasses import dataclass
+from types import ModuleType
 import time
 
 from loguru import logger
@@ -410,12 +411,23 @@ def get_window_segmentation(
         # TODO XXX: handle similar image groups
         raise ValueError("Currently unsupported.")
 
-    descriptions = prompt_for_descriptions(
-        original_image,
-        masked_images,
-        action_event.active_segment_description,
-        exceptions,
-    )
+    if 0:
+        descriptions = adapters.prompt.batch(
+            prompt_for_descriptions,
+            {
+                "original_image": original_image,
+                "masked_images": masked_images,
+                "active_segment_description": action_event.active_segment_description,
+                "exceptions": exceptions,
+            }
+        )
+    else:
+        descriptions = prompt_for_descriptions(
+            original_image,
+            masked_images,
+            action_event.active_segment_description,
+            exceptions,
+        )
     bounding_boxes, centroids = vision.calculate_bounding_boxes(refined_masks)
     assert len(bounding_boxes) == len(descriptions) == len(centroids), (
         len(bounding_boxes),
@@ -437,7 +449,8 @@ def get_window_segmentation(
     return segmentation
 
 
-def prompt_for_descriptions(
+def _prompt_for_descriptions(
+    driver: ModuleType,
     original_image: Image.Image,
     masked_images: list[Image.Image],
     active_segment_description: str | None,
@@ -446,6 +459,7 @@ def prompt_for_descriptions(
     """Generates descriptions for given image segments using a prompt adapter.
 
     Args:
+        driver: Driver module to use for prompting.
         original_image: The original image.
         masked_images: List of masked images.
         active_segment_description: Description of the active segment.
@@ -454,16 +468,14 @@ def prompt_for_descriptions(
     Returns:
         list of descriptions for each masked image.
     """
-    prompt_adapter = adapters.get_default_prompt_adapter()
-
     # TODO: move inside adapters
     # off by one to account for original image
-    if prompt_adapter.MAX_IMAGES and (
-        len(masked_images) + 1 > prompt_adapter.MAX_IMAGES
+    if driver.MAX_IMAGES and (
+        len(masked_images) + 1 > driver.MAX_IMAGES
     ):
         masked_images_batches = utils.split_list(
             masked_images,
-            prompt_adapter.MAX_IMAGES - 1,
+            driver.MAX_IMAGES - 1,
         )
         descriptions = []
         for masked_images_batch in masked_images_batches:
@@ -489,7 +501,7 @@ def prompt_for_descriptions(
         exceptions=exceptions,
     )
     logger.info(f"prompt=\n{prompt}")
-    descriptions_json = prompt_adapter.prompt(
+    descriptions_json = driver.prompt(
         prompt,
         system_prompt,
         images,
@@ -506,4 +518,49 @@ def prompt_for_descriptions(
         raise exc
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
+    return descriptions
+
+def prompt_for_descriptions(
+    original_image: Image.Image,
+    masked_images: list[Image.Image],
+    active_segment_description: str | None,
+    exceptions: list[Exception] | None = None,
+) -> list[str]:
+    """Generates descriptions for given image segments using a prompt adapter.
+
+    Args:
+        original_image: The original image.
+        masked_images: List of masked images.
+        active_segment_description: Description of the active segment.
+        exceptions: List of exceptions previously raised, added to prompts.
+
+    Returns:
+        List of descriptions for each masked image.
+    """
+    system_prompt = utils.render_template_from_file("prompts/system.j2")
+
+    # Use the prompt_template function that handles dynamic batching
+    json_results = adapters.prompt.prompt_template(
+        text_template="prompts/description.j2",
+        images=[original_image] + masked_images,
+        system_prompt=system_prompt,
+        active_segment_description=active_segment_description,
+        exceptions=exceptions
+    )
+
+    # Parse each JSON result to extract descriptions
+    descriptions = []
+    for json_result in json_results:
+        parsed_result = utils.parse_code_snippet(json_result)
+        if 'descriptions' in parsed_result:
+            descriptions.extend(parsed_result['descriptions'])
+        else:
+            logger.error("No 'descriptions' key in parsed JSON results.")
+
+    assert len(descriptions) == len(masked_images), (
+        "Mismatch between descriptions and images count",
+        len(descriptions),
+        len(masked_images),
+    )
+
     return descriptions
