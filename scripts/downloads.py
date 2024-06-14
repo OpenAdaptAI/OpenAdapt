@@ -55,6 +55,10 @@ def fetch_download_data(api_url: str) -> dict:
     return download_data
 
 
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta  # Import timedelta along with datetime
+
+
 def plot_downloads(data: dict) -> None:
     """Plots number of downloads and cumulative downloads over time using matplotlib.
 
@@ -115,7 +119,6 @@ def plot_downloads(data: dict) -> None:
     plt.legend()
     plt.tight_layout()
     plt.show()
-
 
 if __name__ == "__main__":
     api_url = "https://api.github.com/repos/OpenAdaptAI/OpenAdapt/releases"

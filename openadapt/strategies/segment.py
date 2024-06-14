@@ -22,6 +22,7 @@ INCLUDE_MODIFIED_RECORDING_DESCRIPTION = False
 INCLUDE_REPLAY_INSTRUCTIONS = True
 INCLUDE_WINDOW = False
 INCLUDE_WINDOW_DATA = False
+FILTER_MASKS = True
 
 
 class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
