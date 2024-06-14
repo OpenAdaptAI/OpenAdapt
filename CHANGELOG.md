@@ -2,6 +2,21 @@
 
 
 
+## v0.33.1 (2024-06-14)
+
+### Fix
+
+* fix(posthog): fix broken posthog api (#753)
+
+* fix: Fix broken posthog api
+
+* fix types
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`16d510f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/16d510fa776086cd9599f1c0cf946ac03e7d9f53))
+
+
 ## v0.33.0 (2024-06-13)
 
 ### Feature
