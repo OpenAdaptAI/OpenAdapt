@@ -1,5 +1,6 @@
 import { Box, Button, Stack, Text, TextInput } from '@mantine/core'
 import { isNotEmpty, useForm } from '@mantine/form'
+import { notifications } from '@mantine/notifications'
 import React from 'react'
 
 export const RegisterForUpdates = () => {
@@ -24,11 +25,15 @@ export const RegisterForUpdates = () => {
                 'bot-field': '',
             }).toString(),
         }).then(() => {
-            onboardingForm.reset()
+            notifications.show({
+                title: 'Thank you!',
+                message: 'You have been registered for updates',
+                color: 'green',
+            })
         })
     }
     return (
-        <Box maw={600} mx="auto" mt={300}>
+        <Box maw={600} mx="auto">
             <Stack gap="xs">
                 <form onSubmit={onboardingForm.onSubmit(onSubmit)}>
                     <TextInput
