@@ -885,13 +885,15 @@ def split_by_separators(text: str, seps: list[str]) -> list[str]:
 class DistinctIDPosthog(Posthog):
     """Posthog client with a distinct ID injected into all events."""
 
-    def capture(self, **kwargs: Any) -> None:
+    def capture(self, *args: Any, **kwargs: Any) -> None:
         """Capture an event with the distinct ID.
 
         Args:
+            *args: The event name.
             **kwargs: The event properties.
         """
-        super().capture(distinct_id=config.UNIQUE_USER_ID, **kwargs)
+        kwargs.setdefault("distinct_id", config.UNIQUE_USER_ID)
+        super().capture(*args, **kwargs)
 
 
 def get_posthog_instance() -> DistinctIDPosthog:
