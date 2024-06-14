@@ -174,7 +174,9 @@ def main(
 
     assert not all([recording, recording_id]), "Only one may be specified."
 
-    posthog.capture("visualize.started", {"recording_id": recording_id})
+    posthog.capture(
+        event="visualize.started", properties={"recording_id": recording_id}
+    )
 
     session = crud.get_new_session(read_only=True)
 
@@ -182,6 +184,11 @@ def main(
         recording = crud.get_recording_by_id(session, recording_id)
     elif recording is None:
         recording = crud.get_latest_recording(session)
+
+    if recording is None:
+        logger.error("No recording found")
+        return False
+
     if SCRUB:
         from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
@@ -399,7 +406,9 @@ def main(
 
     if cleanup:
         Timer(1, _cleanup).start()
-    posthog.capture("visualize.completed", {"recording_id": recording.id})
+    posthog.capture(
+        event="visualize.completed", properties={"recording_id": recording.id}
+    )
     return True
 
 
