@@ -55,10 +55,14 @@ def fetch_download_data(api_url: str) -> dict:
     return download_data
 
 
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta  # Import timedelta along with datetime
+
+
 def plot_downloads(data: dict) -> None:
     """Plots number of downloads and cumulative downloads over time using matplotlib.
 
-    Includes total cumulative in the title.
+    Includes total cumulative in the title and annotates a specific event date with styled text.
 
     Args:
         data (dict): A dictionary with dates as keys and download counts as values.
@@ -82,9 +86,23 @@ def plot_downloads(data: dict) -> None:
         color="r",
         label="Cumulative Downloads",
     )
+
+    # Annotation for the release download button addition
+    event_date = datetime(2024, 5, 9, 2, 46)  # Year, Month, Day, Hour, Minute
+    plt.axvline(x=event_date, color='g', linestyle=':', label='Download Buttons Added')
+    plt.annotate(
+        'Download Buttons Added at\nwww.openadapt.ai',
+        xy=(event_date, plt.ylim()[0] + 100),
+        xytext=(event_date - timedelta(days=10), plt.ylim()[1]*0.85),  # Shift left by 10 days
+        horizontalalignment='center',
+        fontsize=10,
+        bbox=dict(boxstyle="round,pad=0.5", edgecolor='green', facecolor='#ffffcc', alpha=0.9)
+    )
+
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     plt.title(
-        "Downloads Over Time"
+        "github.com/OpenAdaptAI/OpenAdapt"
+        "\nRelease Downloads Over Time"
         f"\n(Total Cumulative: {total_cumulative_downloads}) "
         f"\n{current_time}"
     )
@@ -95,7 +113,6 @@ def plot_downloads(data: dict) -> None:
     plt.legend()
     plt.tight_layout()
     plt.show()
-
 
 if __name__ == "__main__":
     api_url = "https://api.github.com/repos/OpenAdaptAI/OpenAdapt/releases"
