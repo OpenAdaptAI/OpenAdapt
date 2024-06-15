@@ -25,7 +25,13 @@ def main() -> None:
         image_contrasted.show()
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()
-    segmented_image = segmentation_adapter.fetch_segmented_image(image)
+    segmented_image = segmentation_adapter.fetch_segmented_image(
+        image,
+        # threshold below which boxes will be filtered out
+        conf=0,
+        # discards all overlapping boxes with IoU > iou_threshold
+        iou=0.05,
+    )
     if DEBUG:
         segmented_image.show()
 

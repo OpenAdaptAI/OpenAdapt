@@ -2,6 +2,17 @@
 
 
 
+## v0.33.2 (2024-06-15)
+
+### Fix
+
+* fix(VisualReplayStrategy): increase default NMS thresh/conf (#758)
+
+* repair VisualReplayStrategy
+
+* black/flake8 ([`dd9e8fa`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd9e8fada19bb40ccab892b4335cae7414f110a8))
+
+
 ## v0.33.1 (2024-06-14)
 
 ### Fix
