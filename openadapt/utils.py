@@ -605,12 +605,109 @@ def parse_code_snippet(snippet: str) -> dict:
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)
         else:
+            # XXX this may loop forever, 
+            # TODO make sure to only do this once (e.g. before?)
+            processed_snippet = extract_code_block(snippet)
+            import ipdb; ipdb.set_trace()
+            return parse_code_snippet(processed_snippet)
             msg = f"Unsupported {snippet=}"
             logger.warning(msg)
             return None
     except Exception as exc:
         # TODO
         raise exc
+
+
+def extract_code_block(text: str) -> str:
+    """
+    Extract the text enclosed by the outermost backticks, including the backticks themselves.
+
+    Args:
+        text (str): The input text containing potential code blocks enclosed by backticks.
+
+    Returns:
+        str: The text enclosed by the outermost backticks, or an empty string if no complete block is found.
+
+    Raises:
+        ValueError: If the number of backtick lines is uneven.
+    """
+    backticks = "```"
+    lines = text.splitlines()
+    backtick_idxs = [idx for idx, line in enumerate(lines) if line.startswith(backticks)]
+
+    if len(backtick_idxs) % 2 != 0:
+        raise ValueError("Uneven number of backtick lines")
+
+    if len(backtick_idxs) < 2:
+        return ""  # No enclosing backticks found, return empty string
+
+    # Extract only the lines between the first and last backtick line, including the backticks
+    start_idx, end_idx = backtick_idxs[0], backtick_idxs[-1]
+    return "\n".join(lines[start_idx:end_idx + 1])
+
+
+# TODO: refactor
+def strip_backticks(
+    updated: str,
+    original: str | None = None,
+    first_and_last_only: bool = False,
+    return_discarded: bool = False,
+):
+    """
+    Params:
+        first_and_last_only: bool
+            If True, only strip backticks if they are part of a pair.
+            May no longe be necessary.
+    """
+    BACKTICKS = "```"
+    original = original or ""
+
+    # TOOD: remove if unused
+    if first_and_last_only:
+        # don't assume they are first and last
+        num_original_backticks = original.count(BACKTICKS)
+        num_updated_backticks = updated.count(BACKTICKS)
+        logger.info(f"{num_original_backticks=} {num_updated_backticks=}")
+        if num_updated_backticks != num_original_backticks + 2:
+            # don't make any assumptions
+            return updated
+
+    lines = updated.splitlines()
+    backtick_idxs = [
+        idx
+        for idx, line in enumerate(lines)
+        if line.startswith(BACKTICKS)
+    ]
+    logger.info(f"{backtick_idxs=}")
+    logger.info(f"{len(backtick_idxs)=}")
+    if len(backtick_idxs) % 2 != 0:
+        logger.warning(f"{len(backtick_idxs)=} is uneven")
+    if len(backtick_idxs) < 2:
+        keep_lines = [
+            line
+            for line in lines
+            if not line.startswith(BACKTICKS)
+        ]
+        discarded_prefix = None
+        discarded_suffix = None
+    else:
+        start_idx = backtick_idxs[0]
+        end_idx = backtick_idxs[-1]
+        keep_lines = [
+            line for idx, line in enumerate(lines)
+            if idx > start_idx and idx < end_idx
+            and not line.startswith(BACKTICKS)
+        ]
+        discarded_prefix = "\n".join(lines[:start_idx])
+        discarded_suffix = "\n".join(lines[end_idx:])
+    keep = "\n".join(keep_lines)
+    if return_discarded:
+        logger.info(
+            f"{return_discarded=} {discarded_prefix=} {discarded_suffix=}"
+        )
+        return keep, discarded_prefix, discarded_suffix
+    else:
+        return keep
 
 
 def split_list(input_list: list, size: int) -> list[list]:

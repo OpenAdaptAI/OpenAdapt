@@ -40,23 +40,17 @@ def prompt(
 
 def prompt_template(
     text_template: str,
-    images: list[Image.Image] | None = None,
-    system_prompt: str | None = None,
+    original_image: Image.Image,
+    masked_images: list[Image.Image],
+    active_segment_description: str | None,
+    exceptions: list[Exception] | None = None,
+    dynamic_param_funcs: dict = None,
     **template_params
-) -> list:
-    """Attempt to fetch prompt completions from various services using a template, handling image batching as needed.
-
-    Args:
-        text_template: Path or identifier for the text template.
-        images: Optional list of images to include in the prompt.
-        system_prompt: An optional system-level prompt.
-        template_params: Additional parameters required for rendering the template.
-
-    Returns:
-        A list of raw results from the first successful driver.
-    """
-    if images is None:
-        images = []  # Ensure images is always a list
+) -> list[str]:
+    images = [original_image] + masked_images
+    system_prompt = utils.render_template_from_file("prompts/system.j2")
+    if not dynamic_param_funcs:
+        dynamic_param_funcs = {}
 
     results = []
     for driver in DRIVER_ORDER:
@@ -67,12 +61,24 @@ def prompt_template(
         try:
             for i in range(0, len(images), max_images):
                 batch = images[i:i+max_images]
-                adjusted_params = {**template_params, "num_segments": len(batch)}
-                user_prompt = utils.render_template_from_file(text_template, **adjusted_params)
+                if len(batch) == 1 and batch[0] == original_image:
+                    logger.info("Skipping batch with only the original image.")
+                    continue  # Skip batches that only contain the original image
 
-                # Attempt the prompt with the current driver
-                result = driver.prompt(user_prompt, images=batch, system_prompt=system_prompt)
-                results.append(result)  # Store raw results
+                num_images = len(batch)
+                dynamic_params = {param: func(num_images) for param, func in dynamic_param_funcs.items()}
+                combined_params = {**template_params, **dynamic_params}
+
+                prompt = utils.render_template_from_file(
+                    text_template,
+                    active_segment_description=active_segment_description,
+                    exceptions=exceptions,
+                    **combined_params
+                )
+
+                logger.info(f"Processing batch with {num_images} images")
+                result = driver.prompt(prompt, system_prompt, batch)
+                results.append(result)
         except Exception as e:
             logger.error(f"Driver {driver.__name__} failed with error: {e}")
             continue
