@@ -45,6 +45,7 @@ Usage:
 """
 
 from dataclasses import dataclass
+from pprint import pformat
 from types import ModuleType
 import time
 
@@ -501,12 +502,8 @@ def _prompt_for_descriptions(
         exceptions=exceptions,
     )
     logger.info(f"prompt=\n{prompt}")
-<<<<<<< HEAD
-    logger.info(f"{len(images)=}")
-    descriptions_json = prompt_adapter.prompt(
-=======
     descriptions_json = driver.prompt(
->>>>>>> b121edd2 (split adapters)
+    logger.info(f"{len(images)=}")
         prompt,
         system_prompt,
         images,
