@@ -549,13 +549,20 @@ def prompt_for_descriptions(
     """
     system_prompt = utils.render_template_from_file("prompts/system.j2")
 
+    # Define dynamic parameters for the prompt template
+    dynamic_param_funcs = {
+        "num_segments": lambda num_images: num_images - 1  # num_images includes the original_image
+    }
+
     # Use the prompt_template function that handles dynamic batching
     json_results = adapters.prompt.prompt_template(
         text_template="prompts/description.j2",
-        images=[original_image] + masked_images,
+        original_image=original_image,
+        masked_images=masked_images,
         system_prompt=system_prompt,
         active_segment_description=active_segment_description,
-        exceptions=exceptions
+        exceptions=exceptions,
+        dynamic_param_funcs=dynamic_param_funcs
     )
 
     # Parse each JSON result to extract descriptions
