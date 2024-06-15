@@ -31,24 +31,24 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str = "",
+        instructions: str = "",
     ) -> None:
         """Initialize the SegmentReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
-            replay_instructions (str): Natural language instructions
+            instructions(str): Natural language instructions
                 for how recording should be replayed.
         """
         super().__init__(recording)
-        self.replay_instructions = replay_instructions
+        self.replay_instructions = instructions
         self.action_history = []
         self.action_event_idx = 0
 
         add_active_segment_descriptions(recording.processed_action_events)
         self.modified_actions = apply_replay_instructions(
             recording.processed_action_events,
-            replay_instructions,
+            self.replay_instructions,
         )
         self.recording_description = describe_recording(
             self.recording.processed_action_events
