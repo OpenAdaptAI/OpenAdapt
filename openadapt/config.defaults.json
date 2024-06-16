@@ -86,5 +86,6 @@
     "SOCKET_PORT": 6001,
     "SOCKET_AUTHKEY": "openadapt",
     "SOCKET_ADDRESS": "localhost",
-    "SOCKET_RETRY_INTERVAL": 5
+    "SOCKET_RETRY_INTERVAL": 5,
+    "UNIQUE_USER_ID": ""
 }

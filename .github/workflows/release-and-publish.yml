@@ -42,7 +42,7 @@ jobs:
               pip install poetry
               poetry install
               brew install nvm
-              poetry run install-dashboard
+              poetry run postinstall
               brew install python-tk@3.10
         - name: Build executables
           run: |
@@ -81,6 +81,8 @@ jobs:
               cd openadapt/app/dashboard
               npm install
               cd ../../../
+              pip install wheel
+              poetry run postinstall
         - name: Build executables
           run: |
               poetry run python -m openadapt.build

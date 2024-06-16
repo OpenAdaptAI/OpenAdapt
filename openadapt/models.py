@@ -2,6 +2,7 @@
 
 from collections import OrderedDict
 from copy import deepcopy
+from itertools import zip_longest
 from typing import Any, Type
 import io
 import sys
@@ -17,6 +18,9 @@ from openadapt.config import config
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
+
+
+EMPTY_VALS = [None, "", [], (), {}]
 
 
 # https://groups.google.com/g/sqlalchemy/c/wlr7sShU6-k
@@ -357,8 +361,19 @@ class ActionEvent(db.Base):
     def from_dict(
         cls: Type["ActionEvent"],
         action_dict: dict,
+        handle_separator_variations: bool = True,
     ) -> "ActionEvent":
-        """Get an ActionEvent from a dict."""
+        """Get an ActionEvent from a dict.
+
+        Args:
+            action_dict (dict): A dictionary representing the action.
+            handle_separator_variations (bool): Whether to attempt to handle variations
+                in the key separator string (OpenAI sometimes returns "...><..." instead
+                of " "...>-<...".
+
+        Returns:
+            (ActionEvent) The ActionEvent.
+        """
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
@@ -369,15 +384,35 @@ class ActionEvent(db.Base):
             if action_dict["text"].startswith(name_prefix) and action_dict[
                 "text"
             ].endswith(name_suffix):
-                # Handling special keys
-                sep = "".join([name_suffix, sep, name_prefix])
+                # handle multiple key separators
+                # (each key separator must start and end with a prefix and suffix)
+                default_sep = "".join([name_suffix, sep, name_prefix])
+                variation_seps = ["".join([name_suffix, name_prefix])]
+                key_seps = [default_sep]
+                if handle_separator_variations:
+                    key_seps += variation_seps
+
                 prefix_len = len(name_prefix)
                 suffix_len = len(name_suffix)
-                key_names = action_dict["text"][prefix_len:-suffix_len].split(sep)
-                canonical_key_names = action_dict["canonical_text"][
-                    prefix_len:-suffix_len
-                ].split(sep)
-                for key_name, canonical_key_name in zip(key_names, canonical_key_names):
+
+                key_names = utils.split_by_separators(
+                    action_dict["text"][prefix_len:-suffix_len],
+                    key_seps,
+                )
+                canonical_key_names = utils.split_by_separators(
+                    action_dict["canonical_text"][prefix_len:-suffix_len],
+                    key_seps,
+                )
+                logger.info(f"{key_names=}")
+                logger.info(f"{canonical_key_names=}")
+
+                # Process each key name and canonical key name found
+                children = []
+                release_events = []
+                for key_name, canonical_key_name in zip_longest(
+                    key_names,
+                    canonical_key_names,
+                ):
                     press, release = cls._create_key_events(
                         key_name, canonical_key_name
                     )
@@ -385,6 +420,7 @@ class ActionEvent(db.Base):
                     release_events.append(
                         release
                     )  # Collect release events to append in reverse order later
+
             else:
                 # Handling regular character sequences
                 sep_len = len(sep)
@@ -443,7 +479,7 @@ class ActionEvent(db.Base):
             {
                 key: val
                 for key, val in utils.row2dict(self, follow=False).items()
-                if val is not None
+                if val not in EMPTY_VALS
                 and not key.endswith("timestamp")
                 and not key.endswith("id")
                 and key not in ["reducer_names"]
@@ -482,9 +518,20 @@ class WindowEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
 
     @classmethod
-    def get_active_window_event(cls: "WindowEvent") -> "WindowEvent":
-        """Get the active window event."""
-        return WindowEvent(**window.get_active_window_data())
+    def get_active_window_event(
+        cls: "WindowEvent",
+        # TODO: rename to include_a11y_data
+        include_window_data: bool = True,
+    ) -> "WindowEvent":
+        """Get the active window event.
+
+        Args:
+            include_window_data (bool): whether to include a11y data.
+
+        Returns:
+            (WindowEvent) the active window event.
+        """
+        return WindowEvent(**window.get_active_window_data(include_window_data))
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
         """Scrub the window event."""
@@ -506,28 +553,32 @@ class WindowEvent(db.Base):
             {
                 key: val
                 for key, val in utils.row2dict(self, follow=False).items()
-                if val is not None
+                if val not in EMPTY_VALS
                 and not key.endswith("timestamp")
                 and not key.endswith("id")
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
-        if sys.platform == "win32":
-            logger.warning(
-                "key_suffixes have not yet been defined on Windows."
-                "You can help by uncommenting the lines below and pasting window_dict "
-                "into a new GitHub Issue."
+        if include_data:
+            key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
+            if sys.platform == "win32":
+                logger.warning(
+                    "key_suffixes have not yet been defined on Windows."
+                    "You can help by uncommenting the lines below and pasting "
+                    "the contents of the window_dict into a new GitHub Issue."
+                )
+                # from pprint import pformat
+                # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                # import ipdb; ipdb.set_trace()
+            window_state = window_dict["state"]
+            window_state["data"] = utils.clean_dict(
+                utils.filter_keys(
+                    window_state["data"],
+                    key_suffixes,
+                )
             )
-            # from pprint import pformat
-            # logger.info(f"window_dict=\n{pformat(window_dict)}")
-        window_state = window_dict["state"]
-        window_state["data"] = utils.clean_dict(
-            utils.filter_keys(
-                window_state["data"],
-                key_suffixes,
-            )
-        )
+        else:
+            window_dict["state"].pop("data")
         window_dict["state"].pop("meta")
         return window_dict
 

@@ -38,6 +38,10 @@ def get_events(
     Returns:
         list: A list of action events.
     """
+    posthog = utils.get_posthog_instance()
+    posthog.capture(
+        event="get_events.started", properties={"recording_id": recording.id}
+    )
     start_time = time.time()
     action_events = crud.get_action_events(db, recording)
     window_events = crud.get_window_events(db, recording)
@@ -47,6 +51,9 @@ def get_events(
     if recording.original_recording_id:
         # if recording is a copy, it already has its events processed when it
         # was created, return only the top level events
+        posthog.capture(
+            event="get_events.completed", properties={"recording_id": recording.id}
+        )
         return [event for event in action_events if event.parent_id is None]
 
     raw_action_event_dicts = utils.rows2dicts(action_events)
@@ -130,6 +137,9 @@ def get_events(
     end_time = time.time()
     duration = end_time - start_time
     logger.info(f"{duration=}")
+    posthog.capture(
+        event="get_events.completed", properties={"recording_id": recording.id}
+    )
 
     return action_events, browser_events  # , window_events, screenshots
 

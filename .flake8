@@ -1,7 +1,5 @@
 [flake8]
-exclude =
-    alembic/versions,
-    .venv
+exclude = alembic,.venv,venv,contrib,.cache,.git
 docstring-convention = google
 max-line-length = 88
 extend-ignore = ANN101, E203
