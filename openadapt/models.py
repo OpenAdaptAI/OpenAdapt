@@ -132,7 +132,7 @@ class ActionEvent(db.Base):
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
     window_event_timestamp = sa.Column(ForceFloat)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
-    browser_event_timestamp = sa.Column(sa.ForeignKey("browser_event.timestamp"))
+    browser_event_timestamp = sa.Column(ForceFloat)
     browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
