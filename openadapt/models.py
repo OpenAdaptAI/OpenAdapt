@@ -589,7 +589,7 @@ class BrowserEvent(db.Base):
     __tablename__ = "browser_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    recording_timestamp = sa.Column(sa.ForeignKey("recording.timestamp"))
+    recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     message = sa.Column(sa.JSON)
     timestamp = sa.Column(ForceFloat)
