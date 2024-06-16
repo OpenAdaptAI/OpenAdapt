@@ -4,7 +4,7 @@ from types import ModuleType
 
 from openadapt.config import config
 
-from . import prompt, replicate, som, ultralytics
+from . import prompt, segment  # , replicate, som, ultralytics
 
 
 # TODO: remove
