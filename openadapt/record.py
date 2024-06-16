@@ -782,50 +782,51 @@ def read_browser_events(
         terminate_event: An event to signal the termination of the process.
         recording_timestamp: The timestamp of the recording.
     """
-    utils.configure_logging(logger, LOG_LEVEL)
-    utils.set_start_time(recording_timestamp)
-    logger.info("starting")
-    conn = sockets.create_client_connection(config.SOCKET_PORT)
-    while not terminate_event.is_set():
-        try:
-            if conn.closed:
-                conn = sockets.create_client_connection(config.SOCKET_PORT)
-            else:
-                logger.info("Waiting for message...")
-                msg = conn.recv()
-                logger.info(f"{msg=}")
+    # TODO
+    # utils.configure_logging(logger, LOG_LEVEL)
+    # utils.set_start_time(recording_timestamp)
+    # logger.info("starting")
+    # conn = sockets.create_client_connection(config.SOCKET_PORT)
+    # while not terminate_event.is_set():
+    #     try:
+    #         if conn.closed:
+    #             conn = sockets.create_client_connection(config.SOCKET_PORT)
+    #         else:
+    #             logger.info("Waiting for message...")
+    #             msg = conn.recv()
+    #             logger.info(f"{msg=}")
 
-            if msg is not None:
-                logger.info("Received message.")
-                browser_data = msg
-                logger.debug("queuing browser event for writing")
-                event_q.put(
-                    Event(
-                        utils.get_timestamp(),
-                        "browser",
-                        browser_data,
-                    )
-                )
-            else:
-                logger.info("No message received or received None Type Message.")
-        except EOFError as exc:
-            logger.warning("Connection closed.")
-            logger.warning(exc)
-            break
-            #     while True:
-            #         try:
-            #             conn = establish_connection()
-            #             break
-            #         except Exception as exc:
-            #             logger.warning(f"Failed to reconnect: {exc}")
-            #             time.sleep(config.SOCKET_RETRY_INTERVAL)
-            # except Exception as exc:
-            #     logger.warning(f"Error during communication: {exc}")
-            #     time.sleep(config.SOCKET_RETRY_INTERVAL)
-    # if conn:
-    #     conn.close()
+    #         if msg is not None:
+    #             logger.info("Received message.")
+    #             browser_data = msg
+    #             logger.debug("queuing browser event for writing")
+    #             event_q.put(
+    #                 Event(
+    #                     utils.get_timestamp(),
+    #                     "browser",
+    #                     browser_data,
+    #                 )
+    #             )
+    #         else:
+    #             logger.info("No message received or received None Type Message.")
+    #     except EOFError as exc:
+    #         logger.warning("Connection closed.")
+    #         logger.warning(exc)
+    #         break
+    #         #     while True:
+    #         #         try:
+    #         #             conn = establish_connection()
+    #         #             break
+    #         #         except Exception as exc:
+    #         #             logger.warning(f"Failed to reconnect: {exc}")
+    #         #             time.sleep(config.SOCKET_RETRY_INTERVAL)
+    #         # except Exception as exc:
+    #         #     logger.warning(f"Error during communication: {exc}")
+    #         #     time.sleep(config.SOCKET_RETRY_INTERVAL)
+    # # if conn:
+    # #     conn.close()
 
-    logger.info("done")
+    # logger.info("done")
 
 
 @utils.trace(logger)
