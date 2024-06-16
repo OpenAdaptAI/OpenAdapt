@@ -1271,7 +1271,7 @@ def record(
         args=(event_q, terminate_processing, recording, started_counter),
     )
     window_event_reader.start()
-    
+
     browser_event_reader = threading.Thread(
         target=read_browser_events,
         args=(event_q, terminate_event, recording_timestamp),
@@ -1337,7 +1337,7 @@ def record(
         ),
     )
     screen_event_writer.start()
-    
+
     browser_event_writer = multiprocessing.Process(
         target=write_events,
         args=(
@@ -1475,7 +1475,7 @@ def record(
     if log_memory:
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
-        
+
     term_pipe_parent_browser.send(browser_write_q.qsize())
 
     logger.info("joining...")

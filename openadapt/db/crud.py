@@ -155,9 +155,7 @@ def insert_window_event(
 
 
 def insert_browser_event(
-    recording_timestamp: int,
-    event_timestamp: int,
-    event_data: dict[str, Any] = None
+    recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any] = None
 ) -> None:
     """Insert a browser event into the database.
     Args:

@@ -179,7 +179,7 @@ class Config(BaseSettings):
     SOCKET_PORT: int = 6001
     SOCKET_AUTHKEY: str = b"openadapt"
     SOCKET_ADDRESS: str = "localhost"
-    SOCKET_RETRY_INTERVAL: int = 5 # seconds
+    SOCKET_RETRY_INTERVAL: int = 5  # seconds
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -406,8 +406,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     Returns:
         str: The possibly obfuscated configuration parameter value.
     """
-    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", 
-                           "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
+    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
         val = obfuscate(val)
