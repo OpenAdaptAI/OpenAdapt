@@ -1,7 +1,7 @@
 {
   "name": "openadapt",
   "description": "OpenAdapt DOM Listener",
-  "path": "P:\\OpenAdapt AI - MLDS AI\\cloned_repo\\OpenAdapt\\chrome\\browser.bat",
+  "path": "P:\\OpenAdapt\\chrome_extension\\browser.bat",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://ghlnbigmccnehdmcnbgjnlfehfkcieff/"]
+  "allowed_origins": ["chrome-extension://hlhpeoaekpldgcginonnjlehfaejiihp/"]
 }

@@ -153,7 +153,7 @@ def create_client_connection(port: int) -> Connection:
         The created client connection object.
     """
     address = (config.SOCKET_ADDRESS, port)
-    conn = Client(address, authkey=config.SOCKET_AUTHKEY)
+    conn = Client(address)
     client_by_port[port] = conn
     logger.info("Connected to the Client.")
     return conn
@@ -169,10 +169,12 @@ def create_server_connection(port: int) -> Connection:
         The created server connection object.
     """
     address = (config.SOCKET_ADDRESS, port)
-    conn = Listener(address, authkey=config.SOCKET_AUTHKEY)
+    # print(address)
+    conn = Listener(address)
     conn = conn.accept()
     server_by_port[port] = conn
     logger.info("Connected to the Server.")
+    print("Connected to server")
     return conn
 
 

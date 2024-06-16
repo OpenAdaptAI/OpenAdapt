@@ -104,6 +104,8 @@ numba = "0.57.0"
 openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
+asyncio = "^3.4.3"
+websockets = "^11.0.3"
 
 [tool.pytest.ini_options]
 filterwarnings = [

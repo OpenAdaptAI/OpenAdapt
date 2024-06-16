@@ -1,12 +1,13 @@
 """Mock client for testing the server."""
 import time
+import json
 
 from loguru import logger
 
 from openadapt import config, sockets
 
 RETRY_INTERVAL = 5
-SERVER_SENDS = True
+SERVER_SENDS = False
 
 
 def establish_connection() -> sockets.Connection:
@@ -29,7 +30,7 @@ def main() -> None:
             else:
                 t = time.time()
                 logger.info(f"Sending {t=}")
-                conn.send(t)
+                conn.send(json.dumps(t))
                 time.sleep(1)
         except EOFError:
             logger.warning("Connection closed. Reconnecting...")

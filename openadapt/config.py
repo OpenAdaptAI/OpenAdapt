@@ -43,6 +43,12 @@ SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
+# Chrome Extension Socket configurations
+SOCKET_PORT = 6009
+SOCKET_AUTHKEY = b"openadapt"
+SOCKET_ADDRESS = "localhost"
+SOCKET_RETRY_INTERVAL = 5  # seconds
+
 if not CONFIG_FILE_PATH.exists():
     os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
     shutil.copy(CONFIG_DEFAULTS_FILE_PATH, CONFIG_FILE_PATH)
@@ -168,12 +174,12 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
-    
+
     # Chrome Extension Socket configurations
-    SOCKET_PORT: 6001,
-    SOCKET_AUTHKEY: b"openadapt",
-    SOCKET_ADDRESS: "localhost",
-    SOCKET_RETRY_INTERVAL: 5, # seconds
+    SOCKET_PORT: int = 6001
+    SOCKET_AUTHKEY: str = b"openadapt"
+    SOCKET_ADDRESS: str = "localhost"
+    SOCKET_RETRY_INTERVAL: int = 5 # seconds
 
     # App configurations
     APP_DARK_MODE: bool = False
