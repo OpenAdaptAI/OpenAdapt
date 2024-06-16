@@ -1,3 +1,5 @@
+"""Prompt adapter."""
+
 import sys
 
 from loguru import logger
@@ -61,6 +63,7 @@ def prompt_template(
         try:
             for i in range(0, len(images), max_images):
                 batch = images[i:i+max_images]
+                import ipdb; ipdb.set_trace()
                 if len(batch) == 1 and batch[0] == original_image:
                     logger.info("Skipping batch with only the original image.")
                     continue  # Skip batches that only contain the original image
@@ -78,7 +81,10 @@ def prompt_template(
 
                 logger.info(f"Processing batch with {num_images} images")
                 result = driver.prompt(prompt, system_prompt, batch)
+                logger.info(f"Batch result: {result}")  # Log the result of each batch
                 results.append(result)
+
+            break
         except Exception as e:
             logger.error(f"Driver {driver.__name__} failed with error: {e}")
             continue
@@ -89,6 +95,7 @@ def prompt_template(
     return results
 
 
+# TODO: remove?
 def batch(prompt_function: callable, **kwargs: dict) -> list[Any]:
     for driver in DRIVER_ORDER:
         # off by one to account for original image
@@ -121,6 +128,7 @@ def batch(prompt_function: callable, **kwargs: dict) -> list[Any]:
     raise Exception("All drivers failed to provide a response")
 
 ###
+
 
 
 

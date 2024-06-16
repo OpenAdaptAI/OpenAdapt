@@ -435,6 +435,7 @@ def get_window_segmentation(
         len(descriptions),
         len(centroids),
     )
+    marked_image = adapters.segment.get_marked_image(original_image)
     segmentation = Segmentation(
         original_image,
         marked_image,
@@ -574,10 +575,22 @@ def prompt_for_descriptions(
         else:
             logger.error("No 'descriptions' key in parsed JSON results.")
 
-    assert len(descriptions) == len(masked_images), (
-        "Mismatch between descriptions and images count",
-        len(descriptions),
-        len(masked_images),
-    )
+    try:
+        assert len(descriptions) == len(masked_images), (
+            "Mismatch between descriptions and images count",
+            len(descriptions),
+            len(masked_images),
+        )
+    except AssertionError as exc:
+        logger.warning(f"{exc=}")
+        exceptions = exceptions or []
+        exceptions.append(exc)
+        return prompt_for_descriptions(
+            original_image,
+            masked_images,
+            active_segment_description,
+            exceptions,
+        )
+
 
     return descriptions
