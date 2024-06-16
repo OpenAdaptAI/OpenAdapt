@@ -25,11 +25,12 @@ function connectWebSocket() {
 
 connectWebSocket();
 
-chrome.action.onClicked.addListener((tab) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send("ping");
-    console.log("Ping message sent to WebSocket server");
+    console.log(message);
+    socket.send(JSON.stringify(message));
+    sendResponse({status: "Message sent to WebSocket"});
   } else {
-    console.error("WebSocket connection is not open");
+    sendResponse({status: "WebSocket connection not open"});
   }
 });
