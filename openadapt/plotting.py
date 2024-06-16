@@ -248,6 +248,12 @@ def display_event(
     recording = action_event.recording
     window_event = action_event.window_event
     screenshot = action_event.screenshot
+
+    if not screenshot:
+        logger.warning(
+            f"{screenshot=} for {action_event=} {window_event=} {recording=}"
+        )
+        return None
     if diff and screenshot.diff:
         image = screenshot.diff.convert("RGBA")
     else:

@@ -313,28 +313,37 @@ def main(
                     logger.warning(exc)
                     continue
 
-                if diff_video:
-                    frame_image = frames[idx]
-                    diff_image = compute_diff(
-                        frame_image, action_event.screenshot.image
-                    )
+                if image:
 
-                    # TODO: rename
-                    diff = frame_image
-                    mask = diff_image
+                    if diff_video:
+                        frame_image = frames[idx]
+                        diff_image = compute_diff(
+                            frame_image, action_event.screenshot.image
+                        )
+
+                        # TODO: rename
+                        diff = frame_image
+                        mask = diff_image
+                    else:
+                        diff = display_event(action_event, diff=True)
+                        mask = action_event.screenshot.diff_mask
+
+                    if SCRUB:
+                        image = scrub.scrub_image(image)
+                        diff = scrub.scrub_image(diff)
+                        mask = scrub.scrub_image(mask)
+
+                    image_utf8 = image2utf8(image)
+                    diff_utf8 = image2utf8(diff)
+                    mask_utf8 = image2utf8(mask)
+                    width, height = image.size
                 else:
-                    diff = display_event(action_event, diff=True)
-                    mask = action_event.screenshot.diff_mask
-
-                if SCRUB:
-                    image = scrub.scrub_image(image)
-                    diff = scrub.scrub_image(diff)
-                    mask = scrub.scrub_image(mask)
-
-                image_utf8 = image2utf8(image)
-                diff_utf8 = image2utf8(diff)
-                mask_utf8 = image2utf8(mask)
-                width, height = image.size
+                    # TODO: display a placeholder image
+                    image_utf8 = ""
+                    diff_utf8 = ""
+                    mask_utf8 = ""
+                    width = 0;
+                    height = 1;
 
                 action_event_dict = row2dict(action_event)
                 window_event_dict = row2dict(action_event.window_event)
