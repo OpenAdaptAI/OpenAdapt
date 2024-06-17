@@ -338,10 +338,13 @@ def main(
 
                 action_event_dict = row2dict(action_event)
                 window_event_dict = row2dict(action_event.window_event)
+                browser_event_dict = row2dict(action_event.browser_event)
 
                 if SCRUB:
                     action_event_dict = scrub.scrub_dict(action_event_dict)
                     window_event_dict = scrub.scrub_dict(window_event_dict)
+                    # browser_event_dict = scrub.scrub_dict(browser_event_dict)
+                    # TODO: remove comment or not ?
 
                 rows.append(
                     [

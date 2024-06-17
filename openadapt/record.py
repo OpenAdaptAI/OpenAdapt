@@ -246,7 +246,7 @@ def process_events(
                         prev_browser_event,
                         browser_write_q,
                         write_browser_event,
-                        recording_timestamp,
+                        recording,
                         perf_q,
                     )
                 if prev_browser_event is not None:
@@ -331,6 +331,7 @@ def write_browser_event(
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Write a browser event to the database and update the performance queue.
+
     Args:
         recording_timestamp: The timestamp of the recording.
         event: A browser event to be written.
@@ -777,6 +778,7 @@ def read_browser_events(
     recording_timestamp: float,
 ) -> None:
     """Read browser events and add them to the event queue.
+
     Args:
         event_q: A queue for adding window events.
         terminate_event: An event to signal the termination of the process.
@@ -1275,7 +1277,7 @@ def record(
 
     browser_event_reader = threading.Thread(
         target=read_browser_events,
-        args=(event_q, terminate_event, recording_timestamp),
+        args=(event_q, terminate_processing, recording, started_counter),
     )
     browser_event_reader.start()
 
@@ -1319,6 +1321,7 @@ def record(
             num_screen_events,
             num_action_events,
             num_window_events,
+            num_browser_events,
             num_video_events,
         ),
     )
@@ -1345,10 +1348,11 @@ def record(
             "browser",
             write_browser_event,
             browser_write_q,
+            num_browser_events,
             perf_q,
-            recording_timestamp,
-            terminate_event,
-            term_pipe_child_action,
+            recording,
+            terminate_processing,
+            started_counter,
         ),
     )
     browser_event_writer.start()
@@ -1477,7 +1481,7 @@ def record(
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
 
-    term_pipe_parent_browser.send(browser_write_q.qsize())
+    # term_pipe_parent_browser.send(browser_write_q.qsize())
 
     logger.info("joining...")
     keyboard_event_reader.join()

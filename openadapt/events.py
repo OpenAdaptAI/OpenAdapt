@@ -903,10 +903,11 @@ def process_events(
     logger.info(
         "after"
         f" {num_action_events_=} {num_window_events_=}"
-        f" {num_screenshots_=} {num_browser_events_} "
-        f"{num_total_=}"
+        f" {num_screenshots_=} {num_browser_events_=}"
+        f" {num_total_=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
+        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=}"
+        f" {pct_browser_events=} {pct_total=}"
     )
     return action_events, window_events, screenshots, browser_events

@@ -158,6 +158,7 @@ def insert_browser_event(
     recording_timestamp: int, event_timestamp: int, event_data: dict[str, Any] = None
 ) -> None:
     """Insert a browser event into the database.
+
     Args:
         recording_timestamp (int): The timestamp of the recording.
         event_timestamp (int): The timestamp of the event.
@@ -419,6 +420,7 @@ def get_action_events(
 
 def get_browser_events(recording: Recording) -> list[BrowserEvent]:
     """Get browser events for a given recording.
+
     Args:
         recording (Recording): recording object
     Returns:
