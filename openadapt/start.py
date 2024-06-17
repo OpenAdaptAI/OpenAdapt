@@ -7,7 +7,7 @@ import subprocess
 
 from loguru import logger
 
-from openadapt.app.main import run_app
+from openadapt.app.main import start
 
 
 def main() -> None:
@@ -24,7 +24,7 @@ def main() -> None:
         subprocess.run(["git", "pull", "-q"])
         logger.info("Updated the OpenAdapt App")
 
-    run_app()  # start gui
+    start()  # start gui
 
 
 if __name__ == "__main__":
