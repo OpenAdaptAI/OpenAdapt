@@ -417,11 +417,26 @@ def take_screenshot() -> Image.Image:
     Returns:
         PIL.Image: The screenshot image.
     """
-    # monitor 0 is all in one
-    monitor = SCT.monitors[0]
-    sct_img = SCT.grab(monitor)
-    image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-    return image
+    # Get all monitors
+    monitors = SCT.monitors[1:]  # Exclude the virtual monitor at index 0
+
+    # Calculate the total width and maximum height
+    total_width = sum(monitor['width'] for monitor in monitors)
+    max_height = max(monitor['height'] for monitor in monitors)
+
+    # Create a new image with the calculated dimensions
+    combined_image = Image.new("RGB", (total_width, max_height))
+
+    # Current x position for pasting
+    current_x = 0
+
+    for monitor in monitors:
+        sct_img = SCT.grab(monitor)
+        img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        combined_image.paste(img, (current_x, 0))
+        current_x += monitor['width']
+
+    return combined_image
 
 
 def get_strategy_class_by_name() -> dict:
