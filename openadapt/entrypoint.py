@@ -23,6 +23,7 @@ def run_openadapt() -> None:
         tray._run()
     except Exception as exc:
         data_dir = get_root_dir_path()
+        # TODO: log all exceptions to a file
         with open(data_dir / "error.log", "a") as f:
             f.write(f"{datetime.now()}: {exc}\n")
 
