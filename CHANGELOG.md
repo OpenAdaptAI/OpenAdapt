@@ -2,6 +2,266 @@
 
 
 
+## v0.33.2 (2024-06-15)
+
+### Fix
+
+* fix(VisualReplayStrategy): increase default NMS thresh/conf (#758)
+
+* repair VisualReplayStrategy
+
+* black/flake8 ([`dd9e8fa`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd9e8fada19bb40ccab892b4335cae7414f110a8))
+
+
+## v0.33.1 (2024-06-14)
+
+### Fix
+
+* fix(posthog): fix broken posthog api (#753)
+
+* fix: Fix broken posthog api
+
+* fix types
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`16d510f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/16d510fa776086cd9599f1c0cf946ac03e7d9f53))
+
+
+## v0.33.0 (2024-06-13)
+
+### Feature
+
+* feat(scripts.downloads): add scripts/downloads.py (#735)
+
+* add scripts/downloads.py
+
+* add total cumulative downloads to title
+
+* add module docstring
+
+* pagination
+
+* add datetime
+
+* accumulate by release_date
+
+* black/flake8 ([`3c20298`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3c2029897e91f3f16b6b929cdec656ceda28459f))
+
+
+## v0.32.0 (2024-06-13)
+
+### Feature
+
+* feat(tray): Add posthog analytics to tray actions (#737)
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc0b7ea2d910c31acfc0eef0eba0b2e252196838))
+
+
+## v0.31.0 (2024-06-12)
+
+### Feature
+
+* feat(contrib.som, postinstall): add contrib.som; postinstall.py; other fixes (#679)
+
+
+* add vision.get_similar_image_idxs and test_vision.py
+
+* refactor fixtures
+
+* add get_size_similarity and tests; update default params in adapters.ultralytics
+
+* get_image_similarity rgb
+
+* add caching; win_size
+
+* short_circuit_ssim; plot_similar_image_groups
+
+* refactor: adding plotting.py
+
+* fix test; typo
+
+* bug fixes; title_params
+
+* add tests/openadapt/adapters
+
+* bugfix: imports
+
+* modify prompt adapter API to accept images instead of base64 images
+
+* add experiments/handle_similar_segments.py
+
+* add highlight_masks; increase_contrast
+
+* add experiments/gpt4o_seg.py; normalize_positions; clean_data; filter_keys; modify get_scale_ratios to accept no arguments; modify crop_active_window to accept window event; fix bugs
+
+* ultralytics sam
+
+* add experiments/nms.py
+
+* add fastsamsom.py, visualizer.py
+
+* working fastsamsom.py
+
+* cleanup
+
+* black; flake8; postinstall.py; test_vision.py
+
+* restore utils.get_performance_plot_file_path/get_performance_plot_file_path
+
+* fix ActionEvent.from_dict
+
+* handle HTTPError in test_openai
+
+* utils.split_by_separators
+
+* other fixes
+
+* remove list python files step
+
+* consolidate install-dashboard and postinstall
+
+* install_dashboard from dashboard_dir
+
+* postinstall error logging ([`588494c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/588494c596b7ac2b3bdbabec40c055b266d632d9))
+
+### Fix
+
+* fix(build): pip install wheel (#738) ([`3640f41`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3640f41ec3a8b956e2e848bc6713d64cb8468b28))
+
+* fix(tests, utils): fix regressions (#736)
+
+* recording.monitor_hefith -&gt; recording.monitor_height
+
+* add test_utils.py
+
+* release-and-publish.yml: poetry run postinstall
+
+* black ([`d28a886`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d28a886462f6cd1840da29307e12d24c86785698))
+
+
+## v0.30.4 (2024-06-11)
+
+### Fix
+
+* fix(RecordingsAPI): catch AttributeError if audio_info is None (#729) ([`81b4089`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81b40893d39eebf2c4c4afec60d1ba8f15e473d4))
+
+
+## v0.30.3 (2024-06-10)
+
+### Fix
+
+* fix(scrubbing): Catch exceptions when download required spacy model (#733) ([`b3f73d8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b3f73d8e8689f24b41617ca896a5c40eb1d0eec8))
+
+* fix(video): add num_copies to write_video_event (#732) ([`ca04b6d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca04b6d737fe17371726437540768ee13979128e))
+
+
+## v0.30.2 (2024-06-08)
+
+### Fix
+
+* fix(video): fix video playback with force_key_frame (#726)
+
+* force_key_frame
+
+* fix embedded video playback
+
+* disable fix_moov
+
+* black; flake8
+
+* fix typo
+
+* yuv420p -&gt; yuv444p (lossless) ([`1f67822`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1f67822b710836cb37cfbe578d5d89e4da8412d1))
+
+
+## v0.30.1 (2024-06-08)
+
+### Chore
+
+* chore: fix typo in test_video.py (#710) ([`57a3376`](https://github.com/OpenAdaptAI/OpenAdapt/commit/57a337628006338a91898842666efd9f3553ada0))
+
+### Fix
+
+* fix(get_audio_info, visualize): replace use of recording timestamp in functions with recording id (#717)
+
+* fix(audio): Replace use of recording timestamp in functions with recording id (#727)
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt;
+
+* fix get_audio_info
+
+* black
+
+---------
+
+Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b04fd44c61d276e2aede9a93bb8d2f0c5243029))
+
+
+## v0.30.0 (2024-06-05)
+
+### Feature
+
+* feat(dashboard): Add feature to remove action events (#688)
+
+* feat: Add feature to remove action events
+
+* fix: Fix database revision ([`f33b36d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f33b36d1199b153baa4689ff3c9a1e897f59d55f))
+
+
+## v0.29.0 (2024-06-05)
+
+### Documentation
+
+* docs(README): add dashboard visualization; improve description of VanillaReplayStrategy ([`6df4bb9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6df4bb9e5e69b504fbb745ee1019dbe3d0b47282))
+
+### Feature
+
+* feat(vanilla): Implement vanilla baseline (#702)
+
+* add vanilla.py; update README.md
+
+* update module docstring
+
+* add TODO; remove unused code
+
+* tabs -&gt; spaces
+
+* modify prompt adapter API to accept images instead of base64 images
+
+* fix typo
+
+* add ActionEvent/WindowEvent.to_prompt_dict
+
+* add prompts/describe_recording.j2; prompts/generate_action_event.j2
+
+* fixes; log action history
+
+* fixes; black; flake8
+
+* add tests/openadapt/adapters
+
+* add missing test assets
+
+* DATA_DIR_PATH -&gt; PARENT_DIR_PATH
+
+* get_completion dev_mode
+
+* anthropic dev_mode
+
+* fix tests
+
+* black
+
+* flake8
+
+* ignore .cache in flake8
+
+* vanilla.INCLUDE_WINDOW_DATA; utils.clean_data/filter_keys
+
+* flake8 ([`81074c4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81074c425f27a075ef3d082c9555d2e1ada3df6a))
+
+
 ## v0.28.0 (2024-06-05)
 
 ### Feature

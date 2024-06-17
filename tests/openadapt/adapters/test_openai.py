@@ -3,6 +3,7 @@
 import pytest
 
 from PIL import Image
+import requests
 
 from openadapt.adapters import openai
 
@@ -18,6 +19,9 @@ def test_prompt(calculator_image: Image) -> None:
             pytest.xfail(f"ValueError due to incorrect API key: {e}")
         else:
             raise
+    except requests.exceptions.HTTPError as e:
+        if "Unauthorized" in str(e):
+            pytest.xfail(f"HTTPError: {e}")
 
 
 if __name__ == "__main__":
