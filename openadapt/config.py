@@ -147,7 +147,8 @@ class Config(BaseSettings):
     # useful for debugging but expensive computationally
     LOG_MEMORY: bool
     REPLAY_STRIP_ELEMENT_STATE: bool = True
-    VIDEO_PIXEL_FORMAT: str = "rgb24"
+    VIDEO_ENCODING: str = "libx264"
+    VIDEO_PIXEL_FORMAT: str = "yuv444p"
     VIDEO_DIR_PATH: str = str(VIDEO_DIR_PATH)
     # sequences that when typed, will stop the recording of ActionEvents in record.py
     STOP_SEQUENCES: list[list[str]] = [
@@ -225,6 +226,8 @@ class Config(BaseSettings):
 
     SOM_SERVER_URL: str = "<SOM_SERVER_URL>"
 
+    UNIQUE_USER_ID: str = ""
+
     class Adapter(str, Enum):
         """Adapter for the completions API."""
 
@@ -283,6 +286,9 @@ class Config(BaseSettings):
             "RECORD_VIDEO",
             "RECORD_IMAGES",
             "VIDEO_PIXEL_FORMAT",
+        ],
+        "general": [
+            "UNIQUE_USER_ID",
         ],
     }
 

@@ -1,22 +1,33 @@
 """Computer vision module."""
 
+import math
+
 from loguru import logger
-from PIL import Image, ImageDraw
+from PIL import Image
 from scipy.ndimage import binary_fill_holes
+from skimage.metrics import structural_similarity as ssim
 import cv2
 import numpy as np
 
-from openadapt import utils
+from openadapt import cache
 
 
-def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndarray]:
-    """Process the image to find unique masks based on color channels.
+@cache.cache()
+def get_masks_from_segmented_image(
+    segmented_image: Image.Image, sort_by_area: bool = False
+) -> list[np.ndarray]:
+    """Get masks from a segmented image.
+
+    Process the image to find unique masks based on color channels and optionally sort
+    them by area.
 
     Args:
         segmented_image: A PIL.Image object of the segmented image.
+        sort_by_area: A boolean flag to sort masks by their area in descending order.
 
     Returns:
-        A list of numpy.ndarrays, each representing a unique mask.
+        A list of numpy.ndarrays, each representing a unique mask. Sorted by area if
+            specified.
     """
     logger.info("starting...")
     segmented_image_np = np.array(segmented_image)
@@ -37,10 +48,15 @@ def get_masks_from_segmented_image(segmented_image: Image.Image) -> list[np.ndar
         mask = np.all(segmented_image_np == color, axis=-1)
         masks.append(mask)
 
+    if sort_by_area:
+        # Calculate the area of each mask and sort the masks by area in descending order
+        masks.sort(key=np.sum, reverse=True)
+
     logger.info(f"{len(masks)=}")
     return masks
 
 
+@cache.cache()
 def filter_masks_by_size(
     masks: list[np.ndarray],
     min_mask_size: tuple[int, int] = (15, 15),
@@ -68,6 +84,7 @@ def filter_masks_by_size(
     return size_filtered_masks
 
 
+@cache.cache()
 def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     """Refine the list of masks.
 
@@ -111,6 +128,7 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     return refined_masks
 
 
+@cache.cache()
 def filter_thin_ragged_masks(
     masks: list[np.ndarray],
     kernel_size: int = 3,
@@ -145,6 +163,7 @@ def filter_thin_ragged_masks(
     return filtered_masks
 
 
+@cache.cache()
 def remove_border_masks(
     masks: list[np.ndarray],
     threshold_percent: float = 5.0,
@@ -186,6 +205,7 @@ def remove_border_masks(
     return filtered_masks
 
 
+@cache.cache()
 def extract_masked_images(
     original_image: Image.Image,
     masks: list[np.ndarray],
@@ -227,6 +247,7 @@ def extract_masked_images(
     return masked_images
 
 
+@cache.cache()
 def calculate_bounding_boxes(
     masks: list[np.ndarray],
 ) -> tuple[list[dict[str, float]], list[tuple[float, float]]]:
@@ -273,104 +294,169 @@ def calculate_bounding_boxes(
     return bounding_boxes, centroids
 
 
-def display_binary_images_grid(
-    images: list[np.ndarray],
-    grid_size: tuple[int, int] | None = None,
-    margin: int = 10,
-) -> None:
-    """Display binary arrays as images on a grid with separation between grid cells.
+def get_image_similarity(
+    im1: Image.Image,
+    im2: Image.Image,
+    grayscale: bool = False,
+    win_size: int = 7,  # Default window size for SSIM
+) -> tuple[float, np.array]:
+    """Calculate the structural similarity index (SSIM) between two images.
+
+    This function resizes the images to a common size maintaining their aspect ratios,
+    and computes the SSIM either in grayscale or across each color channel separately.
 
     Args:
-        images: A list of binary numpy.ndarrays.
-        grid_size: Optional tuple (rows, cols) indicating the grid size.
-            If not provided, a square grid size will be calculated.
-        margin: The margin size between images in the grid.
+        im1 (Image.Image): The first image to compare.
+        im2 (Image.Image): The second image to compare.
+        grayscale (bool): If True, convert images to grayscale. Otherwise, compute
+            SSIM on color channels.
+        win_size (int): Window size for SSIM calculation. Must be odd and less than or
+            equal to the smaller side of the images.
+
+    Returns:
+        tuple[float, np.array]: A tuple containing the SSIM and the difference image.
     """
-    if grid_size is None:
-        grid_size = (int(np.ceil(np.sqrt(len(images)))),) * 2
+    # Determine the minimum dimension size based on win_size, ensuring minimum size to
+    # avoid win_size error
+    min_dim_size = max(2 * win_size + 1, 7)
 
-    # Determine max dimensions of images in the list
-    max_width = max(image.shape[1] for image in images) + margin
-    max_height = max(image.shape[0] for image in images) + margin
+    # Calculate scale factors to ensure both dimensions are at least min_dim_size
+    scale_factor1 = max(min_dim_size / im1.width, min_dim_size / im1.height, 1)
+    scale_factor2 = max(min_dim_size / im2.width, min_dim_size / im2.height, 1)
 
-    # Create a new image with a white background
-    total_width = max_width * grid_size[1] + margin
-    total_height = max_height * grid_size[0] + margin
-    grid_image = Image.new("1", (total_width, total_height), 1)
-
-    for index, binary_image in enumerate(images):
-        # Convert ndarray to PIL Image
-        img = Image.fromarray(binary_image.astype(np.uint8) * 255, "L").convert("1")
-        img_with_margin = Image.new("1", (img.width + margin, img.height + margin), 1)
-        img_with_margin.paste(img, (margin // 2, margin // 2))
-
-        # Calculate the position on the grid
-        row, col = divmod(index, grid_size[1])
-        x = col * max_width + margin // 2
-        y = row * max_height + margin // 2
-
-        # Paste the image into the grid
-        grid_image.paste(img_with_margin, (x, y))
-
-    # Display the grid image
-    grid_image.show()
-
-
-def display_images_table_with_titles(
-    images: list[Image.Image],
-    titles: list[str] | None = None,
-    margin: int = 10,
-    fontsize: int = 20,
-) -> None:
-    """Display RGB PIL.Images in a table layout with titles to the right of each image.
-
-    Args:
-        images: A list of RGB PIL.Images.
-        titles: An optional list of strings containing titles for each image.
-        margin: The margin size in pixels between images and their titles.
-        fontsize: The size of the title font.
-    """
-    if titles is None:
-        titles = [""] * len(images)
-    elif len(titles) != len(images):
-        raise ValueError("The length of titles must match the length of images.")
-
-    font = utils.get_font("Arial.ttf", fontsize)
-
-    # Calculate the width and height required for the composite image
-    max_image_width = max(image.width for image in images)
-    total_height = sum(image.height for image in images) + margin * (len(images) - 1)
-    max_title_height = fontsize + margin  # simple approach to calculating title height
-    max_title_width = max(font.getsize(title)[0] for title in titles) + margin
-
-    composite_image_width = max_image_width + max_title_width + margin * 3
-    composite_image_height = max(
-        total_height, max_title_height * len(images) + margin * (len(images) - 1)
+    # Calculate common dimensions that accommodate both images
+    target_width = max(int(im1.width * scale_factor1), int(im2.width * scale_factor2))
+    target_height = max(
+        int(im1.height * scale_factor1), int(im2.height * scale_factor2)
     )
 
-    # Create a new image to composite everything onto
-    composite_image = Image.new(
-        "RGB", (composite_image_width, composite_image_height), "white"
-    )
-    draw = ImageDraw.Draw(composite_image)
+    # Resize images to these new common dimensions
+    im1 = im1.resize((target_width, target_height), Image.LANCZOS)
+    im2 = im2.resize((target_width, target_height), Image.LANCZOS)
 
-    current_y = 0
-    for image, title in zip(images, titles):
-        # Paste the image
-        composite_image.paste(image, (margin, current_y))
-        # Draw the title
-        draw.text(
-            (
-                max_image_width + 2 * margin,
-                current_y + image.height // 2 - fontsize // 2,
-            ),
-            title,
-            fill="black",
-            font=font,
+    if grayscale:
+        # Convert images to grayscale
+        im1 = np.array(im1.convert("L"))
+        im2 = np.array(im2.convert("L"))
+        data_range = max(im1.max(), im2.max()) - min(im1.min(), im2.min())
+        mssim, diff_image = ssim(
+            im1, im2, win_size=win_size, data_range=data_range, full=True
         )
-        current_y += image.height + margin
+    else:
+        # Compute SSIM on each channel separately and then average the results
+        mssims = []
+        diff_images = []
+        for c in range(3):  # Assuming RGB images
+            im1_c = np.array(im1)[:, :, c]
+            im2_c = np.array(im2)[:, :, c]
+            data_range = max(im1_c.max(), im2_c.max()) - min(im1_c.min(), im2_c.min())
+            ssim_c, diff_c = ssim(
+                im1_c, im2_c, win_size=win_size, data_range=data_range, full=True
+            )
+            mssims.append(ssim_c)
+            diff_images.append(diff_c)
 
-    composite_image.show()
+        # Average the SSIM and create a mean difference image
+        mssim = np.mean(mssims)
+        diff_image = np.mean(diff_images, axis=0)
+
+    return mssim, diff_image
+
+
+@cache.cache()
+def get_similar_image_idxs(
+    images: list[Image.Image],
+    min_ssim: float,
+    min_size_sim: float,
+    short_circuit_ssim: bool = True,
+) -> tuple[list[list[int]], list[int], list[list[float]], list[list[float]]]:
+    """Get images having Structural Similarity Index Measure (SSIM) above a threshold.
+
+    Return the SSIM and size similarity matrices. Also returns indices of images not
+    in any group. Optionally skips SSIM computation if the size difference exceeds the
+    threshold.
+
+    Args:
+        images: A list of PIL.Image objects to compare.
+        min_ssim: The minimum threshold for the SSIM for images to be considered
+            similar.
+        min_size_sim: Minimum required similarity in size as a fraction
+            (e.g., 0.9 for 90% similarity required).
+        short_circuit_ssim: If True, skips SSIM calculation when size similarity is
+            below the threshold.
+
+    Returns:
+        A tuple containing four elements:
+        - A list of lists, where each sublist contains indices of images in the input
+          list that are similar to each other above the given SSIM and size thresholds.
+        - A list of indices of images not part of any group.
+        - A matrix of SSIM values between each pair of images.
+        - A matrix of size similarity values between each pair of images.
+    """
+    num_images = len(images)
+    already_compared = set()
+    similar_groups = []
+    ssim_matrix = [[0.0] * num_images for _ in range(num_images)]
+    size_similarity_matrix = [[0.0] * num_images for _ in range(num_images)]
+    all_indices = set(range(num_images))
+
+    for i in range(num_images):
+        ssim_matrix[i][i] = 1.0
+        size_similarity_matrix[i][i] = 1.0
+        for j in range(i + 1, num_images):
+            size_sim = get_size_similarity(images[i], images[j])
+            size_similarity_matrix[i][j] = size_similarity_matrix[j][i] = size_sim
+
+            if not short_circuit_ssim or size_sim >= min_size_sim:
+                s_ssim, _ = get_image_similarity(images[i], images[j])
+                ssim_matrix[i][j] = ssim_matrix[j][i] = s_ssim
+            else:
+                ssim_matrix[i][j] = ssim_matrix[j][i] = math.nan
+
+    for i in range(num_images):
+        if i in already_compared:
+            continue
+        current_group = [i]
+        for j in range(i + 1, num_images):
+            if j in already_compared:
+                continue
+            if (
+                ssim_matrix[i][j] >= min_ssim
+                and size_similarity_matrix[i][j] >= min_size_sim
+            ):
+                current_group.append(j)
+                already_compared.add(j)
+
+        if len(current_group) > 1:
+            similar_groups.append(current_group)
+        already_compared.add(i)
+
+    ungrouped_indices = list(all_indices - already_compared)
+
+    return similar_groups, ungrouped_indices, ssim_matrix, size_similarity_matrix
+
+
+def get_size_similarity(
+    img1: Image.Image,
+    img2: Image.Image,
+) -> float:
+    """Calculate size similarity between two images, returning a score between 0 and 1.
+
+    1.0 indicates identical dimensions, values closer to 0 indicate greater disparity.
+
+    Args:
+        img1: First image to compare.
+        img2: Second image to compare.
+
+    Returns:
+        A float indicating the similarity in size between the two images.
+    """
+    width1, height1 = img1.size
+    width2, height2 = img2.size
+    width_ratio = min(width1 / width2, width2 / width1)
+    height_ratio = min(height1 / height2, height2 / height1)
+
+    return (width_ratio + height_ratio) / 2
 
 
 """

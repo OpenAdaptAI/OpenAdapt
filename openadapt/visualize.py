@@ -22,18 +22,20 @@ from openadapt.config import RECORDING_DIR_PATH, config
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
+from openadapt.plotting import display_event
 from openadapt.utils import (
     EMPTY,
     compute_diff,
     configure_logging,
-    display_event,
     evenly_spaced,
+    get_posthog_instance,
     image2utf8,
     row2dict,
     rows2dicts,
 )
 
 SCRUB = config.SCRUB_ENABLED
+posthog = get_posthog_instance()
 
 LOG_LEVEL = "INFO"
 MAX_EVENTS = None
@@ -172,12 +174,21 @@ def main(
 
     assert not all([recording, recording_id]), "Only one may be specified."
 
+    posthog.capture(
+        event="visualize.started", properties={"recording_id": recording_id}
+    )
+
     session = crud.get_new_session(read_only=True)
 
     if recording_id:
         recording = crud.get_recording_by_id(session, recording_id)
     elif recording is None:
         recording = crud.get_latest_recording(session)
+
+    if recording is None:
+        logger.error("No recording found")
+        return False
+
     if SCRUB:
         from openadapt.privacy.providers.presidio import PresidioScrubbingProvider
 
@@ -186,9 +197,11 @@ def main(
     logger.info(f"{recording=}")
     logger.info(f"{diff_video=}")
 
-    audio_info = row2dict(crud.get_audio_info(recording))
-    # don't display the FLAC data
-    del audio_info["flac_data"]
+    session = crud.get_new_session(read_only=True)
+    audio_info = row2dict(crud.get_audio_info(session, recording))
+    if audio_info:
+        del audio_info["flac_data"]
+    # TODO XXX: display audio_info
 
     if diff_video:
         assert recording.config[
@@ -393,6 +406,9 @@ def main(
 
     if cleanup:
         Timer(1, _cleanup).start()
+    posthog.capture(
+        event="visualize.completed", properties={"recording_id": recording.id}
+    )
     return True
 
 

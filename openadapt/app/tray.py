@@ -43,12 +43,32 @@ from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.utils import get_posthog_instance
 from openadapt.visualize import main as visualize
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
+
+
+class TrackedQAction(QAction):
+    """QAction that tracks the recording state."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the TrackedQAction.
+
+        Args:
+            text (str): The text of the action.
+            parent (QWidget): The parent widget.
+        """
+        super().__init__(*args, **kwargs)
+        self.triggered.connect(self.track_event)
+
+    def track_event(self) -> None:
+        """Track the event."""
+        posthog = get_posthog_instance()
+        posthog.capture(event="action_triggered", properties={"action": self.text()})
 
 
 class SystemTrayIcon:
@@ -94,7 +114,7 @@ class SystemTrayIcon:
 
         self.menu = QMenu()
 
-        self.record_action = QAction("Record")
+        self.record_action = TrackedQAction("Record")
         self.record_action.triggered.connect(self._record)
         self.menu.addAction(self.record_action)
 
@@ -104,15 +124,15 @@ class SystemTrayIcon:
         self.populate_menus()
 
         # TODO: Remove this action once dashboard is integrated
-        # self.app_action = QAction("Show App")
+        # self.app_action = TrackedQAction("Show App")
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
-        self.dashboard_action = QAction("Launch Dashboard")
+        self.dashboard_action = TrackedQAction("Launch Dashboard")
         self.dashboard_action.triggered.connect(self.launch_dashboard)
         self.menu.addAction(self.dashboard_action)
 
-        self.quit = QAction("Quit")
+        self.quit = TrackedQAction("Quit")
 
         def _quit() -> None:
             """Quit the application."""
@@ -424,7 +444,7 @@ class SystemTrayIcon:
         self.recording_actions[action_type] = []
 
         if not recordings:
-            no_recordings_action = QAction("No recordings available")
+            no_recordings_action = TrackedQAction("No recordings available")
             no_recordings_action.setEnabled(False)
             menu.addAction(no_recordings_action)
             self.recording_actions[action_type].append(no_recordings_action)
@@ -434,7 +454,7 @@ class SystemTrayIcon:
                     recording.timestamp
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 action_text = f"{formatted_timestamp}: {recording.task_description}"
-                recording_action = QAction(action_text)
+                recording_action = TrackedQAction(action_text)
                 recording_action.triggered.connect(partial(action, recording))
                 self.recording_actions[action_type].append(recording_action)
                 menu.addAction(recording_action)

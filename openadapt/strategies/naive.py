@@ -4,7 +4,7 @@ import time
 
 from loguru import logger
 
-from openadapt import models, strategies, utils  # , common
+from openadapt import models, plotting, strategies, utils  # , common
 from openadapt.config import config
 
 DISPLAY_EVENTS = False
@@ -80,7 +80,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
             f"{self.action_event_idx=} of {num_action_events=}: {action_event=}"
         )
         if self.display_events:
-            image = utils.display_event(action_event)
+            image = plotting.display_event(action_event)
             image.show()
         if self.replay_events:
             if self.sleep and self.prev_timestamp:
