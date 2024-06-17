@@ -24,15 +24,13 @@ def init_db() -> None:
     """
     conn = sqlite3.connect("chrome.db")
     c = conn.cursor()
-    c.execute(
-        """
+    c.execute("""
         CREATE TABLE IF NOT EXISTS browser_event (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             message TEXT
         )
-    """
-    )
+    """)
     conn.commit()
     conn.close()
 
