@@ -186,7 +186,7 @@ def process_events(
         if event.type == "screen":
             prev_screen_event = event
             if config.RECORD_FULL_VIDEO:
-                video_event = event._replace(type='screen/video')
+                video_event = event._replace(type="screen/video")
                 process_event(
                     video_event,
                     video_write_q,
@@ -225,7 +225,7 @@ def process_events(
                 num_screen_events.value += 1
                 prev_saved_screen_timestamp = prev_screen_event.timestamp
                 if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
-                    prev_video_event = prev_screen_event._replace(type='screen/video')
+                    prev_video_event = prev_screen_event._replace(type="screen/video")
                     process_event(
                         prev_video_event,
                         video_write_q,

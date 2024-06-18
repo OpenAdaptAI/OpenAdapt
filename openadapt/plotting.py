@@ -340,7 +340,6 @@ def plot_performance(
     """
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
-    event_types = set()
 
     if dark_mode:
         plt.style.use("dark_background")
@@ -361,7 +360,25 @@ def plot_performance(
     fig, ax = plt.subplots(1, 1, figsize=(20, 10))
 
     # Define markers to distinguish different event types
-    markers = ['o', 's', 'D', '^', 'v', '>', '<', 'p', '*', 'h', 'H', '+', 'x', 'X', 'd', '|', '_']
+    markers = [
+        "o",
+        "s",
+        "D",
+        "^",
+        "v",
+        ">",
+        "<",
+        "p",
+        "*",
+        "h",
+        "H",
+        "+",
+        "x",
+        "X",
+        "d",
+        "|",
+        "_",
+    ]
     marker_cycle = cycle(markers)
 
     for event_type in type_to_proc_times:
