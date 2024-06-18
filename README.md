@@ -11,12 +11,20 @@ description: >-
 
 Welcome to OpenAdapt's developer API! Here you'll find all the documentation you need to get up and running with our software.
 
-## Want to jump right in?
+## Want to jump to user guide?
 
-Get started on installing OpenAdapt by following our [quick-start.md](getting-started/welcome-to-openadapt/quick-start.md "mention")
+Get started on installing OpenAdapt by following our [user-guide.md](getting-started/welcome-to-openadapt/user-guide.md "mention")
 
-{% content-ref url="getting-started/welcome-to-openadapt/quick-start.md" %}
-[quick-start.md](getting-started/welcome-to-openadapt/quick-start.md)
+{% content-ref url="getting-started/welcome-to-openadapt/user-guide.md" %}
+[user-guide.md](getting-started/welcome-to-openadapt/user-guide.md)
+{% endcontent-ref %}
+
+## Want to jump to developer guide?
+
+Get started with testing/development with OpenAdapt by following our [developer-guide.md](getting-started/welcome-to-openadapt/developer-guide.md "mention")
+
+{% content-ref url="getting-started/welcome-to-openadapt/developer-guide.md" %}
+[developer-guide.md](getting-started/welcome-to-openadapt/developer-guide.md)
 {% endcontent-ref %}
 
 ## Already Familiar?

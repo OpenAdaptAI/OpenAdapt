@@ -2,7 +2,7 @@
 description: Working with OpenAdapt
 ---
 
-# Quick Start
+# Developer Guide
 
 {% hint style="info" %}
 **Experiencing difficulty? Get support on our** [**Discord**](https://discord.gg/QKPuDqhDHF)**.**
@@ -110,6 +110,17 @@ Notice the environment prefix `(openadapt-py3.10)`.
 
 ![image](./assets/poetry-shell.png)
 
+# Run app locally for testing
+
+`python -m openadapt.entrypoint`
+
+CLI would look something like this after the command
+![image](./assets/developer-run-local.png)
+
+After it runs successfully, you will see an app tray at top right of screen
+
+![image](./assets/app-tray.png)
+
 # Make your first recording
 
 {% hint style="info" %}
@@ -209,18 +220,6 @@ See [strategy list](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt
 `python3 -m openadapt.start`
 
 ![image](./assets/client.png)
-
-# State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
-
-![image](./assets/segment-anything.png)
-
-# Industry leading privacy (PII/PHI scrubbing) via [AWS Comprehend](https://aws.amazon.com/comprehend/), [Microsoft Presidio](https://microsoft.github.io/presidio/) and [Private AI](https://www.private-ai.com/en/redact/):
-
-![image](./assets/privacy.png)
-
-# Decentralized and secure data distribution via [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole):
-
-![image](./assets/secure-data-distribution.png)
 
 # Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
 
