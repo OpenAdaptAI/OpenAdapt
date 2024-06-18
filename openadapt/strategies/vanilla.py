@@ -35,20 +35,20 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
     def __init__(
         self,
         recording: models.Recording,
-        replay_instructions: str = "",
+        instructions: str = "",
         process_events: bool = PROCESS_EVENTS,
     ) -> None:
         """Initialize the VanillaReplayStrategy.
 
         Args:
             recording (models.Recording): The recording object.
-            replay_instructions (str): Natural language instructions
+            instructions (str): Natural language instructions
                 for how recording should be replayed.
             process_events (bool): Flag indicating whether to process the events.
               Defaults to True.
         """
         super().__init__(recording)
-        self.replay_instructions = replay_instructions
+        self.instructions = instructions
         self.process_events = process_events
         self.action_history = []
         self.action_event_idx = 0
@@ -89,7 +89,7 @@ class VanillaReplayStrategy(strategies.base.BaseReplayStrategy):
             window_event,
             action_events,
             self.action_history,
-            self.replay_instructions,
+            self.instructions,
         )
         if not action_event:
             raise StopIteration()
@@ -161,7 +161,7 @@ def generate_action_event(
     current_window_event: models.WindowEvent,
     recorded_actions: list[models.ActionEvent],
     replayed_actions: list[models.ActionEvent],
-    replay_instructions: str,
+    instructions: str,
 ) -> models.ActionEvent:
     """Modify the given ActionEvents according to the given replay instructions.
 
@@ -176,7 +176,7 @@ def generate_action_event(
             recording
         replayed_actions (list[models.ActionEvent]): list of actions produced during
             current replay
-        replay_instructions (str): proposed modifications in natural language
+        instructions (str): proposed modifications in natural language
             instructions
 
     Returns:
@@ -195,7 +195,7 @@ def generate_action_event(
         current_window=current_window_dict,
         recorded_actions=recorded_action_dicts,
         replayed_actions=replayed_action_dicts,
-        replay_instructions=replay_instructions,
+        instructions=instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
