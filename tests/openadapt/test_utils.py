@@ -22,10 +22,16 @@ def test_get_scale_ratios() -> None:
 def test_posthog_capture() -> None:
     """Tests utils.get_posthog_instance."""
     with patch("posthog.Posthog.capture") as mock_capture:
-        posthog = utils.get_posthog_instance()
-        posthog.capture(event="test_event", properties={"test_prop": "test_val"})
-        mock_capture.assert_called_once_with(
-            event="test_event",
-            properties={"test_prop": "test_val"},
-            distinct_id=config.UNIQUE_USER_ID,
-        )
+        with patch("importlib.metadata.version") as mock_version:
+            mock_version.return_value = "1.0.0"
+            posthog = utils.get_posthog_instance()
+            posthog.capture(event="test_event", properties={"test_prop": "test_val"})
+            mock_capture.assert_called_once_with(
+                event="test_event",
+                properties={
+                    "test_prop": "test_val",
+                    "version": "1.0.0",
+                    "is_development": True,
+                },
+                distinct_id=config.UNIQUE_USER_ID,
+            )
