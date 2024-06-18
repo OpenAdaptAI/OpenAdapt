@@ -328,7 +328,6 @@ def write_events(
     started_counter: multiprocessing.Value,
     pre_callback: Callable[[float], dict] | None = None,
     post_callback: Callable[[dict], None] | None = None,
-    event_type_modifier: str = "",
 ) -> None:
     """Write events of a specific type to the db using the provided write function.
 
@@ -345,7 +344,6 @@ def write_events(
             timestamp as only argument, returns a state dict.
         post_callback: Optional function to call after main loop. Takes state dict as
             only argument, returns None.
-        event_type_modifier: Optional string to differentiate identical event_types
     """
     utils.set_start_time(recording.timestamp)
 
@@ -368,7 +366,7 @@ def write_events(
                 total_events = num_events.value
                 progress = tqdm(
                     total=total_events,
-                    desc=f"Writing {event_type}{event_type_modifier} events...",
+                    desc=f"Writing {event_type} events...",
                     unit="event",
                     colour="green",
                     dynamic_ncols=True,
