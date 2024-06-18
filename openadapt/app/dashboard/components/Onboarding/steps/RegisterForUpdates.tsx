@@ -1,3 +1,6 @@
+'use client';
+
+
 import { Box, Button, Stack, Text, TextInput } from '@mantine/core'
 import { isNotEmpty, useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
@@ -33,7 +36,7 @@ export const RegisterForUpdates = () => {
         })
     }
     return (
-        <Box maw={600} mx="auto">
+        <Box maw={600}>
             <Stack gap="xs">
                 <form onSubmit={onboardingForm.onSubmit(onSubmit)}>
                     <TextInput

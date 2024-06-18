@@ -4,8 +4,8 @@ import React from 'react'
 
 export const BookACall = () => {
   return (
-    <Box mx="auto" w="fit-content">
-        <Text size='xl' className='text-center'>
+    <Box w="fit-content">
+        <Text>
             <Link href="https://www.getclockwise.com/c/richard-abrich/quick-meeting" className='no-underline'>
                 Book a call with us
             </Link>
