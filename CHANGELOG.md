@@ -2,6 +2,21 @@
 
 
 
+## v0.33.3 (2024-06-18)
+
+### Fix
+
+* fix(record): fix performance plotting regression (#774)
+
+* Fixes regressions introduced in Database access refactor #676 affecting plotting of performance plots.
+
+* Re-uses record.write_event for video events.
+
+* Modifies plot_performance to use color-blind-friendly markers
+
+* black/flake8 ([`44371e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/44371e93db7e068284c50f8dbef08fc6c8c80671))
+
+
 ## v0.33.2 (2024-06-15)
 
 ### Fix
