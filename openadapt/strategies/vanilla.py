@@ -195,7 +195,7 @@ def generate_action_event(
         current_window=current_window_dict,
         recorded_actions=recorded_action_dicts,
         replayed_actions=replayed_action_dicts,
-        instructions=instructions,
+        replay_instructions=instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
