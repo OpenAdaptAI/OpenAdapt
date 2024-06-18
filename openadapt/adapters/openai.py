@@ -195,6 +195,7 @@ def prompt(
     """
     logger.info(f"system_prompt=\n{system_prompt}")
     logger.info(f"prompt=\n{prompt}")
+    images = images or []
     logger.info(f"{len(images)=}")
     payload = create_payload(
         prompt,

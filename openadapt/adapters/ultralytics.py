@@ -49,21 +49,23 @@ DEFAULT_MODEL_NAME = MODEL_NAMES[0]
 def fetch_segmented_image(
     image: Image.Image,
     model_name: str = DEFAULT_MODEL_NAME,
+    **kwargs,
 ) -> Image.Image:
     """Segment a PIL.Image using ultralytics.
 
     Args:
         image: The input image to be segmented.
         model_name: The name of the model to use.
+        kwargs: Arguments to pass to segmentation function.
 
     Returns:
         The segmented image as a PIL Image.
     """
     assert model_name in MODEL_NAMES, "{model_name=} must be in {MODEL_NAMES=}"
     if model_name in FASTSAM_MODEL_NAMES:
-        return do_fastsam(image, model_name)
+        return do_fastsam(image, model_name, **kwargs)
     else:
-        return do_sam(image, model_name)
+        return do_sam(image, model_name, **kwargs)
 
 
 @cache.cache()
@@ -75,9 +77,9 @@ def do_fastsam(
     retina_masks: bool = True,
     imgsz: int | tuple[int, int] | None = 1024,
     # threshold below which boxes will be filtered out
-    conf: float = 0,
+    conf: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
-    iou: float = 0.05,
+    iou: float = 0.9,
 ) -> Image:
     model = FastSAM(model_name)
 
