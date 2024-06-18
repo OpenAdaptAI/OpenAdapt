@@ -314,7 +314,6 @@ def main(
                     continue
 
                 if image:
-
                     if diff_video:
                         frame_image = frames[idx]
                         diff_image = compute_diff(
@@ -342,8 +341,8 @@ def main(
                     image_utf8 = ""
                     diff_utf8 = ""
                     mask_utf8 = ""
-                    width = 0;
-                    height = 1;
+                    width = 0
+                    height = 1
 
                 action_event_dict = row2dict(action_event)
                 window_event_dict = row2dict(action_event.window_event)
