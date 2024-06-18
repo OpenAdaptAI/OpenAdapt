@@ -449,7 +449,7 @@ class SystemTrayIcon:
             menu.addAction(no_recordings_action)
             self.recording_actions[action_type].append(no_recordings_action)
         else:
-            for idx, recording in enumerate(recordings):
+            for recording in recordings:
                 formatted_timestamp = datetime.fromtimestamp(
                     recording.timestamp
                 ).strftime("%Y-%m-%d %H:%M:%S")
