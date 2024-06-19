@@ -9,6 +9,7 @@ from logging import StreamHandler
 from typing import Any, Callable
 import ast
 import base64
+import importlib.metadata
 import inspect
 import os
 import sys
@@ -893,6 +894,12 @@ class DistinctIDPosthog(Posthog):
             **kwargs: The event properties.
         """
         kwargs.setdefault("distinct_id", config.UNIQUE_USER_ID)
+        properties = kwargs.get("properties", {})
+        properties.setdefault("version", importlib.metadata.version("openadapt"))
+        if not is_running_from_executable():
+            # for cases when we need to test events in development
+            properties.setdefault("is_development", True)
+        kwargs["properties"] = properties
         super().capture(*args, **kwargs)
 
 

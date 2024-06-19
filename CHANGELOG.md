@@ -2,6 +2,21 @@
 
 
 
+## v0.33.5 (2024-06-19)
+
+### Fix
+
+* fix(analytics): Posthog event logging updates (#772)
+
+* feat: Add openadapt version to posthog events
+
+* feat: Update tracking text of replay, visualize and delete submenus
+
+* fix: Fix code in plotting.py not using correct arguments
+
+* fix: Update broken tests ([`59c2714`](https://github.com/OpenAdaptAI/OpenAdapt/commit/59c2714a8c4672f1042dd326b68492bc805bc9e0))
+
+
 ## v0.33.4 (2024-06-18)
 
 ### Fix
