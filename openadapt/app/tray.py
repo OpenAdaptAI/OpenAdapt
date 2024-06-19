@@ -62,13 +62,18 @@ class TrackedQAction(QAction):
             text (str): The text of the action.
             parent (QWidget): The parent widget.
         """
+        self.tracking_text = kwargs.pop("tracking_text", None)
         super().__init__(*args, **kwargs)
+        if not self.tracking_text:
+            self.tracking_text = self.text()
         self.triggered.connect(self.track_event)
 
     def track_event(self) -> None:
         """Track the event."""
         posthog = get_posthog_instance()
-        posthog.capture(event="action_triggered", properties={"action": self.text()})
+        posthog.capture(
+            event="action_triggered", properties={"action": self.tracking_text}
+        )
 
 
 class SystemTrayIcon:
@@ -452,7 +457,9 @@ class SystemTrayIcon:
                     recording.timestamp
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 action_text = f"{formatted_timestamp}: {recording.task_description}"
-                recording_action = TrackedQAction(action_text)
+                recording_action = TrackedQAction(
+                    action_text, tracking_text=f"{action_type.title()} recording"
+                )
                 recording_action.triggered.connect(partial(action, recording))
                 self.recording_actions[action_type].append(recording_action)
                 menu.addAction(recording_action)
