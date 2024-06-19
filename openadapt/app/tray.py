@@ -13,7 +13,6 @@ import multiprocessing
 import os
 import sys
 import requests
-from urllib.parse import urlparse
 import threading
 from tqdm import tqdm
 
@@ -42,7 +41,7 @@ from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
-from openadapt.build_utils import is_running_from_executable
+from openadapt.build_utils import is_running_from_executable, unzip_file
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
@@ -226,17 +225,15 @@ class SystemTrayIcon:
             FILE_NAME = f"OpenAdapt-v{latest_version}.zip"
             DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
 
-        parsed_url = urlparse(DOWNLOAD_URL)
-        filename = os.path.basename(parsed_url.path)
         downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
-        local_filename = os.path.join(downloads_path, filename)
+        local_filename = os.path.join(downloads_path, FILE_NAME)
 
         response = requests.get(DOWNLOAD_URL, stream=True)
         total_size = response.headers.get("content-length")
         total_size = int(total_size) if total_size else None
         block_size = 1024  # 1 Kilobyte
         with open(local_filename, "wb") as file, tqdm(
-            total=total_size, unit="B", unit_scale=True, desc=filename
+            total=total_size, unit="B", unit_scale=True, desc=FILE_NAME
         ) as progress_bar:
             for data in response.iter_content(block_size):
                 if CANCEL_APP_DOWNLOAD:
@@ -244,6 +241,7 @@ class SystemTrayIcon:
                     break
                 file.write(data)
                 progress_bar.update(len(data))
+        unzip_file(local_filename)
 
     def check_and_download_latest_version(self) -> None:
         """Check and Download latest version"""

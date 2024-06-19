@@ -4,6 +4,22 @@ import importlib.metadata
 import pathlib
 import sys
 import time
+import shutil
+
+
+def set_permissions(path):
+    for root, dirs, files in os.walk(path):
+        for dir in dirs:
+            os.chmod(os.path.join(root, dir), 0o755)
+        for file in files:
+            os.chmod(os.path.join(root, file), 0o755)
+
+
+def unzip_file(file_path: str) -> None:
+    if os.path.exists(file_path):
+        shutil.unpack_archive(file_path, os.path.dirname(file_path))
+        set_permissions(os.path.dirname(file_path))
+        print("Unzipped")
 
 
 def get_root_dir_path() -> pathlib.Path:
