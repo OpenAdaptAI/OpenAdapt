@@ -59,6 +59,9 @@ def start(fullscreen: bool = False) -> None:
         ui.icon("share").tooltip("Share").on(
             "click", lambda: (_ for _ in ()).throw(Exception(NotImplementedError))
         )
+        ui.icon("update").tooltip("Update App").on(
+            "click", partial(Popen, ["python", "-m", "openadapt.update"])
+        )
 
         with ui.splitter(value=20) as splitter:
             splitter.classes("w-full h-full")
