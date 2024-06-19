@@ -108,6 +108,8 @@ posthog = "^3.5.0"
 
 wheel = "^0.43.0"
 cython = "^3.0.10"
+packaging = "^24.1"
+urllib3 = "^2.2.2"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"

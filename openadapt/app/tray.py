@@ -12,6 +12,10 @@ import inspect
 import multiprocessing
 import os
 import sys
+import requests
+from urllib.parse import urlparse
+import threading
+from tqdm import tqdm
 
 from loguru import logger
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
@@ -45,11 +49,17 @@ from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.utils import get_posthog_instance
 from openadapt.visualize import main as visualize
+from build_scripts.get_version import get_version, get_latest_version
+from packaging.version import Version
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
+APP_DOWNLOAD_BASE_URL = "https://github.com/OpenAdaptAI/OpenAdapt/releases/download"
+CANCEL_APP_DOWNLOAD = False
+CURRENT_VERSION = get_version()
+LATEST_VERSION = get_latest_version()
 
 
 class TrackedQAction(QAction):
@@ -155,6 +165,19 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
+        self.dashboard_action = TrackedQAction("Launch Dashboard")
+        self.dashboard_action.triggered.connect(self.launch_dashboard)
+        self.menu.addAction(self.dashboard_action)
+
+        self.download_button_text = (
+            f"Download Latest Version v{LATEST_VERSION}"
+            if Version(CURRENT_VERSION) < Version(LATEST_VERSION)
+            else "No updates available"
+        )
+        self.download_update_action = TrackedQAction(self.download_button_text)
+        self.download_update_action.triggered.connect(self.download_latest_app_version)
+        self.menu.addAction(self.download_update_action)
+
         self.quit = TrackedQAction("Quit")
 
         def _quit() -> None:
@@ -184,6 +207,69 @@ class SystemTrayIcon:
         self.sticky_toasts = {}
 
         self.launch_dashboard()
+
+    def stop_download(self) -> None:
+        global CANCEL_APP_DOWNLOAD
+        self.show_toast("Stopping download...", duration=4000)
+        CANCEL_APP_DOWNLOAD = True
+
+    def download_latest_version(self, base_url: str, latest_version: str) -> None:
+        global CANCEL_APP_DOWNLOAD
+
+        DOWNLOAD_URL = ""
+        FILE_NAME = ""
+
+        if sys.platform == "darwin":
+            FILE_NAME = f"OpenAdapt-v{latest_version}.app.zip"
+            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+        else:
+            FILE_NAME = f"OpenAdapt-v{latest_version}.zip"
+            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+
+        parsed_url = urlparse(DOWNLOAD_URL)
+        filename = os.path.basename(parsed_url.path)
+        downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+        local_filename = os.path.join(downloads_path, filename)
+
+        response = requests.get(DOWNLOAD_URL, stream=True)
+        total_size = response.headers.get("content-length")
+        total_size = int(total_size) if total_size else None
+        block_size = 1024  # 1 Kilobyte
+        with open(local_filename, "wb") as file, tqdm(
+            total=total_size, unit="B", unit_scale=True, desc=filename
+        ) as progress_bar:
+            for data in response.iter_content(block_size):
+                if CANCEL_APP_DOWNLOAD:
+                    CANCEL_APP_DOWNLOAD = False
+                    break
+                file.write(data)
+                progress_bar.update(len(data))
+
+    def check_and_download_latest_version(self) -> None:
+        """Check and Download latest version"""
+
+        if Version(CURRENT_VERSION) >= Version(LATEST_VERSION):
+            self.show_toast("You are already on the latest version.")
+            return
+
+        self.show_toast("Downloading the latest version...", duration=4000)
+        download_thread = threading.Thread(
+            target=self.download_latest_version,
+            args=(APP_DOWNLOAD_BASE_URL, LATEST_VERSION),
+        )
+        download_thread.start()
+
+        self.show_toast("After download, use the latest app version", duration=10000)
+
+    def download_latest_app_version(self) -> None:
+        global CANCEL_APP_DOWNLOAD
+
+        if self.download_update_action.text() == "Stop Download":
+            self.stop_download()
+            self.download_update_action.setText(self.download_button_text)
+        elif not CANCEL_APP_DOWNLOAD:
+            self.download_update_action.setText("Stop Download")
+            self.check_and_download_latest_version()
 
     def handle_recording_signal(
         self,
