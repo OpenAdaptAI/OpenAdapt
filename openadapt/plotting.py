@@ -5,18 +5,17 @@ from io import BytesIO
 from itertools import cycle
 import math
 import os
-import unicodedata
 import sys
+import unicodedata
 
-
-import matplotlib.pyplot as plt
-import numpy as np
 from loguru import logger
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+import matplotlib.pyplot as plt
+import numpy as np
 
+from openadapt import common, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
-from openadapt import common, models, utils
 
 
 # TODO: move parameters to config
@@ -352,9 +351,10 @@ def plot_performance(
 
     from openadapt.db import crud
 
-    if not recording:
-        recording = crud.get_latest_recording()
     session = crud.get_new_session(read_only=True)
+
+    if not recording:
+        recording = crud.get_latest_recording(session)
     perf_stats = crud.get_perf_stats(session, recording)
     for perf_stat in perf_stats:
         event_type = perf_stat.event_type
