@@ -44,29 +44,25 @@ function Invoke-LatestReleaseDownload {
     }
 
     Write-Host "All assets downloaded successfully."
+
+    # Remove older versions
+    Remove-Item -Recurse -Force dist/OpenAdapt.zip, dist/OpenAdapt.app.zip
+    Remove-Item -Recurse -Force dist/OpenAdapt, dist/OpenAdapt.app
+
+    # Rename the downloaded assets
+    Rename-Item "OpenAdapt-$tagName.zip" "OpenAdapt.zip"
+    Rename-Item "OpenAdapt-$tagName.app.zip" "OpenAdapt.app.zip"
+
+    # Move assets to dist folder
+    Move-Item "OpenAdapt.zip" "dist/"
+    Move-Item "OpenAdapt.app.zip" "dist/"
+
+    # Unzip the downloaded assets
+    Expand-Archive -Force -Path "dist/OpenAdapt.zip" -DestinationPath "dist/"
+    Expand-Archive -Force -Path "dist/OpenAdapt.app.zip" -DestinationPath "dist/"
 }
 
 # Download the assets
 Invoke-LatestReleaseDownload
-
-# Remove older versions
-Remove-Item -Recurse -Force dist/OpenAdapt.zip, dist/OpenAdapt.app.zip
-Remove-Item -Recurse -Force dist/OpenAdapt, dist/OpenAdapt.app
-
-# Rename the downloaded assets
-Rename-Item "OpenAdapt-$tagName.zip" "OpenAdapt.zip"
-Rename-Item "OpenAdapt-$tagName.app.zip" "OpenAdapt.app.zip"
-
-# Move assets to dist folder
-Move-Item "OpenAdapt.zip" "dist/"
-Move-Item "OpenAdapt.app.zip" "dist/"
-
-# Unzip the downloaded assets
-Expand-Archive -Force -Path "dist/OpenAdapt.zip" -DestinationPath "dist/"
-Expand-Archive -Force -Path "dist/OpenAdapt.app.zip" -DestinationPath "dist/"
-
-# Move the unzipped app to the Applications folder
-Move-Item "dist/OpenAdapt.app" "dist/"
-Move-Item "dist/OpenAdapt" "dist/"
 
 Write-Host "Updated the OpenAdapt app successfully!"
