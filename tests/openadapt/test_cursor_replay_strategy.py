@@ -28,7 +28,16 @@ class TestCursorReplayStrategy(unittest.TestCase):
         # the target location should be approximately the centre of the rectangle
         self.assertEqual(target_location,(50,50))
 
-        def test_process(self):
+       def test_is_dot_correct(self):
+           #create an image with a white rectangle on a black backgraound
+           image = np.zeroes((100,100,3),dtype="uint8")
+           cv2.rectangle(image, (30,30), (70,70), (255,255,255),-1)
+           target_location = (50,50)
+           image_with_dot = self.strategy.paint_red_dot(image,target_location)
+           is_correct = self.strategy.is_dot_correct(image_with_dot, target_location)
+           self.assertTrue(is_correct)
+        
+        def test_process_with_correction(self):
             # create an image with a white rectangle on a black backgraound
             image = np.zeroes((100,100,3), dtype="uint8")
             cv2.rectangle(image,(30,30),(70,70),(255,255,255),-1)
