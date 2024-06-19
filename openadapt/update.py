@@ -1,5 +1,4 @@
 import importlib.metadata
-import os
 import subprocess
 import sys
 
@@ -21,15 +20,11 @@ def main() -> None:
     curr_version = importlib.metadata.version("openadapt")
 
     if version.parse(curr_version) < version.parse(latest_release):
-        cwd = os.getcwd()
-        scripts_dir = os.path.join(cwd, "scripts")
-
         try:
-            os.chdir(scripts_dir)
             if sys.platform.startswith("win"):
-                subprocess.call("powershell -File update_app.ps1", shell=True)
+                subprocess.call("powershell -File scripts/update_app.ps1", shell=True)
             else:
-                subprocess.check_call(["./update_app.sh"])
+                subprocess.check_call(["./scripts/update_app.sh"])
 
             ui.notify("OpenAdapt has been updated")
         except subprocess.CalledProcessError as e:
