@@ -43,13 +43,14 @@ class CursorReplayStrategy:
             :param image: The image to process
             :return: Modified image with suggested target locations marked
             """
-
+            for _ in range(5):
+                
             target_location = self.suggest_target_location(image)
 
-            image_with_dot = self.paint_red_dot(image,target_location)
-
+            image_with_dot = self.paint_red_dot(image.copy(),target_location)
+            if self.is_dot_correct(image_with_dot, target_location):
             return image_with_dot
-
+            image = image_with_dot
 
         def suggest_target_location(self,image):
             """
@@ -91,6 +92,41 @@ class CursorReplayStrategy:
                 cX, cY = (w // 2, h // 2)
                 return (cX ,cY)
 
-            pass
+            def is_dot_corrected(self,image_with_dot, target_location):
+                """
+                Check if the red dot is correctly placed.
+
+                :param image_with_dot: The image with the red dot
+                :param target_location: The (x,y) coordinates of the red dot 
+
+                :return: True if the dot is correctly placed, False otherwise
+                """
+                # for simplicity lets assume the dot is correct if it lies within the largest contour
+                if image_with_dot is None or target_location is None
+                return False
+                x, y = target_location
+
+                # convert image to grayscale
+                gray = cv2.cvtColor(image_with_dot,cv2.COLOR_BGR2GRAY)
+
+                 #Apply GaussianBlur to reduce noise and improve contour
+                detection 
+                blurred = cv2.GaussianBlur(gray, (5,5),0)
+
+                # Perform edge detection
+                 edged = cv2.Canny(blurred,50,150)
+
+                #find contours
+
+                contours, _ = cv2.findContours(edged.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    return False
+
+                largest contour = max(contours, key=cv2.contourArea)
+
+                is_inside = cv2.piontPolygonTest(largest_contour, (x,y), False) >= 0
+                return is_inside
+
+            
 
 
