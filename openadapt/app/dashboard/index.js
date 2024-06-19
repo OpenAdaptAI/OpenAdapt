@@ -17,7 +17,7 @@ const checkPort = (port) => {
 }
 
 // check if both ports are not being used
-const { DASHBOARD_CLIENT_PORT, DASHBOARD_SERVER_PORT } = process.env
+const { DASHBOARD_CLIENT_PORT, DASHBOARD_SERVER_PORT, REDIRECT_TO_ONBOARDING } = process.env
 Promise.all([checkPort(DASHBOARD_CLIENT_PORT), checkPort(DASHBOARD_SERVER_PORT)])
 .then(([clientPort, serverPort]) => {
     if (clientPort !== DASHBOARD_CLIENT_PORT) {
@@ -45,7 +45,11 @@ function spawnChildProcess() {
         // wait for 3 seconds before opening the browser
         setTimeout(() => {
             import('open').then(({ default: open }) => {
-                open(`http://localhost:${DASHBOARD_CLIENT_PORT}`)
+                let url = `http://localhost:${DASHBOARD_CLIENT_PORT}`
+                if (REDIRECT_TO_ONBOARDING === 'true') {
+                    url += '/onboarding'
+                }
+                open(url)
             })
         }, 3000)
     })

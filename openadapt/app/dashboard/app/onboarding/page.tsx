@@ -6,11 +6,11 @@ import { Box, Divider } from "@mantine/core";
 export default function Onboarding() {
     return (
         <Box w="fit-content" mx="auto">
-            <Tutorial />
-            <Divider my={20} w="40vw" mx="auto" />
             <RegisterForUpdates />
             <Divider my={20} w="40vw" mx="auto" />
             <BookACall />
+            <Divider my={20} w="40vw" mx="auto" />
+            <Tutorial />
         </Box>
     );
 }

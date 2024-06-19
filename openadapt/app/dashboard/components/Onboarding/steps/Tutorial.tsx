@@ -48,13 +48,13 @@ export const Tutorial = () => {
         Welcome to OpenAdapt! Thank you for joining us on our mission to build open source desktop AI. Your feedback is extremely valuable!
       </Text>
       <Text my={20} maw={800}>
-        To start, please watch the demonstration below. Then try it yourself!
+        To start, please watch the demonstration below. Then try it yourself! If you have any issues, please submit a <Link href='https://github.com/OpenAdaptAI/OpenAdapt/issues/new/choose' className='no-underline'>Github Issue.</Link>
       </Text>
+      <iframe width="800" height="400" src="https://www.youtube.com/embed/OVERugs50cQ?si=cmi1vY73ADom9EKG" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen className='block mx-auto'></iframe>
       <Text my={20} maw={800}>
         If you'd like to contribute directly to our development, please consider the following open Bounties (no development experience required):
         {featuredBounty && <BountyCard bounty={featuredBounty} />}
       </Text>
-      <iframe width="800" height="400" src="https://www.youtube.com/embed/OVERugs50cQ?si=cmi1vY73ADom9EKG" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen className='block mx-auto'></iframe>
     </Box>
   )
 }

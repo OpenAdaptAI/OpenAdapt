@@ -4,7 +4,6 @@ import { ColorSchemeScript, MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications';
 import { Shell } from '@/components/Shell'
 import { CSPostHogProvider } from './providers';
-import { RedirectToOnboarding } from '@/components/Onboarding/Redirect';
 
 export const metadata = {
     title: 'OpenAdapt.AI',
@@ -25,7 +24,6 @@ export default function RootLayout({
                     <MantineProvider>
                         <Notifications />
                             <Shell>
-                                <RedirectToOnboarding />
                                 {children}
                             </Shell>
                     </MantineProvider>

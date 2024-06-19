@@ -4,7 +4,7 @@
 import { Box, Button, Stack, Text, TextInput } from '@mantine/core'
 import { isNotEmpty, useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
-import React from 'react'
+import React, { useEffect } from 'react'
 
 export const RegisterForUpdates = () => {
     const onboardingForm = useForm({
@@ -15,6 +15,17 @@ export const RegisterForUpdates = () => {
           email: isNotEmpty('Email is required'),
         }
     })
+    useEffect(() => {
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                REDIRECT_TO_ONBOARDING: false
+            }),
+        })
+    }, [])
     function onSubmit({ email }: { email: string }) {
         fetch('https://openadapt.ai/form.html', {
             method: 'POST',
