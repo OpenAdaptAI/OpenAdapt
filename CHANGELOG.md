@@ -2,6 +2,46 @@
 
 
 
+## v0.33.4 (2024-06-18)
+
+### Fix
+
+* fix(visualize): Handle no screenshots (#763)
+
+* handle no screenshot in visualize.py / plotting.py
+
+* black/flake8 ([`92b74f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/92b74f05936bfb2000d393e0ba0060d2ec6a857d))
+
+### Test
+
+* test: Add CI scripts to run the app after build (#709)
+
+* feat: Add scripts to run the app after build
+
+* feat: Log error in a file
+
+* chore: Add TODO for future additions of logging
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e370fe6fa6a028fcdaabf729fc2c1909c66e207d))
+
+
+## v0.33.3 (2024-06-18)
+
+### Fix
+
+* fix(record): fix performance plotting regression (#774)
+
+* Fixes regressions introduced in Database access refactor #676 affecting plotting of performance plots.
+
+* Re-uses record.write_event for video events.
+
+* Modifies plot_performance to use color-blind-friendly markers
+
+* black/flake8 ([`44371e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/44371e93db7e068284c50f8dbef08fc6c8c80671))
+
+
 ## v0.33.2 (2024-06-15)
 
 ### Fix
