@@ -47,9 +47,11 @@ Usage:
 from dataclasses import dataclass
 from pprint import pformat
 import time
+from xml.etree.ElementPath import find
 
 from loguru import logger
 from PIL import Image, ImageDraw
+from typing import List
 import numpy as np
 
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
@@ -317,6 +319,7 @@ def get_active_segment(
     return active_index
 
 
+
 def find_similar_image_segmentation(
     image: Image.Image,
     min_ssim: float = MIN_SCREENSHOT_SSIM,
@@ -353,6 +356,33 @@ def find_similar_image_segmentation(
 
     return similar_segmentation, similar_segmentation_diff
 
+ 
+
+def combine_segmentations(
+    previous_segmentation: Segmentation,
+    new_descriptions: List[str],
+    new_masked_images: List[Image.Image],
+    new_masks: List[np.ndarray]
+) -> Segmentation:
+
+    combined_image = previous_segmentation.image
+    combined_masked_images = previous_segmentation.masked_images + new_masked_images
+    combined_descriptions = previous_segmentation.descriptions + new_descriptions
+
+    previous_bounding_boxes, previous_centroids = vision.calculate_bounding_boxes(previous_segmentation.masks)
+    new_bounding_boxes, new_centroids = vision.calculate_bounding_boxes(new_masks)
+
+    combined_bounding_boxes = previous_bounding_boxes + new_bounding_boxes
+    combined_centroids = previous_centroids + new_centroids
+
+    return Segmentation(
+        image=combined_image,
+        masked_images=combined_masked_images,
+        descriptions=combined_descriptions,
+        bounding_boxes=combined_bounding_boxes,
+        centroids=combined_centroids
+    )
+
 
 def get_window_segmentation(
     action_event: models.ActionEvent,
@@ -382,6 +412,26 @@ def get_window_segmentation(
         # TODO XXX: create copy of similar_segmentation, but overwrite with segments of
         # regions of new image where segments of similar_segmentation overlap non-zero
         # regions of similar_segmentation_diff
+        new_image = vision.extract_difference_image(
+            original_image,
+            similar_segmentation.image,
+            tolerance=0.05,
+        )
+        new_masks = vision.get_masks_from_segmented_image(new_image)
+        new_masked_images = vision.extract_masked_images(new_image, new_masks)
+        new_descriptions = prompt_for_descriptions(
+            new_image,
+            new_masked_images,
+            action_event.active_segment_description,
+            exceptions,
+        )
+        updated_segmentation = combine_segmentations(
+            similar_segmentation,
+            new_descriptions,
+            new_masked_images,
+            new_masks,
+        )
+        similar_segmentation = updated_segmentation
         return similar_segmentation
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()
