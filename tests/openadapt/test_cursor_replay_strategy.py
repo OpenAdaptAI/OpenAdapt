@@ -18,12 +18,12 @@ class TestCursorReplayStrategy(unittest.TestCase):
         self.assertTrue((result_image[50,50] == [0,0,255]).all())
 
         def
-        test_suggest_target_location(self):
+        test_segment_and_describe(self):
             #Create an image with a white rectangle on a black background
             image = np.zeroes((100,100,3), dtype="uint8")
             cv2.rectangle(image,(30,30),(70,70),(255,255,255),-1)
 
-        target_location = self.strategy.suggest_target_location(image)
+        target_location = self.strategy.segment_and_describe(image)
 
         # the target location should be approximately the centre of the rectangle
         self.assertEqual(target_location,(50,50))
