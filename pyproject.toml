@@ -109,6 +109,10 @@ tokencost = "^0.1.12"
 numba = "^0.60.0"
 llvmlite = "^0.43.0"
 ell-ai = "^0.0.14"
+
+[tool.poetry.group.dev.dependencies]
+aws-sam-cli = "^1.119.0"
+
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
