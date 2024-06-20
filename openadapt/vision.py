@@ -137,23 +137,19 @@ def extract_difference_image(
     new_image_np = np.array(new_image.convert('L'))
     old_image_np = np.array(old_image.convert('L'))
 
-    # Compute the SSIM between the two images
-    score, diff = ssim(new_image_np, old_image_np, full=True)
-    diff = (diff * 255).astype("uint8")
+    # Compute the absolute difference between the two images
+    diff = np.abs(new_image_np - old_image_np)
 
-    # Threshold the difference image to get the regions that are different
-    thresh = cv2.threshold(diff, 255 * (1 - tolerance), 255, cv2.THRESH_BINARY_INV)[1]
+    # Create a mask for the regions where the difference is above the tolerance
+    mask = diff > (255 * tolerance)
 
-    # Find contours of the different regions
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Initialize an array for the difference image
+    diff_image_np = np.zeros_like(new_image_np)
 
-    # Create a mask of the differences
-    mask = np.zeros_like(new_image_np)
-    cv2.drawContours(mask, contours, -1, (255), thickness=cv2.FILLED)
+    # Set the pixels that are different in the new image
+    diff_image_np[mask] = new_image_np[mask]
 
-    # Apply the mask to the new image to extract the different regions
-    diff_image_np = cv2.bitwise_and(np.array(new_image), np.array(new_image), mask=mask)
-
+    # Convert the numpy array back to an image
     return Image.fromarray(diff_image_np)
 
 @cache.cache()
@@ -320,6 +316,7 @@ def calculate_bounding_boxes(
         centroids.append((float(center_x), float(center_y)))
 
     return bounding_boxes, centroids
+
 
 
 def get_image_similarity(
