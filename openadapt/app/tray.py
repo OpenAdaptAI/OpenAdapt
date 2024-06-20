@@ -208,11 +208,13 @@ class SystemTrayIcon:
         self.launch_dashboard()
 
     def stop_download(self) -> None:
+        """Stops download when button clicked."""
         global CANCEL_APP_DOWNLOAD
         self.show_toast("Stopping download...", duration=4000)
         CANCEL_APP_DOWNLOAD = True
 
     def download_latest_version(self, base_url: str, latest_version: str) -> None:
+        """Download latest version of the app."""
         global CANCEL_APP_DOWNLOAD
 
         DOWNLOAD_URL = ""
@@ -238,14 +240,13 @@ class SystemTrayIcon:
             for data in response.iter_content(block_size):
                 if CANCEL_APP_DOWNLOAD:
                     CANCEL_APP_DOWNLOAD = False
-                    break
+                    return
                 file.write(data)
                 progress_bar.update(len(data))
         unzip_file(local_filename)
 
     def check_and_download_latest_version(self) -> None:
-        """Check and Download latest version"""
-
+        """Checks and Download latest version."""
         if Version(CURRENT_VERSION) >= Version(LATEST_VERSION):
             self.show_toast("You are already on the latest version.")
             return
@@ -260,6 +261,10 @@ class SystemTrayIcon:
         self.show_toast("After download, use the latest app version", duration=10000)
 
     def download_latest_app_version(self) -> None:
+        """Main function called when download button is clicked.
+
+        This calls the necessary function according to the condition.
+        """
         global CANCEL_APP_DOWNLOAD
 
         if self.download_update_action.text() == "Stop Download":
