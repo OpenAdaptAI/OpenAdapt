@@ -1291,7 +1291,6 @@ def record(
                 started_counter,
                 video_pre_callback,
                 video_post_callback,
-                "(video)",
             ),
         )
         video_writer.start()
