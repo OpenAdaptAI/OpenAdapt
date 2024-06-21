@@ -4,7 +4,8 @@ import { ActionEvents } from "@/components/ActionEvent/ActionEvents";
 import { RecordingDetails } from "@/components/RecordingDetails";
 import { ActionEvent as ActionEventType } from "@/types/action-event";
 import { Recording as RecordingType } from "@/types/recording";
-import { Box, Loader, Progress } from "@mantine/core";
+import { Box, Button, Grid, Loader, Progress } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -57,6 +58,25 @@ function Recording() {
             websocket.close();
         }
     }, [id]);
+    function uploadRecording() {
+        fetch(`/api/recordings/${id}/upload`, {
+            method: "POST",
+        }).then(resp => {
+            if (resp.status === 200) {
+                notifications.show({
+                    title: "Recording uploaded",
+                    message: "Recording has been uploaded successfully",
+                    color: "teal",
+                });
+            } else {
+                notifications.show({
+                    title: "Error",
+                    message: "Failed to upload recording",
+                    color: "red",
+                });
+            }
+        });
+    }
     if (!recordingInfo) {
         return <Loader />;
     }
@@ -64,7 +84,14 @@ function Recording() {
 
     return (
         <Box>
-            <RecordingDetails recording={recordingInfo.recording} />
+            <Grid>
+                <Grid.Col span={6}>
+                    <RecordingDetails recording={recordingInfo.recording} />
+                </Grid.Col>
+                <Grid.Col span={6} display="flex" className="items-center">
+                    <Button onClick={uploadRecording}>Upload recording</Button>
+                </Grid.Col>
+            </Grid>
             {actionEvents.length && actionEvents.length < recordingInfo.num_events && (
                 <Progress.Root size={30} my={30}>
                     <Progress.Section value={(actionEvents.length / recordingInfo.num_events) * 100}>

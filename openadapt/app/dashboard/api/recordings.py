@@ -9,8 +9,9 @@ from openadapt.app import cards
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
-from openadapt.utils import image2utf8, row2dict
 from openadapt.plotting import display_event
+from openadapt.share import upload_recording_to_s3
+from openadapt.utils import image2utf8, row2dict
 
 
 class RecordingsAPI:
@@ -29,6 +30,9 @@ class RecordingsAPI:
         self.app.add_api_route("/start", self.start_recording)
         self.app.add_api_route("/stop", self.stop_recording)
         self.app.add_api_route("/status", self.recording_status)
+        self.app.add_api_route(
+            "/{recording_id}/upload", self.upload_recording, methods=["POST"]
+        )
         self.recording_detail_route()
         return self.app
 
@@ -62,6 +66,11 @@ class RecordingsAPI:
     def recording_status() -> dict[str, bool]:
         """Get the recording status."""
         return {"recording": cards.is_recording()}
+
+    def upload_recording(self, recording_id: int) -> dict[str, str]:
+        """Upload a recording."""
+        upload_recording_to_s3(recording_id)
+        return {"message": "Recording uploaded"}
 
     def recording_detail_route(self) -> None:
         """Add the recording detail route as a websocket."""
