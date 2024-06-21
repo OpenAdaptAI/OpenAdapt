@@ -4,6 +4,8 @@ See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
 # flake8: noqa: E402
 
+import errno
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -135,8 +137,29 @@ def do_fastsam(
         logger.info(f"{annotation.path=}")
         segmented_image_path = Path(tmp_dir) / result_name
         segmented_image = Image.open(segmented_image_path)
-        os.remove(segmented_image_path)
+        # os.remove(segmented_image_path)
 
+        # Ensure the image is fully loaded before deletion
+        segmented_image.load()
+
+        # Attempt to delete the file with retries and delay
+        max_retries = 5
+        retry_delay = 0.1  # seconds
+        retries = 0
+
+        while retries < max_retries:
+            try:
+                os.remove(segmented_image_path)
+                break  # If deletion succeeds, exit loop
+            except OSError as e:
+                if e.errno == errno.ENOENT:  # File not found
+                    break
+                else:
+                    retries += 1
+                    time.sleep(retry_delay)
+        
+        if retries == max_retries:
+            logger.warning(f"Failed to delete {segmented_image_path}")
     # Check if the dimensions of the original and segmented images differ
     # XXX TODO this is a hack, this plotting code should be refactored, but the
     # bug may exist in ultralytics, since they seem to resize as well; see:
@@ -152,6 +175,7 @@ def do_fastsam(
 
 
 @cache.cache()
+
 def do_sam(
     image: Image.Image,
     model_name: str,
