@@ -20,7 +20,9 @@ class SettingsAPI:
         self.app.add_api_route("", self.set_settings, methods=["POST"])
         return self.app
 
-    Category = Literal["api_keys", "scrubbing", "record_and_replay", "general"]
+    Category = Literal[
+        "api_keys", "scrubbing", "record_and_replay", "general", "onboarding"
+    ]
 
     @staticmethod
     def get_settings(category: Category) -> dict[str, Any]:

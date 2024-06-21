@@ -2,6 +2,42 @@
 
 
 
+## v0.34.0 (2024-06-20)
+
+### Feature
+
+* feat(onboarding): Add onboarding for new users (#746)
+
+* feat: Add onboarding for new users
+
+* feat: Overhaul onboarding into a multistep process
+
+* docs: Update README.md with usage of the entrypoint module
+
+* refactor: Remove steppers and move all steps to a single page
+
+* feat: Move onboarding to a separate page and add bounty card
+
+* feat: Redirect to onboarding on launch, and move around content
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bdf153e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bdf153e153aea428653b5a5fa845cf373059712e))
+
+
+## v0.33.6 (2024-06-20)
+
+### Fix
+
+* fix(tray): Fix incorrect argument when visualizing from tary (#780)
+
+Changed order in tray.py
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`4ff4c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4ff4c736685e02dc45ab73eb2912df5fdd0c7386))
+
+* fix(record): remove extra param (#784) ([`f60a617`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f60a617f7b13a7d6c6232bcdb519652fb43f7fb8))
+
+
 ## v0.33.5 (2024-06-19)
 
 ### Fix
