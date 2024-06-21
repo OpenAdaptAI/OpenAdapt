@@ -30,7 +30,9 @@ def prompt(
             logger.info(f"Trying driver: {driver.__name__}")
             return driver.prompt(text, images=images, system_prompt=system_prompt)
         except Exception as e:
+            logger.exception(e)
             logger.error(f"Driver {driver.__name__} failed with error: {e}")
+            import ipdb; ipdb.set_trace()
             continue
     raise Exception("All drivers failed to provide a response")
 

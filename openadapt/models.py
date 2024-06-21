@@ -392,11 +392,11 @@ class ActionEvent(db.Base):
                 suffix_len = len(name_suffix)
 
                 key_names = utils.split_by_separators(
-                    action_dict["text"][prefix_len:-suffix_len],
+                    action_dict.get("text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
                 canonical_key_names = utils.split_by_separators(
-                    action_dict["canonical_text"][prefix_len:-suffix_len],
+                    action_dict.get("canonical_text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
                 logger.info(f"{key_names=}")

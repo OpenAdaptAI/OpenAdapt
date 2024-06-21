@@ -15,8 +15,8 @@ from openadapt.strategies.visual import (
 )
 
 
-INCLUDE_RAW_RECORDING = True
-INCLUDE_RAW_RECORDING_DESCRIPTION = True
+INCLUDE_RAW_RECORDING = False
+INCLUDE_RAW_RECORDING_DESCRIPTION = False
 INCLUDE_MODIFIED_RECORDING = True
 INCLUDE_MODIFIED_RECORDING_DESCRIPTION = False
 INCLUDE_REPLAY_INSTRUCTIONS = True
@@ -211,8 +211,8 @@ def describe_recording(
     prompt_adapter = adapters.get_default_prompt_adapter()
     recording_description = prompt_adapter.prompt(
         prompt,
-        system_prompt,
-        images,
+        images=images,
+        system_prompt=system_prompt,
     )
     return recording_description
 
@@ -293,8 +293,8 @@ def generate_action_event(
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
         prompt,
-        system_prompt,
-        [current_image],
+        images=[current_image],
+        system_prompt=system_prompt,
     )
     action_dict = utils.parse_code_snippet(content)
     logger.info(f"{action_dict=}")

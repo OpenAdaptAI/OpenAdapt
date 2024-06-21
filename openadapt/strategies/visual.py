@@ -143,7 +143,7 @@ def apply_replay_instructions(
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
         prompt,
-        system_prompt,
+        system_prompt=system_prompt,
     )
     content_dict = utils.parse_code_snippet(content)
     try:

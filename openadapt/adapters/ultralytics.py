@@ -83,6 +83,10 @@ def do_fastsam(
 ) -> Image:
     """Get segmented image via FastSAM.
 
+    For usage of thresholds see:
+    github.com/ultralytics/ultralytics/blob/dacbd48fcf8407098166c6812eeb751deaac0faf
+        /ultralytics/utils/ops.py#L164
+
     Args:
         TODO
         min_confidence_threshold (float, optional): The minimum confidence score
