@@ -8,7 +8,7 @@ from botocore.client import Config
 import boto3
 
 
-def lambda_handler(*args: Any, **kwargs: Any):
+def lambda_handler(*args: Any, **kwargs: Any) -> dict:
     """Main entry point for the lambda function."""
     return {
         "statusCode": 200,
@@ -16,7 +16,7 @@ def lambda_handler(*args: Any, **kwargs: Any):
     }
 
 
-def get_presigned_url():
+def get_presigned_url() -> dict:
     """Generate a presigned URL for uploading a recording to S3."""
     bucket = "openadapt"
     region_name = "us-east-1"
