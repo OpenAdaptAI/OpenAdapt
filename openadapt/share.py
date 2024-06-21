@@ -5,6 +5,7 @@ Usage:
     python -m openadapt.share receive <wormhole_code>
 """
 
+from threading import Thread
 from zipfile import ZIP_DEFLATED, ZipFile
 import os
 import re
@@ -171,6 +172,31 @@ def receive_recording(wormhole_code: str) -> None:
         if os.path.exists(zip_path):
             os.remove(zip_path)
             logger.info(f"deleted {zip_path=}")
+
+
+def upload_recording_to_s3(recording_id):
+    """Upload a recording to an S3 bucket.
+
+    Args:
+        recording_id (int): The ID of the recording to upload.
+    """
+
+    def _inner():
+        try:
+            # Export the recording to a zip file
+            zip_file_path = export_recording_to_folder(recording_id)
+
+            # Upload the zip file to the S3 bucket
+            utils.upload_file_to_s3(zip_file_path)
+
+            # Delete the zip file after uploading
+            if os.path.exists(zip_file_path):
+                os.remove(zip_file_path)
+                logger.info(f"deleted {zip_file_path=}")
+        except Exception as exc:
+            logger.exception(exc)
+
+    Thread(target=_inner).start()
 
 
 # Create a command-line interface using python-fire and utils.get_functions

@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import requests
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 from openadapt.custom_logger import logger
@@ -44,6 +45,7 @@ from openadapt.config import (
     PERFORMANCE_PLOTS_DIR_PATH,
     POSTHOG_HOST,
     POSTHOG_PUBLIC_KEY,
+    RECORDING_UPLOAD_URL,
     config,
 )
 from openadapt.custom_logger import filter_log_messages
@@ -944,6 +946,22 @@ def get_posthog_instance() -> DistinctIDPosthog:
     if not is_running_from_executable():
         posthog.disabled = True
     return posthog
+
+
+def upload_file_to_s3(file_path: str) -> None:
+    """Upload a file to an S3 bucket.
+
+    Args:
+        file_path (str): The path to the file to upload.
+    """
+    filename = os.path.basename(file_path)
+    resp = requests.get(RECORDING_UPLOAD_URL)
+    upload_url = resp.json()["url"]
+
+    with open(file_path, "rb") as file:
+        files = {"file": (filename, file)}
+        resp = requests.put(upload_url, files=files)
+        resp.raise_for_status()
 
 
 def retry_with_exceptions(max_retries: int = 5) -> Callable:
