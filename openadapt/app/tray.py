@@ -41,7 +41,8 @@ from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
-from openadapt.build_utils import is_running_from_executable, unzip_file
+from openadapt.build_utils import is_running_from_executable
+from openadapt.update_utils import unzip_file
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
