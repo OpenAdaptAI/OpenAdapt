@@ -10,7 +10,13 @@ import fire
 CURRENT_DIR = pathlib.Path(__file__).parent
 
 
-def main(region_name: str = "us-east-1", guided: bool = True):
+def main(region_name: str = "us-east-1", guided: bool = True) -> None:
+    """Deploy the uploader to AWS Lambda.
+
+    Args:
+        region_name (str): The AWS region to deploy the Lambda function to.
+        guided (bool): Whether to use the guided SAM deployment.
+    """
     s3 = boto3.client(
         "s3",
         region_name=region_name,

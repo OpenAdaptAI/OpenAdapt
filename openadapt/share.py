@@ -174,14 +174,14 @@ def receive_recording(wormhole_code: str) -> None:
             logger.info(f"deleted {zip_path=}")
 
 
-def upload_recording_to_s3(recording_id):
+def upload_recording_to_s3(recording_id: int) -> None:
     """Upload a recording to an S3 bucket.
 
     Args:
         recording_id (int): The ID of the recording to upload.
     """
 
-    def _inner():
+    def _inner() -> None:
         try:
             # Export the recording to a zip file
             zip_file_path = export_recording_to_folder(recording_id)
