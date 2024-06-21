@@ -47,6 +47,7 @@ Usage:
 from dataclasses import dataclass
 from pprint import pformat
 import time
+from turtle import title
 from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
@@ -585,3 +586,10 @@ def prompt_for_descriptions(
     # remove indexes
     descriptions = [desc for idx, desc in descriptions]
     return descriptions
+
+#Example usage for visualizing
+image_1 = Image.open("./winCalOld.png")
+image_2 = Image.open("./winCalNew.png")
+
+difference_image = vision.extract_difference_image(image_1, image_2, tolerance=0.05)
+difference_image.show(title="difference Image")

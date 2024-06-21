@@ -127,30 +127,6 @@ def refine_masks(masks: list[np.ndarray]) -> list[np.ndarray]:
     logger.info(f"{len(refined_masks)=}")
     return refined_masks
 
-@cache.cache()
-def extract_difference_image(
-    new_image: Image.Image,
-    old_image: Image.Image,
-    tolerance: float = 0.05,
-) -> Image.Image:
-    """Extract the portion of the new image that is different from the old image."""
-    new_image_np = np.array(new_image.convert('L'))
-    old_image_np = np.array(old_image.convert('L'))
-
-    # Compute the absolute difference between the two images
-    diff = np.abs(new_image_np - old_image_np)
-
-    # Create a mask for the regions where the difference is above the tolerance
-    mask = diff > (255 * tolerance)
-
-    # Initialize an array for the difference image
-    diff_image_np = np.zeros_like(new_image_np)
-
-    # Set the pixels that are different in the new image
-    diff_image_np[mask] = new_image_np[mask]
-
-    # Convert the numpy array back to an image
-    return Image.fromarray(diff_image_np)
 
 @cache.cache()
 def filter_thin_ragged_masks(
@@ -316,7 +292,6 @@ def calculate_bounding_boxes(
         centroids.append((float(center_x), float(center_y)))
 
     return bounding_boxes, centroids
-
 
 
 def get_image_similarity(
