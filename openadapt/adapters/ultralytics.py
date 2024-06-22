@@ -4,15 +4,15 @@ See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
 # flake8: noqa: E402
 
-import os
-import time
-import errno
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import errno
+import os
+import time
 
-import numpy as np
 from loguru import logger
 from PIL import Image, ImageColor
+import numpy as np
 
 
 # use() required when invoked from tray
@@ -83,7 +83,7 @@ def do_fastsam(
     # discards all overlapping boxes with IoU > iou_threshold
     iou: float = 0.9,
     max_retries : int =  5,
-    retry_delay_seconds: float = 0.1,  # seconds
+    retry_delay_seconds: float = 0.1,  
     
 ) -> Image:
     model = FastSAM(model_name)
