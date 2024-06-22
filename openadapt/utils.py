@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import pyautogui
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 
@@ -412,17 +413,38 @@ def evenly_spaced(arr: list, N: list) -> list:
     return [val for idx, val in enumerate(arr) if idx in idxs]
 
 
-def take_screenshot() -> Image.Image:
-    """Take a screenshot.
+def get_current_monitor(monitors: list[dict]) -> dict:
+    """Determine the monitor where the cursor is currently located.
+    Args:
+        monitors (list[dict]): The list of monitors.
+    Returns:
+        dict: The current monitor.
+    """
+    cursor_x, cursor_y = pyautogui.position()
 
+    # for monitor in monitors:
+    #     if monitor["left"] < cursor_x < monitor["left"] + monitor["width"] and monitor["top"] < cursor_y < monitor["top"] + monitor["height"]:
+    #         return monitor
+    for monitor in monitors:
+        if monitor["left"] <= cursor_x < monitor["left"] + monitor["width"] and monitor["top"] <= cursor_y < monitor["top"] + monitor["height"]:
+            return monitor
+        
+    # If not found, return the default monitor
+    return monitors[1]
+
+def take_screenshot() -> Image.Image:
+    """Take a screenshot of the current monitor.
+    
     Returns:
         PIL.Image: The screenshot image.
     """
-    # monitor 0 is all in one
-    monitor = SCT.monitors[0]
-    sct_img = SCT.grab(monitor)
-    image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-    return image
+    with mss.mss() as sct:
+        monitors = sct.monitors
+        current_monitor = get_current_monitor(monitors)
+        sct_img = sct.grab(current_monitor)
+        image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        return image
+
 
 
 def get_strategy_class_by_name() -> dict:
