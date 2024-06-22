@@ -178,6 +178,7 @@ class VisualReplayStrategy(
         """
         super().__init__(recording)
         self.recording_action_idx = 0
+        self.action_history = []
         add_active_segment_descriptions(recording.processed_action_events)
         self.modified_actions = apply_replay_instructions(
             recording.processed_action_events,
@@ -246,7 +247,15 @@ class VisualReplayStrategy(
             target_mouse_y = target_centroid[1] / height_ratio + active_window.top
             modified_reference_action.mouse_x = target_mouse_x
             modified_reference_action.mouse_y = target_mouse_y
+        self.action_history.append(modified_reference_action)
         return modified_reference_action
+
+    def __del__(self) -> None:
+        """Log the action history."""
+        action_history_dicts = [
+            action.to_prompt_dict() for action in self.action_history
+        ]
+        logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
 
 def get_active_segment(
@@ -500,7 +509,7 @@ def prompt_for_descriptions(
             active_segment_description=active_segment_description,
             num_segments=num_segments,
             exceptions=exceptions,
-        )
+        ).strip()
         logger.info(f"prompt=\n{prompt}")
         logger.info(f"{len(images)=}")
         descriptions_json = driver.prompt(

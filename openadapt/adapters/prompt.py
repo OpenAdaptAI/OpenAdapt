@@ -25,6 +25,7 @@ def prompt(
     Returns:
         The result from the first successful driver.
     """
+    text = text.strip()
     for driver in DRIVER_ORDER:
         try:
             logger.info(f"Trying driver: {driver.__name__}")

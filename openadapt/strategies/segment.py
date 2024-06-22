@@ -50,10 +50,20 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             recording.processed_action_events,
             self.replay_instructions,
         )
-        self.recording_description = describe_recording(
-            self.recording.processed_action_events
-        )
-        self.modified_recording_description = describe_recording(self.modified_actions)
+
+        if INCLUDE_RAW_RECORDING_DESCRIPTION:
+            self.recording_description = describe_recording(
+                self.recording.processed_action_events
+            )
+        else:
+            self.recording_description = None
+
+        if INCLUDE_MODIFIED_RECORDING_DESCRIPTION:
+            self.modified_recording_description = describe_recording(
+                self.modified_actions
+            )
+        else:
+            self.modified_recording_description = None
 
 
     def get_next_action_event(
@@ -63,7 +73,9 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         include_raw_recording: bool = INCLUDE_RAW_RECORDING,
         include_raw_recording_description: bool = INCLUDE_RAW_RECORDING_DESCRIPTION,
         include_modified_recording: bool = INCLUDE_MODIFIED_RECORDING,
-        include_modified_recording_description: bool = INCLUDE_MODIFIED_RECORDING_DESCRIPTION,
+        include_modified_recording_description: bool = (
+            INCLUDE_MODIFIED_RECORDING_DESCRIPTION
+        ),
         include_active_window: bool = INCLUDE_WINDOW,
         include_active_window_data: bool = INCLUDE_WINDOW_DATA,
     ) -> models.ActionEvent | None:
@@ -89,9 +101,12 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             models.ActionEvent or None: The next ActionEvent for replay or None
               if there are no more events.
         """
-        action_events = self.recording.processed_action_events
+        reference_actions = self.recording.processed_action_events
+        num_action_events = max(
+            len(reference_actions),
+            len(self.modified_actions),
+        )
         self.action_event_idx += 1
-        num_action_events = len(action_events)
         if self.action_event_idx >= num_action_events:
             raise StopIteration()
         logger.debug(f"{self.action_event_idx=} of {num_action_events=}")
@@ -99,7 +114,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         generated_action_event = generate_action_event(
             screenshot,
             window_event,
-            action_events,
+            reference_actions,
             self.modified_actions,
             self.action_history,
             self.replay_instructions,
@@ -139,8 +154,8 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                         generated_action_event.active_segment_description
                     )
                 except ValueError as exc:
-                    logger.warning(f"{exc=}")
                     exceptions.append(exc)
+                    logger.warning(f"{exc=} {len(exceptions)=}")
                 else:
                     break
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
