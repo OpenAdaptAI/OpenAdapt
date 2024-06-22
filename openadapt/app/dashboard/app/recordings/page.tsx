@@ -50,7 +50,7 @@ export default function Recordings() {
     }, []);
     return (
         <Box>
-            {recordingStatus === RecordingStatus.RECORDING && (
+            {/* {recordingStatus === RecordingStatus.RECORDING && (
                 <Button onClick={stopRecording} variant="outline" color="red">
                     Stop recording
                 </Button>
@@ -64,7 +64,7 @@ export default function Recordings() {
                 <Button variant="outline" color="blue">
                     Loading recording status...
                 </Button>
-            )}
+            )} */}
             <Tabs defaultValue="regular" mt={40}>
                 <Tabs.List>
                     <Tabs.Tab value="regular">

@@ -95,10 +95,72 @@ jobs:
               name: OpenAdapt
               path: OpenAdapt.zip
 
+  test_on_macos:
+    name: Test on macOS
+    runs-on: macos-latest
+    needs: [build-macos-executables]
+    outputs:
+      macos_build_status: ${{ steps.test_on_macos.outputs.status }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download macOS executable
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt.app
+          path: dist/
+      - name: Run app
+        id: test_on_macos
+        run: |
+          ./build_scripts/test_app_run_macos.sh
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "macos_build_status=failed" >> $GITHUB_OUTPUT
+          fi
+
+  test_on_windows:
+    name: Test on Windows
+    runs-on: windows-latest
+    needs: [build-windows-executables]
+    outputs:
+      windows_build_status: ${{ steps.test_on_windows.outputs.windows_build_status }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt
+          path: dist/
+      - name: Run app
+        id: test_on_windows
+        shell: powershell
+        run: |
+          ./build_scripts/test_app_run_windows.bat
+          if ($LastExitCode -ne 0) {
+            "windows_build_status=failed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+  consolidate_tests:
+    name: Consolidate test results
+    runs-on: ubuntu-latest
+    needs: [test_on_windows, test_on_macos]
+    steps:
+      - name: Consolidate test results
+        id: consolidate_test_results
+        run: |
+          if [ "${{ needs.test_on_windows.outputs.windows_build_status }}" = "failed" ] || [ "${{ needs.test_on_macos.outputs.macos_build_status }}" = "failed" ]; then
+            echo "Error: Tests failed"
+            exit 1
+          fi
+
   release:
     runs-on: ubuntu-latest
-    needs: [check_last_commit_author, build-macos-executables, build-windows-executables]
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
+    needs: [consolidate_tests]
     concurrency: release
     permissions:
       id-token: write
@@ -143,8 +205,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    needs: [check_last_commit_author, release]
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
+    needs: [release]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

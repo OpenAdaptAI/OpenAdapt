@@ -87,5 +87,6 @@
     "SOCKET_AUTHKEY": "openadapt",
     "SOCKET_ADDRESS": "localhost",
     "SOCKET_RETRY_INTERVAL": 5,
-    "UNIQUE_USER_ID": ""
+    "UNIQUE_USER_ID": "",
+    "REDIRECT_TO_ONBOARDING": true
 }

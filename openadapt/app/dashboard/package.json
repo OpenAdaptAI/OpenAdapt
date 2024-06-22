@@ -15,6 +15,7 @@
         "format": "prettier --write ."
     },
     "dependencies": {
+        "@algora/sdk": "^0.2.0",
         "@mantine/carousel": "7.7.1",
         "@mantine/core": "7.7.1",
         "@mantine/form": "7.7.1",

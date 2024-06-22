@@ -62,13 +62,18 @@ class TrackedQAction(QAction):
             text (str): The text of the action.
             parent (QWidget): The parent widget.
         """
+        self.tracking_text = kwargs.pop("tracking_text", None)
         super().__init__(*args, **kwargs)
+        if not self.tracking_text:
+            self.tracking_text = self.text()
         self.triggered.connect(self.track_event)
 
     def track_event(self) -> None:
         """Track the event."""
         posthog = get_posthog_instance()
-        posthog.capture(event="action_triggered", properties={"action": self.text()})
+        posthog.capture(
+            event="action_triggered", properties={"action": self.tracking_text}
+        )
 
 
 class SystemTrayIcon:
@@ -128,10 +133,6 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
-        self.dashboard_action = TrackedQAction("Launch Dashboard")
-        self.dashboard_action.triggered.connect(self.launch_dashboard)
-        self.menu.addAction(self.dashboard_action)
-
         self.quit = TrackedQAction("Quit")
 
         def _quit() -> None:
@@ -162,6 +163,8 @@ class SystemTrayIcon:
 
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
+
+        self.launch_dashboard()
 
     def handle_recording_signal(
         self,
@@ -244,7 +247,7 @@ class SystemTrayIcon:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
             self.visualize_proc = multiprocessing.Process(
-                target=visualize, args=(recording.id,)
+                target=visualize, args=(recording,)
             )
             self.visualize_proc.start()
 
@@ -449,12 +452,14 @@ class SystemTrayIcon:
             menu.addAction(no_recordings_action)
             self.recording_actions[action_type].append(no_recordings_action)
         else:
-            for idx, recording in enumerate(recordings):
+            for recording in recordings:
                 formatted_timestamp = datetime.fromtimestamp(
                     recording.timestamp
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 action_text = f"{formatted_timestamp}: {recording.task_description}"
-                recording_action = TrackedQAction(action_text)
+                recording_action = TrackedQAction(
+                    action_text, tracking_text=f"{action_type.title()} recording"
+                )
                 recording_action.triggered.connect(partial(action, recording))
                 self.recording_actions[action_type].append(recording_action)
                 menu.addAction(recording_action)
@@ -474,7 +479,6 @@ class SystemTrayIcon:
             self.dashboard_thread.join()
         self.dashboard_thread = run_dashboard()
         self.dashboard_thread.start()
-        self.dashboard_action.setText("Reload dashboard")
 
     def run(self) -> None:
         """Run the system tray icon."""

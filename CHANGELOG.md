@@ -2,6 +2,97 @@
 
 
 
+## v0.34.0 (2024-06-20)
+
+### Feature
+
+* feat(onboarding): Add onboarding for new users (#746)
+
+* feat: Add onboarding for new users
+
+* feat: Overhaul onboarding into a multistep process
+
+* docs: Update README.md with usage of the entrypoint module
+
+* refactor: Remove steppers and move all steps to a single page
+
+* feat: Move onboarding to a separate page and add bounty card
+
+* feat: Redirect to onboarding on launch, and move around content
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bdf153e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bdf153e153aea428653b5a5fa845cf373059712e))
+
+
+## v0.33.6 (2024-06-20)
+
+### Fix
+
+* fix(tray): Fix incorrect argument when visualizing from tary (#780)
+
+Changed order in tray.py
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`4ff4c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4ff4c736685e02dc45ab73eb2912df5fdd0c7386))
+
+* fix(record): remove extra param (#784) ([`f60a617`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f60a617f7b13a7d6c6232bcdb519652fb43f7fb8))
+
+
+## v0.33.5 (2024-06-19)
+
+### Fix
+
+* fix(analytics): Posthog event logging updates (#772)
+
+* feat: Add openadapt version to posthog events
+
+* feat: Update tracking text of replay, visualize and delete submenus
+
+* fix: Fix code in plotting.py not using correct arguments
+
+* fix: Update broken tests ([`59c2714`](https://github.com/OpenAdaptAI/OpenAdapt/commit/59c2714a8c4672f1042dd326b68492bc805bc9e0))
+
+
+## v0.33.4 (2024-06-18)
+
+### Fix
+
+* fix(visualize): Handle no screenshots (#763)
+
+* handle no screenshot in visualize.py / plotting.py
+
+* black/flake8 ([`92b74f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/92b74f05936bfb2000d393e0ba0060d2ec6a857d))
+
+### Test
+
+* test: Add CI scripts to run the app after build (#709)
+
+* feat: Add scripts to run the app after build
+
+* feat: Log error in a file
+
+* chore: Add TODO for future additions of logging
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e370fe6fa6a028fcdaabf729fc2c1909c66e207d))
+
+
+## v0.33.3 (2024-06-18)
+
+### Fix
+
+* fix(record): fix performance plotting regression (#774)
+
+* Fixes regressions introduced in Database access refactor #676 affecting plotting of performance plots.
+
+* Re-uses record.write_event for video events.
+
+* Modifies plot_performance to use color-blind-friendly markers
+
+* black/flake8 ([`44371e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/44371e93db7e068284c50f8dbef08fc6c8c80671))
+
+
 ## v0.33.2 (2024-06-15)
 
 ### Fix
