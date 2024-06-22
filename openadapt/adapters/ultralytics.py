@@ -141,7 +141,8 @@ def do_fastsam(
         segmented_image_path = Path(tmp_dir) / result_name
         segmented_image = Image.open(segmented_image_path)
 
-        # Ensure the image is fully loaded before deletion
+        # Ensure the image is fully loaded before deletion to avoid errors or incomplete operations,
+        # as some operating systems and file systems lock files during read or processing.
         segmented_image.load()
 
         # Attempt to delete the file with retries and delay
