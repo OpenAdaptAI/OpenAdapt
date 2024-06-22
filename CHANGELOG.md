@@ -2,6 +2,29 @@
 
 
 
+## v0.34.0 (2024-06-20)
+
+### Feature
+
+* feat(onboarding): Add onboarding for new users (#746)
+
+* feat: Add onboarding for new users
+
+* feat: Overhaul onboarding into a multistep process
+
+* docs: Update README.md with usage of the entrypoint module
+
+* refactor: Remove steppers and move all steps to a single page
+
+* feat: Move onboarding to a separate page and add bounty card
+
+* feat: Redirect to onboarding on launch, and move around content
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bdf153e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bdf153e153aea428653b5a5fa845cf373059712e))
+
+
 ## v0.33.6 (2024-06-20)
 
 ### Fix

@@ -25,9 +25,11 @@ def run() -> Thread:
     def run_client() -> subprocess.Popen:
         """The entry point for the thread that runs the dashboard client."""
         if is_running_from_executable():
-            webbrowser.open(
-                f"http://localhost:{config.DASHBOARD_SERVER_PORT}/recordings"
-            )
+            if config.REDIRECT_TO_ONBOARDING:
+                url = f"http://localhost:{config.DASHBOARD_SERVER_PORT}/onboarding"
+            else:
+                url = f"http://localhost:{config.DASHBOARD_SERVER_PORT}"
+            webbrowser.open(url)
             run_app()
             return
 
@@ -41,6 +43,9 @@ def run() -> Thread:
                 "DASHBOARD_SERVER_PORT": str(config.DASHBOARD_SERVER_PORT),
                 "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
                 "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
+                "REDIRECT_TO_ONBOARDING": (
+                    "true" if config.REDIRECT_TO_ONBOARDING else "false"
+                ),
                 "NEXT_PUBLIC_MODE": (
                     "production" if is_running_from_executable() else "development"
                 ),
