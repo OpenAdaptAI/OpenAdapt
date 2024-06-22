@@ -150,7 +150,6 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
             import ipdb
 
             ipdb.set_trace()
-            foo = 1
             # TODO: handle more errors
         else:
             raise exc

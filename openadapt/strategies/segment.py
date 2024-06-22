@@ -65,7 +65,6 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         else:
             self.modified_recording_description = None
 
-
     def get_next_action_event(
         self,
         screenshot: models.Screenshot,
@@ -165,9 +164,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                     break
             target_centroid = active_window_segmentation.centroids[target_segment_idx]
             # <image space position> = scale_ratio * <window/action space position>
-            width_ratio, height_ratio = utils.get_scale_ratios(
-                generated_action_event
-            )
+            width_ratio, height_ratio = utils.get_scale_ratios(generated_action_event)
             target_mouse_x = target_centroid[0] / width_ratio + active_window.left
             target_mouse_y = target_centroid[1] / height_ratio + active_window.top
             generated_action_event.mouse_x = target_mouse_x
@@ -204,9 +201,12 @@ def describe_recording(
     """
     action_dicts = [action.to_prompt_dict() for action in action_events]
     window_dicts = [
-        action.window_event.to_prompt_dict(include_window_data)
-        # this may be a modified action, in which case there is no window event
-        if action.window_event else {}
+        (
+            action.window_event.to_prompt_dict(include_window_data)
+            # this may be a modified action, in which case there is no window event
+            if action.window_event
+            else {}
+        )
         for action in action_events
     ]
     action_window_dicts = [
@@ -216,11 +216,7 @@ def describe_recording(
         }
         for action_dict, window_dict in zip(action_dicts, window_dicts)
     ]
-    images = [
-        action.screenshot.image
-        for action in action_events
-        if action.screenshot
-    ]
+    images = [action.screenshot.image for action in action_events if action.screenshot]
     system_prompt = utils.render_template_from_file(
         "prompts/system.j2",
     )

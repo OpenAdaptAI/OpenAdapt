@@ -381,9 +381,7 @@ class ActionEvent(db.Base):
                 # handle multiple key separators
                 # (each key separator must start and end with a prefix and suffix)
                 default_sep = "".join([name_suffix, sep, name_prefix])
-                variation_seps = [
-                    "".join([name_suffix, name_prefix])
-                ]
+                variation_seps = ["".join([name_suffix, name_prefix])]
                 key_seps = [default_sep]
                 if handle_separator_variations:
                     key_seps += variation_seps

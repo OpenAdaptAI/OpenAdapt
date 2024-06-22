@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 import matplotlib.pyplot as plt
 import numpy as np
 
-from openadapt import adapters, common, contrib, models, utils
+from openadapt import common, contrib, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
 
@@ -772,8 +772,7 @@ def get_marked_image(
     include_masks: bool = True,
     include_marks: bool = True,
 ) -> Image.Image:
-    """
-    Get a Set-of-Mark image using the original SoM visualizer.
+    """Get a Set-of-Mark image using the original SoM visualizer.
 
     Args:
         original_image (Image.Image): The original PIL image.

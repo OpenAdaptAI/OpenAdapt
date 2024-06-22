@@ -122,7 +122,7 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
 def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
-    #retain_window_events: bool = False,
+    # retain_window_events: bool = False,
 ) -> None:
     """Modify the given ActionEvents according to the given replay instructions.
 
@@ -476,16 +476,13 @@ def prompt_for_descriptions(
     Returns:
         list of descriptions for each masked image.
     """
-
     # TODO: move inside adapters.prompt
     for driver in adapters.prompt.DRIVER_ORDER:
         # off by one to account for original image
-        if driver.MAX_IMAGES and (
-            len(masked_images) + 1 > driver.MAX_IMAGES
-        ):
+        if driver.MAX_IMAGES and (len(masked_images) + 1 > driver.MAX_IMAGES):
             masked_images_batches = utils.split_list(
                 masked_images,
-                prompt_adapter.MAX_IMAGES - 1,
+                driver.MAX_IMAGES - 1,
             )
             descriptions = []
             for masked_images_batch in masked_images_batches:

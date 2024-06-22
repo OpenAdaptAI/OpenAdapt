@@ -1,3 +1,5 @@
+"""Adapter for prompting foundation models."""
+
 from loguru import logger
 from typing import Type
 from PIL import Image
@@ -33,7 +35,9 @@ def prompt(
         except Exception as e:
             logger.exception(e)
             logger.error(f"Driver {driver.__name__} failed with error: {e}")
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
             continue
     raise Exception("All drivers failed to provide a response")
 
