@@ -422,9 +422,7 @@ def get_current_monitor(monitors: list[dict]) -> dict:
     """
     cursor_x, cursor_y = pyautogui.position()
 
-    # for monitor in monitors:
-    #     if monitor["left"] < cursor_x < monitor["left"] + monitor["width"] and monitor["top"] < cursor_y < monitor["top"] + monitor["height"]:
-    #         return monitor
+
     for monitor in monitors:
         if monitor["left"] <= cursor_x < monitor["left"] + monitor["width"] and monitor["top"] <= cursor_y < monitor["top"] + monitor["height"]:
             return monitor
