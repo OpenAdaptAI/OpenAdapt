@@ -423,10 +423,11 @@ def get_action_events(
     return action_events
 
 
-def get_browser_events(recording: Recording) -> list[BrowserEvent]:
+def get_browser_events(session: SaSession, recording: Recording) -> list[BrowserEvent]:
     """Get browser events for a given recording.
 
     Args:
+        session (sa.orm.Session): The database session
         recording (Recording): recording object
     Returns:
         List[BrowserEvent]: list of browser events

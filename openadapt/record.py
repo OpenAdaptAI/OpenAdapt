@@ -31,13 +31,15 @@ with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
+import asyncio
 import numpy as np
 import psutil
 import sounddevice
 import soundfile
+import websockets
 import whisper
 
-from openadapt import plotting, utils, video, window
+from openadapt import browser, plotting, utils, video, window
 from openadapt.config import config
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
@@ -45,7 +47,7 @@ from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window")
+EVENT_TYPES = ("screen", "action", "window", "browser")
 LOG_LEVEL = "INFO"
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -53,6 +55,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "screen/video": True,
     "action": True,
     "window": True,
+    "browser": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
@@ -137,6 +140,7 @@ def process_events(
     num_screen_events: multiprocessing.Value,
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
+    num_browser_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -155,6 +159,7 @@ def process_events(
         num_screen_events: A counter for the number of screen events.
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
+        num_browser_events: A counter for the number of browser events.
         num_video_events: A counter for the number of video events.
     """
     utils.set_start_time(recording.timestamp)
@@ -210,14 +215,14 @@ def process_events(
             if prev_window_event is None:
                 logger.warning("Discarding input that came before window")
                 continue
+            if prev_browser_event is None:
+                logger.warning("Discarding input that came before browser")
+                continue
+
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
-            if prev_browser_event is not None:
-                event.data["browser_event_timestamp"] = (
-                    prev_browser_event.message["timestamp"]
-                    if prev_browser_event is not None
-                    else None
-                )
+            event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+
             process_event(
                 event,
                 action_write_q,
@@ -225,6 +230,7 @@ def process_events(
                 recording,
                 perf_q,
             )
+
             num_action_events.value += 1
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
@@ -256,19 +262,16 @@ def process_events(
                 )
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
-            if prev_browser_event is not None:
-                if prev_saved_browser_timestamp < prev_browser_event.msg["timestamp"]:
-                    process_event(
-                        prev_browser_event,
-                        browser_write_q,
-                        write_browser_event,
-                        recording,
-                        perf_q,
-                    )
-                if prev_browser_event is not None:
-                    prev_saved_browser_timestamp = prev_browser_event.message[
-                        "timestamp"
-                    ]
+            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
+                process_event(
+                    prev_browser_event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
+                )
+                num_browser_events.value += 1
+                prev_saved_browser_timestamp = prev_browser_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -342,19 +345,21 @@ def write_window_event(
 
 
 def write_browser_event(
-    recording_timestamp: float,
+    db: crud.SaSession,
+    recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
     """Write a browser event to the database and update the performance queue.
 
     Args:
-        recording_timestamp: The timestamp of the recording.
+        db: The database session.
+        recording: The recording object.
         event: A browser event to be written.
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "browser", event
-    crud.insert_browser_event(recording_timestamp, event.timestamp, event.data)
+    crud.insert_browser_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -787,63 +792,126 @@ def read_window_events(
         prev_window_data = window_data
 
 
-def read_browser_events(
+async def handle_message(message: Any, event_q: queue.Queue) -> None:
+    """Handle incoming WebSocket messages."""
+
+    return message
+
+
+async def websocket_handler(
+    websocket: Any,
+    path: str,
     event_q: queue.Queue,
-    terminate_event: multiprocessing.Event,
-    recording_timestamp: float,
+    browser_data: Any,
+    prev_browser_data: Any,
+    started_counter: multiprocessing.Value,
+    started: bool,
 ) -> None:
-    """Read browser events and add them to the event queue.
+    """Websocket handler to process incoming messages."""
+    logger.info("here 003")
+    async for message in websocket:
 
-    Args:
-        event_q: A queue for adding window events.
-        terminate_event: An event to signal the termination of the process.
-        recording_timestamp: The timestamp of the recording.
-    """
-    # TODO
-    # utils.configure_logging(logger, LOG_LEVEL)
-    # utils.set_start_time(recording_timestamp)
-    # logger.info("starting")
-    # conn = sockets.create_client_connection(config.SOCKET_PORT)
-    # while not terminate_event.is_set():
-    #     try:
-    #         if conn.closed:
-    #             conn = sockets.create_client_connection(config.SOCKET_PORT)
-    #         else:
-    #             logger.info("Waiting for message...")
-    #             msg = conn.recv()
-    #             logger.info(f"{msg=}")
+        logger.info(f"Received Browser Event message type: {type(message)=}")
 
-    #         if msg is not None:
-    #             logger.info("Received message.")
-    #             browser_data = msg
-    #             logger.debug("queuing browser event for writing")
-    #             event_q.put(
-    #                 Event(
-    #                     utils.get_timestamp(),
-    #                     "browser",
-    #                     browser_data,
-    #                 )
-    #             )
-    #         else:
-    #             logger.info("No message received or received None Type Message.")
-    #     except EOFError as exc:
-    #         logger.warning("Connection closed.")
-    #         logger.warning(exc)
-    #         break
-    #         #     while True:
-    #         #         try:
-    #         #             conn = establish_connection()
-    #         #             break
-    #         #         except Exception as exc:
-    #         #             logger.warning(f"Failed to reconnect: {exc}")
-    #         #             time.sleep(config.SOCKET_RETRY_INTERVAL)
-    #         # except Exception as exc:
-    #         #     logger.warning(f"Error during communication: {exc}")
-    #         #     time.sleep(config.SOCKET_RETRY_INTERVAL)
-    # # if conn:
-    # #     conn.close()
+        if not browser_data:
+            continue
 
-    # logger.info("done")
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
+
+        if browser_data["browser_id"] != prev_browser_data.get("browser_id"):
+            _browser_data = browser_data
+            logger.info(f"Browser Event Data: \n {_browser_data=}")
+        if browser_data != prev_browser_data:
+            logger.debug("Queuing browser event for writing")
+            event_q.put(
+                Event(
+                    utils.get_timestamp(),
+                    "browser",
+                    browser_data,
+                )
+            )
+        prev_browser_data = browser_data
+        event_q.put(Event(utils.get_timestamp(), "browser", message))
+
+
+async def read_browser_events(
+    event_q: queue.Queue,
+    terminate_processing: multiprocessing.Event,
+    recording: Any,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Read browser events and add them to the event queue."""
+    logger.info("here 001")
+
+    utils.set_start_time(recording.timestamp)
+
+    logger.info("Starting Reading Browser Events ...")
+
+    prev_browser_data = {}
+    started = False
+
+    while not terminate_processing.is_set():
+        logger.info("here 002 in while loop ...")
+        # Start the Websocket for the chrome (browser) extension.
+        async with websockets.serve(websocket_handler, "localhost", 8765):
+            await asyncio.Future()  # run forever
+
+        # browser_data = await browser.get_active_browser_data()
+
+
+def run_read_browser_events(*args: Any) -> None:
+    """Run the read_browser_events function."""
+    logger.info("here 000")
+    asyncio.run(read_browser_events(*args))
+
+
+# @utils.trace(logger)
+# def read_browser_events(
+#     event_q: queue.Queue,
+#     terminate_processing: multiprocessing.Event,
+#     recording: Recording,
+#     started_counter: multiprocessing.Value,
+# ) -> None:
+#     """Read browser events and add them to the event queue.
+
+#     Args:
+#         event_q: A queue for adding window events.
+#         terminate_processing: An event to signal the termination of the process.
+#         recording: The recording object.
+#         started_counter: Value to increment once started.
+#     """
+#     utils.set_start_time(recording.timestamp)
+
+#     logger.info("Starting Reading Browser Events ...")
+#     prev_browser_data = {}
+#     started = False
+
+#     while not terminate_processing.is_set():
+#         browser_data = browser.get_active_browser_data()
+#         if not browser_data:
+#             continue
+
+#         if not started:
+#             with started_counter.get_lock():
+#                 started_counter.value += 1
+#             started = True
+
+#         if browser_data["browser_id"] != prev_browser_data.get("browser_id"):
+#             _browser_data = browser_data
+#             logger.info(f"Browser Event Data: \n {_browser_data=}")
+#         if browser_data != prev_browser_data:
+#             logger.debug("Queuing browser event for writing")
+#             event_q.put(
+#                 Event(
+#                     utils.get_timestamp(),
+#                     "browser",
+#                     browser_data,
+#                 )
+#             )
+#         prev_browser_data = browser_data
 
 
 @utils.trace(logger)
@@ -1239,7 +1307,7 @@ def record(
     status_pipe: multiprocessing.connection.Connection | None = None,
     log_memory: bool = config.LOG_MEMORY,
 ) -> None:
-    """Record Screenshots/ActionEvents/WindowEvents.
+    """Record Screenshots/ActionEvents/WindowEvents/Browser (chrome) Events.
 
     Args:
         task_description: A text description of the task to be recorded.
@@ -1291,7 +1359,7 @@ def record(
     window_event_reader.start()
 
     browser_event_reader = threading.Thread(
-        target=read_browser_events,
+        target=run_read_browser_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     browser_event_reader.start()

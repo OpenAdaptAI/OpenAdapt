@@ -13,7 +13,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import window
+from openadapt import browser, window
 from openadapt.config import config
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
@@ -599,10 +599,19 @@ class BrowserEvent(db.Base):
     action_event = sa.orm.relationship("ActionEvent", back_populates="browser_event")
 
     # TODO: implement for extension
-    # @classmethod
-    # def get_active_browser_event(cls: Any) -> Any:
-    #     """Get the active chrome tab window's DOM"""
-    #     return BrowserEvent(**get_active_chrome_data())
+    @classmethod
+    def get_active_browser_event(
+        cls: "BrowserEvent",
+    ) -> "BrowserEvent":
+        """Get the active browser event.
+
+        Args:
+            None
+
+        Returns:
+            (BrowserEvent) the active Browser event.
+        """
+        return BrowserEvent(**browser.get_active_browser_data())
 
 
 class FrameCache:

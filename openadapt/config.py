@@ -44,10 +44,10 @@ POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
 # Chrome Extension Socket configurations
-SOCKET_PORT = 6009
-SOCKET_AUTHKEY = b"openadapt"
-SOCKET_ADDRESS = "localhost"
-SOCKET_RETRY_INTERVAL = 5  # seconds
+# SOCKET_PORT = 6009
+# SOCKET_AUTHKEY = b"openadapt"
+# SOCKET_ADDRESS = "localhost"
+# SOCKET_RETRY_INTERVAL = 5  # seconds
 
 if not CONFIG_FILE_PATH.exists():
     os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
@@ -143,7 +143,8 @@ class Config(BaseSettings):
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
-    RECORD_WINDOW_DATA: bool = True
+    RECORD_WINDOW_DATA: bool = False
+    RECORD_BROWSER_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
@@ -174,12 +175,6 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
-
-    # Chrome Extension Socket configurations
-    SOCKET_PORT: int = 6001
-    SOCKET_AUTHKEY: str = b"openadapt"
-    SOCKET_ADDRESS: str = "localhost"
-    SOCKET_RETRY_INTERVAL: int = 5  # seconds
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -411,6 +406,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
+        val = str(val)
         val = obfuscate(val)
     return val
 
