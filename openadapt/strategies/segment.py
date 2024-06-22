@@ -168,7 +168,9 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                     exceptions.append(exc)
                     # TODO XXX this does not update the prompts, even though it should
                     logger.exception(exc)
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
+
+                    ipdb.set_trace()
                     logger.warning(f"{exc=} {len(exceptions)=}")
                 else:
                     break

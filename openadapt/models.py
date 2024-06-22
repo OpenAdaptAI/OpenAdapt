@@ -920,6 +920,18 @@ class ScrubbedRecording(db.Base):
         }
 
 
+class Replay(db.Base):
+    """Class representing a replay in the database."""
+
+    __tablename__ = "replay"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    strategy_name = sa.Column(sa.String)
+    strategy_args = sa.Column(sa.JSON)
+    git_hash = sa.Column(sa.String)
+
+
 def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:
     """Copy a SQLAlchemy instance.
 

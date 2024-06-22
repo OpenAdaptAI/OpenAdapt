@@ -17,7 +17,7 @@ with redirect_stdout_stderr():
     import fire
 
 from openadapt import capture as _capture, utils
-from openadapt.config import CAPTURE_DIR_PATH
+from openadapt.config import CAPTURE_DIR_PATH, print_config
 from openadapt.db import crud
 from openadapt.models import Recording
 
@@ -49,6 +49,7 @@ def replay(
         bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
+    print_config()
     posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
 
     if status_pipe:
