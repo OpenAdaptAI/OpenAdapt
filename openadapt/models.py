@@ -366,8 +366,6 @@ class ActionEvent(db.Base):
         Returns:
             (ActionEvent) The ActionEvent.
         """
-        from openadapt import utils
-
         sep = config.ACTION_TEXT_SEP
         name_prefix = config.ACTION_TEXT_NAME_PREFIX
         name_suffix = config.ACTION_TEXT_NAME_SUFFIX
