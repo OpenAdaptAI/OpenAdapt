@@ -131,7 +131,7 @@ def get_response(
     return result
 
 
-def get_completion(payload: dict, dev_mode: bool = True) -> str:
+def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
     Args:

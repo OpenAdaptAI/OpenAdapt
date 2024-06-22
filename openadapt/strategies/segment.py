@@ -19,7 +19,7 @@ INCLUDE_RAW_RECORDING = False
 INCLUDE_RAW_RECORDING_DESCRIPTION = False
 INCLUDE_MODIFIED_RECORDING = True
 INCLUDE_MODIFIED_RECORDING_DESCRIPTION = False
-INCLUDE_REPLAY_INSTRUCTIONS = True
+INCLUDE_REPLAY_INSTRUCTIONS = False
 INCLUDE_WINDOW = False
 INCLUDE_WINDOW_DATA = False
 FILTER_MASKS = True
@@ -78,6 +78,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         ),
         include_active_window: bool = INCLUDE_WINDOW,
         include_active_window_data: bool = INCLUDE_WINDOW_DATA,
+        include_replay_instructions: bool = INCLUDE_REPLAY_INSTRUCTIONS,
     ) -> models.ActionEvent | None:
         """Get the next ActionEvent for replay.
 
@@ -96,6 +97,8 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                 prompt.
             include_active_window_data (bool): Whether to retain window a11y data in
                 the prompt.
+            include_replay_instructions (bool): Whether to include replay instructions
+                in the prompt.
 
         Returns:
             models.ActionEvent or None: The next ActionEvent for replay or None
@@ -126,6 +129,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             include_modified_recording_description,
             include_active_window,
             include_active_window_data,
+            include_replay_instructions,
         )
         if not generated_action_event:
             raise StopIteration()
@@ -155,6 +159,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                     )
                 except ValueError as exc:
                     exceptions.append(exc)
+                    logger.exception(exc)
                     logger.warning(f"{exc=} {len(exceptions)=}")
                 else:
                     break
@@ -247,6 +252,7 @@ def generate_action_event(
     include_modified_recording_description: bool,
     include_active_window: bool,
     include_active_window_data: bool,
+    include_replay_instructions: str,
 ) -> models.ActionEvent:
     """Modify the given ActionEvents according to the given replay instructions.
 
@@ -275,6 +281,8 @@ def generate_action_event(
             prompt.
         include_active_window_data (bool): Whether to retain window a11y data in
             the prompt.
+        include_replay_instructions (bool): Whether to include replay instructions
+            in the prompt.
 
     Returns:
         (models.ActionEvent) the next action event to be played, produced by the model
@@ -304,6 +312,7 @@ def generate_action_event(
         include_modified_recording=include_modified_recording,
         include_modified_recording_description=include_modified_recording_description,
         include_active_window=include_active_window,
+        include_replay_instructions=include_replay_instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
