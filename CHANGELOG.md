@@ -2,6 +2,41 @@
 
 
 
+## v0.35.0 (2024-06-22)
+
+### Feature
+
+* feat(SegmentReplayStrategy, drivers): add strategies.replay; refactor adapters -&gt; drivers + adapters  (#714)
+
+* implemented
+
+* add get_active_window_data parameter include_window_data; fix ActionEvent.from_dict to handle multiple separators; add test_models.py
+
+* update get_default_prompt_adapter
+
+* add TODO
+
+* tests.openadapt.adapters -&gt; drivers
+
+* utils.get_marked_image, .extract_code_block; .strip_backticks
+
+* working segment.py (misses final click in calculator task)
+
+* include_replay_instructions; dev_mode=False
+
+* fix test_openai.py: ValueError -&gt; Exception
+
+* replay.py --record -&gt; --capture
+
+* black/flake8
+
+* remove import
+
+* INCLUDE_CURRENT_SCREENSHOT; handle mouse events without x/y
+
+* add models.Replay; print_config in replay.py ([`7ef115a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7ef115a6172222d7d624ce92d0ec38a60d0e86f1))
+
+
 ## v0.34.0 (2024-06-20)
 
 ### Feature
