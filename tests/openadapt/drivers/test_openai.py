@@ -14,7 +14,7 @@ def test_prompt(calculator_image: Image) -> None:
     try:
         result = openai.prompt(prompt, images=[calculator_image])
         assert "calculator" in result.lower(), result
-    except ValueError as e:
+    except Exception as e:
         if "Incorrect API key" in str(e):
             pytest.xfail(f"ValueError due to incorrect API key: {e}")
         else:
