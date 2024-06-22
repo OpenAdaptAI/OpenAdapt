@@ -4,15 +4,15 @@ See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
 # flake8: noqa: E402
 
-import errno
+import os
 import time
+import errno
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import os
 
+import numpy as np
 from loguru import logger
 from PIL import Image, ImageColor
-import numpy as np
 
 
 # use() required when invoked from tray
@@ -82,6 +82,9 @@ def do_fastsam(
     conf: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
     iou: float = 0.9,
+    max_retries : int =  5,
+    retry_delay_seconds: float = 0.1,  # seconds
+    
 ) -> Image:
     model = FastSAM(model_name)
 
@@ -137,14 +140,11 @@ def do_fastsam(
         logger.info(f"{annotation.path=}")
         segmented_image_path = Path(tmp_dir) / result_name
         segmented_image = Image.open(segmented_image_path)
-        # os.remove(segmented_image_path)
 
         # Ensure the image is fully loaded before deletion
         segmented_image.load()
 
         # Attempt to delete the file with retries and delay
-        max_retries = 5
-        retry_delay = 0.1  # seconds
         retries = 0
 
         while retries < max_retries:
@@ -156,7 +156,7 @@ def do_fastsam(
                     break
                 else:
                     retries += 1
-                    time.sleep(retry_delay)
+                    time.sleep(retry_delay_seconds)
         
         if retries == max_retries:
             logger.warning(f"Failed to delete {segmented_image_path}")
