@@ -27,7 +27,10 @@ def play_mouse_event(event: ActionEvent, mouse_controller: mouse.Controller) -> 
     pressed = event.mouse_pressed
     logger.debug(f"{name=} {x=} {y=} {dx=} {dy=} {button_name=} {pressed=}")
 
-    mouse_controller.position = (x, y)
+    if all([val is not None for val in (x, y)]):
+        mouse_controller.position = (x, y)
+    else:
+        logger.warning(f"{x=} {y=}")
     if name == "move":
         pass
     elif name == "click":

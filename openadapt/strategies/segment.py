@@ -23,6 +23,7 @@ INCLUDE_REPLAY_INSTRUCTIONS = False
 INCLUDE_WINDOW = False
 INCLUDE_WINDOW_DATA = False
 FILTER_MASKS = True
+INCLUDE_CURRENT_SCREENSHOT = False
 
 
 class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
@@ -78,6 +79,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         include_active_window: bool = INCLUDE_WINDOW,
         include_active_window_data: bool = INCLUDE_WINDOW_DATA,
         include_replay_instructions: bool = INCLUDE_REPLAY_INSTRUCTIONS,
+        include_current_screenshot: bool = INCLUDE_CURRENT_SCREENSHOT,
     ) -> models.ActionEvent | None:
         """Get the next ActionEvent for replay.
 
@@ -97,6 +99,8 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             include_active_window_data (bool): Whether to retain window a11y data in
                 the prompt.
             include_replay_instructions (bool): Whether to include replay instructions
+                in the prompt.
+            include_current_screenshot (bool): Whether to include the current screenshot
                 in the prompt.
 
         Returns:
@@ -129,6 +133,7 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             include_active_window,
             include_active_window_data,
             include_replay_instructions,
+            include_current_screenshot,
         )
         if not generated_action_event:
             raise StopIteration()
@@ -142,7 +147,10 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         active_screenshot = models.Screenshot.take_screenshot()
         logger.info(f"{active_window=}")
 
-        if generated_action_event.name in common.MOUSE_EVENTS:
+        if (
+            generated_action_event.name in common.MOUSE_EVENTS
+            and generated_action_event.active_segment_description
+        ):
             generated_action_event.screenshot = active_screenshot
             generated_action_event.window_event = active_window
             generated_action_event.recording = self.recording
@@ -158,7 +166,9 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                     )
                 except ValueError as exc:
                     exceptions.append(exc)
+                    # TODO XXX this does not update the prompts, even though it should
                     logger.exception(exc)
+                    import ipdb; ipdb.set_trace()
                     logger.warning(f"{exc=} {len(exceptions)=}")
                 else:
                     break
@@ -169,6 +179,9 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             target_mouse_y = target_centroid[1] / height_ratio + active_window.top
             generated_action_event.mouse_x = target_mouse_x
             generated_action_event.mouse_y = target_mouse_y
+        else:
+            # just click wherever the mouse already is
+            pass
 
         self.action_history.append(generated_action_event)
         return generated_action_event
@@ -249,6 +262,7 @@ def generate_action_event(
     include_active_window: bool,
     include_active_window_data: bool,
     include_replay_instructions: str,
+    include_current_screenshot: bool,
 ) -> models.ActionEvent:
     """Modify the given ActionEvents according to the given replay instructions.
 
@@ -278,6 +292,8 @@ def generate_action_event(
         include_active_window_data (bool): Whether to retain window a11y data in
             the prompt.
         include_replay_instructions (bool): Whether to include replay instructions
+            in the prompt.
+        include_current_screenshot (bool): Whether to include the current screenshot
             in the prompt.
 
     Returns:
@@ -311,9 +327,10 @@ def generate_action_event(
         include_replay_instructions=include_replay_instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
+    images = [current_image] if include_current_screenshot else []
     content = prompt_adapter.prompt(
         prompt,
-        images=[current_image],
+        images=images,
         system_prompt=system_prompt,
     )
     action_dict = utils.parse_code_snippet(content)
