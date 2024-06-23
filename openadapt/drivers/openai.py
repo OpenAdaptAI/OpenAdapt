@@ -123,7 +123,12 @@ def get_response(
         headers=headers,
         json=payload,
     )
-    return response
+    result = response.json()
+    if "error" in result:
+        error = result["error"]
+        message = error["message"]
+        raise Exception(message)
+    return result
 
 
 def get_completion(payload: dict, dev_mode: bool = False) -> str:
@@ -136,15 +141,10 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
     Returns:
         (str) first message from the response
     """
-    response = get_response(payload)
-    response.raise_for_status()
-    result = response.json()
-    logger.info(f"result=\n{pformat(result)}")
-    if "error" in result:
-        error = result["error"]
-        message = error["message"]
-        # TODO: fail after maximum number of attempts
-        if "retry your request" in message:
+    try:
+        result = get_response(payload)
+    except Exception as exc:
+        if "retry your request" in str(exc):
             return get_completion(payload)
         elif dev_mode:
             import ipdb
@@ -152,7 +152,8 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
             ipdb.set_trace()
             # TODO: handle more errors
         else:
-            raise ValueError(result["error"]["message"])
+            raise exc
+    logger.info(f"result=\n{pformat(result)}")
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]

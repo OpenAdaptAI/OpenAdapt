@@ -47,8 +47,10 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 EVENT_TYPES = ("screen", "action", "window")
 LOG_LEVEL = "INFO"
+# whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
+    "screen/video": True,
     "action": True,
     "window": True,
 }
@@ -183,8 +185,15 @@ def process_events(
                 # XXX TODO: mitigate
         if event.type == "screen":
             prev_screen_event = event
-            if config.RECORD_VIDEO and config.RECORD_FULL_VIDEO:
-                video_write_q.put(event)
+            if config.RECORD_FULL_VIDEO:
+                video_event = event._replace(type="screen/video")
+                process_event(
+                    video_event,
+                    video_write_q,
+                    write_video_event,
+                    recording,
+                    perf_q,
+                )
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
@@ -216,7 +225,14 @@ def process_events(
                 num_screen_events.value += 1
                 prev_saved_screen_timestamp = prev_screen_event.timestamp
                 if config.RECORD_VIDEO and not config.RECORD_FULL_VIDEO:
-                    video_write_q.put(prev_screen_event)
+                    prev_video_event = prev_screen_event._replace(type="screen/video")
+                    process_event(
+                        prev_video_event,
+                        video_write_q,
+                        write_video_event,
+                        recording,
+                        perf_q,
+                    )
                     num_video_events.value += 1
             if prev_saved_window_timestamp < prev_window_event.timestamp:
                 process_event(
@@ -312,7 +328,6 @@ def write_events(
     started_counter: multiprocessing.Value,
     pre_callback: Callable[[float], dict] | None = None,
     post_callback: Callable[[dict], None] | None = None,
-    event_type_modifier: str = "",
 ) -> None:
     """Write events of a specific type to the db using the provided write function.
 
@@ -329,7 +344,6 @@ def write_events(
             timestamp as only argument, returns a state dict.
         post_callback: Optional function to call after main loop. Takes state dict as
             only argument, returns None.
-        event_type_modifier: Optional string to differentiate identical event_types
     """
     utils.set_start_time(recording.timestamp)
 
@@ -352,7 +366,7 @@ def write_events(
                 total_events = num_events.value
                 progress = tqdm(
                     total=total_events,
-                    desc=f"Writing {event_type}{event_type_modifier} events...",
+                    desc=f"Writing {event_type} events...",
                     unit="event",
                     colour="green",
                     dynamic_ncols=True,
@@ -462,6 +476,7 @@ def write_video_event(
     Returns:
         dict containing state.
     """
+    assert event.type == "screen/video"
     screenshot_image = event.data
     screenshot_timestamp = event.timestamp
     force_key_frame = last_pts == 0
@@ -479,7 +494,7 @@ def write_video_event(
             last_pts,
             force_key_frame,
         )
-    perf_q.put((f"{event.type}(video)", event.timestamp, utils.get_timestamp()))
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
     return {
         **kwargs,
         **{
@@ -1266,7 +1281,7 @@ def record(
         video_writer = multiprocessing.Process(
             target=write_events,
             args=(
-                "screen",
+                "screen/video",
                 write_video_event,
                 video_write_q,
                 num_video_events,
@@ -1276,7 +1291,6 @@ def record(
                 started_counter,
                 video_pre_callback,
                 video_post_callback,
-                "(video)",
             ),
         )
         video_writer.start()

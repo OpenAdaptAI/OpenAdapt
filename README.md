@@ -129,6 +129,14 @@ Using python3.10 (3.10.13)
 
 Notice the environment prefix `(openadapt-py3.10)`.
 
+### Tray
+Run the following command to start the system tray icon and launch the web dashboard:
+
+```
+python -m openadapt.entrypoint
+```
+This command will print the config, update the database to the latest migration, start the system tray icon and launch the web dashboard.
+
 ### Record
 
 Create a new recording by running the following command:

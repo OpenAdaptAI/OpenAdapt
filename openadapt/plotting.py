@@ -2,20 +2,20 @@
 
 from collections import defaultdict
 from io import BytesIO
+from itertools import cycle
 import math
 import os
-import unicodedata
 import sys
+import unicodedata
 
-
-import matplotlib.pyplot as plt
-import numpy as np
 from loguru import logger
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+import matplotlib.pyplot as plt
+import numpy as np
 
+from openadapt import common, contrib, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
-from openadapt import common, utils
 
 
 # TODO: move parameters to config
@@ -248,6 +248,12 @@ def display_event(
     recording = action_event.recording
     window_event = action_event.window_event
     screenshot = action_event.screenshot
+
+    if not screenshot:
+        logger.warning(
+            f"{screenshot=} for {action_event=} {window_event=} {recording=}"
+        )
+        return None
     if diff and screenshot.diff:
         image = screenshot.diff.convert("RGBA")
     else:
@@ -321,7 +327,7 @@ def display_event(
 
 
 def plot_performance(
-    recording_timestamp: float = None,
+    recording: models.Recording | None = None,
     view_file: bool = False,
     save_file: bool = True,
     dark_mode: bool = False,
@@ -329,7 +335,7 @@ def plot_performance(
     """Plot the performance of the event processing and writing.
 
     Args:
-        recording_timestamp: The timestamp of the recording (defaults to latest)
+        recording: The Recording whose performance to plot (defaults to latest).
         view_file: Whether to view the file after saving it.
         save_file: Whether to save the file.
         dark_mode: Whether to use dark mode.
@@ -339,34 +345,57 @@ def plot_performance(
     """
     type_to_proc_times = defaultdict(list)
     type_to_timestamps = defaultdict(list)
-    event_types = set()
 
     if dark_mode:
         plt.style.use("dark_background")
 
-    # avoid circular import
     from openadapt.db import crud
 
-    if not recording_timestamp:
-        recording_timestamp = crud.get_latest_recording().timestamp
-    perf_stats = crud.get_perf_stats(recording_timestamp)
+    session = crud.get_new_session(read_only=True)
+
+    if not recording:
+        recording = crud.get_latest_recording(session)
+    perf_stats = crud.get_perf_stats(session, recording)
     for perf_stat in perf_stats:
         event_type = perf_stat.event_type
         start_time = perf_stat.start_time
         end_time = perf_stat.end_time
         type_to_proc_times[event_type].append(end_time - start_time)
-        event_types.add(event_type)
         type_to_timestamps[event_type].append(start_time)
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 10))
+
+    # Define markers to distinguish different event types
+    markers = [
+        "o",
+        "s",
+        "D",
+        "^",
+        "v",
+        ">",
+        "<",
+        "p",
+        "*",
+        "h",
+        "H",
+        "+",
+        "x",
+        "X",
+        "d",
+        "|",
+        "_",
+    ]
+    marker_cycle = cycle(markers)
+
     for event_type in type_to_proc_times:
         x = type_to_timestamps[event_type]
         y = type_to_proc_times[event_type]
-        ax.scatter(x, y, label=event_type)
+        ax.scatter(x, y, label=event_type, marker=next(marker_cycle))
+
     ax.legend()
     ax.set_ylabel("Duration (seconds)")
 
-    mem_stats = crud.get_memory_stats(recording_timestamp)
+    mem_stats = crud.get_memory_stats(session, recording)
     timestamps = []
     mem_usages = []
     for mem_stat in mem_stats:
@@ -383,21 +412,18 @@ def plot_performance(
     memory_ax.set_ylabel("Memory Usage (bytes)")
 
     if len(mem_usages) > 0:
-        # Get the handles and labels from both axes
         handles1, labels1 = ax.get_legend_handles_labels()
         handles2, labels2 = memory_ax.get_legend_handles_labels()
 
-        # Combine the handles and labels from both axes
         all_handles = handles1 + handles2
         all_labels = labels1 + labels2
 
         ax.legend(all_handles, all_labels)
 
-    ax.set_title(f"{recording_timestamp=}")
+    ax.set_title(f"{recording.timestamp=}")
 
-    # TODO: add PROC_WRITE_BY_EVENT_TYPE
     if save_file:
-        fname_parts = ["performance", str(recording_timestamp)]
+        fname_parts = ["performance", str(recording.timestamp)]
         fname = "-".join(fname_parts) + ".png"
         os.makedirs(PERFORMANCE_PLOTS_DIR_PATH, exist_ok=True)
         fpath = os.path.join(PERFORMANCE_PLOTS_DIR_PATH, fname)
@@ -738,3 +764,57 @@ def plot_segments(
     plt.imshow(image)
     plt.axis("off")
     plt.show()
+
+
+def get_marked_image(
+    original_image: Image.Image,
+    masks: list[np.ndarray],
+    include_masks: bool = True,
+    include_marks: bool = True,
+) -> Image.Image:
+    """Get a Set-of-Mark image using the original SoM visualizer.
+
+    Args:
+        original_image (Image.Image): The original PIL image.
+        masks (list[np.ndarray]): A list of masks representing segments in the
+            original image.
+        include_masks (bool, optional): If True, masks will be included in the
+            output visualizations. Defaults to True.
+        include_marks (bool, optional): If True, marks will be included in the
+            output visualizations. Defaults to True.
+
+    Returns:
+        Image.Image: The marked image, where marks and/or masks are applied based on
+        the specified confidence and IoU thresholds and the include flags.
+    """
+    image_arr = np.asarray(original_image)
+
+    # The rest of this function is copied from
+    # github.com/microsoft/SoM/blob/main/task_adapter/sam/tasks/inference_sam_m2m_auto.py
+
+    # metadata = MetadataCatalog.get('coco_2017_train_panoptic')
+    metadata = None
+    visual = contrib.som.visualizer.Visualizer(image_arr, metadata=metadata)
+    mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
+    label_mode = "1"
+    alpha = 0.1
+    anno_mode = []
+    if include_masks:
+        anno_mode.append("Mask")
+    if include_marks:
+        anno_mode.append("Mark")
+    for i, mask in enumerate(masks):
+        label = i + 1
+        demo = visual.draw_binary_mask_with_number(
+            mask,
+            text=str(label),
+            label_mode=label_mode,
+            alpha=alpha,
+            anno_mode=anno_mode,
+        )
+        mask_map[mask == 1] = label
+
+    im = demo.get_image()
+    marked_image = Image.fromarray(im)
+
+    return marked_image

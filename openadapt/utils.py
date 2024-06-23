@@ -9,6 +9,7 @@ from logging import StreamHandler
 from typing import Any, Callable
 import ast
 import base64
+import importlib.metadata
 import inspect
 import os
 import sys
@@ -605,12 +606,53 @@ def parse_code_snippet(snippet: str) -> dict:
             python_code = snippet.replace("```python\n", "").replace("```", "").strip()
             return ast.literal_eval(python_code)
         else:
+            # XXX this may loop forever
+            # TODO make sure to only do this once (e.g. before?)
+            processed_snippet = extract_code_block(snippet)
+            import ipdb
+
+            ipdb.set_trace()
+            return parse_code_snippet(processed_snippet)
             msg = f"Unsupported {snippet=}"
             logger.warning(msg)
             return None
     except Exception as exc:
         # TODO
         raise exc
+
+
+def extract_code_block(text: str) -> str:
+    """Extract the text enclosed by the outermost backticks.
+
+    Includes the backticks themselves.
+
+    Args:
+        text (str): The input text containing potential code blocks enclosed by
+            backticks.
+
+    Returns:
+        str: The text enclosed by the outermost backticks, or an empty string
+            if no complete block is found.
+
+    Raises:
+        ValueError: If the number of backtick lines is uneven.
+    """
+    backticks = "```"
+    lines = text.splitlines()
+    backtick_idxs = [
+        idx for idx, line in enumerate(lines) if line.startswith(backticks)
+    ]
+
+    if len(backtick_idxs) % 2 != 0:
+        raise ValueError("Uneven number of backtick lines")
+
+    if len(backtick_idxs) < 2:
+        return ""  # No enclosing backticks found, return empty string
+
+    # Extract only the lines between the first and last backtick line,
+    # including the backticks
+    start_idx, end_idx = backtick_idxs[0], backtick_idxs[-1]
+    return "\n".join(lines[start_idx : end_idx + 1])
 
 
 def split_list(input_list: list, size: int) -> list[list]:
@@ -893,6 +935,12 @@ class DistinctIDPosthog(Posthog):
             **kwargs: The event properties.
         """
         kwargs.setdefault("distinct_id", config.UNIQUE_USER_ID)
+        properties = kwargs.get("properties", {})
+        properties.setdefault("version", importlib.metadata.version("openadapt"))
+        if not is_running_from_executable():
+            # for cases when we need to test events in development
+            properties.setdefault("is_development", True)
+        kwargs["properties"] = properties
         super().capture(*args, **kwargs)
 
 

@@ -4,7 +4,6 @@ import { ColorSchemeScript, MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications';
 import { Shell } from '@/components/Shell'
 import { CSPostHogProvider } from './providers';
-import { ModalsProvider } from '@mantine/modals';
 
 export const metadata = {
     title: 'OpenAdapt.AI',
@@ -24,9 +23,9 @@ export default function RootLayout({
                 <body>
                     <MantineProvider>
                         <Notifications />
-                        <ModalsProvider>
-                            <Shell>{children}</Shell>
-                        </ModalsProvider>
+                            <Shell>
+                                {children}
+                            </Shell>
                     </MantineProvider>
                 </body>
             </CSPostHogProvider>
