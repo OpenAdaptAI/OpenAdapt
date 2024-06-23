@@ -32,6 +32,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_FILE_PATH = DATA_DIR_PATH / "openadapt.db"
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
@@ -42,12 +43,6 @@ SPECIAL_CHAR_STOP_SEQUENCES = [["ctrl", "ctrl", "ctrl"]]
 # Posthog
 POSTHOG_PUBLIC_KEY = "phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh"
 POSTHOG_HOST = "https://us.i.posthog.com"
-
-# Chrome Extension Socket configurations
-# SOCKET_PORT = 6009
-# SOCKET_AUTHKEY = b"openadapt"
-# SOCKET_ADDRESS = "localhost"
-# SOCKET_RETRY_INTERVAL = 5  # seconds
 
 if not CONFIG_FILE_PATH.exists():
     os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
@@ -175,6 +170,9 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
+
+    # Database File Path
+    DATABASE_FILE_PATH: str = str(DATABASE_FILE_PATH)
 
     # App configurations
     APP_DARK_MODE: bool = False
