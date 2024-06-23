@@ -358,6 +358,8 @@ def write_browser_event(
         event: A browser event to be written.
         perf_q: A queue for collecting performance data.
     """
+    logger.info("Writing browser event")
+
     assert event.type == "browser", event
     crud.insert_browser_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -792,62 +794,6 @@ def read_window_events(
         prev_window_data = window_data
 
 
-@logger.catch
-@utils.trace(logger)
-async def read_browser_events(
-    websocket: websockets.WebSocketServerProtocol,
-    path: str,
-    event_q: queue.Queue,
-    terminate_processing: Event,
-    recording: Recording,
-    started_counter: multiprocessing.Value,
-) -> None:
-    """Read browser events and add them to the event queue.
-
-    Params:
-        websocket: The websocket object.
-        path: The path to the websocket.
-        event_q: A queue for adding browser events.
-        terminate_processing: An event to signal the termination of the process.
-        recording: The recording object.
-        started_counter: Value to increment once started.
-
-    Returns:
-        None
-    """
-    utils.set_start_time(recording.timestamp)
-
-    logger.info("Starting Reading Browser Events ...")
-    prev_browser_data = {}
-    started = False
-
-    while not terminate_processing.is_set():
-        async for message in websocket:
-            browser_data = message
-
-            if not browser_data:
-                continue
-
-            if not started:
-                with started_counter.get_lock():
-                    started_counter.value += 1
-                started = True
-
-            _browser_data = browser_data
-            logger.info(f"Browser Event Data: \n {_browser_data=}")
-
-            if browser_data != prev_browser_data:
-                logger.debug("Queuing browser event for writing")
-                event_q.put(
-                    Event(
-                        utils.get_timestamp(),
-                        "browser",
-                        browser_data,
-                    )
-                )
-            prev_browser_data = browser_data
-
-
 @utils.trace(logger)
 def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
@@ -1228,6 +1174,88 @@ def record_audio(
         )
 
 
+async def terminate_server(
+    future: asyncio.Future,
+    stop_event: asyncio.Event,
+    terminate_event: multiprocessing.Event,
+) -> None:
+    """Terminate the server and set the future result.
+
+    Params:
+        future: The future to set the result of.
+        stop_event: The event to signal stopping the server.
+        terminate_event: The event to signal termination of the process.
+
+    Returns:
+        None
+    """
+    global stop_sequence_detected
+    try:
+        while not (stop_sequence_detected or terminate_event.is_set()):
+            await asyncio.sleep(1)
+        stop_event.set()
+        future.set_result(None)
+    except KeyboardInterrupt:
+        terminate_event.set()
+        stop_event.set()
+        future.set_result(None)
+
+
+@logger.catch
+@utils.trace(logger)
+async def read_browser_events(
+    websocket: websockets.WebSocketServerProtocol,
+    path: str,
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Read browser events and add them to the event queue.
+
+    Params:
+        websocket: The websocket object.
+        path: The path to the websocket.
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    utils.set_start_time(recording.timestamp)
+
+    logger.info("Starting Reading Browser Events ...")
+    prev_browser_data = {}
+    started = False
+
+    while not terminate_processing.is_set():
+        async for message in websocket:
+            browser_data = message
+
+            if not browser_data:
+                continue
+
+            if not started:
+                with started_counter.get_lock():
+                    started_counter.value += 1
+                started = True
+
+            logger.info(f"Browser Event Data: \n {browser_data=}")
+
+            if browser_data != prev_browser_data:
+                logger.debug("Queuing browser event for writing")
+                event_q.put(
+                    Event(
+                        utils.get_timestamp(),
+                        "browser",
+                        browser_data,
+                    )
+                )
+            prev_browser_data = browser_data
+
+
 @logger.catch
 @utils.trace(logger)
 async def record(
@@ -1292,6 +1320,8 @@ async def record(
     )
     window_event_reader.start()
 
+    # stop_event = asyncio.Event()
+    # future = asyncio.Future()
     server = websockets.serve(
         lambda ws, path: read_browser_events(
             ws, path, event_q, terminate_processing, recording, started_counter

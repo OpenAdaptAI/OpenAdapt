@@ -219,7 +219,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
-    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_event")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -591,27 +591,27 @@ class BrowserEvent(db.Base):
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
-    message = sa.Column(sa.JSON)
+    message = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
     browser_id = sa.Column(sa.String)
 
     recording = sa.orm.relationship("Recording", back_populates="browser_events")
-    action_event = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
 
-    # TODO: implement for extension
-    @classmethod
-    def get_active_browser_event(
-        cls: "BrowserEvent",
-    ) -> "BrowserEvent":
-        """Get the active browser event.
+    # # TODO: implement for extension
+    # @classmethod
+    # def get_active_browser_event(
+    #     cls: "BrowserEvent",
+    # ) -> "BrowserEvent":
+    #     """Get the active browser event.
 
-        Args:
-            None
+    #     Args:
+    #         None
 
-        Returns:
-            (BrowserEvent) the active Browser event.
-        """
-        return BrowserEvent(**browser.get_active_browser_data())
+    #     Returns:
+    #         (BrowserEvent) the active Browser event.
+    #     """
+    #     return BrowserEvent(**)
 
 
 class FrameCache:
