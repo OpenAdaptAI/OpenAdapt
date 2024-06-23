@@ -39,7 +39,7 @@ import soundfile
 import websockets
 import whisper
 
-from openadapt import browser, plotting, utils, video, window
+from openadapt import plotting, utils, video, window
 from openadapt.config import config
 from openadapt.db import crud
 from openadapt.extensions import synchronized_queue as sq
@@ -792,126 +792,60 @@ def read_window_events(
         prev_window_data = window_data
 
 
-async def handle_message(message: Any, event_q: queue.Queue) -> None:
-    """Handle incoming WebSocket messages."""
-
-    return message
-
-
-async def websocket_handler(
-    websocket: Any,
+@logger.catch
+@utils.trace(logger)
+async def read_browser_events(
+    websocket: websockets.WebSocketServerProtocol,
     path: str,
     event_q: queue.Queue,
-    browser_data: Any,
-    prev_browser_data: Any,
-    started_counter: multiprocessing.Value,
-    started: bool,
-) -> None:
-    """Websocket handler to process incoming messages."""
-    logger.info("here 003")
-    async for message in websocket:
-
-        logger.info(f"Received Browser Event message type: {type(message)=}")
-
-        if not browser_data:
-            continue
-
-        if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
-            started = True
-
-        if browser_data["browser_id"] != prev_browser_data.get("browser_id"):
-            _browser_data = browser_data
-            logger.info(f"Browser Event Data: \n {_browser_data=}")
-        if browser_data != prev_browser_data:
-            logger.debug("Queuing browser event for writing")
-            event_q.put(
-                Event(
-                    utils.get_timestamp(),
-                    "browser",
-                    browser_data,
-                )
-            )
-        prev_browser_data = browser_data
-        event_q.put(Event(utils.get_timestamp(), "browser", message))
-
-
-async def read_browser_events(
-    event_q: queue.Queue,
-    terminate_processing: multiprocessing.Event,
-    recording: Any,
+    terminate_processing: Event,
+    recording: Recording,
     started_counter: multiprocessing.Value,
 ) -> None:
-    """Read browser events and add them to the event queue."""
-    logger.info("here 001")
+    """Read browser events and add them to the event queue.
 
+    Params:
+        websocket: The websocket object.
+        path: The path to the websocket.
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting Reading Browser Events ...")
-
     prev_browser_data = {}
     started = False
 
     while not terminate_processing.is_set():
-        logger.info("here 002 in while loop ...")
-        # Start the Websocket for the chrome (browser) extension.
-        async with websockets.serve(websocket_handler, "localhost", 8765):
-            await asyncio.Future()  # run forever
+        async for message in websocket:
+            browser_data = message
 
-        # browser_data = await browser.get_active_browser_data()
+            if not browser_data:
+                continue
 
+            if not started:
+                with started_counter.get_lock():
+                    started_counter.value += 1
+                started = True
 
-def run_read_browser_events(*args: Any) -> None:
-    """Run the read_browser_events function."""
-    logger.info("here 000")
-    asyncio.run(read_browser_events(*args))
+            _browser_data = browser_data
+            logger.info(f"Browser Event Data: \n {_browser_data=}")
 
-
-# @utils.trace(logger)
-# def read_browser_events(
-#     event_q: queue.Queue,
-#     terminate_processing: multiprocessing.Event,
-#     recording: Recording,
-#     started_counter: multiprocessing.Value,
-# ) -> None:
-#     """Read browser events and add them to the event queue.
-
-#     Args:
-#         event_q: A queue for adding window events.
-#         terminate_processing: An event to signal the termination of the process.
-#         recording: The recording object.
-#         started_counter: Value to increment once started.
-#     """
-#     utils.set_start_time(recording.timestamp)
-
-#     logger.info("Starting Reading Browser Events ...")
-#     prev_browser_data = {}
-#     started = False
-
-#     while not terminate_processing.is_set():
-#         browser_data = browser.get_active_browser_data()
-#         if not browser_data:
-#             continue
-
-#         if not started:
-#             with started_counter.get_lock():
-#                 started_counter.value += 1
-#             started = True
-
-#         if browser_data["browser_id"] != prev_browser_data.get("browser_id"):
-#             _browser_data = browser_data
-#             logger.info(f"Browser Event Data: \n {_browser_data=}")
-#         if browser_data != prev_browser_data:
-#             logger.debug("Queuing browser event for writing")
-#             event_q.put(
-#                 Event(
-#                     utils.get_timestamp(),
-#                     "browser",
-#                     browser_data,
-#                 )
-#             )
-#         prev_browser_data = browser_data
+            if browser_data != prev_browser_data:
+                logger.debug("Queuing browser event for writing")
+                event_q.put(
+                    Event(
+                        utils.get_timestamp(),
+                        "browser",
+                        browser_data,
+                    )
+                )
+            prev_browser_data = browser_data
 
 
 @utils.trace(logger)
@@ -1296,7 +1230,7 @@ def record_audio(
 
 @logger.catch
 @utils.trace(logger)
-def record(
+async def record(
     task_description: str,
     # these should be Event | None, but this raises:
     #   TypeError: unsupported operand type(s) for |: 'method' and 'NoneType'
@@ -1358,11 +1292,15 @@ def record(
     )
     window_event_reader.start()
 
-    browser_event_reader = threading.Thread(
-        target=run_read_browser_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+    server = websockets.serve(
+        lambda ws, path: read_browser_events(
+            ws, path, event_q, terminate_processing, recording, started_counter
+        ),
+        "localhost",
+        8765,
     )
-    browser_event_reader.start()
+    async with server:
+        await asyncio.Future()  # run forever
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -1544,6 +1482,7 @@ def record(
         logger.info("*" * 40)
     if status_pipe:
         status_pipe.send({"type": "record.started"})
+
     logger.info("All readers and writers have started. Waiting for input events...")
 
     global stop_sequence_detected
@@ -1563,14 +1502,12 @@ def record(
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
 
-    # term_pipe_parent_browser.send(browser_write_q.qsize())
-
     logger.info("joining...")
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
-    browser_event_reader.join()
+    # browser_event_reader.join()
     event_processor.join()
     screen_event_writer.join()
     action_event_writer.join()
@@ -1601,11 +1538,16 @@ def record(
     crud.release_db_lock()
 
 
+def run_main(task_description: str) -> None:
+    """Run the record function asynchronously."""
+    asyncio.run(record(task_description))
+
+
 # Entry point
 def start() -> None:
     """Starts the recording process."""
-    fire.Fire(record)
+    fire.Fire(run_main)
 
 
 if __name__ == "__main__":
-    fire.Fire(record)
+    fire.Fire(run_main)

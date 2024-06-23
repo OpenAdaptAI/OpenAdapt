@@ -67,19 +67,24 @@ async def handle_message(message: str) -> None:
         None
     """
     print("Received message:", message)
-    insert_message(message)
+    # insert_message(message)
 
 
-async def handler(websocket, path) -> None:  # noqa: ANN001
+async def handler(websocket: websockets.WebSocketServerProtocol, path: str,
+                  a: int, b: int) -> None:
     """A web socket handler to handle incoming messages.
 
     Args:
         websocket: The websocket object.
         path: The path to the websocket.
+        a: Additional argument a.
+        b: Additional argument b.
 
     Returns:
         None
     """
+    print(a)
+    print(b)
     async for message in websocket:
         await handle_message(message)
 
@@ -93,8 +98,9 @@ async def main() -> None:
     Returns:
         None
     """
-    init_db()
-    async with websockets.serve(handler, "localhost", 8765):
+    # init_db()
+    server = websockets.serve(lambda ws, path: handler(ws, path, a=1, b=2), "localhost", 8765)
+    async with server:
         await asyncio.Future()  # run forever
 
 
