@@ -4,35 +4,29 @@ See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
 # flake8: noqa: E402
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import errno
 import os
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from loguru import logger
-from PIL import Image, ImageColor
+import fire
+import matplotlib
 import numpy as np
-
+from PIL import Image, ImageColor
+from loguru import logger
 
 # use() required when invoked from tray
-import matplotlib
-
 # importing is required for use() to work
 from PySide6.QtCore import Qt  # noqa
 
-matplotlib.use("Qt5Agg")
-
-
+from openadapt import cache
 from ultralytics import FastSAM
 from ultralytics.models.fastsam import FastSAMPrompt
 from ultralytics.models.sam import Predictor as SAMPredictor
-import fire
-import numpy as np
 import ultralytics
 
-from openadapt import cache
-
+matplotlib.use("Qt5Agg")
 
 FASTSAM_MODEL_NAMES = (
     "FastSAM-x.pt",
@@ -49,9 +43,7 @@ DEFAULT_MODEL_NAME = MODEL_NAMES[0]
 
 # TODO: rename
 def fetch_segmented_image(
-    image: Image.Image,
-    model_name: str = DEFAULT_MODEL_NAME,
-    **kwargs,
+    image: Image.Image, model_name: str = DEFAULT_MODEL_NAME, **kwargs
 ) -> Image.Image:
     """Segment a PIL.Image using ultralytics.
 
@@ -82,9 +74,8 @@ def do_fastsam(
     conf: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
     iou: float = 0.9,
-    max_retries : int =  5,
-    retry_delay_seconds: float = 0.1,  
-    
+    max_retries: int = 5,
+    retry_delay_seconds: float = 0.1,
 ) -> Image:
     model = FastSAM(model_name)
 
@@ -92,12 +83,7 @@ def do_fastsam(
 
     # Run inference on image
     everything_results = model(
-        image,
-        device=device,
-        retina_masks=retina_masks,
-        imgsz=imgsz,
-        conf=conf,
-        iou=iou,
+        image, device=device, retina_masks=retina_masks, imgsz=imgsz, conf=conf, iou=iou
     )
 
     # Prepare a Prompt Process object
@@ -130,12 +116,7 @@ def do_fastsam(
     with TemporaryDirectory() as tmp_dir:
         # Force the output format to PNG to prevent JPEG compression artefacts
         annotation.path = annotation.path.replace(".jpg", ".png")
-        prompt_process.plot(
-            [annotation],
-            tmp_dir,
-            with_contours=False,
-            retina=False,
-        )
+        prompt_process.plot([annotation], tmp_dir, with_contours=False, retina=False)
         result_name = os.path.basename(annotation.path)
         logger.info(f"{annotation.path=}")
         segmented_image_path = Path(tmp_dir) / result_name
@@ -158,7 +139,7 @@ def do_fastsam(
                 else:
                     retries += 1
                     time.sleep(retry_delay_seconds)
-        
+
         if retries == max_retries:
             logger.warning(f"Failed to delete {segmented_image_path}")
     # Check if the dimensions of the original and segmented images differ
@@ -176,7 +157,6 @@ def do_fastsam(
 
 
 @cache.cache()
-
 def do_sam(
     image: Image.Image,
     model_name: str,
@@ -249,8 +229,7 @@ def colorize_masks(masks: list[Image.Image]) -> Image.Image:
         tuple(
             int(c * 255)
             for c in ImageColor.getcolor(
-                f"hsv({int(i / num_masks * 360)}, 100%, 100%)",
-                "RGB",
+                f"hsv({int(i / num_masks * 360)}, 100%, 100%)", "RGB"
             )
         )
         for i in range(num_masks)
