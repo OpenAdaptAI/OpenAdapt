@@ -80,12 +80,28 @@ def do_fastsam(
     retina_masks: bool = True,
     imgsz: int | tuple[int, int] | None = 1024,
     # threshold below which boxes will be filtered out
-    conf: float = 0.4,
+    min_confidence_threshold: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
-    iou: float = 0.9,
+    max_iou_threshold: float = 0.9,
     max_retries: int = 5,
     retry_delay_seconds: float = 0.1,
 ) -> Image:
+    """Get segmented image via FastSAM.
+
+    For usage of thresholds see:
+    github.com/ultralytics/ultralytics/blob/dacbd48fcf8407098166c6812eeb751deaac0faf
+        /ultralytics/utils/ops.py#L164
+
+    Args:
+        TODO
+        min_confidence_threshold (float, optional): The minimum confidence score
+            that a detection must meet or exceed to be considered valid. Detections
+            below this threshold will not be marked. Defaults to 0.00.
+        max_iou_threshold (float, optional): The maximum allowed Intersection over
+            Union (IoU) value for overlapping detections. Detections that exceed this
+            IoU threshold are considered for suppression, keeping only the
+            detection with the highest confidence. Defaults to 0.05.
+    """
     model = FastSAM(model_name)
 
     imgsz = imgsz or image.size
@@ -96,8 +112,8 @@ def do_fastsam(
         device=device,
         retina_masks=retina_masks,
         imgsz=imgsz,
-        conf=conf,
-        iou=iou,
+        conf=min_confidence_threshold,
+        iou=max_iou_threshold,
     )
 
     # Prepare a Prompt Process object

@@ -52,7 +52,15 @@ from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
 
-from openadapt import adapters, common, models, plotting, strategies, utils, vision
+from openadapt import (
+    adapters,
+    common,
+    models,
+    plotting,
+    strategies,
+    utils,
+    vision,
+)
 
 DEBUG = False
 DEBUG_REPLAY = False
@@ -68,6 +76,7 @@ class Segmentation:
 
     Attributes:
         image: The original image used to generate segments.
+        marked_image: The marked image (for Set-of-Mark prompting).
         masked_images: A list of PIL Image objects that have been masked based on
             segmentation.
         descriptions: Descriptions of each segmented region, correlating with each
@@ -81,6 +90,7 @@ class Segmentation:
     """
 
     image: Image.Image
+    marked_image: Image.Image
     masked_images: list[Image.Image]
     descriptions: list[str]
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
@@ -112,6 +122,7 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
 def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
+    # retain_window_events: bool = False,
 ) -> None:
     """Modify the given ActionEvents according to the given replay instructions.
 
@@ -132,7 +143,7 @@ def apply_replay_instructions(
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(
         prompt,
-        system_prompt,
+        system_prompt=system_prompt,
     )
     content_dict = utils.parse_code_snippet(content)
     try:
@@ -167,6 +178,7 @@ class VisualReplayStrategy(
         """
         super().__init__(recording)
         self.recording_action_idx = 0
+        self.action_history = []
         add_active_segment_descriptions(recording.processed_action_events)
         self.modified_actions = apply_replay_instructions(
             recording.processed_action_events,
@@ -235,7 +247,15 @@ class VisualReplayStrategy(
             target_mouse_y = target_centroid[1] / height_ratio + active_window.top
             modified_reference_action.mouse_x = target_mouse_x
             modified_reference_action.mouse_y = target_mouse_y
+        self.action_history.append(modified_reference_action)
         return modified_reference_action
+
+    def __del__(self) -> None:
+        """Log the action history."""
+        action_history_dicts = [
+            action.to_prompt_dict() for action in self.action_history
+        ]
+        logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
 
 def get_active_segment(
@@ -420,8 +440,13 @@ def get_window_segmentation(
         len(descriptions),
         len(centroids),
     )
+    marked_image = plotting.get_marked_image(
+        original_image,
+        refined_masks,  # masks,
+    )
     segmentation = Segmentation(
         original_image,
+        marked_image,
         masked_images,
         descriptions,
         bounding_boxes,
@@ -451,65 +476,62 @@ def prompt_for_descriptions(
     Returns:
         list of descriptions for each masked image.
     """
-    prompt_adapter = adapters.get_default_prompt_adapter()
+    # TODO: move inside adapters.prompt
+    for driver in adapters.prompt.DRIVER_ORDER:
+        # off by one to account for original image
+        if driver.MAX_IMAGES and (len(masked_images) + 1 > driver.MAX_IMAGES):
+            masked_images_batches = utils.split_list(
+                masked_images,
+                driver.MAX_IMAGES - 1,
+            )
+            descriptions = []
+            for masked_images_batch in masked_images_batches:
+                descriptions_batch = prompt_for_descriptions(
+                    original_image,
+                    masked_images_batch,
+                    active_segment_description,
+                    exceptions,
+                )
+                descriptions += descriptions_batch
+            return descriptions
 
-    # TODO: move inside adapters
-    # off by one to account for original image
-    if prompt_adapter.MAX_IMAGES and (
-        len(masked_images) + 1 > prompt_adapter.MAX_IMAGES
-    ):
-        masked_images_batches = utils.split_list(
-            masked_images,
-            prompt_adapter.MAX_IMAGES - 1,
+        images = [original_image] + masked_images
+        system_prompt = utils.render_template_from_file(
+            "prompts/system.j2",
         )
-        descriptions = []
-        for masked_images_batch in masked_images_batches:
-            descriptions_batch = prompt_for_descriptions(
+        logger.info(f"system_prompt=\n{system_prompt}")
+        num_segments = len(masked_images)
+        prompt = utils.render_template_from_file(
+            "prompts/description.j2",
+            active_segment_description=active_segment_description,
+            num_segments=num_segments,
+            exceptions=exceptions,
+        ).strip()
+        logger.info(f"prompt=\n{prompt}")
+        logger.info(f"{len(images)=}")
+        descriptions_json = driver.prompt(
+            prompt,
+            system_prompt,
+            images,
+        )
+        descriptions = utils.parse_code_snippet(descriptions_json)["descriptions"]
+        logger.info(f"{descriptions=}")
+        try:
+            assert len(descriptions) == len(masked_images), (
+                len(descriptions),
+                len(masked_images),
+            )
+        except Exception as exc:
+            exceptions = exceptions or []
+            exceptions.append(exc)
+            logger.info(f"exceptions=\n{pformat(exceptions)}")
+            return prompt_for_descriptions(
                 original_image,
-                masked_images_batch,
+                masked_images,
                 active_segment_description,
                 exceptions,
             )
-            descriptions += descriptions_batch
+
+        # remove indexes
+        descriptions = [desc for idx, desc in descriptions]
         return descriptions
-
-    images = [original_image] + masked_images
-    system_prompt = utils.render_template_from_file(
-        "prompts/system.j2",
-    )
-    logger.info(f"system_prompt=\n{system_prompt}")
-    num_segments = len(masked_images)
-    prompt = utils.render_template_from_file(
-        "prompts/description.j2",
-        active_segment_description=active_segment_description,
-        num_segments=num_segments,
-        exceptions=exceptions,
-    )
-    logger.info(f"prompt=\n{prompt}")
-    logger.info(f"{len(images)=}")
-    descriptions_json = prompt_adapter.prompt(
-        prompt,
-        system_prompt,
-        images,
-    )
-    descriptions = utils.parse_code_snippet(descriptions_json)["descriptions"]
-    logger.info(f"{descriptions=}")
-    try:
-        assert len(descriptions) == len(masked_images), (
-            len(descriptions),
-            len(masked_images),
-        )
-    except Exception as exc:
-        exceptions = exceptions or []
-        exceptions.append(exc)
-        logger.info(f"exceptions=\n{pformat(exceptions)}")
-        return prompt_for_descriptions(
-            original_image,
-            masked_images,
-            active_segment_description,
-            exceptions,
-        )
-
-    # remove indexes
-    descriptions = [desc for idx, desc in descriptions]
-    return descriptions
