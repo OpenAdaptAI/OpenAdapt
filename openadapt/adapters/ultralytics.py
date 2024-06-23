@@ -2,11 +2,14 @@
 
 See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
+
 # flake8: noqa: E402
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import errno
 import os
+import time
 
 from loguru import logger
 from PIL import Image, ImageColor
@@ -80,6 +83,8 @@ def do_fastsam(
     min_confidence_threshold: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
     max_iou_threshold: float = 0.9,
+    max_retries: int = 5,
+    retry_delay_seconds: float = 0.1,
 ) -> Image:
     """Get segmented image via FastSAM.
 
@@ -151,8 +156,27 @@ def do_fastsam(
         logger.info(f"{annotation.path=}")
         segmented_image_path = Path(tmp_dir) / result_name
         segmented_image = Image.open(segmented_image_path)
-        os.remove(segmented_image_path)
 
+        # Ensure the image is fully loaded before deletion to avoid errors or incomplete operations,
+        # as some operating systems and file systems lock files during read or processing.
+        segmented_image.load()
+
+        # Attempt to delete the file with retries and delay
+        retries = 0
+
+        while retries < max_retries:
+            try:
+                os.remove(segmented_image_path)
+                break  # If deletion succeeds, exit loop
+            except OSError as e:
+                if e.errno == errno.ENOENT:  # File not found
+                    break
+                else:
+                    retries += 1
+                    time.sleep(retry_delay_seconds)
+
+        if retries == max_retries:
+            logger.warning(f"Failed to delete {segmented_image_path}")
     # Check if the dimensions of the original and segmented images differ
     # XXX TODO this is a hack, this plotting code should be refactored, but the
     # bug may exist in ultralytics, since they seem to resize as well; see:
