@@ -2,6 +2,31 @@
 
 
 
+## v0.35.1 (2024-06-23)
+
+### Fix
+
+* fix(ultralytics): fix windows file permission in do_fastsam (#791)
+
+* fix:windows file permission
+
+* Changes as per the comments on last commit
+
+* add max_retries and retry_delay_seconds in args
+
+* add comments for segmented_image.load()
+
+* order imports in ultralytics.py
+
+* build fix
+
+* remove unnecessary formatting changes
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/742b1764d3434f5bb505acf20318ac0c699a1761))
+
+
 ## v0.35.0 (2024-06-22)
 
 ### Feature
