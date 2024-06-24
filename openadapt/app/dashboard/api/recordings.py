@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket
 from loguru import logger
 
 from openadapt.app import cards
+from openadapt.config import config
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
@@ -69,7 +70,7 @@ class RecordingsAPI:
 
     def upload_recording(self, recording_id: int) -> dict[str, str]:
         """Upload a recording."""
-        upload_recording_to_s3(recording_id)
+        upload_recording_to_s3(config.UNIQUE_USER_ID, recording_id)
         return {"message": "Recording uploaded"}
 
     def recording_detail_route(self) -> None:

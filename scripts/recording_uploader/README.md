@@ -24,7 +24,7 @@ The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI
 
 ## Deploy the application
 
-There is a `deploy` script that creates the s3 bucket and deploys the application using the SAM CLI (included as part of the dev dependencies of this project). The bucket name is hardcoded in the script. The SAM CLI is set up to run in `guided` mode, which will prompt the user every time befor deploying, in case the user wants to change the default values.
+There is a `deploy` script that creates the s3 bucket and deploys the application using the SAM CLI (included as part of the dev dependencies of this project). The bucket name is hardcoded in the script. The SAM CLI is set up to run in `guided` mode, which will prompt the user every time before deploying, in case the user wants to change the default values.
 
 
 You can find your API Gateway Endpoint URL in the output values displayed after deployment.
