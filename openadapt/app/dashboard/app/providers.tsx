@@ -3,6 +3,7 @@ import { get } from '@/api'
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { useEffect } from 'react'
+import { getSettings } from './utils'
 
 if (typeof window !== 'undefined') {
   if (process.env.NEXT_PUBLIC_MODE !== "development") {
@@ -11,13 +12,6 @@ if (typeof window !== 'undefined') {
     })
   }
 }
-
-async function getSettings(): Promise<Record<string, string>> {
-  return get('/api/settings?category=general', {
-      cache: 'no-store',
-  })
-}
-
 
 export function CSPostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {

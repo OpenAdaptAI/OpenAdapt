@@ -948,20 +948,21 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
-def upload_file_to_s3(file_path: str) -> None:
+def upload_file_to_s3(file_path: str, body: dict) -> requests.Response:
     """Upload a file to an S3 bucket.
 
     Args:
         file_path (str): The path to the file to upload.
+        body (dict): The body of the request.
     """
     filename = os.path.basename(file_path)
-    resp = requests.get(RECORDING_UPLOAD_URL)
+    resp = requests.post(RECORDING_UPLOAD_URL, json=body)
     upload_url = resp.json()["url"]
 
     with open(file_path, "rb") as file:
         files = {"file": (filename, file)}
         resp = requests.put(upload_url, files=files)
-        resp.raise_for_status()
+        return resp
 
 
 def retry_with_exceptions(max_retries: int = 5) -> Callable:

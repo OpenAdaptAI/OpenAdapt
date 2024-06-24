@@ -4,6 +4,7 @@
 import pathlib
 import subprocess
 
+from loguru import logger
 import boto3
 import fire
 
@@ -40,7 +41,7 @@ def main(region_name: str = "us-east-1", guided: bool = True) -> None:
     if guided:
         commands.append("--guided")
     subprocess.run(commands, cwd=CURRENT_DIR, check=True)
-    print("Lambda function deployed successfully.")
+    logger.info("Lambda function deployed successfully.")
 
 
 if __name__ == "__main__":
