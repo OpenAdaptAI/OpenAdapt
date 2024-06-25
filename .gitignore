@@ -38,3 +38,4 @@ src
 
 dist/
 build/
+openadapt/error.log
