@@ -16,7 +16,8 @@ from openadapt.build_utils import redirect_stdout_stderr
 with redirect_stdout_stderr():
     import fire
 
-from openadapt import capture as _capture, utils
+from openadapt import capture as _capture
+from openadapt import utils
 from openadapt.config import CAPTURE_DIR_PATH, print_config
 from openadapt.db import crud
 from openadapt.models import Recording
@@ -48,6 +49,7 @@ def replay(
     Returns:
         bool: True if replay was successful, None otherwise.
     """
+    utils.set_start_time()
     utils.configure_logging(logger, LOG_LEVEL)
     print_config()
     posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
@@ -81,8 +83,16 @@ def replay(
     strategy_class = strategy_class_by_name[strategy_name]
     logger.info(f"{strategy_class=}")
 
+    write_session = crud.get_new_session(read_and_write=True)
+    replay_id = crud.add_replay(write_session, strategy_name, strategy_args=kwargs)
+
     strategy = strategy_class(recording, **kwargs)
+    strategy.attach_replay_id(replay_id)
     logger.info(f"{strategy=}")
+
+    if not crud.acquire_db_lock():
+        logger.error("Failed to acquire lock")
+        return
 
     handler = None
     rval = True
@@ -112,6 +122,8 @@ def replay(
         sleep(1)
         _capture.stop()
         logger.remove(handler)
+
+    crud.release_db_lock()
 
     return rval
 

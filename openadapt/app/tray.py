@@ -377,7 +377,7 @@ class SystemTrayIcon:
             logger.info(f"kwargs=\n{pformat(kwargs)}")
 
             self.child_conn.send({"type": "replay.starting"})
-            record_replay = False
+            record_replay = True
             recording_timestamp = None
             strategy_name = selected_strategy.__name__
             replay_proc = multiprocessing.Process(

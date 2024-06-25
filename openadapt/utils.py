@@ -20,6 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import git
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 
@@ -950,6 +951,18 @@ def get_posthog_instance() -> DistinctIDPosthog:
     if not is_running_from_executable():
         posthog.disabled = True
     return posthog
+
+
+def get_git_hash():
+    git_hash = None
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        git_hash = repo.head.commit.hexsha
+    except git.InvalidGitRepositoryError:
+        git_hash = importlib.metadata.version("openadapt")
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+    return git_hash
 
 
 if __name__ == "__main__":
