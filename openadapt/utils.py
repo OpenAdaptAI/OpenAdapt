@@ -49,7 +49,9 @@ from openadapt.config import (
 from openadapt.custom_logger import filter_log_messages
 from openadapt.db import db
 from openadapt.models import ActionEvent
+from config import Config
 
+config = Config()
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
 SCT = mss.mss()
@@ -413,35 +415,62 @@ def evenly_spaced(arr: list, N: list) -> list:
     return [val for idx, val in enumerate(arr) if idx in idxs]
 
 
-def get_current_monitor(monitors: list[dict]) -> dict:
+
+
+def get_current_monitor(monitors):
     """Determine the monitor where the cursor is currently located.
+
     Args:
-        monitors (list[dict]): The list of monitors.
+        monitors (list): List of monitor dictionaries.
+
     Returns:
-        dict: The current monitor.
+        dict: The monitor dictionary where the cursor is located.
     """
     cursor_x, cursor_y = pyautogui.position()
-
-
+    
     for monitor in monitors:
-        if monitor["left"] <= cursor_x < monitor["left"] + monitor["width"] and monitor["top"] <= cursor_y < monitor["top"] + monitor["height"]:
+        if monitor['left'] <= cursor_x < monitor['left'] + monitor['width'] and \
+           monitor['top'] <= cursor_y < monitor['top'] + monitor['height']:
             return monitor
-        
-    # If not found, return the default monitor
+    
+    # If not found, default to the first monitor
     return monitors[1]
 
 def take_screenshot() -> Image.Image:
-    """Take a screenshot of the current monitor.
-    
+    """Take a screenshot of the current monitor or all monitors.
+
     Returns:
-        PIL.Image: The screenshot image.
+        PIL.Image.Image: The screenshot image.
     """
     with mss.mss() as sct:
         monitors = sct.monitors
-        current_monitor = get_current_monitor(monitors)
-        sct_img = sct.grab(current_monitor)
-        image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-        return image
+
+        if config.CAPTURE_ALL_MONITORS:
+            # Determine the bounds of the combined image
+            min_left = min(monitor['left'] for monitor in monitors[1:])
+            min_top = min(monitor['top'] for monitor in monitors[1:])
+            max_right = max(monitor['left'] + monitor['width'] for monitor in monitors[1:])
+            max_bottom = max(monitor['top'] + monitor['height'] for monitor in monitors[1:])
+
+            total_width = max_right - min_left
+            total_height = max_bottom - min_top
+            
+            combined_image = Image.new("RGB", (total_width, total_height))
+
+            for monitor in monitors[1:]:  # Skip the first entry which is a union of all monitors
+                sct_img = sct.grab(monitor)
+                image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                x_offset = monitor['left'] - min_left
+                y_offset = monitor['top'] - min_top
+                combined_image.paste(image, (x_offset, y_offset))
+            
+            return combined_image
+        else:
+            # Capture the current monitor
+            current_monitor = get_current_monitor(monitors)
+            sct_img = sct.grab(current_monitor)
+            image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+            return image
 
 
 
