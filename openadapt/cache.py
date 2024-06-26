@@ -1,22 +1,31 @@
 """openadapt.cache module.
 
-This module provides a caching decorator for functions.
+This module provides a caching decorator for functions and a command line interface for
+managing the cache.
 
-Example usage:
+Python Example Usage:
     from openadapt.cache import cache
 
     @cache()
     def my_function():
         # Function body
         pass
+
+Command Line Example Usage:
+    # To clear the cache but keep data from the last 14 days and perform a dry run:
+    python -m openadapt.cache clear --keep_days 14 --dry_run True
 """
 
+from datetime import datetime, timedelta
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable
+import os
 import time
 
 from joblib import Memory
 from loguru import logger
+import fire
 
 from openadapt.config import config
 
@@ -97,3 +106,54 @@ def cache(
         return wrapper
 
     return decorator
+
+
+def clear(keep_days: int = 0, dry_run: bool = False):
+    """Clears the cache, optionally keeping data for a specified number of days.
+
+    With an option for a dry run.
+
+    Args:
+        keep_days (int): The number of days of cached data to keep.
+        dry_run (bool): If True, perform a dry run without deleting files.
+    """
+    logger.info(
+        f"Attempting to clear cache with {'dry run' if dry_run else 'actual deletion'},"
+        " keeping last {keep_days} days."
+    )
+    cache_dir_path = Path(config.CACHE_DIR_PATH) / "joblib"
+    cutoff_date = datetime.now() - timedelta(days=keep_days)
+    total_cleared = 0
+
+    for path in cache_dir_path.rglob('*'):
+        if path.is_file() and os.path.getmtime(path) < cutoff_date.timestamp():
+            file_size = path.stat().st_size
+            if not dry_run:
+                os.remove(path)
+                logger.debug(f"Removed file: {path}")
+            else:
+                logger.debug(f"Would remove file: {path}")
+            total_cleared += file_size
+        # Check if directory is empty after removing files
+        elif path.is_dir() and not any(path.iterdir()):
+            if not dry_run:
+                os.rmdir(path)
+                logger.debug(f"Removed empty directory: {path}")
+            else:
+                logger.debug(f"Would remove empty directory: {path}")
+
+    if dry_run:
+        logger.info(
+            "Dry run complete. Would have cleared "
+            "{total_cleared / (1024 * 1024):.2f} MB."
+        )
+    else:
+        logger.info(
+            f"Cache clearing completed. Cleared {total_cleared / (1024 * 1024):.2f} MB."
+        )
+
+
+if __name__ == "__main__":
+    fire.Fire({
+        'clear_cache': clear_cache
+    })
