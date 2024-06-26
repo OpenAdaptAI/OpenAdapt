@@ -25,7 +25,6 @@ INCLUDE_WINDOW_DATA = False
 FILTER_MASKS = True
 INCLUDE_CURRENT_SCREENSHOT = False
 INCLUDE_SEGMENTATIONS = True
-INCLUDE_SEGMENTATION_CENTROIDS = False
 
 
 class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
@@ -83,7 +82,6 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         include_replay_instructions: bool = INCLUDE_REPLAY_INSTRUCTIONS,
         include_current_screenshot: bool = INCLUDE_CURRENT_SCREENSHOT,
         include_segmentations: bool = INCLUDE_SEGMENTATIONS,
-        include_segmentation_centroids: bool = INCLUDE_SEGMENTATION_CENTROIDS,
     ) -> models.ActionEvent | None:
         """Get the next ActionEvent for replay.
 
@@ -107,8 +105,6 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
             include_current_screenshot (bool): Whether to include the current screenshot
                 in the prompt.
             include_segmentations (bool): Whether to include window segmentations
-                in the prompt.
-            include_segmentation_centroids (bool): Whether to include segment centroids
                 in the prompt.
 
         Returns:
@@ -155,16 +151,9 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
         active_screenshot = models.Screenshot.take_screenshot()
         logger.info(f"{active_window=}")
 
-        assert not (
-            include_segmentation_centroids and not include_segmentations
-        ), (
-            "Invalid configuration: "
-            "{include_segmentation_centroids=} {include_segmentations=}"
-        )
-
         if (
             include_segmentations
-            generated_action_event.name in common.MOUSE_EVENTS
+            and generated_action_event.name in common.MOUSE_EVENTS
             and generated_action_event.active_segment_description
         ):
             generated_action_event.screenshot = active_screenshot
@@ -188,17 +177,16 @@ class SegmentReplayStrategy(strategies.base.BaseReplayStrategy):
                     logger.warning(f"{exc=} {len(exceptions)=}")
                 else:
                     break
-            if include_segmentation_centroids:
-                target_centroid = active_window_segmentation.centroids[target_segment_idx]
+            target_centroid = active_window_segmentation.centroids[target_segment_idx]
 
-                # <image space position> = scale_ratio * <window/action space position>
-                # TODO: move this
-                width_ratio, height_ratio = utils.get_scale_ratios(generated_action_event)
-                target_mouse_x = target_centroid[0] / width_ratio + active_window.left
-                target_mouse_y = target_centroid[1] / height_ratio + active_window.top
+            # <image space position> = scale_ratio * <window/action space position>
+            # TODO: move this
+            width_ratio, height_ratio = utils.get_scale_ratios(generated_action_event)
+            target_mouse_x = target_centroid[0] / width_ratio + active_window.left
+            target_mouse_y = target_centroid[1] / height_ratio + active_window.top
 
-                generated_action_event.mouse_x = target_mouse_x
-                generated_action_event.mouse_y = target_mouse_y
+            generated_action_event.mouse_x = target_mouse_x
+            generated_action_event.mouse_y = target_mouse_y
         else:
             # just click wherever the mouse already is
             pass
