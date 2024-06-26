@@ -442,7 +442,7 @@ class SystemTrayIcon:
             action_type (str): The type of action to perform ["visualize", "replay"]
         """
         session = crud.get_new_session(read_only=True)
-        recordings = crud.get_all_recordings(session)
+        recordings = crud.get_recordings(session)
 
         self.recording_actions[action_type] = []
 

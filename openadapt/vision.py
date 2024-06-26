@@ -56,6 +56,22 @@ def get_masks_from_segmented_image(
     return masks
 
 
+def extract_masked_image(image: Image.Image, mask: np.ndarray) -> Image.Image:
+    # Ensure the mask is in the correct format
+    mask = mask.astype(np.uint8) * 255
+
+    # Create a blank (transparent) image
+    masked_image = Image.new("RGBA", image.size)
+
+    # Convert the mask to an image
+    mask_image = Image.fromarray(mask, mode="L")
+
+    # Composite the original image and the blank image using the mask
+    masked_image = Image.composite(image.convert("RGBA"), masked_image, mask_image)
+
+    return masked_image
+
+
 @cache.cache()
 def extract_difference_image(
     new_image: Image.Image,

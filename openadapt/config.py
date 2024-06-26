@@ -1,6 +1,5 @@
 """Configuration module for OpenAdapt."""
 
-
 from enum import Enum
 from typing import Any, ClassVar, Type, Union
 import json
@@ -33,6 +32,7 @@ PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
+DB_FILE_PATH = (DATA_DIR_PATH / "openadapt.db").absolute()
 
 STOP_STRS = [
     "oa.stop",
@@ -124,7 +124,8 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: ClassVar[str] = f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
+    DB_FILE_PATH: str = str(DB_FILE_PATH)
+    DB_URL: ClassVar[str] = f"sqlite:///{DB_FILE_PATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
@@ -428,11 +429,13 @@ def print_config() -> None:
                     """Show an alert to the user."""
                     msg = QMessageBox()
                     msg.setIcon(QMessageBox.Warning)
-                    msg.setText("""
+                    msg.setText(
+                        """
                         An error has occurred. The development team has been notified.
                         Please join the discord server to get help or send an email to
                         help@openadapt.ai
-                        """)
+                        """
+                    )
                     discord_button = QPushButton("Join the discord server")
                     discord_button.clicked.connect(
                         lambda: webbrowser.open("https://discord.gg/yF527cQbDG")

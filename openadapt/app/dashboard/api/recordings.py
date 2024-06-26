@@ -36,7 +36,7 @@ class RecordingsAPI:
     def get_recordings() -> dict[str, list[Recording]]:
         """Get all recordings."""
         session = crud.get_new_session(read_only=True)
-        recordings = crud.get_all_recordings(session)
+        recordings = crud.get_recordings(session)
         return {"recordings": recordings}
 
     @staticmethod
