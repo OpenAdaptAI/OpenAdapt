@@ -17,8 +17,10 @@ import nicegui
 import oa_pynput
 import pycocotools
 import pydicom
+import pyqttoast
 import spacy_alignments
 import ultralytics
+import whisper
 
 from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY
 
@@ -36,6 +38,8 @@ def main() -> None:
         gradio_client,
         ultralytics,
         pycocotools,
+        pyqttoast,
+        whisper,
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
