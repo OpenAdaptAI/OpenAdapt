@@ -15,6 +15,7 @@ import sys
 import gradio_client
 import nicegui
 import oa_pynput
+import pycocotools
 import pydicom
 import spacy_alignments
 import ultralytics
@@ -34,6 +35,7 @@ def main() -> None:
         spacy_alignments,
         gradio_client,
         ultralytics,
+        pycocotools,
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
