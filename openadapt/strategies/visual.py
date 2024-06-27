@@ -374,64 +374,6 @@ def find_similar_image_segmentation(
     return similar_segmentation, similar_segmentation_diff
 
 
-def combine_segmentations(
-    new_image: Image.Image,
-    previous_segmentation: Segmentation,
-    new_descriptions: list[str],
-    new_masked_images: list[Image.Image],
-    new_masks: list[np.ndarray],
-) -> Segmentation:
-    """Combine the previous segmentation with the new segmentation of the differences.
-    Args:
-        new_image: The new image which includes the changes.
-        previous_segmentation: The previous segmentation containing unchanged segments.
-        new_descriptions: Descriptions of the new segments from the difference image.
-        new_masked_images: Masked images of the new segments from the difference image.
-        new_masks: masks of the new segments.
-    Returns:
-        Segmentation: A new segmentation combining both previous and new segments.
-    """
-
-    def masks_overlap(mask1, mask2):
-        """Check if two masks overlap."""
-        return np.any(np.logical_and(mask1, mask2))
-
-    # Calculate the bounding boxes and centroids for the new segments
-    new_bounding_boxes, new_centroids = vision.calculate_bounding_boxes(new_masks)
-
-    # Filter out overlapping previous segments
-    filtered_previous_masked_images = []
-    filtered_previous_descriptions = []
-    filtered_previous_bounding_boxes = []
-    filtered_previous_centroids = []
-    for idx, prev_mask in enumerate(previous_segmentation.masks):
-        if not any(masks_overlap(prev_mask, new_mask) for new_mask in new_masks):
-            filtered_previous_masked_images.append(
-                previous_segmentation.masked_images[idx]
-            )
-            filtered_previous_descriptions.append(
-                previous_segmentation.descriptions[idx]
-            )
-            filtered_previous_bounding_boxes.append(
-                previous_segmentation.bounding_boxes[idx]
-            )
-            filtered_previous_centroids.append(previous_segmentation.centroids[idx])
-
-    # Combine filtered previous segments with new segments
-    combined_masked_images = filtered_previous_masked_images + new_masked_images
-    combined_descriptions = filtered_previous_descriptions + new_descriptions
-    combined_bounding_boxes = filtered_previous_bounding_boxes + new_bounding_boxes
-    combined_centroids = filtered_previous_centroids + new_centroids
-
-    return Segmentation(
-        image=new_image,
-        masked_images=combined_masked_images,
-        descriptions=combined_descriptions,
-        bounding_boxes=combined_bounding_boxes,
-        centroids=combined_centroids,
-    )
-
-
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
@@ -460,28 +402,42 @@ def get_window_segmentation(
         # TODO XXX: create copy of similar_segmentation, but overwrite with segments of
         # regions of new image where segments of similar_segmentation overlap non-zero
         # regions of similar_segmentation_diff
-        difference_image = vision.extract_difference_image(
-            original_image,
-            similar_segmentation.image,
-            tolerance=0.05,
+        # Create a copy of the similar_segmentation
+        logger.info(f"Found similar_segmentation")
+        modified_original_image = similar_segmentation.image.copy()
+        modified_marked_image = similar_segmentation.marked_image.copy()
+        modified_masked_images = [
+            masked_image.copy() for masked_image in similar_segmentation.masked_images
+        ]
+        modified_descriptions = similar_segmentation.descriptions[:]
+        modified_bounding_boxes = similar_segmentation.bounding_boxes[:]
+        modified_centroids = similar_segmentation.centroids[:]
+
+        # Extract the masks from similar_segmentation_diff
+        masks_diff = vision.get_masks_from_segmented_image(similar_segmentation_diff)
+        refined_masks_diff = vision.refine_masks(masks_diff)
+
+        # Iterate through each mask in similar_segmentation and modify it based on masks_diff
+        for mask_idx, mask in enumerate(similar_segmentation.masked_images):
+            overlap_mask = vision.get_overlap_mask(mask, refined_masks_diff[mask_idx])
+            if overlap_mask.max() > 0:
+                modified_masked_images[mask_idx] = vision.extract_masked_images(
+                    original_image, [overlap_mask]
+                )[0]
+
+        if DEBUG:
+            similar_segmentation.image.show()
+
+        modified_segmentation = Segmentation(
+            modified_original_image,
+            modified_marked_image,
+            modified_masked_images,
+            modified_descriptions,
+            modified_bounding_boxes,
+            modified_centroids,
         )
-        new_masks = vision.get_masks_from_segmented_image(difference_image)
-        new_masked_images = vision.extract_masked_images(difference_image, new_masks)
-        new_descriptions = prompt_for_descriptions(
-            difference_image,
-            new_masked_images,
-            action_event.active_segment_description,
-            exceptions,
-        )
-        updated_segmentation = combine_segmentations(
-            difference_image,
-            similar_segmentation,
-            new_descriptions,
-            new_masked_images,
-            new_masks,
-        )
-        similar_segmentation = updated_segmentation
-        return similar_segmentation
+        # Return the modified segmentation object
+        return modified_segmentation
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()
     segmented_image = segmentation_adapter.fetch_segmented_image(original_image)

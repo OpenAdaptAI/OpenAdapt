@@ -57,38 +57,35 @@ def get_masks_from_segmented_image(
 
 
 @cache.cache()
-def extract_difference_image(
-    new_image: Image.Image,
-    old_image: Image.Image,
-    tolerance: float = 0.05,
-) -> Image.Image:
-    """Extract the portion of the new image that is different from the old image.
+def get_overlap_mask(original_mask: Image.Image, diff_mask: Image.Image) -> Image.Image:
+    """Calculates the overlap between the original mask and the difference mask.
 
     Args:
-        new_image: The new image as a PIL Image object.
-        old_image: The old image as a PIL Image object.
-        tolerance: Tolerance level to consider a pixel as different (default is 0.05).
+        original_mask: The original mask image.
+        diff_mask: The difference mask image.
 
     Returns:
-        A PIL Image object representing the difference image.
+        An image representing the overlap mask.
     """
-    new_image_np = np.array(new_image)
-    old_image_np = np.array(old_image)
+    # Convert images to numpy arrays for easier manipulation
+    original_mask_np = np.array(original_mask)
+    diff_mask_np = np.array(diff_mask)
 
-    # Compute the absolute difference between the two images in each color channel
-    diff = np.abs(new_image_np - old_image_np)
+    # Ensure the shapes of the masks are compatible by resizing
+    if original_mask_np.shape != diff_mask_np.shape:
+        logger.warning(
+            f"Mask shapes are different. Resizing diff_mask from {diff_mask_np.shape} to {original_mask_np.shape}"
+        )
+        diff_mask = diff_mask.resize(original_mask.size, Image.NEAREST)
+        diff_mask_np = np.array(diff_mask)
 
-    # Create a mask for the regions where the difference is above the tolerance
-    mask = np.any(diff > (255 * tolerance), axis=-1)
+    # Calculate the overlap: non-zero regions in both masks
+    overlap_mask_np = np.logical_and(original_mask_np > 0, diff_mask_np > 0)
 
-    # Initialize an array for the segmented image
-    segmented_image_np = np.zeros_like(new_image_np)
+    # Convert the overlap mask back to an image
+    overlap_mask = Image.fromarray((overlap_mask_np * 255).astype(np.uint8))
 
-    # Set the pixels that are different in the new image
-    segmented_image_np[mask] = new_image_np[mask]
-
-    # Convert the numpy array back to an image
-    return Image.fromarray(segmented_image_np)
+    return overlap_mask
 
 
 @cache.cache()
