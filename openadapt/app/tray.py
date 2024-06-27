@@ -60,6 +60,7 @@ APP_DOWNLOAD_BASE_URL = "https://github.com/OpenAdaptAI/OpenAdapt/releases/downl
 CANCEL_APP_DOWNLOAD = False
 CURRENT_VERSION = get_version()
 LATEST_VERSION = get_latest_version()
+DOWNLOAD_TOAST_UPDATE_TIME = 3
 
 
 class TrackedQAction(QAction):
@@ -118,7 +119,7 @@ class SystemTrayIcon(QObject):
     # storing actions is required to prevent garbage collection
     recording_actions = {"visualize": [], "replay": []}
     download_complete = Signal(str)
-    download_start_toast = Signal(str, int)
+    download_start_toast = Signal(str)
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
@@ -185,6 +186,7 @@ class SystemTrayIcon(QObject):
         self.download_start_toast.connect(self.download_start_toast_slot)
 
         self.menu.addAction(self.download_update_action)
+        self.download_progress_toast = None
 
         self.quit = TrackedQAction("Quit")
 
@@ -222,10 +224,18 @@ class SystemTrayIcon(QObject):
         self.show_toast("Stopping download...", duration=4000)
         CANCEL_APP_DOWNLOAD = True
 
-    @Slot(str, int)
-    def download_start_toast_slot(self, message: str, duration: int) -> None:
+    @Slot(str)
+    def download_start_toast_slot(self, message: str) -> None:
         """Shows download start toast depending on emitted signal."""
-        self.show_toast(message, duration=duration)
+        self.download_progress_toast = self.show_toast(
+            message,
+            duration=DOWNLOAD_TOAST_UPDATE_TIME * 1000 - 50,
+            always_on_main_screen=True,
+            reset_duration_on_hover=False,
+            fade_in_duration=0,
+            fade_out_duration=0,
+            show_duration_bar=False,
+        )
 
     @Slot(str)
     def download_complete_slot(self, message: str) -> None:
@@ -256,8 +266,8 @@ class SystemTrayIcon(QObject):
         total_size = response.headers.get("content-length")
         total_size = int(total_size) if total_size else None
         block_size = 1024  # 1 Kilobyte
-        start_time = time.time()  # Track start time for elapsed time calculation
-        download_started = False
+        start_time = time.time()
+        last_update_time = start_time
         with open(local_filename, "wb") as file, tqdm(
             total=total_size, unit="B", unit_scale=True, desc=FILE_NAME
         ) as progress_bar:
@@ -267,14 +277,15 @@ class SystemTrayIcon(QObject):
                     return
                 file.write(data)
                 progress_bar.update(len(data))
+                current_time = time.time()
 
                 if (
-                    not download_started
+                    current_time - last_update_time > DOWNLOAD_TOAST_UPDATE_TIME
                     and progress_bar.n > 0
                     and progress_bar.n < progress_bar.total
-                    and time.time() - start_time > 5
                 ):
-                    elapsed_time = time.time() - start_time
+                    elapsed_time = current_time - start_time
+                    last_update_time = current_time
                     rate = progress_bar.n / elapsed_time
                     eta_seconds_actual = (progress_bar.total - progress_bar.n) / rate
                     # convert to minutes
@@ -282,14 +293,11 @@ class SystemTrayIcon(QObject):
                     eta_seconds_formatted = eta_seconds_actual % 60
                     eta_formatted = f"{eta_minutes}:{int(eta_seconds_formatted):02d}"
 
-                    download_started = True
-
                     progress_message = f"Downloading in {eta_formatted} minutes"
-                    toast_duration = int(eta_seconds_actual * 1000)
-                    self.download_start_toast.emit(progress_message, toast_duration)
+                    self.download_start_toast.emit(progress_message)
 
         unzip_file(local_filename)
-        self.download_complete.emit("Download Complete")
+        self.download_complete.emit("Download & Unzipping Complete")
 
     def check_and_download_latest_version(self) -> None:
         """Checks and Download latest version."""
@@ -781,7 +789,8 @@ class SystemTrayIcon(QObject):
             toast.setDurationBarColor(duration_bar_color)
             toast.setIconColor(icon_color)
             toast.setIconSeparatorColor(icon_separator_color)
-            toast.setShowDurationBar(show_duration_bar)
+
+        toast.setShowDurationBar(show_duration_bar)
 
         # Font settings are typically safe to apply regardless of preset
         toast.setTitleFont(title_font)
