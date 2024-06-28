@@ -57,38 +57,6 @@ def get_masks_from_segmented_image(
 
 
 @cache.cache()
-def get_overlap_mask(original_mask: Image.Image, diff_mask: Image.Image) -> Image.Image:
-    """Calculates the overlap between the original mask and the difference mask.
-
-    Args:
-        original_mask: The original mask image.
-        diff_mask: The difference mask image.
-
-    Returns:
-        An image representing the overlap mask.
-    """
-    # Convert images to numpy arrays for easier manipulation
-    original_mask_np = np.array(original_mask)
-    diff_mask_np = np.array(diff_mask)
-
-    # Ensure the shapes of the masks are compatible by resizing
-    if original_mask_np.shape != diff_mask_np.shape:
-        logger.warning(
-            f"Mask shapes are different. Resizing diff_mask from {diff_mask_np.shape} to {original_mask_np.shape}"
-        )
-        diff_mask = diff_mask.resize(original_mask.size, Image.NEAREST)
-        diff_mask_np = np.array(diff_mask)
-
-    # Calculate the overlap: non-zero regions in both masks
-    overlap_mask_np = np.logical_and(original_mask_np > 0, diff_mask_np > 0)
-
-    # Convert the overlap mask back to an image
-    overlap_mask = Image.fromarray((overlap_mask_np * 255).astype(np.uint8))
-
-    return overlap_mask
-
-
-@cache.cache()
 def filter_masks_by_size(
     masks: list[np.ndarray],
     min_mask_size: tuple[int, int] = (15, 15),
