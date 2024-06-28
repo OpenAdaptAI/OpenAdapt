@@ -189,6 +189,9 @@ class Config(BaseSettings):
         "children",
     ]
 
+    # Screenshot capture
+    CAPTURE_ALL_MONITORS: bool = False
+
     @field_validator("SCRUB_FILL_COLOR")
     @classmethod
     def validate_scrub_fill_color(cls, v: Union[str, int]) -> int:  # noqa: ANN102
