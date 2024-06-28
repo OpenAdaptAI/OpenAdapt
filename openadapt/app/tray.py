@@ -77,14 +77,17 @@ class TrackedQAction(QAction):
 
 
 class Worker(QObject):
+    """Worker to handle signals from the recording process."""
+
     data = Signal(dict)
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the worker."""
         parent_conn = kwargs.pop("parent_conn")
         super().__init__(*args, **kwargs)
         self.parent_conn = parent_conn
 
-    def run(self):
+    def run(self) -> None:
         """Run the worker."""
         while True:
             if self.parent_conn.poll():
