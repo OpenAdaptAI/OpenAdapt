@@ -6,9 +6,9 @@ if __name__ == "__main__":
     # This needs to be called before any code that uses multiprocessing
     multiprocessing.freeze_support()
 
-from datetime import datetime
+from loguru import logger
 
-from openadapt.build_utils import get_root_dir_path, redirect_stdout_stderr
+from openadapt.build_utils import redirect_stdout_stderr
 
 
 def run_openadapt() -> None:
@@ -23,8 +23,7 @@ def run_openadapt() -> None:
             load_alembic_context()
             tray._run()
         except Exception as exc:
-            # TODO: log all exceptions to a file
-            print(f"{datetime.now()}: {exc}")
+            logger.exception(exc)
 
 
 if __name__ == "__main__":
