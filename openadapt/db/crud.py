@@ -5,12 +5,16 @@ Module: crud.py
 
 from typing import Any, TypeVar
 import asyncio
+import importlib.metadata
 import json
 import os
+import pickle
+import sys
 import time
 
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
+import git
 import psutil
 import sqlalchemy as sa
 
@@ -23,6 +27,8 @@ from openadapt.models import (
     MemoryStat,
     PerformanceStat,
     Recording,
+    Replay,
+    ReplayLog,
     Screenshot,
     ScrubbedRecording,
     WindowEvent,
@@ -690,6 +696,72 @@ def get_audio_info(
     """
     audio_infos = _get(session, AudioInfo, recording.id)
     return audio_infos[0] if audio_infos else None
+
+
+def add_replay(
+    session: SaSession,
+    strategy_name: str,
+    strategy_args: dict,
+) -> int:
+    """Add a replay to the database.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        strategy_name (str): The name of the replay strategy.
+        strategy_args (dict): The arguments of the replay strategy.
+
+    Returns:
+        int: The id of the replay.
+    """
+    git_hash = utils.get_git_hash()
+    timestamp = utils.get_timestamp()
+    replay = Replay(
+        timestamp=timestamp,
+        strategy_name=strategy_name,
+        strategy_args=strategy_args,
+        git_hash=git_hash,
+    )
+    session.add(replay)
+    session.commit()
+    session.refresh(replay)
+    return replay.id
+
+
+def add_replay_log(*, replay_id: int, log_level: str, key: str, data: Any) -> None:
+    """Add a replay log entry to the database.
+
+    Args:
+        replay_id (int): The id of the replay.
+        log_level (str): The log level of the log entry.
+        key (str): The key of the log entry.
+        data (Any): The data of the log entry.
+    """
+    with get_new_session(read_and_write=True) as session:
+        pickled_data = pickle.dumps(data)
+
+        frame = sys._getframe(1)
+        caller_line = frame.f_lineno
+        caller_file = frame.f_code.co_filename
+
+        git_hash = utils.get_git_hash()
+        timestamp = utils.get_timestamp()
+
+        logger.info(
+            f"{caller_line=}, {caller_file=}, {git_hash=}, {timestamp=}, {log_level=},"
+            f" {key=}"
+        )
+        replay_log = ReplayLog(
+            replay_id=replay_id,
+            lineno=caller_line,
+            filename=caller_file,
+            git_hash=git_hash,
+            timestamp=timestamp,
+            log_level=log_level,
+            key=key,
+            data=pickled_data,
+        )
+        session.add(replay_log)
+        session.commit()
 
 
 def post_process_events(session: SaSession, recording: Recording) -> None:

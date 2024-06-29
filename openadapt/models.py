@@ -19,7 +19,6 @@ from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 
-
 EMPTY_VALS = [None, "", [], (), {}]
 
 
@@ -930,6 +929,24 @@ class Replay(db.Base):
     strategy_name = sa.Column(sa.String)
     strategy_args = sa.Column(sa.JSON)
     git_hash = sa.Column(sa.String)
+    logs = sa.orm.relationship("ReplayLog", back_populates="replay")
+
+
+class ReplayLog(db.Base):
+    """Class representing a replay log in the database."""
+
+    __tablename__ = "replay_log"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    replay_id = sa.Column(sa.ForeignKey("replay.id"))
+    replay = sa.orm.relationship("Replay", back_populates="logs")
+    lineno = sa.Column(sa.Integer)
+    filename = sa.Column(sa.String)
+    git_hash = sa.Column(sa.String)
+    timestamp = sa.Column(ForceFloat)
+    log_level = sa.Column(sa.String)
+    key = sa.Column(sa.String)
+    data = sa.Column(sa.LargeBinary)
 
 
 def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:
