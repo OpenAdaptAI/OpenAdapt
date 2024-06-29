@@ -12,10 +12,13 @@ import inspect
 import multiprocessing
 import os
 import sys
-
+import requests
+import threading
+from tqdm import tqdm
+import time
 from loguru import logger
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
-from PySide6.QtCore import QMargins, QObject, QSize, Qt, QThread, Signal
+from PySide6.QtCore import QMargins, QSize, Qt, Signal, QObject, Slot, QThread
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,17 +42,24 @@ from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
 from openadapt.build_utils import is_running_from_executable
+from openadapt.update_utils import unzip_file
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.utils import get_posthog_instance
 from openadapt.visualize import main as visualize
+from build_scripts.get_version import get_version, get_latest_version
+from packaging.version import Version
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
+APP_DOWNLOAD_BASE_URL = "https://github.com/OpenAdaptAI/OpenAdapt/releases/download"
+CURRENT_VERSION = get_version()
+LATEST_VERSION = get_latest_version()
+DOWNLOAD_TOAST_UPDATE_TIME = 3
 
 
 class TrackedQAction(QAction):
@@ -98,7 +108,7 @@ class Worker(QObject):
                 self.data.emit(data)
 
 
-class SystemTrayIcon:
+class SystemTrayIcon(QObject):
     """System tray icon for OpenAdapt."""
 
     recording = False
@@ -107,9 +117,12 @@ class SystemTrayIcon:
 
     # storing actions is required to prevent garbage collection
     recording_actions = {"visualize": [], "replay": []}
+    download_complete = Signal(str)
+    download_start_toast = Signal(str)
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
+        super().__init__()
         self.app = QApplication([])
 
         if sys.platform == "darwin":
@@ -122,6 +135,7 @@ class SystemTrayIcon:
             )
 
         self.app.setQuitOnLastWindowClosed(False)
+        self.cancel_download_event = threading.Event()
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
@@ -155,6 +169,25 @@ class SystemTrayIcon:
         # self.app_action.triggered.connect(self.show_app)
         # self.menu.addAction(self.app_action)
 
+        self.dashboard_action = TrackedQAction("Launch Dashboard")
+        self.dashboard_action.triggered.connect(self.launch_dashboard)
+        self.menu.addAction(self.dashboard_action)
+
+        self.download_button_text = (
+            f"Download Latest Version v{LATEST_VERSION}"
+            if Version(CURRENT_VERSION) < Version(LATEST_VERSION)
+            else "No updates available"
+        )
+        self.download_update_action = TrackedQAction(self.download_button_text)
+        self.download_update_action.triggered.connect(self.download_latest_app_version)
+        # Connect download_complete signal to show_toast slot
+        self.download_complete.connect(self.download_complete_slot)
+        # Connect download_start_toast signal to download_start_toast_slot
+        self.download_start_toast.connect(self.download_start_toast_slot)
+
+        self.menu.addAction(self.download_update_action)
+        self.download_progress_toast = None
+
         self.quit = TrackedQAction("Quit")
 
         def _quit() -> None:
@@ -184,6 +217,108 @@ class SystemTrayIcon:
         self.sticky_toasts = {}
 
         self.launch_dashboard()
+
+    def stop_download(self) -> None:
+        """Stops download when button clicked."""
+        self.cancel_download_event.set()
+        self.show_toast("Stopping download...", duration=4000)
+
+    @Slot(str)
+    def download_start_toast_slot(self, message: str) -> None:
+        """Shows download start toast depending on emitted signal."""
+        self.download_progress_toast = self.show_toast(
+            message,
+            duration=DOWNLOAD_TOAST_UPDATE_TIME * 1000 - 50,
+            always_on_main_screen=True,
+            reset_duration_on_hover=False,
+            fade_in_duration=0,
+            fade_out_duration=0,
+            show_duration_bar=False,
+        )
+
+    @Slot(str)
+    def download_complete_slot(self, message: str) -> None:
+        """Shows download start toast and update button text based on signal."""
+        self.show_toast(message)
+        self.download_update_action.setText(self.download_button_text)
+        self.cancel_download_event.clear()
+
+    def download_latest_version(self, base_url: str, latest_version: str) -> None:
+        """Download latest version of the app."""
+        DOWNLOAD_URL = ""
+        FILE_NAME = ""
+
+        if sys.platform == "darwin":
+            FILE_NAME = f"OpenAdapt-v{latest_version}.app.zip"
+            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+        else:
+            FILE_NAME = f"OpenAdapt-v{latest_version}.zip"
+            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+
+        downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+        local_filename = os.path.join(downloads_path, FILE_NAME)
+
+        response = requests.get(DOWNLOAD_URL, stream=True)
+        total_size = response.headers.get("content-length")
+        total_size = int(total_size) if total_size else None
+        block_size = 1024  # 1 Kilobyte
+        start_time = time.time()
+        last_update_time = start_time
+        with open(local_filename, "wb") as file, tqdm(
+            total=total_size, unit="B", unit_scale=True, desc=FILE_NAME
+        ) as progress_bar:
+            for data in response.iter_content(block_size):
+                if self.cancel_download_event.is_set():
+                    self.cancel_download_event.clear()
+                    return
+                file.write(data)
+                progress_bar.update(len(data))
+                current_time = time.time()
+
+                if (
+                    current_time - last_update_time > DOWNLOAD_TOAST_UPDATE_TIME
+                    and progress_bar.n > 0
+                    and progress_bar.n < progress_bar.total
+                ):
+                    elapsed_time = current_time - start_time
+                    last_update_time = current_time
+                    rate = progress_bar.n / elapsed_time
+                    eta_seconds_actual = (progress_bar.total - progress_bar.n) / rate
+                    # convert to minutes
+                    eta_minutes = int(eta_seconds_actual // 60)
+                    eta_seconds_formatted = eta_seconds_actual % 60
+                    eta_formatted = f"{eta_minutes}:{int(eta_seconds_formatted):02d}"
+
+                    progress_message = f"Downloading in {eta_formatted} minutes"
+                    self.download_start_toast.emit(progress_message)
+
+        unzip_file(local_filename)
+        self.download_complete.emit("Download & Unzipping Complete")
+
+    def check_and_download_latest_version(self) -> None:
+        """Checks and Download latest version."""
+        if Version(CURRENT_VERSION) >= Version(LATEST_VERSION):
+            self.show_toast("You are already on the latest version.")
+            return
+
+        self.show_toast("Downloading the latest version...", duration=4000)
+        download_thread = threading.Thread(
+            target=self.download_latest_version,
+            args=(APP_DOWNLOAD_BASE_URL, LATEST_VERSION),
+        )
+        download_thread.start()
+
+    def download_latest_app_version(self) -> None:
+        """Main function called when download button is clicked.
+
+        This calls the necessary function according to the condition.
+        """
+        if self.download_update_action.text() == "Stop Download":
+            self.stop_download()
+            self.download_update_action.setText(self.download_button_text)
+        elif not self.cancel_download_event.is_set():
+            self.download_update_action.setText("Stop Download")
+            self.check_and_download_latest_version()
 
     def handle_recording_signal(
         self,
@@ -648,7 +783,8 @@ class SystemTrayIcon:
             toast.setDurationBarColor(duration_bar_color)
             toast.setIconColor(icon_color)
             toast.setIconSeparatorColor(icon_separator_color)
-            toast.setShowDurationBar(show_duration_bar)
+
+        toast.setShowDurationBar(show_duration_bar)
 
         # Font settings are typically safe to apply regardless of preset
         toast.setTitleFont(title_font)
