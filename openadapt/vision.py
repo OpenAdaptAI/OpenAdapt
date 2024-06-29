@@ -237,11 +237,18 @@ def extract_masked_images(
         cropped_mask = mask[rmin : rmax + 1, cmin : cmax + 1]
         cropped_image = original_image_np[rmin : rmax + 1, cmin : cmax + 1]
 
+        # Ensure the cropped image has the correct shape
+        if cropped_image.ndim == 2:  # Grayscale image
+            cropped_image = cropped_image[:, :, None]
+        elif cropped_image.shape[2] != 1:  # Color image
+            cropped_image = cropped_image[:, :, :3]  # Keep RGB channels only
+
+        # Ensure the mask has the correct shape
+        reshaped_mask = cropped_mask[:, :, None]
+
         # Apply the mask
-        masked_image = np.where(cropped_mask[:, :, None], cropped_image, 0).astype(
-            np.uint8
-        )
-        masked_images.append(Image.fromarray(masked_image))
+        masked_image = np.where(reshaped_mask, cropped_image, 0).astype(np.uint8)
+        masked_images.append(Image.fromarray(masked_image.squeeze()))
 
     logger.info(f"{len(masked_images)=}")
     return masked_images
