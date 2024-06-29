@@ -1,7 +1,7 @@
 from loguru import logger
 from PIL import Image
 import numpy as np
-from openadapt import vision
+from openadapt import vision, adapters
 import cv2
 from skimage.metrics import structural_similarity as ssim
 
@@ -130,17 +130,18 @@ def find_matching_sections_ssim(
                 if score >= threshold:
                     matching_image[y : y + block_size, x : x + block_size] = 255
 
-    # Convert matching regions back to RGB or RGBA for visualization
-    if image_1.mode == "RGBA":
-        matching_image_rgb = cv2.cvtColor(matching_image, cv2.COLOR_GRAY2RGBA)
-        highlight_color = [255, 0, 0, 255]  # Red with full opacity for RGBA
-    else:
-        matching_image_rgb = cv2.cvtColor(matching_image, cv2.COLOR_GRAY2RGB)
-        highlight_color = [255, 0, 0]  # Red for RGB
-
     # Create an overlay to highlight matching regions on the original image
-    overlay = np.array(image_1)
-    overlay[matching_image == 255] = highlight_color
+    overlay = np.zeros_like(np.array(image_1), dtype=np.uint8)
+
+    # Apply the overlay to the matching regions
+    for c in range(0, 3):  # For each color channel
+        overlay[:, :, c] = np.where(
+            matching_image == 255, np.array(image_1)[:, :, c], 0
+        )
+
+    # For RGBA images, set the alpha channel to 255 (fully opaque) for matching sections
+    if image_1.mode == "RGBA":
+        overlay[:, :, 3] = np.where(matching_image == 255, 255, 0)
 
     # Convert back to PIL Image
     matching_image_pil = Image.fromarray(overlay)
@@ -162,13 +163,9 @@ def visualize(image_1: Image, image_2: Image):
     try:
         images = []
 
-        images.append(image_1)
-
         matching_image = find_matching_sections_ssim(image_1, image_2)
-        images.append(matching_image)
 
         difference_image = extract_difference_image(image_2, image_1, tolerance=0.05)
-        images.append(difference_image)
 
         old_masks = vision.get_masks_from_segmented_image(image_1)
         new_masks = vision.get_masks_from_segmented_image(difference_image)
@@ -176,7 +173,30 @@ def visualize(image_1: Image, image_2: Image):
         combined_image = combine_images_with_masks(
             image_1, difference_image, old_masks, new_masks
         )
+
+        segmentation_adapter = adapters.get_default_segmentation_adapter()
+        ref_segmented_image = segmentation_adapter.fetch_segmented_image(image_1)
+        new_segmented_image = segmentation_adapter.fetch_segmented_image(image_2)
+        matching_image_segment = segmentation_adapter.fetch_segmented_image(
+            matching_image
+        )
+        non_matching_image_Segment = segmentation_adapter.fetch_segmented_image(
+            difference_image
+        )
+        combined_image_segment = segmentation_adapter.fetch_segmented_image(
+            combined_image
+        )
+
+        images.append(image_1)
+        images.append(ref_segmented_image)
+        images.append(image_2)
+        images.append(new_segmented_image)
+        images.append(matching_image)
+        images.append(matching_image_segment)
+        images.append(difference_image)
+        images.append(non_matching_image_Segment)
         images.append(combined_image)
+        images.append(combined_image_segment)
 
         for image in images:
             image.show()
@@ -186,6 +206,6 @@ def visualize(image_1: Image, image_2: Image):
 
 
 # Example usage
-img_1 = Image.open("./winCalOld.png")
-img_2 = Image.open("./winCalNew.png")
+img_2 = Image.open("../experiments/winCalNew.png")
+img_1 = Image.open("../experiments/winCalOld.png")
 visualize(img_1, img_2)
