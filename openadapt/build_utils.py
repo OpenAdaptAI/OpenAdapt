@@ -3,6 +3,7 @@
 import importlib.metadata
 import pathlib
 import sys
+import time
 
 
 def get_root_dir_path() -> pathlib.Path:
