@@ -57,7 +57,6 @@ import openadapt.strategies  # noqa: F401
 
 ICON_PATH = os.path.join(FPATH, "assets", "logo.png")
 APP_DOWNLOAD_BASE_URL = "https://github.com/OpenAdaptAI/OpenAdapt/releases/download"
-CANCEL_APP_DOWNLOAD = False
 CURRENT_VERSION = get_version()
 LATEST_VERSION = get_latest_version()
 DOWNLOAD_TOAST_UPDATE_TIME = 3
@@ -136,6 +135,7 @@ class SystemTrayIcon(QObject):
             )
 
         self.app.setQuitOnLastWindowClosed(False)
+        self.cancel_download_event = threading.Event()
 
         # currently required for pyqttoast
         # TODO: remove once https://github.com/niklashenning/pyqt-toast/issues/9
@@ -220,9 +220,8 @@ class SystemTrayIcon(QObject):
 
     def stop_download(self) -> None:
         """Stops download when button clicked."""
-        global CANCEL_APP_DOWNLOAD
+        self.cancel_download_event.set()
         self.show_toast("Stopping download...", duration=4000)
-        CANCEL_APP_DOWNLOAD = True
 
     @Slot(str)
     def download_start_toast_slot(self, message: str) -> None:
@@ -240,15 +239,12 @@ class SystemTrayIcon(QObject):
     @Slot(str)
     def download_complete_slot(self, message: str) -> None:
         """Shows download start toast and update button text based on signal."""
-        global CANCEL_APP_DOWNLOAD
         self.show_toast(message)
         self.download_update_action.setText(self.download_button_text)
-        CANCEL_APP_DOWNLOAD = True
+        self.cancel_download_event.clear()
 
     def download_latest_version(self, base_url: str, latest_version: str) -> None:
         """Download latest version of the app."""
-        global CANCEL_APP_DOWNLOAD
-
         DOWNLOAD_URL = ""
         FILE_NAME = ""
 
@@ -272,8 +268,8 @@ class SystemTrayIcon(QObject):
             total=total_size, unit="B", unit_scale=True, desc=FILE_NAME
         ) as progress_bar:
             for data in response.iter_content(block_size):
-                if CANCEL_APP_DOWNLOAD:
-                    CANCEL_APP_DOWNLOAD = False
+                if self.cancel_download_event.is_set():
+                    self.cancel_download_event.clear()
                     return
                 file.write(data)
                 progress_bar.update(len(data))
@@ -317,12 +313,10 @@ class SystemTrayIcon(QObject):
 
         This calls the necessary function according to the condition.
         """
-        global CANCEL_APP_DOWNLOAD
-
         if self.download_update_action.text() == "Stop Download":
             self.stop_download()
             self.download_update_action.setText(self.download_button_text)
-        elif not CANCEL_APP_DOWNLOAD:
+        elif not self.cancel_download_event.is_set():
             self.download_update_action.setText("Stop Download")
             self.check_and_download_latest_version()
 
