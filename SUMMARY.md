@@ -3,7 +3,11 @@
 ## Getting Started
 
 * [🤖 Welcome to OpenAdapt!](README.md)
-  * [Quick Start](getting-started/welcome-to-openadapt/quick-start.md)
+  * [User Guide](getting-started/welcome-to-openadapt/user-guide.md)
+  * [Developer Guide](getting-started/welcome-to-openadapt/developer-guide.md)
+
+## Legacy Guide
+* [User Guide](legacy/getting-started/quick-start.md)
 
 ## Reference
 
