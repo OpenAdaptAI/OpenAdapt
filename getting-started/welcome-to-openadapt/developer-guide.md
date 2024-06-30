@@ -2,8 +2,6 @@
 description: Working with OpenAdapt
 ---
 
-# Developer Guide
-
 {% hint style="info" %}
 **Experiencing difficulty? Get support on our** [**Discord**](https://discord.gg/QKPuDqhDHF)**.**
 {% endhint %}
@@ -64,13 +62,13 @@ alembic upgrade head
 {% tab title="Scripted Installation" %}
 [Download](https://openadapt.ai/#start)
 
-# Windows:
+## Windows:
 
 - Press Windows Key, type "powershell", and press Enter
 - Copy and paste the following command into the terminal, and press Enter (If Prompted for `User Account Control`, click 'Yes'):
 - `Start-Process powershell -Verb RunAs -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', "iwr -UseBasicParsing -Uri 'https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/install/install_openadapt.ps1' | Invoke-Expression"`
 
-# MacOS:
+## MacOS:
 
 - Download and install Git and Python 3.10
 - Press Command+Space, type "terminal", and press Enter
@@ -80,7 +78,7 @@ alembic upgrade head
 {% endtab %}
 {% endtabs %}
 
-# Permissions(IMPORTANT)
+## Permissions(IMPORTANT)
 
 See how to set up system permissions on macOS [here](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/permissions_in_macOS.md).
 
@@ -89,9 +87,9 @@ See how to set up system permissions on macOS [here](https://github.com/OpenAdap
 `pytest` to verify that the installation was successful.
 {% endhint %}
 
-## Usage
+# Usage
 
-# Shell
+## Shell
 
 Run this in every new terminal window once (while inside the `OpenAdapt` root directory) before running any `openadapt` commands below. This is required to activate the pythom environment:
 
@@ -108,20 +106,21 @@ Using python3.10 (3.10.13)
 
 Notice the environment prefix `(openadapt-py3.10)`.
 
-![image](./assets/poetry-shell.png)
+<img width="100%" src="./assets/poetry-shell.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
-# Run app locally for testing
+## Run app locally for testing
 
 `python -m openadapt.entrypoint`
 
 CLI would look something like this after the command
-![image](./assets/developer-run-local.png)
+
+<img width="100%" src="./assets/developer-run-local.png.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 After it runs successfully, you will see an app tray at top right of screen
 
-![image](./assets/app-tray.png)
+<img width="100%" src="./assets/app-tray.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
-# Make your first recording
+## Make your first recording
 
 {% hint style="info" %}
 
@@ -133,7 +132,7 @@ To make your first recording, try the following command:
 python -m openadapt.record "testing out openadapt"
 ```
 
-![image](./assets/start-recording-commad.png)
+<img width="100%" src="./assets/start-recording-commad.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 Wait until all three event writers have started:
 
@@ -143,7 +142,7 @@ Wait until all three event writers have started:
 | INFO     | __mp_main__:write_events:230 - event_type='window' starting
 ```
 
-![image](./assets/post-recording-start.png)
+<img width="100%" src="./assets/post-recording-start.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 To stop recording, focus the terminal and send **CTRL+C (SIGINT)**. The recording is finished saving when you see something like this:
 
@@ -158,14 +157,14 @@ To stop recording, focus the terminal and send **CTRL+C (SIGINT)**. The recordin
 | INFO     | __mp_main__:performance_stats_writer:433 - performance stats writer done
 ```
 
-![image](./assets/recording-saved.png)
+<img width="100%" src="./assets/recording-saved.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 Current limitations:
 
 - Recording should be short (i.e. under a minute), as they are somewhat memory intensive, and there is currently an [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/5) describing a possible memory leak.
 - The only touchpad and trackpad gestures currently supported are pointing the cursor and left or right clicking, as described in this [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
-# Visualize
+## Visualize
 
 - Quickly visualize the latest recording you created by running the following command:
 
@@ -173,15 +172,16 @@ Current limitations:
 
 This will generate an HTML file and open a tab in your browser that looks something like this:
 
-![image](./assets/visualize-1.png)
+<img width="100%" src="./assets/visualize-1.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 - For a more powerful dashboard, run:
 
 `python -m openadapt.app.dashboard.run`
 
-![image](./assets/visualize-2.png)
+<img width="100%" src="./assets/visualize-2.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
-![image](./assets/visualize-2-1.png)
+
+<img width="100%" src="./assets/visualize-2-1.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
 - For a desktop app-based visualization, run:
 
@@ -191,9 +191,9 @@ Read more on [openadapt.visualize](../../reference/api-reference/openadapt-modul
 
 This will open a scrollable window that looks something like this:
 
-![image](./assets/visualize-3.png)
+<img width="100%" src="./assets/visualize-3.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
-# Playback
+## Playback
 
 You can play back the recording using the following command:
 
@@ -213,14 +213,14 @@ e.g.: `python -m openadapt.replay VanillaReplayStrategy --instructions "calculat
 
 See [strategy list](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies) for a complete list. More ReplayStrategies coming soon!
 
-## Features
+# Features
 
-# System Tray Icon and Client GUI App(work-in-progress)
+## System Tray Icon and Client GUI App(work-in-progress)
 
 `python3 -m openadapt.start`
 
-![image](./assets/client.png)
+<img width="100%" src="./assets/client.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
 
-# Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
+## Detailed performance monitoring via [pympler](https://pympler.readthedocs.io/en/latest/) and [tracemalloc](https://docs.python.org/3/library/tracemalloc.html):
 
-![image](./assets/visualize-3.png)
+<img width="100%" src="./assets/visualize-3.png" class="r-z2wwpe r-dnmrzs" height="auto"/>
