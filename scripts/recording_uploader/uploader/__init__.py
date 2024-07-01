@@ -1,1 +1,1 @@
-"""Init file for the uploader package."""
+"""Init file for the uploader module."""
