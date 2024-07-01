@@ -32,6 +32,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_FILE_PATH = DATA_DIR_PATH / "openadapt.db"
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
@@ -138,6 +139,7 @@ class Config(BaseSettings):
 
     # Record and replay
     RECORD_WINDOW_DATA: bool = True
+    RECORD_BROWSER_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
@@ -168,6 +170,9 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
+
+    # Database File Path
+    DATABASE_FILE_PATH: str = str(DATABASE_FILE_PATH)
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -396,9 +401,10 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     Returns:
         str: The possibly obfuscated configuration parameter value.
     """
-    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
+    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
+        val = str(val)
         val = obfuscate(val)
     return val
 

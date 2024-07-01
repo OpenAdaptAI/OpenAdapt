@@ -13,7 +13,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import window
+from openadapt import browser, window
 from openadapt.config import config
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
@@ -83,6 +83,11 @@ class Recording(db.Base):
         back_populates="recording",
         order_by="WindowEvent.timestamp",
     )
+    browser_events = sa.orm.relationship(
+        "BrowserEvent",
+        back_populates="recording",
+        order_by="BrowserEvent.timestamp",
+    )
     scrubbed_recordings = sa.orm.relationship(
         "ScrubbedRecording",
         back_populates="recording",
@@ -127,6 +132,8 @@ class ActionEvent(db.Base):
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
     window_event_timestamp = sa.Column(ForceFloat)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
+    browser_event_timestamp = sa.Column(ForceFloat)
+    browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -212,6 +219,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -573,6 +581,36 @@ class WindowEvent(db.Base):
             window_dict["state"].pop("data")
         window_dict["state"].pop("meta")
         return window_dict
+
+
+class BrowserEvent(db.Base):
+    """Class representing a browser event in the database."""
+
+    __tablename__ = "browser_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    message = sa.Column(sa.String)
+    timestamp = sa.Column(ForceFloat)
+
+    recording = sa.orm.relationship("Recording", back_populates="browser_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    # # TODO: implement for extension
+    # @classmethod
+    # def get_active_browser_event(
+    #     cls: "BrowserEvent",
+    # ) -> "BrowserEvent":
+    #     """Get the active browser event.
+
+    #     Args:
+    #         None
+
+    #     Returns:
+    #         (BrowserEvent) the active Browser event.
+    #     """
+    #     return BrowserEvent(**)
 
 
 class FrameCache:

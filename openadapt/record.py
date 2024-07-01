@@ -31,10 +31,12 @@ with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
+import asyncio
 import numpy as np
 import psutil
 import sounddevice
 import soundfile
+import websockets
 import whisper
 
 from openadapt import plotting, utils, video, window
@@ -45,7 +47,7 @@ from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window")
+EVENT_TYPES = ("screen", "action", "window", "browser")
 LOG_LEVEL = "INFO"
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -53,6 +55,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "screen/video": True,
     "action": True,
     "window": True,
+    "browser": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
@@ -128,6 +131,7 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    browser_write_q: sq.SynchronizedQueue,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
@@ -136,6 +140,7 @@ def process_events(
     num_screen_events: multiprocessing.Value,
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
+    num_browser_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -145,6 +150,7 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        browser_write_q: A queue for writing browser events,
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording: The recording object.
@@ -153,6 +159,7 @@ def process_events(
         num_screen_events: A counter for the number of screen events.
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
+        num_browser_events: A counter for the number of browser events.
         num_video_events: A counter for the number of video events.
     """
     utils.set_start_time(recording.timestamp)
@@ -162,8 +169,10 @@ def process_events(
     prev_event = None
     prev_screen_event = None
     prev_window_event = None
+    prev_browser_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+    prev_saved_browser_timestamp = 0
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
@@ -197,6 +206,17 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+        elif event.type == "browser":
+            # logger.info("Processing browser event")
+            prev_browser_event = event
+            # process_event(
+            #     prev_browser_event,
+            #     browser_write_q,
+            #     write_browser_event,
+            #     recording,
+            #     perf_q,
+            # )
+            # num_browser_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -204,8 +224,14 @@ def process_events(
             if prev_window_event is None:
                 logger.warning("Discarding input that came before window")
                 continue
+            if prev_browser_event is None:
+                logger.warning("Discarding input that came before browser")
+                continue
+
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
+            event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+
             process_event(
                 event,
                 action_write_q,
@@ -213,7 +239,20 @@ def process_events(
                 recording,
                 perf_q,
             )
+
             num_action_events.value += 1
+
+            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
+                logger.info("Browser event is being processed")
+                process_event(
+                    prev_browser_event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
+                )
+                num_browser_events.value += 1
+                prev_saved_browser_timestamp = prev_browser_event.timestamp
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
                     prev_screen_event,
@@ -313,6 +352,27 @@ def write_window_event(
     """
     assert event.type == "window", event
     crud.insert_window_event(db, recording, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
+def write_browser_event(
+    db: crud.SaSession,
+    recording: Recording,
+    event: Event,
+    perf_q: sq.SynchronizedQueue,
+) -> None:
+    """Write a browser event to the database and update the performance queue.
+
+    Args:
+        db: The database session.
+        recording: The recording object.
+        event: A browser event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+    logger.info("Writing browser event")
+
+    assert event.type == "browser", event
+    crud.insert_browser_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -1127,7 +1187,111 @@ def record_audio(
 
 @logger.catch
 @utils.trace(logger)
-def record(
+async def read_browser_events(
+    websocket: websockets.WebSocketServerProtocol,
+    path: str,
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Read browser events and add them to the event queue.
+
+    Params:
+        websocket: The websocket object.
+        path: The path to the websocket.
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    utils.set_start_time(recording.timestamp)
+
+    logger.info("Starting Reading Browser Events ...")
+    started = False
+
+    while not terminate_processing.is_set():
+        async for message in websocket:
+            browser_data = message
+
+            if not browser_data:
+                continue
+
+            if not started:
+                with started_counter.get_lock():
+                    started_counter.value += 1
+                started = True
+
+            timestamp = utils.get_timestamp()
+            event_tuple = Event(
+                timestamp,
+                "browser",
+                {"message": browser_data},
+            )
+            event_q.put(event_tuple)
+
+
+@logger.catch
+@utils.trace(logger)
+async def start_browser_event_server(
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Start the browser event server.
+
+    Params:
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    server = await websockets.serve(
+        lambda ws, path: read_browser_events(
+            ws, path, event_q, terminate_processing, recording, started_counter
+        ),
+        "localhost",
+        8765,
+    )
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, terminate_processing.wait)
+    # Wait for termination signal
+    server.close()
+    await server.wait_closed()
+
+
+@logger.catch
+@utils.trace(logger)
+def run_browser_event_server(
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Run the browser event server.
+
+    Params:
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    asyncio.run(start_browser_event_server(event_q, terminate_processing, recording, started_counter))
+
+
+@logger.catch
+@utils.trace(logger)
+async def record(
     task_description: str,
     # these should be Event | None, but this raises:
     #   TypeError: unsupported operand type(s) for |: 'method' and 'NoneType'
@@ -1138,7 +1302,7 @@ def record(
     status_pipe: multiprocessing.connection.Connection | None = None,
     log_memory: bool = config.LOG_MEMORY,
 ) -> None:
-    """Record Screenshots/ActionEvents/WindowEvents.
+    """Record Screenshots/ActionEvents/WindowEvents/Browser (chrome) Events.
 
     Args:
         task_description: A text description of the task to be recorded.
@@ -1174,6 +1338,7 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    browser_write_q = sq.SynchronizedQueue()
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
@@ -1187,6 +1352,12 @@ def record(
         args=(event_q, terminate_processing, recording, started_counter),
     )
     window_event_reader.start()
+
+    browser_event_reader = threading.Thread(
+        target=run_browser_event_server,
+        args=(event_q, terminate_processing, recording, started_counter),
+    )
+    browser_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -1209,6 +1380,7 @@ def record(
     num_action_events = multiprocessing.Value("i", 0)
     num_screen_events = multiprocessing.Value("i", 0)
     num_window_events = multiprocessing.Value("i", 0)
+    num_browser_events = multiprocessing.Value("i", 0)
     num_video_events = multiprocessing.Value("i", 0)
 
     event_processor = threading.Thread(
@@ -1218,6 +1390,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            browser_write_q,
             video_write_q,
             perf_q,
             recording,
@@ -1226,6 +1399,7 @@ def record(
             num_screen_events,
             num_action_events,
             num_window_events,
+            num_browser_events,
             num_video_events,
         ),
     )
@@ -1245,6 +1419,21 @@ def record(
         ),
     )
     screen_event_writer.start()
+
+    browser_event_writer = multiprocessing.Process(
+        target=write_events,
+        args=(
+            "browser",
+            write_browser_event,
+            browser_write_q,
+            num_browser_events,
+            perf_q,
+            recording,
+            terminate_processing,
+            started_counter,
+        ),
+    )
+    browser_event_writer.start()
 
     action_event_writer = multiprocessing.Process(
         target=write_events,
@@ -1350,6 +1539,7 @@ def record(
         logger.info("*" * 40)
     if status_pipe:
         status_pipe.send({"type": "record.started"})
+
     logger.info("All readers and writers have started. Waiting for input events...")
 
     global stop_sequence_detected
@@ -1370,18 +1560,28 @@ def record(
         log_memory_usage(_tracker, performance_snapshots)
 
     logger.info("joining...")
+
+    # all reader threads
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
+    browser_event_reader.join()
+
+    # main event processor thread
     event_processor.join()
+
+    # all writer threads
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    browser_event_writer.join()
     if config.RECORD_VIDEO:
         video_writer.join()
     if config.RECORD_AUDIO:
         audio_recorder.join()
+
+    # set terminate signal
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
@@ -1403,11 +1603,16 @@ def record(
     crud.release_db_lock()
 
 
+def run_main(task_description: str) -> None:
+    """Run the record function asynchronously."""
+    asyncio.run(record(task_description))
+
+
 # Entry point
 def start() -> None:
     """Starts the recording process."""
-    fire.Fire(record)
+    fire.Fire(run_main)
 
 
 if __name__ == "__main__":
-    fire.Fire(record)
+    fire.Fire(run_main)
