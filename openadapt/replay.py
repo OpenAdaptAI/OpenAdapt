@@ -16,8 +16,8 @@ from openadapt.build_utils import redirect_stdout_stderr
 with redirect_stdout_stderr():
     import fire
 
-from openadapt import capture, utils
-from openadapt.config import CAPTURE_DIR_PATH
+from openadapt import capture as _capture, utils
+from openadapt.config import CAPTURE_DIR_PATH, print_config
 from openadapt.db import crud
 from openadapt.models import Recording
 
@@ -29,7 +29,7 @@ posthog = utils.get_posthog_instance()
 @logger.catch
 def replay(
     strategy_name: str,
-    record: bool = False,
+    capture: bool = False,
     timestamp: str | None = None,
     recording: Recording = None,
     status_pipe: multiprocessing.connection.Connection | None = None,
@@ -41,7 +41,7 @@ def replay(
         strategy_name (str): Name of the replay strategy to use.
         timestamp (str, optional): Timestamp of the recording to replay.
         recording (Recording, optional): Recording to replay.
-        record (bool, optional): Flag indicating whether to record the replay.
+        capture (bool, optional): Flag indicating whether to capture the replay.
         status_pipe: A connection to communicate replay status.
         kwargs: Keyword arguments to pass to strategy.
 
@@ -49,6 +49,7 @@ def replay(
         bool: True if replay was successful, None otherwise.
     """
     utils.configure_logging(logger, LOG_LEVEL)
+    print_config()
     posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
 
     if status_pipe:
@@ -85,8 +86,8 @@ def replay(
 
     handler = None
     rval = True
-    if record:
-        capture.start(audio=False, camera=False)
+    if capture:
+        _capture.start(audio=False, camera=False)
         # TODO: handle this more robustly
         sleep(1)
         file_name = f"log-{strategy_name}-{recording.timestamp}.log"
@@ -107,9 +108,9 @@ def replay(
         properties={"strategy_name": strategy_name, "success": rval},
     )
 
-    if record:
+    if capture:
         sleep(1)
-        capture.stop()
+        _capture.stop()
         logger.remove(handler)
 
     return rval

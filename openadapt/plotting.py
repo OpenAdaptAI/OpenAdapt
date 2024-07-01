@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 import matplotlib.pyplot as plt
 import numpy as np
 
-from openadapt import common, models, utils
+from openadapt import common, contrib, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.models import ActionEvent
 
@@ -764,3 +764,57 @@ def plot_segments(
     plt.imshow(image)
     plt.axis("off")
     plt.show()
+
+
+def get_marked_image(
+    original_image: Image.Image,
+    masks: list[np.ndarray],
+    include_masks: bool = True,
+    include_marks: bool = True,
+) -> Image.Image:
+    """Get a Set-of-Mark image using the original SoM visualizer.
+
+    Args:
+        original_image (Image.Image): The original PIL image.
+        masks (list[np.ndarray]): A list of masks representing segments in the
+            original image.
+        include_masks (bool, optional): If True, masks will be included in the
+            output visualizations. Defaults to True.
+        include_marks (bool, optional): If True, marks will be included in the
+            output visualizations. Defaults to True.
+
+    Returns:
+        Image.Image: The marked image, where marks and/or masks are applied based on
+        the specified confidence and IoU thresholds and the include flags.
+    """
+    image_arr = np.asarray(original_image)
+
+    # The rest of this function is copied from
+    # github.com/microsoft/SoM/blob/main/task_adapter/sam/tasks/inference_sam_m2m_auto.py
+
+    # metadata = MetadataCatalog.get('coco_2017_train_panoptic')
+    metadata = None
+    visual = contrib.som.visualizer.Visualizer(image_arr, metadata=metadata)
+    mask_map = np.zeros(image_arr.shape, dtype=np.uint8)
+    label_mode = "1"
+    alpha = 0.1
+    anno_mode = []
+    if include_masks:
+        anno_mode.append("Mask")
+    if include_marks:
+        anno_mode.append("Mark")
+    for i, mask in enumerate(masks):
+        label = i + 1
+        demo = visual.draw_binary_mask_with_number(
+            mask,
+            text=str(label),
+            label_mode=label_mode,
+            alpha=alpha,
+            anno_mode=anno_mode,
+        )
+        mask_map[mask == 1] = label
+
+    im = demo.get_image()
+    marked_image = Image.fromarray(im)
+
+    return marked_image

@@ -313,7 +313,13 @@ def extract_frames(
 
     video_container.close()
 
-    logger.info(f"frame_differences=\n{pformat(frame_differences)}")
+    logger.debug(f"frame_differences=\n{pformat(frame_differences)}")
+    invalid_frame_differences = {
+        timestamp: difference
+        for timestamp, difference in frame_differences.items()
+        if difference > tolerance
+    }
+    logger.info(f"invalid_frame_differences=\n{pformat(invalid_frame_differences)}")
 
     # Check if all timestamps have been matched
     for timestamp, frame in timestamp_frames.items():

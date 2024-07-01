@@ -1,10 +1,10 @@
-"""Tests for adapters.google."""
+"""Tests for drivers.google."""
 
 from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from PIL import Image
 import pytest
 
-from openadapt.adapters import google
+from openadapt.drivers import google
 
 
 def test_prompt(calculator_image: Image) -> None:

@@ -52,7 +52,7 @@ export const Tutorial = () => {
       </Text>
       <iframe width="800" height="400" src="https://www.youtube.com/embed/OVERugs50cQ?si=cmi1vY73ADom9EKG" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen className='block mx-auto'></iframe>
       <Text my={20} maw={800}>
-        If you'd like to contribute directly to our development, please consider the following open Bounties (no development experience required):
+        If {"you'd"} like to contribute directly to our development, please consider the following open Bounties (no development experience required):
         {featuredBounty && <BountyCard bounty={featuredBounty} />}
       </Text>
     </Box>

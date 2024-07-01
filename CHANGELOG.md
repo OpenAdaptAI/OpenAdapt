@@ -2,6 +2,119 @@
 
 
 
+## v0.36.0 (2024-06-28)
+
+### Feature
+
+* feat(logging): redirect stdout (#810)
+
+* feat: Override std out for application
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f44795c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f44795c5216f076f99e4a9f32a294c82d19aeda8))
+
+### Fix
+
+* fix(tray): fix tray signals (#812)
+
+* feat: Override std out for application
+
+* fix: Fix passing signals around using multiprocessing pipes
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+* lint: flake8 lint
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f231a34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f231a34c881914b5410001d2bbe8c934af427b45))
+
+
+## v0.35.2 (2024-06-27)
+
+### Fix
+
+* fix(build): Fix build issues (#809)
+
+* fix: Fix build issues
+
+* fix: Add pyqttoast and whisper explicitly to build
+
+* black/flake8
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`48995bb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/48995bb9c9de41a948eacb3cad22fe1aec2a0dbf))
+
+### Unknown
+
+* add cache.clear ([`b340d8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b340d8f34326908025db99e178f689929f6112c6))
+
+
+## v0.35.1 (2024-06-23)
+
+### Fix
+
+* fix(ultralytics): fix windows file permission in do_fastsam (#791)
+
+* fix:windows file permission
+
+* Changes as per the comments on last commit
+
+* add max_retries and retry_delay_seconds in args
+
+* add comments for segmented_image.load()
+
+* order imports in ultralytics.py
+
+* build fix
+
+* remove unnecessary formatting changes
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/742b1764d3434f5bb505acf20318ac0c699a1761))
+
+
+## v0.35.0 (2024-06-22)
+
+### Feature
+
+* feat(SegmentReplayStrategy, drivers): add strategies.replay; refactor adapters -&gt; drivers + adapters  (#714)
+
+* implemented
+
+* add get_active_window_data parameter include_window_data; fix ActionEvent.from_dict to handle multiple separators; add test_models.py
+
+* update get_default_prompt_adapter
+
+* add TODO
+
+* tests.openadapt.adapters -&gt; drivers
+
+* utils.get_marked_image, .extract_code_block; .strip_backticks
+
+* working segment.py (misses final click in calculator task)
+
+* include_replay_instructions; dev_mode=False
+
+* fix test_openai.py: ValueError -&gt; Exception
+
+* replay.py --record -&gt; --capture
+
+* black/flake8
+
+* remove import
+
+* INCLUDE_CURRENT_SCREENSHOT; handle mouse events without x/y
+
+* add models.Replay; print_config in replay.py ([`7ef115a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7ef115a6172222d7d624ce92d0ec38a60d0e86f1))
+
+
 ## v0.34.0 (2024-06-20)
 
 ### Feature

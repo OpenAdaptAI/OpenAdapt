@@ -4,22 +4,20 @@ from types import ModuleType
 
 from openadapt.config import config
 
-from . import anthropic, google, openai, replicate, som, ultralytics
+from . import prompt, replicate, som, ultralytics
 
 
+# TODO: remove
 def get_default_prompt_adapter() -> ModuleType:
     """Returns the default prompt adapter module.
 
     Returns:
         The module corresponding to the default prompt adapter.
     """
-    return {
-        "openai": openai,
-        "anthropic": anthropic,
-        "google": google,
-    }[config.DEFAULT_ADAPTER]
+    return prompt
 
 
+# TODO: refactor to follow adapters.prompt
 def get_default_segmentation_adapter() -> ModuleType:
     """Returns the default image segmentation adapter module.
 

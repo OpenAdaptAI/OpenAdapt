@@ -2,11 +2,14 @@
 
 See https://docs.ultralytics.com/models/fast-sam/#predict-usage for details.
 """
+
 # flake8: noqa: E402
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import errno
 import os
+import time
 
 from loguru import logger
 from PIL import Image, ImageColor
@@ -77,10 +80,28 @@ def do_fastsam(
     retina_masks: bool = True,
     imgsz: int | tuple[int, int] | None = 1024,
     # threshold below which boxes will be filtered out
-    conf: float = 0.4,
+    min_confidence_threshold: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
-    iou: float = 0.9,
+    max_iou_threshold: float = 0.9,
+    max_retries: int = 5,
+    retry_delay_seconds: float = 0.1,
 ) -> Image:
+    """Get segmented image via FastSAM.
+
+    For usage of thresholds see:
+    github.com/ultralytics/ultralytics/blob/dacbd48fcf8407098166c6812eeb751deaac0faf
+        /ultralytics/utils/ops.py#L164
+
+    Args:
+        TODO
+        min_confidence_threshold (float, optional): The minimum confidence score
+            that a detection must meet or exceed to be considered valid. Detections
+            below this threshold will not be marked. Defaults to 0.00.
+        max_iou_threshold (float, optional): The maximum allowed Intersection over
+            Union (IoU) value for overlapping detections. Detections that exceed this
+            IoU threshold are considered for suppression, keeping only the
+            detection with the highest confidence. Defaults to 0.05.
+    """
     model = FastSAM(model_name)
 
     imgsz = imgsz or image.size
@@ -91,8 +112,8 @@ def do_fastsam(
         device=device,
         retina_masks=retina_masks,
         imgsz=imgsz,
-        conf=conf,
-        iou=iou,
+        conf=min_confidence_threshold,
+        iou=max_iou_threshold,
     )
 
     # Prepare a Prompt Process object
@@ -135,8 +156,27 @@ def do_fastsam(
         logger.info(f"{annotation.path=}")
         segmented_image_path = Path(tmp_dir) / result_name
         segmented_image = Image.open(segmented_image_path)
-        os.remove(segmented_image_path)
 
+        # Ensure the image is fully loaded before deletion to avoid errors or incomplete operations,
+        # as some operating systems and file systems lock files during read or processing.
+        segmented_image.load()
+
+        # Attempt to delete the file with retries and delay
+        retries = 0
+
+        while retries < max_retries:
+            try:
+                os.remove(segmented_image_path)
+                break  # If deletion succeeds, exit loop
+            except OSError as e:
+                if e.errno == errno.ENOENT:  # File not found
+                    break
+                else:
+                    retries += 1
+                    time.sleep(retry_delay_seconds)
+
+        if retries == max_retries:
+            logger.warning(f"Failed to delete {segmented_image_path}")
     # Check if the dimensions of the original and segmented images differ
     # XXX TODO this is a hack, this plotting code should be refactored, but the
     # bug may exist in ultralytics, since they seem to resize as well; see:

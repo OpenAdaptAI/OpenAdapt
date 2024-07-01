@@ -388,11 +388,11 @@ class ActionEvent(db.Base):
                 suffix_len = len(name_suffix)
 
                 key_names = utils.split_by_separators(
-                    action_dict["text"][prefix_len:-suffix_len],
+                    action_dict.get("text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
                 canonical_key_names = utils.split_by_separators(
-                    action_dict["canonical_text"][prefix_len:-suffix_len],
+                    action_dict.get("canonical_text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
                 logger.info(f"{key_names=}")
@@ -918,6 +918,18 @@ class ScrubbedRecording(db.Base):
                 "task_description": self.recording.original_recording.task_description,
             },
         }
+
+
+class Replay(db.Base):
+    """Class representing a replay in the database."""
+
+    __tablename__ = "replay"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    strategy_name = sa.Column(sa.String)
+    strategy_args = sa.Column(sa.JSON)
+    git_hash = sa.Column(sa.String)
 
 
 def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:

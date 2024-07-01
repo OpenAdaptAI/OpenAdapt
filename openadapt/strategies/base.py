@@ -95,6 +95,7 @@ class BaseReplayStrategy(ABC):
                     import ipdb
 
                     ipdb.set_trace()
+                    foo = 1  # noqa
 
     def log_fps(self) -> None:
         """Log the frames per second (FPS) rate."""
