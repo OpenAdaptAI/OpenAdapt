@@ -108,6 +108,10 @@ posthog = "^3.5.0"
 
 wheel = "^0.43.0"
 cython = "^3.0.10"
+
+[tool.poetry.group.dev.dependencies]
+aws-sam-cli = "^1.119.0"
+
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
