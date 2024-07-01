@@ -25,16 +25,10 @@ def main(region_name: str = "us-east-1", guided: bool = True) -> None:
     )
     bucket = "openadapt"
 
-    # create the S3 bucket, if it doesn't already exist
-    try:
-        s3.create_bucket(
-            ACL="private",
-            Bucket=bucket,
-        )
-    except (s3.exceptions.BucketAlreadyExists, s3.exceptions.BucketAlreadyOwnedByYou):
-        proceed = input(f"Bucket '{bucket}' already exists. Proceed? [y/N] ")
-        if proceed.lower() != "y":
-            return
+    s3.create_bucket(
+        ACL="private",
+        Bucket=bucket,
+    )
 
     # deploy the code to AWS Lambda
     commands = ["sam", "deploy"]
