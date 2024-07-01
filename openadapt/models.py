@@ -593,7 +593,6 @@ class BrowserEvent(db.Base):
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     message = sa.Column(sa.String)
     timestamp = sa.Column(ForceFloat)
-    browser_id = sa.Column(sa.String)
 
     recording = sa.orm.relationship("Recording", back_populates="browser_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")

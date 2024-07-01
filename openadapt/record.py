@@ -207,7 +207,16 @@ def process_events(
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "browser":
+            # logger.info("Processing browser event")
             prev_browser_event = event
+            # process_event(
+            #     prev_browser_event,
+            #     browser_write_q,
+            #     write_browser_event,
+            #     recording,
+            #     perf_q,
+            # )
+            # num_browser_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -232,6 +241,18 @@ def process_events(
             )
 
             num_action_events.value += 1
+
+            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
+                logger.info("Browser event is being processed")
+                process_event(
+                    prev_browser_event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
+                )
+                num_browser_events.value += 1
+                prev_saved_browser_timestamp = prev_browser_event.timestamp
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
                     prev_screen_event,
@@ -262,16 +283,6 @@ def process_events(
                 )
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
-            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
-                process_event(
-                    prev_browser_event,
-                    browser_write_q,
-                    write_browser_event,
-                    recording,
-                    perf_q,
-                )
-                num_browser_events.value += 1
-                prev_saved_browser_timestamp = prev_browser_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -1174,33 +1185,6 @@ def record_audio(
         )
 
 
-async def terminate_server(
-    future: asyncio.Future,
-    stop_event: asyncio.Event,
-    terminate_event: multiprocessing.Event,
-) -> None:
-    """Terminate the server and set the future result.
-
-    Params:
-        future: The future to set the result of.
-        stop_event: The event to signal stopping the server.
-        terminate_event: The event to signal termination of the process.
-
-    Returns:
-        None
-    """
-    global stop_sequence_detected
-    try:
-        while not (stop_sequence_detected or terminate_event.is_set()):
-            await asyncio.sleep(1)
-        stop_event.set()
-        future.set_result(None)
-    except KeyboardInterrupt:
-        terminate_event.set()
-        stop_event.set()
-        future.set_result(None)
-
-
 @logger.catch
 @utils.trace(logger)
 async def read_browser_events(
@@ -1227,7 +1211,6 @@ async def read_browser_events(
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting Reading Browser Events ...")
-    prev_browser_data = {}
     started = False
 
     while not terminate_processing.is_set():
@@ -1242,18 +1225,68 @@ async def read_browser_events(
                     started_counter.value += 1
                 started = True
 
-            logger.info(f"Browser Event Data: \n {browser_data=}")
+            timestamp = utils.get_timestamp()
+            event_tuple = Event(
+                timestamp,
+                "browser",
+                {"message": browser_data},
+            )
+            event_q.put(event_tuple)
 
-            if browser_data != prev_browser_data:
-                logger.debug("Queuing browser event for writing")
-                event_q.put(
-                    Event(
-                        utils.get_timestamp(),
-                        "browser",
-                        browser_data,
-                    )
-                )
-            prev_browser_data = browser_data
+
+@logger.catch
+@utils.trace(logger)
+async def start_browser_event_server(
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Start the browser event server.
+
+    Params:
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    server = await websockets.serve(
+        lambda ws, path: read_browser_events(
+            ws, path, event_q, terminate_processing, recording, started_counter
+        ),
+        "localhost",
+        8765,
+    )
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, terminate_processing.wait)
+    # Wait for termination signal
+    server.close()
+    await server.wait_closed()
+
+
+@logger.catch
+@utils.trace(logger)
+def run_browser_event_server(
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Run the browser event server.
+
+    Params:
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    asyncio.run(start_browser_event_server(event_q, terminate_processing, recording, started_counter))
 
 
 @logger.catch
@@ -1320,17 +1353,11 @@ async def record(
     )
     window_event_reader.start()
 
-    # stop_event = asyncio.Event()
-    # future = asyncio.Future()
-    server = websockets.serve(
-        lambda ws, path: read_browser_events(
-            ws, path, event_q, terminate_processing, recording, started_counter
-        ),
-        "localhost",
-        8765,
+    browser_event_reader = threading.Thread(
+        target=run_browser_event_server,
+        args=(event_q, terminate_processing, recording, started_counter),
     )
-    async with server:
-        await asyncio.Future()  # run forever
+    browser_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -1533,12 +1560,18 @@ async def record(
         log_memory_usage(_tracker, performance_snapshots)
 
     logger.info("joining...")
+
+    # all reader threads
     keyboard_event_reader.join()
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
-    # browser_event_reader.join()
+    browser_event_reader.join()
+
+    # main event processor thread
     event_processor.join()
+
+    # all writer threads
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
@@ -1547,6 +1580,8 @@ async def record(
         video_writer.join()
     if config.RECORD_AUDIO:
         audio_recorder.join()
+
+    # set terminate signal
     terminate_perf_event.set()
 
     if PLOT_PERFORMANCE:
