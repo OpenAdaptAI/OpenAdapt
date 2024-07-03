@@ -51,6 +51,8 @@ import time
 from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
+from sqlalchemy.orm import joinedload, Session
+from sqlalchemy import inspect
 
 from openadapt import (
     adapters,
@@ -62,8 +64,8 @@ from openadapt import (
     vision,
 )
 
-DEBUG = False
-DEBUG_REPLAY = False
+DEBUG = True
+DEBUG_REPLAY = True
 SEGMENTATIONS = []  # TODO: store to db
 MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
 MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
@@ -80,7 +82,7 @@ class Segmentation:
         masked_images: A list of PIL Image objects that have been masked based on
             segmentation.
         descriptions: Descriptions of each segmented region, correlating with each
-            image in `masked_images`.
+            image in masked_images.
         bounding_boxes: A list of dictionaries containing bounding box
             coordinates for each segmented region.  Each dictionary should have the
             keys "top", "left", "height", and "width" with float values indicating
@@ -229,6 +231,8 @@ class VisualReplayStrategy(
                     modified_reference_action,
                     exceptions=exceptions,
                 )
+                logger.debug(f"{active_window_segmentation.descriptions=}")
+                logger.debug(f"{modified_reference_action.active_segment_description=}")
                 try:
                     target_segment_idx = active_window_segmentation.descriptions.index(
                         modified_reference_action.active_segment_description
@@ -374,102 +378,6 @@ def find_similar_image_segmentation(
     return similar_segmentation, similar_segmentation_diff
 
 
-def combine_segmentations(
-    difference_image: Image.Image,
-    previous_segmentation: Segmentation,
-    new_descriptions: list[str],
-    new_masked_images: list[Image.Image],
-    new_masks: list[np.ndarray],
-) -> Segmentation:
-    """Combine the previous segmentation with the new segmentation of the differences.
-    Args:
-        difference_image: The difference image found in similar segmentation.
-        previous_segmentation: The previous segmentation containing unchanged segments.
-        new_descriptions: Descriptions of the new segments from the difference image.
-        new_masked_images: Masked images of the new segments from the difference image.
-        new_masks: masks of the new segments.
-    Returns:
-        Segmentation: A new segmentation combining both previous and new segments.
-    """
-
-    image_1_np = np.array(previous_segmentation.image)
-    difference_image_np = np.array(difference_image)
-
-    # Create an empty canvas with the same dimensions and mode as image_1
-    combined_image_np = np.zeros_like(image_1_np)
-
-    # Ensure difference_image_np is 3 channels
-    if difference_image_np.ndim == 2:  # Grayscale image
-        difference_image_np = np.stack((difference_image_np,) * 3, axis=-1)
-
-    def masks_overlap(mask1, mask2):
-        """Check if two masks overlap."""
-        return np.any(np.logical_and(mask1, mask2))
-
-    # Calculate the bounding boxes and centroids for the new segments
-    new_bounding_boxes, new_centroids = vision.calculate_bounding_boxes(new_masks)
-
-    segmentation_adapter = adapters.get_default_segmentation_adapter()
-    segmented_prev_image = segmentation_adapter.fetch_segmented_image(
-        previous_segmentation.image
-    )
-    previous_masks = vision.get_masks_from_segmented_image(segmented_prev_image)
-
-    # Filter out overlapping previous segments
-    filtered_previous_masked_images = []
-    # filtered_previous_descriptions = []
-    filtered_previous_bounding_boxes = []
-    filtered_previous_centroids = []
-    for idx, prev_mask in enumerate(previous_masks):
-        if not any(masks_overlap(prev_mask, new_mask) for new_mask in new_masks):
-            combined_image_np[prev_mask] = image_1_np[
-                prev_mask
-            ]  # Apply previous masks to the combined image where there is no overlap with new masks
-            filtered_previous_masked_images.append(
-                previous_segmentation.masked_images[idx]
-            )
-            # filtered_previous_descriptions.append(
-            #     previous_segmentation.descriptions[idx]
-            # )
-            filtered_previous_bounding_boxes.append(
-                previous_segmentation.bounding_boxes[idx]
-            )
-            filtered_previous_centroids.append(previous_segmentation.centroids[idx])
-
-    # Apply new masks to the combined image
-    for new_mask in new_masks:
-        combined_image_np[new_mask] = difference_image_np[new_mask]
-
-    # Fill in remaining pixels from image_1 where there are no masks
-    combined_image_np[(combined_image_np == 0).all(axis=-1)] = image_1_np[
-        (combined_image_np == 0).all(axis=-1)
-    ]
-
-    # Combine filtered previous segments with new segments
-    combined_masked_images = filtered_previous_masked_images + new_masked_images
-    # combined_descriptions = filtered_previous_descriptions + new_descriptions
-    combined_bounding_boxes = filtered_previous_bounding_boxes + new_bounding_boxes
-    combined_centroids = filtered_previous_centroids + new_centroids
-
-    # Convert the numpy array back to an image
-    new_image = Image.fromarray(combined_image_np)
-
-    marked_image = plotting.get_marked_image(
-        new_image,
-        new_masks,  # masks,
-    )
-    # new_image.show()
-
-    return Segmentation(
-        new_image,
-        marked_image,
-        combined_masked_images,
-        new_descriptions,
-        combined_bounding_boxes,
-        combined_centroids,
-    )
-
-
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
@@ -486,10 +394,18 @@ def get_window_segmentation(
     Returns:
         Segmentation object containing detailed segmentation information.
     """
-    screenshot = action_event.screenshot
+    session = Session()  # Ensure you have an active session
+
+    # Ensure the action.screenshot is attached to a session and eager load 'action_event'
+    if not inspect(action_event.screenshot).persistent:
+        screenshot = (
+            session.query(models.Screenshot).options(joinedload("action_event")),
+            joinedload("recording").filter_by(id=action_event.screenshot.id).one(),
+        )
+    else:
+        screenshot = action_event.screenshot
+
     original_image = screenshot.cropped_image
-    if DEBUG:
-        original_image.show()
 
     similar_segmentation, similar_segmentation_diff = find_similar_image_segmentation(
         original_image,
@@ -498,29 +414,112 @@ def get_window_segmentation(
         # TODO XXX: create copy of similar_segmentation, but overwrite with segments of
         # regions of new image where segments of similar_segmentation overlap non-zero
         # regions of similar_segmentation_diff
+        if DEBUG:
+            similar_segmentation.image.show()
         logger.info(f"Found similar_segmentation")
         similar_segmentation_diff_image = Image.fromarray(similar_segmentation_diff)
         segmentation_adapter = adapters.get_default_segmentation_adapter()
         segmented_diff_image = segmentation_adapter.fetch_segmented_image(
             similar_segmentation_diff_image
         )
+        segmented_original_image = segmentation_adapter.fetch_segmented_image(
+            original_image
+        )
+        prev_masks = vision.get_masks_from_segmented_image(segmented_original_image)
         new_masks = vision.get_masks_from_segmented_image(segmented_diff_image)
-        new_masked_images = vision.extract_masked_images(
-            similar_segmentation_diff_image, new_masks
+
+        original_image_np = np.array(original_image)
+        # Create an empty canvas with the same dimensions and mode as original_image
+        combined_image_np = np.zeros_like(original_image_np)
+        # Ensure difference_image_np is 3 channels
+        if similar_segmentation_diff.ndim == 2:  # Grayscale image
+            similar_segmentation_diff = np.stack(
+                (similar_segmentation_diff,) * 3, axis=-1
+            )
+
+        def masks_overlap(mask1, mask2):
+            """Check if two masks overlap."""
+            return np.any(np.logical_and(mask1, mask2))
+
+        filtered_previous_descriptions = []
+        filtered_previous_bounding_boxes = []
+        filtered_previous_centroids = []
+
+        for idx, prev_mask in enumerate(prev_masks):
+            if not any(masks_overlap(prev_mask, new_mask) for new_mask in new_masks):
+                combined_image_np[prev_mask] = original_image_np[prev_mask]
+                filtered_previous_bounding_boxes.append(
+                    similar_segmentation.bounding_boxes[idx]
+                )
+                filtered_previous_descriptions.append(
+                    similar_segmentation.descriptions[idx]
+                )
+
+                filtered_previous_centroids.append(similar_segmentation.centroids[idx])
+        # Apply new masks to the combined image
+        for new_mask in new_masks:
+            combined_image_np[new_mask] = similar_segmentation_diff[new_mask]
+
+        cropped_masked_images = vision.extract_masked_images(
+            Image.fromarray(combined_image_np), new_masks
         )
         new_descriptions = prompt_for_descriptions(
-            similar_segmentation_diff_image,
-            new_masked_images,
+            Image.fromarray(combined_image_np),
+            cropped_masked_images,
             action_event.active_segment_description,
             exceptions,
         )
-        updated_segmentation = combine_segmentations(
-            similar_segmentation_diff_image,
-            similar_segmentation,
-            new_descriptions,
-            new_masked_images,
-            new_masks,
+        # Fill in remaining pixels from original_image where there are no masks
+        combined_image_np[(combined_image_np == 0).all(axis=-1)] = original_image_np[
+            (combined_image_np == 0).all(axis=-1)
+        ]
+        # Convert the numpy array back to an image
+        new_image = Image.fromarray(combined_image_np)
+
+        combined_segmented_image = segmentation_adapter.fetch_segmented_image(new_image)
+
+        combined_masks = vision.get_masks_from_segmented_image(combined_segmented_image)
+
+        combined_masked_images = vision.extract_masked_images(new_image, combined_masks)
+
+        # Calculate the bounding boxes and centroids for the new segments
+        new_bounding_boxes, new_centroids = vision.calculate_bounding_boxes(new_masks)
+
+        # combined_bounding_boxes = filtered_previous_bounding_boxes + new_bounding_boxes
+        # combined_centroids = filtered_previous_centroids + new_centroids
+        # combined_new_descriptions = new_descriptions
+
+        marked_image = plotting.get_marked_image(
+            new_image,
+            combined_masks,  # masks,a
         )
+        # combined_new_descriptions = prompt_for_descriptions(
+        #     similar_segmentation_diff_image,
+        #     cropped_masked_images,
+        #     action_event.active_segment_description,
+        #     exceptions,
+        # )
+
+        # assert (
+        #     len(new_bounding_boxes)
+        #     == len(combined_new_descriptions)
+        #     == len(new_centroids)
+        # ), (
+        #     len(new_bounding_boxes),
+        #     len(combined_new_descriptions),
+        #     len(new_centroids),
+        # )
+
+        updated_segmentation = Segmentation(
+            new_image,
+            cropped_masked_images,
+            combined_masked_images,
+            new_descriptions,
+            new_bounding_boxes,
+            new_centroids,
+        )
+        if DEBUG:
+            updated_segmentation.image.show()
         return updated_segmentation
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()
