@@ -11,6 +11,7 @@ import time
 
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
+from sqlalchemy.orm import joinedload
 import psutil
 import sqlalchemy as sa
 
@@ -391,7 +392,13 @@ def get_action_events(
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    action_events = _get(session, ActionEvent, recording.id)
+    # Use joinedload to eagerly load related entities
+    action_events = (
+        session.query(ActionEvent)
+        .options(joinedload(ActionEvent.screenshot))
+        .filter(ActionEvent.recording_id == recording.id)
+        .all()
+    )
     action_events = filter_disabled_action_events(action_events)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
@@ -530,7 +537,13 @@ def get_screenshots(
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = _get(session, Screenshot, recording.id)
+    screenshots = screenshots = (
+        session.query(Screenshot)
+        .filter(Screenshot.recording_id == recording.id)
+        .order_by(Screenshot.timestamp)
+        .options(joinedload(Screenshot.action_event))
+        .all()
+    )
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
@@ -555,7 +568,12 @@ def get_window_events(
     Returns:
         list[WindowEvent]: A list of window events for the recording.
     """
-    return _get(session, WindowEvent, recording.id)
+    return (
+        session.query(WindowEvent)
+        .options(joinedload(WindowEvent.action_events))
+        .filter(WindowEvent.recording_id == recording.id)
+        .all()
+    )
 
 
 def disable_action_event(session: SaSession, event_id: int) -> None:
