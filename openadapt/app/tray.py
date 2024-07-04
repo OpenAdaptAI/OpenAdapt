@@ -245,27 +245,25 @@ class SystemTrayIcon(QObject):
 
     def download_latest_version(self, base_url: str, latest_version: str) -> None:
         """Download latest version of the app."""
-        DOWNLOAD_URL = ""
-        FILE_NAME = ""
-
         if sys.platform == "darwin":
-            FILE_NAME = f"OpenAdapt-v{latest_version}.app.zip"
-            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+            file_ext = ".app.zip"
         else:
-            FILE_NAME = f"OpenAdapt-v{latest_version}.zip"
-            DOWNLOAD_URL = base_url + f"/v{latest_version}/{FILE_NAME}"
+            file_ext = ".zip"
+
+        file_name = f"open_adapt-v{latest_version}{file_ext}"
+        download_url = base_url + f"/v{latest_version}/{file_name}"
 
         downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
-        local_filename = os.path.join(downloads_path, FILE_NAME)
+        local_filename = os.path.join(downloads_path, file_name)
 
-        response = requests.get(DOWNLOAD_URL, stream=True)
+        response = requests.get(download_url, stream=True)
         total_size = response.headers.get("content-length")
         total_size = int(total_size) if total_size else None
         block_size = 1024  # 1 Kilobyte
         start_time = time.time()
         last_update_time = start_time
         with open(local_filename, "wb") as file, tqdm(
-            total=total_size, unit="B", unit_scale=True, desc=FILE_NAME
+            total=total_size, unit="B", unit_scale=True, desc=file_name
         ) as progress_bar:
             for data in response.iter_content(block_size):
                 if self.cancel_download_event.is_set():
