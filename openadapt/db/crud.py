@@ -369,7 +369,8 @@ def _get(
         table (BaseModel): The database table to query.
         recording_id (int): The recording id.
         eager (bool, optional): If true, implement eager loading. Defaults to False.
-        relationships (list[str], optional): List of relationships to eagerly load. Defaults to None.
+        relationships (list[str], optional): Relationships to load eagerly.
+        Defaults to None.
 
     Returns:
         list[BaseModel]: A list of records retrieved from the database table,
