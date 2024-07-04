@@ -108,7 +108,7 @@ def cache(
     return decorator
 
 
-def clear(keep_days: int = 0, dry_run: bool = False):
+def clear(keep_days: int = 0, dry_run: bool = False) -> None:
     """Clears the cache, optionally keeping data for a specified number of days.
 
     With an option for a dry run.
@@ -125,7 +125,7 @@ def clear(keep_days: int = 0, dry_run: bool = False):
     cutoff_date = datetime.now() - timedelta(days=keep_days)
     total_cleared = 0
 
-    for path in cache_dir_path.rglob('*'):
+    for path in cache_dir_path.rglob("*"):
         if path.is_file() and os.path.getmtime(path) < cutoff_date.timestamp():
             file_size = path.stat().st_size
             if not dry_run:
@@ -154,6 +154,4 @@ def clear(keep_days: int = 0, dry_run: bool = False):
 
 
 if __name__ == "__main__":
-    fire.Fire({
-        'clear_cache': clear_cache
-    })
+    fire.Fire({"clear": clear})
