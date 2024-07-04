@@ -117,15 +117,14 @@ def clear(keep_days: int = 0, dry_run: bool = False) -> None:
         keep_days (int): The number of days of cached data to keep.
         dry_run (bool): If True, perform a dry run without deleting files.
     """
-    logger.info(
-        f"Attempting to clear cache with {'dry run' if dry_run else 'actual deletion'},"
-        " keeping last {keep_days} days."
-    )
+    logger.info(f"Attempting to clear cache with {dry_run=} {keep_days=}")
     cache_dir_path = Path(config.CACHE_DIR_PATH) / "joblib"
     cutoff_date = datetime.now() - timedelta(days=keep_days)
     total_cleared = 0
 
-    for path in cache_dir_path.rglob("*"):
+    # Collect all files and directories to consider
+    paths = list(cache_dir_path.rglob("*"))
+    for path in paths:
         if path.is_file() and os.path.getmtime(path) < cutoff_date.timestamp():
             file_size = path.stat().st_size
             if not dry_run:
@@ -134,8 +133,10 @@ def clear(keep_days: int = 0, dry_run: bool = False) -> None:
             else:
                 logger.debug(f"Would remove file: {path}")
             total_cleared += file_size
-        # Check if directory is empty after removing files
-        elif path.is_dir() and not any(path.iterdir()):
+
+    # Check directories from the deepest first
+    for path in sorted([p for p in paths if p.is_dir()], key=lambda x: -len(x.parts)):
+        if not any(path.iterdir()):
             if not dry_run:
                 os.rmdir(path)
                 logger.debug(f"Removed empty directory: {path}")
@@ -144,8 +145,8 @@ def clear(keep_days: int = 0, dry_run: bool = False) -> None:
 
     if dry_run:
         logger.info(
-            "Dry run complete. Would have cleared "
-            "{total_cleared / (1024 * 1024):.2f} MB."
+            f"Dry run complete. Would have cleared {total_cleared / (1024 * 1024):.2f}"
+            " MB."
         )
     else:
         logger.info(
