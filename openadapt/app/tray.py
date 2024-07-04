@@ -266,36 +266,46 @@ class SystemTrayIcon(QObject):
         block_size = 1024  # 1 Kilobyte
         start_time = time.time()
         last_update_time = start_time
-        with open(local_filename, "wb") as file, tqdm(
-            total=total_size, unit="B", unit_scale=True, desc=file_name
-        ) as progress_bar:
-            for data in response.iter_content(block_size):
-                if self.cancel_download_event.is_set():
-                    self.cancel_download_event.clear()
-                    return
-                file.write(data)
-                progress_bar.update(len(data))
-                current_time = time.time()
+        try:
+            with open(local_filename, "wb") as file, tqdm(
+                total=total_size, unit="B", unit_scale=True, desc=file_name
+            ) as progress_bar:
+                for data in response.iter_content(block_size):
+                    if self.cancel_download_event.is_set():
+                        self.cancel_download_event.clear()
+                        return
+                    file.write(data)
+                    progress_bar.update(len(data))
+                    current_time = time.time()
 
-                if (
-                    current_time - last_update_time > DOWNLOAD_TOAST_UPDATE_TIME
-                    and progress_bar.n > 0
-                    and progress_bar.n < progress_bar.total
-                ):
-                    elapsed_time = current_time - start_time
-                    last_update_time = current_time
-                    rate = progress_bar.n / elapsed_time
-                    eta_seconds_actual = (progress_bar.total - progress_bar.n) / rate
-                    # convert to minutes
-                    eta_minutes = int(eta_seconds_actual // 60)
-                    eta_seconds_formatted = eta_seconds_actual % 60
-                    eta_formatted = f"{eta_minutes}:{int(eta_seconds_formatted):02d}"
+                    if (
+                        current_time - last_update_time > DOWNLOAD_TOAST_UPDATE_TIME
+                        and progress_bar.n > 0
+                        and progress_bar.n < progress_bar.total
+                    ):
+                        elapsed_time = current_time - start_time
+                        last_update_time = current_time
+                        rate = progress_bar.n / elapsed_time
+                        eta_seconds_actual = (
+                            progress_bar.total - progress_bar.n
+                        ) / rate
+                        # convert to minutes
+                        eta_minutes = int(eta_seconds_actual // 60)
+                        eta_seconds_formatted = eta_seconds_actual % 60
+                        eta_formatted = (
+                            f"{eta_minutes}:{int(eta_seconds_formatted):02d}"
+                        )
 
-                    progress_message = f"Estimated time remaining: {eta_formatted}"
-                    self.download_start_toast.emit(progress_message)
+                        progress_message = (
+                            f"Estimated time remaining: {eta_formatted} minutes"
+                        )
+                        self.download_start_toast.emit(progress_message)
 
-        unzip_file(local_filename)
-        self.download_complete.emit("Download & Unzipping Complete")
+            unzip_file(local_filename)
+            self.download_complete.emit("Download & Unzipping Complete")
+        except Exception as e:
+            logger.error(e)
+            self.download_complete.emit("Download Failed")
 
     def check_and_download_latest_version(self) -> None:
         """Checks and Download latest version."""
