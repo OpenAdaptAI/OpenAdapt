@@ -5288,13 +5288,13 @@ files = [
 
 [[package]]
 name = "pyqt-toast-notification"
-version = "1.1.0"
+version = "1.2.0"
 description = "A fully customizable toast notification library for PyQt and PySide"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pyqt-toast-notification-1.1.0.tar.gz", hash = "sha256:98c7c6c3fc027fa387aa8a1cb9882962d2260cb971d3ff3b909f7451ea8789b7"},
-    {file = "pyqt_toast_notification-1.1.0-py3-none-any.whl", hash = "sha256:98a0f1bac0dae2f0b170ffeeb8db91be70d1aa4e558d35aae7c5c2b2c0b69f94"},
+    {file = "pyqt-toast-notification-1.2.0.tar.gz", hash = "sha256:9a401de25cd9256e3caa1f5467a9c66e6e0ea1c6268995d19e04b8feecaec85b"},
+    {file = "pyqt_toast_notification-1.2.0-py3-none-any.whl", hash = "sha256:450c377e39cce4ef73bf869bcfdaaab0c1180892802b4951b80bdbd06169e9cf"},
 ]
 
 [package.dependencies]

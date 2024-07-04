@@ -173,9 +173,13 @@ class SystemTrayIcon(QObject):
         self.dashboard_action.triggered.connect(self.launch_dashboard)
         self.menu.addAction(self.dashboard_action)
 
+        current_version = Version(CURRENT_VERSION)
+        latest_version = Version(LATEST_VERSION)
+        logger.info(f"{current_version=} {latest_version=}")
+
         self.download_button_text = (
             f"Download Latest Version v{LATEST_VERSION}"
-            if Version(CURRENT_VERSION) < Version(LATEST_VERSION)
+            if current_version < latest_version
             else "No updates available"
         )
         self.download_update_action = TrackedQAction(self.download_button_text)
@@ -250,7 +254,7 @@ class SystemTrayIcon(QObject):
         else:
             file_ext = ".zip"
 
-        file_name = f"open_adapt-v{latest_version}{file_ext}"
+        file_name = f"OpenAdapt-v{latest_version}{file_ext}"
         download_url = base_url + f"/v{latest_version}/{file_name}"
 
         downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -287,7 +291,7 @@ class SystemTrayIcon(QObject):
                     eta_seconds_formatted = eta_seconds_actual % 60
                     eta_formatted = f"{eta_minutes}:{int(eta_seconds_formatted):02d}"
 
-                    progress_message = f"Downloading in {eta_formatted} minutes"
+                    progress_message = f"Estimated time remaining: {eta_formatted}"
                     self.download_start_toast.emit(progress_message)
 
         unzip_file(local_filename)
