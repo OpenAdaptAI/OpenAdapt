@@ -2,6 +2,59 @@
 
 
 
+## v0.36.0 (2024-06-28)
+
+### Feature
+
+* feat(logging): redirect stdout (#810)
+
+* feat: Override std out for application
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f44795c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f44795c5216f076f99e4a9f32a294c82d19aeda8))
+
+### Fix
+
+* fix(tray): fix tray signals (#812)
+
+* feat: Override std out for application
+
+* fix: Fix passing signals around using multiprocessing pipes
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+* lint: flake8 lint
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f231a34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f231a34c881914b5410001d2bbe8c934af427b45))
+
+
+## v0.35.2 (2024-06-27)
+
+### Fix
+
+* fix(build): Fix build issues (#809)
+
+* fix: Fix build issues
+
+* fix: Add pyqttoast and whisper explicitly to build
+
+* black/flake8
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`48995bb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/48995bb9c9de41a948eacb3cad22fe1aec2a0dbf))
+
+### Unknown
+
+* add cache.clear ([`b340d8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b340d8f34326908025db99e178f689929f6112c6))
+
+
 ## v0.35.1 (2024-06-23)
 
 ### Fix

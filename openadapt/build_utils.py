@@ -1,8 +1,9 @@
 """Utility functions for the build process."""
 
-import os
+import importlib.metadata
 import pathlib
 import sys
+import time
 
 
 def get_root_dir_path() -> pathlib.Path:
@@ -36,10 +37,11 @@ class RedirectOutput:
     def __enter__(self) -> "RedirectOutput":
         """Redirect stdout and stderr to /dev/null."""
         if is_running_from_executable():
-            null_stream = open(os.devnull, "a")
+            log_file_path = get_log_file_path()
+            log_stream = open(log_file_path, "a")
             self.old_stdout = sys.stdout
             self.old_stderr = sys.stderr
-            sys.stdout = sys.stderr = null_stream
+            sys.stdout = sys.stderr = log_stream
             return self
 
     def __exit__(self, exc_type: type, exc_value: Exception, traceback: type) -> None:
@@ -54,3 +56,16 @@ class RedirectOutput:
 def redirect_stdout_stderr() -> RedirectOutput:
     """Get the RedirectOutput instance for use as a context manager."""
     return RedirectOutput()
+
+
+def get_log_file_path() -> str:
+    """Get the path to the log file.
+
+    Returns:
+        str: The path to the log file.
+    """
+    version = importlib.metadata.version("openadapt")
+    date = time.strftime("%Y-%m-%d")
+    path = get_root_dir_path() / "data" / "logs" / version / date / "openadapt.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)

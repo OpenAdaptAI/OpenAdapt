@@ -28,7 +28,7 @@ def run() -> Thread:
             if config.REDIRECT_TO_ONBOARDING:
                 url = f"http://localhost:{config.DASHBOARD_SERVER_PORT}/onboarding"
             else:
-                url = f"http://localhost:{config.DASHBOARD_SERVER_PORT}"
+                url = f"http://localhost:{config.DASHBOARD_SERVER_PORT}/recordings"
             webbrowser.open(url)
             run_app()
             return
