@@ -1,0 +1,33 @@
+Consider the previously recorded actions:
+
+```json
+{{ recorded_actions }}
+```
+
+Consider the actions you've produced (and we have replayed) so far:
+
+```json
+{{ replayed_actions }}
+```
+
+Consider the user's proposed modifications in natural language replay instructions:
+
+```text
+{{ replay_instructions }}
+```
+
+Consider the current active window:
+```json
+{{ current_window }}
+```
+Task at hand:
+{{ task }}
+
+The attached image is a screenshot of the current state of the system.
+
+Provide the next location of where the cursor should be in order to accomplish the user's instructions and the task at hand.
+
+Respond with JSON and nothing else. JSON format should be like : { "x": _ , "y": _ }.
+
+Please Remeber to be precise with your x and y coordinates.
+My career depends on this. Lives are at stake.
