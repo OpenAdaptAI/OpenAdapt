@@ -1,8 +1,8 @@
 """Consolidated post-install script for OpenAdapt."""
 
+import os
 import subprocess
 import sys
-import os
 
 
 def install_detectron2() -> None:
@@ -40,6 +40,15 @@ def install_dashboard() -> None:
         print("Changed directory to:", os.getcwd())
 
         if sys.platform.startswith("win"):
+            try:
+                subprocess.check_call(["nvm", "install", "21"])
+                subprocess.check_call(["nvm", "use", "21"])
+            except FileNotFoundError:
+                if os.getenv("CI") == "true":
+                    print("nvm not found. Skipping installation.")
+                else:
+                    print("nvm not found. Please install nvm.")
+                    sys.exit(1)
             subprocess.check_call(["powershell", "./entrypoint.ps1"])
         else:
             subprocess.check_call(["bash", "./entrypoint.sh"])
