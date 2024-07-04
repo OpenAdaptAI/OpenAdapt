@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 import psutil
 import sqlalchemy as sa
 
+
 from openadapt import utils
 from openadapt.config import DATABASE_LOCK_FILE_PATH, config
 from openadapt.db.db import Session, get_read_only_session_maker
@@ -61,7 +62,7 @@ def _insert(
         sa.engine.Result | None: The SQLAlchemy Result object if a buffer is
           not provided. None if a buffer is provided.
     """
-    db_obj = {column.name: None for column in table._table_.columns}
+    db_obj = {column.name: None for column in table.__table__.columns}
     for key in db_obj:
         if key in event_data:
             val = event_data[key]
@@ -392,11 +393,12 @@ def get_action_events(
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    # Using joinedload to eagerly load related entities
+    assert recording, "Invalid recording."
     action_events = (
         session.query(ActionEvent)
-        .options(joinedload(ActionEvent.screenshot))
         .filter(ActionEvent.recording_id == recording.id)
+        .order_by(ActionEvent.timestamp)
+        .options(joinedload(ActionEvent.recording))
         .all()
     )
     action_events = filter_disabled_action_events(action_events)
@@ -537,11 +539,11 @@ def get_screenshots(
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = screenshots = (
+    screenshots = (
         session.query(Screenshot)
         .filter(Screenshot.recording_id == recording.id)
         .order_by(Screenshot.timestamp)
-        .options(joinedload(Screenshot.action_event))
+        .options(joinedload(Screenshot.recording), joinedload(Screenshot.action_event))
         .all()
     )
 
@@ -570,8 +572,9 @@ def get_window_events(
     """
     return (
         session.query(WindowEvent)
-        .options(joinedload(WindowEvent.action_events))
         .filter(WindowEvent.recording_id == recording.id)
+        .order_by(WindowEvent.timestamp)
+        .options(joinedload(WindowEvent.recording))
         .all()
     )
 
