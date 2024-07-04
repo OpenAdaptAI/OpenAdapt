@@ -119,6 +119,7 @@ class SystemTrayIcon(QObject):
     recording_actions = {"visualize": [], "replay": []}
     download_complete = Signal(str)
     download_start_toast = Signal(str)
+    unzipping_started_toast = Signal(str)
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
@@ -188,11 +189,14 @@ class SystemTrayIcon(QObject):
         self.download_complete.connect(self.download_complete_slot)
         # Connect download_start_toast signal to download_start_toast_slot
         self.download_start_toast.connect(self.download_start_toast_slot)
+        self.unzipping_started_toast.connect(self.unzipping_started_slot)
 
         self.menu.addAction(self.download_update_action)
         self.download_progress_toast = None
 
         self.quit = TrackedQAction("Quit")
+        if current_version >= latest_version:
+            self.download_update_action.setEnabled(False)
 
         def _quit() -> None:
             """Quit the application."""
@@ -245,6 +249,12 @@ class SystemTrayIcon(QObject):
         """Shows download start toast and update button text based on signal."""
         self.show_toast(message)
         self.download_update_action.setText(self.download_button_text)
+        self.cancel_download_event.clear()
+
+    @Slot(str)
+    def unzipping_started_slot(self, message: str) -> None:
+        """Shows unzip started toast."""
+        self.show_toast(message)
         self.cancel_download_event.clear()
 
     def download_latest_version(self, base_url: str, latest_version: str) -> None:
@@ -301,6 +311,7 @@ class SystemTrayIcon(QObject):
                         )
                         self.download_start_toast.emit(progress_message)
 
+            self.unzipping_started_toast.emit("Unzipping Started")
             unzip_file(local_filename)
             self.download_complete.emit("Download & Unzipping Complete")
         except Exception as e:
