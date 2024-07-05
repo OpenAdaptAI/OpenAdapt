@@ -32,7 +32,7 @@ def test_recording(setup_db):
 
     # Wait for the recording.started signal
     start_time = time.time()
-    while time.time() - start_time < 30:
+    while time.time() - start_time < RECORD_STARTED_TIMEOUT:
         if status_pipe.poll():
             message = status_pipe.recv()
             if message.get("type") == "record.started":
