@@ -3,6 +3,7 @@ from typing import Any, Literal, Union
 import pickle
 import plistlib
 import re
+import time
 
 from loguru import logger
 import AppKit
@@ -110,7 +111,11 @@ def get_window_data(window_meta: dict) -> dict:
         dict: A dictionary containing the data of the window.
     """
     window = get_active_window(window_meta)
+    start_time = time.time()
+    logger.debug("dumping state...")
     state = dump_state(window)
+    duration = time.time() - start_time
+    logger.debug(f"{duration=}")
     return state
 
 
