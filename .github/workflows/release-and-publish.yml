@@ -205,6 +205,7 @@ jobs:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
+          build_command: "pip install poetry && poetry env use $PYTHON_PATH/python3.10 && poetry build"
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
