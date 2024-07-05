@@ -21,6 +21,8 @@ from loguru import logger
 from PIL import Image, ImageEnhance
 from posthog import Posthog
 import pyautogui
+import argparse
+import time
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 
@@ -434,6 +436,7 @@ def get_current_monitor(monitors):
             return monitor
     
     # If not found, default to the first monitor
+    logger.warning(f"Cursor position ({cursor_x}, {cursor_y}) not found in any monitor. Defaulting to first monitor.")
     return monitors[1]
 
 def take_screenshot() -> Image.Image:
@@ -442,35 +445,42 @@ def take_screenshot() -> Image.Image:
     Returns:
         PIL.Image.Image: The screenshot image.
     """
-    with mss.mss() as sct:
-        monitors = sct.monitors
+    global SCT
+    monitors = SCT.monitors[1:]  # Skip the first entry which is a union of all monitors
 
-        if config.CAPTURE_ALL_MONITORS:
-            # Determine the bounds of the combined image
-            min_left = min(monitor['left'] for monitor in monitors[1:])
-            min_top = min(monitor['top'] for monitor in monitors[1:])
-            max_right = max(monitor['left'] + monitor['width'] for monitor in monitors[1:])
-            max_bottom = max(monitor['top'] + monitor['height'] for monitor in monitors[1:])
+    if config.CAPTURE_ALL_MONITORS:
+        # Grab all monitors at once
+        sct_img = SCT.grab(SCT.monitors[0])  # Grab the union of all monitors
+        full_img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
-            total_width = max_right - min_left
-            total_height = max_bottom - min_top
-            
-            combined_image = Image.new("RGB", (total_width, total_height))
+        # Determine the bounds of the combined image
+        min_left = min(monitor['left'] for monitor in monitors)
+        min_top = min(monitor['top'] for monitor in monitors)
+        max_right = max(monitor['left'] + monitor['width'] for monitor in monitors)
+        max_bottom = max(monitor['top'] + monitor['height'] for monitor in monitors)
 
-            for monitor in monitors[1:]:  # Skip the first entry which is a union of all monitors
-                sct_img = sct.grab(monitor)
-                image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                x_offset = monitor['left'] - min_left
-                y_offset = monitor['top'] - min_top
-                combined_image.paste(image, (x_offset, y_offset))
-            
-            return combined_image
-        else:
-            # Capture the current monitor
-            current_monitor = get_current_monitor(monitors)
-            sct_img = sct.grab(current_monitor)
-            image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            return image
+        total_width = max_right - min_left
+        total_height = max_bottom - min_top
+        
+        combined_image = Image.new("RGB", (total_width, total_height))
+
+        for monitor in monitors:
+            x_offset = monitor['left'] - min_left
+            y_offset = monitor['top'] - min_top
+            monitor_img = full_img.crop((
+                monitor['left'], monitor['top'],
+                monitor['left'] + monitor['width'],
+                monitor['top'] + monitor['height']
+            ))
+            combined_image.paste(monitor_img, (x_offset, y_offset))
+        
+        return combined_image
+    else:
+        # Capture the current monitor
+        current_monitor = get_current_monitor(monitors)
+        sct_img = SCT.grab(current_monitor)
+        image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+        return image
 
 
 
