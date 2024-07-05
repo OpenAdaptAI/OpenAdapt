@@ -40,7 +40,7 @@ def test_recording(setup_db):
                 break
         time.sleep(0.1)
     else:
-        pytest.fail("recording.started signal not received within 30 seconds")
+        pytest.fail(f"recording.started signal not received within {RECORD_STARTED_TIMEOUT} seconds")
 
     # Stop the recording by emitting the stop sequence
     with patch("openadapt.playback.emit_stop_sequence") as mock_emit_stop_sequence:
