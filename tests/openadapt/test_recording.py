@@ -7,6 +7,9 @@ from unittest.mock import patch
 from openadapt import record, playback, db, config, utils
 from openadapt.db import crud
 from openadapt.models import Recording
+from loguru import logger
+
+RECORD_STARTED_TIMEOUT = 30  # seconds
 
 @pytest.fixture
 def setup_db():
@@ -19,11 +22,6 @@ def test_recording(setup_db):
     terminate_processing = multiprocessing.Event()
     terminate_recording = multiprocessing.Event()
     status_pipe, child_conn = multiprocessing.Pipe()
-    # conn =  multiprocessing.connection.Connection
-    # signal = conn.recv()
-    # print(f"Received signal: {signal}")
-    # signal_type = signal["type"]
-    # print(f"Signal type: {signal_type}")
 
     # Start the recording process
     record_proc = multiprocessing.Process(
@@ -38,8 +36,7 @@ def test_recording(setup_db):
         if status_pipe.poll():
             message = status_pipe.recv()
             if message.get("type") == "record.started":
-                print(f"Received signal: {message}")
-            # if signal_type == "record.started":
+                logger.info(f"Received signal: {message}")
                 break
         time.sleep(0.1)
     else:
@@ -80,19 +77,19 @@ def test_record_functionality():
     )
     record_process.start()
     
-    print("Waiting for the 'record.started' signal")
-    print(f"Parent conn: {parent_conn}")
-    print(f"Child conn: {child_conn}")
-    print(f"Parent conn poll: {parent_conn.poll()}")
-    print(f"Parent conn recv: {parent_conn.recv()}")
-    print(f"Message: {parent_conn.recv()['type']}")
+    logger.info("Waiting for the 'record.started' signal")
+    logger.info(f"Parent conn: {parent_conn}")
+    logger.info(f"Child conn: {child_conn}")
+    logger.info(f"Parent conn poll: {parent_conn.poll()}")
+    logger.info(f"Parent conn recv: {parent_conn.recv()}")
+    logger.info(f"Message: {parent_conn.recv()['type']}")
     # Wait for the 'record.started' signal
     start_time = time.time()
-    while time.time() - start_time < 30:  # 30 second timeout
+    while time.time() - start_time < RECORD_STARTED_TIMEOUT:
         if parent_conn.poll(1):  # 1 second timeout for poll
-            print(f"Message: {parent_conn.recv()['type']}")
+            logger.info(f"Message: {parent_conn.recv()['type']}")
             message = parent_conn.recv()
-            print(f"Message: {message}")
+            logger.info(f"Message: {message}")
             if message['type'] == 'record.started':
                 break
     else:
