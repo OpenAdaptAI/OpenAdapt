@@ -359,8 +359,6 @@ def _get(
     session: SaSession,
     table: BaseModelType,
     recording_id: int,
-    eager: bool = False,
-    relationships: list[str] = None,
 ) -> list[BaseModelType]:
     """Retrieve records from the database table based on the recording timestamp.
 
@@ -368,9 +366,6 @@ def _get(
         session (sa.orm.Session): The database session.
         table (BaseModel): The database table to query.
         recording_id (int): The recording id.
-        eager (bool, optional): If true, implement eager loading. Defaults to False.
-        relationships (list[str], optional): Relationships to load eagerly.
-            Defaults to None.
 
     Returns:
         list[BaseModel]: A list of records retrieved from the database table,
