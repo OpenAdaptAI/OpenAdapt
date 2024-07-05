@@ -191,10 +191,13 @@ jobs:
           path: dist/
       - name: Set Python path
         run: |
-          echo "PYTHON_PATH=$(dirname $(which python3.10))" >> $GITHUB_ENV
+          PYTHON_PATH=$(dirname $(which python3.10))
+          echo "PYTHON_PATH=$PYTHON_PATH" >> $GITHUB_ENV
           echo "$PYTHON_PATH" >> $GITHUB_PATH
-          echo "Updated GITHUB_PATH:"
-          echo "$GITHUB_PATH"
+          echo "Set PYTHON_PATH to: $PYTHON_PATH"
+          echo "Current PATH: $PATH"
+          echo "Current GITHUB_PATH:"
+          cat $GITHUB_PATH
       - name: Python Semantic Release
         id: semantic_release
         uses: python-semantic-release/python-semantic-release@v9.8.4
