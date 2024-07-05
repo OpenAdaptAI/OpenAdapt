@@ -189,6 +189,12 @@ jobs:
         with:
           name: OpenAdapt
           path: dist/
+      - name: Set Python path
+        run: |
+          echo "PYTHON_PATH=$(dirname $(which python3.10))" >> $GITHUB_ENV
+          echo "$PYTHON_PATH" >> $GITHUB_PATH
+          echo "Updated GITHUB_PATH:"
+          echo "$GITHUB_PATH"
       - name: Python Semantic Release
         id: semantic_release
         uses: python-semantic-release/python-semantic-release@v9.8.4
