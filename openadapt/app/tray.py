@@ -12,13 +12,13 @@ import inspect
 import multiprocessing
 import os
 import sys
-import requests
 import threading
-from tqdm import tqdm
 import time
+
 from loguru import logger
+from packaging.version import Version
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
-from PySide6.QtCore import QMargins, QSize, Qt, Signal, QObject, Slot, QThread
+from PySide6.QtCore import QMargins, QObject, QSize, Qt, QThread, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -36,21 +36,22 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from tqdm import tqdm
+import requests
 
+from build_scripts.get_version import get_latest_version, get_version
 from openadapt.app.cards import quick_record, stop_record
 from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
 from openadapt.build_utils import is_running_from_executable
-from openadapt.update_utils import unzip_file
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.update_utils import unzip_file
 from openadapt.utils import get_posthog_instance
 from openadapt.visualize import main as visualize
-from build_scripts.get_version import get_version, get_latest_version
-from packaging.version import Version
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
@@ -117,9 +118,9 @@ class SystemTrayIcon(QObject):
 
     # storing actions is required to prevent garbage collection
     recording_actions = {"visualize": [], "replay": []}
-    download_complete = Signal(str)
-    download_start_toast = Signal(str)
-    unzipping_started_toast = Signal(str)
+    download_complete_signal = Signal(str)
+    download_start_toast_signal = Signal(str)
+    unzipping_started_toast_signal = Signal(str)
 
     def __init__(self) -> None:
         """Initialize the system tray icon."""
@@ -185,11 +186,11 @@ class SystemTrayIcon(QObject):
         )
         self.download_update_action = TrackedQAction(self.download_button_text)
         self.download_update_action.triggered.connect(self.download_latest_app_version)
-        # Connect download_complete signal to show_toast slot
-        self.download_complete.connect(self.download_complete_slot)
-        # Connect download_start_toast signal to download_start_toast_slot
-        self.download_start_toast.connect(self.download_start_toast_slot)
-        self.unzipping_started_toast.connect(self.unzipping_started_slot)
+        # Connect download_complete_signal signal to show_toast slot
+        self.download_complete_signal.connect(self.download_complete_slot)
+        # Connect download_start_toast_signal signal to download_start_toast_slot
+        self.download_start_toast_signal.connect(self.download_start_toast_slot)
+        self.unzipping_started_toast_signal.connect(self.unzipping_started_slot)
 
         self.menu.addAction(self.download_update_action)
         self.download_progress_toast = None
@@ -224,7 +225,7 @@ class SystemTrayIcon(QObject):
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
 
-        self.launch_dashboard()
+        # self.launch_dashboard()
 
     def stop_download(self) -> None:
         """Stops download when button clicked."""
@@ -264,7 +265,8 @@ class SystemTrayIcon(QObject):
         else:
             file_ext = ".zip"
 
-        file_name = f"OpenAdapt-v{latest_version}{file_ext}"
+        file_base_name = f"OpenAdapt-v{latest_version}"
+        file_name = f"{file_base_name}{file_ext}"
         download_url = base_url + f"/v{latest_version}/{file_name}"
 
         downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -309,14 +311,14 @@ class SystemTrayIcon(QObject):
                         progress_message = (
                             f"Estimated time remaining: {eta_formatted} minutes"
                         )
-                        self.download_start_toast.emit(progress_message)
+                        self.download_start_toast_signal.emit(progress_message)
 
-            self.unzipping_started_toast.emit("Unzipping Started")
-            unzip_file(local_filename)
-            self.download_complete.emit("Download & Unzipping Complete")
+            self.unzipping_started_toast_signal.emit("Unzipping Started")
+            unzip_file(local_filename, file_base_name)
+            self.download_complete_signal.emit("Download Complete")
         except Exception as e:
             logger.error(e)
-            self.download_complete.emit("Download Failed")
+            self.download_complete_signal.emit("Download Failed")
 
     def check_and_download_latest_version(self) -> None:
         """Checks and Download latest version."""
