@@ -33,7 +33,7 @@ def get_active_window_data(
     """
     state = get_active_window_state(include_window_data)
     if not state:
-        return None
+        return {}
     title = state["title"]
     left = state["left"]
     top = state["top"]
