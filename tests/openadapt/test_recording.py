@@ -108,7 +108,7 @@ def test_record_functionality():
         )
     
     # Wait for the recording to stop
-    terminate_recording.wait(timeout=30)
+    terminate_recording.wait(timeout=RECORD_STARTED_TIMEOUT)
     if not terminate_recording.is_set():
         pytest.fail("Recording did not stop within the expected time")
     
