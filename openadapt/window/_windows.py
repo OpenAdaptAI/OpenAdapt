@@ -1,9 +1,61 @@
 from pprint import pprint
+import pygetwindow as gw
 import pickle
 import time
 
 from loguru import logger
 import pywinauto
+
+
+def get_active_window_state_gw(read_window_data: bool) -> dict:
+    try:
+        active_window = gw.getActiveWindow()
+        if not active_window:
+            raise RuntimeError("No active window found.")
+    except RuntimeError as e:
+        logger.warning(e)
+        return {}
+
+    meta = {
+        "title": active_window.title,
+        "left": active_window.left,
+        "top": active_window.top,
+        "width": active_window.width,
+        "height": active_window.height,
+        "rectangle": {
+            "left": active_window.left,
+            "top": active_window.top,
+            "right": active_window.right,
+            "bottom": active_window.bottom,
+            "width": active_window.width,
+            "height": active_window.height,
+        },
+        "control_id": active_window._hWnd,
+    }
+
+    if read_window_data:
+        data = {}  # Placeholder for additional data fetching logic if needed
+    else:
+        data = {}
+
+    state = {
+        "title": meta["title"],
+        "left": meta["left"],
+        "top": meta["top"],
+        "width": meta["width"],
+        "height": meta["height"],
+        "meta": meta,
+        "data": data,
+        "window_id": meta["control_id"],
+    }
+
+    try:
+        pickle.dumps(state)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        state.pop("data")
+
+    return state
 
 
 def get_active_window_state(read_window_data: bool) -> dict:
