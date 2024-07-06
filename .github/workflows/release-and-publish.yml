@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - debug-release
 
 jobs:
   check_last_commit_author:
@@ -171,6 +170,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -190,43 +190,9 @@ jobs:
         with:
           name: OpenAdapt
           path: dist/
-      - name: Set Python path
-        run: |
-          PYTHON_PATH=$(dirname $(which python3.10))
-          echo "PYTHON_PATH=$PYTHON_PATH" >> $GITHUB_ENV
-          echo "$PYTHON_PATH" >> $GITHUB_PATH
-          echo "Set PYTHON_PATH to: $PYTHON_PATH"
-          echo "Current PATH: $PATH"
-          echo "Current GITHUB_PATH:"
-          cat $GITHUB_PATH
-      - name: Start SSH service
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openssh-server
-          sudo service ssh start
-          ssh-keygen -t rsa -b 4096 -f /tmp/sshkey -N ""
-          cat /tmp/sshkey.pub >> ~/.ssh/authorized_keys
-          echo "SSH private key:"
-          cat /tmp/sshkey
-      - name: Set up ngrok
-        run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt-get update && sudo apt-get install ngrok
-          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok tcp 22 &
-      - name: Wait for ngrok
-        run: sleep 10
-      - name: Get ngrok URL
-        id: ngrok
-        run: curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url
-      - name: Display ngrok SSH URL
-        run: echo "SSH to your runner with: ssh -i /tmp/sshkey -o StrictHostKeyChecking=no root@$(echo ${{ steps.ngrok.outputs.ngrok }} | sed 's|tcp://||;s|:| -p |')"
       - name: Python Semantic Release
         id: semantic_release
-        uses: python-semantic-release/python-semantic-release@v9.8.4
-        env:
-          PYTHON_PATH: ${{ env.PYTHON_PATH }}
+        uses: python-semantic-release/python-semantic-release@v9.6.0
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"

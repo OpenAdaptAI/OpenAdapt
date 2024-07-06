@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.36.1"
+version = "0.36.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
@@ -156,23 +156,4 @@ upload_to_PyPI = false
 upload_to_release = true
 upload_to_repository = false
 repository_url = "https://upload.pypi.org/legacy/"
-build_command = """
-pip install poetry && \
-echo "PYTHON_PATH is set to: $PYTHON_PATH" && \
-if [ -z \"$PYTHON_PATH\" ]; then \
-  echo "PYTHON_PATH is empty, trying default python3.10" && \
-  POETRY_PYTHON_PATH=$(which python3.10 || echo "/opt/hostedtoolcache/Python/3.10.14/x64/bin/python3.10") && \
-  if [ -x "$POETRY_PYTHON_PATH" ]; then \
-    echo "Resolved Python path: $POETRY_PYTHON_PATH" && \
-    poetry env use $POETRY_PYTHON_PATH; \
-  else \
-    echo "python3.10 not found, trying default python" && \
-    poetry env use python; \
-  fi; \
-else \
-  echo "Using python from PYTHON_PATH: $PYTHON_PATH/python3.10" && \
-  ls -la $PYTHON_PATH && \
-  poetry env use $PYTHON_PATH/python3.10; \
-fi && \
-poetry build
-"""
+build_command = "pip install poetry && poetry env use python3.10 && poetry build"

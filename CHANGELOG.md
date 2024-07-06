@@ -1,56 +1,6 @@
 # CHANGELOG
 
-## v0.36.1 (2024-07-06)
 
-### Fix
-
-* fix(release): hard code python path fallback (#837) ([`1b48f94`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b48f940770fdd0e963e25ff2d0188914e2f9eb3))
-
-* fix(release): set PYTHON_PATH in semantic_release; hard-code fallback (#836)
-
-* Update release-and-publish.yml: set PYTHON_PATH in semantic_release
-
-* Update pyproject.toml: hard code python path fallback ([`e6c88d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e6c88d1e84c7f553cb75ced0071ddf817cb722cc))
-
-* fix(release): modify build_command in pyproject.toml (#835)
-
-* Update release-and-publish.yml: remove build_command
-
-* Update pyproject.toml: add PYTHON_PATH to build_command
-
-* Update pyproject.toml: increase verbosity ([`0f5166e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0f5166e369193cb74a3e21e88e2fdc1a10909067))
-
-* fix(release): override build_command and include PYTHON_PATH (#834) ([`88fca89`](https://github.com/OpenAdaptAI/OpenAdapt/commit/88fca896ddd7b2442ba789ebd4a0681742c03ee2))
-
-* fix(release): set python path more robustly (#833) ([`6b382dd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6b382ddef626b644f8b09c4d6d29c229009cf373))
-
-* fix(release): add PYTHON_PATH to GITHUB_PATH (#832) ([`217204b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/217204baf13b2aa26ad1c6a57bd6d9a0364d20c5))
-
-* fix(release): update python-semantic-release to v9.8.4 (#831) ([`8054d69`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8054d6959f363c232da7e9ad7dd6557d1e1eab74))
-
-* fix(release): remove ADMIN_TOKEN from actions/checkout (#830) ([`094a054`](https://github.com/OpenAdaptAI/OpenAdapt/commit/094a0542dacc30dae33e6574375e50a0b6d1a0f0))
-
-* fix(release): replace GITHUB_TOKEN with ADMIN_TOKEN (#829) ([`c193fe6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c193fe6dfe07d698d3c3133b3803e990ae20024c))
-
-* fix(release): add token to actions/checkout (#828) ([`8e1a17d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8e1a17d33fcdc0221ecc73caf37207b260ffc59c))
-
-* fix(db): eager loading (#822)
-
-* add joinedload to eagerly load related entities
-
-* change get_active_window_data to return empty dict when state is none
-
-* add eager as parameter in _get
-
-* add a default parameter for relationships
-
-* flake8 error fix
-
-* use direct and indirect relationships
-
-* chore: refactor code ([`615fc6f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/615fc6ffe560ff0788414c80643308b484012750))
-
-* fix(audio): Fix error when downloading whisper model (#826) ([`2ad143a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2ad143a7452c4a178b7291da339685a704f3eb37))
 
 ## v0.36.0 (2024-06-28)
 
@@ -82,6 +32,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f44795c`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f231a34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f231a34c881914b5410001d2bbe8c934af427b45))
 
+
 ## v0.35.2 (2024-06-27)
 
 ### Fix
@@ -102,6 +53,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`48995bb`](htt
 ### Unknown
 
 * add cache.clear ([`b340d8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b340d8f34326908025db99e178f689929f6112c6))
+
 
 ## v0.35.1 (2024-06-23)
 
@@ -126,6 +78,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`48995bb`](htt
 ---------
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/742b1764d3434f5bb505acf20318ac0c699a1761))
+
 
 ## v0.35.0 (2024-06-22)
 
@@ -161,6 +114,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](ht
 
 * add models.Replay; print_config in replay.py ([`7ef115a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7ef115a6172222d7d624ce92d0ec38a60d0e86f1))
 
+
 ## v0.34.0 (2024-06-20)
 
 ### Feature
@@ -183,6 +137,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bdf153e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bdf153e153aea428653b5a5fa845cf373059712e))
 
+
 ## v0.33.6 (2024-06-20)
 
 ### Fix
@@ -194,6 +149,7 @@ Changed order in tray.py
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`4ff4c73`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4ff4c736685e02dc45ab73eb2912df5fdd0c7386))
 
 * fix(record): remove extra param (#784) ([`f60a617`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f60a617f7b13a7d6c6232bcdb519652fb43f7fb8))
+
 
 ## v0.33.5 (2024-06-19)
 
@@ -208,6 +164,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`4ff4c73`](ht
 * fix: Fix code in plotting.py not using correct arguments
 
 * fix: Update broken tests ([`59c2714`](https://github.com/OpenAdaptAI/OpenAdapt/commit/59c2714a8c4672f1042dd326b68492bc805bc9e0))
+
 
 ## v0.33.4 (2024-06-18)
 
@@ -233,6 +190,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`4ff4c73`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e370fe6fa6a028fcdaabf729fc2c1909c66e207d))
 
+
 ## v0.33.3 (2024-06-18)
 
 ### Fix
@@ -247,6 +205,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](ht
 
 * black/flake8 ([`44371e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/44371e93db7e068284c50f8dbef08fc6c8c80671))
 
+
 ## v0.33.2 (2024-06-15)
 
 ### Fix
@@ -256,6 +215,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](ht
 * repair VisualReplayStrategy
 
 * black/flake8 ([`dd9e8fa`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd9e8fada19bb40ccab892b4335cae7414f110a8))
+
 
 ## v0.33.1 (2024-06-14)
 
@@ -270,6 +230,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`e370fe6`](ht
 ---------
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`16d510f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/16d510fa776086cd9599f1c0cf946ac03e7d9f53))
+
 
 ## v0.33.0 (2024-06-13)
 
@@ -291,6 +252,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`16d510f`](htt
 
 * black/flake8 ([`3c20298`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3c2029897e91f3f16b6b929cdec656ceda28459f))
 
+
 ## v0.32.0 (2024-06-13)
 
 ### Feature
@@ -298,6 +260,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`16d510f`](htt
 * feat(tray): Add posthog analytics to tray actions (#737)
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc0b7ea2d910c31acfc0eef0eba0b2e252196838))
+
 
 ## v0.31.0 (2024-06-12)
 
@@ -380,11 +343,13 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](ht
 
 * black ([`d28a886`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d28a886462f6cd1840da29307e12d24c86785698))
 
+
 ## v0.30.4 (2024-06-11)
 
 ### Fix
 
 * fix(RecordingsAPI): catch AttributeError if audio_info is None (#729) ([`81b4089`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81b40893d39eebf2c4c4afec60d1ba8f15e473d4))
+
 
 ## v0.30.3 (2024-06-10)
 
@@ -393,6 +358,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](ht
 * fix(scrubbing): Catch exceptions when download required spacy model (#733) ([`b3f73d8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b3f73d8e8689f24b41617ca896a5c40eb1d0eec8))
 
 * fix(video): add num_copies to write_video_event (#732) ([`ca04b6d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ca04b6d737fe17371726437540768ee13979128e))
+
 
 ## v0.30.2 (2024-06-08)
 
@@ -411,6 +377,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`dc0b7ea`](ht
 * fix typo
 
 * yuv420p -&gt; yuv444p (lossless) ([`1f67822`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1f67822b710836cb37cfbe578d5d89e4da8412d1))
+
 
 ## v0.30.1 (2024-06-08)
 
@@ -434,6 +401,7 @@ Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt;
 
 Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b04fd44c61d276e2aede9a93bb8d2f0c5243029))
 
+
 ## v0.30.0 (2024-06-05)
 
 ### Feature
@@ -443,6 +411,7 @@ Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`]
 * feat: Add feature to remove action events
 
 * fix: Fix database revision ([`f33b36d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f33b36d1199b153baa4689ff3c9a1e897f59d55f))
+
 
 ## v0.29.0 (2024-06-05)
 
@@ -496,6 +465,7 @@ Co-authored-by: Shohan Dutta Roy &lt;shohanduttaroy99@gmail.com&gt; ([`1b04fd4`]
 
 * flake8 ([`81074c4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/81074c425f27a075ef3d082c9555d2e1ada3df6a))
 
+
 ## v0.28.0 (2024-06-05)
 
 ### Feature
@@ -524,6 +494,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`889d48c`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`6492120`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6492120069ed5b24fadd6c8ae4441ba2c34ccc5e))
 
+
 ## v0.27.0 (2024-06-04)
 
 ### Feature
@@ -546,6 +517,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`6492120`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`1e11906`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e1190650ac1f42a725c360dd3f52214adf8847c))
 
+
 ## v0.26.2 (2024-06-03)
 
 ### Documentation
@@ -555,6 +527,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`1e11906`](ht
 ### Fix
 
 * fix(docs): add nvm install info in Readme.md in manual setup section. (#694) ([`4f240b6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4f240b68a1426f57bf74a0fc722baf15100f68cd))
+
 
 ## v0.26.1 (2024-05-28)
 
@@ -577,6 +550,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`1e11906`](ht
 ---------
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`987f6ac`](https://github.com/OpenAdaptAI/OpenAdapt/commit/987f6acc55c1512805ab0cc31c922cb17c1cc846))
+
 
 ## v0.26.0 (2024-05-27)
 
@@ -604,11 +578,13 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`987f6ac`](htt
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3083fef9dceb30780f91dd235eea89e6a7b68ebc))
 
+
 ## v0.25.5 (2024-05-24)
 
 ### Fix
 
 * fix(docs): fix typo in README.md (#686) ([`320bb88`](https://github.com/OpenAdaptAI/OpenAdapt/commit/320bb88c4ca64d296f8c38806eecebbd87684896))
+
 
 ## v0.25.4 (2024-05-22)
 
@@ -616,11 +592,13 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](ht
 
 * fix(installer): Fix build failing due to replicate and other issues (#684) ([`fdf286c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fdf286ce69f6c3704dd350e7eff2235026e99bd6))
 
+
 ## v0.25.3 (2024-05-22)
 
 ### Fix
 
 * fix(installer): add hidden import replicate (#680) ([`6621a04`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6621a04208ab4a076ce0a8175621d1934a0d730e))
+
 
 ## v0.25.2 (2024-05-19)
 
@@ -628,11 +606,13 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](ht
 
 * fix(app): add hidden-imports to build spec (#678) ([`d2db305`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d2db30512bc0488df7c250b10fcf45c5025431ec))
 
+
 ## v0.25.1 (2024-05-17)
 
 ### Fix
 
 * fix(config): Fix path of default config file (#675) ([`9ffdf67`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9ffdf677a2db81d4aac901ba582cdcd2a76ad075))
+
 
 ## v0.25.0 (2024-05-14)
 
@@ -642,7 +622,15 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`3083fef`](ht
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bed12ec`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bed12ecde56baa3f6540d2b0399d1e4af43bf050))
 
+
 ## v0.24.1 (2024-05-14)
+
+### Fix
+
+* fix(dashboard): close dashboard from tray (#671) ([`3f0db86`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3f0db86aed32cc6d71076c8ebaad4f78447546db))
+
+
+## v0.24.0 (2024-05-12)
 
 ### Feature
 
@@ -664,15 +652,13 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bed12ec`](ht
 
 * fix test_share.py: RECORDING_DIRECTORY_PATH -&gt; RECORDING_DIR_PATH ([`45c06c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/45c06c33f977d18b8dd012e1b98d316e114651ca))
 
-### Fix
-
-* fix(dashboard): close dashboard from tray (#671) ([`3f0db86`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3f0db86aed32cc6d71076c8ebaad4f78447546db))
 
 ## v0.23.1 (2024-05-11)
 
 ### Fix
 
 * fix: Install latest version before deciding which release to upload to (#668) ([`c91efd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c91efd4c5fa8f645ae95742be26dab18b4cdac17))
+
 
 ## v0.23.0 (2024-05-11)
 
@@ -711,6 +697,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`bed12ec`](ht
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`0ac599c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ac599c71bcee4da87bd563c914a1a805ef523cc))
 
+
 ## v0.22.0 (2024-05-10)
 
 ### Feature
@@ -719,6 +706,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`0ac599c`](ht
 
 Co-authored-by: OpenAdapt Bot &lt;bot@openadapt.ai&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`400a73b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/400a73bb201ee173e408a9eb178aa76519fa3a33))
+
 
 ## v0.21.0 (2024-05-10)
 
@@ -836,11 +824,13 @@ This reverts commit cc6cab34861032393d0264844d3714c0319ebd03.
 
 * python-semantic-release@9.6.0 ([`e06bceb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e06bcebd5dcf5d684430846747b572e97b601333))
 
+
 ## v0.20.1 (2024-05-03)
 
 ### Fix
 
 * fix(config): restore Config.ROOT_DIR_PATH (#653) ([`b33e454`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b33e454ec3950449a9544e027c25e3b7d9d7d83d))
+
 
 ## v0.20.0 (2024-05-02)
 
@@ -876,6 +866,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 
 * fix(release): Revert to use admin token for semantic release action (#646) ([`64cd483`](https://github.com/OpenAdaptAI/OpenAdapt/commit/64cd483624302e77b8fb746c41d2d4ec61db78f3))
 
+
 ## v0.19.0 (2024-04-27)
 
 ### Feature
@@ -894,6 +885,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 
 * fix test_crop_active_window ([`3c185e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3c185e880483aeb26ef46381b3a1e2164534cb31))
 
+
 ## v0.18.3 (2024-04-22)
 
 ### Fix
@@ -901,6 +893,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 * fix: video performance
 
 * remove screenshot_to_np ([`943adb7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/943adb7be0ce18295dce8923f5bb91fcb2ae4a88))
+
 
 ## v0.18.2 (2024-04-22)
 
@@ -911,6 +904,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 * screenshot_to_np Image.Image argument
 
 * remove unused import; update documentation/types ([`9a0501d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9a0501dd711f62f9d6e07857e1f40cfc4738eab5))
+
 
 ## v0.18.1 (2024-04-22)
 
@@ -925,6 +919,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 * mss.windows.CAPTUREBLT = 0
 
 * return PIL.image in utils.take_screenshot() ([`d354b94`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d354b94846e99a8911b4f748b3a01b72cd5d1a10))
+
 
 ## v0.18.0 (2024-04-16)
 
@@ -972,6 +967,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ee506f0`](htt
 
 Co-authored-by: Cody DeVilliers &lt;devilliers.cody@gmail.com&gt; ([`250943f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/250943fa14fe58a261890db7fa4d54b1f7a64945))
 
+
 ## v0.17.1 (2024-04-15)
 
 ### Fix
@@ -985,6 +981,7 @@ dashboard -&gt; install-dashboard
 * dashboard -&gt; install-dashboard (win)
 
 * pull_request_target -&gt; pull_request ([`e3834ed`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e3834edddaffcf37c774cacbf2c521edf0ee3d43))
+
 
 ## v0.17.0 (2024-04-11)
 
@@ -1040,6 +1037,7 @@ Update System Overview diagram ([`aee1078`](https://github.com/OpenAdaptAI/OpenA
 
 * chore: Code cleanup and workflow fix ([`0050cea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0050cea6df4ea71930b7ee25ab78b03f6bedbafd))
 
+
 ## v0.16.2 (2024-03-08)
 
 ### Documentation
@@ -1090,6 +1088,7 @@ Update system overview image
 
 Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt; ([`9ed9ac3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9ed9ac3bcb46bd2485c0abe7398a9130218e2c17))
 
+
 ## v0.16.1 (2024-02-29)
 
 ### Documentation
@@ -1099,6 +1098,7 @@ Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt; ([`9ed9ac3`]
 ### Fix
 
 * fix(video): add migration script ([`b769c4a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b769c4a19b520a109a84fa02f21e5d31596d4641))
+
 
 ## v0.16.0 (2024-02-29)
 
@@ -1166,6 +1166,7 @@ Add contract positions
 
 Improve contracts section ([`275db79`](https://github.com/OpenAdaptAI/OpenAdapt/commit/275db79d4230cf726ec8e8876f4a3c1f8eb644f5))
 
+
 ## v0.15.1 (2023-12-12)
 
 ### Documentation
@@ -1223,6 +1224,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`39b334e`](htt
 * fix failing tests ([`22b5f0c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/22b5f0cd4241904999ba2e543f5e1218e728a1f1))
 
 * poetry lock ([`61553f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/61553f00c57436ea8a6b3fe73306c990e34fc189))
+
 
 ## v0.15.0 (2023-11-11)
 
@@ -1349,6 +1351,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`396bbb5`](htt
 Co-authored-by: Krish Patel &lt;kmppatel133@gmail.com&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`086a5ca`](https://github.com/OpenAdaptAI/OpenAdapt/commit/086a5ca9a1f98ec58295241faf11b5bb73110c30))
 
+
 ## v0.14.0 (2023-11-10)
 
 ### Feature
@@ -1366,6 +1369,7 @@ fixed deprecated/visualize
 * Update README.md (#514) ([`f5a22fb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f5a22fbf0a2d2931216ac28b63b60dc7a8a4c3cb))
 
 * Update LICENSE (#505) ([`97478b7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/97478b7369602d90655b3a211c97fe35d39c5403))
+
 
 ## v0.13.2 (2023-10-16)
 
@@ -1389,6 +1393,7 @@ replace slack with discord ([`5a6530a`](https://github.com/OpenAdaptAI/OpenAdapt
 
 * fix wormhole sharing ([`a94c303`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a94c303452ace7688630a7487b79835b80f10604))
 
+
 ## v0.13.1 (2023-08-30)
 
 ### Fix
@@ -1404,6 +1409,7 @@ replace slack with discord ([`5a6530a`](https://github.com/OpenAdaptAI/OpenAdapt
 * Merge pull request #483 from OpenAdaptAI/modify-install-script ([`5fa12eb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5fa12ebddf8271883aa54c6beb6d43df79a8a609))
 
 * Merge branch &#39;main&#39; into modify-install-script ([`73bfad4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/73bfad4bd845f91563c1f50a23ef851a68a864b4))
+
 
 ## v0.13.0 (2023-08-29)
 
@@ -1483,6 +1489,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](ht
 
 * Merge branch &#39;main&#39; into modify-install-script ([`705a2f0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/705a2f0d0414d9010f9b0cea7a3a3a1306b49de1))
 
+
 ## v0.12.0 (2023-08-29)
 
 ### Feature
@@ -1505,6 +1512,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`33fe244`](ht
 * address formatting errors ([`2fa3fde`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2fa3fde760692a4c820ebc06976064ce2b865eab))
 
 * Merge branch &#39;main&#39; into modify-install-script ([`b5ad05c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b5ad05c90e9fba38b0d9e95145a0d98b209ba4ac))
+
 
 ## v0.11.0 (2023-08-29)
 
@@ -1599,6 +1607,7 @@ This reverts commit 0fe81563e88417d61012e24e1dc55befa960c2ed.
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`581b9b8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/581b9b831fe208e143169e90a1e7a02cd1a2c68d))
 
+
 ## v0.10.0 (2023-08-29)
 
 ### Feature
@@ -1624,6 +1633,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`581b9b8`](ht
 ---------
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`90bfe8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/90bfe8fd8068ad0d684b04f7ba3f06a9121d32d5))
+
 
 ## v0.9.0 (2023-08-28)
 
@@ -1886,6 +1896,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`09f4e71`](htt
 
 * Undo changing PLOT_PERFORMANCE ([`56d22a8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/56d22a8fe0e532f671020c8393d07c6b072acac4))
 
+
 ## v0.8.1 (2023-08-21)
 
 ### Chore
@@ -2035,6 +2046,7 @@ fix undefined error in pylint and falek8
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`75b324d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/75b324d31f71f6192c3e55a59cd331e4932b2092))
 
+
 ## v0.8.0 (2023-08-10)
 
 ### Chore
@@ -2145,6 +2157,7 @@ This reverts commit 82e62d95093e6114653f59b8a7ea94233efc60e1.
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`453d2c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/453d2c25d890e59427adfd0f444bc3068cc5909d))
 
+
 ## v0.7.1 (2023-08-10)
 
 ### Chore
@@ -2207,6 +2220,7 @@ Co-authored-by: M &lt;mortezaho.1376@gmail.com&gt; ([`ea25b53`](https://github.c
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`1a10f8a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1a10f8a924c1c443a9eba5b12a99d7907a31ba15))
 
+
 ## v0.7.0 (2023-07-28)
 
 ### Feature
@@ -2259,6 +2273,7 @@ Co-authored-by: M &lt;mortezaho.1376@gmail.com&gt; ([`ea25b53`](https://github.c
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1e96a4f599b9790509dad865ea3c7b1b254fb19b))
 
+
 ## v0.6.1 (2023-07-28)
 
 ### Fix
@@ -2272,6 +2287,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](htt
 * remove file exclusion in .flake8 and add ignore comment in openadapt/strategies/__init__.py
 
 * resolve lint errors from recent merge ([`f03be2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f03be2f9cf100b5bc8dfa34cf76fd60b6eef9f62))
+
 
 ## v0.6.0 (2023-07-26)
 
@@ -2302,6 +2318,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`1e96a4f`](htt
 * resolve merge conflicts ([`2f66b8a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2f66b8ac81ea24dbc648ac4574cf125809caf77d))
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`ada2aad`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ada2aad0eef8962e412b5026920eb7f70434b032))
+
 
 ## v0.5.8 (2023-07-25)
 
@@ -2340,6 +2357,7 @@ At line:1 char:9
 ---------
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`fb3ae1e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fb3ae1e4b4991776f9c89791636e20c9c7a689a5))
+
 
 ## v0.5.7 (2023-07-25)
 
@@ -2553,6 +2571,7 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`2d4e8c6`](htt
 
 * copy alembic migrations ([`2149adc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2149adc4102606ee1e40153dc9788225eefd6693))
 
+
 ## v0.5.6 (2023-07-20)
 
 ### Chore
@@ -2595,6 +2614,7 @@ Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-P
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`d4d3f1c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d4d3f1c238e3a511dec73707ca9e3f9845b5f4a2))
 
+
 ## v0.5.5 (2023-07-17)
 
 ### Fix
@@ -2623,6 +2643,7 @@ Co-authored-by: Seyed Morteza Hosseini &lt;seyedmortezahosseini@Seyeds-MacBook-P
 
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`7aba45b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7aba45be73cb3cc4807f08ebc7bf36a9e9e5c2fb))
 
+
 ## v0.5.4 (2023-07-17)
 
 ### Fix
@@ -2647,6 +2668,7 @@ need to call it with identical arguments in various functions.
 * fix: add test fixtures
 
 * revert test_summary.py ([`0ee5397`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ee5397ea1ab4b324e5fd699b858fe30892a3491))
+
 
 ## v0.5.3 (2023-07-17)
 
@@ -2689,6 +2711,7 @@ need to call it with identical arguments in various functions.
 * nonetype
 
 * Update _macos.py ([`be0774f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be0774fc8e5004830c7b0a578432f04b849ff68b))
+
 
 ## v0.5.2 (2023-07-17)
 
@@ -2830,11 +2853,13 @@ https://github.com/OpenAdaptAI/OpenAdapt/pull/289/files#r1252150636 ([`755dd55`]
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`1096a15`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1096a1566e7d198c1d8790d87f29c2b90ffefeed))
 
+
 ## v0.5.1 (2023-07-04)
 
 ### Fix
 
 * fix: add pympler and psutil ([`f853839`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f8538398d3c0da51dbd6fb56f3e891c7558df6fb))
+
 
 ## v0.5.0 (2023-07-03)
 
@@ -2913,6 +2938,7 @@ https://github.com/MLDSAI/OpenAdapt/pull/318#discussion_r1246073970
 
 Co-authored-by: Aaron &lt;57018940+0dm@users.noreply.github.com&gt; ([`3e12fd4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3e12fd4910f41da17506fae75f3d459c5b26e42b))
 
+
 ## v0.4.0 (2023-07-03)
 
 ### Feature
@@ -2980,11 +3006,13 @@ This reverts commit 5601407207b085c254cf86b2f425be2eddd741c1.
 
 * switch to pip3.10 ([`25b70c0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/25b70c0af2d33c92003b574c56f55b027321b162))
 
+
 ## v0.3.1 (2023-07-03)
 
 ### Fix
 
 * fix(window): prevent SegmentationFault ([`cf0fc0b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cf0fc0bebb984b1bc3b9f61920bf8d048361b220))
+
 
 ## v0.3.0 (2023-07-02)
 
@@ -3050,15 +3078,8 @@ Co-authored-by: Krish Patel &lt;65433817+KrishPatel13@users.noreply.github.com&g
 Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
 Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ef0d5eb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ef0d5ebcf400c216c0b16c7ffb552391544b0a0c))
 
+
 ## v0.2.0 (2023-07-02)
-
-### Chore
-
-* chore(release): Use PAT token to bypass branch protection for release github action (#326)
-
-* feat(release): Initial development version 0.1.0
-
-* use PAT token to bypass branch protection for release github action ([`d456bc2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d456bc2c7e888d76258a9c966a69becba1660f1d))
 
 ### Documentation
 
@@ -3073,8 +3094,6 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ef0d5eb`](htt
 * Add Poetry conflicts
 
 * Add Richard&#39;s better import order explanation: ([`5b9f735`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5b9f735da42c0bcdda2e47747f2acabb0f5f45fd))
-
-* docs: Add note on making major release in CONTRIBUTING.md ([`e097189`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e0971897c9210a614cc65c1e1e69d510bb7a61ed))
 
 ### Feature
 
@@ -3113,6 +3132,27 @@ Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`ef0d5eb`](htt
 * black
 
 * black ([`385963c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/385963ce098fbb9bdbe7adce8be97ea6213b0c20))
+
+### Unknown
+
+* Update config.py (#332) ([`aa49489`](https://github.com/OpenAdaptAI/OpenAdapt/commit/aa49489c0d8d116cae9bcd5ab9747cef52096b15))
+
+
+## v0.1.0 (2023-06-29)
+
+### Chore
+
+* chore(release): Use PAT token to bypass branch protection for release github action (#326)
+
+* feat(release): Initial development version 0.1.0
+
+* use PAT token to bypass branch protection for release github action ([`d456bc2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d456bc2c7e888d76258a9c966a69becba1660f1d))
+
+### Documentation
+
+* docs: Add note on making major release in CONTRIBUTING.md ([`e097189`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e0971897c9210a614cc65c1e1e69d510bb7a61ed))
+
+### Feature
 
 * feat(install): install tesseract, remove vcredist (windows)
 
@@ -3222,8 +3262,6 @@ https://github.com/MLDSAI/OpenAdapt/pull/312#discussion_r1244070600
 * feat(release): Initial development version 0.1.0 (#325) ([`5ab0e01`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5ab0e011cf42b61fd8ebc41035e29c14583fd7de))
 
 ### Unknown
-
-* Update config.py (#332) ([`aa49489`](https://github.com/OpenAdaptAI/OpenAdapt/commit/aa49489c0d8d116cae9bcd5ab9747cef52096b15))
 
 * Merge branch &#39;main&#39; into share-magic-wormhole ([`088f370`](https://github.com/OpenAdaptAI/OpenAdapt/commit/088f370d40252d9852d528cb993eac1940bd04e4))
 
