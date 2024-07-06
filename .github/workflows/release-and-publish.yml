@@ -183,11 +183,13 @@ jobs:
           pip install poetry
           poetry install
       - name: Download macOS executable
+        if: false
         uses: actions/download-artifact@v4
         with:
           name: OpenAdapt.app
           path: dist/
       - name: Download Windows executable
+        if: false
         uses: actions/download-artifact@v4
         with:
           name: OpenAdapt
