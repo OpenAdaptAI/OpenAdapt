@@ -227,11 +227,11 @@ jobs:
         run: |
           curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url > ngrok_url.txt
           cat ngrok_url.txt
-          echo "::set-output name=url::$(cat ngrok_url.txt)"
+          echo "url=$(cat ngrok_url.txt)" >> $GITHUB_ENV
 
       - name: Display ngrok SSH URL
         run: |
-          NGROK_URL="${{ steps.ngrok.outputs.url }}"
+          NGROK_URL="${{ env.url }}"
           SSH_URL="ssh -i /tmp/sshkey -o StrictHostKeyChecking=no root@$(echo $NGROK_URL | sed 's|tcp://||;s|:| -p |')"
           echo "SSH to your runner with: $SSH_URL"
       - name: Python Semantic Release
