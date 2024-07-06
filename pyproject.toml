@@ -160,12 +160,18 @@ build_command = """
 pip install poetry && \
 echo "PYTHON_PATH is set to: $PYTHON_PATH" && \
 if [ -z \"$PYTHON_PATH\" ]; then \
-  echo "PYTHON_PATH is empty, using default python3.10" && \
+  echo "PYTHON_PATH is empty, trying default python3.10" && \
   POETRY_PYTHON_PATH=$(which python3.10 || echo "/opt/hostedtoolcache/Python/3.10.14/x64/bin/python3.10") && \
-  echo "Resolved Python path: $POETRY_PYTHON_PATH" && \
-  poetry env use $POETRY_PYTHON_PATH; \
+  if [ -x "$POETRY_PYTHON_PATH" ]; then \
+    echo "Resolved Python path: $POETRY_PYTHON_PATH" && \
+    poetry env use $POETRY_PYTHON_PATH; \
+  else \
+    echo "python3.10 not found, trying default python" && \
+    poetry env use python; \
+  fi; \
 else \
   echo "Using python from PYTHON_PATH: $PYTHON_PATH/python3.10" && \
+  ls -la $PYTHON_PATH && \
   poetry env use $PYTHON_PATH/python3.10; \
 fi && \
 poetry build
