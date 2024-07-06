@@ -5,11 +5,21 @@ from PySide6.QtWidgets import QApplication  ,  QSplashScreen , QMainWindow , QLa
 from PySide6.QtGui import QPixmap , QGuiApplication
 from loguru import logger
 
-
+queue = multiprocessing.Queue()
 label_2 = False
+label_3 = False
+
+def update_progress(num):
+    try:
+        global queue
+        queue.put(num)
+    except Exception as e : 
+        logger.error(" Error in updating progress : "+ str(e) )
+
+
 def update_label():
     try:
-        global label_2 
+        global label_2 , label_3, queue
         currText = label_2.text()
         if(currText == "Loading." ) :
             currText = "Loading.." 
@@ -18,17 +28,22 @@ def update_label():
         elif(currText == "Loading..." ) :
             currText = "Loading." 
         label_2.setText(currText)
+        count = queue.qsize()
+        if count > 0 : 
+            event = queue.get()
+            label_3.setText(event)
     except Exception as e : 
         logger.error(" Error in updating splash screen : "+ str(e) )
 
-def showUI():
+def showUI(process_que):
     try :
         app = QApplication([])
         pixmap = QPixmap("splash.jpg")
         pixmap = QtGui.QPixmap(pixmap.scaledToWidth(820))
         app.processEvents()         
 
-        global label_2
+        global label_2 , label_3, queue 
+        queue = process_que 
         centerPoint = QGuiApplication.screens()[0].geometry().center()
         window = QMainWindow() 
         window.setGeometry(centerPoint.x()-400, centerPoint.y()-300, 800, 600) 
@@ -38,15 +53,20 @@ def showUI():
         label.setPixmap(pixmap)
         label.show()
         timer = QtCore.QTimer(window)
-        timer.timeout.connect( update_label)
-        timer.start(1500)
+        timer.timeout.connect( update_label) 
+        timer.start(400)
         myFont=QtGui.QFont('Times', 13)
         myFont.setBold(True)  
         label_2 = QLabel('Loading.', window) 
         label_2.setFont(myFont)
         label_2.setStyleSheet('color: white')
-        label_2.move(340, 560)
+        label_2.move(320, 560)
         label_2.show()
+        label_3 = QLabel('5%', window) 
+        label_3.setFont(myFont)
+        label_3.setStyleSheet('color: white')
+        label_3.move(430, 560)
+        label_3.show()
         window.setWindowFlag( QtCore.Qt.WindowStaysOnTopHint )
         window.setWindowIcon(QtGui.QIcon('logo.png'))
         # window.setWindowTitle("OpenAdapt")
@@ -56,7 +76,7 @@ def showUI():
     except Exception as e : 
         logger.error(" Error in splash screen : "+ str(e) )
 
-showUI_process = multiprocessing.Process(target=showUI, args=( )) 
+showUI_process = multiprocessing.Process(target=showUI, args=(queue,)) 
 
 def show_splash_screen():
     try:
