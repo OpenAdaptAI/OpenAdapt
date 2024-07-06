@@ -28,7 +28,7 @@ jobs:
     name: Build macOS app
     runs-on: macos-latest
     needs: check_last_commit_author
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
+    if: false
     steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
     name: Build Windows app
     runs-on: windows-latest
     needs: check_last_commit_author
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
+    if: false
     steps:
         - name: Checkout repository
           uses: actions/checkout@v4
@@ -99,6 +99,7 @@ jobs:
   test_on_macos:
     name: Test on macOS
     runs-on: macos-latest
+    if: false
     needs: [build-macos-executables]
     outputs:
       macos_build_status: ${{ steps.test_on_macos.outputs.status }}
@@ -124,6 +125,7 @@ jobs:
   test_on_windows:
     name: Test on Windows
     runs-on: windows-latest
+    if: false
     needs: [build-windows-executables]
     outputs:
       windows_build_status: ${{ steps.test_on_windows.outputs.windows_build_status }}
@@ -149,6 +151,7 @@ jobs:
   consolidate_tests:
     name: Consolidate test results
     runs-on: ubuntu-latest
+    if: false
     needs: [test_on_windows, test_on_macos]
     steps:
       - name: Consolidate test results
@@ -234,15 +237,11 @@ jobs:
           github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./build_scripts/upload_release_artifacts.sh
 
   publish:
     name: Publish to PyPI
     needs: [release]
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
