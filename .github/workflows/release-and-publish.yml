@@ -221,7 +221,10 @@ jobs:
         id: ngrok
         run: curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url
       - name: Display ngrok SSH URL
-        run: echo "SSH to your runner with: ssh -i /tmp/sshkey -o StrictHostKeyChecking=no root@$(echo ${{ steps.ngrok.outputs.ngrok }} | sed 's|tcp://||;s|:| -p |')"
+        run: |
+          NGROK_URL="${{ steps.ngrok.outputs.ngrok }}"
+          SSH_URL="ssh -i /tmp/sshkey -o StrictHostKeyChecking=no root@$(echo $NGROK_URL | sed 's|tcp://||;s|:| -p |')"
+          echo "SSH to your runner with: $SSH_URL"
       - name: Python Semantic Release
         id: semantic_release
         uses: python-semantic-release/python-semantic-release@v9.8.4
