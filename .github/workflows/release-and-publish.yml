@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - debug-release
 
 jobs:
   check_last_commit_author:
@@ -198,6 +199,29 @@ jobs:
           echo "Current PATH: $PATH"
           echo "Current GITHUB_PATH:"
           cat $GITHUB_PATH
+      - name: Start SSH service
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          sudo service ssh start
+          ssh-keygen -t rsa -b 4096 -f /tmp/sshkey -N ""
+          cat /tmp/sshkey.pub >> ~/.ssh/authorized_keys
+          echo "SSH private key:"
+          cat /tmp/sshkey
+      - name: Set up ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update && sudo apt-get install ngrok
+          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok tcp 22 &
+      - name: Wait for ngrok
+        run: sleep 10
+      - name: Get ngrok URL
+        id: ngrok
+        run: curl -s localhost:4040/api/tunnels | jq -r .tunnels[0].public_url
+      - name: Display ngrok SSH URL
+        run: echo "SSH to your runner with: ssh -i /tmp/sshkey -o StrictHostKeyChecking=no root@$(echo ${{ steps.ngrok.outputs.ngrok }} | sed 's|tcp://||;s|:| -p |')"
       - name: Python Semantic Release
         id: semantic_release
         uses: python-semantic-release/python-semantic-release@v9.8.4
