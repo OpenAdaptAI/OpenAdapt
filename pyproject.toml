@@ -158,9 +158,12 @@ upload_to_repository = false
 repository_url = "https://upload.pypi.org/legacy/"
 build_command = """
 pip install poetry && \
+echo "PYTHON_PATH is set to: $PYTHON_PATH" && \
 if [ -z \"$PYTHON_PATH\" ]; then \
+  echo "PYTHON_PATH is empty, using default python3.10" && \
   poetry env use python3.10; \
 else \
+  echo "Using python from PYTHON_PATH: $PYTHON_PATH/python3.10" && \
   poetry env use $PYTHON_PATH/python3.10; \
 fi && \
 poetry build
