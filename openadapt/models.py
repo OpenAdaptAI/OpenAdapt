@@ -572,6 +572,31 @@ class WindowEvent(db.Base):
         else:
             window_dict["state"].pop("data")
         window_dict["state"].pop("meta")
+
+        # Let,
+        # left = window_dict["left"] = x
+        # top = window_dict["top"] = y
+        # width = window_dict["width"] = w
+        # height = window_dict["height"] = h
+
+        # Compute the centroid of the bounding box
+        # Reference: https://stackoverflow.com/a/18932029
+        centroid_x = window_dict["left"] + window_dict["width"] / 2
+        centroid_y = window_dict["top"] + window_dict["height"] / 2
+
+        # Add centroid in the prompt dict { "centroid": }
+        window_dict["centroid"] = {
+            "x": centroid_x,
+            "y": centroid_y,
+        }
+
+        # Uncomment, if we want to remove the x, y, w, h data,
+        # if using centroid solves all of the issues.
+        # window_dict.pop("left")
+        # window_dict.pop("top")
+        # window_dict.pop("width")
+        # window_dict.pop("height")
+
         return window_dict
 
 
