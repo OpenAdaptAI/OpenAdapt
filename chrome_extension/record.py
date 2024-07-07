@@ -70,8 +70,9 @@ async def handle_message(message: str) -> None:
     # insert_message(message)
 
 
-async def handler(websocket: websockets.WebSocketServerProtocol, path: str,
-                  a: int, b: int) -> None:
+async def handler(
+    websocket: websockets.WebSocketServerProtocol, path: str, a: int, b: int
+) -> None:
     """A web socket handler to handle incoming messages.
 
     Args:
@@ -99,7 +100,9 @@ async def main() -> None:
         None
     """
     # init_db()
-    server = websockets.serve(lambda ws, path: handler(ws, path, a=1, b=2), "localhost", 8765)
+    server = websockets.serve(
+        lambda ws, path: handler(ws, path, a=1, b=2), "localhost", 8765
+    )
     async with server:
         await asyncio.Future()  # run forever
 

@@ -13,7 +13,7 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import browser, window
+from openadapt import window
 from openadapt.config import config
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin

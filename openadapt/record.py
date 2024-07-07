@@ -1286,7 +1286,11 @@ def run_browser_event_server(
     Returns:
         None
     """
-    asyncio.run(start_browser_event_server(event_q, terminate_processing, recording, started_counter))
+    asyncio.run(
+        start_browser_event_server(
+            event_q, terminate_processing, recording, started_counter
+        )
+    )
 
 
 @logger.catch
