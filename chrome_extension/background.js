@@ -1,5 +1,14 @@
+/**
+ * @file background.js
+ * @description Creates a new background script that listens for messages from the content script
+ * and sends them to a WebSocket server.
+*/
+
 let socket;
 
+/*
+ * Function to connect to the WebSocket server.
+*/
 function connectWebSocket() {
   socket = new WebSocket("ws://localhost:8765");
 
@@ -23,8 +32,10 @@ function connectWebSocket() {
   };
 }
 
+// Create a connection to the WebSocket server
 connectWebSocket();
 
+/* Listen for messages from the content script */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (socket && socket.readyState === WebSocket.OPEN) {
     console.log(message);

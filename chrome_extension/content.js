@@ -2,23 +2,25 @@
  * @file content.js
  * @description This file is injected into the web page and is responsible for
  * capturing DOM changes and sending them to the background script.
- */
+*/
 
 let logged = false;
 let ignoreAttributes = new Set();
 const elements = {};
 
+
 /*
  * Function to send a message to the background script
- */
+*/
 function sendMessageToBackgroundScript(message) {
   chrome.runtime.sendMessage(message);
 }
 
+
 /*
  * Function to capture initial document state and
  * send it to the background script
- */
+*/
 function captureDocumentState() {
   const documentBody = document.body.outerHTML;
   const documentHead = document.head.outerHTML;
@@ -34,6 +36,11 @@ function captureDocumentState() {
   });
 }
 
+
+/*
+ * Function to handle click events on any element on a web page.
+ * It sends the element details to the background script.
+*/
 function handleElementClick(event) {
   const element = event.target;
   const tagName = element.tagName;
@@ -57,6 +64,12 @@ function handleElementClick(event) {
   });
 }
 
+
+/*
+ * Function to create a debounced version of a function.
+ * @param {Function} func - The function to be debounced.
+ * @param {number} delay - The delay in milliseconds.
+*/
 function debounce(func, delay) {
   let timerId;
   return function (...args) {
@@ -70,6 +83,13 @@ function debounce(func, delay) {
   };
 }
 
+
+/*
+  * Function to handle input events on any element on a web page.
+  * It sends the element details to the background script.
+  * @param {Event} event - The input event.
+  * @param {Element} element - The element on which the input event occurred.
+*/
 function handleDebouncedInput(event) {
   const element = event.target;
   const { x, y } = elements[element.id];
@@ -93,12 +113,18 @@ function handleDebouncedInput(event) {
   });
 }
 
+/* Debounce Input Handler */
 const debouncedInputHandler = debounce(handleDebouncedInput, 500);
 
+/* Call Debounce Input Handler */
 function handleElementInput(event) {
   debouncedInputHandler(event);
 }
 
+
+/*
+ * Add an click and input information of the element.
+*/
 function addElement(element) {
   const rect = element.getBoundingClientRect();
   const x = rect.left + window.scrollX;
@@ -112,6 +138,10 @@ function addElement(element) {
   element.addEventListener("input", debounce(handleDebouncedInput, 500));
 }
 
+
+/*
+ * Handle all events that occur on the page.
+*/
 function addEventListeners() {
   const elements = document.getElementsByTagName("*");
 
@@ -120,5 +150,8 @@ function addEventListeners() {
   }
 }
 
-addEventListeners();
-captureDocumentState();
+
+/* Function Calls */
+
+addEventListeners(); // Adds listeners
+captureDocumentState(); // Captures initial document state
