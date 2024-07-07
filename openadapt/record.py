@@ -950,6 +950,7 @@ def read_keyboard_events(
             if stop_sequence_indices[i] == len(stop_sequence):
                 logger.info("Stop sequence entered! Stopping recording now.")
                 stop_sequence_detected = True
+                stop_sequence_indices[i] = 0
 
     def on_release(
         event_q: queue.Queue,
