@@ -1138,7 +1138,8 @@ def record_audio(
 
     # Convert audio to text using OpenAI's Whisper
     logger.info("Transcribing audio...")
-    model = whisper.load_model("base")
+    with redirect_stdout_stderr():
+        model = whisper.load_model("base")
     result_info = model.transcribe(converted_audio, word_timestamps=True, fp16=False)
     logger.info(f"The narrated text is: {result_info['text']}")
     # empty word_list if the user didn't say anything

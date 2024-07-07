@@ -2,6 +2,183 @@
 
 
 
+## v0.36.2 (2024-07-06)
+
+### Fix
+
+* fix(release): add ngrok; run release on debug-release branch; fallback to python (#838) ([`8777574`](https://github.com/OpenAdaptAI/OpenAdapt/commit/877757420dc34614810665f4b867882e20f09acd))
+
+### Unknown
+
+* revert until 615fc6ffe560ff0788414c80643308b484012750 ([`748bdb3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/748bdb3dfa2916395a2c5452dbc4b5eef62d6731))
+
+
+## v0.36.1 (2024-07-06)
+
+### Fix
+
+* fix(release): hard code python path fallback (#837) ([`1b48f94`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1b48f940770fdd0e963e25ff2d0188914e2f9eb3))
+
+* fix(release): set PYTHON_PATH in semantic_release; hard-code fallback (#836)
+
+* Update release-and-publish.yml: set PYTHON_PATH in semantic_release
+
+* Update pyproject.toml: hard code python path fallback ([`e6c88d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e6c88d1e84c7f553cb75ced0071ddf817cb722cc))
+
+* fix(release): modify build_command in pyproject.toml (#835)
+
+* Update release-and-publish.yml: remove build_command
+
+* Update pyproject.toml: add PYTHON_PATH to build_command
+
+* Update pyproject.toml: increase verbosity ([`0f5166e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0f5166e369193cb74a3e21e88e2fdc1a10909067))
+
+* fix(release): override build_command and include PYTHON_PATH (#834) ([`88fca89`](https://github.com/OpenAdaptAI/OpenAdapt/commit/88fca896ddd7b2442ba789ebd4a0681742c03ee2))
+
+* fix(release): set python path more robustly (#833) ([`6b382dd`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6b382ddef626b644f8b09c4d6d29c229009cf373))
+
+* fix(release): add PYTHON_PATH to GITHUB_PATH (#832) ([`217204b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/217204baf13b2aa26ad1c6a57bd6d9a0364d20c5))
+
+* fix(release): update python-semantic-release to v9.8.4 (#831) ([`8054d69`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8054d6959f363c232da7e9ad7dd6557d1e1eab74))
+
+* fix(release): remove ADMIN_TOKEN from actions/checkout (#830) ([`094a054`](https://github.com/OpenAdaptAI/OpenAdapt/commit/094a0542dacc30dae33e6574375e50a0b6d1a0f0))
+
+* fix(release): replace GITHUB_TOKEN with ADMIN_TOKEN (#829) ([`c193fe6`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c193fe6dfe07d698d3c3133b3803e990ae20024c))
+
+* fix(release): add token to actions/checkout (#828) ([`8e1a17d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8e1a17d33fcdc0221ecc73caf37207b260ffc59c))
+
+* fix(db): eager loading (#822)
+
+* add joinedload to eagerly load related entities
+
+* change get_active_window_data to return empty dict when state is none
+
+* add eager as parameter in _get
+
+* add a default parameter for relationships
+
+* flake8 error fix
+
+* use direct and indirect relationships
+
+* chore: refactor code ([`615fc6f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/615fc6ffe560ff0788414c80643308b484012750))
+
+* fix(audio): Fix error when downloading whisper model (#826) ([`2ad143a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2ad143a7452c4a178b7291da339685a704f3eb37))
+
+
+## v0.36.0 (2024-06-28)
+
+### Feature
+
+* feat(logging): redirect stdout (#810)
+
+* feat: Override std out for application
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f44795c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f44795c5216f076f99e4a9f32a294c82d19aeda8))
+
+### Fix
+
+* fix(tray): fix tray signals (#812)
+
+* feat: Override std out for application
+
+* fix: Fix passing signals around using multiprocessing pipes
+
+* feat: Separate logs by version number and date and use logger instead of print
+
+* lint: flake8 lint
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`f231a34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f231a34c881914b5410001d2bbe8c934af427b45))
+
+
+## v0.35.2 (2024-06-27)
+
+### Fix
+
+* fix(build): Fix build issues (#809)
+
+* fix: Fix build issues
+
+* fix: Add pyqttoast and whisper explicitly to build
+
+* black/flake8
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`48995bb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/48995bb9c9de41a948eacb3cad22fe1aec2a0dbf))
+
+### Unknown
+
+* add cache.clear ([`b340d8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b340d8f34326908025db99e178f689929f6112c6))
+
+
+## v0.35.1 (2024-06-23)
+
+### Fix
+
+* fix(ultralytics): fix windows file permission in do_fastsam (#791)
+
+* fix:windows file permission
+
+* Changes as per the comments on last commit
+
+* add max_retries and retry_delay_seconds in args
+
+* add comments for segmented_image.load()
+
+* order imports in ultralytics.py
+
+* build fix
+
+* remove unnecessary formatting changes
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`742b176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/742b1764d3434f5bb505acf20318ac0c699a1761))
+
+
+## v0.35.0 (2024-06-22)
+
+### Feature
+
+* feat(SegmentReplayStrategy, drivers): add strategies.replay; refactor adapters -&gt; drivers + adapters  (#714)
+
+* implemented
+
+* add get_active_window_data parameter include_window_data; fix ActionEvent.from_dict to handle multiple separators; add test_models.py
+
+* update get_default_prompt_adapter
+
+* add TODO
+
+* tests.openadapt.adapters -&gt; drivers
+
+* utils.get_marked_image, .extract_code_block; .strip_backticks
+
+* working segment.py (misses final click in calculator task)
+
+* include_replay_instructions; dev_mode=False
+
+* fix test_openai.py: ValueError -&gt; Exception
+
+* replay.py --record -&gt; --capture
+
+* black/flake8
+
+* remove import
+
+* INCLUDE_CURRENT_SCREENSHOT; handle mouse events without x/y
+
+* add models.Replay; print_config in replay.py ([`7ef115a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7ef115a6172222d7d624ce92d0ec38a60d0e86f1))
+
+
 ## v0.34.0 (2024-06-20)
 
 ### Feature
