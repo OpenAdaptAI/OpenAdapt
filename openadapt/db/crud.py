@@ -437,18 +437,6 @@ def get_action_events(
     return action_events
 
 
-def get_browser_events(session: SaSession, recording: Recording) -> list[BrowserEvent]:
-    """Get browser events for a given recording.
-
-    Args:
-        session (sa.orm.Session): The database session
-        recording (Recording): recording object
-    Returns:
-        List[BrowserEvent]: list of browser events
-    """
-    return _get(session, BrowserEvent, recording.timestamp)
-
-
 def filter_disabled_action_events(
     action_events: list[ActionEvent],
 ) -> list[ActionEvent]:
@@ -624,6 +612,27 @@ def get_window_events(
             subqueryload(WindowEvent.action_events).joinedload(ActionEvent.screenshot),
         )
         .order_by(WindowEvent.timestamp)
+        .all()
+    )
+
+
+def get_browser_events(session: SaSession, recording: Recording) -> list[BrowserEvent]:
+    """Get browser events for a given recording.
+
+    Args:
+        session (sa.orm.Session): The database session
+        recording (Recording): recording object
+    Returns:
+        List[BrowserEvent]: list of browser events
+    """
+    return (
+        session.query(BrowserEvent)
+        .filter(BrowserEvent.recording_id == recording.id)
+        .options(
+            joinedload(BrowserEvent.recording),
+            subqueryload(BrowserEvent.action_events).joinedload(ActionEvent.screenshot),
+        )
+        .order_by(BrowserEvent.timestamp)
         .all()
     )
 
