@@ -10,6 +10,7 @@ let socket;
  * Function to connect to the WebSocket server.
 */
 function connectWebSocket() {
+  // TODO: Ideally we read "ws://localhost:8765" from config.py, or it gets passed in somehow. 
   socket = new WebSocket("ws://localhost:8765");
 
   socket.onopen = function() {
