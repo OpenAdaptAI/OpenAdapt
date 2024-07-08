@@ -141,7 +141,7 @@ def get_events(
         event="get_events.completed", properties={"recording_id": recording.id}
     )
 
-    return action_events, browser_events  # , window_events, screenshots
+    return action_events  # , window_events, screenshots, browser_events
 
 
 def make_parent_event(
