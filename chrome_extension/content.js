@@ -4,8 +4,7 @@
  * capturing DOM changes and sending them to the background script.
 */
 
-let logged = false;
-let ignoreAttributes = new Set();
+
 const elements = {};
 
 
