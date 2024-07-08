@@ -15,7 +15,7 @@ import sys
 
 from loguru import logger
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
-from PySide6.QtCore import QMargins, QSize, QSocketNotifier, Qt
+from PySide6.QtCore import QMargins, QObject, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -74,6 +74,28 @@ class TrackedQAction(QAction):
         posthog.capture(
             event="action_triggered", properties={"action": self.tracking_text}
         )
+
+
+class Worker(QObject):
+    """Worker to handle signals from the recording process."""
+
+    data = Signal(dict)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the worker."""
+        parent_conn = kwargs.pop("parent_conn")
+        super().__init__(*args, **kwargs)
+        self.parent_conn = parent_conn
+
+    def run(self) -> None:
+        """Run the worker."""
+        while True:
+            if self.parent_conn.poll():
+                try:
+                    data = self.parent_conn.recv()
+                except EOFError:
+                    break
+                self.data.emit(data)
 
 
 class SystemTrayIcon:
@@ -149,17 +171,14 @@ class SystemTrayIcon:
         self.visualize_proc = None
 
         self.parent_conn, self.child_conn = multiprocessing.Pipe()
-        # Set up QSocketNotifier to monitor the read end of the pipe
-        self.notifier = QSocketNotifier(
-            self.parent_conn.fileno(),
-            QSocketNotifier.Read,
-        )
-        self.notifier.activated.connect(
-            lambda: self.handle_recording_signal(
-                self.notifier,
-                self.parent_conn,
-            )
-        )
+
+        self.notifier = QThread(self.app)
+        self.worker = Worker(parent_conn=self.parent_conn)
+        self.worker.moveToThread(self.notifier)
+        self.notifier.started.connect(self.worker.run)
+        self.notifier.destroyed.connect(self.worker.deleteLater)
+        self.notifier.start()
+        self.worker.data.connect(self.handle_recording_signal)
 
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
@@ -168,11 +187,13 @@ class SystemTrayIcon:
 
     def handle_recording_signal(
         self,
-        notifier: QSocketNotifier,
-        conn: multiprocessing.connection.Connection,
+        signal: dict,
     ) -> None:
-        """Callback function to handle the signal from the recording process."""
-        signal = conn.recv()
+        """Callback function to handle the signal from the recording process.
+
+        Args:
+            signal (dict): The signal from the recording process.
+        """
         logger.info(f"Received signal: {signal}")
 
         signal_type = signal["type"]
