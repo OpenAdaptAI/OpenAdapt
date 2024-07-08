@@ -401,7 +401,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     Returns:
         str: The possibly obfuscated configuration parameter value.
     """
-    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN", "AUTHKEY", "PORT", "ADDRESS")
+    OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
         val = str(val)
