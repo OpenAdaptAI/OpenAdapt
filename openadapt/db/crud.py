@@ -11,7 +11,7 @@ import time
 
 from loguru import logger
 from sqlalchemy.orm import Session as SaSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, subqueryload
 import psutil
 import sqlalchemy as sa
 
@@ -359,7 +359,6 @@ def _get(
     session: SaSession,
     table: BaseModelType,
     recording_id: int,
-    eager: bool = False,
 ) -> list[BaseModelType]:
     """Retrieve records from the database table based on the recording timestamp.
 
@@ -367,21 +366,11 @@ def _get(
         session (sa.orm.Session): The database session.
         table (BaseModel): The database table to query.
         recording_id (int): The recording id.
-        eager (bool): if true, implement eagerloading.
 
     Returns:
         list[BaseModel]: A list of records retrieved from the database table,
           ordered by timestamp.
     """
-    if eager:
-        return (
-            session.query(table)
-            .filter(table.recording_id == recording_id)
-            .order_by(table.timestamp)
-            .options(joinedload(table.recording))
-            .all()
-        )
-
     return (
         session.query(table)
         .filter(table.recording_id == recording_id)
@@ -404,7 +393,19 @@ def get_action_events(
         list[ActionEvent]: A list of action events for the recording.
     """
     assert recording, "Invalid recording."
-    action_events = _get(session, ActionEvent, recording.id, eager=True)
+    action_events = (
+        session.query(ActionEvent)
+        .filter(ActionEvent.recording_id == recording.id)
+        .options(
+            joinedload(ActionEvent.recording),
+            joinedload(ActionEvent.screenshot),
+            subqueryload(ActionEvent.window_event).joinedload(
+                WindowEvent.action_events
+            ),
+        )
+        .order_by(ActionEvent.timestamp)
+        .all()
+    )
     action_events = filter_disabled_action_events(action_events)
     # filter out stop sequences listed in STOP_SEQUENCES and Ctrl + C
     filter_stop_sequences(action_events)
@@ -543,7 +544,17 @@ def get_screenshots(
     Returns:
         list[Screenshot]: A list of screenshots for the recording.
     """
-    screenshots = _get(session, Screenshot, recording.id, eager=True)
+    screenshots = (
+        session.query(Screenshot)
+        .filter(Screenshot.recording_id == recording.id)
+        .options(
+            joinedload(Screenshot.action_event).joinedload(ActionEvent.recording),
+            subqueryload(Screenshot.action_event).joinedload(ActionEvent.screenshot),
+            subqueryload(Screenshot.recording),
+        )
+        .order_by(Screenshot.timestamp)
+        .all()
+    )
 
     for prev, cur in zip(screenshots, screenshots[1:]):
         cur.prev = prev
@@ -568,7 +579,16 @@ def get_window_events(
     Returns:
         list[WindowEvent]: A list of window events for the recording.
     """
-    return _get(session, WindowEvent, recording.id, eager=True)
+    return (
+        session.query(WindowEvent)
+        .filter(WindowEvent.recording_id == recording.id)
+        .options(
+            joinedload(WindowEvent.recording),
+            subqueryload(WindowEvent.action_events).joinedload(ActionEvent.screenshot),
+        )
+        .order_by(WindowEvent.timestamp)
+        .all()
+    )
 
 
 def disable_action_event(session: SaSession, event_id: int) -> None:
