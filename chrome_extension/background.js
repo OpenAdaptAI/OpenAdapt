@@ -5,12 +5,13 @@
 */
 
 let socket;
+let TIMEOUT_INTERVAL = 5000; // ms
 
 /*
  * Function to connect to the WebSocket server.
 */
 function connectWebSocket() {
-  // TODO: Ideally we read "ws://localhost:8765" from config.py, or it gets passed in somehow. 
+  // TODO: Ideally we read "ws://localhost:8765" and `TIMEOUT_INTERVAL` from config.py, or it gets passed in somehow. 
   socket = new WebSocket("ws://localhost:8765");
 
   socket.onopen = function() {
@@ -24,7 +25,7 @@ function connectWebSocket() {
   socket.onclose = function(event) {
     console.log("WebSocket connection closed", event);
     // Reconnect after 5 seconds if the connection is lost
-    setTimeout(connectWebSocket, 5000);
+    setTimeout(connectWebSocket, TIMEOUT_INTERVAL);
   };
 
   socket.onerror = function(error) {
