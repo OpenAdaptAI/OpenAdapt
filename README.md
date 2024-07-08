@@ -164,6 +164,11 @@ possible memory leak
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
+#### Want to capture Chrome Browser Events as well ?
+
+- Follow the steps listed here for setup of a chrome (browser) extension: [Setup for Chrome Extension](https://github.com/OpenAdaptAI/OpenAdapt/pull/744#issuecomment-2212523232).
+
+
 ### Visualize
 
 Quickly visualize the latest recording you created by running the following command:
