@@ -36,10 +36,10 @@ def upgrade() -> None:
         "UPDATE action_event SET window_event_id = (SELECT id FROM window_event WHERE"
         " window_event.timestamp = action_event.window_event_timestamp)"
     )
-    # session.execute(
-    #     "UPDATE action_event SET browser_event_id = (SELECT id FROM browser_event WHERE"
-    #     " browser_event.timestamp = action_event.browser_event_timestamp)"
-    # )
+    session.execute(
+        "UPDATE action_event SET browser_event_id = (SELECT id FROM browser_event WHERE"
+        " browser_event.timestamp = action_event.browser_event_timestamp)"
+    )
     session.execute(
         "UPDATE action_event SET screenshot_id = (SELECT id FROM screenshot WHERE"
         " screenshot.timestamp = action_event.screenshot_timestamp)"
