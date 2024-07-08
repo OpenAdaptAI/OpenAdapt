@@ -1043,6 +1043,9 @@ def record_audio(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     audio_frames = []  # to store audio frames
+    
+    with started_counter.get_lock():
+        started_counter.value += 1
 
     def audio_callback(
         indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags
@@ -1065,8 +1068,6 @@ def record_audio(
 
     # NOTE: listener may not have actually started by now
     # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    with started_counter.get_lock():
-        started_counter.value += 1
 
     terminate_processing.wait()
     audio_stream.stop()
