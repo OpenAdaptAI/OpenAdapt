@@ -7,7 +7,7 @@ from loguru import logger
 import pywinauto
 
 
-def get_active_window_state_gw(read_window_data: bool) -> dict:
+def get_active_window_state_pgw(read_window_data: bool) -> dict:
     try:
         active_window = gw.getActiveWindow()
         if not active_window:
@@ -34,7 +34,7 @@ def get_active_window_state_gw(read_window_data: bool) -> dict:
     }
 
     if read_window_data:
-        data = {}  # Placeholder for additional data fetching logic if needed
+        data = get_element_properties_pgw(active_window)
     else:
         data = {}
 
@@ -199,6 +199,34 @@ def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
         "bottom": rect.bottom,
     }
     return rect_dict
+
+
+def get_element_properties_pgw(window: gw.Window) -> dict:
+    """Simulates retrieving properties of a window element and its children.
+
+    Args:
+        window: An instance of a pygetwindow Window.
+
+    Returns:
+        dict: A nested dictionary containing the properties of the window.
+        The dictionary includes a "children" key, which will be an empty list
+        since pygetwindow does not support child elements retrieval.
+    """
+    properties = {
+        "title": window.title,
+        "left": window.left,
+        "top": window.top,
+        "width": window.width,
+        "height": window.height,
+        "rectangle": {
+            "left": window.left,
+            "top": window.top,
+            "width": window.width,
+            "height": window.height,
+        },
+        "children": [],  # pygetwindow does not support children
+    }
+    return properties
 
 
 def get_properties(element: pywinauto.application.WindowSpecification) -> dict:

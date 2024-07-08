@@ -31,7 +31,7 @@ def get_active_window_data(
         dict or None: A dictionary containing information about the active window,
             or None if the state is not available.
     """
-    state = get_active_window_state(include_window_data)
+    state = get_active_window_state_pgw(include_window_data)
     if not state:
         return {}
     title = state["title"]
@@ -62,6 +62,20 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
     # TODO: save window identifier (a window's title can change, or
     try:
         return impl.get_active_window_state(read_window_data)
+    except Exception as exc:
+        logger.warning(f"{exc=}")
+        return None
+
+
+def get_active_window_state_pgw(read_window_data: bool) -> dict | None:
+    """Get the state of the active window using pygetwindow.
+
+    Returns:
+        dict or None: A dictionary containing the state of the active window,
+          or None if the state is not available.
+    """
+    try:
+        return impl.get_active_window_state_pgw(read_window_data)
     except Exception as exc:
         logger.warning(f"{exc=}")
         return None
