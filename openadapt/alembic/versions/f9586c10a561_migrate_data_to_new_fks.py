@@ -22,7 +22,7 @@ def upgrade() -> None:
     for table in [
         "action_event",
         "window_event",
-        # "browser_event",
+        "browser_event",
         "screenshot",
         "memory_stat",
         "performance_stat",
