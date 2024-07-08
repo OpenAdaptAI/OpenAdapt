@@ -953,7 +953,8 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
-def get_git_hash():
+def get_git_hash() -> str:
+    """Get the Git hash of the current commit."""
     git_hash = None
     try:
         repo = git.Repo(search_parent_directories=True)

@@ -5,7 +5,6 @@ Module: crud.py
 
 from typing import Any, TypeVar
 import asyncio
-import importlib.metadata
 import json
 import os
 import pickle
