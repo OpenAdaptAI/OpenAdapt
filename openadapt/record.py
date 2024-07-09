@@ -1249,8 +1249,8 @@ async def start_browser_event_server(
         lambda ws, path: read_browser_events(
             ws, path, event_q, terminate_processing, recording, started_counter
         ),
-        "localhost",
-        8765,
+        config.BROWSER_WEBSOCKET_SERVER_IP,
+        config.BROWSER_WEBSOCKET_PORT,
     )
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, terminate_processing.wait)
