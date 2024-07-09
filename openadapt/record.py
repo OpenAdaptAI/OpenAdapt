@@ -234,15 +234,15 @@ def process_events(
             num_action_events.value += 1
 
             if prev_saved_browser_timestamp < prev_browser_event.timestamp:
-                logger.info("Browser event is being processed")
-                process_event(
-                    prev_browser_event,
-                    browser_write_q,
-                    write_browser_event,
-                    recording,
-                    perf_q,
-                )
-                num_browser_events.value += 1
+                if config.RECORD_BROWSER_EVENTS:
+                    process_event(
+                        prev_browser_event,
+                        browser_write_q,
+                        write_browser_event,
+                        recording,
+                        perf_q,
+                    )
+                    num_browser_events.value += 1
                 prev_saved_browser_timestamp = prev_browser_event.timestamp
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
@@ -1349,11 +1349,13 @@ async def record(
     )
     window_event_reader.start()
 
-    browser_event_reader = threading.Thread(
-        target=run_browser_event_server,
-        args=(event_q, terminate_processing, recording, started_counter),
-    )
-    browser_event_reader.start()
+    browser_event_reader = None
+    if config.RECORD_BROWSER_EVENTS:
+        browser_event_reader = threading.Thread(
+            target=run_browser_event_server,
+            args=(event_q, terminate_processing, recording, started_counter),
+        )
+        browser_event_reader.start()
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -1416,21 +1418,24 @@ async def record(
     )
     screen_event_writer.start()
 
-    browser_event_writer = multiprocessing.Process(
-        target=write_events,
-        args=(
-            "browser",
-            write_browser_event,
-            browser_write_q,
-            num_browser_events,
-            perf_q,
-            recording,
-            terminate_processing,
-            started_counter,
-        ),
-    )
-    browser_event_writer.start()
-    # TODO: Ideally we would re-use get_events here.
+    browser_event_writer = None
+    if config.RECORD_BROWSER_EVENTS:
+        expected_starts += 1
+        browser_event_writer = multiprocessing.Process(
+            target=write_events,
+            args=(
+                "browser",
+                write_browser_event,
+                browser_write_q,
+                num_browser_events,
+                perf_q,
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        browser_event_writer.start()
+        # TODO: Ideally we would re-use get_events here.
 
     action_event_writer = multiprocessing.Process(
         target=write_events,
@@ -1563,7 +1568,8 @@ async def record(
     mouse_event_reader.join()
     screen_event_reader.join()
     window_event_reader.join()
-    browser_event_reader.join()
+    if config.RECORD_BROWSER_EVENTS:
+        browser_event_reader.join()
 
     # main event processor thread
     event_processor.join()
@@ -1572,7 +1578,8 @@ async def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    browser_event_writer.join()
+    if config.RECORD_BROWSER_EVENTS:
+        browser_event_writer.join()
     if config.RECORD_VIDEO:
         video_writer.join()
     if config.RECORD_AUDIO:

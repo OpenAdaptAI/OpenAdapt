@@ -143,6 +143,7 @@ class Config(BaseSettings):
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
+    RECORD_BROWSER_EVENTS: bool
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool
     RECORD_IMAGES: bool
