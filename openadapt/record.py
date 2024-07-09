@@ -207,16 +207,7 @@ def process_events(
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "browser":
-            # logger.info("Processing browser event")
             prev_browser_event = event
-            # process_event(
-            #     prev_browser_event,
-            #     browser_write_q,
-            #     write_browser_event,
-            #     recording,
-            #     perf_q,
-            # )
-            # num_browser_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
