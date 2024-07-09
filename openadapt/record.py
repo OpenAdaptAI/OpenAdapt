@@ -1430,6 +1430,7 @@ async def record(
         ),
     )
     browser_event_writer.start()
+    # TODO: Ideally we would re-use get_events here.
 
     action_event_writer = multiprocessing.Process(
         target=write_events,
