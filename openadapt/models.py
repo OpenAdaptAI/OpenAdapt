@@ -602,15 +602,6 @@ class BrowserEvent(db.Base):
     # def get_active_browser_event(
     #     cls: "BrowserEvent",
     # ) -> "BrowserEvent":
-    #     """Get the active browser event.
-
-    #     Args:
-    #         None
-
-    #     Returns:
-    #         (BrowserEvent) the active Browser event.
-    #     """
-    #     return BrowserEvent(**)
 
 
 class FrameCache:
