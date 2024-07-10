@@ -1182,6 +1182,8 @@ def record(
     perf_q = sq.SynchronizedQueue()
     if terminate_processing is None:
         terminate_processing = multiprocessing.Event()
+    else : 
+        terminate_processing.clear()
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
 
