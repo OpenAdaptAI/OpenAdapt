@@ -470,7 +470,8 @@ def filter_stop_sequences(action_events: list[ActionEvent]) -> None:
                 == config.STOP_SEQUENCES[i][stop_sequence_indices[i]]
             ) and action_events[j].name == "press":
                 # for press events, compare the characters
-                stop_sequence_indices[i] -= 1
+                if not stop_sequence_indices[i] == -1 :
+                    stop_sequence_indices[i] -= 1
                 num_to_remove += 1
             elif action_events[j].name == "release" and (
                 action_events[j].canonical_key_char in config.STOP_SEQUENCES[i]
