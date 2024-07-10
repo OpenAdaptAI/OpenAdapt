@@ -43,7 +43,7 @@ export const RemoveActionEvent = ({
             }
         });
     }
-    if (event.isComputed || !event.isOriginal) return null;
+    // if (event.isComputed || !event.isOriginal) return null;
     return (
         <Button variant='filled' color='red' onClick={openModal}>
             Remove action event
