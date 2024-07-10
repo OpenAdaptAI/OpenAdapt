@@ -271,6 +271,11 @@ def delete_recording(session: SaSession, recording: Recording) -> None:
         recording (Recording): The recording object.
     """
     recording_timestamp = recording.timestamp
+
+    # Delete associated ActionEvent and Screenshot entries
+    session.query(ActionEvent).filter(ActionEvent.recording_id == recording.id).delete()
+    session.query(Screenshot).filter(Screenshot.recording_id == recording.id).delete()
+
     session.query(Recording).filter(Recording.id == recording.id).delete()
     session.commit()
 
