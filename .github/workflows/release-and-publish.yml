@@ -140,7 +140,7 @@ jobs:
         id: test_on_windows
         shell: powershell
         run: |
-          ./build_scripts/test_app_run_windows.bat
+          cmd.exe /c .\build_scripts\test_app_run_windows.bat
           if ($LastExitCode -ne 0) {
             "windows_build_status=failed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
