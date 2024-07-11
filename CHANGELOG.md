@@ -2,6 +2,15 @@
 
 
 
+## v0.36.3 (2024-07-11)
+
+### Fix
+
+* fix(replay): fix video not found (#845)
+
+* fix:modify Recording class to delete all associated records when recording is deleted ([`ab1f125`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ab1f125385ad73c08d338dd791e3125363e4c675))
+
+
 ## v0.36.2 (2024-07-06)
 
 ### Fix
