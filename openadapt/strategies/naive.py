@@ -94,6 +94,7 @@ class NaiveReplayStrategy(strategies.base.BaseReplayStrategy):
             # (fixed by disabling remove_move_before_click in events.py)
             # if action_event.name in common.MOUSE_CLICK_EVENTS:
             #    time.sleep(self.double_click_interval_seconds + 0.01)
+
             return action_event
         else:
             return None
