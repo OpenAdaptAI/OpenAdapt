@@ -2,6 +2,13 @@
 
 
 
+## v0.36.4 (2024-07-12)
+
+### Fix
+
+* fix(VanillaReplayStrategy): replay_instructions -&gt; instructions (#849) ([`640f926`](https://github.com/OpenAdaptAI/OpenAdapt/commit/640f92680db225bf46f8f250e75ac715a92c53f9))
+
+
 ## v0.36.3 (2024-07-11)
 
 ### Fix
