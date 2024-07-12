@@ -562,26 +562,19 @@ class WindowEvent(db.Base):
                     "You can help by uncommenting the lines below and pasting "
                     "the contents of the window_dict into a new GitHub Issue."
                 )
-                from pprint import pformat
-
-                logger.info(f"window_dict=\n{pformat(window_dict)}")
-                import ipdb
-
-                ipdb.set_trace()
-            if "state" in window_dict and "data" in window_dict["state"]:
-                window_state = window_dict["state"]
-                window_state["data"] = utils.clean_dict(
-                    utils.filter_keys(
-                        window_state["data"],
-                        key_suffixes,
-                    )
+                # from pprint import pformat
+                # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                # import ipdb; ipdb.set_trace()
+            window_state = window_dict["state"]
+            window_state["data"] = utils.clean_dict(
+                utils.filter_keys(
+                    window_state["data"],
+                    key_suffixes,
                 )
-        if "state" in window_dict:
-            if "data" in window_dict["state"]:
-                window_dict["state"].pop("data")
-            if "meta" in window_dict["state"]:
-                window_dict["state"].pop("meta")
-
+            )
+        else:
+            window_dict["state"].pop("data")
+        window_dict["state"].pop("meta")
         return window_dict
 
 

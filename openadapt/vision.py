@@ -56,57 +56,6 @@ def get_masks_from_segmented_image(
     return masks
 
 
-def extract_masked_image(image: Image.Image, mask: np.ndarray) -> Image.Image:
-    # Ensure the mask is in the correct format
-    mask = mask.astype(np.uint8) * 255
-
-    # Create a blank (transparent) image
-    masked_image = Image.new("RGBA", image.size)
-
-    # Convert the mask to an image
-    mask_image = Image.fromarray(mask, mode="L")
-
-    # Composite the original image and the blank image using the mask
-    masked_image = Image.composite(image.convert("RGBA"), masked_image, mask_image)
-
-    return masked_image
-
-
-@cache.cache()
-def extract_difference_image(
-    new_image: Image.Image,
-    old_image: Image.Image,
-    tolerance: float = 0.05,
-) -> Image.Image:
-    """Extract the portion of the new image that is different from the old image.
-
-    Args:
-        new_image: The new image as a PIL Image object.
-        old_image: The old image as a PIL Image object.
-        tolerance: Tolerance level to consider a pixel as different (default is 0.05).
-
-    Returns:
-        A PIL Image object representing the difference image.
-    """
-    new_image_np = np.array(new_image)
-    old_image_np = np.array(old_image)
-
-    # Compute the absolute difference between the two images in each color channel
-    diff = np.abs(new_image_np - old_image_np)
-
-    # Create a mask for the regions where the difference is above the tolerance
-    mask = np.any(diff > (255 * tolerance), axis=-1)
-
-    # Initialize an array for the segmented image
-    segmented_image_np = np.zeros_like(new_image_np)
-
-    # Set the pixels that are different in the new image
-    segmented_image_np[mask] = new_image_np[mask]
-
-    # Convert the numpy array back to an image
-    return Image.fromarray(segmented_image_np)
-
-
 @cache.cache()
 def filter_masks_by_size(
     masks: list[np.ndarray],

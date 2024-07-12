@@ -799,7 +799,6 @@ def get_marked_image(
     label_mode = "1"
     alpha = 0.1
     anno_mode = []
-
     if include_masks:
         anno_mode.append("Mask")
     if include_marks:
@@ -815,6 +814,7 @@ def get_marked_image(
         )
         mask_map[mask == 1] = label
 
-        im = demo.get_image()
-        marked_image = Image.fromarray(im)
-        return marked_image
+    im = demo.get_image()
+    marked_image = Image.fromarray(im)
+
+    return marked_image
