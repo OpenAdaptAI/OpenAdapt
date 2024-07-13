@@ -125,7 +125,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: str = str(DATABASE_FILE_PATH)
+    DB_URL: str = f"sqlite:///{DATABASE_FILE_PATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
@@ -157,7 +157,7 @@ class Config(BaseSettings):
     STOP_SEQUENCES: list[list[str]] = [
         list(stop_str) for stop_str in STOP_STRS
     ] + SPECIAL_CHAR_STOP_SEQUENCES
-
+    
     # Browser Events Record (extension) configurations
     BROWSER_WEBSOCKET_SERVER_IP: str = "localhost"
     BROWSER_WEBSOCKET_PORT: int = 8765
