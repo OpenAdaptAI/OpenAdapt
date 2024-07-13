@@ -597,7 +597,7 @@ class BrowserEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="browser_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
 
-    # # TODO: implement for extension
+    # # TODO: implement
     # @classmethod
     # def get_active_browser_event(
     #     cls: "BrowserEvent",
