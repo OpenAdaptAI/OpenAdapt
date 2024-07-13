@@ -64,24 +64,26 @@ class Recording(db.Base):
         remote_side=[id],
     )
     copies = sa.orm.relationship(
-        "Recording",
-        back_populates="original_recording",
+        "Recording", back_populates="original_recording", cascade="all, delete-orphan"
     )
 
     action_events = sa.orm.relationship(
         "ActionEvent",
         back_populates="recording",
         order_by="ActionEvent.timestamp",
+        cascade="all, delete-orphan",
     )
     screenshots = sa.orm.relationship(
         "Screenshot",
         back_populates="recording",
         order_by="Screenshot.timestamp",
+        cascade="all, delete-orphan",
     )
     window_events = sa.orm.relationship(
         "WindowEvent",
         back_populates="recording",
         order_by="WindowEvent.timestamp",
+        cascade="all, delete-orphan",
     )
     browser_events = sa.orm.relationship(
         "BrowserEvent",
@@ -89,10 +91,11 @@ class Recording(db.Base):
         order_by="BrowserEvent.timestamp",
     )
     scrubbed_recordings = sa.orm.relationship(
-        "ScrubbedRecording",
-        back_populates="recording",
+        "ScrubbedRecording", back_populates="recording", cascade="all, delete-orphan"
     )
-    audio_info = sa.orm.relationship("AudioInfo", back_populates="recording")
+    audio_info = sa.orm.relationship(
+        "AudioInfo", back_populates="recording", cascade="all, delete-orphan"
+    )
 
     _processed_action_events = None
 
