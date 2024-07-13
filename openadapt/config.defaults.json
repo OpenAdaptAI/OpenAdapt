@@ -18,7 +18,7 @@
     "REPLAY_STRIP_ELEMENT_STATE": true,
     "RECORD_VIDEO": true,
     "RECORD_AUDIO": true,
-    "RECORD_BROWSER_EVENTS": true,
+    "RECORD_BROWSER_EVENTS": false,
     "RECORD_FULL_VIDEO": false,
     "RECORD_IMAGES": false,
     "LOG_MEMORY": false,
