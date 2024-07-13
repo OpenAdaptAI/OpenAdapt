@@ -840,7 +840,6 @@ def process_events(
     num_total = (
         num_action_events + num_window_events + num_screenshots + num_browser_events
     )
-    # num_total = num_action_events + num_window_events + num_screenshots
     logger.info(
         "before"
         f" {num_action_events=} {num_window_events=}"
