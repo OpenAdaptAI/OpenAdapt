@@ -32,7 +32,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
-DATABASE_FILE_PATH = DATA_DIR_PATH / "openadapt.db"
+DATABASE_FILE_PATH = (DATA_DIR_PATH / "openadapt.db").absolute()
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
@@ -125,7 +125,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: ClassVar[str] = f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
+    DB_URL: str = str(DATABASE_FILE_PATH)
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
