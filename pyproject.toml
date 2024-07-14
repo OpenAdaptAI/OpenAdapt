@@ -108,6 +108,7 @@ posthog = "^3.5.0"
 
 wheel = "^0.43.0"
 cython = "^3.0.10"
+pm4py = "^2.7.11.11"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
