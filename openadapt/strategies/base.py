@@ -88,7 +88,7 @@ class BaseReplayStrategy(ABC):
                     replay_id=self._replay_id,
                     log_level="INFO",
                     key="action_event",
-                    data=action_event,
+                    data=action_event.to_log_dict(),
                 )
             except StopIteration:
                 break
