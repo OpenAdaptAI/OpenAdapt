@@ -221,6 +221,18 @@ python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
+### Admin features
+If you want to self host the app, you should run the following scripts
+
+**recording_uploader**
+- Ensure that you have valid AWS credentials added in your environment
+- Run the following command to create a stack on AWS that you can upload recordings to
+```bash
+python -m admin.recording_uploader.deploy
+```
+- If the script runs successfully, you should see an API Gateway URL in the output
+- Copy the URL and change the value of `RECORDING_UPLOAD_URL` in `openadapt/config.py` to the URL you copied
+
 ## Features
 
 ### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
