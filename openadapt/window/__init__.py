@@ -7,7 +7,6 @@ from typing import Any
 import sys
 
 from loguru import logger
-import pywinauto
 
 from openadapt.config import config
 
@@ -66,17 +65,6 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
     except Exception as exc:
         logger.warning(f"{exc=}")
         return None
-
-
-def get_active_window() -> pywinauto.application.WindowSpecification:
-    """Get the active window object.
-
-    Returns:
-        pywinauto.application.WindowSpecification: The active window object.
-    """
-    app = pywinauto.application.Application(backend="uia").connect(active_only=True)
-    window = app.top_window()
-    return window.wrapper_object()
 
 
 def get_active_element_state(x: int, y: int) -> dict | None:

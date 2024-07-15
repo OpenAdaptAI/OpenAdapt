@@ -1,3 +1,0 @@
-2024-07-12 23:11:21,853 | INFO | Value match: '6' == '6'
-2024-07-12 23:11:45,640 | INFO | Value match: '8' == '8'
-2024-07-12 23:11:46,388 | INFO | HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
