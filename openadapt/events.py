@@ -146,9 +146,16 @@ def make_parent_event(
 
     """
     # TODO: record which process_fn created the parent event
+    id_str = ""
+    if extra is not None :
+        for each in extra["children"] : 
+            id_str = id_str  + "œ" + str(each.id) 
+    else : 
+        extra = {}
     event_dict = {
         # TODO: set parent event to child timestamp?
         # "timestamp": child.timestamp,
+        "id" : id_str[1:] ,
         "recording_timestamp": child.recording_timestamp,
         "window_event_timestamp": child.window_event_timestamp,
         "screenshot_timestamp": child.screenshot_timestamp,
@@ -156,7 +163,6 @@ def make_parent_event(
         "window_event": child.window_event,
         "screenshot": child.screenshot,
     }
-    extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
     action_event = models.ActionEvent(**event_dict)
