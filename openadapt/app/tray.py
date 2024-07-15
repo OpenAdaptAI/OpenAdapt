@@ -225,7 +225,7 @@ class SystemTrayIcon(QObject):
         # for storing toasts that should be manually removed
         self.sticky_toasts = {}
 
-        # self.launch_dashboard()
+        self.launch_dashboard()
 
     def stop_download(self) -> None:
         """Stops download when button clicked."""
@@ -235,9 +235,11 @@ class SystemTrayIcon(QObject):
     @Slot(str)
     def download_start_toast_slot(self, message: str) -> None:
         """Shows download start toast depending on emitted signal."""
+        if self.download_progress_toast:
+            self.download_progress_toast.hide()
         self.download_progress_toast = self.show_toast(
             message,
-            duration=DOWNLOAD_TOAST_UPDATE_TIME * 1000 - 50,
+            duration=DOWNLOAD_TOAST_UPDATE_TIME * 1000,
             always_on_main_screen=True,
             reset_duration_on_hover=False,
             fade_in_duration=0,
