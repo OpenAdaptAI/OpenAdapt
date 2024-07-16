@@ -6,7 +6,6 @@ Usage:
         ...
 """
 
-from loguru import logger
 from sumy.nlp.stemmers import Stemmer
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.parsers.plaintext import PlaintextParser
@@ -14,6 +13,7 @@ from sumy.summarizers.lsa import LsaSummarizer
 from sumy.utils import get_stop_words
 import nltk
 
+from openadapt.custom_logger import logger
 from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
 

@@ -17,11 +17,11 @@ import threading
 import time
 
 from jinja2 import Environment, FileSystemLoader
-from loguru import logger
 from PIL import Image, ImageEnhance
 from posthog import Posthog
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     import fire

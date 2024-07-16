@@ -8,10 +8,10 @@ Usage:
 from copy import deepcopy
 from pprint import pformat
 
-from loguru import logger
 import deepdiff
 
 from openadapt import models, strategies, utils
+from openadapt.custom_logger import logger
 from openadapt.strategies.mixins.openai import OpenAIReplayStrategyMixin
 
 # import datetime

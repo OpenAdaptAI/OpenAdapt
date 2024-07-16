@@ -8,13 +8,13 @@ import os
 import sys
 import unicodedata
 
-from loguru import logger
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 import matplotlib.pyplot as plt
 import numpy as np
 
 from openadapt import common, contrib, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
+from openadapt.custom_logger import logger
 from openadapt.models import ActionEvent
 
 

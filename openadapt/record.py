@@ -19,12 +19,12 @@ import threading
 import time
 import tracemalloc
 
-from loguru import logger
 from oa_pynput import keyboard, mouse
 from pympler import tracker
 import av
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 from openadapt.models import Recording
 
 with redirect_stdout_stderr():

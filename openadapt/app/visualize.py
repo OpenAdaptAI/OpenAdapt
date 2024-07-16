@@ -5,10 +5,10 @@ from functools import partial
 from os import path, sep
 from pprint import pformat
 
-from loguru import logger
 from nicegui import events, ui
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     from tqdm import tqdm
@@ -19,13 +19,7 @@ from openadapt.config import config
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.plotting import display_event, plot_performance
-from openadapt.utils import (
-    EMPTY,
-    configure_logging,
-    image2utf8,
-    row2dict,
-    rows2dicts,
-)
+from openadapt.utils import EMPTY, configure_logging, image2utf8, row2dict, rows2dicts
 
 SCRUB = config.SCRUB_ENABLED
 

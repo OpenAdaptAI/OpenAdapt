@@ -13,7 +13,6 @@ import multiprocessing
 import os
 import sys
 
-from loguru import logger
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
 from PySide6.QtCore import QMargins, QObject, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
@@ -39,6 +38,7 @@ from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
 from openadapt.build_utils import is_running_from_executable
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
