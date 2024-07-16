@@ -28,6 +28,7 @@ from openadapt.models import (
     Screenshot,
     ScrubbedRecording,
     WindowEvent,
+    A11yEvent,
     copy_sa_instance,
 )
 from openadapt.privacy.base import ScrubbingProvider
@@ -261,6 +262,24 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
     session.commit()
     session.refresh(db_obj)
     return db_obj
+
+
+def insert_a11y_event(
+    db: SaSession,
+    data: dict,
+) -> None:
+    """Insert an a11y event into the database.
+
+    Args:
+        db: The database session.
+        data: The data associated with the a11y event.
+    """
+    a11y_event = A11yEvent(
+        window_event_id=data["window_event_id"],
+        data=data,
+    )
+    db.add(a11y_event)
+    db.commit()
 
 
 def delete_recording(session: SaSession, recording: Recording) -> None:

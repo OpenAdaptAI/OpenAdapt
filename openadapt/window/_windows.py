@@ -1,61 +1,9 @@
 from pprint import pprint
-import pygetwindow as gw
 import pickle
 import time
 
 from loguru import logger
 import pywinauto
-
-
-def get_active_window_state_pgw(read_window_data: bool) -> dict:
-    try:
-        active_window = gw.getActiveWindow()
-        if not active_window:
-            raise RuntimeError("No active window found.")
-    except RuntimeError as e:
-        logger.warning(e)
-        return {}
-
-    meta = {
-        "title": active_window.title,
-        "left": active_window.left,
-        "top": active_window.top,
-        "width": active_window.width,
-        "height": active_window.height,
-        "rectangle": {
-            "left": active_window.left,
-            "top": active_window.top,
-            "right": active_window.right,
-            "bottom": active_window.bottom,
-            "width": active_window.width,
-            "height": active_window.height,
-        },
-        "control_id": active_window._hWnd,
-    }
-
-    if read_window_data:
-        data = get_element_properties_pgw(active_window)
-    else:
-        data = {}
-
-    state = {
-        "title": meta["title"],
-        "left": meta["left"],
-        "top": meta["top"],
-        "width": meta["width"],
-        "height": meta["height"],
-        "meta": meta,
-        "data": data,
-        "window_id": meta["control_id"],
-    }
-
-    try:
-        pickle.dumps(state)
-    except Exception as exc:
-        logger.warning(f"{exc=}")
-        state.pop("data")
-
-    return state
 
 
 def get_active_window_state(read_window_data: bool) -> dict:
@@ -199,34 +147,6 @@ def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
         "bottom": rect.bottom,
     }
     return rect_dict
-
-
-def get_element_properties_pgw(window: gw.Window) -> dict:
-    """Simulates retrieving properties of a window element and its children.
-
-    Args:
-        window: An instance of a pygetwindow Window.
-
-    Returns:
-        dict: A nested dictionary containing the properties of the window.
-        The dictionary includes a "children" key, which will be an empty list
-        since pygetwindow does not support child elements retrieval.
-    """
-    properties = {
-        "title": window.title,
-        "left": window.left,
-        "top": window.top,
-        "width": window.width,
-        "height": window.height,
-        "rectangle": {
-            "left": window.left,
-            "top": window.top,
-            "width": window.width,
-            "height": window.height,
-        },
-        "children": [],  # pygetwindow does not support children
-    }
-    return properties
 
 
 def get_properties(element: pywinauto.application.WindowSpecification) -> dict:

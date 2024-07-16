@@ -489,6 +489,18 @@ class ActionEvent(db.Base):
         return action_dict
 
 
+class A11yEvent(db.Base):
+    """Class representing an accessibility (a11y) event in the database."""
+
+    __tablename__ = "a11y_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    window_event_id = sa.Column(sa.ForeignKey("window_event.id"), nullable=False)
+    data = sa.Column(sa.JSON)
+
+    window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_events")
+
+
 class WindowEvent(db.Base):
     """Class representing a window event in the database."""
 
@@ -508,6 +520,7 @@ class WindowEvent(db.Base):
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+    a11y_events = sa.orm.relationship("A11yEvent", back_populates="window_event")
 
     @classmethod
     def get_active_window_event(
@@ -523,7 +536,15 @@ class WindowEvent(db.Base):
         Returns:
             (WindowEvent) the active window event.
         """
-        return WindowEvent(**window.get_active_window_data(include_window_data))
+        window_event_data = window.get_active_window_data(include_window_data)
+        window_event = WindowEvent(**window_event_data)
+
+        if include_window_data:
+            a11y_event_data = window_event_data.pop("data", {})
+            a11y_event = A11yEvent(data=a11y_event_data)
+            window_event.a11y_events.append(a11y_event)
+
+        return window_event
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
         """Scrub the window event."""

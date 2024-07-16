@@ -128,6 +128,7 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    a11y_write_q: sq.SynchronizedQueue,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
@@ -136,7 +137,9 @@ def process_events(
     num_screen_events: multiprocessing.Value,
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
+    num_a11y_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
+    window_event_map: dict,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -167,6 +170,7 @@ def process_events(
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
+        window_event_id = event.data.get("window_id")
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -197,6 +201,20 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+        elif event.type == "a11y":
+            window_event = window_event_map.get(window_event_id)
+            if not window_event:
+                logger.warning(f"Discarding A11yEvent with no corresponding WindowEvent: {event}")
+                continue
+            event.data["window_event_timestamp"] = window_event.timestamp
+            process_event(
+                event,
+                a11y_write_q,
+                write_a11y_event,
+                recording,
+                perf_q,
+            )
+            num_a11y_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -313,6 +331,23 @@ def write_window_event(
     """
     assert event.type == "window", event
     crud.insert_window_event(db, recording, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
+def write_a11y_event(
+    db: crud.SaSession,
+    event: Event,
+    perf_q: sq.SynchronizedQueue,
+) -> None:
+    """Write an accessibility (a11y) event to the database and update the performance queue.
+
+    Args:
+        db: The database session.
+        event: An a11y event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+    assert event.type == "a11y", event
+    crud.insert_a11y_event(db, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -696,6 +731,7 @@ def read_window_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_counter: multiprocessing.Value,
+    window_event_map: dict,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -735,13 +771,13 @@ def read_window_events(
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            event_q.put(
-                Event(
-                    utils.get_timestamp(),
-                    "window",
-                    window_data,
-                )
+            window_event = Event(
+                utils.get_timestamp(),
+                "window",
+                {"window_id": window_data["window_id"], **window_data},  # Embed window_id in data
             )
+            window_event_map[window_data["window_id"]] = window_event  # Store window event in map
+            event_q.put(window_event)
         prev_window_data = window_data
 
 
@@ -1175,6 +1211,7 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    a11y_write_q = sq.SynchronizedQueue()
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
@@ -1183,9 +1220,11 @@ def record(
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
 
+    window_event_map = {}
+
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(event_q, terminate_processing, recording, started_counter, window_event_map),
     )
     window_event_reader.start()
 
@@ -1210,6 +1249,7 @@ def record(
     num_action_events = multiprocessing.Value("i", 0)
     num_screen_events = multiprocessing.Value("i", 0)
     num_window_events = multiprocessing.Value("i", 0)
+    num_a11y_events = multiprocessing.Value("i", 0)
     num_video_events = multiprocessing.Value("i", 0)
 
     event_processor = threading.Thread(
@@ -1219,6 +1259,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            a11y_write_q,
             video_write_q,
             perf_q,
             recording,
@@ -1227,7 +1268,9 @@ def record(
             num_screen_events,
             num_action_events,
             num_window_events,
+            num_a11y_events,
             num_video_events,
+            window_event_map
         ),
     )
     event_processor.start()
@@ -1276,6 +1319,21 @@ def record(
         ),
     )
     window_event_writer.start()
+
+    a11y_event_writer = multiprocessing.Process(  # Add a11y_event_writer
+        target=write_events,
+        args=(
+            "a11y",
+            write_a11y_event,  # This should be implemented to handle A11yEvent
+            a11y_write_q,
+            num_a11y_events,
+            perf_q,
+            recording,
+            terminate_processing,
+            started_counter,
+        ),
+    )
+    a11y_event_writer.start()
 
     if config.RECORD_VIDEO:
         expected_starts += 1
@@ -1379,6 +1437,7 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
+    a11y_event_writer.join()  # Join a11y_event_writer
     if config.RECORD_VIDEO:
         video_writer.join()
     if config.RECORD_AUDIO:
