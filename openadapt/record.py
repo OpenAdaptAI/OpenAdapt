@@ -170,7 +170,7 @@ def process_events(
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
-        window_event_id = event.data.get("window_id")
+        window_event_id = event.data["window_id"]
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -201,20 +201,6 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
-        elif event.type == "a11y":
-            window_event = window_event_map.get(window_event_id)
-            if not window_event:
-                logger.warning(f"Discarding A11yEvent with no corresponding WindowEvent: {event}")
-                continue
-            event.data["window_event_timestamp"] = window_event.timestamp
-            process_event(
-                event,
-                a11y_write_q,
-                write_a11y_event,
-                recording,
-                perf_q,
-            )
-            num_a11y_events.value += 1
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -262,6 +248,20 @@ def process_events(
                 )
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
+        elif event.type == "a11y":
+            window_event = window_event_map.get(window_event_id)
+            if not window_event:
+                logger.warning(f"Discarding A11yEvent with no corresponding WindowEvent: {event}")
+                continue
+            event.data["window_event_timestamp"] = window_event.timestamp
+            process_event(
+                event,
+                a11y_write_q,
+                write_a11y_event,
+                recording,
+                perf_q,
+            )
+            num_a11y_events.value += 1
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -771,13 +771,13 @@ def read_window_events(
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            window_event = Event(
+            event = Event(
                 utils.get_timestamp(),
                 "window",
-                {"window_id": window_data["window_id"], **window_data},  # Embed window_id in data
+                window_data, 
             )
-            window_event_map[window_data["window_id"]] = window_event  # Store window event in map
-            event_q.put(window_event)
+            window_event_map[window_data["window_id"]] = event  # Store window event in map
+            event_q.put(event)
         prev_window_data = window_data
 
 

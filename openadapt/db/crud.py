@@ -274,9 +274,11 @@ def insert_a11y_event(
         db: The database session.
         data: The data associated with the a11y event.
     """
+    window_event_id = data["window_id"]
+
     a11y_event = A11yEvent(
-        window_event_id=data["window_event_id"],
-        data=data,
+        window_event_id=window_event_id,
+        data=data["state"],
     )
     db.add(a11y_event)
     db.commit()
