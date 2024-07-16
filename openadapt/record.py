@@ -1233,7 +1233,7 @@ def record(
     event_processor.start()
 
     screen_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "screen",
             write_screen_event,
@@ -1248,7 +1248,7 @@ def record(
     screen_event_writer.start()
 
     action_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "action",
             write_action_event,
@@ -1263,7 +1263,7 @@ def record(
     action_event_writer.start()
 
     window_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "window",
             write_window_event,
@@ -1280,7 +1280,7 @@ def record(
     if config.RECORD_VIDEO:
         expected_starts += 1
         video_writer = multiprocessing.Process(
-            target=write_events,
+            target=utils.WrapStdout(write_events),
             args=(
                 "screen/video",
                 write_video_event,
@@ -1299,7 +1299,7 @@ def record(
     if config.RECORD_AUDIO:
         expected_starts += 1
         audio_recorder = multiprocessing.Process(
-            target=record_audio,
+            target=utils.WrapStdout(record_audio),
             args=(
                 recording,
                 terminate_processing,
@@ -1310,7 +1310,7 @@ def record(
 
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
-        target=performance_stats_writer,
+        target=utils.WrapStdout(performance_stats_writer),
         args=(
             perf_q,
             recording,
@@ -1324,7 +1324,7 @@ def record(
         expected_starts += 1
         record_pid = os.getpid()
         mem_plotter = multiprocessing.Process(
-            target=memory_writer,
+            target=utils.WrapStdout(memory_writer),
             args=(
                 recording,
                 terminate_perf_event,

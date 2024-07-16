@@ -952,5 +952,18 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
+class WrapStdout:
+    def __init__(self, target):
+        self.target = target
+
+    def __call__(self, *args, **kwargs):
+        with redirect_stdout_stderr():
+            try:
+                return self.target(*args, **kwargs)
+            except Exception as exc:
+                logger.exception(f"Error running process: {exc}")
+                return
+
+
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))

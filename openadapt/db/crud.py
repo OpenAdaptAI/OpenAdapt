@@ -15,7 +15,6 @@ from sqlalchemy.orm import joinedload, subqueryload
 import psutil
 import sqlalchemy as sa
 
-
 from openadapt import utils
 from openadapt.config import DATABASE_LOCK_FILE_PATH, config
 from openadapt.db.db import Session, get_read_only_session_maker
