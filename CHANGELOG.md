@@ -2,6 +2,33 @@
 
 
 
+## v0.36.5 (2024-07-16)
+
+### Fix
+
+* fix(error-reporting): add ignore_errors (#855)
+
+* add ignore_errors
+
+* black ([`dc26a2a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc26a2a3ddb3789bf65be26cb9d9e500b51803f7))
+
+
+## v0.36.4 (2024-07-12)
+
+### Fix
+
+* fix(VanillaReplayStrategy): replay_instructions -&gt; instructions (#849) ([`640f926`](https://github.com/OpenAdaptAI/OpenAdapt/commit/640f92680db225bf46f8f250e75ac715a92c53f9))
+
+
+## v0.36.3 (2024-07-11)
+
+### Fix
+
+* fix(replay): fix video not found (#845)
+
+* fix:modify Recording class to delete all associated records when recording is deleted ([`ab1f125`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ab1f125385ad73c08d338dd791e3125363e4c675))
+
+
 ## v0.36.2 (2024-07-06)
 
 ### Fix
