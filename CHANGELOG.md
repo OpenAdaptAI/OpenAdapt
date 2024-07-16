@@ -2,6 +2,17 @@
 
 
 
+## v0.36.5 (2024-07-16)
+
+### Fix
+
+* fix(error-reporting): add ignore_errors (#855)
+
+* add ignore_errors
+
+* black ([`dc26a2a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc26a2a3ddb3789bf65be26cb9d9e500b51803f7))
+
+
 ## v0.36.4 (2024-07-12)
 
 ### Fix
