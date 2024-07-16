@@ -1,8 +1,8 @@
 """add_a11yevent_model
 
-Revision ID: 5db0992561cb
+Revision ID: b2a68aec8cb6
 Revises: bb25e889ad71
-Create Date: 2024-07-16 19:10:51.690001
+Create Date: 2024-07-17 03:27:27.591270
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '5db0992561cb'
+revision = 'b2a68aec8cb6'
 down_revision = 'bb25e889ad71'
 branch_labels = None
 depends_on = None
