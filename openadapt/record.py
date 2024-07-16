@@ -1320,11 +1320,11 @@ def record(
     )
     window_event_writer.start()
 
-    a11y_event_writer = multiprocessing.Process(  # Add a11y_event_writer
+    a11y_event_writer = multiprocessing.Process(  
         target=write_events,
         args=(
             "a11y",
-            write_a11y_event,  # This should be implemented to handle A11yEvent
+            write_a11y_event,  
             a11y_write_q,
             num_a11y_events,
             perf_q,
