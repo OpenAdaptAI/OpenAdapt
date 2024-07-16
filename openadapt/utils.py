@@ -953,10 +953,14 @@ def get_posthog_instance() -> DistinctIDPosthog:
 
 
 class WrapStdout:
-    def __init__(self, target):
+    """Class to be used a target for multiprocessing.Process."""
+
+    def __init__(self, target: Callable) -> None:
+        """Initialize the target function."""
         self.target = target
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the target function and catch any exceptions."""
         with redirect_stdout_stderr():
             try:
                 return self.target(*args, **kwargs)
