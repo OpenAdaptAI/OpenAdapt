@@ -453,4 +453,5 @@ def print_config() -> None:
                     dsn=config.ERROR_REPORTING_DSN,
                     traces_sample_rate=1.0,
                     before_send=before_send_event,
+                    ignore_errors=[KeyboardInterrupt]
                 )
