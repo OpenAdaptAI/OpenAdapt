@@ -543,10 +543,10 @@ class WindowEvent(db.Base):
         window_event = WindowEvent(**window_event_data)
 
         if include_window_data:
-            a11y_event_data = window_event_data["state"]
+            a11y_event_data = window_event_data["state"].copy()
             a11y_event = A11yEvent(data=a11y_event_data)
             window_event.a11y_events.append(a11y_event)
-            window_event_data.pop("state", {})
+            window_event_data["state"].pop("data")
 
         return window_event
 
