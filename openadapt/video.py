@@ -326,9 +326,7 @@ def extract_frames(
 
     # Check if all timestamps have been matched
     missing_frame_timestamps = [
-        timestamp
-        for timestamp, frame in frame_by_timestamp.items()
-        if frame is None
+        timestamp for timestamp, frame in frame_by_timestamp.items() if frame is None
     ]
     if missing_frame_timestamps:
         raise Exception(

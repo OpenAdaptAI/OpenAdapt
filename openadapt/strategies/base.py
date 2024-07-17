@@ -58,7 +58,8 @@ class BaseReplayStrategy(ABC):
 
             # check if previous action is complete
             is_action_complete = prompt_is_action_complete(
-                screenshot, self.action_events,
+                screenshot,
+                self.action_events,
             )
             if not is_action_complete:
                 continue

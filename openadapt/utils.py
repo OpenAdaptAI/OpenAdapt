@@ -602,7 +602,10 @@ def parse_code_snippet(snippet: str) -> dict:
     try:
         rval = ast.literal_eval(code_content)
     except Exception as exc:
-        import ipdb; ipdb.set_trace()
+        logger.exception(exc)
+        import ipdb
+
+        ipdb.set_trace()
         # TODO: handle this
         raise
     return rval
@@ -939,11 +942,12 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
-def retry_with_exceptions(max_retries: int = 5):
+def retry_with_exceptions(max_retries: int = 5) -> Callable:
     """Decorator to retry a function while keeping track of exceptions."""
+
     def decorator_retry(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper_retry(*args, **kwargs) -> Any:
+        def wrapper_retry(*args: tuple, **kwargs: dict[str, Any]) -> Any:
             exceptions = []
             retries = 0
             while retries < max_retries:
@@ -956,7 +960,9 @@ def retry_with_exceptions(max_retries: int = 5):
             raise RuntimeError(
                 f"Failed after {max_retries} retries with exceptions: {exceptions}"
             )
+
         return wrapper_retry
+
     return decorator_retry
 
 

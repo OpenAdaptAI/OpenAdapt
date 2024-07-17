@@ -22,9 +22,7 @@ def configure_error_reporting() -> None:
     else:
         active_branch_name = git.Repo(PARENT_DIR_PATH).active_branch.name
         logger.info(f"{active_branch_name=}")
-        is_reporting_branch = (
-            active_branch_name == config.ERROR_REPORTING_BRANCH
-        )
+        is_reporting_branch = active_branch_name == config.ERROR_REPORTING_BRANCH
         logger.info(f"{is_reporting_branch=}")
 
     if is_reporting_branch:
