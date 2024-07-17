@@ -1,0 +1,21 @@
+Consider the actions that you previously generated:
+
+```json
+{{ actions }}
+```
+
+The attached image is a screenshot of the current state of the system, immediately
+after the last action in the sequence was played.
+
+Your task is to:
+1. Describe what you would expect to see in the screenshot after the last action in the
+sequence is complete, and
+2. Determine whether the the last action has completed. For example, if you expect that
+the sequence of actions would result in opening a particular application, you should
+determine whether that application has finished opening.
+
+Respond with JSON and nothing else. The JSON should have the following keys:
+- "expected_state": Natural language description of what you would expect to see.
+- "is_complete": Boolean indicating whether the last action is complete or not.
+
+My career depends on this. Lives are at stake.
