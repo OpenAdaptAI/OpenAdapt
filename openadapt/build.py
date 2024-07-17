@@ -28,8 +28,8 @@ if sys.platform == "win32":
     import screen_recorder_sdk
 
 
-def main() -> None:
-    """Entry point."""
+def build_pyinstaller() -> None:
+    """Build the application using PyInstaller."""
     additional_packages_to_install = [
         nicegui,
         oa_pynput,
@@ -182,5 +182,59 @@ def main() -> None:
         )
 
 
+def create_macos_dmg() -> None:
+    """Create a DMG installer for macOS."""
+    ROOT_DIR = Path(__file__).parent.parent
+    subprocess.run(
+        [
+            "hdiutil",
+            "create",
+            "-volname",
+            "OpenAdapt",
+            "-srcfolder",
+            ROOT_DIR / "dist" / "OpenAdapt.app",
+            "-ov",
+            "-format",
+            "UDZO",
+            ROOT_DIR / "dist" / "OpenAdapt.dmg",
+        ]
+    )
+
+
+def create_windows_installer() -> None:
+    """Create an EXE installer for Windows using Inno Setup."""
+    INNO_SETUP_SCRIPT = """
+[Setup]
+AppName=OpenAdapt
+AppVersion=1.0
+DefaultDirName={pf}\\OpenAdapt
+DefaultGroupName=OpenAdapt
+OutputBaseFilename=OpenAdapt_Installer
+Compression=lzma
+SolidCompression=yes
+
+[Files]
+Source: "dist\\OpenAdapt\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\\OpenAdapt"; Filename: "{app}\\OpenAdapt.exe"
+Name: "{group}\\{cm:UninstallProgram,OpenAdapt}"; Filename: "{uninstallexe}"
+"""
+    INNO_SETUP_PATH = Path("build_scripts") / "OpenAdapt.iss"
+    INNO_SETUP_PATH.write_text(INNO_SETUP_SCRIPT)
+
+    subprocess.run(["iscc", INNO_SETUP_PATH])
+
+
+def main() -> None:
+    """Entry point."""
+    build_pyinstaller()
+    if sys.platform == "darwin":
+        create_macos_dmg()
+    elif sys.platform == "win32":
+        create_windows_installer()
+
+
 if __name__ == "__main__":
     main()
+
