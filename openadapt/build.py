@@ -214,7 +214,8 @@ Compression=lzma
 SolidCompression=yes
 
 [Files]
-Source: "dist\\OpenAdapt\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\\OpenAdapt\\*"; DestDir: "{app}";
+Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\\OpenAdapt"; Filename: "{app}\\OpenAdapt.exe"
@@ -237,4 +238,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
