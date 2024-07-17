@@ -119,16 +119,19 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
             action.available_segment_descriptions = window_segmentation.descriptions
 
 
+@utils.retry_with_exceptions()
 def apply_replay_instructions(
     action_events: list[models.ActionEvent],
     replay_instructions: str,
-    # retain_window_events: bool = False,
+    exceptions: list[Exception],
 ) -> None:
     """Modify the given ActionEvents according to the given replay instructions.
 
     Args:
         action_events: list of action events to be modified in place.
         replay_instructions: instructions for how action events should be modified.
+        exceptions: list of exceptions that were produced attempting to run this
+            function.
     """
     action_dicts = [action.to_prompt_dict() for action in action_events]
     actions_dict = {"actions": action_dicts}
@@ -139,6 +142,7 @@ def apply_replay_instructions(
         "prompts/apply_replay_instructions.j2",
         actions=actions_dict,
         replay_instructions=replay_instructions,
+        exceptions=exceptions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
     content = prompt_adapter.prompt(

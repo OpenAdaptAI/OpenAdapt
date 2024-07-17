@@ -8,7 +8,7 @@ from loguru import logger
 from oa_pynput import keyboard, mouse
 import numpy as np
 
-from openadapt import models, playback, utils
+from openadapt import adapters, models, playback, utils
 
 MAX_FRAME_TIMES = 1000
 

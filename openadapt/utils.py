@@ -952,5 +952,26 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
+def retry_with_exceptions(max_retries: int = 5):
+    """Decorator to retry a function while keeping track of exceptions."""
+    def decorator_retry(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_retry(*args, **kwargs) -> Any:
+            exceptions = []
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, exceptions=exceptions, **kwargs)
+                except Exception as exc:
+                    logger.warning(exc)
+                    exceptions.append(str(exc))
+                    retries += 1
+            raise RuntimeError(
+                f"Failed after {max_retries} retries with exceptions: {exceptions}"
+            )
+        return wrapper_retry
+    return decorator_retry
+
+
 if __name__ == "__main__":
     fire.Fire(get_functions(__name__))
