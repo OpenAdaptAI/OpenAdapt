@@ -1,3 +1,5 @@
+"""Module for error reporting logic."""
+
 from typing import Any
 
 from loguru import logger
