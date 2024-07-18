@@ -206,13 +206,15 @@ def create_macos_dmg() -> None:
 def download_and_install_inno_setup() -> None:
     """Download and install Inno Setup if not already installed."""
     inno_setup_url = "https://jrsoftware.org/download.php/is.exe"
-    inno_setup_path = Path("build_scripts") / "is.exe"
+    inno_setup_path = Path.home() / ".inno_setup" / "is.exe"
 
     if not inno_setup_path.exists():
+        inno_setup_path.parent.mkdir(parents=True, exist_ok=True)
         print("Downloading Inno Setup...")
         urllib.request.urlretrieve(inno_setup_url, inno_setup_path)
         print("Installing Inno Setup...")
-        subprocess.run([inno_setup_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+        subprocess.run([inno_setup_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR={}".format(inno_setup_path.parent)], check=True)
+
 
 def create_windows_installer() -> None:
     """Create an EXE installer for Windows using Inno Setup."""
