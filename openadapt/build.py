@@ -11,6 +11,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
+import zipfile
 
 import gradio_client
 import nicegui
@@ -201,8 +203,21 @@ def create_macos_dmg() -> None:
     )
 
 
+def download_and_install_inno_setup() -> None:
+    """Download and install Inno Setup if not already installed."""
+    inno_setup_url = "https://jrsoftware.org/download.php/is.exe"
+    inno_setup_path = Path("build_scripts") / "is.exe"
+
+    if not inno_setup_path.exists():
+        print("Downloading Inno Setup...")
+        urllib.request.urlretrieve(inno_setup_url, inno_setup_path)
+        print("Installing Inno Setup...")
+        subprocess.run([inno_setup_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+
 def create_windows_installer() -> None:
     """Create an EXE installer for Windows using Inno Setup."""
+    download_and_install_inno_setup()
+
     INNO_SETUP_SCRIPT = """
 [Setup]
 AppName=OpenAdapt
