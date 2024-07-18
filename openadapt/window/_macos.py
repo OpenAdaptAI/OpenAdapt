@@ -32,7 +32,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
     ]
     title_parts = [part for part in title_parts if part]
     title = " ".join(title_parts)
-    window_id = meta["kCGWindowNumber"]
+    handle = meta["kCGWindowNumber"]
     bounds = meta["kCGWindowBounds"]
     left = bounds["X"]
     top = bounds["Y"]
@@ -44,7 +44,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
         "top": top,
         "width": width,
         "height": height,
-        "window_id": window_id,
+        "handle": handle,
         "meta": meta,
         "data": data,
     }

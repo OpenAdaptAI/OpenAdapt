@@ -45,7 +45,7 @@ from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window")
+EVENT_TYPES = ("screen", "action", "window", "a11y")
 LOG_LEVEL = "INFO"
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -53,6 +53,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "screen/video": True,
     "action": True,
     "window": True,
+    "a11y": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
@@ -139,7 +140,7 @@ def process_events(
     num_window_events: multiprocessing.Value,
     num_a11y_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
-    window_event_map: dict,
+    window_event_by_id: dict,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -170,7 +171,8 @@ def process_events(
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
-        window_event_id = event.data["window_id"]
+        if event.type == 'window' or event.type == 'a11y':
+            handle = event.data["handle"]
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -249,7 +251,8 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         elif event.type == "a11y":
-            window_event = window_event_map.get(window_event_id)
+            window_event = window_event_by_id.get(handle)
+            logger.debug(f"Processing A11yEvent: {event}")
             if not window_event:
                 logger.warning(f"Discarding A11yEvent with no corresponding WindowEvent: {event}")
                 continue
@@ -262,6 +265,7 @@ def process_events(
                 perf_q,
             )
             num_a11y_events.value += 1
+            logger.debug(f"A11yEvent processed: {event}")
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -330,12 +334,14 @@ def write_window_event(
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "window", event
-    crud.insert_window_event(db, recording, event.timestamp, event.data)
+    data = event.data
+    crud.insert_window_event(db, recording, event.timestamp, data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
 def write_a11y_event(
     db: crud.SaSession,
+    recording: Recording,
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
@@ -731,7 +737,7 @@ def read_window_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_counter: multiprocessing.Value,
-    window_event_map: dict,
+    window_event_by_id: dict,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -757,8 +763,8 @@ def read_window_events(
             started = True
 
         if window_data["title"] != prev_window_data.get("title") or window_data[
-            "window_id"
-        ] != prev_window_data.get("window_id"):
+            "handle"
+        ] != prev_window_data.get("handle"):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -766,18 +772,25 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            _window_data = window_data
+            _window_data = window_data.copy()
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            event = Event(
+            window_event = Event(
                 utils.get_timestamp(),
                 "window",
-                window_data, 
+                _window_data, 
             )
-            window_event_map[window_data["window_id"]] = event  # Store window event in map
-            event_q.put(event)
+            a11y_event = Event(
+                utils.get_timestamp(),
+                "a11y",
+                window_data,
+            )
+            window_event_by_id[window_data["handle"]] = a11y_event  # Store window event in map
+            event_q.put(window_event)
+            event_q.put(a11y_event)
+            
         prev_window_data = window_data
 
 
@@ -1220,11 +1233,11 @@ def record(
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
 
-    window_event_map = {}
+    window_event_by_id = {}
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, started_counter, window_event_map),
+        args=(event_q, terminate_processing, recording, started_counter, window_event_by_id),
     )
     window_event_reader.start()
 
@@ -1270,7 +1283,7 @@ def record(
             num_window_events,
             num_a11y_events,
             num_video_events,
-            window_event_map
+            window_event_by_id
         ),
     )
     event_processor.start()
@@ -1304,6 +1317,7 @@ def record(
         ),
     )
     action_event_writer.start()
+
 
     window_event_writer = multiprocessing.Process(
         target=write_events,
@@ -1437,8 +1451,9 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-    a11y_event_writer.join()  # Join a11y_event_writer
+      # Join a11y_event_writer
     if config.RECORD_VIDEO:
+        a11y_event_writer.join()
         video_writer.join()
     if config.RECORD_AUDIO:
         audio_recorder.join()

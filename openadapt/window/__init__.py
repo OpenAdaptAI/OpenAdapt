@@ -39,14 +39,14 @@ def get_active_window_data(
     top = state["top"]
     width = state["width"]
     height = state["height"]
-    window_id = state["window_id"]
+    handle = state["handle"]
     window_data = {
         "title": title,
         "left": left,
         "top": top,
         "width": width,
         "height": height,
-        "window_id": window_id,
+        "handle": handle,
         "state": state,
     }
     return window_data

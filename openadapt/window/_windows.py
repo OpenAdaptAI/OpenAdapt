@@ -23,7 +23,7 @@ def get_active_window_state(read_window_data: bool) -> dict:
     """
     # catch specific exceptions, when except happens do log.warning
     try:
-        active_window = get_active_window()
+        active_window, handle = get_active_window()
     except RuntimeError as e:
         logger.warning(e)
         return {}
@@ -41,7 +41,7 @@ def get_active_window_state(read_window_data: bool) -> dict:
         "height": meta["rectangle"].height(),
         "meta": {**meta, "rectangle": rectangle_dict},
         "data": data,
-        "window_id": meta["control_id"],
+        "handle": handle,
     }
     try:
         pickle.dumps(state)
@@ -95,7 +95,7 @@ def get_active_window() -> pywinauto.application.WindowSpecification:
     """
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
     window = app.top_window()
-    return window.wrapper_object()
+    return [window.wrapper_object(), window.handle]
 
 
 def get_element_properties(element: pywinauto.application.WindowSpecification) -> dict:
