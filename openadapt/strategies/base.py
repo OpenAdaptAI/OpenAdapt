@@ -10,6 +10,7 @@ import numpy as np
 
 from openadapt import adapters, models, playback, utils
 
+CHECK_ACTION_COMPLETE = True
 MAX_FRAME_TIMES = 1000
 
 
@@ -57,12 +58,13 @@ class BaseReplayStrategy(ABC):
             screenshot = models.Screenshot.take_screenshot()
 
             # check if previous action is complete
-            is_action_complete = prompt_is_action_complete(
-                screenshot,
-                self.action_events,
-            )
-            if not is_action_complete:
-                continue
+            if CHECK_ACTION_COMPLETE:
+                is_action_complete = prompt_is_action_complete(
+                    screenshot,
+                    self.action_events,
+                )
+                if not is_action_complete:
+                    continue
 
             self.screenshots.append(screenshot)
             window_event = models.WindowEvent.get_active_window_event()
