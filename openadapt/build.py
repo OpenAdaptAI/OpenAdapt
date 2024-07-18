@@ -204,7 +204,8 @@ def create_macos_dmg() -> None:
     )
 
 
-def download_and_extract_inno_setup():
+def download_and_extract_inno_setup() -> tuple[str, str]:
+    """Download and extract Inno Setup."""
     inno_setup_url = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
     temp_dir = tempfile.mkdtemp()
     temp_file = Path(temp_dir) / "innosetup.exe"
@@ -212,7 +213,10 @@ def download_and_extract_inno_setup():
     urllib.request.urlretrieve(inno_setup_url, temp_file)
 
     print("Extracting Inno Setup...")
-    subprocess.run([str(temp_file), "/VERYSILENT", "/CURRENTUSER", f"/DIR={temp_dir}\\InnoSetup"], check=True)
+    subprocess.run(
+        [str(temp_file), "/VERYSILENT", "/CURRENTUSER", f"/DIR={temp_dir}\\InnoSetup"],
+        check=True,
+    )
 
     inno_setup_compiler = Path(temp_dir) / "InnoSetup" / "ISCC.exe"
     if not inno_setup_compiler.exists():
@@ -239,7 +243,8 @@ PrivilegesRequired=lowest
 OutputDir={ROOT_DIR / "dist"}
 
 [Files]
-Source: "{DIST_DIR}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{DIST_DIR}\\*"; DestDir: "{{app}}";
+Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{{group}}\\OpenAdapt"; Filename: "{{app}}\\OpenAdapt.exe"
