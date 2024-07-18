@@ -68,7 +68,7 @@ class BaseReplayStrategy(ABC):
                 replay_id=self._replay_id,
                 log_level="INFO",
                 key="screenshot",
-                data=screenshot.png_data,
+                data=screenshot.image,
             )
             self.screenshots.append(screenshot)
             window_event = models.WindowEvent.get_active_window_event()

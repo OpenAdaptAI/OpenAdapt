@@ -794,6 +794,36 @@ def add_replay_log(*, replay_id: int, log_level: str, key: str, data: Any) -> No
         session.commit()
 
 
+def get_replays(
+    session: SaSession,
+) -> list[Replay]:
+    """Get all replays.
+
+    Args:
+        session (sa.orm.Session): The database session.
+
+    Returns:
+        list[Replay]: A list of all replays.
+    """
+    return session.query(Replay).order_by(sa.desc(Replay.timestamp)).all()
+
+
+def get_replay_logs(
+    session: SaSession,
+    replay_id: int,
+) -> list[ReplayLog]:
+    """Get all logs for a replay.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        replay_id (int): The id of the replay.
+
+    Returns:
+        list[ReplayLog]: A list of all logs for the replay.
+    """
+    return session.query(ReplayLog).filter(ReplayLog.replay_id == replay_id).all()
+
+
 def post_process_events(session: SaSession, recording: Recording) -> None:
     """Post-process events.
 

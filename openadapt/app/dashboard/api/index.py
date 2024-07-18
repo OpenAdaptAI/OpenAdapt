@@ -12,6 +12,7 @@ import uvicorn
 
 from openadapt.app.dashboard.api.action_events import ActionEventsAPI
 from openadapt.app.dashboard.api.recordings import RecordingsAPI
+from openadapt.app.dashboard.api.replays import ReplaysAPI
 from openadapt.app.dashboard.api.scrubbing import ScrubbingAPI
 from openadapt.app.dashboard.api.settings import SettingsAPI
 from openadapt.build_utils import is_running_from_executable
@@ -23,11 +24,13 @@ api = APIRouter()
 
 action_events_app = ActionEventsAPI().attach_routes()
 recordings_app = RecordingsAPI().attach_routes()
+replays_app = ReplaysAPI().attach_routes()
 scrubbing_app = ScrubbingAPI().attach_routes()
 settings_app = SettingsAPI().attach_routes()
 
 api.include_router(action_events_app, prefix="/action-events")
 api.include_router(recordings_app, prefix="/recordings")
+api.include_router(replays_app, prefix="/replays")
 api.include_router(scrubbing_app, prefix="/scrubbing")
 api.include_router(settings_app, prefix="/settings")
 
