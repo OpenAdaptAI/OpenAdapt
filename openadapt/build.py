@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 import gradio_client
@@ -202,6 +203,7 @@ def create_macos_dmg() -> None:
         ]
     )
 
+
 def download_and_extract_inno_setup():
     inno_setup_url = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
     temp_dir = tempfile.mkdtemp()
@@ -218,7 +220,6 @@ def download_and_extract_inno_setup():
 
     return inno_setup_compiler, temp_dir
 
-import time
 
 def create_windows_installer() -> None:
     """Create an EXE installer for Windows using Inno Setup."""
@@ -258,6 +259,8 @@ Name: "{{group}}\\{{cm:UninstallProgram,OpenAdapt}}"; Filename: "{{uninstallexe}
         except PermissionError:
             print(f"Warning: Unable to remove temporary directory: {temp_dir}")
             print("You may need to manually delete this directory later.")
+
+
 def main() -> None:
     """Entry point."""
     build_pyinstaller()
@@ -265,6 +268,7 @@ def main() -> None:
         create_macos_dmg()
     elif sys.platform == "win32":
         create_windows_installer()
+
 
 if __name__ == "__main__":
     main()
