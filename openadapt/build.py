@@ -243,8 +243,8 @@ PrivilegesRequired=lowest
 OutputDir={ROOT_DIR / "dist"}
 
 [Files]
-Source: "{DIST_DIR}\\*"; DestDir: "{{app}}";
-Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{DIST_DIR}\\*"; DestDir: "{{app}}"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{{group}}\\OpenAdapt"; Filename: "{{app}}\\OpenAdapt.exe"
