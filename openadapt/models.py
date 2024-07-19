@@ -534,7 +534,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_data: bool = True,
+        add_centroid: bool = True,
+        remove_bbox: bool = False
+    ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
         Args:
@@ -574,31 +579,30 @@ class WindowEvent(db.Base):
             )
         else:
             window_dict["state"].pop("data")
+
         window_dict["state"].pop("meta")
 
-        # Let,
-        # left = window_dict["left"] = x
-        # top = window_dict["top"] = y
-        # width = window_dict["width"] = w
-        # height = window_dict["height"] = h
+        if add_centroid:
+            left = window_dict["left"]
+            top = window_dict["top"]
+            width = window_dict["width"]
+            height = window_dict["height"]
 
-        # Compute the centroid of the bounding box
-        # Reference: https://stackoverflow.com/a/18932029
-        centroid_x = window_dict["left"] + window_dict["width"] / 2
-        centroid_y = window_dict["top"] + window_dict["height"] / 2
+            # Compute the centroid of the bounding box
+            centroid_x = left + width / 2
+            centroid_y = top + height / 2
 
-        # Add centroid in the prompt dict { "centroid": }
-        window_dict["centroid"] = {
-            "x": centroid_x,
-            "y": centroid_y,
-        }
+            # Add centroid in the prompt dict { "centroid": }
+            window_dict["centroid"] = {
+                "x": centroid_x,
+                "y": centroid_y,
+            }
 
-        # Uncomment, if we want to remove the x, y, w, h data,
-        # if using centroid solves all of the issues.
-        # window_dict.pop("left")
-        # window_dict.pop("top")
-        # window_dict.pop("width")
-        # window_dict.pop("height")
+        if remove_bbox:
+            window_dict.pop("left")
+            window_dict.pop("top")
+            window_dict.pop("width")
+            window_dict.pop("height")
 
         return window_dict
 
