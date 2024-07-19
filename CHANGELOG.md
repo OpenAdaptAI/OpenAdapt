@@ -2,6 +2,23 @@
 
 
 
+## v0.37.0 (2024-07-19)
+
+### Feature
+
+* feat(logging): store application logs (#854)
+
+* feat: Wrap all processes inside a try catch block
+
+* chore: Modify files to use the custom logger
+
+* lint: flake8 lint
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`13bbe48`](https://github.com/OpenAdaptAI/OpenAdapt/commit/13bbe48dfa6ba93f297c23b65994ad3523c81188))
+
+
 ## v0.36.6 (2024-07-19)
 
 ### Fix
