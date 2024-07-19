@@ -538,7 +538,7 @@ class WindowEvent(db.Base):
         self,
         include_data: bool = True,
         add_centroid: bool = True,
-        remove_bbox: bool = False
+        remove_bbox: bool = False,
     ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
