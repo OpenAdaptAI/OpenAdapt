@@ -9,12 +9,12 @@ from sys import platform
 import os
 
 from Foundation import NSURL, NSObject  # type: ignore # noqa
-from loguru import logger
 from Quartz import CGMainDisplayID  # type: ignore # noqa
 import AVFoundation as AVF  # type: ignore # noqa
 import objc  # type: ignore # noqa
 
 from openadapt.config import CAPTURE_DIR_PATH
+from openadapt.custom_logger import logger
 
 
 class Capture:

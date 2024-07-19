@@ -3,14 +3,14 @@
 import json
 
 from fastapi import APIRouter, WebSocket
-from loguru import logger
 
 from openadapt.app import cards
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import Recording
-from openadapt.utils import image2utf8, row2dict
 from openadapt.plotting import display_event
+from openadapt.utils import image2utf8, row2dict
 
 
 class RecordingsAPI:

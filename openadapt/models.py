@@ -7,7 +7,6 @@ from typing import Any, Type
 import io
 import sys
 
-from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
@@ -15,10 +14,10 @@ import sqlalchemy as sa
 
 from openadapt import window
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
-
 
 EMPTY_VALS = [None, "", [], (), {}]
 

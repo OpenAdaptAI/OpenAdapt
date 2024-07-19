@@ -7,12 +7,12 @@ import subprocess
 import tempfile
 import threading
 
-from loguru import logger
 from PIL import Image
 import av
 
 from openadapt import utils
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 
 def get_video_file_path(recording_timestamp: float) -> str:
