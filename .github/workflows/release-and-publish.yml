@@ -47,14 +47,11 @@ jobs:
         - name: Build executables
           run: |
               poetry run python -m openadapt.build
-              cd dist
-              zip -r ../OpenAdapt.app.zip OpenAdapt.app
-              cd ..
         - name: Upload executables
           uses: actions/upload-artifact@v4
           with:
-              name: OpenAdapt.app
-              path: OpenAdapt.app.zip
+              name: OpenAdapt.dmg
+              path: OpenAdapt.dmg
 
   build-windows-executables:
     name: Build Windows app
@@ -86,14 +83,11 @@ jobs:
         - name: Build executables
           run: |
               poetry run python -m openadapt.build
-              cd dist
-              7z a -tzip ../OpenAdapt.zip OpenAdapt
-              cd ..
         - name: Upload executables
           uses: actions/upload-artifact@v4
           with:
-              name: OpenAdapt
-              path: OpenAdapt.zip
+              name: OpenAdapt_Installer
+              path: OpenAdapt_Installer
 
   test_on_macos:
     name: Test on macOS
