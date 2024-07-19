@@ -18,7 +18,7 @@ from pprint import pformat
 import json
 
 # external
-from loguru import logger
+from openadapt.custom_logger import logger
 import numpy as np
 
 # local

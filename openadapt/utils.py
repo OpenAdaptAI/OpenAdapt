@@ -17,11 +17,11 @@ import threading
 import time
 
 from jinja2 import Environment, FileSystemLoader
-from loguru import logger
 from PIL import Image, ImageEnhance
 from posthog import Posthog
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     import fire
@@ -964,6 +964,23 @@ def retry_with_exceptions(max_retries: int = 5) -> Callable:
         return wrapper_retry
 
     return decorator_retry
+
+
+class WrapStdout:
+    """Class to be used a target for multiprocessing.Process."""
+
+    def __init__(self, target: Callable) -> None:
+        """Initialize the target function."""
+        self.target = target
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the target function and catch any exceptions."""
+        with redirect_stdout_stderr():
+            try:
+                return self.target(*args, **kwargs)
+            except Exception as exc:
+                logger.exception(f"Error running process: {exc}")
+                return
 
 
 if __name__ == "__main__":

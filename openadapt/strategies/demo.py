@@ -5,8 +5,7 @@ Usage:
     $ python -m openadapt.replay DemoReplayStrategy
 """
 
-from loguru import logger
-
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.models import Recording, Screenshot, WindowEvent
 from openadapt.strategies.base import BaseReplayStrategy

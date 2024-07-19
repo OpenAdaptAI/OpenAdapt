@@ -3,6 +3,9 @@
 from collections import defaultdict
 import time
 
+from loguru import logger as loguru_logger
+
+from openadapt.build_utils import get_log_file_path, is_running_from_executable
 from openadapt.config import config
 
 MESSAGE_TIMESTAMPS = defaultdict(list)
@@ -41,3 +44,11 @@ def filter_log_messages(data: dict) -> bool:
                 MESSAGE_TIMESTAMPS[msg] = timestamps
 
     return True
+
+
+logger = loguru_logger
+if is_running_from_executable():
+    logger.remove()
+    logger.add(
+        get_log_file_path(),
+    )

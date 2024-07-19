@@ -7,9 +7,9 @@ import multiprocessing
 import os
 import time
 
-from loguru import logger
 import sqlalchemy as sa
 
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.models import ActionEvent, Recording, Screenshot, WindowEvent
 from openadapt.privacy.providers import ScrubProvider

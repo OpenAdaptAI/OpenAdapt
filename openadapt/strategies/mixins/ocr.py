@@ -10,11 +10,11 @@ Usage:
 
 from typing import Union
 
-from loguru import logger
 from rapidocr_onnxruntime import RapidOCR
 from sklearn.cluster import DBSCAN
 import pandas as pd
 
+from openadapt.custom_logger import logger
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 
