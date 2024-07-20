@@ -7,13 +7,13 @@ from copy import deepcopy
 from pprint import pformat
 from typing import Any
 
-from loguru import logger
 from PIL import Image
 import fire
 import requests
 
 from openadapt import cache, utils
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 MODEL_NAME = [
     "gpt-4-vision-preview",

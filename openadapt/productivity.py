@@ -16,18 +16,13 @@ import string
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
-from loguru import logger
 
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.events import get_events
 from openadapt.models import ActionEvent, WindowEvent
 from openadapt.plotting import display_event
-from openadapt.utils import (
-    configure_logging,
-    image2utf8,
-    row2dict,
-    rows2dicts,
-)
+from openadapt.utils import configure_logging, image2utf8, row2dict, rows2dicts
 from openadapt.visualize import IMG_WIDTH_PCT, MAX_EVENTS, dict2html
 
 CSS = string.Template("""

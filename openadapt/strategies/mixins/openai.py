@@ -9,12 +9,12 @@ Usage:
 from pprint import pformat
 import time
 
-from loguru import logger
 import openai
 import tiktoken
 
 from openadapt import cache, models
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.strategies.base import BaseReplayStrategy
 
 # https://github.com/nalgeon/pokitoki/blob/0b6b921d367f693738e7b9bab44e6926171b48d6/bot/ai/chatgpt.py#L78

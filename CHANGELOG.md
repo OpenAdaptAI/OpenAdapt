@@ -2,6 +2,57 @@
 
 
 
+## v0.37.0 (2024-07-19)
+
+### Feature
+
+* feat(logging): store application logs (#854)
+
+* feat: Wrap all processes inside a try catch block
+
+* chore: Modify files to use the custom logger
+
+* lint: flake8 lint
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt; ([`13bbe48`](https://github.com/OpenAdaptAI/OpenAdapt/commit/13bbe48dfa6ba93f297c23b65994ad3523c81188))
+
+
+## v0.36.6 (2024-07-19)
+
+### Fix
+
+* fix(build): escape installer newline, upload installers and executables (#860)
+
+* escape newline in inno script
+
+* upload installers and executables ([`6d878fe`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6d878fe8ff46b697102d7edb20f753e4974dcf9d))
+
+### Unknown
+
+* feat(build) modify build.py to produce installers (#858)
+
+* modify build.py to produce installers
+
+* download_and_install_inno_setup
+
+* black/flake8
+
+* remove zipping in build ([`21e5de1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/21e5de1b3983a08416e252958a93b44fb5d9020f))
+
+
+## v0.36.5 (2024-07-16)
+
+### Fix
+
+* fix(error-reporting): add ignore_errors (#855)
+
+* add ignore_errors
+
+* black ([`dc26a2a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dc26a2a3ddb3789bf65be26cb9d9e500b51803f7))
+
+
 ## v0.36.4 (2024-07-12)
 
 ### Fix

@@ -9,15 +9,14 @@ import json
 import os
 import time
 
-from loguru import logger
 from sqlalchemy.orm import Session as SaSession
 from sqlalchemy.orm import joinedload, subqueryload
 import psutil
 import sqlalchemy as sa
 
-
 from openadapt import utils
 from openadapt.config import DATABASE_LOCK_FILE_PATH, config
+from openadapt.custom_logger import logger
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,

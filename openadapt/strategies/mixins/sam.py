@@ -11,7 +11,6 @@ Usage:
 from pathlib import Path
 import urllib
 
-from loguru import logger
 from PIL import Image
 from segment_anything import (
     SamAutomaticMaskGenerator,
@@ -23,6 +22,7 @@ import matplotlib.axes as axes
 import matplotlib.pyplot as plt
 import numpy as np
 
+from openadapt.custom_logger import logger
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 

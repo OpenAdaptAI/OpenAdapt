@@ -22,11 +22,11 @@ Example: To redact all entities in sample2.mp4
 from typing import Optional
 import math
 
-from loguru import logger
 from moviepy.editor import VideoClip, VideoFileClip
 from PIL import Image
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     from tqdm import tqdm

@@ -1,8 +1,8 @@
 """API endpoints for recordings."""
 
 from fastapi import APIRouter
-from loguru import logger
 
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 
