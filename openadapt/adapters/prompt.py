@@ -1,12 +1,11 @@
 """Adapter for prompting foundation models."""
 
-from loguru import logger
 from typing import Type
+
 from PIL import Image
 
-
+from openadapt.custom_logger import logger
 from openadapt.drivers import anthropic, google, openai
-
 
 # Define a list of drivers in the order they should be tried
 DRIVER_ORDER: list[Type] = [openai, google, anthropic]

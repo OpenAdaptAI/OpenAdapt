@@ -5,11 +5,11 @@ import os
 import sys
 import time
 
-from loguru import logger
 from PIL import Image
 
 from openadapt import cache, config, models, plotting, utils
 from openadapt.adapters import openai
+from openadapt.custom_logger import logger
 
 
 @cache.cache(force_refresh=False)
