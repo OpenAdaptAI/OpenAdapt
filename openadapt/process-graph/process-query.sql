@@ -1,11 +1,22 @@
-select r.id as case_id, 
-	we.title as activity, 
-    -- ae."timestamp" as timestamp,
-    datetime(ae."timestamp", 'unixepoch', 'localtime') AS "timestamp",
-	COALESCE(ae."timestamp" - LAG(ae."timestamp") OVER (ORDER BY ae."timestamp"), 0) as costs,
-	ae.name	as resource
-from recording r
-inner join action_event ae on r."timestamp" = ae.recording_timestamp 
-inner join window_event we on r."timestamp" = we.recording_timestamp and we."timestamp" = ae.window_event_timestamp
-where r.id = 1
-order by r.id, ae."timestamp";
+SELECT
+    R.ID AS "case_id",
+    'Title: ' || WE.TITLE || ', Action: ' || AE.NAME || ', Action_Target: ' || 
+    CASE 
+        WHEN AE.NAME = 'scroll' THEN '(' || AE.mouse_dx || ',' || AE.mouse_dy || ')'
+        WHEN AE.NAME = 'move' THEN '(' || AE.mouse_x || ',' || AE.mouse_y || ')'
+        WHEN AE.NAME = 'click' THEN AE.mouse_button_name
+        WHEN AE.NAME IN ('press', 'release') THEN AE.CANONICAL_KEY_NAME
+        ELSE 'N/A'
+    END AS "activity",
+    DATETIME(AE."timestamp", 'unixepoch', 'localtime') AS "timestamp",
+    COALESCE(AE."timestamp" - LAG(AE."timestamp") OVER (ORDER BY AE."timestamp"), 0) AS "costs",
+    AE.NAME AS "resource"
+FROM
+    RECORDING R
+    INNER JOIN ACTION_EVENT AE ON R."timestamp" = AE.RECORDING_TIMESTAMP
+    INNER JOIN WINDOW_EVENT WE ON R."timestamp" = WE.RECORDING_TIMESTAMP AND WE."timestamp" = AE.WINDOW_EVENT_TIMESTAMP
+WHERE
+    R.ID = 1
+ORDER BY
+    R.ID,
+    AE."timestamp";

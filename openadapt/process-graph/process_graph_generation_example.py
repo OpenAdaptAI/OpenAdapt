@@ -1,5 +1,8 @@
+"""Example of process graph generation using PM4Py library."""
+
 import pm4py
 import pandas
+
 
 if __name__ == "__main__":
     log = pandas.read_csv("dataout.csv", sep=",")
