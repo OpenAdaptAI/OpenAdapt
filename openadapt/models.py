@@ -500,12 +500,14 @@ class A11yEvent(db.Base):
     id = sa.Column(sa.Integer, primary_key=True)
     handle = sa.Column(sa.ForeignKey("window_event.handle"), nullable=False)
     data = sa.Column(sa.JSON)
+    a11y_counter = sa.Column(sa.Integer)
 
     window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_events")
 
-    def __init__(self, handle, data):
+    def __init__(self, handle, data, a11y_counter=None):
         self.handle = handle
         self.data = data
+        self.a11y_counter = a11y_counter
 
 
 class WindowEvent(db.Base):
@@ -525,6 +527,7 @@ class WindowEvent(db.Base):
     height = sa.Column(sa.Integer)
     handle = sa.Column(sa.Integer)
     meta = sa.Column(sa.JSON)
+    a11y_counter = sa.Column(sa.Integer)
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
@@ -556,7 +559,6 @@ class WindowEvent(db.Base):
             window_event.a11y_events.append(a11y_event)
             window_event = WindowEvent(**window_event_data)
 
-        
         return window_event
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
@@ -954,16 +956,16 @@ class ScrubbedRecording(db.Base):
         }
 
 
-# class Replay(db.Base):
-#     """Class representing a replay in the database."""
+class Replay(db.Base):
+    """Class representing a replay in the database."""
 
-#     __tablename__ = "replay"
+    __tablename__ = "replay"
 
-#     id = sa.Column(sa.Integer, primary_key=True)
-#     timestamp = sa.Column(ForceFloat)
-#     strategy_name = sa.Column(sa.String)
-#     strategy_args = sa.Column(sa.JSON)
-#     git_hash = sa.Column(sa.String)
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    strategy_name = sa.Column(sa.String)
+    strategy_args = sa.Column(sa.JSON)
+    git_hash = sa.Column(sa.String)
 
 
 def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:

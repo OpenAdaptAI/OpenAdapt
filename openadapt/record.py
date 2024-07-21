@@ -171,8 +171,9 @@ def process_events(
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
-        if event.type == 'window' or event.type == 'a11y':
+        if event.type == "window" or event.type == "a11y":
             handle = event.data["handle"]
+            a11y_counter = event.data["a11y_counter"]
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -251,10 +252,12 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         elif event.type == "a11y":
-            window_event = window_event_by_id.get(handle)
+            window_event = window_event_by_id[(handle, a11y_counter)]
             logger.debug(f"Processing A11yEvent: {event}")
             if not window_event:
-                logger.warning(f"Discarding A11yEvent with no corresponding WindowEvent: {event}")
+                logger.warning(
+                    f"Discarding A11yEvent with no corresponding WindowEvent: {event}"
+                )
                 continue
             event.data["window_event_timestamp"] = window_event.timestamp
             process_event(
@@ -752,6 +755,7 @@ def read_window_events(
     logger.info("Starting")
     prev_window_data = {}
     started = False
+    a11y_counter = 0
     while not terminate_processing.is_set():
         window_data = window.get_active_window_data()
         if not window_data:
@@ -775,22 +779,29 @@ def read_window_events(
             _window_data = window_data.copy()
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
+            a11y_counter = 0
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
+            a11y_counter += 1
+            window_data.update({"a11y_counter": a11y_counter})
+            _window_data = window_data.copy()
+            _window_data.pop("state", None)
             window_event = Event(
                 utils.get_timestamp(),
                 "window",
-                _window_data, 
+                _window_data,
             )
+            event_q.put(window_event)
             a11y_event = Event(
                 utils.get_timestamp(),
                 "a11y",
                 window_data,
             )
-            window_event_by_id[window_data["handle"]] = a11y_event  # Store window event in map
-            event_q.put(window_event)
+            window_event_by_id[(window_data["handle"], window_data["a11y_counter"])] = (
+                a11y_event  # Store a11y event in map
+            )
             event_q.put(a11y_event)
-            
+
         prev_window_data = window_data
 
 
@@ -1237,7 +1248,13 @@ def record(
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, started_counter, window_event_by_id),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            started_counter,
+            window_event_by_id,
+        ),
     )
     window_event_reader.start()
 
@@ -1283,7 +1300,7 @@ def record(
             num_window_events,
             num_a11y_events,
             num_video_events,
-            window_event_by_id
+            window_event_by_id,
         ),
     )
     event_processor.start()
@@ -1318,7 +1335,6 @@ def record(
     )
     action_event_writer.start()
 
-
     window_event_writer = multiprocessing.Process(
         target=write_events,
         args=(
@@ -1334,11 +1350,11 @@ def record(
     )
     window_event_writer.start()
 
-    a11y_event_writer = multiprocessing.Process(  
+    a11y_event_writer = multiprocessing.Process(
         target=write_events,
         args=(
             "a11y",
-            write_a11y_event,  
+            write_a11y_event,
             a11y_write_q,
             num_a11y_events,
             perf_q,
@@ -1451,7 +1467,7 @@ def record(
     screen_event_writer.join()
     action_event_writer.join()
     window_event_writer.join()
-      # Join a11y_event_writer
+    # Join a11y_event_writer
     if config.RECORD_VIDEO:
         a11y_event_writer.join()
         video_writer.join()

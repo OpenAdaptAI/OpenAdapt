@@ -275,11 +275,13 @@ def insert_a11y_event(
         data: The data associated with the a11y event.
     """
     handle = data["handle"]
-    data= data["state"]
+    a11y_data = data["state"]
+    a11y_counter = data["a11y_counter"]
 
     a11y_event = A11yEvent(
-        handle,
-        data,
+        handle=handle,
+        data=a11y_data,
+        a11y_counter=a11y_counter
     )
     db.add(a11y_event)
     db.commit()
