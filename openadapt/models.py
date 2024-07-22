@@ -519,14 +519,12 @@ class WindowEvent(db.Base):
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
-    state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
     handle = sa.Column(sa.Integer)
-    meta = sa.Column(sa.JSON)
     a11y_counter = sa.Column(sa.Integer)
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
@@ -549,15 +547,12 @@ class WindowEvent(db.Base):
         """
         window_event_data = window.get_active_window_data(include_window_data)
 
+        a11y_event_data = window_event_data.get("state", {}).copy()
+        window_event_data.pop("state", None)
+        a11y_event_handle = window_event_data.get("handle")
+        a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
         window_event = WindowEvent(**window_event_data)
-
-        if include_window_data:
-            a11y_event_data = window_event_data.get("state", {}).copy()
-            window_event_data.pop("state", None)
-            a11y_event_handle = window_event_data.get("handle")
-            a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
-            window_event.a11y_events.append(a11y_event)
-            window_event = WindowEvent(**window_event_data)
+        window_event.a11y_events.append(a11y_event)
 
         return window_event
 
