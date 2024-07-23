@@ -5,6 +5,7 @@ from fastapi import APIRouter, WebSocket
 from loguru import logger
 
 from openadapt.db import crud
+from openadapt.models import Replay
 from openadapt.utils import image2utf8
 
 
@@ -17,12 +18,14 @@ class ReplaysAPI:
 
     def attach_routes(self) -> APIRouter:
         """Attach routes to the FastAPI app."""
-        self.app.add_api_route("", self.get_replays, methods=["GET"])
+        self.app.add_api_route(
+            "", self.get_replays, methods=["GET"], response_model=None
+        )
         self.replay_logs_route()
         return self.app
 
     @staticmethod
-    def get_replays() -> list[dict]:
+    def get_replays() -> list[Replay]:
         """Get all replays."""
         session = crud.get_new_session(read_only=True)
         return crud.get_replays(session)

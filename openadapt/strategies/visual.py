@@ -89,6 +89,18 @@ class Segmentation:
     bounding_boxes: list[dict[str, float]]  # "top", "left", "height", "width"
     centroids: list[tuple[float, float]]
 
+    def asdict(self) -> dict:
+        from openadapt.utils import image2utf8
+
+        return {
+            "image": image2utf8(self.image),
+            "image_shape": self.image.size,
+            "marked_image": image2utf8(self.marked_image),
+            "descriptions": self.descriptions,
+            "bounding_boxes": self.bounding_boxes,
+            "centroids": self.centroids,
+        }
+
 
 def add_active_segment_descriptions(
     action_events: list[models.ActionEvent], replay_id: int
