@@ -52,15 +52,8 @@ from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
 
-from openadapt import (
-    adapters,
-    common,
-    models,
-    plotting,
-    strategies,
-    utils,
-    vision,
-)
+from openadapt import adapters, common, models, plotting, strategies, utils, vision
+from openadapt.db import crud
 
 DEBUG = False
 DEBUG_REPLAY = False
@@ -97,16 +90,19 @@ class Segmentation:
     centroids: list[tuple[float, float]]
 
 
-def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> None:
+def add_active_segment_descriptions(
+    action_events: list[models.ActionEvent], replay_id: int
+) -> None:
     """Set the ActionEvent.active_segment_description where appropriate.
 
     Args:
         action_events: list of ActionEvents to modify in-place.
+        replay_id: the replay ID
     """
     for action in action_events:
         # TODO: handle terminal <tab> event
         if action.name in common.MOUSE_EVENTS:
-            window_segmentation = get_window_segmentation(action)
+            window_segmentation = get_window_segmentation(action, replay_id=replay_id)
             active_segment_idx = get_active_segment(action, window_segmentation)
             if not active_segment_idx:
                 logger.warning(f"{active_segment_idx=}")
@@ -179,14 +175,21 @@ class VisualReplayStrategy(
         super().__init__(recording)
         self.recording_action_idx = 0
         self.action_history = []
-        add_active_segment_descriptions(recording.processed_action_events)
+        self.instructions = instructions
+
+    def run(self) -> None:
+        """Run the VisualReplayStrategy."""
+        add_active_segment_descriptions(
+            self.recording.processed_action_events, self._replay_id
+        )
         self.modified_actions = apply_replay_instructions(
-            recording.processed_action_events,
-            instructions,
+            self.recording.processed_action_events,
+            self.instructions,
         )
         # TODO: make this less of a hack
         global DEBUG
         DEBUG = DEBUG_REPLAY
+        super().run()
 
     def get_next_action_event(
         self,
@@ -228,6 +231,7 @@ class VisualReplayStrategy(
                 active_window_segmentation = get_window_segmentation(
                     modified_reference_action,
                     exceptions=exceptions,
+                    replay_id=self._replay_id,
                 )
                 try:
                     target_segment_idx = active_window_segmentation.descriptions.index(
@@ -378,6 +382,7 @@ def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
     handle_similar_image_groups: bool = False,
+    replay_id: int | None = None,
 ) -> Segmentation:
     """Segments the active window from the action event's screenshot.
 
@@ -456,6 +461,13 @@ def get_window_segmentation(
         plotting.display_images_table_with_titles(masked_images, descriptions)
 
     SEGMENTATIONS.append(segmentation)
+    if replay_id:
+        crud.add_replay_log(
+            replay_id=replay_id,
+            log_level="INFO",
+            key="segmentation",
+            data=segmentation,
+        )
     return segmentation
 
 

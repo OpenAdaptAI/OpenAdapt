@@ -808,6 +808,22 @@ def get_replays(
     return session.query(Replay).order_by(sa.desc(Replay.timestamp)).all()
 
 
+def get_replay(
+    session: SaSession,
+    replay_id: int,
+) -> Replay:
+    """Get a replay by its id.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        replay_id (int): The id of the replay.
+
+    Returns:
+        Replay: The replay object.
+    """
+    return session.query(Replay).get(replay_id)
+
+
 def get_replay_logs(
     session: SaSession,
     replay_id: int,

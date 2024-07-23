@@ -21,7 +21,7 @@ export const routes: Route[] = [
         path: '/onboarding',
     },
     {
-        name: "Replay logs",
-        path: "/replay_logs",
+        name: "Replays",
+        path: "/replays",
     }
 ]

@@ -9,7 +9,7 @@ type Props<T extends Record<string, any>> = {
     }[];
     data: T[],
     refreshData: () => void,
-    onClickRow: (row: T) => (event: React.MouseEvent<HTMLTableRowElement, MouseEvent>) => void,
+    onClickRow?: (row: T) => (event: React.MouseEvent<HTMLTableRowElement, MouseEvent>) => void,
 }
 
 export function SimpleTable<T extends Record<string, any>>({
@@ -33,7 +33,7 @@ export function SimpleTable<T extends Record<string, any>>({
             </Table.Thead>
             <Table.Tbody>
                 {data.map((row, rowIndex) => (
-                    <Table.Tr key={rowIndex} className="hover:cursor-pointer hover:bg-gray-100" onClick={onClickRow(row)}>
+                    <Table.Tr key={rowIndex} className="hover:cursor-pointer hover:bg-gray-100" onClick={onClickRow ? onClickRow(row) : () => {}}>
                         {columns.map(({accessor}, accesorIndex) => (
                             <Table.Td key={accesorIndex} py={20}>
                                 {typeof accessor === 'string' ? row[accessor] : accessor(row)}
