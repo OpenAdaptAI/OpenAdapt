@@ -46,6 +46,7 @@ def get_events(
     action_events = crud.get_action_events(db, recording)
     window_events = crud.get_window_events(db, recording)
     screenshots = crud.get_screenshots(db, recording)
+    a11y_events = crud.get_a11y_events(db, recording)
 
     if recording.original_recording_id:
         # if recording is a copy, it already has its events processed when it
@@ -62,10 +63,12 @@ def get_events(
     assert num_action_events > 0, "No action events found."
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
+    num_a11y_events = len(a11y_events)
 
     num_action_events_raw = num_action_events
     num_window_events_raw = num_window_events
     num_screenshots_raw = num_screenshots
+    num_a11y_events_raw = num_a11y_events
     duration_raw = action_events[-1].timestamp - action_events[0].timestamp
 
     num_process_iters = 0
@@ -76,26 +79,31 @@ def get_events(
                 f"{num_action_events=} "
                 f"{num_window_events=} "
                 f"{num_screenshots=}"
+                f"{num_a11y_events=}"
             )
             (
                 action_events,
                 window_events,
                 screenshots,
+                a11y_events,
             ) = process_events(
                 action_events,
                 window_events,
                 screenshots,
+                a11y_events,
             )
             if (
                 len(action_events) == num_action_events
                 and len(window_events) == num_window_events
                 and len(screenshots) == num_screenshots
+                and len(a11y_events) == num_a11y_events
             ):
                 break
             num_process_iters += 1
             num_action_events = len(action_events)
             num_window_events = len(window_events)
             num_screenshots = len(screenshots)
+            num_a11y_events = len(a11y_events)
             if num_process_iters == MAX_PROCESS_ITERS:
                 break
 
@@ -115,6 +123,10 @@ def get_events(
         meta["num_screenshots"] = format_num(
             num_screenshots,
             num_screenshots_raw,
+        )
+        meta["num_a11y_events"] = format_num(
+            num_a11y_events,
+            num_a11y_events_raw,
         )
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
@@ -797,10 +809,12 @@ def process_events(
     action_events: list[models.ActionEvent],
     window_events: list[models.WindowEvent],
     screenshots: list[models.Screenshot],
+    a11y_events: list[models.A11yEvent],
 ) -> tuple[
     list[models.ActionEvent],
     list[models.WindowEvent],
     list[models.Screenshot],
+    list[models.A11yEvent],
 ]:
     """Process action events, window events, and screenshots.
 
@@ -808,6 +822,7 @@ def process_events(
         action_events (list): The list of action events.
         window_events (list): The list of window events.
         screenshots (list): The list of screenshots.
+        a11y_events (list): The list of a11y events.
 
     Returns:
         tuple: A tuple containing the processed action events, window events,
@@ -821,9 +836,12 @@ def process_events(
     num_action_events = len(action_events)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
-    num_total = num_action_events + num_window_events + num_screenshots
+    num_a11y_events = len(a11y_events)
+    num_total = (
+        num_action_events + num_window_events + num_screenshots + num_a11y_events
+    )
     logger.info(
-        f"before {num_action_events=} {num_window_events=} {num_screenshots=} "
+        f"before {num_action_events=} {num_window_events=} {num_screenshots=} {num_a11y_events=}"
         f"{num_total=}"
     )
     process_fns = [
@@ -862,19 +880,28 @@ def process_events(
             action_events,
             "screenshot_timestamp",
         )
+        a11y_events = discard_unused_events(
+            a11y_events,
+            action_events,
+            "window_event_timestamp",
+        )
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
-    num_total_ = num_action_events_ + num_window_events_ + num_screenshots_
+    num_a11y_events_ = len(a11y_events)
+    num_total_ = (
+        num_action_events_ + num_window_events_ + num_screenshots_ + num_a11y_events_
+    )
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
+    pct_a11y_events = num_a11y_events_ / num_a11y_events
     pct_screenshots = num_screenshots_ / num_screenshots
     pct_total = num_total_ / num_total
     logger.info(
-        f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} "
+        f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} {num_a11y_events_=} "
         f"{num_total_=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
+        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_a11y_events=} {pct_total=}"
     )
-    return action_events, window_events, screenshots
+    return action_events, window_events, screenshots, a11y_events

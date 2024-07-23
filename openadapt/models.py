@@ -498,16 +498,19 @@ class A11yEvent(db.Base):
     __tablename__ = "a11y_event"
 
     id = sa.Column(sa.Integer, primary_key=True)
-    handle = sa.Column(sa.ForeignKey("window_event.handle"), nullable=False)
+    timestamp = sa.Column(ForceFloat)
+    handle = sa.Column(sa.Integer)
     data = sa.Column(sa.JSON)
-    a11y_counter = sa.Column(sa.Integer)
+    counter = sa.Column(
+        sa.Integer, sa.ForeignKey("window_event.counter"), nullable=True
+    )
 
-    window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_events")
+    window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_event")
 
-    def __init__(self, handle, data, a11y_counter=None):
+    def __init__(self, handle, data, counter=None):
         self.handle = handle
         self.data = data
-        self.a11y_counter = a11y_counter
+        self.counter = counter
 
 
 class WindowEvent(db.Base):
@@ -525,11 +528,13 @@ class WindowEvent(db.Base):
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
     handle = sa.Column(sa.Integer)
-    a11y_counter = sa.Column(sa.Integer)
+    counter = sa.Column(sa.Integer)
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
-    a11y_events = sa.orm.relationship("A11yEvent", back_populates="window_event")
+    a11y_event = sa.orm.relationship(
+        "A11yEvent", uselist=False, back_populates="window_event"
+    )
 
     @classmethod
     def get_active_window_event(
@@ -547,12 +552,12 @@ class WindowEvent(db.Base):
         """
         window_event_data = window.get_active_window_data(include_window_data)
 
-        a11y_event_data = window_event_data.get("state", {}).copy()
-        window_event_data.pop("state", None)
+        a11y_event_data = window_event_data.get("state")
+        window_event_data.pop("state")
         a11y_event_handle = window_event_data.get("handle")
         a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
         window_event = WindowEvent(**window_event_data)
-        window_event.a11y_events.append(a11y_event)
+        window_event.a11y_event = a11y_event
 
         return window_event
 

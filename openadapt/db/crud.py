@@ -267,6 +267,7 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
 def insert_a11y_event(
     db: SaSession,
     data: dict,
+    window_event: WindowEvent,
 ) -> None:
     """Insert an a11y event into the database.
 
@@ -276,13 +277,9 @@ def insert_a11y_event(
     """
     handle = data["handle"]
     a11y_data = data["state"]
-    a11y_counter = data["a11y_counter"]
+    counter = data["counter"]
 
-    a11y_event = A11yEvent(
-        handle=handle,
-        data=a11y_data,
-        a11y_counter=a11y_counter
-    )
+    a11y_event = A11yEvent(handle=handle, data=a11y_data, counter=counter)
     db.add(a11y_event)
     db.commit()
 
@@ -611,6 +608,31 @@ def get_window_events(
             subqueryload(WindowEvent.action_events).joinedload(ActionEvent.screenshot),
         )
         .order_by(WindowEvent.timestamp)
+        .all()
+    )
+
+
+def get_a11y_events(
+    session: SaSession,
+    recording: Recording,
+) -> list[A11yEvent]:
+    """Get accessibility events for a given recording.
+
+    Args:
+        session (SaSession): The SQLAlchemy session.
+        recording (Recording): The recording object.
+
+    Returns:
+        list[A11yEvent]: A list of accessibility events for the recording.
+    """
+    return (
+        session.query(A11yEvent)
+        .join(WindowEvent, A11yEvent.handle == WindowEvent.handle)
+        .filter(WindowEvent.recording_id == recording.id)
+        .options(
+            joinedload(A11yEvent.window_event).joinedload(WindowEvent.recording),
+        )
+        .order_by(A11yEvent.counter)
         .all()
     )
 

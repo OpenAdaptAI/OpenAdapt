@@ -158,6 +158,7 @@ def process_events(
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
         num_video_events: A counter for the number of video events.
+        window_event_by_id: A dictionary to map window events and a11y events.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -173,7 +174,7 @@ def process_events(
         event = event_q.get()
         if event.type == "window" or event.type == "a11y":
             handle = event.data["handle"]
-            a11y_counter = event.data["a11y_counter"]
+            counter = event.data["counter"]
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -252,7 +253,7 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         elif event.type == "a11y":
-            window_event = window_event_by_id[(handle, a11y_counter)]
+            window_event = window_event_by_id[(handle, counter)]
             logger.debug(f"Processing A11yEvent: {event}")
             if not window_event:
                 logger.warning(
@@ -755,7 +756,7 @@ def read_window_events(
     logger.info("Starting")
     prev_window_data = {}
     started = False
-    a11y_counter = 0
+    counter = 0
     while not terminate_processing.is_set():
         window_data = window.get_active_window_data()
         if not window_data:
@@ -779,11 +780,11 @@ def read_window_events(
             _window_data = window_data.copy()
             _window_data.pop("state")
             logger.info(f"{_window_data=}")
-            a11y_counter = 0
+            counter = 0
         if window_data != prev_window_data:
             logger.debug("Queuing window event for writing")
-            a11y_counter += 1
-            window_data.update({"a11y_counter": a11y_counter})
+            counter += 1
+            window_data.update({"counter": counter})
             _window_data = window_data.copy()
             _window_data.pop("state", None)
             window_event = Event(
@@ -797,7 +798,7 @@ def read_window_events(
                 "a11y",
                 window_data,
             )
-            window_event_by_id[(window_data["handle"], window_data["a11y_counter"])] = (
+            window_event_by_id[(window_data["handle"], window_data["counter"])] = (
                 a11y_event  # Store a11y event in map
             )
             event_q.put(a11y_event)
