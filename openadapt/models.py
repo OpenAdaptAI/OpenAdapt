@@ -589,7 +589,14 @@ class WindowEvent(db.Base):
         if "state" in window_dict:
             if include_data:
                 key_suffixes = [
-                    "value", "h", "w", "x", "y", "description", "title", "help",
+                    "value",
+                    "h",
+                    "w",
+                    "x",
+                    "y",
+                    "description",
+                    "title",
+                    "help",
                 ]
                 if sys.platform == "win32":
                     logger.warning(
