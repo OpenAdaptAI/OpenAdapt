@@ -506,7 +506,14 @@ class A11yEvent(db.Base):
 
     window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_event")
 
-    def __init__(self, handle, data, counter=None):
+    def __init__(self, handle: int, data: dict, counter: int = None) -> None:
+        """Initialize an A11yEvent instance.
+
+        Args:
+            handle (int): The handle associated with the a11y event.
+            data (dict): The data related to the a11y event.
+            counter (int, optional): The counter value related to the window event.
+        """
         self.handle = handle
         self.data = data
         self.counter = counter

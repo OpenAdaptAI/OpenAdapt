@@ -149,6 +149,7 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        a11y_write_q: A queue for writing a11y events.
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording: The recording object.
@@ -157,8 +158,10 @@ def process_events(
         num_screen_events: A counter for the number of screen events.
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
+        num_a11y_events: A counter for the number of a11y events.
         num_video_events: A counter for the number of video events.
-        window_event_by_id: A dictionary to map window events and a11y events.
+        window_event_by_id: A dictionary mapping tuples of handle and
+        counter to window event objects.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -349,10 +352,11 @@ def write_a11y_event(
     event: Event,
     perf_q: sq.SynchronizedQueue,
 ) -> None:
-    """Write an accessibility (a11y) event to the database and update the performance queue.
+    """Write an a11y event to the database and update the performance queue.
 
     Args:
         db: The database session.
+        recording: The recording object.
         event: An a11y event to be written.
         perf_q: A queue for collecting performance data.
     """
@@ -750,6 +754,8 @@ def read_window_events(
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
         started_counter: Value to increment once started.
+        window_event_by_id: A dictionary mapping window event IDs to
+        their corresponding a11y events.
     """
     utils.set_start_time(recording.timestamp)
 

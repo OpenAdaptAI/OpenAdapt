@@ -266,7 +266,6 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
 def insert_a11y_event(
     db: SaSession,
     data: dict,
-    window_event: WindowEvent,
 ) -> None:
     """Insert an a11y event into the database.
 
