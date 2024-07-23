@@ -24,10 +24,10 @@ import os
 import time
 
 from joblib import Memory
-from loguru import logger
 import fire
 
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 
 def default(val: Any, default: Any) -> Any:

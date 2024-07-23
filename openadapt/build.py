@@ -11,6 +11,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
+import urllib.request
 
 import gradio_client
 import nicegui
@@ -28,8 +31,8 @@ if sys.platform == "win32":
     import screen_recorder_sdk
 
 
-def main() -> None:
-    """Entry point."""
+def build_pyinstaller() -> None:
+    """Build the application using PyInstaller."""
     additional_packages_to_install = [
         nicegui,
         oa_pynput,
@@ -180,6 +183,96 @@ def main() -> None:
             ROOT_DIR / "build_scripts" / "macos.sh",
             ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt",
         )
+
+
+def create_macos_dmg() -> None:
+    """Create a DMG installer for macOS."""
+    ROOT_DIR = Path(__file__).parent.parent
+    subprocess.run(
+        [
+            "hdiutil",
+            "create",
+            "-volname",
+            "OpenAdapt",
+            "-srcfolder",
+            ROOT_DIR / "dist" / "OpenAdapt.app",
+            "-ov",
+            "-format",
+            "UDZO",
+            ROOT_DIR / "dist" / "OpenAdapt.dmg",
+        ]
+    )
+
+
+def download_and_extract_inno_setup() -> tuple[str, str]:
+    """Download and extract Inno Setup."""
+    inno_setup_url = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
+    temp_dir = tempfile.mkdtemp()
+    temp_file = Path(temp_dir) / "innosetup.exe"
+    print("Downloading Inno Setup...")
+    urllib.request.urlretrieve(inno_setup_url, temp_file)
+
+    print("Extracting Inno Setup...")
+    subprocess.run(
+        [str(temp_file), "/VERYSILENT", "/CURRENTUSER", f"/DIR={temp_dir}\\InnoSetup"],
+        check=True,
+    )
+
+    inno_setup_compiler = Path(temp_dir) / "InnoSetup" / "ISCC.exe"
+    if not inno_setup_compiler.exists():
+        raise FileNotFoundError("Failed to extract Inno Setup compiler (ISCC.exe)")
+
+    return inno_setup_compiler, temp_dir
+
+
+def create_windows_installer() -> None:
+    """Create an EXE installer for Windows using Inno Setup."""
+    ROOT_DIR = Path(__file__).parent.parent
+    DIST_DIR = ROOT_DIR / "dist" / "OpenAdapt"
+
+    INNO_SETUP_SCRIPT = f"""
+[Setup]
+AppName=OpenAdapt
+AppVersion=1.0
+DefaultDirName={{userappdata}}\\OpenAdapt
+DefaultGroupName=OpenAdapt
+OutputBaseFilename=OpenAdapt_Installer
+Compression=lzma
+SolidCompression=yes
+PrivilegesRequired=lowest
+OutputDir={ROOT_DIR / "dist"}
+
+[Files]
+Source: "{DIST_DIR}\\*"; DestDir: "{{app}}"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{{group}}\\OpenAdapt"; Filename: "{{app}}\\OpenAdapt.exe"
+Name: "{{group}}\\{{cm:UninstallProgram,OpenAdapt}}"; Filename: "{{uninstallexe}}"
+"""
+    INNO_SETUP_PATH = ROOT_DIR / "build_scripts" / "OpenAdapt.iss"
+    INNO_SETUP_PATH.write_text(INNO_SETUP_SCRIPT)
+
+    inno_setup_compiler, temp_dir = download_and_extract_inno_setup()
+    try:
+        subprocess.run([str(inno_setup_compiler), str(INNO_SETUP_PATH)], check=True)
+    finally:
+        # Wait a moment before cleaning up
+        time.sleep(2)
+        try:
+            shutil.rmtree(temp_dir)
+        except PermissionError:
+            print(f"Warning: Unable to remove temporary directory: {temp_dir}")
+            print("You may need to manually delete this directory later.")
+
+
+def main() -> None:
+    """Entry point."""
+    build_pyinstaller()
+    if sys.platform == "darwin":
+        create_macos_dmg()
+    elif sys.platform == "win32":
+        create_windows_installer()
 
 
 if __name__ == "__main__":

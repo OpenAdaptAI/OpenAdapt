@@ -4,11 +4,11 @@ from io import BytesIO
 from typing import List
 import base64
 
-from loguru import logger
 from PIL import Image
 import requests
 
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.privacy.base import Modality, ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
 

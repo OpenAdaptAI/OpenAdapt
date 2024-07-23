@@ -6,9 +6,8 @@ if __name__ == "__main__":
     # This needs to be called before any code that uses multiprocessing
     multiprocessing.freeze_support()
 
-from loguru import logger
-
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 
 def run_openadapt() -> None:

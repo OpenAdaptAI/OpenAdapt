@@ -2,12 +2,12 @@
 
 from pprint import pprint
 
-from loguru import logger
 from PIL import Image
 import anthropic
 
 from openadapt import cache, utils
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 MAX_TOKENS = 4096
 # from https://docs.anthropic.com/claude/docs/vision

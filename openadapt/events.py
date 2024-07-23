@@ -4,11 +4,11 @@ from pprint import pformat
 from typing import Any, Callable, Optional
 import time
 
-from loguru import logger
 from scipy.spatial import distance
 import numpy as np
 
 from openadapt import common, models, utils
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 MAX_PROCESS_ITERS = 1
