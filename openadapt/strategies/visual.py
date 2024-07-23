@@ -48,11 +48,11 @@ from dataclasses import dataclass
 from pprint import pformat
 import time
 
-from loguru import logger
 from PIL import Image, ImageDraw
 import numpy as np
 
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 DEBUG = False

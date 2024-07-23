@@ -3,10 +3,9 @@
 import os
 
 from PIL import Image
-from loguru import logger
 
 from openadapt import adapters, cache, config, plotting, utils, vision
-
+from openadapt.custom_logger import logger
 
 DEBUG = True
 MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar

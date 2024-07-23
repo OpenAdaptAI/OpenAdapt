@@ -2,12 +2,11 @@
 
 from pprint import pformat
 
-from loguru import logger
 from PIL import Image
 import numpy as np
 
 from openadapt import adapters, config, contrib, utils, vision
-
+from openadapt.custom_logger import logger
 
 CONTRAST_FACTOR = 10000
 DEBUG = False

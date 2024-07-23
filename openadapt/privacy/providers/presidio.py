@@ -2,10 +2,10 @@
 
 from typing import List
 
-from loguru import logger
 from PIL import Image
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 from openadapt.spacy_model_helpers import download_spacy_model
 
 with redirect_stdout_stderr():

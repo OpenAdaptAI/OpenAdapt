@@ -4,11 +4,11 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 import time
 
-from loguru import logger
 from oa_pynput import keyboard, mouse
 import numpy as np
 
 from openadapt import models, playback, utils
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 MAX_FRAME_TIMES = 1000

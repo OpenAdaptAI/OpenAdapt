@@ -9,9 +9,8 @@ import multiprocessing
 import multiprocessing.connection
 import os
 
-from loguru import logger
-
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     import fire

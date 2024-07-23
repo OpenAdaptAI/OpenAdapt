@@ -5,12 +5,13 @@ import plistlib
 import re
 import time
 
-from loguru import logger
 import AppKit
 import ApplicationServices
 import Foundation
 import oa_atomacos
 import Quartz
+
+from openadapt.custom_logger import logger
 
 
 def get_active_window_state(read_window_data: bool) -> dict | None:

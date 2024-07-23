@@ -7,7 +7,6 @@ import os
 from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from loguru import logger
 import uvicorn
 
 from openadapt.app.dashboard.api.action_events import ActionEventsAPI
@@ -17,6 +16,7 @@ from openadapt.app.dashboard.api.scrubbing import ScrubbingAPI
 from openadapt.app.dashboard.api.settings import SettingsAPI
 from openadapt.build_utils import is_running_from_executable
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 app = FastAPI()
 

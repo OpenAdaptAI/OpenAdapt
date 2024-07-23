@@ -13,7 +13,6 @@ import multiprocessing
 import os
 import sys
 
-from loguru import logger
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
 from PySide6.QtCore import QMargins, QObject, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
@@ -39,11 +38,12 @@ from openadapt.app.dashboard.run import cleanup as cleanup_dashboard
 from openadapt.app.dashboard.run import run as run_dashboard
 from openadapt.app.main import FPATH  # , start
 from openadapt.build_utils import is_running_from_executable
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.models import Recording
 from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
-from openadapt.utils import get_posthog_instance
+from openadapt.utils import WrapStdout, get_posthog_instance
 from openadapt.visualize import main as visualize
 
 # ensure all strategies are registered
@@ -268,7 +268,7 @@ class SystemTrayIcon:
             if self.visualize_proc is not None:
                 self.visualize_proc.kill()
             self.visualize_proc = multiprocessing.Process(
-                target=visualize, args=(recording,)
+                target=WrapStdout(visualize), args=(recording,)
             )
             self.visualize_proc.start()
 
@@ -402,7 +402,7 @@ class SystemTrayIcon:
             recording_timestamp = None
             strategy_name = selected_strategy.__name__
             replay_proc = multiprocessing.Process(
-                target=replay,
+                target=WrapStdout(replay),
                 args=(
                     strategy_name,
                     record_replay,
