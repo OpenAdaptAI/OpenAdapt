@@ -11,16 +11,16 @@ import errno
 import os
 import time
 
-from loguru import logger
 from PIL import Image, ImageColor
-import numpy as np
-
-
-# use() required when invoked from tray
-import matplotlib
 
 # importing is required for use() to work
 from PySide6.QtCore import Qt  # noqa
+
+# use() required when invoked from tray
+import matplotlib
+import numpy as np
+
+from openadapt.custom_logger import logger
 
 matplotlib.use("Qt5Agg")
 
@@ -33,7 +33,6 @@ import numpy as np
 import ultralytics
 
 from openadapt import cache
-
 
 FASTSAM_MODEL_NAMES = (
     "FastSAM-x.pt",

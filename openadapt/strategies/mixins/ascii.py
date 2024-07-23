@@ -7,8 +7,8 @@ Usage:
 """
 
 from ascii_magic import AsciiArt
-from loguru import logger
 
+from openadapt.custom_logger import logger
 from openadapt.models import Recording, Screenshot
 from openadapt.strategies.base import BaseReplayStrategy
 

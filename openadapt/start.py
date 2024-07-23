@@ -5,9 +5,8 @@ Usage:
 """
 import subprocess
 
-from loguru import logger
-
 from openadapt.app.main import run_app
+from openadapt.custom_logger import logger
 
 
 def main() -> None:
