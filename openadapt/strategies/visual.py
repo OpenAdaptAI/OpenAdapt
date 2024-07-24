@@ -54,6 +54,7 @@ import numpy as np
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
 from openadapt.custom_logger import logger
 from openadapt.db import crud
+from openadapt.utils import image2utf8
 
 DEBUG = False
 DEBUG_REPLAY = False
@@ -90,8 +91,7 @@ class Segmentation:
     centroids: list[tuple[float, float]]
 
     def asdict(self) -> dict:
-        from openadapt.utils import image2utf8
-
+        """Return the Segmentation as a dictionary."""
         return {
             "image": image2utf8(self.image),
             "image_shape": self.image.size,
