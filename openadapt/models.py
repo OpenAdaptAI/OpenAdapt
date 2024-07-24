@@ -558,28 +558,6 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        if include_data:
-            key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
-            if sys.platform == "win32":
-                logger.warning(
-                    "key_suffixes have not yet been defined on Windows."
-                    "You can help by uncommenting the lines below and pasting "
-                    "the contents of the window_dict into a new GitHub Issue."
-                )
-                # from pprint import pformat
-                # logger.info(f"window_dict=\n{pformat(window_dict)}")
-                # import ipdb; ipdb.set_trace()
-            window_state = window_dict["state"]
-            window_state["data"] = utils.clean_dict(
-                utils.filter_keys(
-                    window_state["data"],
-                    key_suffixes,
-                )
-            )
-        else:
-            window_dict["state"].pop("data")
-
-        window_dict["state"].pop("meta")
 
         if add_centroid:
             left = window_dict["left"]
@@ -603,6 +581,30 @@ class WindowEvent(db.Base):
             window_dict.pop("width")
             window_dict.pop("height")
 
+        if "state" in window_dict:
+            if include_data:
+                key_suffixes = [
+                    "value", "h", "w", "x", "y", "description", "title", "help",
+                ]
+                if sys.platform == "win32":
+                    logger.warning(
+                        "key_suffixes have not yet been defined on Windows."
+                        "You can help by uncommenting the lines below and pasting "
+                        "the contents of the window_dict into a new GitHub Issue."
+                    )
+                    # from pprint import pformat
+                    # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                    # import ipdb; ipdb.set_trace()
+                  window_state = window_dict["state"]
+                  window_state["data"] = utils.clean_dict(
+                      utils.filter_keys(
+                          window_state["data"],
+                          key_suffixes,
+                      )
+                  )
+            else:
+                window_dict["state"].pop("data")
+            window_dict["state"].pop("meta")
         return window_dict
 
 
