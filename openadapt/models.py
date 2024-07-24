@@ -584,7 +584,14 @@ class WindowEvent(db.Base):
         if "state" in window_dict:
             if include_data:
                 key_suffixes = [
-                    "value", "h", "w", "x", "y", "description", "title", "help",
+                    "value",
+                    "h",
+                    "w",
+                    "x",
+                    "y",
+                    "description",
+                    "title",
+                    "help",
                 ]
                 if sys.platform == "win32":
                     logger.warning(
@@ -595,13 +602,13 @@ class WindowEvent(db.Base):
                     # from pprint import pformat
                     # logger.info(f"window_dict=\n{pformat(window_dict)}")
                     # import ipdb; ipdb.set_trace()
-                  window_state = window_dict["state"]
-                  window_state["data"] = utils.clean_dict(
-                      utils.filter_keys(
-                          window_state["data"],
-                          key_suffixes,
-                      )
-                  )
+                window_state = window_dict["state"]
+                window_state["data"] = utils.clean_dict(
+                    utils.filter_keys(
+                        window_state["data"],
+                        key_suffixes,
+                    )
+                )
             else:
                 window_dict["state"].pop("data")
             window_dict["state"].pop("meta")
