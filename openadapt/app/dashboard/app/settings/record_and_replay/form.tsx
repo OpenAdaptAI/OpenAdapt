@@ -44,7 +44,7 @@ export const Form = ({
                     <Checkbox label="Record images" {...form.getInputProps('RECORD_IMAGES')} checked={form.values.RECORD_IMAGES} />
                 </Grid.Col>
                 <Grid.Col span={6}>
-                    <Checkbox label="Record browser (chrome) events" {...form.getInputProps('RECORD_BROWSER_EVENTS')} checked={form.values.RECORD_BROWSER_EVENTS} />
+                    <Checkbox label="Record browser (Chrome) events (see <insert link to relevant README section> to install extension)" {...form.getInputProps('RECORD_BROWSER_EVENTS')} checked={form.values.RECORD_BROWSER_EVENTS} />
                 </Grid.Col>
                 <Grid.Col span={6}>
                     <TextInput label="Video pixel format" placeholder="Video pixel format" {...form.getInputProps('VIDEO_PIXEL_FORMAT')} />
