@@ -28,6 +28,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_FILE_PATH = (DATA_DIR_PATH / "openadapt.db").absolute()
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
@@ -120,7 +121,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: ClassVar[str] = f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
+    DB_URL: str = f"sqlite:///{DATABASE_FILE_PATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
@@ -134,9 +135,11 @@ class Config(BaseSettings):
 
     # Record and replay
     RECORD_WINDOW_DATA: bool = True
-    RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
+    RECORD_BROWSER_DATA: bool = True
+    RECORD_READ_ACTIVE_ELEMENT_STATE: bool = True
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
+    RECORD_BROWSER_EVENTS: bool
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool
     RECORD_IMAGES: bool
@@ -151,6 +154,10 @@ class Config(BaseSettings):
         list(stop_str) for stop_str in STOP_STRS
     ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+    # Browser Events Record (extension) configurations
+    BROWSER_WEBSOCKET_SERVER_IP: str = "localhost"
+    BROWSER_WEBSOCKET_PORT: int = 8765
+
     # Warning suppression
     IGNORE_WARNINGS: bool = False
     MAX_NUM_WARNINGS_PER_SECOND: int = 5
@@ -164,6 +171,9 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
+
+    # Database File Path
+    DATABASE_FILE_PATH: str = str(DATABASE_FILE_PATH)
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -282,6 +292,7 @@ class Config(BaseSettings):
             "RECORD_READ_ACTIVE_ELEMENT_STATE",
             "RECORD_VIDEO",
             "RECORD_IMAGES",
+            "RECORD_BROWSER_EVENTS",
             "VIDEO_PIXEL_FORMAT",
         ],
         "general": [
@@ -395,6 +406,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
+        val = str(val)
         val = obfuscate(val)
     return val
 

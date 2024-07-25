@@ -18,6 +18,7 @@
     "REPLAY_STRIP_ELEMENT_STATE": true,
     "RECORD_VIDEO": true,
     "RECORD_AUDIO": true,
+    "RECORD_BROWSER_EVENTS": false,
     "RECORD_FULL_VIDEO": false,
     "RECORD_IMAGES": false,
     "LOG_MEMORY": false,
@@ -83,6 +84,8 @@
     "SPACY_MODEL_NAME": "en_core_web_trf",
     "DASHBOARD_CLIENT_PORT": 5173,
     "DASHBOARD_SERVER_PORT": 8080,
+    "BROWSER_WEBSOCKET_PORT": 8765,
+    "BROWSER_WEBSOCKET_SERVER_IP": "localhost",
     "UNIQUE_USER_ID": "",
     "REDIRECT_TO_ONBOARDING": true
 }
