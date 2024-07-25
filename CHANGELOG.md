@@ -2,6 +2,51 @@
 
 
 
+## v0.39.0 (2024-07-25)
+
+### Feature
+
+* feat(installer): upload installers (#863) ([`47fa551`](https://github.com/OpenAdaptAI/OpenAdapt/commit/47fa551b204c749f6649815bcf01def9d06257c3))
+
+
+## v0.38.0 (2024-07-25)
+
+### Feature
+
+* feat: add_centroid in WindowEvent.to_prompt_dict (#840)
+
+* add centroid in window_dict output
+
+* black
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`5118b39`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5118b39ed087d2d74cbc29d5e2f3694a25d4e5de))
+
+* feat(action verification): implement replay action verification (#857)
+
+* add is_action_event_complete
+
+* retry_with_exceptions in apply_replay_instructions
+
+* fix parse_code_snippet
+
+* add error_reporting.py
+
+* refactor video.py
+
+* black/flake8
+
+* add module docstring
+
+* CHECK_ACTION_COMPLETE ([`b288c07`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b288c074b4546e1ea495bf23c7a0f9ea75fcf8a5))
+
+### Unknown
+
+* fix keyerror if no state in window_dict ([`001c8fa`](https://github.com/OpenAdaptAI/OpenAdapt/commit/001c8fa88d8d9f1a9a18db844e216f7a2be6d4f2))
+
+
 ## v0.37.0 (2024-07-19)
 
 ### Feature
