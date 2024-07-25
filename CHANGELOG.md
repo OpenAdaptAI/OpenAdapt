@@ -2,6 +2,13 @@
 
 
 
+## v0.39.0 (2024-07-25)
+
+### Feature
+
+* feat(installer): upload installers (#863) ([`47fa551`](https://github.com/OpenAdaptAI/OpenAdapt/commit/47fa551b204c749f6649815bcf01def9d06257c3))
+
+
 ## v0.38.0 (2024-07-25)
 
 ### Feature
