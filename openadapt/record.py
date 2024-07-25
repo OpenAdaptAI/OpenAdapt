@@ -797,7 +797,6 @@ def read_window_events(
 
         if window_data != prev_window_data:
             logger.debug("Queuing {event_name} event for writing")
-            logger.debug("Queuing {event_name} event for writing")
             event_q.put(
                 Event(
                     utils.get_timestamp(),
@@ -1254,8 +1253,6 @@ def record(
             terminate_processing,
             recording,
             started_counter,
-            False,
-            "window",
             False,
             "window",
         ),
