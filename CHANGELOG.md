@@ -2,6 +2,25 @@
 
 
 
+## v0.39.1 (2024-07-25)
+
+### Fix
+
+* fix(installer): fix installer upload (#866)
+
+* Update release-and-publish.yml: upload installers
+
+* Update release-and-publish.yml: fix case ([`489b9c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/489b9c201d318fba09320b3c3e414ee1713ccafc))
+
+* fix(VisualReplayStrategy): avoid re-using failing segmentations ([`0045ebb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0045ebb1f98cc74983ab1265266aed870ff54d7d))
+
+* fix(installer, audio): postinstall whisper; download installer artefacts (#865)
+
+* postinstall whisper; download installer artefacts
+
+* poetry lock ([`a4470c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a4470c372417cb0a22ee1a44193b6f23de44d96e))
+
+
 ## v0.39.0 (2024-07-25)
 
 ### Feature
