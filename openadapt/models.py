@@ -621,6 +621,18 @@ class WindowEvent(db.Base):
             window_dict.pop("height")
 
         if a11y_data:
+            window_dict = deepcopy(
+                {
+                    key: val
+                    for key, val in utils.row2dict(
+                        self.a11y_event, follow=False
+                    ).items()
+                    if val not in EMPTY_VALS
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    # and not isinstance(getattr(models.WindowEvent, key), property)
+                }
+            )
             if "a11y_data" in window_dict:
                 if include_data:
                     key_suffixes = [
