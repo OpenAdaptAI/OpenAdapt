@@ -1,6 +1,6 @@
 {
   "name": "openadapt",
-  "description": "Native messaging example add-on",
+  "description": "Uses sockets to expose DOM events to OpenAdapt",
   "version": "1.0",
   "manifest_version": 3,
   "icons": {
