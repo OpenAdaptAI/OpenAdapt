@@ -200,6 +200,16 @@ jobs:
         with:
           name: OpenAdapt
           path: dist/
+      - name: Download macOS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt.dmg
+          path: dist/
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt_Installer
+          path: dist/
       - name: Python Semantic Release
         id: semantic_release
         uses: python-semantic-release/python-semantic-release@v9.6.0

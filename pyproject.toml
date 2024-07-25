@@ -101,7 +101,6 @@ pyqt-toast-notification = "^1.1.0"
 pudb = "^2024.1"
 llvmlite = "0.40.1rc1"
 numba = "0.57.0"
-openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
 posthog = "^3.5.0"

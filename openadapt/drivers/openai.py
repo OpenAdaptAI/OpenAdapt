@@ -127,6 +127,9 @@ def get_response(
     if "error" in result:
         error = result["error"]
         message = error["message"]
+        logger.warning(f"{message=}")
+        if "retry" in message:
+            return get_response(payload)
         raise Exception(message)
     return result
 
