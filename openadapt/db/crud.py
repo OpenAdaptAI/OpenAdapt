@@ -39,7 +39,6 @@ lock.set()
 action_events = []
 screenshots = []
 window_events = []
-a11y_events = []
 performance_stats = []
 memory_stats = []
 

@@ -761,8 +761,6 @@ def read_window_events(
         started_counter: Value to increment once started.
         read_a11y_data: Whether to read a11y_data.
         event_name: The name of the event.
-        read_a11y_data: Whether to read a11y_data.
-        event_name: The name of the event.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -1258,21 +1256,6 @@ def record(
         ),
     )
     window_event_reader.start()
-
-    if config.READ_A11Y_DATA:
-        a11y_event_reader = threading.Thread(
-            target=read_window_events,
-            args=(
-                event_q,
-                terminate_processing,
-                recording,
-                started_counter,
-                True,
-                "a11y",
-            ),
-        )
-        a11y_event_reader.start()
-        expected_starts += 1
 
     if config.READ_A11Y_DATA:
         a11y_event_reader = threading.Thread(
