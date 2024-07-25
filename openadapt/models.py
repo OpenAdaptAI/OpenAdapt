@@ -553,7 +553,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_data: bool = True,
+        add_centroid: bool = True,
+        remove_bbox: bool = False,
+    ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
         Args:
@@ -573,6 +578,29 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
+
+        if add_centroid:
+            left = window_dict["left"]
+            top = window_dict["top"]
+            width = window_dict["width"]
+            height = window_dict["height"]
+
+            # Compute the centroid of the bounding box
+            centroid_x = left + width / 2
+            centroid_y = top + height / 2
+
+            # Add centroid in the prompt dict { "centroid": }
+            window_dict["centroid"] = {
+                "x": centroid_x,
+                "y": centroid_y,
+            }
+
+        if remove_bbox:
+            window_dict.pop("left")
+            window_dict.pop("top")
+            window_dict.pop("width")
+            window_dict.pop("height")
+
         if "state" in window_dict:
             if include_data:
                 key_suffixes = [
@@ -594,14 +622,13 @@ class WindowEvent(db.Base):
                     # from pprint import pformat
                     # logger.info(f"window_dict=\n{pformat(window_dict)}")
                     # import ipdb; ipdb.set_trace()
-                if "state" in window_dict:
-                    window_state = window_dict["state"]
-                    window_state["data"] = utils.clean_dict(
-                        utils.filter_keys(
-                            window_state["data"],
-                            key_suffixes,
-                        )
+                window_state = window_dict["state"]
+                window_state["data"] = utils.clean_dict(
+                    utils.filter_keys(
+                        window_state["data"],
+                        key_suffixes,
                     )
+                )
             else:
                 window_dict["state"].pop("data")
             window_dict["state"].pop("meta")

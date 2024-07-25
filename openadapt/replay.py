@@ -19,6 +19,7 @@ from openadapt import capture as _capture
 from openadapt import utils
 from openadapt.config import CAPTURE_DIR_PATH, print_config
 from openadapt.db import crud
+from openadapt.error_reporting import configure_error_reporting
 from openadapt.models import Recording
 
 LOG_LEVEL = "INFO"
@@ -51,6 +52,7 @@ def replay(
     utils.set_start_time()
     utils.configure_logging(logger, LOG_LEVEL)
     print_config()
+    configure_error_reporting()
     posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
 
     if status_pipe:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.37.0"
+version = "0.39.0"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
@@ -101,7 +101,6 @@ pyqt-toast-notification = "^1.1.0"
 pudb = "^2024.1"
 llvmlite = "0.40.1rc1"
 numba = "0.57.0"
-openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
 posthog = "^3.5.0"

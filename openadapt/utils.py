@@ -573,9 +573,10 @@ def render_template_from_file(template_relative_path: str, **kwargs: dict) -> st
 
 
 def parse_code_snippet(snippet: str) -> dict:
-    """Parse a text code snippet into a dict.
+    """Parse a text snippet containing JSON or a Python dict into a dict.
 
     e.g.
+        Sure, here you go:
         ```json
         { "foo": true }
         ```
@@ -589,37 +590,29 @@ def parse_code_snippet(snippet: str) -> dict:
     Returns:
         dict representation of what was in the text snippet
     """
+    code_block = extract_code_block(snippet)
+    # remove backtick lines
+    if "```" in code_block:
+        code_content = "\n".join(code_block.splitlines()[1:-1])
+    else:
+        code_content = code_block
+    # convert literals from Javascript to Python
+    to_by_from = {
+        "true": "True",
+        "false": "False",
+    }
+    for _from, _to in to_by_from.items():
+        code_content = code_content.replace(_from, _to)
     try:
-        if snippet.startswith("```json"):
-            # Remove Markdown code block syntax
-            json_string = (
-                snippet.replace("```json\n", "")
-                .replace("```", "")
-                .replace("True", "true")
-                .replace("False", "false")
-                .strip()
-            )
-            # Parse the JSON string
-            rval = ast.literal_eval(json_string)
-            return rval
-
-        elif snippet.startswith("```python"):
-            python_code = snippet.replace("```python\n", "").replace("```", "").strip()
-            return ast.literal_eval(python_code)
-        else:
-            # XXX this may loop forever
-            # TODO make sure to only do this once (e.g. before?)
-            processed_snippet = extract_code_block(snippet)
-            import ipdb
-
-            ipdb.set_trace()
-            return parse_code_snippet(processed_snippet)
-            msg = f"Unsupported {snippet=}"
-            logger.warning(msg)
-            return None
+        rval = ast.literal_eval(code_content)
     except Exception as exc:
-        # TODO
-        raise exc
+        logger.exception(exc)
+        import ipdb
+
+        ipdb.set_trace()
+        # TODO: handle this
+        raise
+    return rval
 
 
 def extract_code_block(text: str) -> str:
@@ -648,7 +641,7 @@ def extract_code_block(text: str) -> str:
         raise ValueError("Uneven number of backtick lines")
 
     if len(backtick_idxs) < 2:
-        return ""  # No enclosing backticks found, return empty string
+        return text
 
     # Extract only the lines between the first and last backtick line,
     # including the backticks
@@ -951,6 +944,30 @@ def get_posthog_instance() -> DistinctIDPosthog:
     if not is_running_from_executable():
         posthog.disabled = True
     return posthog
+
+
+def retry_with_exceptions(max_retries: int = 5) -> Callable:
+    """Decorator to retry a function while keeping track of exceptions."""
+
+    def decorator_retry(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_retry(*args: tuple, **kwargs: dict[str, Any]) -> Any:
+            exceptions = []
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, exceptions=exceptions, **kwargs)
+                except Exception as exc:
+                    logger.warning(exc)
+                    exceptions.append(str(exc))
+                    retries += 1
+            raise RuntimeError(
+                f"Failed after {max_retries} retries with exceptions: {exceptions}"
+            )
+
+        return wrapper_retry
+
+    return decorator_retry
 
 
 def get_git_hash() -> str:
