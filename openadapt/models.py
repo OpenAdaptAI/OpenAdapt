@@ -550,6 +550,7 @@ class WindowEvent(db.Base):
             (WindowEvent) the active window event.
         """
         window_event_data = window.get_active_window_data(include_a11y_data)
+<<<<<<< HEAD
         a11y_event = None
 
         if include_a11y_data:
@@ -561,6 +562,17 @@ class WindowEvent(db.Base):
         window_event = WindowEvent(**window_event_data)
 
         if a11y_event:
+=======
+        window_event = WindowEvent(**window_event_data)
+
+        if include_a11y_data:
+            # TODO: rename "state" in the return value from get_active_window_data to a11y_data
+            # TODO: don't return a11y_data/state from get_active_window_data if include_a11y_data is False
+            a11y_event_data = window_event_data.get("state")
+            window_event_data.pop("state", None)
+            a11y_event_handle = window_event_data.get("handle")
+            a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
+>>>>>>> 27e8c75807d2b31ae8dde85306212a573b808c62
             window_event.a11y_event = a11y_event
 
         return window_event

@@ -208,6 +208,8 @@ def process_events(
             prev_window_event = event
             if config.READ_A11Y_DATA:
                 window_events_waiting_for_a11y.put_nowait(event)
+            if config.READ_A11Y_DATA:
+                window_events_waiting_for_a11y.put_nowait(event)
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -759,6 +761,8 @@ def read_window_events(
         started_counter: Value to increment once started.
         read_a11y_data: Whether to read a11y_data.
         event_name: The name of the event.
+        read_a11y_data: Whether to read a11y_data.
+        event_name: The name of the event.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -792,6 +796,7 @@ def read_window_events(
                 logger.info(f"{window_data=}")
 
         if window_data != prev_window_data:
+            logger.debug("Queuing {event_name} event for writing")
             logger.debug("Queuing {event_name} event for writing")
             event_q.put(
                 Event(
@@ -1251,9 +1256,26 @@ def record(
             started_counter,
             False,
             "window",
+            False,
+            "window",
         ),
     )
     window_event_reader.start()
+
+    if config.READ_A11Y_DATA:
+        a11y_event_reader = threading.Thread(
+            target=read_window_events,
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                started_counter,
+                True,
+                "a11y",
+            ),
+        )
+        a11y_event_reader.start()
+        expected_starts += 1
 
     if config.READ_A11Y_DATA:
         a11y_event_reader = threading.Thread(
