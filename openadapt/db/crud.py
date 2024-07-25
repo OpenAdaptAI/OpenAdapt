@@ -757,7 +757,9 @@ def add_replay(
     return replay.id
 
 
-def add_replay_log(*, replay_id: int, log_level: str, key: str, data: Any) -> None:
+def add_replay_log(
+    *, replay_id: int, log_level: str, key: str, data: Any, depth: int = 2
+) -> None:
     """Add a replay log entry to the database.
 
     Args:
@@ -765,11 +767,12 @@ def add_replay_log(*, replay_id: int, log_level: str, key: str, data: Any) -> No
         log_level (str): The log level of the log entry.
         key (str): The key of the log entry.
         data (Any): The data of the log entry.
+        depth (int): The depth of the stack frame to get the caller info from.
     """
     with get_new_session(read_and_write=True) as session:
         pickled_data = pickle.dumps(data)
 
-        frame = sys._getframe(1)
+        frame = sys._getframe(depth)
         caller_line = frame.f_lineno
         caller_file = frame.f_code.co_filename
 
