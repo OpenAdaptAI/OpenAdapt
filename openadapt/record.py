@@ -208,8 +208,6 @@ def process_events(
             prev_window_event = event
             if config.READ_A11Y_DATA:
                 window_events_waiting_for_a11y.put_nowait(event)
-            if config.READ_A11Y_DATA:
-                window_events_waiting_for_a11y.put_nowait(event)
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
