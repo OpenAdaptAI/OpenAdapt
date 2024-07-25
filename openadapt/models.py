@@ -571,7 +571,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_data: bool = True,
+        add_centroid: bool = True,
+        remove_bbox: bool = False,
+    ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
         Args:
@@ -582,18 +587,40 @@ class WindowEvent(db.Base):
             dictionary containing relevant properties from the WindowEvent.
         """
         a11y_data = self.a11y_event.data
+        window_dict = deepcopy(
+            {
+                key: val
+                for key, val in utils.row2dict(self, follow=False).items()
+                if val not in EMPTY_VALS
+                and not key.endswith("timestamp")
+                and not key.endswith("id")
+                # and not isinstance(getattr(models.WindowEvent, key), property)
+            }
+        )
+
+        if add_centroid:
+            left = window_dict["left"]
+            top = window_dict["top"]
+            width = window_dict["width"]
+            height = window_dict["height"]
+
+            # Compute the centroid of the bounding box
+            centroid_x = left + width / 2
+            centroid_y = top + height / 2
+
+            # Add centroid in the prompt dict { "centroid": }
+            window_dict["centroid"] = {
+                "x": centroid_x,
+                "y": centroid_y,
+            }
+
+        if remove_bbox:
+            window_dict.pop("left")
+            window_dict.pop("top")
+            window_dict.pop("width")
+            window_dict.pop("height")
 
         if a11y_data:
-            window_dict = deepcopy(
-                {
-                    key: val
-                    for key, val in utils.row2dict(self, follow=False).items()
-                    if val not in EMPTY_VALS
-                    and not key.endswith("timestamp")
-                    and not key.endswith("id")
-                    # and not isinstance(getattr(models.WindowEvent, key), property)
-                }
-            )
             if "a11y_data" in window_dict:
                 if include_data:
                     key_suffixes = [
@@ -626,8 +653,7 @@ class WindowEvent(db.Base):
                 else:
                     window_dict["a11y_data"].pop("data")
                 window_dict["a11y_data"].pop("meta")
-            return window_dict
-        return None
+        return window_dict
 
 
 class FrameCache:
