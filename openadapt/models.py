@@ -581,49 +581,53 @@ class WindowEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the WindowEvent.
         """
-        window_dict = deepcopy(
-            {
-                key: val
-                for key, val in utils.row2dict(self, follow=False).items()
-                if val not in EMPTY_VALS
-                and not key.endswith("timestamp")
-                and not key.endswith("id")
-                # and not isinstance(getattr(models.WindowEvent, key), property)
-            }
-        )
-        if "state" in window_dict:
-            if include_data:
-                key_suffixes = [
-                    "value",
-                    "h",
-                    "w",
-                    "x",
-                    "y",
-                    "description",
-                    "title",
-                    "help",
-                ]
-                if sys.platform == "win32":
-                    logger.warning(
-                        "key_suffixes have not yet been defined on Windows."
-                        "You can help by uncommenting the lines below and pasting "
-                        "the contents of the window_dict into a new GitHub Issue."
-                    )
-                    # from pprint import pformat
-                    # logger.info(f"window_dict=\n{pformat(window_dict)}")
-                    # import ipdb; ipdb.set_trace()
-                if "state" in window_dict:
-                    window_state = window_dict["state"]
-                    window_state["data"] = utils.clean_dict(
-                        utils.filter_keys(
-                            window_state["data"],
-                            key_suffixes,
+        a11y_data = self.a11y_event.data
+
+        if a11y_data:
+            window_dict = deepcopy(
+                {
+                    key: val
+                    for key, val in utils.row2dict(self, follow=False).items()
+                    if val not in EMPTY_VALS
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    # and not isinstance(getattr(models.WindowEvent, key), property)
+                }
+            )
+            if "a11y_data" in window_dict:
+                if include_data:
+                    key_suffixes = [
+                        "value",
+                        "h",
+                        "w",
+                        "x",
+                        "y",
+                        "description",
+                        "title",
+                        "help",
+                    ]
+                    if sys.platform == "win32":
+                        logger.warning(
+                            "key_suffixes have not yet been defined on Windows."
+                            "You can help by uncommenting the lines below and pasting "
+                            "the contents of the window_dict into a new GitHub Issue."
                         )
-                    )
-            else:
-                window_dict["state"].pop("data")
-            window_dict["state"].pop("meta")
-        return window_dict
+                        # from pprint import pformat
+                        # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                        # import ipdb; ipdb.set_trace()
+                    if "a11y_data" in window_dict:
+                        window_state = window_dict["a11y_data"]
+                        window_state["data"] = utils.clean_dict(
+                            utils.filter_keys(
+                                window_state["data"],
+                                key_suffixes,
+                            )
+                        )
+                else:
+                    window_dict["a11y_data"].pop("data")
+                window_dict["a11y_data"].pop("meta")
+            return window_dict
+        return None
 
 
 class FrameCache:
