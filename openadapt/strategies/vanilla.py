@@ -16,10 +16,8 @@ action.
 
 from pprint import pformat
 
-from loguru import logger
-
 from openadapt import adapters, models, strategies, utils
-
+from openadapt.custom_logger import logger
 
 PROCESS_EVENTS = True
 INCLUDE_WINDOW_DATA = False

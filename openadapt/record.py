@@ -19,12 +19,12 @@ import threading
 import time
 import tracemalloc
 
-from loguru import logger
 from oa_pynput import keyboard, mouse
 from pympler import tracker
 import av
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 from openadapt.models import Recording
 
 with redirect_stdout_stderr():
@@ -1404,7 +1404,7 @@ async def record(
     event_processor.start()
 
     screen_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "screen",
             write_screen_event,
@@ -1438,7 +1438,7 @@ async def record(
         # TODO: Ideally we would re-use get_events here.
 
     action_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "action",
             write_action_event,
@@ -1453,7 +1453,7 @@ async def record(
     action_event_writer.start()
 
     window_event_writer = multiprocessing.Process(
-        target=write_events,
+        target=utils.WrapStdout(write_events),
         args=(
             "window",
             write_window_event,
@@ -1470,7 +1470,7 @@ async def record(
     if config.RECORD_VIDEO:
         expected_starts += 1
         video_writer = multiprocessing.Process(
-            target=write_events,
+            target=utils.WrapStdout(write_events),
             args=(
                 "screen/video",
                 write_video_event,
@@ -1489,7 +1489,7 @@ async def record(
     if config.RECORD_AUDIO:
         expected_starts += 1
         audio_recorder = multiprocessing.Process(
-            target=record_audio,
+            target=utils.WrapStdout(record_audio),
             args=(
                 recording,
                 terminate_processing,
@@ -1500,7 +1500,7 @@ async def record(
 
     terminate_perf_event = multiprocessing.Event()
     perf_stat_writer = multiprocessing.Process(
-        target=performance_stats_writer,
+        target=utils.WrapStdout(performance_stats_writer),
         args=(
             perf_q,
             recording,
@@ -1514,7 +1514,7 @@ async def record(
         expected_starts += 1
         record_pid = os.getpid()
         mem_plotter = multiprocessing.Process(
-            target=memory_writer,
+            target=utils.WrapStdout(memory_writer),
             args=(
                 recording,
                 terminate_perf_event,

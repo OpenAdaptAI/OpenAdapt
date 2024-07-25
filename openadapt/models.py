@@ -7,7 +7,6 @@ from typing import Any, Type
 import io
 import sys
 
-from loguru import logger
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
@@ -15,10 +14,10 @@ import sqlalchemy as sa
 
 from openadapt import window
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
-
 
 EMPTY_VALS = [None, "", [], (), {}]
 
@@ -542,7 +541,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_data: bool = True,
+        add_centroid: bool = True,
+        remove_bbox: bool = False,
+    ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
         Args:
@@ -562,27 +566,60 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        if include_data:
-            key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
-            if sys.platform == "win32":
-                logger.warning(
-                    "key_suffixes have not yet been defined on Windows."
-                    "You can help by uncommenting the lines below and pasting "
-                    "the contents of the window_dict into a new GitHub Issue."
+
+        if add_centroid:
+            left = window_dict["left"]
+            top = window_dict["top"]
+            width = window_dict["width"]
+            height = window_dict["height"]
+
+            # Compute the centroid of the bounding box
+            centroid_x = left + width / 2
+            centroid_y = top + height / 2
+
+            # Add centroid in the prompt dict { "centroid": }
+            window_dict["centroid"] = {
+                "x": centroid_x,
+                "y": centroid_y,
+            }
+
+        if remove_bbox:
+            window_dict.pop("left")
+            window_dict.pop("top")
+            window_dict.pop("width")
+            window_dict.pop("height")
+
+        if "state" in window_dict:
+            if include_data:
+                key_suffixes = [
+                    "value",
+                    "h",
+                    "w",
+                    "x",
+                    "y",
+                    "description",
+                    "title",
+                    "help",
+                ]
+                if sys.platform == "win32":
+                    logger.warning(
+                        "key_suffixes have not yet been defined on Windows."
+                        "You can help by uncommenting the lines below and pasting "
+                        "the contents of the window_dict into a new GitHub Issue."
+                    )
+                    # from pprint import pformat
+                    # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                    # import ipdb; ipdb.set_trace()
+                window_state = window_dict["state"]
+                window_state["data"] = utils.clean_dict(
+                    utils.filter_keys(
+                        window_state["data"],
+                        key_suffixes,
+                    )
                 )
-                # from pprint import pformat
-                # logger.info(f"window_dict=\n{pformat(window_dict)}")
-                # import ipdb; ipdb.set_trace()
-            window_state = window_dict["state"]
-            window_state["data"] = utils.clean_dict(
-                utils.filter_keys(
-                    window_state["data"],
-                    key_suffixes,
-                )
-            )
-        else:
-            window_dict["state"].pop("data")
-        window_dict["state"].pop("meta")
+            else:
+                window_dict["state"].pop("data")
+            window_dict["state"].pop("meta")
         return window_dict
 
 

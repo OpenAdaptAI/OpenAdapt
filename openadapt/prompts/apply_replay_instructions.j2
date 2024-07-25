@@ -16,4 +16,13 @@ Do NOT provide available_segment_descriptions in your response.
 
 Respond with json and nothing else.
 
+{% if exceptions.length %}
+Your previous attempts at this produced the following exceptions:
+{% for exception in exceptions %}
+<exception>
+{{ exception }}
+</exception>
+{% endfor %}
+{% endif %}
+
 My career depends on this. Lives are at stake.

@@ -6,9 +6,9 @@ Usage:
         ...
 """
 
-from loguru import logger
 import transformers as tf  # RIP TensorFlow
 
+from openadapt.custom_logger import logger
 from openadapt.models import Recording
 from openadapt.strategies.base import BaseReplayStrategy
 

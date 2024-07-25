@@ -2,7 +2,6 @@
 
 import math
 
-from loguru import logger
 from PIL import Image
 from scipy.ndimage import binary_fill_holes
 from skimage.metrics import structural_similarity as ssim
@@ -10,6 +9,7 @@ import cv2
 import numpy as np
 
 from openadapt import cache
+from openadapt.custom_logger import logger
 
 
 @cache.cache()

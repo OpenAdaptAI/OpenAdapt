@@ -2,10 +2,9 @@
 
 import time
 
-from loguru import logger
-
 from openadapt import models, plotting, strategies, utils  # , common
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 DISPLAY_EVENTS = False
 PROCESS_EVENTS = True
