@@ -2,12 +2,11 @@ from pprint import pprint
 import pickle
 import time
 
+from loguru import logger
 import pywinauto
 
-from openadapt.custom_logger import logger
 
-
-def get_active_window_state(read_window_data: bool) -> dict:
+def get_active_window_state(read_a11y_data: bool) -> dict:
     """Get the state of the active window.
 
     Returns:
@@ -30,7 +29,7 @@ def get_active_window_state(read_window_data: bool) -> dict:
         return {}
     meta = get_active_window_meta(active_window)
     rectangle_dict = dictify_rect(meta["rectangle"])
-    if read_window_data:
+    if read_a11y_data:
         data = get_element_properties(active_window)
     else:
         data = {}

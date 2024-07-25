@@ -138,6 +138,7 @@ class Config(BaseSettings):
 
     # Record and replay
     RECORD_WINDOW_DATA: bool = True
+    READ_A11Y_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool

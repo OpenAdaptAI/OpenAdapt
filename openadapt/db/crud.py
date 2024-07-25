@@ -39,6 +39,7 @@ lock.set()
 action_events = []
 screenshots = []
 window_events = []
+a11y_events = []
 performance_stats = []
 memory_stats = []
 
@@ -264,22 +265,22 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
 
 
 def insert_a11y_event(
-    db: SaSession,
-    data: dict,
+    session: SaSession,
+    event_data: dict,
 ) -> None:
     """Insert an a11y event into the database.
 
     Args:
-        db: The database session.
-        data: The data associated with the a11y event.
+        session (sa.orm.Session): The database session.
+        event_data (dict): The data of the event
     """
-    handle = data["handle"]
-    a11y_data = data["state"]
-    counter = data["counter"]
+    handle = event_data["handle"]
+    a11y_data = event_data["state"]
+    timestamp = event_data["timestamp"]
+    a11y_event = A11yEvent(timestamp=timestamp, handle=handle, data=a11y_data)
 
-    a11y_event = A11yEvent(handle=handle, data=a11y_data, counter=counter)
-    db.add(a11y_event)
-    db.commit()
+    session.add(a11y_event)
+    session.commit()
 
 
 def delete_recording(session: SaSession, recording: Recording) -> None:
@@ -625,12 +626,16 @@ def get_a11y_events(
     """
     return (
         session.query(A11yEvent)
-        .join(WindowEvent, A11yEvent.handle == WindowEvent.handle)
+        .join(
+            WindowEvent,
+            (A11yEvent.handle == WindowEvent.handle)
+            & (A11yEvent.timestamp == WindowEvent.timestamp),
+        )
         .filter(WindowEvent.recording_id == recording.id)
         .options(
             joinedload(A11yEvent.window_event).joinedload(WindowEvent.recording),
         )
-        .order_by(A11yEvent.counter)
+        .order_by(A11yEvent.timestamp)
         .all()
     )
 

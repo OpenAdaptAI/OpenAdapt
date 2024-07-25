@@ -140,7 +140,6 @@ def process_events(
     num_window_events: multiprocessing.Value,
     num_a11y_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
-    window_event_by_id: dict,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -160,24 +159,23 @@ def process_events(
         num_window_events: A counter for the number of window events.
         num_a11y_events: A counter for the number of a11y events.
         num_video_events: A counter for the number of video events.
-        window_event_by_id: A dictionary mapping tuples of handle and
-        counter to window event objects.
     """
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting")
 
     prev_event = None
+
+    # for assigning to actions
     prev_screen_event = None
     prev_window_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
+
+    window_events_waiting_for_a11y = queue.Queue()
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
-        if event.type == "window" or event.type == "a11y":
-            handle = event.data["handle"]
-            counter = event.data["counter"]
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -208,6 +206,8 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+            if config.READ_A11Y_DATA:
+                window_events_waiting_for_a11y.put_nowait(event)
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -256,14 +256,15 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         elif event.type == "a11y":
-            window_event = window_event_by_id[(handle, counter)]
             logger.debug(f"Processing A11yEvent: {event}")
-            if not window_event:
+            try:
+                window_event = window_events_waiting_for_a11y.get_nowait()
+            except queue.Empty as exc:
                 logger.warning(
-                    f"Discarding A11yEvent with no corresponding WindowEvent: {event}"
+                    f"Discarding A11yEvent with no corresponding WindowEvent: {exc}"
                 )
                 continue
-            event.data["window_event_timestamp"] = window_event.timestamp
+            event.data["timestamp"] = window_event.timestamp
             process_event(
                 event,
                 a11y_write_q,
@@ -361,7 +362,8 @@ def write_a11y_event(
         perf_q: A queue for collecting performance data.
     """
     assert event.type == "a11y", event
-    crud.insert_a11y_event(db, event.data)
+    data = event.data
+    crud.insert_a11y_event(db, data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -745,7 +747,8 @@ def read_window_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_counter: multiprocessing.Value,
-    window_event_by_id: dict,
+    read_a11y_data: bool,
+    event_name: str,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -754,28 +757,25 @@ def read_window_events(
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
         started_counter: Value to increment once started.
-        window_event_by_id: A dictionary mapping window event IDs to
-        their corresponding a11y events.
+        read_a11y_data: Whether to read a11y_data.
+        event_name: The name of the event.
     """
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting")
     prev_window_data = {}
     started = False
-    counter = 0
     while not terminate_processing.is_set():
-        window_data = window.get_active_window_data()
+        window_data = window.get_active_window_data(read_a11y_data=read_a11y_data)
         if not window_data:
             continue
-
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
             started = True
 
-        if window_data["title"] != prev_window_data.get("title") or window_data[
-            "handle"
-        ] != prev_window_data.get("handle"):
+        # for logging purposes only
+        if window_data["handle"] != prev_window_data.get("handle"):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -783,32 +783,23 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            _window_data = window_data.copy()
-            _window_data.pop("state")
-            logger.info(f"{_window_data=}")
-            counter = 0
-        if window_data != prev_window_data:
-            logger.debug("Queuing window event for writing")
-            counter += 1
-            window_data.update({"counter": counter})
-            _window_data = window_data.copy()
-            _window_data.pop("state", None)
-            window_event = Event(
-                utils.get_timestamp(),
-                "window",
-                _window_data,
-            )
-            event_q.put(window_event)
-            a11y_event = Event(
-                utils.get_timestamp(),
-                "a11y",
-                window_data,
-            )
-            window_event_by_id[(window_data["handle"], window_data["counter"])] = (
-                a11y_event  # Store a11y event in map
-            )
-            event_q.put(a11y_event)
+            window_data["timestamp"] = utils.get_timestamp()
+            if read_a11y_data:
+                _window_data = window_data.copy()
+                _window_data.pop("state")
+                logger.info(f"{_window_data=}")
+            else:
+                logger.info(f"{window_data=}")
 
+        if window_data != prev_window_data:
+            logger.debug("Queuing {event_name} event for writing")
+            event_q.put(
+                Event(
+                    utils.get_timestamp(),
+                    event_name,
+                    window_data,
+                )
+            )
         prev_window_data = window_data
 
 
@@ -1251,8 +1242,6 @@ def record(
     started_counter = multiprocessing.Value("i", 0)
     expected_starts = 9
 
-    window_event_by_id = {}
-
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(
@@ -1260,10 +1249,26 @@ def record(
             terminate_processing,
             recording,
             started_counter,
-            window_event_by_id,
+            False,
+            "window",
         ),
     )
     window_event_reader.start()
+
+    if config.READ_A11Y_DATA:
+        a11y_event_reader = threading.Thread(
+            target=read_window_events,
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                started_counter,
+                True,
+                "a11y",
+            ),
+        )
+        a11y_event_reader.start()
+        expected_starts += 1
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
@@ -1307,7 +1312,6 @@ def record(
             num_window_events,
             num_a11y_events,
             num_video_events,
-            window_event_by_id,
         ),
     )
     event_processor.start()

@@ -1,8 +1,8 @@
 """add_a11y_event_remove_state_from_window_event
 
-Revision ID: 54b42e4fd1a4
+Revision ID: d1b385041a20
 Revises: bb25e889ad71
-Create Date: 2024-07-23 16:36:45.883878
+Create Date: 2024-07-25 16:21:27.450372
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import sqlite
 import openadapt
 
 # revision identifiers, used by Alembic.
-revision = '54b42e4fd1a4'
+revision = 'd1b385041a20'
 down_revision = 'bb25e889ad71'
 branch_labels = None
 depends_on = None
@@ -24,13 +24,12 @@ def upgrade() -> None:
     sa.Column('timestamp', openadapt.models.ForceFloat(precision=10, scale=2, asdecimal=False), nullable=True),
     sa.Column('handle', sa.Integer(), nullable=True),
     sa.Column('data', sa.JSON(), nullable=True),
-    sa.Column('counter', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['counter'], ['window_event.counter'], name=op.f('fk_a11y_event_counter_window_event')),
+    sa.ForeignKeyConstraint(['handle', 'timestamp'], ['window_event.handle', 'window_event.timestamp'], name=op.f('fk_a11y_event_handle_window_event')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_a11y_event'))
     )
     with op.batch_alter_table('window_event', schema=None) as batch_op:
         batch_op.add_column(sa.Column('handle', sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column('counter', sa.Integer(), nullable=True))
+        batch_op.create_unique_constraint('uix_handle_timestamp', ['handle', 'timestamp'])
         batch_op.drop_column('state')
         batch_op.drop_column('window_id')
 
@@ -42,7 +41,7 @@ def downgrade() -> None:
     with op.batch_alter_table('window_event', schema=None) as batch_op:
         batch_op.add_column(sa.Column('window_id', sa.VARCHAR(), nullable=True))
         batch_op.add_column(sa.Column('state', sqlite.JSON(), nullable=True))
-        batch_op.drop_column('counter')
+        batch_op.drop_constraint('uix_handle_timestamp', type_='unique')
         batch_op.drop_column('handle')
 
     op.drop_table('a11y_event')

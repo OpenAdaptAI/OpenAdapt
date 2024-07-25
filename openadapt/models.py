@@ -500,23 +500,14 @@ class A11yEvent(db.Base):
     timestamp = sa.Column(ForceFloat)
     handle = sa.Column(sa.Integer)
     data = sa.Column(sa.JSON)
-    counter = sa.Column(
-        sa.Integer, sa.ForeignKey("window_event.counter"), nullable=True
+
+    __table_args__ = (
+        sa.ForeignKeyConstraint(
+            ["handle", "timestamp"], ["window_event.handle", "window_event.timestamp"]
+        ),
     )
 
     window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_event")
-
-    def __init__(self, handle: int, data: dict, counter: int = None) -> None:
-        """Initialize an A11yEvent instance.
-
-        Args:
-            handle (int): The handle associated with the a11y event.
-            data (dict): The data related to the a11y event.
-            counter (int, optional): The counter value related to the window event.
-        """
-        self.handle = handle
-        self.data = data
-        self.counter = counter
 
 
 class WindowEvent(db.Base):
@@ -534,7 +525,10 @@ class WindowEvent(db.Base):
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
     handle = sa.Column(sa.Integer)
-    counter = sa.Column(sa.Integer)
+
+    __table_args__ = (
+        sa.UniqueConstraint("handle", "timestamp", name="uix_handle_timestamp"),
+    )
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
@@ -545,25 +539,29 @@ class WindowEvent(db.Base):
     @classmethod
     def get_active_window_event(
         cls: "WindowEvent",
-        # TODO: rename to include_a11y_data
-        include_window_data: bool = True,
+        include_a11y_data: bool = True,
     ) -> "WindowEvent":
         """Get the active window event.
 
         Args:
-            include_window_data (bool): whether to include a11y data.
+            include_a11y_data (bool): whether to include a11y data.
 
         Returns:
             (WindowEvent) the active window event.
         """
-        window_event_data = window.get_active_window_data(include_window_data)
+        window_event_data = window.get_active_window_data(include_a11y_data)
+        a11y_event = None
 
-        a11y_event_data = window_event_data.get("state")
-        window_event_data.pop("state", None)
-        a11y_event_handle = window_event_data.get("handle")
-        a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
+        if include_a11y_data:
+            a11y_event_data = window_event_data.get("state")
+            window_event_data.pop("state", None)
+            a11y_event_handle = window_event_data.get("handle")
+            a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
+
         window_event = WindowEvent(**window_event_data)
-        window_event.a11y_event = a11y_event
+
+        if a11y_event:
+            window_event.a11y_event = a11y_event
 
         return window_event
 

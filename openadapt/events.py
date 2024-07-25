@@ -887,7 +887,7 @@ def process_events(
         a11y_events = discard_unused_events(
             a11y_events,
             action_events,
-            "window_event_timestamp",
+            "timestamp",
         )
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
