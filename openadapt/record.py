@@ -1418,7 +1418,6 @@ async def record(
     )
     screen_event_writer.start()
 
-    browser_event_writer = None
     if config.RECORD_BROWSER_EVENTS:
         expected_starts += 1
         browser_event_writer = multiprocessing.Process(
