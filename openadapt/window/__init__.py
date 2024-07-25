@@ -19,18 +19,18 @@ else:
 
 
 def get_active_window_data(
-    read_a11y_data: bool = config.READ_A11Y_DATA,
+    include_a11y_data: bool = config.RECORD_A11Y_DATA,
 ) -> dict[str, Any] | None:
     """Get data of the active window.
 
     Args:
-        include_window_data (bool): whether to include a11y data.
+        include_a11y_data (bool): whether to include a11y data.
 
     Returns:
         dict or None: A dictionary containing information about the active window,
             or None if the state is not available.
     """
-    state = get_active_window_state(read_a11y_data)
+    state = get_active_window_state(include_a11y_data)
     if not state:
         return {}
     title = state["title"]
@@ -48,8 +48,8 @@ def get_active_window_data(
         "handle": handle,
     }
 
-    if read_a11y_data:
-        window_data["state"] = state
+    if include_a11y_data:
+        window_data["a11y_data"] = state
 
     return window_data
 
@@ -58,7 +58,7 @@ def get_active_window_state(read_a11y_data: bool) -> dict | None:
     """Get the state of the active window.
 
     Returns:
-        dict or None: A dictionary containing the state of the active window,
+        dict or None: A dictionary containing the a11y_data of the active window,
           or None if the state is not available.
     """
     # TODO: save window identifier (a window's title can change, or

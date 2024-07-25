@@ -206,7 +206,7 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
-            if config.READ_A11Y_DATA:
+            if config.RECORD_A11Y_DATA:
                 window_events_waiting_for_a11y.put_nowait(event)
         elif event.type == "action":
             if prev_screen_event is None:
@@ -766,7 +766,7 @@ def read_window_events(
     prev_window_data = {}
     started = False
     while not terminate_processing.is_set():
-        window_data = window.get_active_window_data(read_a11y_data=read_a11y_data)
+        window_data = window.get_active_window_data(include_a11y_data=read_a11y_data)
         if not window_data:
             continue
         if not started:
@@ -786,7 +786,7 @@ def read_window_events(
             window_data["timestamp"] = utils.get_timestamp()
             if read_a11y_data:
                 _window_data = window_data.copy()
-                _window_data.pop("state")
+                _window_data.pop("a11y_data")
                 logger.info(f"{_window_data=}")
             else:
                 logger.info(f"{window_data=}")
@@ -1255,7 +1255,7 @@ def record(
     )
     window_event_reader.start()
 
-    if config.READ_A11Y_DATA:
+    if config.RECORD_A11Y_DATA:
         a11y_event_reader = threading.Thread(
             target=read_window_events,
             args=(

@@ -553,8 +553,8 @@ class WindowEvent(db.Base):
         a11y_event = None
 
         if include_a11y_data:
-            a11y_event_data = window_event_data.get("state")
-            window_event_data.pop("state", None)
+            a11y_event_data = window_event_data.get("a11y_data")
+            window_event_data.pop("a11y_data", None)
             a11y_event_handle = window_event_data.get("handle")
             a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
 

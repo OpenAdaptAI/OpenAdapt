@@ -274,7 +274,7 @@ def insert_a11y_event(
         event_data (dict): The data of the event
     """
     handle = event_data["handle"]
-    a11y_data = event_data["state"]
+    a11y_data = event_data["a11y_data"]
     timestamp = event_data["timestamp"]
     a11y_event = A11yEvent(timestamp=timestamp, handle=handle, data=a11y_data)
 
