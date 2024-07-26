@@ -99,6 +99,12 @@ export const ActionEvent = ({
                                 <TableCellWithBorder>{event.text}</TableCellWithBorder>
                             </TableRowWithBorder>
                         )}
+                        {event.a11y_data && (
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>a11y_data</TableCellWithBorder>
+                                <TableCellWithBorder>{event.a11y_data.join(", ")}</TableCellWithBorder>
+                            </TableRowWithBorder>
+                        )}
                         {event.canonical_text && (
                             <TableRowWithBorder>
                                 <TableCellWithBorder>canonical text</TableCellWithBorder>

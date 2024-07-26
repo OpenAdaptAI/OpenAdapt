@@ -69,6 +69,38 @@ class RecordingsAPI:
         @self.app.websocket("/{recording_id}")
         async def get_recording_detail(websocket: WebSocket, recording_id: int) -> None:
             """Get a specific recording and its action events."""
+
+            def extract_a11y_texts_value(
+                data: dict | list, target_key: str, target_class_name: str
+            ) -> list:
+                """Recursively extracts values from a nested dictionary.
+
+                Args:
+                    data (dict or list): The nested dict/list to search within.
+                    target_key (str): The key for which the values should be extracted.
+                    target_class_name (str): The value of the "friendly_class_name" key
+                        that must match for the target_key.
+
+                Returns:
+                    list: A list of values corresponding to the target_key where the
+                        "friendly_class_name" matches the target_class_name.
+                """
+                results = []
+
+                def recursive_extract(d: dict | list) -> None:
+                    if isinstance(d, dict):
+                        if d.get("friendly_class_name") == target_class_name:
+                            if target_key in d:
+                                results.append(d[target_key])
+                        for key, value in d.items():
+                            recursive_extract(value)
+                    elif isinstance(d, list):
+                        for item in d:
+                            recursive_extract(item)
+
+                recursive_extract(data)
+                return results
+
             await websocket.accept()
             session = crud.get_new_session(read_only=True)
             recording = crud.get_recording_by_id(session, recording_id)
@@ -112,6 +144,11 @@ class RecordingsAPI:
 
             for action_event in action_events:
                 event_dict = row2dict(action_event)
+                a11y_dict = row2dict(action_event.window_event.a11y_event)
+                a11y_event_dict = a11y_dict["data"]
+                a11y_data_dict = a11y_event_dict["data"]
+                a11y_texts = extract_a11y_texts_value(a11y_data_dict, "texts", "Static")
+
                 try:
                     image = display_event(action_event)
                     width, height = image.size
@@ -133,6 +170,8 @@ class RecordingsAPI:
                 ):
                     words.append(words_with_timestamps[word_index]["word"])
                     word_index += 1
+
+                event_dict["a11y_data"] = a11y_texts
                 event_dict["words"] = words
                 convert_to_str(event_dict)
                 await websocket.send_json({"type": "action_event", "value": event_dict})
