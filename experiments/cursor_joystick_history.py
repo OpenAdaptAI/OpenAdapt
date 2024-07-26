@@ -109,8 +109,8 @@ def update_coords(coords: Dict[str, int], directions: Dict[str, str], width: int
     for direction, magnitude in directions.items():
         step_size = {
             'large': 0.25,
-            'medium': 0.125,
-            'small': 0.0625
+            'medium': 0.10,
+            'small': 0.01
         }[magnitude]
         
         if direction == 'left':
@@ -133,8 +133,12 @@ def main():
     all_coords = []
     exceptions = []
     placement_history = []
-    target = "The center of Cell E5"
+    target = "The center of Cell G1"
     iteration = 1
+
+
+    # TODO: warn off screen
+    # TODO: zoom, other primitives?
 
     color = maximally_different_color(image)
     logger.info(f"{color=}")
