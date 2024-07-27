@@ -135,8 +135,8 @@ class Config(BaseSettings):
 
     # Record and replay
     RECORD_WINDOW_DATA: bool = True
-    RECORD_BROWSER_DATA: bool = True
-    RECORD_READ_ACTIVE_ELEMENT_STATE: bool = True
+    RECORD_BROWSER_DATA: bool
+    RECORD_READ_ACTIVE_ELEMENT_STATE: bool
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
     RECORD_BROWSER_EVENTS: bool
