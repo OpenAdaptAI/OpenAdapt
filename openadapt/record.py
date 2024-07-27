@@ -1349,7 +1349,6 @@ async def record(
     )
     window_event_reader.start()
 
-    browser_event_reader = None
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
             target=run_browser_event_server,
