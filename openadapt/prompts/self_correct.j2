@@ -1,0 +1,34 @@
+You are a master GUI understander. I have attached a screenshot of a GUI, and a several
+segments of the screenshot.
+
+{% if older_action %}
+You have previously suggested the following action: {{ older_action }}
+{% endif %}
+
+A red dot has been painted on the screenshot at the x and y coordinates you specified. Please carefully examine the new screenshot with the red dot.
+
+Current Window Information:
+{{ current_window }}
+
+Recorded Actions:
+{% for action in recorded_actions %}
+{{ action }}
+{% endfor %}
+
+Replayed Actions So Far:
+{% for action in replayed_actions %}
+{{ action }}
+{% endfor %}
+
+Replay Instructions:
+{{ replay_instructions }}
+
+Task:
+{{ task }}
+
+After examining the screenshot with the red dot, please confirm or correct your initial action suggestion.
+Remember to consider the task at hand. 
+Respond with 1 if you are satisfied with the current state of action.
+{% if older_action %}
+Respond with 0 if the previos task was incorrect and should be redone.
+{% endif %}

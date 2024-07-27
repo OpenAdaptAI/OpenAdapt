@@ -435,8 +435,15 @@ def get_strategy_class_by_name() -> dict:
 
     strategy_classes = BaseReplayStrategy.__subclasses__()
     class_by_name = {cls.__name__: cls for cls in strategy_classes}
-    logger.debug(f"{class_by_name=}")
-    return class_by_name
+    
+    from openadapt.strategies import VanillaReplayStrategy
+    
+    vanilla_strategy_classes = VanillaReplayStrategy.__subclasses__()
+    vanilla_class_by_name = {cls.__name__: cls for cls in vanilla_strategy_classes}
+
+    combined_classes = {**class_by_name, **vanilla_class_by_name}
+    logger.debug(f"{combined_classes=}")
+    return combined_classes
 
 
 def get_performance_plot_file_path(recording_timestamp: float) -> str:
