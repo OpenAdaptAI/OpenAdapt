@@ -215,9 +215,10 @@ def process_events(
             if prev_window_event is None:
                 logger.warning("Discarding input that came before window")
                 continue
-            if prev_browser_event is None:
-                logger.warning("Discarding input that came before browser")
-                continue
+            if config.RECORD_BROWSER_EVENTS and prev_browser_event is None:
+                logger.warning("Input came before browser event")
+                # The browser may not be open, so don't discard
+                #continue
 
             event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             event.data["window_event_timestamp"] = prev_window_event.timestamp
