@@ -234,16 +234,15 @@ def process_events(
 
             num_action_events.value += 1
 
-            if prev_saved_browser_timestamp < prev_browser_event.timestamp:
-                if config.RECORD_BROWSER_EVENTS:
-                    process_event(
-                        prev_browser_event,
-                        browser_write_q,
-                        write_browser_event,
-                        recording,
-                        perf_q,
-                    )
-                    num_browser_events.value += 1
+            if config.RECORD_BROWSER_EVENTS and prev_saved_browser_timestamp < prev_browser_event.timestamp:
+                process_event(
+                    prev_browser_event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
+                )
+                num_browser_events.value += 1
                 prev_saved_browser_timestamp = prev_browser_event.timestamp
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
