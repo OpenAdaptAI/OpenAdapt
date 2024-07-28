@@ -406,8 +406,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
-        val = str(val)
-        val = obfuscate(val)
+        val = obfuscate(str(val))
     return val
 
 
