@@ -121,7 +121,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: str = f"sqlite:///{DATABASE_FILE_PATH}"
+    DB_URL: ClassVar[str] = f"sqlite:///{DATABASE_FILE_PATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
