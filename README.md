@@ -193,9 +193,9 @@ Meaning that the extension is loaded !
 
 ![image](https://github.com/user-attachments/assets/8eba24a3-7c68-4deb-8fbe-9d03cece1482)
 
-7. Finally, start recording, once Everything is started, then go to chrome browser and search for some page, do a few click and then stop the recording. Let it finish successfully.
+7. Finally, start recording. Once everything is started, go to the Chrome browser and search for some pages, perform a few clicks, and then stop the recording. Let it finish successfully.
 
-8. Once done, you can check the `openadapt.db` -> table `browser_event` it should have all of your browser activity logs in it. You can check for correctness by using `sqlite3` cli or using an extension like SQLite Viewer in VS Code to open `openadapt.db`.
+8. Once done, you can check the `openadapt.db` table `browser_event`. It should have all of your browser activity logs in it. You can check for correctness by using the `sqlite3` CLI or using an extension like `SQLite Viewer` in VS Code to open `data/openadapt.db`.
 
 
 ### Visualize
