@@ -88,6 +88,7 @@ class Recording(db.Base):
         "BrowserEvent",
         back_populates="recording",
         order_by="BrowserEvent.timestamp",
+        cascade="all, delete-orphan",
     )
     scrubbed_recordings = sa.orm.relationship(
         "ScrubbedRecording", back_populates="recording", cascade="all, delete-orphan"
