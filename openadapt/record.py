@@ -1298,7 +1298,7 @@ async def record(
     status_pipe: multiprocessing.connection.Connection | None = None,
     log_memory: bool = config.LOG_MEMORY,
 ) -> None:
-    """Record Screenshots/ActionEvents/WindowEvents/Browser (chrome) Events.
+    """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
     Args:
         task_description: A text description of the task to be recorded.
