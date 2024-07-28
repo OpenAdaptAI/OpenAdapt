@@ -5,14 +5,24 @@
 */
 
 let socket;
+
+/* 
+ * TODO: 
+  * Ideally we read `WS_SERVER_PORT`, `WS_SERVER_ADDRESS` and 
+  * `RECONNECT_TIMEOUT_INTERVAL` from config.py, 
+  * or it gets passed in somehow. 
+*/
 let RECONNECT_TIMEOUT_INTERVAL = 1000; // ms
+let WS_SERVER_PORT = 8765;
+let WS_SERVER_ADDRESS = "localhost";
+let WS_SERVER_URL = "ws://" + WS_SERVER_ADDRESS + ":" + WS_SERVER_PORT;
+
 
 /*
  * Function to connect to the WebSocket server.
 */
 function connectWebSocket() {
-  // TODO: Ideally we read "ws://localhost:8765" and `RECONNECT_TIMEOUT_INTERVAL` from config.py, or it gets passed in somehow. 
-  socket = new WebSocket("ws://localhost:8765");
+  socket = new WebSocket(WS_SERVER_URL);
 
   socket.onopen = function() {
     console.log("WebSocket connection established");
