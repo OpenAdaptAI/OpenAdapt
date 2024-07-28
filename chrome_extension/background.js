@@ -5,7 +5,7 @@
 */
 
 let socket;
-let TIMEOUT_INTERVAL = 5000; // ms
+let RECONNECT_TIMEOUT_INTERVA = 1000; // ms
 
 /*
  * Function to connect to the WebSocket server.
