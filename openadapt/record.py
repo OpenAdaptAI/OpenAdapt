@@ -256,7 +256,6 @@ def process_events(
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
         elif event.type == "a11y":
-            logger.debug(f"Processing A11yEvent: {event}")
             try:
                 window_event = window_events_waiting_for_a11y.get_nowait()
             except queue.Empty as exc:

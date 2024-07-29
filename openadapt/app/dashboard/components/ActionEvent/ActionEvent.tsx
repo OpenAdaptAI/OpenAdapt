@@ -5,6 +5,7 @@ import { ActionEvent as ActionEventType } from '@/types/action-event'
 import { Accordion, Box, Grid, Image, Table } from '@mantine/core'
 import { useHover } from '@mantine/hooks';
 import { RemoveActionEvent } from './RemoveActionEvent';
+import './style.css'; 
 
 type Props = {
     event: ActionEventType;
@@ -41,7 +42,7 @@ export const ActionEvent = ({
     let content = (
         <Grid align='center'>
             <Grid.Col span={8}>
-                <Table w={400} withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
+                <Table withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
                     <Table.Tbody>
                         {typeof event.id === 'number' && (
                             <TableRowWithBorder>
@@ -99,12 +100,6 @@ export const ActionEvent = ({
                                 <TableCellWithBorder>{event.text}</TableCellWithBorder>
                             </TableRowWithBorder>
                         )}
-                        {event.a11y_data && (
-                            <TableRowWithBorder>
-                                <TableCellWithBorder>a11y_data</TableCellWithBorder>
-                                <TableCellWithBorder>{event.a11y_data.join(", ")}</TableCellWithBorder>
-                            </TableRowWithBorder>
-                        )}
                         {event.canonical_text && (
                             <TableRowWithBorder>
                                 <TableCellWithBorder>canonical text</TableCellWithBorder>
@@ -142,6 +137,26 @@ export const ActionEvent = ({
                     </Table.Tbody>
                 </Table>
             </Grid.Col>
+            {event.a11y_data && (
+                <Grid.Col span={12}>
+                        <Accordion className="w-full">
+                            <Accordion.Item value="a11y_data">
+                                <Accordion.Control>
+                                    <div className="text-blue-500 w-full cursor-pointer">
+                                        Accessibility Data
+                                    </div>
+                                </Accordion.Control>
+                                <Accordion.Panel>
+                                    <Table  withTableBorder withColumnBorders my={20} className="border-2 border-gray-300 border-solid w-full">
+                                        <Table.Tbody>
+                                            <div className="table-nested border-2 border-gray-300 border-solid w-full" dangerouslySetInnerHTML={{ __html: event.a11y_data }} />
+                                        </Table.Tbody>
+                                    </Table>
+                                </Accordion.Panel>
+                            </Accordion.Item>
+                        </Accordion>   
+                </Grid.Col>
+            )}
             <Grid.Col span={4}>
                 <RemoveActionEvent event={event} />
             </Grid.Col>

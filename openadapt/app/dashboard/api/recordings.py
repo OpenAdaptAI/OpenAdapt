@@ -11,6 +11,7 @@ from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.plotting import display_event
 from openadapt.utils import image2utf8, row2dict
+from openadapt.visualize import dict2html
 
 
 class RecordingsAPI:
@@ -145,10 +146,7 @@ class RecordingsAPI:
             for action_event in action_events:
                 event_dict = row2dict(action_event)
                 a11y_dict = row2dict(action_event.window_event.a11y_event)
-                a11y_event_dict = a11y_dict["data"]
-                a11y_data_dict = a11y_event_dict["data"]
-                a11y_texts = extract_a11y_texts_value(a11y_data_dict, "texts", "Static")
-
+                event_dict["a11y_data"] = dict2html(a11y_dict)
                 try:
                     image = display_event(action_event)
                     width, height = image.size
@@ -170,8 +168,6 @@ class RecordingsAPI:
                 ):
                     words.append(words_with_timestamps[word_index]["word"])
                     word_index += 1
-
-                event_dict["a11y_data"] = a11y_texts
                 event_dict["words"] = words
                 convert_to_str(event_dict)
                 await websocket.send_json({"type": "action_event", "value": event_dict})

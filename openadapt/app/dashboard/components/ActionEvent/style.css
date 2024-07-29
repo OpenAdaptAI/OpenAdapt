@@ -1,0 +1,20 @@
+.table-nested table {
+  border-collapse: collapse;
+  border: 1px solid #d1d5db;
+}
+
+.table-nested th,
+.table-nested td {
+  border: 1px solid #d1d5db;
+  padding: 8px; 
+  text-align: left;
+}
+
+.table-nested th {
+  background-color: #f9fafb;
+  font-weight: bold;
+}
+
+.table-nested td {
+  background-color: #ffffff;
+}

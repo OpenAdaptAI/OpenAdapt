@@ -4,6 +4,7 @@ import time
 
 from loguru import logger
 import pywinauto
+import pygetwindow as gw
 
 
 def get_active_window_state(read_a11y_data: bool) -> dict:
@@ -19,35 +20,47 @@ def get_active_window_state(read_a11y_data: bool) -> dict:
                 - "height": Height of the active window.
                 - "meta": Meta information of the active window.
                 - "data": None (to be filled with window data).
-                - "window_id": ID of the active window.
+                - "handle": ID of the active window.
     """
     # catch specific exceptions, when except happens do log.warning
-    try:
-        active_window, handle = get_active_window()
-    except RuntimeError as e:
-        logger.warning(e)
-        return {}
-    meta = get_active_window_meta(active_window)
-    rectangle_dict = dictify_rect(meta["rectangle"])
     if read_a11y_data:
+        try:
+            active_window, handle = get_active_window()
+        except RuntimeError as e:
+            logger.warning(e)
+            return {}
+        meta = get_active_window_meta(active_window)
+        rectangle_dict = dictify_rect(meta["rectangle"])
         data = get_element_properties(active_window)
+        state = {
+            "title": meta["texts"][0],
+            "left": meta["rectangle"].left,
+            "top": meta["rectangle"].top,
+            "width": meta["rectangle"].width(),
+            "height": meta["rectangle"].height(),
+            "meta": {**meta, "rectangle": rectangle_dict},
+            "data": data,
+            "handle": handle,
+        }
+        try:
+            pickle.dumps(state)
+        except Exception as exc:
+            logger.warning(f"{exc=}")
+            state.pop("data")
     else:
-        data = {}
-    state = {
-        "title": meta["texts"][0],
-        "left": meta["rectangle"].left,
-        "top": meta["rectangle"].top,
-        "width": meta["rectangle"].width(),
-        "height": meta["rectangle"].height(),
-        "meta": {**meta, "rectangle": rectangle_dict},
-        "data": data,
-        "handle": handle,
-    }
-    try:
-        pickle.dumps(state)
-    except Exception as exc:
-        logger.warning(f"{exc=}")
-        state.pop("data")
+        try:
+            active_window = gw.getActiveWindow()
+        except RuntimeError as e:
+            logger.warning(e)
+            return {}
+        state = {
+            "title": active_window.title if active_window.title else "None",
+            "left": active_window.left,
+            "top": active_window.top,
+            "width": active_window.width,
+            "height": active_window.height,
+            "handle": active_window._hWnd,
+        }
     return state
 
 
