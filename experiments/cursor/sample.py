@@ -1,3 +1,4 @@
+from collections import Counter
 import random
 from typing import List, Dict, Tuple
 import json
@@ -13,9 +14,13 @@ from openadapt.drivers import anthropic, openai, google
 from openadapt.utils import parse_code_snippet
 
 DRIVER = anthropic
-NUM_CURSORS = 2**2 # This can now be easily changed
+NUM_CURSORS = 2**2
 SPREAD_REDUCTION_FACTOR = 0.5  # How much to reduce spread each iteration
-MAX_ITERATIONS = 5  # Maximum number of iterations
+MAX_ITERATIONS = 4  # Maximum number of iterations
+CONTRAST_FACTOR = 1
+RETRIES_PER_ITERATION = 3
+DOWNSAMPLE_FACTOR = 3
+CONSENSUS_THRESHOLD = 2
 
 
 def maximally_different_color(image: Image.Image, sample_size: int = 1000, n_clusters: int = 10) -> tuple[int, int, int]:
@@ -41,7 +46,19 @@ def maximally_different_color(image: Image.Image, sample_size: int = 1000, n_clu
 
     return tuple(all_colors[max_dist_index].astype(int))
 
-def generate_cursors(center: Dict[str, int], spread: float, width: int, height: int) -> List[Dict[str, int]]:
+def generate_cursors(center: dict[str, int], spread: float, width: int, height: int, jitter: float = 0.1) -> list[dict[str, int]]:
+    """Generates cursors around a center point within a defined spread, with optional jitter.
+
+    Args:
+        center (dict[str, int]): The central point from which cursors are generated.
+        spread (float): The spread factor determining the grid size.
+        width (int): The width of the image.
+        height (int): The height of the image.
+        jitter (float): The jitter factor to add randomness to cursor positions.
+
+    Returns:
+        list[dict[str, int]]: A list of cursor positions.
+    """
     cursors = []
     
     # Calculate grid dimensions
@@ -60,6 +77,10 @@ def generate_cursors(center: Dict[str, int], spread: float, width: int, height: 
             x = int(start_x + i * cell_width)
             y = int(start_y + j * cell_height)
             
+            # Apply jitter
+            x += int((random.random() - 0.5) * cell_width * jitter)
+            y += int((random.random() - 0.5) * cell_height * jitter)
+            
             # Ensure cursors are within image bounds
             x = max(0, min(width - 1, x))
             y = max(0, min(height - 1, y))
@@ -67,17 +88,30 @@ def generate_cursors(center: Dict[str, int], spread: float, width: int, height: 
             cursors.append({'x': x, 'y': y})
     
     return cursors
+
 def draw_labelled_cursors(
     image: Image.Image,
     cursors: List[Dict[str, int]],
     inner_color: Tuple[int, int, int],
-    border_color: Tuple[int, int, int],
     label_color: Tuple[int, int, int],
-    bg_color: tuple = (0, 0, 0),
+    bg_color: Tuple[int, int, int] = (0, 0, 0),
     bg_transparency: float = 0.25,
     labels: List[str] = None,
 ) -> Image.Image:
+    """Draws labelled cursors on the image.
+    
+    Args:
+        image: The input image on which cursors are to be drawn.
+        cursors: A list of dictionaries containing cursor coordinates.
+        inner_color: The color of the inner part of the cursor.
+        label_color: The color of the label text.
+        bg_color: Background color for transparency overlay.
+        bg_transparency: Transparency level for the background overlay.
+        labels: List of labels to be drawn with the cursors.
 
+    Returns:
+        Image with labelled cursors.
+    """
     image = image.convert("RGBA")
     bg_opacity = int(255 * bg_transparency)
     overlay = Image.new("RGBA", image.size, bg_color + (bg_opacity,))
@@ -91,23 +125,34 @@ def draw_labelled_cursors(
     width, height = image.size
     min_dimension = min(width, height)
     
+    # Calculate rectangle size based on the largest label
+    max_label = max(labels, key=len) if labels else str(len(cursors))
+    max_label_bbox = draw.textbbox((0, 0), max_label, font=font)
+    max_label_w = max_label_bbox[2] - max_label_bbox[0]
+    max_label_h = max_label_bbox[3] - max_label_bbox[1]
+    rect_width = max_label_w + 20
+    rect_height = max_label_h + 20
+    
     for i, coords in enumerate(cursors):
         x, y = coords['x'], coords['y']
         label = labels[i] if labels else str(i + 1)
         
-        # Draw cursor
-        border_radius = int(.02 * min_dimension)
-        dot_radius = int(.015 * min_dimension)
-        draw.ellipse((x - border_radius, y - border_radius, x + border_radius, y + border_radius), fill=border_color)
-        draw.ellipse((x - dot_radius, y - dot_radius, x + dot_radius, y + dot_radius), fill=inner_color)
+        # Draw rectangle
+        rect_x0 = x - rect_width // 2
+        rect_y0 = y - rect_height // 2
+        rect_x1 = x + rect_width // 2
+        rect_y1 = y + rect_height // 2
+        draw.rectangle((rect_x0, rect_y0, rect_x1, rect_y1), fill=inner_color)
         
         # Draw label
-        label_w, label_h = draw.textsize(label, font=font)
+        label_bbox = draw.textbbox((0, 0), label, font=font)
+        label_w = label_bbox[2] - label_bbox[0]
+        label_h = label_bbox[3] - label_bbox[1]
         draw.text((x - label_w / 2, y - label_h / 2), label, fill=label_color, font=font)
     
     return image
 
-def load_and_downsample_image(image_file_path):
+def load_and_downsample_image(image_file_path, downsample_factor: int):
     # Open the image and convert to RGB
     image = Image.open(image_file_path).convert("RGB")
     
@@ -115,8 +160,8 @@ def load_and_downsample_image(image_file_path):
     original_width, original_height = image.size
     
     # Calculate new dimensions (half of the original)
-    new_width = original_width // 2
-    new_height = original_height // 2
+    new_width = original_width // downsample_factor
+    new_height = original_height // downsample_factor
     
     # Resize the image to half its original size
     downsampled_image = image.resize((new_width, new_height), Image.LANCZOS)
@@ -135,6 +180,9 @@ def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image
     Returns:
         Image.Image: The enhanced PIL image.
     """
+    if contrast_factor == 1:
+        return image
+
     # Create an ImageEnhance object for contrast enhancement
     enhancer = ImageEnhance.Contrast(image)
     
@@ -145,13 +193,11 @@ def increase_contrast(image: Image.Image, contrast_factor: float) -> Image.Image
 
 def main():
     image_file_path = os.path.join(config.ROOT_DIR_PATH, "../tests/assets/excel.png")
-    #image = Image.open(image_file_path).convert("RGB")
-    image = load_and_downsample_image(image_file_path)
-    #image = increase_contrast(image, 2)
+    image = load_and_downsample_image(image_file_path, DOWNSAMPLE_FACTOR)
+    image = increase_contrast(image, CONTRAST_FACTOR)
     width, height = image.size
 
-    inner_color = (255, 0, 0)
-    border_color = maximally_different_color(image)
+    inner_color = maximally_different_color(image)
     label_color = (255, 255, 255)
     
     target = "Inside cell C8"  # almost
@@ -161,6 +207,7 @@ def main():
     target = "Cell E7"
     target = "Save button"
     target = "Cell C3"
+    target = "Cell G4"
     center = {'x': width // 2, 'y': height // 2}
     spread = 1.0
     iteration = 1
@@ -169,13 +216,10 @@ def main():
     exceptions = []
 
     while iteration <= MAX_ITERATIONS:
-        cursors = generate_cursors(center, spread, width, height)
-        cursor_image = draw_labelled_cursors(image.copy(), cursors, inner_color, border_color, label_color)
-        cursor_image.show()
 
         prompt = f"""
-Attached is 1. a raw screenshot, and 2. the same screenshot a) dimmed and b) with {NUM_CURSORS} cursors overlaid.
-Each cursor is a circle with color {inner_color} surrounded by {border_color}, labelled with a number from 1 to {NUM_CURSORS} with color {label_color}.
+Attached is a screenshot that has been dimmed and with {NUM_CURSORS} cursors overlaid.
+Each cursor is a rectangle with color {inner_color}, labelled with a number from 1 to {NUM_CURSORS} with color {label_color}.
 
 Your task is to identify the cursor closest to the target: '{target}'.
 
@@ -196,33 +240,38 @@ Previously when you responded to this prompt, this resulted in the following exc
 {{exceptions}}
 """
         logger.info(f"prompt=\n{prompt}")
-        
-        response = DRIVER.prompt(
-            prompt=prompt,
-            system_prompt="You are an expert GUI interpreter. You are precise and accurate.",
-            images=[image, cursor_image],
-        )
 
-        try:
-            result = parse_code_snippet(response)
-        except Exception as exc:
-            logger.exception(exc)
-            exceptions.append(exc)
-            continue
-        else:
-            exceptions = []
+        votes = []
+        while True:
+            cursors = generate_cursors(center, spread, width, height)
+            cursor_image = draw_labelled_cursors(image.copy(), cursors, inner_color, label_color)
+            cursor_image.show()
+            response = DRIVER.prompt(
+                prompt=prompt,
+                system_prompt="You are an expert GUI interpreter. You are precise and accurate.",
+                images=[
+                    #image,
+                    cursor_image,
+                ],
+            )
 
-        logger.info(f"Iteration {iteration}: {result}")
+            try:
+                result = parse_code_snippet(response)
+                if 'closest' in result:
+                    votes.append(int(result['closest']))
+            except Exception as exc:
+                logger.exception(exc)
+                exceptions.append(exc)
 
-        if 'closest' in result:
-            closest_number = int(result['closest'])
-            identified_location = cursors[closest_number - 1]  # Adjust for 0-based indexing
-            identified_locations.append(identified_location)
-            center = identified_location
-            spread *= SPREAD_REDUCTION_FACTOR
-        else:
-            logger.error("Invalid response from model")
-            continue
+            most_common = Counter(votes).most_common(1)[0]
+            logger.info(f"{votes=} {most_common=}")
+            if most_common[1] >= CONSENSUS_THRESHOLD:
+                break
+        closest_number = most_common[0]
+        identified_location = cursors[closest_number - 1]  # Adjust for 0-based indexing
+        identified_locations.append(identified_location)
+        center = identified_location
+        spread *= SPREAD_REDUCTION_FACTOR
 
         iteration += 1
 
@@ -233,7 +282,6 @@ Previously when you responded to this prompt, this resulted in the following exc
         final_image, 
         identified_locations, 
         inner_color, 
-        border_color, 
         label_color, 
         labels=labels
     )
