@@ -12,7 +12,7 @@ from openadapt.utils import parse_code_snippet
 DOWNSAMPLE_FACTOR = 2
 GRID_SIZE = 25  # Adjust based on desired grid size
 DRIVER = openai
-DO_CORRECTIONS = False
+DO_CORRECTIONS = True
 
 def load_and_downsample_image(image_file_path: str, downsample_factor: int) -> Image.Image:
     """Load and downsample the image."""
@@ -29,9 +29,9 @@ def dim_image(image: Image.Image) -> Image.Image:
     return enhancer.enhance(0.5)
 
 def add_grid_labels(image: Image.Image, grid_size: int) -> Image.Image:
-    """Add grid labels to the image."""
+    """Add grid labels to the image on all four sides."""
     width, height = image.size
-    grid_image = Image.new('RGB', (width + 50, height + 50), 'red')
+    grid_image = Image.new('RGB', (width + 100, height + 100), 'red')
     grid_image.paste(image, (50, 50))
     draw = ImageDraw.Draw(grid_image)
 
@@ -42,9 +42,8 @@ def add_grid_labels(image: Image.Image, grid_size: int) -> Image.Image:
     while True:
         fits = True
         for i in range(grid_size):
-            row_text_size = draw.textbbox((0, 0), str(i + 1), font=font)[2:]
-            col_text_size = draw.textbbox((0, 0), str(i + 1), font=font)[2:]
-            if row_text_size[1] > height // grid_size or col_text_size[0] > width // grid_size:
+            text_size = draw.textbbox((0, 0), str(i + 1), font=font)[2:]
+            if text_size[0] > width // grid_size or text_size[1] > height // grid_size:
                 fits = False
                 break
         if fits:
@@ -58,14 +57,22 @@ def add_grid_labels(image: Image.Image, grid_size: int) -> Image.Image:
     cell_height = height / grid_size
 
     for i in range(grid_size):
+        # Left side labels
         draw.text((25, 50 + int(i * cell_height + cell_height / 2) - font_size // 2), str(i + 1), fill='white', font=font)
+        # Top side labels
         draw.text((50 + int(i * cell_width + cell_width / 2) - font_size // 2, 25), str(i + 1), fill='white', font=font)
+        # Right side labels
+        draw.text((width + 75, 50 + int(i * cell_height + cell_height / 2) - font_size // 2), str(i + 1), fill='white', font=font)
+        # Bottom side labels
+        draw.text((50 + int(i * cell_width + cell_width / 2) - font_size // 2, height + 75), str(i + 1), fill='white', font=font)
 
     overlay = Image.new('RGBA', grid_image.size, (255, 0, 0, 0))
     overlay_draw = ImageDraw.Draw(overlay)
     for i in range(grid_size + 1):
-        overlay_draw.line([(50, 50 + int(i * cell_height)), (50 + width, 50 + int(i * cell_height))], fill=(255, 255, 255, 128), width=1)
-        overlay_draw.line([(50 + int(i * cell_width), 50), (50 + int(i * cell_width), 50 + height)], fill=(255, 255, 255, 128), width=1)
+        # Horizontal lines
+        overlay_draw.line([(50, 50 + int(i * cell_height)), (50 + width, 50 + int(i * cell_height))], fill=(255, 255, 255, 128), width=3)
+        # Vertical lines
+        overlay_draw.line([(50 + int(i * cell_width), 50), (50 + int(i * cell_width), 50 + height)], fill=(255, 255, 255, 128), width=3)
 
     grid_image = Image.alpha_composite(grid_image.convert('RGBA'), overlay)
     return grid_image.convert('RGB')
@@ -90,11 +97,11 @@ def draw_target_coordinates(image: Image.Image, coordinates: List[Tuple[int, int
     return image
 
 def undim_target_cells(image: Image.Image, coordinates: List[Tuple[int, int]], grid_size: int) -> Image.Image:
-    """Undim the target cells on the image."""
+    """Undim the target cells on the image and highlight them in red."""
     image = image.copy()
     width, height = image.size
-    cell_width = (width - 50) / grid_size
-    cell_height = (height - 50) / grid_size
+    cell_width = (width - 100) / grid_size
+    cell_height = (height - 100) / grid_size
     label_offset = 50
 
     for coordinate in coordinates:
@@ -107,7 +114,15 @@ def undim_target_cells(image: Image.Image, coordinates: List[Tuple[int, int]], g
         cropped_section = image.crop(box)
         enhancer = ImageEnhance.Brightness(cropped_section)
         brightened_section = enhancer.enhance(2.0)  # Increase brightness to undim
-        image.paste(brightened_section, box)
+
+        # Create a red overlay
+        red_overlay = Image.new('RGBA', brightened_section.size, (255, 0, 0, 128))  # Semi-transparent red
+
+        # Combine the brightened section with the red overlay
+        highlighted_section = Image.alpha_composite(brightened_section.convert('RGBA'), red_overlay)
+
+        image.paste(highlighted_section, box)
+
     return image
 
 def main(target: str):
@@ -123,33 +138,42 @@ def main(target: str):
     grid_image_with_target = None
 
     while True:
+        if DO_CORRECTIONS and coordinates:
+            correction_prompt = f"""
+- Previously, someone specified these cells: {coordinates}. These cells have been highlighted in red.
+- There may be an error. Please correct or confirm the previous assessment.
+- In your analysis, include the position of the target relative to these previously specified cells.
+- In your reasoning, describe how many cells to move in each direction to reach the target."""
+        else:
+            correction_prompt = "\n"
+
         prompt = f"""
 Attached is an image containing a screenshot over which a grid has been overlaid.
-The grid labels are white (255, 255, 255) on a red (255, 0, 0) background. The grid lines
-are semi-transparent.
+The grid labels are white (255, 255, 255) on a red (255, 0, 0) background.
+The grid lines are semi-transparent.
 Your task is to identify the coordinates of grid cells containing the target.
 The target is: "{target}".
+
 Respond in JSON with the following keys:
-    {{
-        "target": "<the target you are looking for>",
-        "descrpition": "<natural language description of the location of the target, adjacent elements, and anything else that is relevant to identifying the correct row and column>",
-        "reasoning": "<natural language step by step reasoning of how you are determining the grid coordinates of the target>",
-        "coordinates": [(<grid row>, <grid col>), (<grid row>, <grid col>), ...],
-    }}
-You may specify one or more grid cell coordinates.
-Make sure not to confuse the overlaid grid with any grid inside the screenshot!!!
-For example, if the screenshot contains a spreadsheet, don't specify the spreadsheet
-coordinates. You MUST specify the coordinates in the overlaid grid.
+{{
+    "target": "<the target you are looking for>",
+    "analysis": "<natural language description of the location of the target, adjacent elements, and anything else that is relevant to identifying the correct row and column>",
+    "reasoning": "<natural language step by step reasoning of how you are determining the grid coordinates of the target>",
+    "coordinates": [(<grid row>, <grid col>), (<grid row>, <grid col>), ...],
+}}
+
+**Important Instructions**:
+- Focus on the overlaid grid for coordinate determination.
+- Do not confuse the overlaid grid with any internal grids in the screenshot, such as those in spreadsheets.
+- Verify the grid coordinates carefully.{correction_prompt}
+- LOOK CAREFULLY AT THE IMAGE to avoid mistakes.
+- You must specify all cells containing any part of the target, so that the target is COMPLETELY COVERED.
+
 Wrap your code in triple backticks: ```
 """
-        if DO_CORRECTIONS and coordinates:
-            prompt += f"""
-Previously, someone else specified these cells: {coordinates}. These cells have been undimmed.
-There may be an error. Please correct or confirm the previous assessment.
-DON'T GUESS -- LOOK CAREFULLY AT THE IMAGE!!! My career depends on this. Lives are at stake.
-"""
 
-        config.CACHE_ENABLED = False
+        if not DO_CORRECTIONS:
+            config.CACHE_ENABLED = False
         response = DRIVER.prompt(
             prompt=prompt,
             system_prompt="You are an expert GUI interpreter. You are precise and accurate.",
@@ -172,11 +196,13 @@ DON'T GUESS -- LOOK CAREFULLY AT THE IMAGE!!! My career depends on this. Lives a
 
 if __name__ == "__main__":
     #main("save button")
-    #main("cell A1")
+    main("Spreadsheet cell A1")
     #main("cell containing 'Marketing'")
     #main("font selector")
     #main("zoom slider")
     #main("paste button")
     #main("font size dropdown")
     #main("13-May")
-    main("Engineering")
+    #main("Engineering")
+    #main("Sales")
+    #main("Spreadsheet area")
