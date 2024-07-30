@@ -13,7 +13,7 @@ from openadapt.config import config
 from openadapt.drivers import anthropic, openai, google
 from openadapt.utils import parse_code_snippet
 
-DRIVER = google
+DRIVER = openai#google
 NUM_CURSORS = 2**2
 SPREAD_REDUCTION_FACTOR = 0.5
 MAX_ITERATIONS = None
@@ -232,6 +232,7 @@ def main():
     target = "Cell C3"
     target = "Cell G4"
     target = "Cell A1"
+    target = "14-May"
     center = {'x': width // 2, 'y': height // 2}
     spread = 1.0
     iteration = 1
