@@ -45,8 +45,8 @@ def get_events(
     start_time = time.time()
     action_events = crud.get_action_events(db, recording)
     window_events = crud.get_window_events(db, recording)
+    browser_events = crud.get_browser_events(db, recording)
     screenshots = crud.get_screenshots(db, recording)
-    browser_events = crud.get_browser_events(recording)
 
     if recording.original_recording_id:
         # if recording is a copy, it already has its events processed when it

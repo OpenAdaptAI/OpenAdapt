@@ -12,8 +12,6 @@ import base64
 import importlib.metadata
 import inspect
 import os
-import signal
-import socket
 import sys
 import threading
 import time
@@ -31,7 +29,6 @@ with redirect_stdout_stderr():
 import mss
 import mss.base
 import numpy as np
-import psutil
 import orjson
 
 if sys.platform == "win32":
