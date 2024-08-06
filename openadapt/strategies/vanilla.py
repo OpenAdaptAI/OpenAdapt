@@ -196,10 +196,11 @@ def generate_action_event(
         replay_instructions=instructions,
     )
     prompt_adapter = adapters.get_default_prompt_adapter()
+    images = [current_image]
     content = prompt_adapter.prompt(
         prompt,
         system_prompt,
-        [current_image],
+        images,
     )
     action_dict = utils.parse_code_snippet(content)
     logger.info(f"{action_dict=}")
