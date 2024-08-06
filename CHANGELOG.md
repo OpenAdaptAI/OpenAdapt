@@ -2,6 +2,15 @@
 
 
 
+## v0.39.2 (2024-08-06)
+
+### Fix
+
+* fix(video): upgrade to pyav 12.3.0 (#868)
+
+Fixes #862 ([`d7f463c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d7f463c7a17006162248007262515cd6c28b3e38))
+
+
 ## v0.39.1 (2024-07-25)
 
 ### Fix
