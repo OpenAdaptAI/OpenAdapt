@@ -12,7 +12,6 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import window
 from openadapt.config import config
 from openadapt.custom_logger import logger
 from openadapt.db import db
