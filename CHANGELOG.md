@@ -2,6 +2,17 @@
 
 
 
+## v0.39.3 (2024-08-07)
+
+### Fix
+
+* fix: remove duplicate import (#870) ([`e776ed8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e776ed88dddd1eeaf773bd2dca5a0aea27da46ce))
+
+* fix: only import window if necessary (#869)
+
+Only import window if necessary ([`efc941d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/efc941d34a4cabc7178112d5ca707fb6b956af52))
+
+
 ## v0.39.2 (2024-08-06)
 
 ### Fix
