@@ -525,6 +525,8 @@ class WindowEvent(db.Base):
         Returns:
             (WindowEvent) the active window event.
         """
+        from openadapt import window
+
         return WindowEvent(**window.get_active_window_data(include_window_data))
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
