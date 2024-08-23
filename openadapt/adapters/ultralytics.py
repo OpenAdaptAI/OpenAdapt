@@ -26,7 +26,7 @@ matplotlib.use("Qt5Agg")
 
 
 from ultralytics import FastSAM
-from ultralytics.models.fastsam import FastSAMPrompt
+from ultralytics.models.fastsam import FastSAMPredictor
 from ultralytics.models.sam import Predictor as SAMPredictor
 import fire
 import numpy as np
@@ -70,6 +70,58 @@ def fetch_segmented_image(
         return do_sam(image, model_name, **kwargs)
 
 
+# TODO: support SAM models
+# TODO: consolidate with do_fastsam
+@cache.cache()
+def get_annotations(
+    image: Image,
+    model_name: str = FASTSAM_MODEL_NAMES[0],
+    # TODO: inject from config
+    device: str = "cpu",
+    retina_masks: bool = True,
+    imgsz: int | tuple[int, int] | None = 1024,
+    # threshold below which boxes will be filtered out
+    min_confidence_threshold: float = 0.4,
+    # discards all overlapping boxes with IoU > iou_threshold
+    max_iou_threshold: float = 0.9,
+    # The maximum number of boxes to keep after NMS.
+    max_det: int = 1000,
+    max_retries: int = 5,
+    retry_delay_seconds: float = 0.1,
+) -> Image:
+    """Get mask segments via FastSAM.
+
+    For usage of thresholds see:
+    github.com/ultralytics/ultralytics/blob/dacbd48fcf8407098166c6812eeb751deaac0faf
+        /ultralytics/utils/ops.py#L164
+
+    Args:
+        TODO
+        min_confidence_threshold (float, optional): The minimum confidence score
+            that a detection must meet or exceed to be considered valid. Detections
+            below this threshold will not be marked. Defaults to 0.00.
+        max_iou_threshold (float, optional): The maximum allowed Intersection over
+            Union (IoU) value for overlapping detections. Detections that exceed this
+            IoU threshold are considered for suppression, keeping only the
+            detection with the highest confidence. Defaults to 0.05.
+    """
+    model = FastSAM(model_name)
+
+    imgsz = imgsz or image.size
+
+    everything_results = model(
+        image,
+        device=device,
+        retina_masks=retina_masks,
+        imgsz=imgsz,
+        conf=min_confidence_threshold,
+        iou=max_iou_threshold,
+        max_det=max_det,
+    )
+    assert len(everything_results) == 1, len(everything_results)
+    return everything_results
+
+
 @cache.cache()
 def do_fastsam(
     image: Image,
@@ -82,6 +134,8 @@ def do_fastsam(
     min_confidence_threshold: float = 0.4,
     # discards all overlapping boxes with IoU > iou_threshold
     max_iou_threshold: float = 0.9,
+    # The maximum number of boxes to keep after NMS.
+    max_det: int = 1000,
     max_retries: int = 5,
     retry_delay_seconds: float = 0.1,
 ) -> Image:
@@ -105,7 +159,6 @@ def do_fastsam(
 
     imgsz = imgsz or image.size
 
-    # Run inference on image
     everything_results = model(
         image,
         device=device,
@@ -113,69 +166,22 @@ def do_fastsam(
         imgsz=imgsz,
         conf=min_confidence_threshold,
         iou=max_iou_threshold,
+        max_det=max_det,
+    )
+    assert len(everything_results) == 1, len(everything_results)
+    annotation = everything_results[0]
+
+    segmented_image = Image.fromarray(
+        annotation.plot(
+            img=np.ones(annotation.orig_img.shape, dtype=annotation.orig_img.dtype),
+            kpt_line=False,
+            labels=False,
+            boxes=False,
+            probs=False,
+            color_mode='instance',
+        )
     )
 
-    # Prepare a Prompt Process object
-    prompt_process = FastSAMPrompt(image, everything_results, device="cpu")
-
-    # Everything prompt
-    annotations = prompt_process.everything_prompt()
-
-    # TODO: support other modes once issues are fixed
-    # https://github.com/ultralytics/ultralytics/issues/13218#issuecomment-2142960103
-
-    # Bbox default shape [0,0,0,0] -> [x1,y1,x2,y2]
-    # annotations = prompt_process.box_prompt(bbox=[200, 200, 300, 300])
-
-    # Text prompt
-    # annotations = prompt_process.text_prompt(text='a photo of a dog')
-
-    # Point prompt
-    # points default [[0,0]] [[x1,y1],[x2,y2]]
-    # point_label default [0] [1,0] 0:background, 1:foreground
-    # annotations = prompt_process.point_prompt(points=[[200, 200]], pointlabel=[1])
-
-    assert len(annotations) == 1, len(annotations)
-    annotation = annotations[0]
-
-    # hide original image
-    annotation.orig_img = np.ones(annotation.orig_img.shape)
-
-    # TODO: in memory, e.g. with prompt_process.fast_show_mask()
-    with TemporaryDirectory() as tmp_dir:
-        # Force the output format to PNG to prevent JPEG compression artefacts
-        annotation.path = annotation.path.replace(".jpg", ".png")
-        prompt_process.plot(
-            [annotation],
-            tmp_dir,
-            with_contours=False,
-            retina=False,
-        )
-        result_name = os.path.basename(annotation.path)
-        logger.info(f"{annotation.path=}")
-        segmented_image_path = Path(tmp_dir) / result_name
-        segmented_image = Image.open(segmented_image_path)
-
-        # Ensure the image is fully loaded before deletion to avoid errors or incomplete operations,
-        # as some operating systems and file systems lock files during read or processing.
-        segmented_image.load()
-
-        # Attempt to delete the file with retries and delay
-        retries = 0
-
-        while retries < max_retries:
-            try:
-                os.remove(segmented_image_path)
-                break  # If deletion succeeds, exit loop
-            except OSError as e:
-                if e.errno == errno.ENOENT:  # File not found
-                    break
-                else:
-                    retries += 1
-                    time.sleep(retry_delay_seconds)
-
-        if retries == max_retries:
-            logger.warning(f"Failed to delete {segmented_image_path}")
     # Check if the dimensions of the original and segmented images differ
     # XXX TODO this is a hack, this plotting code should be refactored, but the
     # bug may exist in ultralytics, since they seem to resize as well; see:
