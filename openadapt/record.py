@@ -220,9 +220,12 @@ def process_events(
                 # The browser may not be open, so don't discard
                 continue
 
-            event.data["screenshot_timestamp"] = prev_screen_event.timestamp
-            event.data["window_event_timestamp"] = prev_window_event.timestamp
-            event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+            if prev_browser_event:
+                event.data["screenshot_timestamp"] = prev_screen_event.timestamp
+                event.data["window_event_timestamp"] = prev_window_event.timestamp
+                event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+            else:
+                logger.warning(f"{prev_browser_event=}")
 
             process_event(
                 event,

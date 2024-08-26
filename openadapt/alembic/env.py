@@ -10,6 +10,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from openadapt.config import config
 from openadapt.db import db
+from openadapt.models import ForceFloat
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,6 +38,11 @@ def get_url() -> str:
     return config.DB_URL
 
 
+def process_revision_directives(context, revision, directives):
+    script = directives[0]
+    script.imports.add("import openadapt")
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -55,6 +61,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():
@@ -80,6 +87,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            process_revision_directives=process_revision_directives,
         )
 
         with context.begin_transaction():

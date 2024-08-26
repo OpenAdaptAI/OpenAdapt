@@ -21,7 +21,6 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("recording_id", sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column("screenshot_id", sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column("window_event_id", sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column("browser_event_id", sa.Integer(), nullable=True))
         batch_op.create_foreign_key(
             batch_op.f("fk_action_event_recording_id_recording"),
             "recording",
@@ -38,12 +37,6 @@ def upgrade() -> None:
             batch_op.f("fk_action_event_window_event_id_window_event"),
             "window_event",
             ["window_event_id"],
-            ["id"],
-        )
-        batch_op.create_foreign_key(
-            batch_op.f("fk_action_event_browser_event_id_browser_event"),
-            "browser_event",
-            ["browser_event_id"],
             ["id"],
         )
 
@@ -78,14 +71,6 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("recording_id", sa.Integer(), nullable=True))
         batch_op.create_foreign_key(
             batch_op.f("fk_window_event_recording_id_recording"),
-            "recording",
-            ["recording_id"],
-            ["id"],
-        )
-    with op.batch_alter_table("browser_event", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("recording_id", sa.Integer(), nullable=True))
-        batch_op.create_foreign_key(
-            batch_op.f("fk_browser_event_recording_id_recording"),
             "recording",
             ["recording_id"],
             ["id"],
@@ -126,7 +111,6 @@ def downgrade() -> None:
             batch_op.f("fk_action_event_recording_id_recording"), type_="foreignkey"
         )
         batch_op.drop_column("window_event_id")
-        batch_op.drop_column("browser_event_id")
         batch_op.drop_column("screenshot_id")
         batch_op.drop_column("recording_id")
 
