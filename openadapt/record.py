@@ -212,20 +212,20 @@ def process_events(
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
                 continue
+            else:
+                event.data["screenshot_timestamp"] = prev_screen_event.timestamp
             if prev_window_event is None:
                 logger.warning("Discarding input that came before window")
                 continue
-            if config.RECORD_BROWSER_EVENTS and prev_browser_event is None:
-                logger.warning("Input came before browser event")
-                # The browser may not be open, so don't discard
-                continue
-
-            if prev_browser_event:
-                event.data["screenshot_timestamp"] = prev_screen_event.timestamp
-                event.data["window_event_timestamp"] = prev_window_event.timestamp
-                event.data["browser_event_timestamp"] = prev_browser_event.timestamp
             else:
-                logger.warning(f"{prev_browser_event=}")
+                event.data["window_event_timestamp"] = prev_window_event.timestamp
+            if config.RECORD_BROWSER_EVENTS:
+                if prev_browser_event is None:
+                    logger.debug("{prev_browser_event=}")
+                    # The browser may not be open, so don't discard by continuing
+                    #continue
+                else:
+                    event.data["browser_event_timestamp"] = prev_browser_event.timestamp
 
             process_event(
                 event,
@@ -238,8 +238,9 @@ def process_events(
             num_action_events.value += 1
 
             if (
-                config.RECORD_BROWSER_EVENTS
-                and prev_saved_browser_timestamp < prev_browser_event.timestamp
+                config.RECORD_BROWSER_EVENTS and
+                prev_browser_event is not None and
+                prev_saved_browser_timestamp < prev_browser_event.timestamp
             ):
                 process_event(
                     prev_browser_event,
@@ -366,8 +367,6 @@ def write_browser_event(
         event: A browser event to be written.
         perf_q: A queue for collecting performance data.
     """
-    logger.info("Writing browser event")
-
     assert event.type == "browser", event
     crud.insert_browser_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
@@ -1213,9 +1212,7 @@ async def read_browser_events(
 
     while not terminate_processing.is_set():
         async for message in websocket:
-            browser_data = message
-
-            if not browser_data:
+            if not message:
                 continue
 
             if not started:
@@ -1223,13 +1220,7 @@ async def read_browser_events(
                     started_counter.value += 1
                 started = True
 
-            timestamp = utils.get_timestamp()
-            event_tuple = Event(
-                timestamp,
-                "browser",
-                {"message": browser_data},
-            )
-            event_q.put(event_tuple)
+            event_q.put(Event(utils.get_timestamp(), "browser", {"message": message}))
 
 
 @logger.catch

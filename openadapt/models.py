@@ -44,6 +44,7 @@ class Recording(db.Base):
     """Class representing a recording in the database."""
 
     __tablename__ = "recording"
+    _repr_ignore_attrs = ["config"]
 
     id = sa.Column(sa.Integer, primary_key=True)
     timestamp = sa.Column(ForceFloat)
