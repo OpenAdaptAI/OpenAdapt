@@ -1,8 +1,8 @@
 """add BrowserEvent table
 
-Revision ID: 2e7ce7e2c2f0
+Revision ID: 98505a067995
 Revises: bb25e889ad71
-Create Date: 2024-08-26 11:11:46.598553
+Create Date: 2024-08-28 16:51:10.592340
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 import openadapt
 
 # revision identifiers, used by Alembic.
-revision = '2e7ce7e2c2f0'
+revision = '98505a067995'
 down_revision = 'bb25e889ad71'
 branch_labels = None
 depends_on = None
@@ -22,7 +22,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('recording_timestamp', openadapt.models.ForceFloat(precision=10, scale=2, asdecimal=False), nullable=True),
     sa.Column('recording_id', sa.Integer(), nullable=True),
-    sa.Column('message', sa.String(), nullable=True),
+    sa.Column('message', sa.JSON(), nullable=True),
     sa.Column('timestamp', openadapt.models.ForceFloat(precision=10, scale=2, asdecimal=False), nullable=True),
     sa.ForeignKeyConstraint(['recording_id'], ['recording.id'], name=op.f('fk_browser_event_recording_id_recording')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_browser_event'))
