@@ -134,6 +134,7 @@ class Config(BaseSettings):
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
+    EVENT_BUFFER_QUEUE_SIZE: int = 10
     RECORD_WINDOW_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool
     RECORD_VIDEO: bool

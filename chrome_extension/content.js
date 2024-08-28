@@ -133,6 +133,7 @@ function sendVisibleHtmlString(startTime = null) {
     startTime = performance.now();
   }
 
+  const timestamp = Date.now();
   const visibleHtmlString = getVisibleHtmlString();
   const totalDuration = performance.now() - startTime;
 
@@ -140,7 +141,7 @@ function sendVisibleHtmlString(startTime = null) {
     type: 'VISIBLE_HTML',
     data: visibleHtmlString,
     url: window.location.href,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
     totalDuration,
   });
 }
@@ -188,16 +189,18 @@ function setupMutationObserver() {
   });
 }
 
+/*
 function handleUserGeneratedEvent(event) {
   const eventTarget = event.target;
   const eventTargetId = generateElementIdAndBbox(eventTarget);
+  const timestamp = Date.now();
 
   const eventData = {
     type: 'USER_EVENT',
     eventType: event.type,
     targetId: eventTargetId,
     url: window.location.href,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
   };
 
   // Add event-specific data
@@ -225,9 +228,10 @@ function attachUserEventListeners() {
     document.body.addEventListener(eventType, handleUserGeneratedEvent, true);
   });
 }
+*/
 
 // Initial setup
 setupIntersectionObserver();
 setupMutationObserver();
-attachUserEventListeners();
+//attachUserEventListeners();
 sendVisibleHtmlString();

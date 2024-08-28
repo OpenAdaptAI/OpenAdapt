@@ -10,6 +10,7 @@ from collections import namedtuple
 from functools import partial
 from typing import Any, Callable
 import io
+import json
 import multiprocessing
 import os
 import queue
@@ -21,6 +22,7 @@ import tracemalloc
 
 from oa_pynput import keyboard, mouse
 from pympler import tracker
+from sortedcontainers import SortedList
 import av
 
 from openadapt.build_utils import redirect_stdout_stderr
@@ -100,6 +102,46 @@ def log_memory_usage(
     logger.info(f"trace_str=\n{trace_str}")
 
 
+def sort_events(
+    event_q: queue.Queue,
+    sorted_event_q: queue.Queue,
+    terminate_processing: multiprocessing.Event,
+    started_counter: multiprocessing.Value,
+    buffer_size: int = config.EVENT_BUFFER_QUEUE_SIZE,
+) -> None:
+    """
+    Buffers and sorts events before sending them to the main processing queue.
+
+    Args:
+        event_q: Queue to read incoming events from.
+        sorted_event_q: Queue to send sorted events to.
+        terminate_processing: Event to signal termination.
+        started_counter: Value to increment once started.
+        buffer_size: Size of the buffer to sort events.
+    """
+    buffer = SortedList(key=lambda e: e.timestamp)
+    started = False
+
+    while not terminate_processing.is_set() or not event_q.empty() or len(buffer) > 0:
+        try:
+            # Continuously read events from event_q
+            event = event_q.get(timeout=0.1)
+            buffer.add(event)
+        except queue.Empty:
+            pass
+
+        # If the buffer exceeds the size or if termination is signaled
+        if len(buffer) > buffer_size or (terminate_processing.is_set() and len(buffer) > 0):
+            sorted_event = buffer.pop(0)  # Get the earliest event
+
+            if not started:
+                with started_counter.get_lock():
+                    started_counter.value += 1
+                started = True
+
+            sorted_event_q.put(sorted_event)  # Send to the sorted event queue
+
+
 def process_event(
     event: ActionEvent,
     write_q: sq.SynchronizedQueue,
@@ -127,7 +169,7 @@ def process_event(
 
 @utils.trace(logger)
 def process_events(
-    event_q: queue.Queue,
+    sorted_event_q: queue.Queue,
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
@@ -146,7 +188,7 @@ def process_events(
     """Process events from the event queue and write them to write queues.
 
     Args:
-        event_q: A queue with events to be processed.
+        sorted_event_q: A queue with events to be processed.
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
@@ -174,8 +216,8 @@ def process_events(
     prev_saved_window_timestamp = 0
     prev_saved_browser_timestamp = 0
     started = False
-    while not terminate_processing.is_set() or not event_q.empty():
-        event = event_q.get()
+    while not terminate_processing.is_set() or not sorted_event_q.empty():
+        event = sorted_event_q.get()
         if not started:
             with started_counter.get_lock():
                 started_counter.value += 1
@@ -189,7 +231,8 @@ def process_events(
                     prev_event,
                 )
             except AssertionError as exc:
-                logger.error(exc)
+                delta = event.timestamp - prev_event.timestamp
+                logger.error(f"{delta=} {prev_event=} {event=}")
                 # behavior undefined, swallow for now
                 # XXX TODO: mitigate
         if event.type == "screen":
@@ -214,16 +257,17 @@ def process_events(
                 continue
             else:
                 event.data["screenshot_timestamp"] = prev_screen_event.timestamp
+
             if prev_window_event is None:
-                logger.warning("Discarding input that came before window")
+                logger.warning("Discarding action that came before window")
                 continue
             else:
                 event.data["window_event_timestamp"] = prev_window_event.timestamp
+
             if config.RECORD_BROWSER_EVENTS:
                 if prev_browser_event is None:
                     logger.debug("{prev_browser_event=}")
-                    # The browser may not be open, so don't discard by continuing
-                    #continue
+                    # Browser events are optional (the browser may not be open)
                 else:
                     event.data["browser_event_timestamp"] = prev_browser_event.timestamp
 
@@ -1209,18 +1253,64 @@ async def read_browser_events(
 
     logger.info("Starting Reading Browser Events ...")
     started = False
+    time_offset = 0
 
     while not terminate_processing.is_set():
         async for message in websocket:
             if not message:
                 continue
 
+            local_timestamp = utils.get_timestamp()
+
             if not started:
                 with started_counter.get_lock():
                     started_counter.value += 1
                 started = True
 
-            event_q.put(Event(utils.get_timestamp(), "browser", {"message": message}))
+            data = json.loads(message)
+
+            # Handle sync message to calculate offset
+            if data['type'] == 'SYNC':
+                initial_timestamp = data['timestamp']
+                python_timestamp = utils.get_timestamp() * 1000  # Current Python time in milliseconds
+                response = {
+                    'type': 'SYNC_RESPONSE',
+                    'initialTimestamp': initial_timestamp,
+                    'pythonTimestamp': python_timestamp
+                }
+                await websocket.send(json.dumps(response))
+            elif data['type'] == 'SYNC_RESPONSE':
+                current_timestamp = utils.get_timestamp() * 1000
+                initial_timestamp = data['initialTimestamp']
+                rtt = current_timestamp - initial_timestamp  # round trip time
+                time_offset = data['pythonTimestamp'] - (initial_timestamp + rtt / 2)
+                logger.info(f"Time offset calculated: {time_offset} ms")
+            else:
+                # Adjust the timestamp using the calculated offset
+                logger.info(f"{data['timestamp']=}")
+                raw_remote_timestamp = data["timestamp"] / 1000
+                data['timestamp'] += data['timeOffset']
+                adjusted_remote_timestamp = data["timestamp"] / 1000
+                raw_delta = local_timestamp - raw_remote_timestamp
+                adjusted_delta = local_timestamp - adjusted_remote_timestamp
+                logger.info(
+                    f"{raw_remote_timestamp=} "
+                    f"{adjusted_remote_timestamp=} "
+                    f"{local_timestamp=} "
+                    f"{raw_delta=} "
+                    f"{adjusted_delta=}"
+                )
+                data["_local_timestamp"] = local_timestamp
+                data["_adjusted_remote_timestamp"] = adjusted_remote_timestamp
+                data["_raw_remote_timestamp"] = raw_remote_timestamp
+                data["_adjusted_delta"] = adjusted_delta
+                data["_raw_delta"] = raw_delta
+
+                event_q.put(Event(
+                    adjusted_remote_timestamp,
+                    "browser",
+                    {"message": data},
+                ))
 
 
 @logger.catch
@@ -1328,6 +1418,7 @@ async def record(
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
+    sorted_event_q = queue.Queue()
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
@@ -1377,10 +1468,21 @@ async def record(
     num_browser_events = multiprocessing.Value("i", 0)
     num_video_events = multiprocessing.Value("i", 0)
 
+    event_sorter = threading.Thread(
+        target=sort_events,
+        args=(
+            event_q,
+            sorted_event_q,
+            terminate_processing,
+            started_counter,
+        ),
+    )
+    event_sorter.start()
+
     event_processor = threading.Thread(
         target=process_events,
         args=(
-            event_q,
+            sorted_event_q,
             screen_write_q,
             action_write_q,
             window_write_q,
@@ -1567,6 +1669,7 @@ async def record(
         browser_event_reader.join()
 
     # main event processor thread
+    event_sorter.join()
     event_processor.join()
 
     # all writer threads
