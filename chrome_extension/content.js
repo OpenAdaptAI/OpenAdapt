@@ -230,8 +230,13 @@ function attachUserEventListeners() {
 }
 */
 
+function attachWindowEventListeners() {
+  window.addEventListener('focus', sendVisibleHtmlString);
+}
+
 // Initial setup
 setupIntersectionObserver();
 setupMutationObserver();
 //attachUserEventListeners();
+attachWindowEventListeners();
 sendVisibleHtmlString();
