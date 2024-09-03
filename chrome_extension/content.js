@@ -189,7 +189,6 @@ function setupMutationObserver() {
   });
 }
 
-/*
 function handleUserGeneratedEvent(event) {
   const eventTarget = event.target;
   const eventTargetId = generateElementIdAndBbox(eventTarget);
@@ -222,13 +221,20 @@ function handleUserGeneratedEvent(event) {
 }
 
 function attachUserEventListeners() {
-  const eventsToCapture = ['click', 'scroll', 'input', 'focusin', 'focusout', 'keydown', 'keyup'];
+  const eventsToCapture = [
+    'click',
+    //'scroll',
+    'input',
+    //'focusin',
+    //'focusout',
+    //'keydown',
+    //'keyup',
+  ];
 
   eventsToCapture.forEach(eventType => {
     document.body.addEventListener(eventType, handleUserGeneratedEvent, true);
   });
 }
-*/
 
 function attachWindowEventListeners() {
   window.addEventListener('focus', sendVisibleHtmlString);
@@ -237,6 +243,7 @@ function attachWindowEventListeners() {
 // Initial setup
 setupIntersectionObserver();
 setupMutationObserver();
-//attachUserEventListeners();
+attachUserEventListeners();
 attachWindowEventListeners();
 sendVisibleHtmlString();
+

@@ -47,7 +47,7 @@ function connectWebSocket() {
       const currentTimestamp = Date.now();
       const rtt = currentTimestamp - message.initialTimestamp;  // roundTripTime
       timeOffset = message.pythonTimestamp - (message.initialTimestamp + rtt / 2);
-      console.log("Timestamp Offset:", timeOffset);
+      console.log({ rtt, timeOffset });
     }
   };
 

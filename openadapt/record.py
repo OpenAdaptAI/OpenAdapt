@@ -38,7 +38,7 @@ import numpy as np
 import psutil
 import sounddevice
 import soundfile
-import websockets
+import websockets.sync.server
 import whisper
 
 from openadapt import plotting, utils, video, window
@@ -130,14 +130,14 @@ def sort_events(
         except queue.Empty:
             pass
 
+        if not started:
+            with started_counter.get_lock():
+                started_counter.value += 1
+            started = True
+
         # If the buffer exceeds the size or if termination is signaled
         if len(buffer) > buffer_size or (terminate_processing.is_set() and len(buffer) > 0):
             sorted_event = buffer.pop(0)  # Get the earliest event
-
-            if not started:
-                with started_counter.get_lock():
-                    started_counter.value += 1
-                started = True
 
             sorted_event_q.put(sorted_event)  # Send to the sorted event queue
 
@@ -211,10 +211,10 @@ def process_events(
     prev_event = None
     prev_screen_event = None
     prev_window_event = None
-    prev_browser_event = None
+    #prev_browser_event = None
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
-    prev_saved_browser_timestamp = 0
+    browser_event_buffer = []
     started = False
     while not terminate_processing.is_set() or not sorted_event_q.empty():
         event = sorted_event_q.get()
@@ -232,7 +232,9 @@ def process_events(
                 )
             except AssertionError as exc:
                 delta = event.timestamp - prev_event.timestamp
-                logger.error(f"{delta=} {prev_event=} {event=}")
+                log_prev_event = prev_event._replace(data="")
+                log_event = event._replace(data="")
+                logger.error(f"{delta=} {log_prev_event=} {log_event=}")
                 # behavior undefined, swallow for now
                 # XXX TODO: mitigate
         if event.type == "screen":
@@ -250,7 +252,8 @@ def process_events(
         elif event.type == "window":
             prev_window_event = event
         elif event.type == "browser":
-            prev_browser_event = event
+            browser_event_buffer.append(event)
+            #prev_browser_event = event
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
@@ -265,11 +268,37 @@ def process_events(
                 event.data["window_event_timestamp"] = prev_window_event.timestamp
 
             if config.RECORD_BROWSER_EVENTS:
-                if prev_browser_event is None:
-                    logger.debug("{prev_browser_event=}")
+                # Flush the accumulated browser events before inserting the action event
+                if browser_event_buffer:
+                    # Combine all buffered browser events into one
+                    combined_browser_event = Event(
+                        browser_event_buffer[0].timestamp,
+                        "browser",
+                        {
+                            "messages": [
+                                event.data["message"]
+                                for event in browser_event_buffer
+                            ]
+                        }
+                    )
+                    # Process the combined browser event
+                    process_event(
+                        combined_browser_event,
+                        browser_write_q,
+                        write_browser_event,
+                        recording,
+                        perf_q,
+                    )
+                    num_browser_events.value += 1
+                    browser_event_buffer.clear()  # Clear the buffer after processing
+                else:
+                    combined_browser_event = None
+
+                if combined_browser_event is None:
+                    logger.debug("{combined_browser_event=}")
                     # Browser events are optional (the browser may not be open)
                 else:
-                    event.data["browser_event_timestamp"] = prev_browser_event.timestamp
+                    event.data["browser_event_timestamp"] = combined_browser_event.timestamp
 
             process_event(
                 event,
@@ -281,20 +310,6 @@ def process_events(
 
             num_action_events.value += 1
 
-            if (
-                config.RECORD_BROWSER_EVENTS and
-                prev_browser_event is not None and
-                prev_saved_browser_timestamp < prev_browser_event.timestamp
-            ):
-                process_event(
-                    prev_browser_event,
-                    browser_write_q,
-                    write_browser_event,
-                    recording,
-                    perf_q,
-                )
-                num_browser_events.value += 1
-                prev_saved_browser_timestamp = prev_browser_event.timestamp
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
                     prev_screen_event,
@@ -1228,9 +1243,8 @@ def record_audio(
 
 @logger.catch
 @utils.trace(logger)
-async def read_browser_events(
-    websocket: websockets.WebSocketServerProtocol,
-    path: str,
+def read_browser_events(
+    websocket: websockets.sync.server.ServerConnection,
     event_q: queue.Queue,
     terminate_processing: Event,
     recording: Recording,
@@ -1240,7 +1254,6 @@ async def read_browser_events(
 
     Params:
         websocket: The websocket object.
-        path: The path to the websocket.
         event_q: A queue for adding browser events.
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
@@ -1256,7 +1269,7 @@ async def read_browser_events(
     time_offset = 0
 
     while not terminate_processing.is_set():
-        async for message in websocket:
+        for message in websocket:
             if not message:
                 continue
 
@@ -1278,7 +1291,7 @@ async def read_browser_events(
                     'initialTimestamp': initial_timestamp,
                     'pythonTimestamp': python_timestamp
                 }
-                await websocket.send(json.dumps(response))
+                websocket.send(json.dumps(response))
             elif data['type'] == 'SYNC_RESPONSE':
                 current_timestamp = utils.get_timestamp() * 1000
                 initial_timestamp = data['initialTimestamp']
@@ -1313,38 +1326,7 @@ async def read_browser_events(
                 ))
 
 
-@logger.catch
-@utils.trace(logger)
-async def start_browser_event_server(
-    event_q: queue.Queue,
-    terminate_processing: Event,
-    recording: Recording,
-    started_counter: multiprocessing.Value,
-) -> None:
-    """Start the browser event server.
-
-    Params:
-        event_q: A queue for adding browser events.
-        terminate_processing: An event to signal the termination of the process.
-        recording: The recording object.
-        started_counter: Value to increment once started.
-
-    Returns:
-        None
-    """
-    server = await websockets.serve(
-        lambda ws, path: read_browser_events(
-            ws, path, event_q, terminate_processing, recording, started_counter
-        ),
-        config.BROWSER_WEBSOCKET_SERVER_IP,
-        config.BROWSER_WEBSOCKET_PORT,
-    )
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, terminate_processing.wait)
-    # Wait for termination signal
-    server.close()
-    await server.wait_closed()
-
+ws_server_instance = None
 
 @logger.catch
 @utils.trace(logger)
@@ -1365,11 +1347,35 @@ def run_browser_event_server(
     Returns:
         None
     """
-    asyncio.run(
-        start_browser_event_server(
-            event_q, terminate_processing, recording, started_counter
-        )
-    )
+    global ws_server_instance
+
+    # Function to run the server in a separate thread
+    def run_server() -> None:
+        global ws_server_instance
+        with websockets.sync.server.serve(
+            lambda ws: read_browser_events(
+                ws, event_q, terminate_processing, recording, started_counter
+            ),
+            config.BROWSER_WEBSOCKET_SERVER_IP,
+            config.BROWSER_WEBSOCKET_PORT
+        ) as server:
+            ws_server_instance = server
+            logger.info("WebSocket server started")
+            server.serve_forever()
+
+    # Start the server in a separate thread
+    server_thread = threading.Thread(target=run_server)
+    server_thread.start()
+
+    # Wait for a termination signal
+    terminate_processing.wait()
+    logger.info("Termination signal received, shutting down server")
+
+    if ws_server_instance:
+        ws_server_instance.shutdown()
+
+    # Ensure the server thread is terminated cleanly
+    server_thread.join()
 
 
 @logger.catch

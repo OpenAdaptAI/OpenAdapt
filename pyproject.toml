@@ -91,7 +91,6 @@ spacy-curated-transformers = "^0.2.0"
 anthropic = "^0.19.2"
 orjson = "^3.9.15"
 replicate = "^0.25.0"
-gradio-client = "0.15.0"
 google-generativeai = "^0.5.0"
 uvicorn = {extras = ["standard"], version = "^0.22"}
 ultralytics = "^8.1.47"
@@ -105,7 +104,7 @@ openai-whisper = {git = "https://github.com/openai/whisper.git"}
 sounddevice = "^0.4.6"
 soundfile = "^0.12.1"
 asyncio = "^3.4.3"
-websockets = "^11.0.3"
+websockets = "^13.0.1"
 posthog = "^3.5.0"
 
 wheel = "^0.43.0"

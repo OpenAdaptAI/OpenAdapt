@@ -86,7 +86,7 @@ def get_events(
                 window_events,
                 screenshots,
                 browser_events,
-            ) = process_events(
+            ) = merge_events(
                 action_events,
                 window_events,
                 screenshots,
@@ -807,7 +807,7 @@ def discard_unused_events(
     return referred_events
 
 
-def process_events(
+def merge_events(
     action_events: list[models.ActionEvent],
     window_events: list[models.WindowEvent],
     screenshots: list[models.Screenshot],
@@ -817,7 +817,7 @@ def process_events(
     list[models.WindowEvent],
     list[models.Screenshot],
 ]:
-    """Process action events, window events, and screenshots.
+    """Merge redundant action events, window events, and screenshots.
 
     Args:
         action_events (list): The list of action events.
@@ -828,11 +828,6 @@ def process_events(
         tuple: A tuple containing the processed action events, window events,
           and screenshots.
     """
-    # For debugging
-    # _action_events = action_events
-    # _window_events = window_events
-    # _screenshots = screenshots
-
     num_action_events = len(action_events)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
@@ -897,7 +892,7 @@ def process_events(
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
-    pct_browser_events = num_browser_events_ / num_browser_events
+    pct_browser_events = num_browser_events_ / num_browser_events if num_browser_events else None
     pct_total = num_total_ / num_total
     logger.info(
         "after"
