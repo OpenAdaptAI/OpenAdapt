@@ -972,7 +972,7 @@ def truncate_html(html_str: str, max_len: int) -> str:
         head = html_str[:n]
         tail = html_str[-n:]
         snipped = html_str[n:-n]
-        middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
+        middle = f"<br/>...<i>(snipped {len(snipped):,})</i>...<br/>"
         html_str = head + middle + tail
     return html_str
 

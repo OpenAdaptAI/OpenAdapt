@@ -1,7 +1,7 @@
+const debug = true;
 const elementIdMap = new WeakMap();
 const idToElementMap = new Map(); // Reverse lookup map
 let idCounter = 0;
-const debug = true; // Global debug flag
 let latestVisibleHtmlString = '';
 let latestVisibleHtmlTimestamp = 0;
 
@@ -32,10 +32,8 @@ function generateElementIdAndBbox(element) {
 
 function getScreenCoordinates(element) {
   const rect = element.getBoundingClientRect();
-  const screenX = window.screenX + window.outerWidth - window.innerWidth;
-  const screenY = window.screenY + window.outerHeight - window.innerHeight;
-  const top = rect.top + screenY;
-  const left = rect.left + screenX;
+  const top = rect.top + window.screenY;
+  const left = rect.left + window.screenX;
   const bottom = rect.bottom + screenY;
   const right = rect.right + screenX;
 
@@ -154,19 +152,16 @@ function handleUserGeneratedEvent(event) {
     targetId: eventTargetId,
     url: window.location.href,
     timestamp: timestamp,
-    // Attach the most recent visible HTML data
     visibleHtmlData: latestVisibleHtmlString,
     visibleHtmlTimestamp: latestVisibleHtmlTimestamp,
   };
 
-  // Add event-specific data
   if (event instanceof KeyboardEvent) {
     eventData.key = event.key;
     eventData.code = event.code;
   } else if (event instanceof MouseEvent) {
-    eventData.clientX = event.clientX;
-    eventData.clientY = event.clientY;
-    eventData.devicePixelRatio = window.devicePixelRatio;
+    eventData.screenX = event.screenX;
+    eventData.screenY = event.screenY;
     eventData.button = event.button;
   } else if (event instanceof InputEvent) {
     eventData.inputType = event.inputType;
