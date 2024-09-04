@@ -399,6 +399,36 @@ def main(
 
             progress.close()
 
+    # Visualize BrowserEvents
+    rows.append([row(Div(text="<h2>Browser Events</h2>"))])
+    browser_events = crud.get_browser_events(session, recording)
+    with redirect_stdout_stderr():
+        with tqdm(
+            total=len(browser_events),
+            desc="Preparing HTML (browser events)",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
+            for idx, browser_event in enumerate(browser_events):
+                browser_event_dict = row2dict(browser_event)
+                rows.append(
+                    [
+                        row(
+                            Div(text=f"""
+                                <table>
+                                    {dict2html(browser_event_dict)}
+                                </table>
+                            """),
+                        ),
+                    ]
+                )
+
+                progress.update()
+
+            progress.close()
+
+
     title = f"recording-{recording.id}"
 
     fname_out = RECORDING_DIR_PATH / f"recording-{recording.id}.html"

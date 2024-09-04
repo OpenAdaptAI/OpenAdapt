@@ -267,11 +267,14 @@ class ActionEvent(db.Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, canonical: bool = False) -> str | None:
+    def _text(
+        self,
+        canonical: bool = False,
+        name_prefix: str = config.ACTION_TEXT_NAME_PREFIX,
+        name_suffix: str = config.ACTION_TEXT_NAME_SUFFIX,
+    ) -> str | None:
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if self.children:
             parts = [
                 child.canonical_text if canonical else child.text
@@ -633,7 +636,7 @@ class BrowserEvent(db.Base):
     id = sa.Column(sa.Integer, primary_key=True)
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
-    messages = sa.Column(sa.JSON)
+    message = sa.Column(sa.JSON)
     timestamp = sa.Column(ForceFloat)
 
     recording = sa.orm.relationship("Recording", back_populates="browser_events")

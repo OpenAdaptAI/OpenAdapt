@@ -1,25 +1,34 @@
+from statistics import mean, median, stdev
+
 from dtaidistance import dtw
 from loguru import logger
 
 from openadapt.db import crud
 
+# action to browser
 MOUSE_BUTTON_MAPPING = {
     "left": 0,
     "right": 2,
     "middle": 1
 }
 
+# action to browser
 EVENT_TYPE_MAPPING = {
     "click": "click",
     "press": "keydown",
     "release": "keyup"
 }
 
+# TODO: read from pynput
 KEYBOARD_KEYS = [
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+    'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'tab', 'enter', 'shift', 'ctrl', 'alt', 'esc', 'space', 'backspace', 'delete', 'home', 'end', 'pageup', 'pagedown', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
+    'tab', 'enter', 'shift', 'ctrl', 'alt', 'esc', 'space', 'backspace',
+    'delete', 'home', 'end', 'pageup', 'pagedown',
+    'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
 ]
+
 
 def main() -> None:
     session = crud.get_new_session(read_only=True)
@@ -47,26 +56,65 @@ def main() -> None:
         [(f"Key Release {key.upper()}", "release", key) for key in KEYBOARD_KEYS]
     )
 
+    total_errors = 0  # Initialize total errors counter
+    total_remote_time_differences = []
+    total_local_time_differences = []
+
     # Process each event pair
     for event_type, action_name, key_or_button in event_pairs:
         action_filtered_events = list(filter(lambda e: is_action_event(e, action_name, key_or_button), action_events))
         browser_filtered_events = list(filter(lambda e: is_browser_event(e, action_name, key_or_button), browser_events))
 
-        logger.info(f"{event_type}: {len(action_filtered_events)} action events, {len(browser_filtered_events)} browser events")
+        # Only log if there are any action or browser events
+        if action_filtered_events or browser_filtered_events:
+            logger.info(f"{event_type}: {len(action_filtered_events)} action events, {len(browser_filtered_events)} browser events")
+            # Convert series of events to timestamps
+            action_timestamps = [e.timestamp for e in action_filtered_events]
+            browser_timestamps = [e.message["timestamp"] for e in browser_filtered_events]
 
-        # Convert series of events to timestamps
-        action_timestamps = [e.timestamp for e in action_filtered_events]
-        browser_timestamps = [e.message["timestamp"] for e in browser_filtered_events]
+            # Align and print events for the specific type
+            errors, remote_time_differences, local_time_differences  = align_and_print(
+                event_type, action_timestamps, browser_timestamps, action_filtered_events, browser_filtered_events
+            )
+            total_errors += errors  # Accumulate errors
+            total_remote_time_differences += remote_time_differences
+            total_local_time_differences += local_time_differences
 
-        # Align and print events for the specific type
-        align_and_print(event_type, action_timestamps, browser_timestamps, action_filtered_events, browser_filtered_events)
+    # Calculate and log statistics for timestamp differences
+    for name, time_differences in (
+        ('Remote', total_remote_time_differences),
+        ('Local', total_local_time_differences),
+    ):
+        min_diff = min(time_differences, key=abs)
+        max_diff = max(time_differences, key=abs)
+        mean_diff = mean(time_differences)
+        median_diff = median(time_differences)
+        stddev_diff = stdev(time_differences) if len(time_differences) > 1 else 0
+        logger.info(
+            f"{name} Timestamp Differences - Min: {min_diff:.4f}, Max: {max_diff:.4f}, "
+            f"Mean: {mean_diff:.4f}, Median: {median_diff:.4f}, Std Dev: {stddev_diff:.4f}"
+        )
+    # Report total errors at the end
+    logger.info(f"Total Errors Across All Events: {total_errors}")
 
 
 def is_action_event(event, action_name: str, key_or_button: str) -> bool:
+    """
+    Determine if the event matches the given action name and key/button.
+
+    Args:
+        event: The action event to check.
+        action_name: The type of action (e.g., "click", "press", "release").
+        key_or_button: The key or button associated with the action.
+
+    Returns:
+        bool: True if the event matches the action name and key/button, False otherwise.
+    """
     if action_name == "click":
         return event.name == action_name and event.mouse_button_name == key_or_button
     elif action_name in {"press", "release"}:
-        return event.name == action_name and event.key == key_or_button
+        stripped_action_text = event._text(name_prefix="", name_suffix="")
+        return event.name == action_name and stripped_action_text == key_or_button
     else:
         return False
 
@@ -82,7 +130,17 @@ def is_browser_event(event, action_name: str, key_or_button: str) -> bool:
         return False
 
 
-def align_and_print(event_type: str, action_timestamps: list, browser_timestamps: list, action_events: list, browser_events: list) -> None:
+def align_and_print(
+    event_type: str,
+    action_timestamps: list,
+    browser_timestamps: list,
+    action_events: list,
+    browser_events: list,
+) -> tuple[int, list[float], list[float]]:
+    # Only log if there are any action or browser events of each type
+    if not action_events and not browser_events:
+        return 0
+
     # Compute the alignment using DTW
     path = dtw.warping_path(action_timestamps, browser_timestamps)
 
@@ -91,8 +149,11 @@ def align_and_print(event_type: str, action_timestamps: list, browser_timestamps
 
     match_count = 0
     mismatch_count = 0
+    error_count = 0  # Initialize error counter
+    remote_time_differences = []  # To store differences in local/remote timestamps for matching events
+    local_time_differences = []  # As above but for local/local
 
-    print(f"\nAlignment for {event_type} Events")
+    logger.info(f"Alignment for {event_type} Events")
     for i, j in filtered_path:
         action_event = action_events[i]
         browser_event = browser_events[j]
@@ -102,12 +163,18 @@ def align_and_print(event_type: str, action_timestamps: list, browser_timestamps
 
         if action_event_type in EVENT_TYPE_MAPPING and browser_event_type == EVENT_TYPE_MAPPING[action_event_type]:
             match_count += 1
+            remote_time_difference = action_event.timestamp - browser_event.message['timestamp']
+            remote_time_differences.append(remote_time_difference)
+            local_time_difference = action_event.timestamp - browser_event.timestamp
+            local_time_differences.append(local_time_difference)
         else:
             mismatch_count += 1
-            print(f"Event type mismatch: Action({action_event_type}) does not match Browser({browser_event_type})")
+            logger.warning(f"Event type mismatch: Action({action_event_type}) does not match Browser({browser_event_type})")
+            logger.warning(f"{action_event=}")
+            logger.warning(f"{browser_event=}")
 
-        print(
-            f"Action Event:\n"
+        logger.info(
+            f"\nAction Event:\n"
             f"  - Type: {action_event.name}\n"
             f"  - Timestamp: {action_event.timestamp}\n"
             f"  - Details: {action_event}\n"
@@ -118,10 +185,31 @@ def align_and_print(event_type: str, action_timestamps: list, browser_timestamps
             f"{'-'*80}"
         )
 
-    print(f"\nTotal Matches: {match_count}")
-    print(f"Total Mismatches: {mismatch_count}")
+    logger.info(f"Total Matches: {match_count}")
+    logger.info(f"Total Mismatches: {mismatch_count}")
 
-    assert len(browser_events) == match_count, "Every BrowserEvent should have a corresponding ActionEvent."
+    # Log unmatched browser events
+    matched_browser_indices = {j for _, j in filtered_path}
+    unmatched_browser_events = [e for idx, e in enumerate(browser_events) if idx not in matched_browser_indices]
+
+    if unmatched_browser_events:
+        logger.warning(f"Unmatched Browser Events: {len(unmatched_browser_events)}")
+        for browser_event in unmatched_browser_events:
+            logger.warning(
+                f"Unmatched Browser Event:\n"
+                f"  - Type: {browser_event.message['eventType']}\n"
+                f"  - Timestamp: {browser_event.message['timestamp']}\n"
+                f"  - Details: {browser_event}\n"
+            )
+            error_count += 1  # Increment error count for each unmatched browser event
+    
+    try:
+        assert len(browser_events) == match_count, "Every BrowserEvent should have a corresponding ActionEvent."
+    except Exception as exc:
+        error_count += 1  # Increment error count for assertion error
+        logger.warning(exc)
+    
+    return error_count, remote_time_differences, local_time_differences
 
 
 def enforce_one_to_one_mapping(path: list, action_timestamps: list, browser_timestamps: list) -> list:
@@ -158,7 +246,6 @@ def enforce_one_to_one_mapping(path: list, action_timestamps: list, browser_time
             used_action_indices.add(i)
 
     return filtered_path
-
 
 
 if __name__ == "__main__":

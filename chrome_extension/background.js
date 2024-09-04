@@ -33,22 +33,11 @@ function connectWebSocket() {
 
   socket.onopen = function() {
     console.log("WebSocket connection established");
-
-    // Send initial sync message with the current timestamp
-    const initialTimestamp = Date.now();
-    socketSend(socket, { type: "SYNC", timestamp: initialTimestamp });
   };
 
   socket.onmessage = function(event) {
     console.log("Message from server:", event.data);
     const message = JSON.parse(event.data);
-
-    if (message.type === "SYNC_RESPONSE") {
-      const currentTimestamp = Date.now();
-      const rtt = currentTimestamp - message.initialTimestamp;  // roundTripTime
-      timeOffset = message.pythonTimestamp - (message.initialTimestamp + rtt / 2);
-      console.log({ rtt, timeOffset });
-    }
   };
 
   socket.onclose = function(event) {
@@ -69,8 +58,6 @@ connectWebSocket();
 /* Listen for messages from the content script */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (socket && socket.readyState === WebSocket.OPEN) {
-    // Add the offset to the existing timestamp as a separate property
-    message.timeOffset = timeOffset;
     socketSend(socket, message);
     sendResponse({ status: "Message sent to WebSocket" });
   } else {
