@@ -3,6 +3,7 @@ from statistics import mean, median, stdev
 from dtaidistance import dtw
 from loguru import logger
 
+from openadapt import utils
 from openadapt.db import crud
 
 # action to browser
@@ -85,6 +86,9 @@ def main() -> None:
         ('Remote', total_remote_time_differences),
         ('Local', total_local_time_differences),
     ):
+        if not time_differences:
+            logger.warning(f"{name=} {time_differences=}")
+            continue
         min_diff = min(time_differences, key=abs)
         max_diff = max(time_differences, key=abs)
         mean_diff = mean(time_differences)
@@ -170,9 +174,8 @@ def align_and_print(
         else:
             mismatch_count += 1
             logger.warning(f"Event type mismatch: Action({action_event_type}) does not match Browser({browser_event_type})")
-            logger.warning(f"{action_event=}")
-            logger.warning(f"{browser_event=}")
 
+        browser_event.message["visibleHtmlData"] = utils.truncate_html(browser_event.message["visibleHtmlData"], max_len=100)
         logger.info(
             f"\nAction Event:\n"
             f"  - Type: {action_event.name}\n"

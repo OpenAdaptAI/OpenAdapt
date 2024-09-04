@@ -142,13 +142,7 @@ def dict2html(
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
-        if len(html_str) > max_len:
-            n = max_len // 2
-            head = html_str[:n]
-            tail = html_str[-n:]
-            snipped = html_str[n:-n]
-            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
-            html_str = head + middle + tail
+        html_str = utils.truncate_html(html_str)
     return html_str
 
 

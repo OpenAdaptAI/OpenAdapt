@@ -966,6 +966,17 @@ def retry_with_exceptions(max_retries: int = 5) -> Callable:
     return decorator_retry
 
 
+def truncate_html(html_str: str, max_len: int) -> str:
+    if len(html_str) > max_len:
+        n = max_len // 2
+        head = html_str[:n]
+        tail = html_str[-n:]
+        snipped = html_str[n:-n]
+        middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
+        html_str = head + middle + tail
+    return html_str
+
+
 class WrapStdout:
     """Class to be used a target for multiprocessing.Process."""
 
