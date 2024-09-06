@@ -1548,6 +1548,7 @@ async def record(
     window_event_reader.join()
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader.join()
+        logger.info(f"{browser_event_reader=} joined")
 
     # main event processor thread
 #    event_sorter.join()

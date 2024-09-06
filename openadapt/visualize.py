@@ -32,6 +32,7 @@ from openadapt.utils import (
     image2utf8,
     row2dict,
     rows2dicts,
+    truncate_html,
 )
 
 SCRUB = config.SCRUB_ENABLED
@@ -142,7 +143,7 @@ def dict2html(
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
-        html_str = utils.truncate_html(html_str)
+        html_str = truncate_html(html_str, max_len)
     return html_str
 
 

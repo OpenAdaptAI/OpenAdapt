@@ -110,6 +110,7 @@ posthog = "^3.5.0"
 wheel = "^0.43.0"
 cython = "^3.0.10"
 sortedcontainers = "^2.4.0"
+beautifulsoup4 = "^4.12.3"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"

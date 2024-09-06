@@ -4,6 +4,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import zip_longest
 from typing import Any, Type
+import copy
 import io
 import sys
 
@@ -641,6 +642,24 @@ class BrowserEvent(db.Base):
 
     recording = sa.orm.relationship("Recording", back_populates="browser_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    def __str__(self) -> str:
+        """Returns a string representation of the BrowserEvent instance without modifying original data."""
+        # Create a copy of the message to avoid modifying the original
+        message_copy = copy.deepcopy(self.message)
+
+        # Truncate the visibleHtmlData in the copied message if it exists
+        if "visibleHtmlData" in message_copy:
+            message_copy["visibleHtmlData"] = utils.truncate_html(message_copy["visibleHtmlData"], max_len=100)
+
+        # Get all attributes except 'message'
+        attributes = {attr: getattr(self, attr) for attr in self.__mapper__.columns.keys() if attr != "message"}
+
+        # Construct the string representation dynamically
+        base_repr = ", ".join(f"{key}={value}" for key, value in attributes.items())
+
+        # Return the complete representation including the truncated message
+        return f"BrowserEvent({base_repr}, message={message_copy})"
 
     # # TODO: implement
     # @classmethod
