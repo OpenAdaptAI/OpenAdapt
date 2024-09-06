@@ -2,9 +2,9 @@ const DEBUG = true;
 const RETURN_FULL_DOCUMENT = false;
 const elementIdMap = new WeakMap();
 const idToElementMap = new Map(); // Reverse lookup map
-let idCounter = 0;
-let latestVisibleHtmlString = '';
-let latestVisibleHtmlTimestamp = 0;
+let elementIdCounter = 0;
+let messageIdCounter = 0;
+// TODO: only track as many as necessary
 const eventBuffer = [];
 const maxBufferSize = 100;
 
@@ -20,6 +20,7 @@ function trackMouseEvent(event) {
 }
 
 function sendMessageToBackgroundScript(message) {
+  message.id = messageIdCounter++;
   if (DEBUG) {
     const messageType = message.type;
     const messageLength = JSON.stringify(message).length;
@@ -34,9 +35,9 @@ function generateElementIdAndBbox(element) {
     // not enough data points to get screen coordinates
     return
   }
-  console.log({ top, left, bottom, right });
+  //console.log({ top, left, bottom, right });
   if (!elementIdMap.has(element)) {
-    const newId = `elem-${idCounter++}`;
+    const newId = `elem-${elementIdCounter++}`;
     elementIdMap.set(element, newId);
     idToElementMap.set(newId, element); // Reverse mapping
     element.setAttribute('data-id', newId);
@@ -60,24 +61,20 @@ function getScreenCoordinates(element) {
   const rect = element.getBoundingClientRect();
   const { top: clientTop, left: clientLeft, bottom: clientBottom, right: clientRight } = rect;
 
-  // Calculate client center points
-  const clientCenterX = (clientLeft + clientRight) / 2;
-  const clientCenterY = (clientTop + clientBottom) / 2;
-
   // Assume recent mouse events are stored in eventBuffer
   if (eventBuffer.length < 2) {
     console.warn("Not enough data to compute screen coordinates.");
     return { top: 0, left: 0, bottom: 0, right: 0 };
   }
 
-  // Use the first mouse event from the buffer
+  // Use the last mouse event from the buffer
   const { clientX: cx1, clientY: cy1, screenX: sx1, screenY: sy1 } = eventBuffer[eventBuffer.length - 1];
 
   // Initialize variables for the second event
   let cx2, cy2, sx2, sy2;
   let found = false;
 
-  // Iterate from the last element until one is found that is not aligned
+  // Iterate from the second last element until one is found that is not aligned
   for (let i = eventBuffer.length - 2; i >= 0; i--) {
     ({ clientX: cx2, clientY: cy2, screenX: sx2, screenY: sy2 } = eventBuffer[i]);
 
@@ -93,7 +90,7 @@ function getScreenCoordinates(element) {
 
   // If no suitable event pair is found, log a warning and return default values
   if (!found) {
-    console.warn("No suitable event pair found; cannot compute conversion.");
+    console.warn(`No suitable event pair found; cannot compute conversion. ${eventBuffer.length}`);
     return { top: 0, left: 0, bottom: 0, right: 0 };
   }
 
@@ -103,7 +100,7 @@ function getScreenCoordinates(element) {
   const sxOffset = sx1 - sxScale * cx1;
   const syOffset = sy1 - syScale * cy1;
 
-  console.log({ sxScale, syScale, sxOffset, syOffset });
+  //console.log({ sxScale, syScale, sxOffset, syOffset });
 
   // Convert element's client bounding box to screen coordinates
   const screenTop = syScale * clientTop + syOffset;
@@ -143,8 +140,10 @@ function cleanDomTree(node) {
       if (child.tagName === 'IMG' && child.hasAttribute('src')) {
         const src = child.getAttribute('src');
         if (src.startsWith('data:')) {
-          const [metadata] = src.split(','); // Extract the metadata part (e.g., "data:image/jpeg;base64")
-          child.setAttribute('src', `${metadata}<snip>`); // Replace the data content with "<snip>"
+          //const [metadata] = src.split(','); // Extract the metadata part (e.g., "data:image/jpeg;base64")
+          //child.setAttribute('src', `${metadata}<snip>`); // Replace the data content with "<snip>"
+          // The above triggers net::ERR_INVALID_URL, so just remove it for now
+          child.setAttribute('src', ''); // Replace the data content with "<snip>"
         }
       }
 
@@ -172,6 +171,11 @@ function cleanDomTree(node) {
 }
 
 function getVisibleHtmlString() {
+  /*
+  if (eventBuffer.length < 2) {
+    return;
+  }
+  */
   console.time('getVisibleHtmlString duration');
 
   // Step 1: Instrument the live DOM with data-id and data-bbox attributes
@@ -179,7 +183,7 @@ function getVisibleHtmlString() {
 
   if (RETURN_FULL_DOCUMENT) {
     console.timeEnd('getVisibleHtmlString duration');
-    return document.body.innerHTML;
+    return document.body.outerHTML;
   }
 
   // Step 2: Clone the body
@@ -195,29 +199,15 @@ function getVisibleHtmlString() {
   return visibleHtmlString;
 }
 
-function handleIntersection(entries) {
-  let shouldSendUpdate = false;
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      shouldSendUpdate = true;
-    }
-  });
-  if (shouldSendUpdate) {
-    setVisibleHtmlString(null);
-  }
-}
-
 function setVisibleHtmlString(startTime = null) {
   if (startTime === null) {
     startTime = performance.now();
   }
 
-  const timestamp = Date.now() / 1000;  // Convert to Python-compatible seconds
   const visibleHtmlString = getVisibleHtmlString();
-  
-  // Update the global state with the most recent visible HTML and its timestamp
-  latestVisibleHtmlString = visibleHtmlString;
-  latestVisibleHtmlTimestamp = timestamp;
+  const visibleHtmlDuration = performance.now() - startTime;
+
+  return { visibleHtmlString, visibleHtmlDuration };
 }
 
 /**
@@ -260,14 +250,16 @@ function handleUserGeneratedEvent(event) {
   const eventTargetId = generateElementIdAndBbox(eventTarget);
   const timestamp = Date.now() / 1000;  // Convert to Python-compatible seconds
 
+  const { visibleHtmlString, visibleHtmlDuration } = setVisibleHtmlString();
+
   const eventData = {
     type: 'USER_EVENT',
     eventType: event.type,
     targetId: eventTargetId,
     url: window.location.href,
     timestamp: timestamp,
-    visibleHtmlData: latestVisibleHtmlString,
-    visibleHtmlTimestamp: latestVisibleHtmlTimestamp,
+    visibleHtmlString,
+    visibleHtmlDuration,
   };
 
   if (event instanceof KeyboardEvent) {
@@ -292,52 +284,6 @@ function handleUserGeneratedEvent(event) {
   sendMessageToBackgroundScript(eventData);
 }
 
-function setupIntersectionObserver() {
-  const observer = new IntersectionObserver(handleIntersection, {
-    root: null, // Use the viewport as the root
-    threshold: 0 // Consider an element visible if any part of it is in view
-  });
-
-  document.querySelectorAll('*').forEach(element => observer.observe(element));
-}
-
-
-function setupMutationObserver() {
-  const observer = new MutationObserver(handleMutations);
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true
-  });
-}
-
-
-// Ensure VISIBLE_HTML data is updated on mutations
-function handleMutations(mutationsList) {
-  const startTime = performance.now(); // Capture start time for instrumentation
-
-  let shouldUpdateVisibleHtml = false;
-  mutationsList.forEach(mutation => {
-    mutation.addedNodes.forEach(node => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        generateElementIdAndBbox(node); // Generate a new ID and bbox for the added node
-        if (isVisible(node)) {
-          shouldUpdateVisibleHtml = true;
-        }
-      }
-    });
-    mutation.removedNodes.forEach(node => {
-      if (node.nodeType === Node.ELEMENT_NODE && idToElementMap.has(node.getAttribute('data-id'))) {
-        shouldUpdateVisibleHtml = true;
-      }
-    });
-  });
-
-  if (shouldUpdateVisibleHtml) {
-    setVisibleHtmlString(startTime); // Update the most recent visible HTML
-  }
-}
-
 function setupMutationObserver() {
   const observer = new MutationObserver(handleMutations);
   observer.observe(document.body, {
@@ -351,7 +297,7 @@ function setupMutationObserver() {
 function attachUserEventListeners() {
   const eventsToCapture = [
     'click',
-    'input',
+    //'input',
     'keydown',
     'keyup',
   ];
@@ -361,7 +307,7 @@ function attachUserEventListeners() {
   });
 }
 
-function attachMouseEventListeners() {
+function attachInstrumentationEventListeners() {
   const eventsToCapture = [
     'click',
     'mousedown',
@@ -373,16 +319,6 @@ function attachMouseEventListeners() {
   });
 }
 
-function attachWindowEventListeners() {
-  window.addEventListener('focus', setVisibleHtmlString);
-  window.addEventListener('scroll', setVisibleHtmlString);
-  window.addEventListener('resize', setVisibleHtmlString);
-}
-
 // Initial setup
-setupIntersectionObserver();
-setupMutationObserver();
 attachUserEventListeners();
-attachMouseEventListeners();
-attachWindowEventListeners();
-setVisibleHtmlString();
+attachInstrumentationEventListeners();

@@ -648,9 +648,9 @@ class BrowserEvent(db.Base):
         # Create a copy of the message to avoid modifying the original
         message_copy = copy.deepcopy(self.message)
 
-        # Truncate the visibleHtmlData in the copied message if it exists
-        if "visibleHtmlData" in message_copy:
-            message_copy["visibleHtmlData"] = utils.truncate_html(message_copy["visibleHtmlData"], max_len=100)
+        # Truncate the visibleHtmlString in the copied message if it exists
+        if "visibleHtmlString" in message_copy:
+            message_copy["visibleHtmlString"] = utils.truncate_html(message_copy["visibleHtmlString"], max_len=100)
 
         # Get all attributes except 'message'
         attributes = {attr: getattr(self, attr) for attr in self.__mapper__.columns.keys() if attr != "message"}

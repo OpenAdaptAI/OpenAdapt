@@ -2,8 +2,9 @@ from statistics import mean, median, stdev
 
 from bs4 import BeautifulSoup
 from copy import deepcopy
-from dtaidistance import dtw
+from dtaidistance import dtw, dtw_ndim
 from loguru import logger
+import numpy as np
 
 from openadapt import utils
 from openadapt.db import crud
@@ -73,13 +74,10 @@ def main() -> None:
         # Only log if there are any action or browser events
         if action_filtered_events or browser_filtered_events:
             logger.info(f"{event_type}: {len(action_filtered_events)} action events, {len(browser_filtered_events)} browser events")
-            # Convert series of events to timestamps
-            action_timestamps = [e.timestamp for e in action_filtered_events]
-            browser_timestamps = [e.message["timestamp"] for e in browser_filtered_events]
 
             # Align and print events for the specific type
             errors, remote_time_differences, local_time_differences, mouse_x_differences, mouse_y_differences = align_and_print(
-                event_type, action_timestamps, browser_timestamps, action_filtered_events, browser_filtered_events
+                event_type, action_filtered_events, browser_filtered_events
             )
             total_errors += errors  # Accumulate errors
             total_remote_time_differences += remote_time_differences
@@ -117,7 +115,10 @@ def main() -> None:
             continue
         min_diff = min(differences, key=abs)
         max_diff = max(differences, key=abs)
-        if abs(max_diff) > 1:
+        num_errors = sum([diff >= 1 for diff in differences])
+        num_correct = sum([diff < 1 for diff in differences])
+        logger.info(f"{num_errors=} {num_correct=}")
+        if abs(max_diff) >= 1:
             logger.warning(f"{abs(max_diff)=} > 1")
         mean_diff = mean(differences)
         median_diff = median(differences)
@@ -138,33 +139,33 @@ def identify_and_log_smallest_clicked_element(browser_event) -> None:
     Args:
         browser_event: The browser event containing the click details.
     """
-    screen_x = browser_event.message.get('screenX')
-    screen_y = browser_event.message.get('screenY')
-    client_x = browser_event.message.get('clientX')
-    client_y = browser_event.message.get('clientY')
-    visible_html_data = browser_event.message.get('visibleHtmlData')
+    visible_html_string = browser_event.message.get('visibleHtmlString')
+    message_id = browser_event.message.get('id')
+    logger.info("*" * 10)
+    logger.info(f"{message_id=}")
     target_id = browser_event.message.get('targetId')
     logger.info(f"{target_id=}")
 
-    if not visible_html_data:
+    if not visible_html_string:
         logger.warning("No visible HTML data available for click event.")
         return
 
     # Parse the visible HTML using BeautifulSoup
-    soup = BeautifulSoup(visible_html_data, 'html.parser')
+    soup = BeautifulSoup(visible_html_string, 'html.parser')
     target_element = soup.find(attrs={"data-id": target_id})
     if not target_element:
-        import ipdb; ipdb.set_trace()
-    logger.info(f"{target_element=}")
-    for x, y, tlbr in (
-        (client_x, client_y, 'data-tlbr-client'),
-        (screen_x, screen_y, 'data-tlbr-screen'),
-    ):
-        target_element_tlbr = target_element[tlbr]
-        top, left, bottom, right = map(float, target_element_tlbr.split(','))
-        assert left <= x <= right and top <= y <= bottom, (
-            tlbr, left, x , right, top, y, bottom
-        )
+        logger.warning(f"{target_element=}")
+    else:
+        for coord_type in ('client', 'screen'):
+            x = browser_event.message.get(f"{coord_type}X")
+            y = browser_event.message.get(f"{coord_type}Y")
+            tlbr = f"data-tlbr-{coord_type}"
+            target_element_tlbr = target_element[tlbr]
+            top, left, bottom, right = map(float, target_element_tlbr.split(','))
+            logger.info(f"{tlbr=} {x=} {y=} {top=} {left=} {bottom=} {right=}")
+            if not (left <= x <= right and top <= y <= bottom):
+                #import ipdb; ipdb.set_trace()
+                logger.warning(f"outside")
 
     elements = soup.find_all(attrs={'data-tlbr-client': True})
     
@@ -176,6 +177,8 @@ def identify_and_log_smallest_clicked_element(browser_event) -> None:
         #    import ipdb; ipdb.set_trace()
         data_tlbr = elem['data-tlbr-client']
         top, left, bottom, right = map(float, data_tlbr.split(','))
+        client_x = browser_event.message.get("clientX")
+        client_y = browser_event.message.get("clientY")
 
         if left <= client_x <= right and top <= client_y <= bottom:
             area = (right - left) * (bottom - top)
@@ -186,8 +189,9 @@ def identify_and_log_smallest_clicked_element(browser_event) -> None:
     logger.info(f"browser_event={str(browser_event)}")
     if smallest_element is not None:
         smallest_element_str = utils.truncate_html(str(smallest_element), 100)
-        tlbr = smallest_element.attrs['data-tlbr-client']
         logger.info(f"Smallest clicked element found: {tlbr} {smallest_element_str}")
+        smallest_element_id = smallest_element["data-id"]
+        assert smallest_element_id == target_id, (smallest_element_id, target_id)
     else:
         logger.warning("No element found matching the click coordinates.")
 
@@ -223,10 +227,41 @@ def is_browser_event(event, action_name: str, key_or_button: str) -> bool:
         return False
 
 
+def composite_distance(
+    action_event, browser_event, 
+    time_weight: float = 1.0, 
+    spatial_weight: float = 1.0
+) -> float:
+    """
+    Computes a composite distance between action and browser events 
+    based on both time and spatial (x/y) position differences.
+
+    Args:
+        action_event: The action event containing timestamp and position data.
+        browser_event: The browser event containing timestamp and position data.
+        time_weight: The weight assigned to the time difference in the composite distance.
+        spatial_weight: The weight assigned to the spatial difference in the composite distance.
+
+    Returns:
+        float: The computed composite distance.
+    """
+    # Time difference
+    time_diff = abs(action_event.timestamp - browser_event.message["timestamp"])
+
+    # Spatial differences (x/y positions)
+    if action_event.mouse_x is not None and action_event.mouse_y is not None:
+        x_diff = action_event.mouse_x - browser_event.message.get('screenX', 0)
+        y_diff = action_event.mouse_y - browser_event.message.get('screenY', 0)
+        spatial_diff = (x_diff ** 2 + y_diff ** 2) ** 0.5  # Euclidean distance
+    else:
+        spatial_diff = 0
+
+    # Composite distance: weighted sum of time and spatial differences
+    return (time_weight * time_diff) + (spatial_weight * spatial_diff)
+
+
 def align_and_print(
     event_type: str,
-    action_timestamps: list,
-    browser_timestamps: list,
     action_events: list,
     browser_events: list,
 ) -> tuple[int, list[float], list[float], list[float], list[float]]:
@@ -234,8 +269,29 @@ def align_and_print(
     if not action_events and not browser_events:
         return 0, [], [], [], []
 
-    # Compute the alignment using DTW
-    path = dtw.warping_path(action_timestamps, browser_timestamps)
+    # Convert series of events to timestamps
+    action_timestamps = [e.timestamp for e in action_events]
+    #browser_timestamps = [e.message["timestamp"] for e in browser_filtered_events]
+    browser_timestamps = [e.timestamp for e in browser_events]
+
+    SPATIAL = True
+    if SPATIAL:
+        # Prepare sequences for multidimensional DTW
+        action_sequence = np.array([
+            [e.timestamp, e.mouse_x or 0.0, e.mouse_y or 0.0]
+            for e in action_events
+        ], dtype=np.double)
+
+        browser_sequence = np.array([
+            [e.timestamp, e.message.get('screenX', 0.0), e.message.get('screenY', 0.0)]
+            for e in browser_events
+        ], dtype=np.double)
+
+        # Compute the alignment using multidimensional DTW
+        path = dtw_ndim.warping_path(action_sequence, browser_sequence)
+    else:
+        # Compute the alignment using DTW
+        path = dtw.warping_path(action_timestamps, browser_timestamps)
 
     # Enforce a one-to-one correspondence by selecting the closest matches
     filtered_path = enforce_one_to_one_mapping(path, action_timestamps, browser_timestamps)

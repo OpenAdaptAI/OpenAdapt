@@ -32,7 +32,6 @@ with redirect_stdout_stderr():
     from tqdm import tqdm
     import fire
 
-import asyncio
 import numpy as np
 import psutil
 import sounddevice
@@ -1175,7 +1174,6 @@ def read_browser_events(
     event_q: queue.Queue,
     terminate_processing: Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
 ) -> None:
     """Read browser events and add them to the event queue.
 
@@ -1184,7 +1182,6 @@ def read_browser_events(
         event_q: A queue for adding browser events.
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
-        started_counter: Value to increment once started.
 
     Returns:
         None
@@ -1192,7 +1189,6 @@ def read_browser_events(
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting Reading Browser Events ...")
-    started = False
     time_offset = 0
 
     while not terminate_processing.is_set():
@@ -1201,11 +1197,6 @@ def read_browser_events(
                 continue
 
             timestamp = utils.get_timestamp()
-
-            if not started:
-                with started_counter.get_lock():
-                    started_counter.value += 1
-                started = True
 
             data = json.loads(message)
 
@@ -1242,13 +1233,15 @@ def run_browser_event_server(
         global ws_server_instance
         with websockets.sync.server.serve(
             lambda ws: read_browser_events(
-                ws, event_q, terminate_processing, recording, started_counter
+                ws, event_q, terminate_processing, recording,
             ),
             config.BROWSER_WEBSOCKET_SERVER_IP,
             config.BROWSER_WEBSOCKET_PORT
         ) as server:
             ws_server_instance = server
             logger.info("WebSocket server started")
+            with started_counter.get_lock():
+                started_counter.value += 1
             server.serve_forever()
 
     # Start the server in a separate thread
@@ -1268,7 +1261,7 @@ def run_browser_event_server(
 
 @logger.catch
 @utils.trace(logger)
-async def record(
+def record(
     task_description: str,
     # these should be Event | None, but this raises:
     #   TypeError: unsupported operand type(s) for |: 'method' and 'NoneType'
@@ -1322,13 +1315,14 @@ async def record(
     if terminate_processing is None:
         terminate_processing = multiprocessing.Event()
     started_counter = multiprocessing.Value("i", 0)
-    expected_starts = 8
+    task_by_name = {}
 
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     window_event_reader.start()
+    task_by_name["window_event_reader"] = window_event_reader
 
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
@@ -1336,24 +1330,28 @@ async def record(
             args=(event_q, terminate_processing, recording, started_counter),
         )
         browser_event_reader.start()
+        task_by_name["browser_event_reader"] = browser_event_reader
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     screen_event_reader.start()
+    task_by_name["screen_event_reader"] = screen_event_reader
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     keyboard_event_reader.start()
+    task_by_name["keyboard_event_reader"] = keyboard_event_reader
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     mouse_event_reader.start()
+    task_by_name["mouse_event_reader"] = mouse_event_reader
 
     num_action_events = multiprocessing.Value("i", 0)
     num_screen_events = multiprocessing.Value("i", 0)
@@ -1382,6 +1380,7 @@ async def record(
         ),
     )
     event_processor.start()
+    task_by_name["event_processor"] =  event_processor
 
     screen_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1397,9 +1396,9 @@ async def record(
         ),
     )
     screen_event_writer.start()
+    task_by_name["screen_event_writer"] = screen_event_writer
 
     if config.RECORD_BROWSER_EVENTS:
-        expected_starts += 1
         browser_event_writer = multiprocessing.Process(
             target=write_events,
             args=(
@@ -1414,6 +1413,7 @@ async def record(
             ),
         )
         browser_event_writer.start()
+        task_by_name["browser_event_writer"] = browser_event_writer
 
     action_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1429,6 +1429,7 @@ async def record(
         ),
     )
     action_event_writer.start()
+    task_by_name["action_event_writer"] = action_event_writer
 
     window_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1444,9 +1445,9 @@ async def record(
         ),
     )
     window_event_writer.start()
+    task_by_name["window_event_writer"] =  window_event_writer
 
     if config.RECORD_VIDEO:
-        expected_starts += 1
         video_writer = multiprocessing.Process(
             target=utils.WrapStdout(write_events),
             args=(
@@ -1463,9 +1464,9 @@ async def record(
             ),
         )
         video_writer.start()
+        task_by_name["video_writer"] = video_writer
 
     if config.RECORD_AUDIO:
-        expected_starts += 1
         audio_recorder = multiprocessing.Process(
             target=utils.WrapStdout(record_audio),
             args=(
@@ -1475,9 +1476,10 @@ async def record(
             ),
         )
         audio_recorder.start()
+        task_by_name["audio_recorder"] = audio_recorder
 
     terminate_perf_event = multiprocessing.Event()
-    perf_stat_writer = multiprocessing.Process(
+    perf_stats_writer = multiprocessing.Process(
         target=utils.WrapStdout(performance_stats_writer),
         args=(
             perf_q,
@@ -1486,12 +1488,12 @@ async def record(
             started_counter,
         ),
     )
-    perf_stat_writer.start()
+    perf_stats_writer.start()
+    task_by_name["perf_stats_writer"] = perf_stats_writer
 
     if PLOT_PERFORMANCE:
-        expected_starts += 1
         record_pid = os.getpid()
-        mem_plotter = multiprocessing.Process(
+        mem_writer = multiprocessing.Process(
             target=utils.WrapStdout(memory_writer),
             args=(
                 recording,
@@ -1500,7 +1502,8 @@ async def record(
                 started_counter,
             ),
         )
-        mem_plotter.start()
+        mem_writer.start()
+        task_by_name["mem_writer"] = mem_writer
 
     if log_memory:
         performance_snapshots = []
@@ -1511,23 +1514,23 @@ async def record(
     # TODO: discard events until everything is ready
 
     # Wait for all to signal they've started
+    expected_starts = len(task_by_name)
+    logger.info(f"{expected_starts=}")
     while True:
         if started_counter.value >= expected_starts:
             break
         time.sleep(0.1)  # Sleep to reduce busy waiting
     for _ in range(5):
         logger.info("*" * 40)
+    logger.info("All readers and writers have started. Waiting for input events...")
+
     if status_pipe:
         status_pipe.send({"type": "record.started"})
 
-    logger.info("All readers and writers have started. Waiting for input events...")
-
     global stop_sequence_detected
-
     try:
         while not (stop_sequence_detected or terminate_processing.is_set()):
             time.sleep(1)
-
         terminate_processing.set()
     except KeyboardInterrupt:
         terminate_processing.set()
@@ -1539,37 +1542,35 @@ async def record(
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
 
-    logger.info("joining...")
+    def join_tasks(task_names: list[str]) -> None:
+        for task_name in task_names:
+            if task_name in task_by_name:
+                logger.info(f"joining {task_name=}...")
+                task = task_by_name[task_name]
+                task.join()
 
-    # all reader threads
-    keyboard_event_reader.join()
-    mouse_event_reader.join()
-    screen_event_reader.join()
-    window_event_reader.join()
-    if config.RECORD_BROWSER_EVENTS:
-        browser_event_reader.join()
-        logger.info(f"{browser_event_reader=} joined")
+    join_tasks([
+        "window_event_reader",
+        "browser_event_reader",
+        "screen_event_reader",
+        "keyboard_event_reader",
+        "mouse_event_reader",
+        "event_processor",
+        "screen_event_writer",
+        "browser_event_writer",
+        "action_event_writer",
+        "window_event_writer",
+        "video_writer",
+        "audio_recorder",
+    ])
 
-    # main event processor thread
-#    event_sorter.join()
-    event_processor.join()
-
-    # all writer threads
-    screen_event_writer.join()
-    action_event_writer.join()
-    window_event_writer.join()
-    if config.RECORD_BROWSER_EVENTS:
-        browser_event_writer.join()
-    if config.RECORD_VIDEO:
-        video_writer.join()
-    if config.RECORD_AUDIO:
-        audio_recorder.join()
-
-    # set terminate signal
     terminate_perf_event.set()
+    join_tasks([
+        "perf_stats_writer",
+        "mem_writer",
+    ])
 
     if PLOT_PERFORMANCE:
-        mem_plotter.join()
         plotting.plot_performance(recording)
 
     logger.info(f"Saved {recording_timestamp=}")
@@ -1588,8 +1589,8 @@ async def record(
 
 
 def run_main(task_description: str) -> None:
-    """Run the record function asynchronously."""
-    asyncio.run(record(task_description))
+    """Run the record function."""
+    record(task_description)
 
 
 # Entry point
