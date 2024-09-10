@@ -1236,7 +1236,8 @@ def run_browser_event_server(
                 ws, event_q, terminate_processing, recording,
             ),
             config.BROWSER_WEBSOCKET_SERVER_IP,
-            config.BROWSER_WEBSOCKET_PORT
+            config.BROWSER_WEBSOCKET_PORT,
+            max_size=config.BROWSER_WEBSOCKET_MAX_SIZE,
         ) as server:
             ws_server_instance = server
             logger.info("WebSocket server started")

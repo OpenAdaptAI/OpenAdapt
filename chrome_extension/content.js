@@ -1,26 +1,119 @@
 const DEBUG = true;
 const RETURN_FULL_DOCUMENT = false;
+const MAX_COORDS = 3;
+const SET_SCREEN_COORDS = false;
 const elementIdMap = new WeakMap();
 const idToElementMap = new Map(); // Reverse lookup map
 let elementIdCounter = 0;
 let messageIdCounter = 0;
-// TODO: only track as many as necessary
-const eventBuffer = [];
-const maxBufferSize = 100;
+const pageId = `${Date.now()}-${Math.random()}`;
+const coordMappings = {
+  x: { client: [], screen: [] },
+  y: { client: [], screen: [] }
+};
 
-// Function to track mouse events and maintain buffer size
 function trackMouseEvent(event) {
   const { clientX, clientY, screenX, screenY } = event;
-  eventBuffer.push({ clientX, clientY, screenX, screenY });
 
-  // Maintain buffer size
-  if (eventBuffer.length > maxBufferSize) {
-    eventBuffer.shift();
+  const prevCoordMappingsStr = JSON.stringify(coordMappings);
+
+  // Track x-coordinates
+  updateCoordinateMappings('x', clientX, screenX);
+  // Track y-coordinates
+  updateCoordinateMappings('y', clientY, screenY);
+
+  // Ensure only the latest 2 distinct coordinate mappings per dimension are kept
+  trimMappings(coordMappings.x);
+  trimMappings(coordMappings.y);
+
+  const coordMappingsStr = JSON.stringify(coordMappings);
+  if (DEBUG && coordMappingsStr != prevCoordMappingsStr) {
+    console.log(JSON.stringify(coordMappings));
   }
+}
+
+function updateCoordinateMappings(dim, clientCoord, screenCoord) {
+  const coordMap = coordMappings[dim];
+
+  // Check if current event's client coordinate matches any of the existing ones
+  if (coordMap.client.includes(clientCoord)) {
+    // Update screen coordinate for the matching client coordinate
+    coordMap.screen[coordMap.client.indexOf(clientCoord)] = screenCoord;
+  } else {
+    // Add new coordinate mapping
+    coordMap.client.push(clientCoord);
+    coordMap.screen.push(screenCoord);
+  }
+}
+
+function trimMappings(coordMap) {
+  // Keep only the latest distinct coordinate mappings
+  if (coordMap.client.length > MAX_COORDS) {
+    coordMap.client.shift();
+    coordMap.screen.shift();
+  }
+}
+
+function getConversionPoints() {
+  const { x, y } = coordMappings;
+
+  // Ensure we have at least two points for each dimension
+  if (x.client.length < 2 || y.client.length < 2) {
+    return { sxScale: null, syScale: null, sxOffset: null, syOffset: null };
+  }
+
+  // Use linear regression or least squares fitting to determine scale factors and offsets
+  const { scale: sxScale, offset: sxOffset } = fitLinearTransformation(x.client, x.screen);
+  const { scale: syScale, offset: syOffset } = fitLinearTransformation(y.client, y.screen);
+
+  return {
+    sxScale, syScale, sxOffset, syOffset
+  };
+}
+
+function fitLinearTransformation(clientCoords, screenCoords) {
+  const n = clientCoords.length;
+  let sumClient = 0, sumScreen = 0, sumClientSquared = 0, sumClientScreen = 0;
+
+  for (let i = 0; i < n; i++) {
+    sumClient += clientCoords[i];
+    sumScreen += screenCoords[i];
+    sumClientSquared += clientCoords[i] * clientCoords[i];
+    sumClientScreen += clientCoords[i] * screenCoords[i];
+  }
+
+  const scale = (n * sumClientScreen - sumClient * sumScreen) / (n * sumClientSquared - sumClient * sumClient);
+  const offset = (sumScreen - scale * sumClient) / n;
+
+  return { scale, offset };
+}
+
+function getScreenCoordinates(element) {
+  const rect = element.getBoundingClientRect();
+  const { top: clientTop, left: clientLeft, bottom: clientBottom, right: clientRight } = rect;
+
+  const conversionPoints = getConversionPoints();
+
+  // If conversion points are not sufficient, return null coordinates
+  if (conversionPoints.sxScale === null) {
+    return { top: null, left: null, bottom: null, right: null };
+  }
+
+  const { sxScale, syScale, sxOffset, syOffset } = conversionPoints;
+
+  // Convert element's client bounding box to screen coordinates
+  const screenTop = syScale * clientTop + syOffset;
+  const screenLeft = sxScale * clientLeft + sxOffset;
+  const screenBottom = syScale * clientBottom + syOffset;
+  const screenRight = sxScale * clientRight + sxOffset;
+
+  return { top: screenTop, left: screenLeft, bottom: screenBottom, right: screenRight };
 }
 
 function sendMessageToBackgroundScript(message) {
   message.id = messageIdCounter++;
+  message.pageId = pageId;
+  message.url = window.location.href;
   if (DEBUG) {
     const messageType = message.type;
     const messageLength = JSON.stringify(message).length;
@@ -30,12 +123,12 @@ function sendMessageToBackgroundScript(message) {
 }
 
 function generateElementIdAndBbox(element) {
-  let { top, left, bottom, right } = getScreenCoordinates(element);
-  if (top == 0 && left == 0 && bottom == 0 && right == 0) {
-    // not enough data points to get screen coordinates
-    return
+  // ignore invisible elements
+  if (!isVisible(element)) {
+    return;
   }
-  //console.log({ top, left, bottom, right });
+
+  // set id
   if (!elementIdMap.has(element)) {
     const newId = `elem-${elementIdCounter++}`;
     elementIdMap.set(element, newId);
@@ -43,72 +136,23 @@ function generateElementIdAndBbox(element) {
     element.setAttribute('data-id', newId);
   }
 
-  if (isVisible(element)) {
+  // set client bbox
+  let { top, left, bottom, right } = element.getBoundingClientRect();
+  let bboxClient = `${top},${left},${bottom},${right}`;
+  element.setAttribute('data-tlbr-client', bboxClient);
+
+  // set screen bbox
+  if (SET_SCREEN_COORDS) {
+    ({ top, left, bottom, right } = getScreenCoordinates(element));
+    if (top == null) {
+      // not enough data points to get screen coordinates
+      return
+    }
     let bboxScreen = `${top},${left},${bottom},${right}`;
     element.setAttribute('data-tlbr-screen', bboxScreen);
-
-    ({ top, left, bottom, right } = element.getBoundingClientRect());
-    
-    let bboxClient = `${top},${left},${bottom},${right}`;
-    element.setAttribute('data-tlbr-client', bboxClient);
-
   }
+
   return elementIdMap.get(element);
-}
-
-function getScreenCoordinates(element) {
-  // Get the bounding client rectangle for the element
-  const rect = element.getBoundingClientRect();
-  const { top: clientTop, left: clientLeft, bottom: clientBottom, right: clientRight } = rect;
-
-  // Assume recent mouse events are stored in eventBuffer
-  if (eventBuffer.length < 2) {
-    console.warn("Not enough data to compute screen coordinates.");
-    return { top: 0, left: 0, bottom: 0, right: 0 };
-  }
-
-  // Use the last mouse event from the buffer
-  const { clientX: cx1, clientY: cy1, screenX: sx1, screenY: sy1 } = eventBuffer[eventBuffer.length - 1];
-
-  // Initialize variables for the second event
-  let cx2, cy2, sx2, sy2;
-  let found = false;
-
-  // Iterate from the second last element until one is found that is not aligned
-  for (let i = eventBuffer.length - 2; i >= 0; i--) {
-    ({ clientX: cx2, clientY: cy2, screenX: sx2, screenY: sy2 } = eventBuffer[i]);
-
-    // Check for vertical and horizontal alignment
-    const isVerticalAligned = (cx1 === cx2);
-    const isHorizontalAligned = (cy1 === cy2);
-
-    if (!isVerticalAligned && !isHorizontalAligned) {
-      found = true;
-      break;
-    }
-  }
-
-  // If no suitable event pair is found, log a warning and return default values
-  if (!found) {
-    console.warn(`No suitable event pair found; cannot compute conversion. ${eventBuffer.length}`);
-    return { top: 0, left: 0, bottom: 0, right: 0 };
-  }
-
-  // Calculate scale factors and translation offsets for both axes
-  const sxScale = (sx2 - sx1) / (cx2 - cx1);
-  const syScale = (sy2 - sy1) / (cy2 - cy1);
-  const sxOffset = sx1 - sxScale * cx1;
-  const syOffset = sy1 - syScale * cy1;
-
-  //console.log({ sxScale, syScale, sxOffset, syOffset });
-
-  // Convert element's client bounding box to screen coordinates
-  const screenTop = syScale * clientTop + syOffset;
-  const screenLeft = sxScale * clientLeft + sxOffset;
-  const screenBottom = syScale * clientBottom + syOffset;
-  const screenRight = sxScale * clientRight + sxOffset;
-
-  return { top: screenTop, left: screenLeft, bottom: screenBottom, right: screenRight };
 }
 
 function instrumentLiveDomWithBbox() {
@@ -143,7 +187,7 @@ function cleanDomTree(node) {
           //const [metadata] = src.split(','); // Extract the metadata part (e.g., "data:image/jpeg;base64")
           //child.setAttribute('src', `${metadata}<snip>`); // Replace the data content with "<snip>"
           // The above triggers net::ERR_INVALID_URL, so just remove it for now
-          child.setAttribute('src', ''); // Replace the data content with "<snip>"
+          child.setAttribute('src', '');
         }
       }
 
@@ -171,19 +215,16 @@ function cleanDomTree(node) {
 }
 
 function getVisibleHtmlString() {
-  /*
-  if (eventBuffer.length < 2) {
-    return;
-  }
-  */
-  console.time('getVisibleHtmlString duration');
+  const startTime = performance.now();
 
   // Step 1: Instrument the live DOM with data-id and data-bbox attributes
   instrumentLiveDomWithBbox();
 
   if (RETURN_FULL_DOCUMENT) {
-    console.timeEnd('getVisibleHtmlString duration');
-    return document.body.outerHTML;
+    const visibleHtmlDuration = performance.now() - startTime;
+    console.log({ visibleHtmlDuration });
+    const visibleHtmlString = document.body.outerHTML;
+    return { visibleHtmlString, visibleHtmlDuration };
   }
 
   // Step 2: Clone the body
@@ -194,18 +235,9 @@ function getVisibleHtmlString() {
 
   // Step 4: Serialize the modified clone to a string
   const visibleHtmlString = clonedBody.outerHTML;
-  console.timeEnd('getVisibleHtmlString duration');
 
-  return visibleHtmlString;
-}
-
-function setVisibleHtmlString(startTime = null) {
-  if (startTime === null) {
-    startTime = performance.now();
-  }
-
-  const visibleHtmlString = getVisibleHtmlString();
   const visibleHtmlDuration = performance.now() - startTime;
+  console.log({ visibleHtmlDuration });
 
   return { visibleHtmlString, visibleHtmlDuration };
 }
@@ -250,13 +282,12 @@ function handleUserGeneratedEvent(event) {
   const eventTargetId = generateElementIdAndBbox(eventTarget);
   const timestamp = Date.now() / 1000;  // Convert to Python-compatible seconds
 
-  const { visibleHtmlString, visibleHtmlDuration } = setVisibleHtmlString();
+  const { visibleHtmlString, visibleHtmlDuration } = getVisibleHtmlString();
 
   const eventData = {
     type: 'USER_EVENT',
     eventType: event.type,
     targetId: eventTargetId,
-    url: window.location.href,
     timestamp: timestamp,
     visibleHtmlString,
     visibleHtmlDuration,
@@ -266,37 +297,27 @@ function handleUserGeneratedEvent(event) {
     eventData.key = event.key;
     eventData.code = event.code;
   } else if (event instanceof MouseEvent) {
-    console.log({ event });
-    eventData.screenX = event.screenX;
-    eventData.screenY = event.screenY;
     eventData.clientX = event.clientX;
     eventData.clientY = event.clientY;
+    eventData.screenX = event.screenX;
+    eventData.screenY = event.screenY;
     eventData.button = event.button;
+    eventData.coordMappings = coordMappings;
     validateCoordinates(event, eventTarget, 'client', 'clientX', 'clientY');
-    validateCoordinates(event, eventTarget, 'screen', 'screenX', 'screenY');
-  } else if (event instanceof InputEvent) {
-    eventData.inputType = event.inputType;
-    eventData.data = event.data;
-  } else if (event instanceof FocusEvent) {
-    eventData.relatedTarget = event.relatedTarget ? generateElementIdAndBbox(event.relatedTarget) : null;
+    if (SET_SCREEN_COORDS) {
+      validateCoordinates(event, eventTarget, 'screen', 'screenX', 'screenY');
+    }
   }
-
   sendMessageToBackgroundScript(eventData);
-}
-
-function setupMutationObserver() {
-  const observer = new MutationObserver(handleMutations);
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true
-  });
 }
 
 // Attach event listeners for user-generated events
 function attachUserEventListeners() {
   const eventsToCapture = [
     'click',
+    // input events are triggered after the DOM change is written, so we can't use them
+    // (since the resulting HTML would not look as the DOM was at the time the
+    // user took the action, i.e. immediately before)
     //'input',
     'keydown',
     'keyup',
@@ -309,7 +330,6 @@ function attachUserEventListeners() {
 
 function attachInstrumentationEventListeners() {
   const eventsToCapture = [
-    'click',
     'mousedown',
     'mouseup',
     'mousemove',

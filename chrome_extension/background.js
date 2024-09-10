@@ -57,6 +57,8 @@ connectWebSocket();
 
 /* Listen for messages from the content script */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const tabId = sender.tab.id;
+  message.tabId = tabId;
   if (socket && socket.readyState === WebSocket.OPEN) {
     socketSend(socket, message);
     sendResponse({ status: "Message sent to WebSocket" });
