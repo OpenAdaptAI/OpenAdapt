@@ -2,7 +2,6 @@
 
 import json
 import queue
-import time
 import threading
 import websockets.sync.server
 
@@ -13,6 +12,7 @@ from openadapt.custom_logger import logger
 from openadapt.record import Event
 
 ws_server_instance = None
+
 
 def read_browser_events(
     websocket: websockets.sync.server.ServerConnection,
@@ -43,7 +43,7 @@ def read_browser_events(
             timestamp = utils.get_timestamp()
             logger.info(f"{len(message)=}")
             data = json.loads(message)
-            assert data['type'] == "DOM_EVENT", data.type
+            assert data["type"] == "DOM_EVENT", data.type
             event_q.put(
                 # TODO: create BrowserEvent?
                 Event(
@@ -136,7 +136,7 @@ class BrowserReplayStrategy(strategies.base.BaseReplayStrategy):
         while not self.event_q.empty():
             event = self.event_q.get()
             num_messages_read += 1
-            self.recent_visible_dom = event.data['message']['visibleHTMLString']
+            self.recent_visible_dom = event.data["message"]["visibleHTMLString"]
 
         if num_messages_read:
             logger.info(f"{num_messages_read=} {len(self.recent_visible_dom)=}")
@@ -159,5 +159,6 @@ class BrowserReplayStrategy(strategies.base.BaseReplayStrategy):
         """
         # Get the most recent DOM
         most_recent_dom = self.get_most_recent_dom()
+        logger.info(f"{len(most_recent_dom)=}")
         # TODO XXX
         return None

@@ -81,7 +81,9 @@ KEYBOARD_KEYS = [
 ]
 
 
-def set_browser_mode(mode: str, websocket: websockets.sync.server.ServerConnection) -> None:
+def set_browser_mode(
+    mode: str, websocket: websockets.sync.server.ServerConnection
+) -> None:
     """Send a message to the browser extension to set the mode."""
     logger.info(f"{type(websocket)=}")
     VALID_MODES = ("idle", "record", "replay")
