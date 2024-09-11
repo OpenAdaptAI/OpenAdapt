@@ -4,10 +4,9 @@ import json
 import queue
 import time
 import threading
-
 import websockets.sync.server
 
-from openadapt import models, plotting, strategies, utils  # , common
+from openadapt import models, strategies, utils
 from openadapt.browser import set_browser_mode
 from openadapt.config import config
 from openadapt.custom_logger import logger
@@ -120,7 +119,7 @@ class BrowserReplayStrategy(strategies.base.BaseReplayStrategy):
         super().__init__(recording)
         self.event_q = queue.Queue()
         self.terminate_processing = threading.Event()
-        self.recent_visible_dom = ""  # Store the most recent visible DOM here
+        self.recent_visible_dom = ""
         self.browser_event_reader = threading.Thread(
             target=run_browser_event_server,
             args=(self.event_q, self.terminate_processing),
@@ -133,13 +132,14 @@ class BrowserReplayStrategy(strategies.base.BaseReplayStrategy):
         Returns:
             str: The most recent visible DOM.
         """
-        num_messages = 0
+        num_messages_read = 0
         while not self.event_q.empty():
             event = self.event_q.get()
-            num_messages += 1
+            num_messages_read += 1
             self.recent_visible_dom = event.data['message']['visibleHTMLString']
 
-        logger.info(f"{len(self.recent_visible_dom)=} {num_messages=}")
+        if num_messages_read:
+            logger.info(f"{num_messages_read=} {len(self.recent_visible_dom)=}")
         return self.recent_visible_dom
 
     def get_next_action_event(
@@ -159,4 +159,5 @@ class BrowserReplayStrategy(strategies.base.BaseReplayStrategy):
         """
         # Get the most recent DOM
         most_recent_dom = self.get_most_recent_dom()
+        # TODO XXX
         return None

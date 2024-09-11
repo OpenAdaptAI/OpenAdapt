@@ -1213,9 +1213,7 @@ def read_browser_events(
             )
         )
 
-    logger.info(f"before setting browser mode to idle")
     set_browser_mode("idle", websocket)
-    logger.info(f"after setting browser mode to idle")
 
 
 @logger.catch
