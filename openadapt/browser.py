@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from copy import deepcopy
 from dtaidistance import dtw, dtw_ndim
 from loguru import logger
+from sqlalchemy.orm import Session as SaSession
 from tqdm import tqdm
 import numpy as np
 
@@ -47,7 +48,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
     if none exist for the current event by iterating over the events in reverse order.
 
     Args:
-        browser_events (list[models.BrowserEvent]): List of browser events to process.
+        browser_events (list[models.BrowserEvent]): list of browser events to process.
     """
     # Initialize variables to store the most recent valid mappings
     latest_valid_x_mappings = None
@@ -280,6 +281,7 @@ def is_action_event(event, action_name: str, key_or_button: str) -> bool:
 
 
 def is_browser_event(event, action_name: str, key_or_button: str) -> bool:
+    """TODO"""
     if action_name == "click":
         return (event.message.get("eventType") == EVENT_TYPE_MAPPING[action_name] and
                 event.message.get("button") == MOUSE_BUTTON_MAPPING[key_or_button])
@@ -290,20 +292,24 @@ def is_browser_event(event, action_name: str, key_or_button: str) -> bool:
         return False
 
 
-def align_and_print(
+def align_events(
     event_type: str,
     action_events: list,
     browser_events: list,
     spatial: bool = SPATIAL,
-) -> tuple[int, list[float], list[float], list[float], list[float]]:
+    use_local_timestamps: bool = False,
+) -> list[tuple[int, int]]:
+    """TODO"""
     # Only log if there are any action or browser events of each type
     if not action_events and not browser_events:
-        return 0, [], [], [], []
+        return []
 
     # Convert series of events to timestamps
     action_timestamps = [e.timestamp for e in action_events]
-    browser_timestamps = [e.message["timestamp"] for e in browser_events]
-    #browser_timestamps = [e.timestamp for e in browser_events]
+    if use_local_timestamps:
+        browser_timestamps = [e.timestamp for e in browser_events]
+    else:
+        browser_timestamps = [e.message["timestamp"] for e in browser_events]
 
     if spatial:
         # Prepare sequences for multidimensional DTW
@@ -326,6 +332,17 @@ def align_and_print(
     # Enforce a one-to-one correspondence by selecting the closest matches
     filtered_path = enforce_one_to_one_mapping(path, action_timestamps, browser_timestamps)
 
+    return filtered_path
+
+
+def evaluate_alignment(
+    filtered_path: list[tuple[int, int]],
+    event_type: str,
+    action_events: list,
+    browser_events: list,
+    spatial: bool = SPATIAL,
+) -> tuple[int, list[float], list[float], list[float], list[float]]:
+    """TODO"""
     match_count = 0
     mismatch_count = 0
     error_count = 0  # Initialize error counter
@@ -402,17 +419,21 @@ def align_and_print(
     return error_count, remote_time_differences, local_time_differences, mouse_x_differences, mouse_y_differences
 
 
-def enforce_one_to_one_mapping(path: list, action_timestamps: list, browser_timestamps: list) -> list:
+def enforce_one_to_one_mapping(
+    path: list[tuple[int, int]],
+    action_timestamps: list[float],
+    browser_timestamps: list[float],
+) -> list[tuple[int, int]]:
     """
     Enforces a one-to-one mapping between BrowserEvents and ActionEvents by selecting the closest match.
     
     Args:
-        path: List of tuples representing the DTW path.
-        action_timestamps: List of timestamps for action events.
-        browser_timestamps: List of timestamps for browser events.
+        path: list of tuples representing the DTW path.
+        action_timestamps: list of timestamps for action events.
+        browser_timestamps: list of timestamps for browser events.
         
     Returns:
-        filtered_path: List of tuples representing the filtered DTW path with one-to-one mapping.
+        filtered_path: list of tuples representing the filtered DTW path with one-to-one mapping.
     """
     used_action_indices = set()
     filtered_path = []
@@ -438,12 +459,22 @@ def enforce_one_to_one_mapping(path: list, action_timestamps: list, browser_time
     return filtered_path
 
 
-def main() -> None:
-    session = crud.get_new_session(read_only=True)
-    recording = crud.get_latest_recording(session)
-    action_events = crud.get_action_events(session=session, recording=recording)
-    browser_events = crud.get_browser_events(session=session, recording=recording)
+def assign_browser_events(
+    session: SaSession,
+    action_events: list[models.ActionEvent],
+    browser_events: list[models.BrowserEvent],
+) -> dict:
+    """
+    Assigns browser events to corresponding action events by aligning them based on timestamps and event types.
 
+    Args:
+        session (sa.orm.Session): The database session.
+        action_events (list[models.ActionEvent]): list of action events to assign.
+        browser_events (list[models.BrowserEvent]): list of browser events to assign.
+
+    Returns:
+        dict: A dictionary containing statistics and information about the event assignments.
+    """
     # Filter BrowserEvents for 'USER_EVENT' type
     browser_events = [
         browser_event
@@ -466,37 +497,63 @@ def main() -> None:
         [(f"Key Release {key.upper()}", "release", key) for key in KEYBOARD_KEYS]
     )
 
-    total_errors = 0  # Initialize total errors counter
+    # Initialize statistics
+    total_errors = 0
     total_remote_time_differences = []
     total_local_time_differences = []
     total_mouse_x_differences = []
     total_mouse_y_differences = []
+
+    # Initialize additional statistics
+    event_stats = {
+        'match_count': 0,
+        'mismatch_count': 0,
+        'unmatched_browser_events': 0,
+        'timestamp_stats': {},
+        'mouse_position_stats': {}
+    }
 
     # Process each event pair
     for event_type, action_name, key_or_button in tqdm(event_pairs):
         action_filtered_events = list(filter(lambda e: is_action_event(e, action_name, key_or_button), action_events))
         browser_filtered_events = list(filter(lambda e: is_browser_event(e, action_name, key_or_button), browser_events))
 
-        # Only log if there are any action or browser events
         if action_filtered_events or browser_filtered_events:
             logger.info(f"{event_type}: {len(action_filtered_events)} action events, {len(browser_filtered_events)} browser events")
 
-            # Align and print events for the specific type
-            errors, remote_time_differences, local_time_differences, mouse_x_differences, mouse_y_differences = align_and_print(
-                event_type, action_filtered_events, browser_filtered_events
+            filtered_path = align_events(event_type, action_filtered_events, browser_filtered_events)
+
+            # Assign the closest browser event to each action event
+            for i, j in filtered_path:
+                action_event = action_filtered_events[i]
+                browser_event = browser_filtered_events[j]
+                action_event.browser_event_timestamp = browser_event.timestamp
+                action_event.browser_event_id = browser_event.id
+                logger.info(f"assigning {action_event.timestamp=} ==> {browser_event.timestamp=}")
+
+                # Add the updated ActionEvent to the session
+                session.add(action_event)
+
+            errors, remote_time_differences, local_time_differences, mouse_x_differences, mouse_y_differences = evaluate_alignment(
+                filtered_path, event_type, action_filtered_events, browser_filtered_events
             )
-            total_errors += errors  # Accumulate errors
+
+            # Accumulate statistics
+            total_errors += errors
             total_remote_time_differences += remote_time_differences
             total_local_time_differences += local_time_differences
             total_mouse_x_differences += mouse_x_differences
             total_mouse_y_differences += mouse_y_differences
 
-            # Identify and log the smallest clicked DOM element
+            event_stats['match_count'] += len(filtered_path)
+            event_stats['mismatch_count'] += errors
+
             for browser_event in browser_filtered_events:
                 if browser_event.message["eventType"] == "click":
                     identify_and_log_smallest_clicked_element(browser_event)
 
     # Calculate and log statistics for timestamp differences
+    event_stats['timestamp_stats'] = {}
     for name, time_differences in (
         ('Remote', total_remote_time_differences),
         ('Local', total_local_time_differences),
@@ -509,12 +566,20 @@ def main() -> None:
         mean_diff = mean(time_differences)
         median_diff = median(time_differences)
         stddev_diff = stdev(time_differences) if len(time_differences) > 1 else 0
+        event_stats['timestamp_stats'][name] = {
+            'min': min_diff,
+            'max': max_diff,
+            'mean': mean_diff,
+            'median': median_diff,
+            'stddev': stddev_diff
+        }
         logger.info(
             f"{name} Timestamp Differences - Min: {min_diff:.4f}, Max: {max_diff:.4f}, "
             f"Mean: {mean_diff:.4f}, Median: {median_diff:.4f}, Std Dev: {stddev_diff:.4f}"
         )
 
     # Calculate and log statistics for mouse position differences
+    event_stats['mouse_position_stats'] = {}
     for axis, mouse_differences in (("X", total_mouse_x_differences), ("Y", total_mouse_y_differences)):
         if not mouse_differences:
             logger.warning(f"{axis=} {mouse_differences=}")
@@ -523,19 +588,67 @@ def main() -> None:
         max_mouse_diff = max(mouse_differences, key=abs)
         num_mouse_errors = sum([abs(diff) >= 1 for diff in mouse_differences])
         num_mouse_correct = sum([abs(diff) < 1 for diff in mouse_differences])
+        event_stats['mouse_position_stats'][axis] = {
+            'min': min_mouse_diff,
+            'max': max_mouse_diff,
+            'mean': mean(mouse_differences),
+            'median': median(mouse_differences),
+            'stddev': stdev(mouse_differences) if len(mouse_differences) > 1 else 0,
+            'num_errors': num_mouse_errors,
+            'num_correct': num_mouse_correct
+        }
         logger.info(f"{num_mouse_errors=} {num_mouse_correct=}")
         if abs(max_mouse_diff) >= 1:
             logger.warning(f"abs({max_mouse_diff=}) > 1")
-        mean_mouse_diff = mean(mouse_differences)
-        median_mouse_diff = median(mouse_differences)
-        stddev_mouse_diff = stdev(mouse_differences) if len(mouse_differences) > 1 else 0
         logger.info(
             f"Mouse {axis} Position Differences - Min: {min_mouse_diff:.4f}, Max: {max_mouse_diff:.4f}, "
-            f"Mean: {mean_mouse_diff:.4f}, Median: {median_mouse_diff:.4f}, Std Dev: {stddev_mouse_diff:.4f}"
+            f"Mean: {event_stats['mouse_position_stats'][axis]['mean']:.4f}, Median: {event_stats['mouse_position_stats'][axis]['median']:.4f}, Std Dev: {event_stats['mouse_position_stats'][axis]['stddev']:.4f}"
         )
 
-    # Report total errors at the end
+    event_stats['unmatched_browser_events'] = len([
+        e for idx, e in enumerate(browser_events)
+        if idx not in {j for _, j in filtered_path}
+    ])
+
     logger.info(f"Total Errors Across All Events: {total_errors}")
+    return event_stats
+
+
+def log_stats(event_stats: dict) -> None:
+    """
+    Logs statistics for event assignment.
+
+    Args:
+        event_stats (dict): A dictionary containing statistics about event assignments.
+    """
+    # Log general event statistics
+    logger.info(f"{event_stats['match_count']=}")
+    logger.info(f"{event_stats['mismatch_count']=}")
+    logger.info(f"{event_stats['unmatched_browser_events']=}")
+
+    # Log timestamp differences statistics
+    for name, stats in event_stats['timestamp_stats'].items():
+        logger.info(f"{name} - {stats['min']=:.4f}, {stats['max']=:.4f}, "
+                    f"{stats['mean']=:.4f}, {stats['median']=:.4f}, {stats['stddev']=:.4f}")
+
+    # Log mouse position differences statistics
+    for axis, stats in event_stats['mouse_position_stats'].items():
+        logger.info(f"Mouse {axis} - {stats['min']=:.4f}, {stats['max']=:.4f}, "
+                    f"{stats['mean']=:.4f}, {stats['median']=:.4f}, {stats['stddev']=:.4f}, "
+                    f"{stats['num_errors']=}, {stats['num_correct']=}")
+
+
+def main() -> None:
+    session = crud.get_new_session(read_and_write=True)
+    recording = crud.get_latest_recording(session)
+    action_events = crud.get_action_events(session=session, recording=recording)
+    browser_events = crud.get_browser_events(session=session, recording=recording)
+
+    # Get statistics by assigning browser events to action events
+    event_stats = assign_browser_events(session, action_events, browser_events)
+
+    # Log the statistics using the new function
+    log_stats(event_stats)
 
 
 if __name__ == "__main__":

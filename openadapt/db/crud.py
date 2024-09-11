@@ -678,7 +678,7 @@ def get_new_session(
             """Raise an error when trying to write to a read-only session."""
             raise PermissionError("This session is read-only.")
 
-        session.add = raise_error_on_write
+        #session.add = raise_error_on_write
         session.delete = raise_error_on_write
         session.commit = raise_error_on_write
         session.flush = raise_error_on_write

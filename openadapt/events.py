@@ -7,7 +7,7 @@ import time
 from scipy.spatial import distance
 import numpy as np
 
-from openadapt import common, models, utils
+from openadapt import browser, common, models, utils
 from openadapt.custom_logger import logger
 from openadapt.db import crud
 
@@ -47,6 +47,9 @@ def get_events(
     window_events = crud.get_window_events(db, recording)
     browser_events = crud.get_browser_events(db, recording)
     screenshots = crud.get_screenshots(db, recording)
+
+    browser_stats = browser.assign_browser_events(db, action_events, browser_events)
+    browser.log_stats(browser_stats)
 
     if recording.original_recording_id:
         # if recording is a copy, it already has its events processed when it
@@ -143,7 +146,7 @@ def get_events(
         event="get_events.completed", properties={"recording_id": recording.id}
     )
 
-    return action_events  # , window_events, screenshots, browser_events
+    return action_events#, window_events, screenshots, browser_events
 
 
 def make_parent_event(
@@ -175,6 +178,18 @@ def make_parent_event(
     extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
+
+    children = extra.get("children", [])
+    browser_events = [
+        child.browser_event
+        for child in children
+        if child.browser_event
+    ]
+    if browser_events:
+        assert len(browser_events) <= 1, len(browser_events)
+        browser_event = browser_events[0]
+        event_dict["browser_event"] = browser_event
+
     action_event = models.ActionEvent(**event_dict)
     return action_event
 
