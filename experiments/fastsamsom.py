@@ -27,9 +27,9 @@ def main() -> None:
     segmented_image = segmentation_adapter.fetch_segmented_image(
         image,
         # threshold below which boxes will be filtered out
-        conf=0,
+        min_confidence_threshold=0,
         # discards all overlapping boxes with IoU > iou_threshold
-        iou=0.05,
+        max_iou_threshold=0.05,
     )
     if DEBUG:
         segmented_image.show()
