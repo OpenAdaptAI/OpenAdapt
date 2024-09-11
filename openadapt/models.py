@@ -13,7 +13,6 @@ from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import window
 from openadapt.config import config
 from openadapt.custom_logger import logger
 from openadapt.db import db
@@ -539,6 +538,8 @@ class WindowEvent(db.Base):
         Returns:
             (WindowEvent) the active window event.
         """
+        from openadapt import window
+
         return WindowEvent(**window.get_active_window_data(include_window_data))
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:

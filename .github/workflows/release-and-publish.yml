@@ -49,6 +49,7 @@ jobs:
               poetry run python -m openadapt.build
               cd dist
               zip -r ../OpenAdapt.app.zip OpenAdapt.app
+              mv OpenAdapt.dmg ..
               cd ..
         - name: Upload MacOS executable
           uses: actions/upload-artifact@v4
@@ -93,6 +94,7 @@ jobs:
               poetry run python -m openadapt.build
               cd dist
               7z a -tzip ../OpenAdapt.zip OpenAdapt
+              move OpenAdapt_Installer.exe ..
               cd ..
         - name: Upload Windows executable
           uses: actions/upload-artifact@v4
@@ -199,6 +201,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: OpenAdapt
+          path: dist/
+      - name: Download macOS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt.dmg
+          path: dist/
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt_Installer
           path: dist/
       - name: Python Semantic Release
         id: semantic_release

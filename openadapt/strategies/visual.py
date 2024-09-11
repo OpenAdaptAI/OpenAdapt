@@ -391,14 +391,15 @@ def get_window_segmentation(
     if DEBUG:
         original_image.show()
 
-    similar_segmentation, similar_segmentation_diff = find_similar_image_segmentation(
-        original_image,
-    )
-    if similar_segmentation:
-        # TODO XXX: create copy of similar_segmentation, but overwrite with segments of
-        # regions of new image where segments of similar_segmentation overlap non-zero
-        # regions of similar_segmentation_diff
-        return similar_segmentation
+    if not exceptions:
+        similar_segmentation, similar_segmentation_diff = (
+            find_similar_image_segmentation(original_image)
+        )
+        if similar_segmentation:
+            # TODO XXX: create copy of similar_segmentation, but overwrite with segments
+            # of regions of new image where segments of similar_segmentation overlap
+            # non-zero regions of similar_segmentation_diff
+            return similar_segmentation
 
     segmentation_adapter = adapters.get_default_segmentation_adapter()
     segmented_image = segmentation_adapter.fetch_segmented_image(original_image)

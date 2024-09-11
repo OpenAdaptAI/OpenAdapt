@@ -591,7 +591,10 @@ def parse_code_snippet(snippet: str) -> dict:
     """
     code_block = extract_code_block(snippet)
     # remove backtick lines
-    code_content = "\n".join(code_block.splitlines()[1:-1])
+    if "```" in code_block:
+        code_content = "\n".join(code_block.splitlines()[1:-1])
+    else:
+        code_content = code_block
     # convert literals from Javascript to Python
     to_by_from = {
         "true": "True",
@@ -637,7 +640,7 @@ def extract_code_block(text: str) -> str:
         raise ValueError("Uneven number of backtick lines")
 
     if len(backtick_idxs) < 2:
-        return ""  # No enclosing backticks found, return empty string
+        return text
 
     # Extract only the lines between the first and last backtick line,
     # including the backticks

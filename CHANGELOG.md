@@ -2,6 +2,52 @@
 
 
 
+## v0.39.3 (2024-08-07)
+
+### Fix
+
+* fix: remove duplicate import (#870) ([`e776ed8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e776ed88dddd1eeaf773bd2dca5a0aea27da46ce))
+
+* fix: only import window if necessary (#869)
+
+Only import window if necessary ([`efc941d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/efc941d34a4cabc7178112d5ca707fb6b956af52))
+
+
+## v0.39.2 (2024-08-06)
+
+### Fix
+
+* fix(video): upgrade to pyav 12.3.0 (#868)
+
+Fixes #862 ([`d7f463c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d7f463c7a17006162248007262515cd6c28b3e38))
+
+
+## v0.39.1 (2024-07-25)
+
+### Fix
+
+* fix(installer): fix installer upload (#866)
+
+* Update release-and-publish.yml: upload installers
+
+* Update release-and-publish.yml: fix case ([`489b9c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/489b9c201d318fba09320b3c3e414ee1713ccafc))
+
+* fix(VisualReplayStrategy): avoid re-using failing segmentations ([`0045ebb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0045ebb1f98cc74983ab1265266aed870ff54d7d))
+
+* fix(installer, audio): postinstall whisper; download installer artefacts (#865)
+
+* postinstall whisper; download installer artefacts
+
+* poetry lock ([`a4470c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a4470c372417cb0a22ee1a44193b6f23de44d96e))
+
+
+## v0.39.0 (2024-07-25)
+
+### Feature
+
+* feat(installer): upload installers (#863) ([`47fa551`](https://github.com/OpenAdaptAI/OpenAdapt/commit/47fa551b204c749f6649815bcf01def9d06257c3))
+
+
 ## v0.38.0 (2024-07-25)
 
 ### Feature
