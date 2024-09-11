@@ -35,9 +35,8 @@ with the power of Large Multimodal Modals (LMMs) by:
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
-- Generating synthetic input via transformer model completions
-- Generating task trees by analyzing recordings (work-in-progress)
-- Replaying synthetic input to complete tasks (work-in-progress)
+- Generating and replaying synthetic input via transformer model completions
+- Generating process graphs by analyzing recording logs (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
@@ -165,37 +164,6 @@ pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
 
-### Capturing Browser Events
-
-To capture (record) browser events in Chrome, follow these steps:
-
-1. Go to: [Chrome Extension Page](chrome://extensions/)
-
-2. Enable `Developer mode` (located at the top right):
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/c97eb9fb-05d6-465d-85b3-332694556272)
-
-3. Click `Load unpacked` (located at the top left).
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/00c8adf5-074a-4655-b132-fd87644007fc)
-
-4. Select the `chrome_extension` directory:
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/71610ed3-f8d4-431a-9a22-d901127b7b0c)
-
-5. You should see the following confirmation, indicating that the extension is loaded:
-
-![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/7ee19da9-37e0-448f-b9ab-08ef99110e85)
-
-6. Set the flag to `true` if it is currently `false`:
-
-![image](https://github.com/user-attachments/assets/8eba24a3-7c68-4deb-8fbe-9d03cece1482)
-
-7. Start recording. Once recording begins, navigate to the Chrome browser, browse some pages, and perform a few clicks. Then, stop the recording and let it complete successfully.
-
-8. After recording, check the `openadapt.db` table `browser_event`. It should contain all your browser activity logs. You can verify the data's correctness using the `sqlite3` CLI or an extension like `SQLite Viewer` in VS Code to open `data/openadapt.db`.
-
-
 ### Visualize
 
 Quickly visualize the latest recording you created by running the following command:
@@ -253,6 +221,22 @@ python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
 
+### Browser integration
+
+To record browser events in Google Chrome (required by the `BrowserReplayStrategy`), follow these steps:
+
+1. Go to your Chrome extensions page by entering [chrome://extensions](chrome://extensions/) in your address bar.
+
+2. Enable `Developer mode` (located at the top right).
+
+3. Click `Load unpacked` (located at the top left).
+
+4. Select the `chrome_extension` directory in the OpenAdapt repo.
+
+5. Make sure the Chrome extension is enabled by toggling the OpenAdapt Chrome extension enabled switch the right.
+
+6. Set the `RECORD_BROWSER_EVENTS` flag to `true` in `openadapt/data/config.json`.
+
 ## Features
 
 ### State-of-the-art GUI understanding via [Segment Anything in High Quality](https://github.com/SysCV/sam-hq):
@@ -305,13 +289,6 @@ We are thrilled to open new contract positions for developers passionate about p
 We're looking forward to your contributions. Let's build the future 🚀
 
 ## Contributing
-
-### Notable Works-in-progress (incomplete, see https://github.com/OpenAdaptAI/OpenAdapt/pulls and https://github.com/OpenAdaptAI/OpenAdapt/issues/ for more)
-
-- [Video Recording Hardware Acceleration](https://github.com/OpenAdaptAI/OpenAdapt/issues/570) (help wanted)
-- [Audio Narration](https://github.com/OpenAdaptAI/OpenAdapt/pull/346) (help wanted)
-- [Chrome Extension](https://github.com/OpenAdaptAI/OpenAdapt/pull/364) (help wanted)
-- [Gemini Vision](https://github.com/OpenAdaptAI/OpenAdapt/issues/551) (help wanted)
 
 ### Replay Problem Statement
 
