@@ -1601,16 +1601,11 @@ def record(
     crud.release_db_lock()
 
 
-def run_main(task_description: str) -> None:
-    """Run the record function."""
-    record(task_description)
-
-
 # Entry point
 def start() -> None:
     """Starts the recording process."""
-    fire.Fire(run_main)
+    fire.Fire(record)
 
 
 if __name__ == "__main__":
-    fire.Fire(run_main)
+    fire.Fire(record)
