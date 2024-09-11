@@ -970,6 +970,18 @@ def retry_with_exceptions(max_retries: int = 5) -> Callable:
 
 
 def truncate_html(html_str: str, max_len: int) -> str:
+    """Truncates the given HTML string to a specified maximum length.
+
+    Retains the head and tail while indicating the truncated portion in the middle.
+
+    Args:
+        html_str (str): The HTML string to truncate.
+        max_len (int): The maximum length for the truncated HTML string.
+
+    Returns:
+        str: The truncated HTML string with the head and tail retained, and
+             an indication of the truncated portion in the middle if applicable.
+    """
     if len(html_str) > max_len:
         n = max_len // 2
         head = html_str[:n]

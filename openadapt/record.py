@@ -187,7 +187,7 @@ def process_events(
                     event,
                     prev_event,
                 )
-            except AssertionError as exc:
+            except AssertionError:
                 delta = event.timestamp - prev_event.timestamp
                 log_prev_event = prev_event._replace(data="")
                 log_event = event._replace(data="")
@@ -1193,7 +1193,6 @@ def read_browser_events(
     utils.set_start_time(recording.timestamp)
 
     logger.info("Starting Reading Browser Events ...")
-    time_offset = 0
 
     while not terminate_processing.is_set():
         for message in websocket:

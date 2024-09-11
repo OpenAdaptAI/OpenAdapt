@@ -111,9 +111,9 @@ def get_events(
                 break
 
     if meta is not None:
-        format_num = lambda num, raw_num: (
+        format_num = lambda num, raw_num: (  # noqa: E731
             f"{num} of {raw_num} ({(num / raw_num):.2%})" if raw_num else "0"
-        )  # noqa: E731
+        )
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
             num_action_events,

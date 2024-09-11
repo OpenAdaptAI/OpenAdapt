@@ -80,11 +80,12 @@ KEYBOARD_KEYS = [
 
 
 def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
-    """
-    Computes and adds the 'data-tlbr-screen' attribute for each element based on the
-    coordMappings provided by JavaScript events. If 'data-tlbr-screen' already exists,
-    compute the values again and assert equality. Reuse the most recent valid mappings
-    if none exist for the current event by iterating over the events in reverse order.
+    """Computes and adds the 'data-tlbr-screen' attribute for each element.
+
+    Uses coordMappings provided by JavaScript events. If 'data-tlbr-screen' already
+    exists, compute the values again and assert equality. Reuse the most recent valid
+    mappings if none exist for the current event by iterating over the events in
+    reverse order.
 
     Args:
         browser_events (list[models.BrowserEvent]): list of browser events to process.
@@ -122,7 +123,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
         x_mappings = coord_mappings.get("x", {})
         y_mappings = coord_mappings.get("y", {})
 
-        # Check if there are sufficient data points; if not, reuse the latest valid mappings
+        # Check if there are sufficient data points; if not, reuse latest valid mappings
         if (
             "client" in x_mappings
             and len(x_mappings["client"]) >= 2
@@ -202,8 +203,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
 def fit_linear_transformation(
     client_coords: list[float], screen_coords: list[float]
 ) -> tuple[float, float]:
-    """
-    Fits a linear transformation (scale and offset) from client coordinates to screen coordinates.
+    """Fit a linear transformation (scale and offset) from client to screen coordinates.
 
     Args:
         client_coords (list[float]): The client coordinates (x or y).
@@ -227,10 +227,10 @@ def fit_linear_transformation(
     return scale, offset
 
 
-def identify_and_log_smallest_clicked_element(browser_event) -> None:
-    """
-    Identifies the smallest DOM element that was clicked on for a given click event
-    and logs it.
+def identify_and_log_smallest_clicked_element(
+    browser_event: models.BrowserEvent,
+) -> None:
+    """Logs the smallest DOM element that was clicked on for a given click event.
 
     Args:
         browser_event: The browser event containing the click details.
@@ -259,13 +259,13 @@ def identify_and_log_smallest_clicked_element(browser_event) -> None:
             tlbr = f"data-tlbr-{coord_type}"
             try:
                 target_element_tlbr = target_element[tlbr]
-            except KeyError as exc:
+            except KeyError:
                 logger.warning(f"{tlbr=} not in {target_element=}")
                 continue
             top, left, bottom, right = map(float, target_element_tlbr.split(","))
             logger.info(f"{tlbr=} {x=} {y=} {top=} {left=} {bottom=} {right=}")
             if not (left <= x <= right and top <= y <= bottom):
-                logger.warning(f"outside")
+                logger.warning("outside")
 
         # Calculate the area for target_element
         if "data-tlbr-client" in target_element.attrs:
@@ -307,20 +307,25 @@ def identify_and_log_smallest_clicked_element(browser_event) -> None:
             is_descendant = target_element in smallest_element.parents
             is_ancestor = smallest_element in target_element.parents
 
-        # Log a warning if the smallest element is not the target, or a descendant/ancestor of the target
+        # Log a warning if the smallest element is not the target,
+        # or a descendant/ancestor of the target
         if not (smallest_element_id == target_id or is_descendant or is_ancestor):
             logger.warning(
-                f"{smallest_element_id=} {smallest_element_type=} {smallest_element_area=} does"
-                " not match "
-                f"{target_id=} {target_element_type=} {target_area=} is_descendant={is_descendant} is_ancestor={is_ancestor}"
+                f"{smallest_element_id=} {smallest_element_type=}"
+                f" {smallest_element_area=} does not match"
+                f" {target_id=} {target_element_type=} {target_area=}"
+                f" is_descendant={is_descendant} is_ancestor={is_ancestor}"
             )
     else:
         logger.warning("No element found matching the click coordinates.")
 
 
-def is_action_event(event, action_name: str, key_or_button: str) -> bool:
-    """
-    Determine if the event matches the given action name and key/button.
+def is_action_event(
+    event: models.ActionEvent,
+    action_name: str,
+    key_or_button: str,
+) -> bool:
+    """Determine if the event matches the given action name and key/button.
 
     Args:
         event: The action event to check.
@@ -339,9 +344,12 @@ def is_action_event(event, action_name: str, key_or_button: str) -> bool:
         return False
 
 
-def is_browser_event(event, action_name: str, key_or_button: str) -> bool:
-    """
-    Determines if the browser event matches the given action name and key/button.
+def is_browser_event(
+    event: models.ActionEvent,
+    action_name: str,
+    key_or_button: str,
+) -> bool:
+    """Determine if the browser event matches the given action name and key/button.
 
     Args:
         event: The browser event to check.
@@ -372,15 +380,18 @@ def align_events(
     spatial: bool = SPATIAL,
     use_local_timestamps: bool = False,
 ) -> list[tuple[int, int]]:
-    """
-    Aligns action events and browser events based on timestamps and spatial data using DTW.
+    """Align action events and browser events based on timestamps and spatial data.
+
+    Uses Dynamic Time Warping (DTW).
 
     Args:
         event_type (str): The type of event to align.
         action_events (list): The list of action events.
         browser_events (list): The list of browser events.
-        spatial (bool, optional): Whether to use spatial data (mouse coordinates). Defaults to True.
-        use_local_timestamps (bool, optional): Whether to use local timestamps for alignment. Defaults to False.
+        spatial (bool, optional): Whether to use spatial data (mouse coordinates).
+            Defaults to True.
+        use_local_timestamps (bool, optional): Whether to use local timestamps for
+            alignment. Defaults to False.
 
     Returns:
         list[tuple[int, int]]: The list of tuples representing aligned event indices.
@@ -436,15 +447,16 @@ def evaluate_alignment(
     browser_events: list,
     spatial: bool = SPATIAL,
 ) -> tuple[int, list[float], list[float], list[float], list[float]]:
-    """
-    Evaluates the alignment between action events and browser events, logging discrepancies.
+    """Evaluate the alignment between action events and browser events.
 
     Args:
-        filtered_path (list[tuple[int, int]]): The filtered DTW path representing aligned events.
+        filtered_path (list[tuple[int, int]]): The filtered DTW path representing
+            aligned events.
         event_type (str): The type of event being aligned.
         action_events (list): The list of action events.
         browser_events (list): The list of browser events.
-        spatial (bool, optional): Whether to use spatial data (mouse coordinates). Defaults to True.
+        spatial (bool, optional): Whether to use spatial data (mouse coordinates).
+            Defaults to True.
 
     Returns:
         tuple: A tuple containing:
@@ -498,11 +510,13 @@ def evaluate_alignment(
                 )
                 if mouse_x_difference > 1:
                     logger.warning(
-                        f"{mouse_x_difference=} {action_event.mouse_x=} {browser_event.message['screenX']=}"
+                        f"{mouse_x_difference=} {action_event.mouse_x=}"
+                        f" {browser_event.message['screenX']=}"
                     )
                 if mouse_y_difference > 1:
                     logger.warning(
-                        f"{mouse_y_difference=} {action_event.mouse_y=} {browser_event.message['screenY']=}"
+                        f"{mouse_y_difference=} {action_event.mouse_y=}"
+                        f" {browser_event.message['screenY']=}"
                     )
                 mouse_x_differences.append(mouse_x_difference)
                 mouse_y_differences.append(mouse_y_difference)
@@ -567,8 +581,7 @@ def enforce_one_to_one_mapping(
     action_timestamps: list[float],
     browser_timestamps: list[float],
 ) -> list[tuple[int, int]]:
-    """
-    Enforces a one-to-one mapping between BrowserEvents and ActionEvents by selecting the closest match.
+    """Enforce one-to-one mapping between Browser/Action by selecting the closest match.
 
     Args:
         path: list of tuples representing the DTW path.
@@ -576,7 +589,8 @@ def enforce_one_to_one_mapping(
         browser_timestamps: list of timestamps for browser events.
 
     Returns:
-        filtered_path: list of tuples representing the filtered DTW path with one-to-one mapping.
+        filtered_path: list of tuples representing the filtered DTW path with
+            one-to-one mapping.
     """
     used_action_indices = set()
     filtered_path = []
@@ -588,7 +602,7 @@ def enforce_one_to_one_mapping(
         if j not in closest_matches:
             closest_matches[j] = (i, abs(action_timestamps[i] - browser_timestamps[j]))
         else:
-            # If a closer match is found, update the closest match for this browser event
+            # If a closer match is found, update closest match for this browser event
             current_diff = abs(action_timestamps[i] - browser_timestamps[j])
             if current_diff < closest_matches[j][1]:
                 closest_matches[j] = (i, current_diff)
@@ -607,8 +621,7 @@ def assign_browser_events(
     action_events: list[models.ActionEvent],
     browser_events: list[models.BrowserEvent],
 ) -> dict:
-    """
-    Assigns browser events to corresponding action events by aligning them based on timestamps and event types.
+    """Assign browser events to action events by aligning timestamps/types.
 
     Args:
         session (sa.orm.Session): The database session.
@@ -616,7 +629,8 @@ def assign_browser_events(
         browser_events (list[models.BrowserEvent]): list of browser events to assign.
 
     Returns:
-        dict: A dictionary containing statistics and information about the event assignments.
+        dict: A dictionary containing statistics and information about the event
+            assignments.
     """
     # Filter BrowserEvents for 'USER_EVENT' type
     browser_events = [
@@ -794,8 +808,7 @@ def assign_browser_events(
 
 
 def log_stats(event_stats: dict) -> None:
-    """
-    Logs statistics for event assignment.
+    """Logs statistics for event assignment.
 
     Args:
         event_stats (dict): A dictionary containing statistics about event assignments.
@@ -822,6 +835,7 @@ def log_stats(event_stats: dict) -> None:
 
 
 def main() -> None:
+    """Run alignment on the latest recording."""
     session = crud.get_new_session(read_and_write=True)
     recording = crud.get_latest_recording(session)
     action_events = crud.get_action_events(session=session, recording=recording)
