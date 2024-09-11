@@ -2,6 +2,280 @@
 
 
 
+## v0.40.0 (2024-09-11)
+
+### Feature
+
+* feat(chrome_extension): correct commit format for semantic release ([`532ec3f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/532ec3fa663b8a680da0cc097a56f753bb397bfb))
+
+### Unknown
+
+* feat(browser_extension) add browser_extension and openadapt.browser (#744)
+
+* add old chrome extension files
+
+* add old changes back, related to chrome extension, in openadapt dir
+
+* try web socket solution, add asyncio and websockets libraries to poetry
+
+* now we can log the dom changes ina a desctop running python process
+
+* remove the old nativeMessaging extension code
+
+* rename dir
+
+* save the dom chages into dummy db: chrome.db
+
+* fix actions tests
+
+* ran `poetry run black --preview . --exclude &#39;alembic&#39;`
+
+* remove sockets.py
+
+* fix falke8 formatting issues
+
+* ran `poetry run black --preview . --exclude &#39;alembic&#39;`
+
+* add browser event code
+
+* chrome extension work wip
+
+* fix reset_db python file.
+
+* now, extension messages can be seen in logs when the recording is started.
+
+* till trying to fix the issue: record functione execution gets stuck at read_browser_events due to asyncio.runForever
+
+* browser_events can be seen in db
+
+* ran black and flake8
+
+* add documentation in extension side js files and remove unused files
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#pullrequestreview-2163565340
+
+Update readme.md
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668787418
+remove mlds logo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668782507
+
+add todo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668782930
+
+add NAMED_CONSTANT
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668785377
+
+remove unused lines in content.js
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668788679
+
+uncomment for `alembic upgrade`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668788679
+
+resolve this
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668790311
+
+remove unwanted obfuscate keys
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668791304
+
+used joinedload
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668792409
+
+remove unwanted return
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668793589
+
+Ran the following:
+- `alembic revision --autogenerate -m &#34;regenrate with browser_event table&#34;`
+- `alembic upgrade head`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668795476
+
+remove unwanted commetns lines
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668796268
+
+remove commented lines
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files#r1668802201
+
+added this todo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668803476
+
+optimize browser events record  by adding an option to include to record or not like audio
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668797431
+
+move constants to config
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676066028
+
+update readme
+
+* update readme again
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676066895
+
+update config default for RECORD_BROWSER_EVENTS
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676069410
+
+removed unessary comment in events.py
+
+* Update openadapt/models.py
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676070009
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676071070
+
+resolve d
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/3836c3d165bb11c5615c83a0df65f6cdc155f93f#r1676068390
+
+resolved
+
+* ran black on openadapt dir
+`poetry run black --preview openadapt/`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676813676
+
+fixed faiing tests
+
+* update the form type script
+
+* add the record browser flag in classification group
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691451352
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691417341
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691424083
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/config.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691427223
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691427223
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691450866
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/config.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/aa7b1ae7df8fb7045abb5d71d1d41a09f2d8bea2#r1691430453
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/aa7b1ae7df8fb7045abb5d71d1d41a09f2d8bea2#r1691430453
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Remove 3 unused functions owing to:
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454036
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454395
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454487
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691449435
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691449435
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Rename owing to: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691406587
+
+* Rename const: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691406587
+
+* Remove unused: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691428462
+
+* Use ClassVar again: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691426324
+
+* Update openadapt/models.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691432709
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691432709
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691440931
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691440931
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691446147
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691446147
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Move string to const: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691405762
+
+* Correct Grammatical errors: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691404444
+
+* fix visualize and reformat
+
+* fix alembic migrations
+
+* Intersection/MutationObserver; _repr_ignore_attrs; fix process_events
+
+* synchronize timestamps
+
+* attachWindowEventListeners
+
+* recreate alembic migration
+
+* sync; buffer
+
+* add dtw.py (wip)
+
+* remove sorting and syncing; working experiments/dtw.py
+
+* fix content.js
+
+* report screenX/screenY; fix getScreenCoordinates; compute coordinate differences
+
+* wip
+
+* remove observers; composite distance; task_by_name
+
+* replace eventBuffer with coordMappings; compute tlbr-screen in browser.py
+
+* assign_browser_events in events.py
+
+* black; docstrings
+
+* flake8
+
+* update test
+
+* black
+
+* add test_browser.py
+
+---------
+
+Co-authored-by: pate1595 &lt;kmp.patel@utoronto.ca&gt;
+Co-authored-by: Krish Patel &lt;65433817+KrishPatel13@users.noreply.github.com&gt; ([`49d71d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/49d71d1ce6c78df657498426b5f2638585df9aa7))
+
+
 ## v0.39.3 (2024-08-07)
 
 ### Fix
