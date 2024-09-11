@@ -4,6 +4,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from itertools import zip_longest
 from typing import Any, Type
+import copy
 import io
 import sys
 
@@ -43,6 +44,7 @@ class Recording(db.Base):
     """Class representing a recording in the database."""
 
     __tablename__ = "recording"
+    _repr_ignore_attrs = ["config"]
 
     id = sa.Column(sa.Integer, primary_key=True)
     timestamp = sa.Column(ForceFloat)
@@ -81,6 +83,12 @@ class Recording(db.Base):
         "WindowEvent",
         back_populates="recording",
         order_by="WindowEvent.timestamp",
+        cascade="all, delete-orphan",
+    )
+    browser_events = sa.orm.relationship(
+        "BrowserEvent",
+        back_populates="recording",
+        order_by="BrowserEvent.timestamp",
         cascade="all, delete-orphan",
     )
     scrubbed_recordings = sa.orm.relationship(
@@ -128,6 +136,8 @@ class ActionEvent(db.Base):
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
     window_event_timestamp = sa.Column(ForceFloat)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
+    browser_event_timestamp = sa.Column(ForceFloat)
+    browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -213,6 +223,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -256,11 +267,14 @@ class ActionEvent(db.Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, canonical: bool = False) -> str | None:
+    def _text(
+        self,
+        canonical: bool = False,
+        name_prefix: str = config.ACTION_TEXT_NAME_PREFIX,
+        name_suffix: str = config.ACTION_TEXT_NAME_SUFFIX,
+    ) -> str | None:
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if self.children:
             parts = [
                 child.canonical_text if canonical else child.text
@@ -614,6 +628,51 @@ class WindowEvent(db.Base):
                 window_dict["state"].pop("data")
             window_dict["state"].pop("meta")
         return window_dict
+
+
+class BrowserEvent(db.Base):
+    """Class representing a browser event in the database."""
+
+    __tablename__ = "browser_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    message = sa.Column(sa.JSON)
+    timestamp = sa.Column(ForceFloat)
+
+    recording = sa.orm.relationship("Recording", back_populates="browser_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    def __str__(self) -> str:
+        """Returns a truncated string representation without modifying original data."""
+        # Create a copy of the message to avoid modifying the original
+        message_copy = copy.deepcopy(self.message)
+
+        # Truncate the visibleHtmlString in the copied message if it exists
+        if "visibleHtmlString" in message_copy:
+            message_copy["visibleHtmlString"] = utils.truncate_html(
+                message_copy["visibleHtmlString"], max_len=100
+            )
+
+        # Get all attributes except 'message'
+        attributes = {
+            attr: getattr(self, attr)
+            for attr in self.__mapper__.columns.keys()
+            if attr != "message"
+        }
+
+        # Construct the string representation dynamically
+        base_repr = ", ".join(f"{key}={value}" for key, value in attributes.items())
+
+        # Return the complete representation including the truncated message
+        return f"BrowserEvent({base_repr}, message={message_copy})"
+
+    # # TODO: implement
+    # @classmethod
+    # def get_active_browser_event(
+    #     cls: "BrowserEvent",
+    # ) -> "BrowserEvent":
 
 
 class FrameCache:

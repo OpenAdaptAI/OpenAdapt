@@ -20,6 +20,7 @@ from openadapt.custom_logger import logger
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
+    BrowserEvent,
     AudioInfo,
     MemoryStat,
     PerformanceStat,
@@ -38,6 +39,7 @@ lock.set()
 action_events = []
 screenshots = []
 window_events = []
+browser_events = []
 performance_stats = []
 memory_stats = []
 
@@ -151,6 +153,29 @@ def insert_window_event(
         "recording_timestamp": recording.timestamp,
     }
     _insert(session, event_data, WindowEvent, window_events)
+
+
+def insert_browser_event(
+    session: SaSession,
+    recording: Recording,
+    event_timestamp: int,
+    event_data: dict[str, Any],
+) -> None:
+    """Insert a browser event into the database.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        recording (Recording): The recording object.
+        event_timestamp (int): The timestamp of the event.
+        event_data (dict): The data of the event.
+    """
+    event_data = {
+        **event_data,
+        "timestamp": event_timestamp,
+        "recording_id": recording.id,
+        "recording_timestamp": recording.timestamp,
+    }
+    _insert(session, event_data, BrowserEvent, browser_events)
 
 
 def insert_perf_stat(
@@ -590,6 +615,27 @@ def get_window_events(
     )
 
 
+def get_browser_events(session: SaSession, recording: Recording) -> list[BrowserEvent]:
+    """Get browser events for a given recording.
+
+    Args:
+        session (sa.orm.Session): The database session
+        recording (Recording): recording object
+    Returns:
+        List[BrowserEvent]: list of browser events
+    """
+    return (
+        session.query(BrowserEvent)
+        .filter(BrowserEvent.recording_id == recording.id)
+        .options(
+            joinedload(BrowserEvent.recording),
+            subqueryload(BrowserEvent.action_events).joinedload(ActionEvent.screenshot),
+        )
+        .order_by(BrowserEvent.timestamp)
+        .all()
+    )
+
+
 def disable_action_event(session: SaSession, event_id: int) -> None:
     """Disable an action event.
 
@@ -611,12 +657,15 @@ def disable_action_event(session: SaSession, event_id: int) -> None:
 def get_new_session(
     read_only: bool = False,
     read_and_write: bool = False,
+    allow_add_on_read_only: bool = True,
 ) -> sa.orm.Session:
     """Get a new database session.
 
     Args:
         read_only (bool): Whether to open the session in read-only mode.
         read_and_write (bool): Whether to open the session in read-and-write mode.
+        allow_add_on_read_only (bool): Whether to allow session.add on read_only
+            (write to memory, but not to disk).
 
     Returns:
         sa.orm.Session: A new database session.
@@ -632,7 +681,8 @@ def get_new_session(
             """Raise an error when trying to write to a read-only session."""
             raise PermissionError("This session is read-only.")
 
-        session.add = raise_error_on_write
+        if not allow_add_on_read_only:
+            session.add = raise_error_on_write
         session.delete = raise_error_on_write
         session.commit = raise_error_on_write
         session.flush = raise_error_on_write
@@ -734,12 +784,16 @@ def post_process_events(session: SaSession, recording: Recording) -> None:
     screenshots = _get(session, Screenshot, recording.id)
     action_events = _get(session, ActionEvent, recording.id)
     window_events = _get(session, WindowEvent, recording.id)
+    browser_events = _get(session, BrowserEvent, recording.id)
 
     screenshot_timestamp_to_id_map = {
         screenshot.timestamp: screenshot.id for screenshot in screenshots
     }
     window_event_timestamp_to_id_map = {
         window_event.timestamp: window_event.id for window_event in window_events
+    }
+    browser_event_timestamp_to_id_map = {
+        browser_event.timestamp: browser_event.id for browser_event in browser_events
     }
 
     for action_event in action_events:
@@ -748,6 +802,9 @@ def post_process_events(session: SaSession, recording: Recording) -> None:
         )
         action_event.window_event_id = window_event_timestamp_to_id_map.get(
             action_event.window_event_timestamp
+        )
+        action_event.browser_event_id = browser_event_timestamp_to_id_map.get(
+            action_event.browser_event_timestamp
         )
     session.commit()
 
@@ -789,6 +846,7 @@ def copy_recording(session: SaSession, recording_id: int) -> int:
 
         screenshots = [action_event.screenshot for action_event in action_events]
         window_events = [action_event.window_event for action_event in action_events]
+        browser_events = [action_event.browser_event for action_event in action_events]
 
         for i, action_event in enumerate(new_action_events):
             action_event.screenshot = copy_sa_instance(
@@ -797,6 +855,10 @@ def copy_recording(session: SaSession, recording_id: int) -> int:
             action_event.window_event = copy_sa_instance(
                 window_events[i], recording_id=new_recording.id
             )
+            action_event.browser_event = copy_sa_instance(
+                browser_events[i], recording_id=new_recording.id
+            )
+
             session.add(action_event)
 
         session.commit()

@@ -107,6 +107,8 @@ posthog = "^3.5.0"
 wheel = "^0.43.0"
 cython = "^3.0.10"
 av = "^12.3.0"
+beautifulsoup4 = "^4.12.3"
+dtaidistance = "^2.3.12"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"

@@ -10,7 +10,7 @@ FUSED_MOUSE_EVENTS = (
     "doubleclick",
 )
 MOUSE_EVENTS = tuple(list(RAW_MOUSE_EVENTS) + list(FUSED_MOUSE_EVENTS))
-MOUSE_CLICK_EVENTS = (event for event in MOUSE_EVENTS if "click" in event)
+MOUSE_CLICK_EVENTS = (event for event in MOUSE_EVENTS if event.endswith("click"))
 
 RAW_KEY_EVENTS = (
     "press",

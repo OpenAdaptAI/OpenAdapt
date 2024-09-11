@@ -14,8 +14,8 @@ from openadapt.config import config
 
 def reset_db() -> None:
     """Clears the database by removing the db file and running a db migration."""
-    if os.path.exists(config.DB_FPATH):
-        os.remove(config.DB_FPATH)
+    if os.path.exists(config.DATABASE_FILE_PATH):
+        os.remove(config.DATABASE_FILE_PATH)
 
     # Prevents duplicate logging of config values by piping stderr
     #  and filtering the output.

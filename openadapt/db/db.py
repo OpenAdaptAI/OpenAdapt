@@ -37,10 +37,12 @@ class BaseModel(DictableModel):
         # avoid circular import
         from openadapt.utils import EMPTY, row2dict
 
+        ignore_attrs = getattr(self, "_repr_ignore_attrs", [])
+
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in row2dict(self, follow=False).items()
-            if v not in EMPTY
+            if v not in EMPTY and k not in ignore_attrs
         )
         return f"{self.__class__.__name__}({params})"
 

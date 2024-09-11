@@ -10,6 +10,7 @@ from collections import namedtuple
 from functools import partial
 from typing import Any, Callable
 import io
+import json
 import multiprocessing
 import os
 import queue
@@ -35,6 +36,7 @@ import numpy as np
 import psutil
 import sounddevice
 import soundfile
+import websockets.sync.server
 import whisper
 
 from openadapt import plotting, utils, video, window
@@ -45,7 +47,7 @@ from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window")
+EVENT_TYPES = ("screen", "action", "window", "browser")
 LOG_LEVEL = "INFO"
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -53,12 +55,14 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "screen/video": True,
     "action": True,
     "window": True,
+    "browser": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
 STOP_SEQUENCES = config.STOP_SEQUENCES
 
 stop_sequence_detected = False
+ws_server_instance = None
 
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
@@ -128,6 +132,7 @@ def process_events(
     screen_write_q: sq.SynchronizedQueue,
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
+    browser_write_q: sq.SynchronizedQueue,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
@@ -136,6 +141,7 @@ def process_events(
     num_screen_events: multiprocessing.Value,
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
+    num_browser_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -145,6 +151,7 @@ def process_events(
         screen_write_q: A queue for writing screen events.
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
+        browser_write_q: A queue for writing browser events,
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording: The recording object.
@@ -153,6 +160,7 @@ def process_events(
         num_screen_events: A counter for the number of screen events.
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
+        num_browser_events: A counter for the number of browser events.
         num_video_events: A counter for the number of video events.
     """
     utils.set_start_time(recording.timestamp)
@@ -179,8 +187,11 @@ def process_events(
                     event,
                     prev_event,
                 )
-            except AssertionError as exc:
-                logger.error(exc)
+            except AssertionError:
+                delta = event.timestamp - prev_event.timestamp
+                log_prev_event = prev_event._replace(data="")
+                log_event = event._replace(data="")
+                logger.error(f"{delta=} {log_prev_event=} {log_event=}")
                 # behavior undefined, swallow for now
                 # XXX TODO: mitigate
         if event.type == "screen":
@@ -197,15 +208,28 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+        elif event.type == "browser":
+            if config.RECORD_BROWSER_EVENTS:
+                process_event(
+                    event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
+                )
         elif event.type == "action":
             if prev_screen_event is None:
                 logger.warning("Discarding action that came before screen")
                 continue
+            else:
+                event.data["screenshot_timestamp"] = prev_screen_event.timestamp
+
             if prev_window_event is None:
-                logger.warning("Discarding input that came before window")
+                logger.warning("Discarding action that came before window")
                 continue
-            event.data["screenshot_timestamp"] = prev_screen_event.timestamp
-            event.data["window_event_timestamp"] = prev_window_event.timestamp
+            else:
+                event.data["window_event_timestamp"] = prev_window_event.timestamp
+
             process_event(
                 event,
                 action_write_q,
@@ -213,7 +237,9 @@ def process_events(
                 recording,
                 perf_q,
             )
+
             num_action_events.value += 1
+
             if prev_saved_screen_timestamp < prev_screen_event.timestamp:
                 process_event(
                     prev_screen_event,
@@ -313,6 +339,25 @@ def write_window_event(
     """
     assert event.type == "window", event
     crud.insert_window_event(db, recording, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
+def write_browser_event(
+    db: crud.SaSession,
+    recording: Recording,
+    event: Event,
+    perf_q: sq.SynchronizedQueue,
+) -> None:
+    """Write a browser event to the database and update the performance queue.
+
+    Args:
+        db: The database session.
+        recording: The recording object.
+        event: A browser event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+    assert event.type == "browser", event
+    crud.insert_browser_event(db, recording, event.timestamp, event.data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -1128,6 +1173,103 @@ def record_audio(
 
 @logger.catch
 @utils.trace(logger)
+def read_browser_events(
+    websocket: websockets.sync.server.ServerConnection,
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+) -> None:
+    """Read browser events and add them to the event queue.
+
+    Params:
+        websocket: The websocket object.
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+
+    Returns:
+        None
+    """
+    utils.set_start_time(recording.timestamp)
+
+    logger.info("Starting Reading Browser Events ...")
+
+    while not terminate_processing.is_set():
+        for message in websocket:
+            if not message:
+                continue
+
+            timestamp = utils.get_timestamp()
+
+            data = json.loads(message)
+
+            event_q.put(
+                Event(
+                    timestamp,
+                    "browser",
+                    {"message": data},
+                )
+            )
+
+
+@logger.catch
+@utils.trace(logger)
+def run_browser_event_server(
+    event_q: queue.Queue,
+    terminate_processing: Event,
+    recording: Recording,
+    started_counter: multiprocessing.Value,
+) -> None:
+    """Run the browser event server.
+
+    Params:
+        event_q: A queue for adding browser events.
+        terminate_processing: An event to signal the termination of the process.
+        recording: The recording object.
+        started_counter: Value to increment once started.
+
+    Returns:
+        None
+    """
+    global ws_server_instance
+
+    # Function to run the server in a separate thread
+    def run_server() -> None:
+        global ws_server_instance
+        with websockets.sync.server.serve(
+            lambda ws: read_browser_events(
+                ws,
+                event_q,
+                terminate_processing,
+                recording,
+            ),
+            config.BROWSER_WEBSOCKET_SERVER_IP,
+            config.BROWSER_WEBSOCKET_PORT,
+            max_size=config.BROWSER_WEBSOCKET_MAX_SIZE,
+        ) as server:
+            ws_server_instance = server
+            logger.info("WebSocket server started")
+            with started_counter.get_lock():
+                started_counter.value += 1
+            server.serve_forever()
+
+    # Start the server in a separate thread
+    server_thread = threading.Thread(target=run_server)
+    server_thread.start()
+
+    # Wait for a termination signal
+    terminate_processing.wait()
+    logger.info("Termination signal received, shutting down server")
+
+    if ws_server_instance:
+        ws_server_instance.shutdown()
+
+    # Ensure the server thread is terminated cleanly
+    server_thread.join()
+
+
+@logger.catch
+@utils.trace(logger)
 def record(
     task_description: str,
     # these should be Event | None, but this raises:
@@ -1139,7 +1281,7 @@ def record(
     status_pipe: multiprocessing.connection.Connection | None = None,
     log_memory: bool = config.LOG_MEMORY,
 ) -> None:
-    """Record Screenshots/ActionEvents/WindowEvents.
+    """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
     Args:
         task_description: A text description of the task to be recorded.
@@ -1175,41 +1317,55 @@ def record(
     screen_write_q = sq.SynchronizedQueue()
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
+    browser_write_q = sq.SynchronizedQueue()
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
     if terminate_processing is None:
         terminate_processing = multiprocessing.Event()
     started_counter = multiprocessing.Value("i", 0)
-    expected_starts = 9
+    task_by_name = {}
 
     window_event_reader = threading.Thread(
         target=read_window_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     window_event_reader.start()
+    task_by_name["window_event_reader"] = window_event_reader
+
+    if config.RECORD_BROWSER_EVENTS:
+        browser_event_reader = threading.Thread(
+            target=run_browser_event_server,
+            args=(event_q, terminate_processing, recording, started_counter),
+        )
+        browser_event_reader.start()
+        task_by_name["browser_event_reader"] = browser_event_reader
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     screen_event_reader.start()
+    task_by_name["screen_event_reader"] = screen_event_reader
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     keyboard_event_reader.start()
+    task_by_name["keyboard_event_reader"] = keyboard_event_reader
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
         args=(event_q, terminate_processing, recording, started_counter),
     )
     mouse_event_reader.start()
+    task_by_name["mouse_event_reader"] = mouse_event_reader
 
     num_action_events = multiprocessing.Value("i", 0)
     num_screen_events = multiprocessing.Value("i", 0)
     num_window_events = multiprocessing.Value("i", 0)
+    num_browser_events = multiprocessing.Value("i", 0)
     num_video_events = multiprocessing.Value("i", 0)
 
     event_processor = threading.Thread(
@@ -1219,6 +1375,7 @@ def record(
             screen_write_q,
             action_write_q,
             window_write_q,
+            browser_write_q,
             video_write_q,
             perf_q,
             recording,
@@ -1227,10 +1384,12 @@ def record(
             num_screen_events,
             num_action_events,
             num_window_events,
+            num_browser_events,
             num_video_events,
         ),
     )
     event_processor.start()
+    task_by_name["event_processor"] = event_processor
 
     screen_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1246,6 +1405,24 @@ def record(
         ),
     )
     screen_event_writer.start()
+    task_by_name["screen_event_writer"] = screen_event_writer
+
+    if config.RECORD_BROWSER_EVENTS:
+        browser_event_writer = multiprocessing.Process(
+            target=write_events,
+            args=(
+                "browser",
+                write_browser_event,
+                browser_write_q,
+                num_browser_events,
+                perf_q,
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        browser_event_writer.start()
+        task_by_name["browser_event_writer"] = browser_event_writer
 
     action_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1261,6 +1438,7 @@ def record(
         ),
     )
     action_event_writer.start()
+    task_by_name["action_event_writer"] = action_event_writer
 
     window_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1276,9 +1454,9 @@ def record(
         ),
     )
     window_event_writer.start()
+    task_by_name["window_event_writer"] = window_event_writer
 
     if config.RECORD_VIDEO:
-        expected_starts += 1
         video_writer = multiprocessing.Process(
             target=utils.WrapStdout(write_events),
             args=(
@@ -1295,9 +1473,9 @@ def record(
             ),
         )
         video_writer.start()
+        task_by_name["video_writer"] = video_writer
 
     if config.RECORD_AUDIO:
-        expected_starts += 1
         audio_recorder = multiprocessing.Process(
             target=utils.WrapStdout(record_audio),
             args=(
@@ -1307,9 +1485,10 @@ def record(
             ),
         )
         audio_recorder.start()
+        task_by_name["audio_recorder"] = audio_recorder
 
     terminate_perf_event = multiprocessing.Event()
-    perf_stat_writer = multiprocessing.Process(
+    perf_stats_writer = multiprocessing.Process(
         target=utils.WrapStdout(performance_stats_writer),
         args=(
             perf_q,
@@ -1318,12 +1497,12 @@ def record(
             started_counter,
         ),
     )
-    perf_stat_writer.start()
+    perf_stats_writer.start()
+    task_by_name["perf_stats_writer"] = perf_stats_writer
 
     if PLOT_PERFORMANCE:
-        expected_starts += 1
         record_pid = os.getpid()
-        mem_plotter = multiprocessing.Process(
+        mem_writer = multiprocessing.Process(
             target=utils.WrapStdout(memory_writer),
             args=(
                 recording,
@@ -1332,7 +1511,8 @@ def record(
                 started_counter,
             ),
         )
-        mem_plotter.start()
+        mem_writer.start()
+        task_by_name["mem_writer"] = mem_writer
 
     if log_memory:
         performance_snapshots = []
@@ -1343,22 +1523,23 @@ def record(
     # TODO: discard events until everything is ready
 
     # Wait for all to signal they've started
+    expected_starts = len(task_by_name)
+    logger.info(f"{expected_starts=}")
     while True:
         if started_counter.value >= expected_starts:
             break
         time.sleep(0.1)  # Sleep to reduce busy waiting
     for _ in range(5):
         logger.info("*" * 40)
-    if status_pipe:
-        status_pipe.send({"type": "record.started"})
     logger.info("All readers and writers have started. Waiting for input events...")
 
-    global stop_sequence_detected
+    if status_pipe:
+        status_pipe.send({"type": "record.started"})
 
+    global stop_sequence_detected
     try:
         while not (stop_sequence_detected or terminate_processing.is_set()):
             time.sleep(1)
-
         terminate_processing.set()
     except KeyboardInterrupt:
         terminate_processing.set()
@@ -1370,23 +1551,39 @@ def record(
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
 
-    logger.info("joining...")
-    keyboard_event_reader.join()
-    mouse_event_reader.join()
-    screen_event_reader.join()
-    window_event_reader.join()
-    event_processor.join()
-    screen_event_writer.join()
-    action_event_writer.join()
-    window_event_writer.join()
-    if config.RECORD_VIDEO:
-        video_writer.join()
-    if config.RECORD_AUDIO:
-        audio_recorder.join()
+    def join_tasks(task_names: list[str]) -> None:
+        for task_name in task_names:
+            if task_name in task_by_name:
+                logger.info(f"joining {task_name=}...")
+                task = task_by_name[task_name]
+                task.join()
+
+    join_tasks(
+        [
+            "window_event_reader",
+            "browser_event_reader",
+            "screen_event_reader",
+            "keyboard_event_reader",
+            "mouse_event_reader",
+            "event_processor",
+            "screen_event_writer",
+            "browser_event_writer",
+            "action_event_writer",
+            "window_event_writer",
+            "video_writer",
+            "audio_recorder",
+        ]
+    )
+
     terminate_perf_event.set()
+    join_tasks(
+        [
+            "perf_stats_writer",
+            "mem_writer",
+        ]
+    )
 
     if PLOT_PERFORMANCE:
-        mem_plotter.join()
         plotting.plot_performance(recording)
 
     logger.info(f"Saved {recording_timestamp=}")
