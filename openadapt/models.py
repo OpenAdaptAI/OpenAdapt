@@ -528,7 +528,7 @@ class WindowEvent(db.Base):
     def get_active_window_event(
         cls: "WindowEvent",
         # TODO: rename to include_a11y_data
-        include_window_data: bool = True,
+        include_window_data: bool = False,
     ) -> "WindowEvent":
         """Get the active window event.
 

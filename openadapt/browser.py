@@ -1,16 +1,18 @@
 """Utilities for working with BrowserEvents."""
 
 from statistics import mean, median, stdev
+import json
 
 from bs4 import BeautifulSoup
 from copy import deepcopy
 from dtaidistance import dtw, dtw_ndim
-from loguru import logger
 from sqlalchemy.orm import Session as SaSession
 from tqdm import tqdm
 import numpy as np
+import websockets.sync.server
 
 from openadapt import models, utils
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 # action to browser
@@ -79,6 +81,16 @@ KEYBOARD_KEYS = [
 ]
 
 
+def set_browser_mode(mode: str, websocket: websockets.sync.server.ServerConnection) -> None:
+    """Send a message to the browser extension to set the mode."""
+    logger.info(f"{type(websocket)=}")
+    VALID_MODES = ("idle", "record", "replay")
+    assert mode in VALID_MODES, f"{mode=} not in {VALID_MODES=}"
+    message = json.dumps({"type": "SET_MODE", "mode": mode})
+    logger.info(f"sending {message=}")
+    websocket.send(message)
+
+
 def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
     """Computes and adds the 'data-tlbr-screen' attribute for each element.
 
@@ -102,7 +114,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
         if event_type != "click":
             continue
 
-        visible_html_string = message.get("visibleHtmlString")
+        visible_html_string = message.get("visibleHTMLString")
         if not visible_html_string:
             logger.warning("No visible HTML data available for event.")
             continue
@@ -195,7 +207,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
         target_element["data-tlbr-screen"] = new_screen_coords
 
         # Write the updated element back to the message
-        message["visibleHtmlString"] = str(soup)
+        message["visibleHTMLString"] = str(soup)
 
     logger.info("Finished processing all browser events for screen coordinates.")
 
@@ -235,7 +247,7 @@ def identify_and_log_smallest_clicked_element(
     Args:
         browser_event: The browser event containing the click details.
     """
-    visible_html_string = browser_event.message.get("visibleHtmlString")
+    visible_html_string = browser_event.message.get("visibleHTMLString")
     message_id = browser_event.message.get("id")
     logger.info("*" * 10)
     logger.info(f"{message_id=}")

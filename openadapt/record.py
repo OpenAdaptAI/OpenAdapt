@@ -24,6 +24,7 @@ from oa_pynput import keyboard, mouse
 from pympler import tracker
 import av
 
+from openadapt.browser import set_browser_mode
 from openadapt.build_utils import redirect_stdout_stderr
 from openadapt.custom_logger import logger
 from openadapt.models import Recording
@@ -1192,24 +1193,29 @@ def read_browser_events(
     """
     utils.set_start_time(recording.timestamp)
 
+    # set the browser mode
+    set_browser_mode("record", websocket)
+
     logger.info("Starting Reading Browser Events ...")
 
     while not terminate_processing.is_set():
-        for message in websocket:
-            if not message:
-                continue
-
-            timestamp = utils.get_timestamp()
-
-            data = json.loads(message)
-
-            event_q.put(
-                Event(
-                    timestamp,
-                    "browser",
-                    {"message": data},
-                )
+        try:
+            message = websocket.recv(0.01)
+        except TimeoutError:
+            continue
+        timestamp = utils.get_timestamp()
+        data = json.loads(message)
+        event_q.put(
+            Event(
+                timestamp,
+                "browser",
+                {"message": data},
             )
+        )
+
+    logger.info(f"before setting browser mode to idle")
+    set_browser_mode("idle", websocket)
+    logger.info(f"after setting browser mode to idle")
 
 
 @logger.catch
