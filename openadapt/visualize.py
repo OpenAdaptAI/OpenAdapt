@@ -423,7 +423,6 @@ def main(
 
             progress.close()
 
-
     title = f"recording-{recording.id}"
 
     fname_out = RECORDING_DIR_PATH / f"recording-{recording.id}.html"

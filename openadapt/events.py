@@ -111,10 +111,8 @@ def get_events(
                 break
 
     if meta is not None:
-        format_num = (
-            lambda num, raw_num: (
-                f"{num} of {raw_num} ({(num / raw_num):.2%})" if raw_num else "0"
-            )
+        format_num = lambda num, raw_num: (
+            f"{num} of {raw_num} ({(num / raw_num):.2%})" if raw_num else "0"
         )  # noqa: E731
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
@@ -146,7 +144,7 @@ def get_events(
         event="get_events.completed", properties={"recording_id": recording.id}
     )
 
-    return action_events#, window_events, screenshots, browser_events
+    return action_events  # , window_events, screenshots, browser_events
 
 
 def make_parent_event(
@@ -180,11 +178,7 @@ def make_parent_event(
         event_dict[key] = val
 
     children = extra.get("children", [])
-    browser_events = [
-        child.browser_event
-        for child in children
-        if child.browser_event
-    ]
+    browser_events = [child.browser_event for child in children if child.browser_event]
     if browser_events:
         assert len(browser_events) <= 1, len(browser_events)
         browser_event = browser_events[0]
@@ -909,7 +903,9 @@ def merge_events(
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
-    pct_browser_events = num_browser_events_ / num_browser_events if num_browser_events else None
+    pct_browser_events = (
+        num_browser_events_ / num_browser_events if num_browser_events else None
+    )
     pct_total = num_total_ / num_total
     logger.info(
         "after"

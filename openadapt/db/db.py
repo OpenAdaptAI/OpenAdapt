@@ -42,8 +42,7 @@ class BaseModel(DictableModel):
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in row2dict(self, follow=False).items()
-            if v not in EMPTY
-            and k not in ignore_attrs
+            if v not in EMPTY and k not in ignore_attrs
         )
         return f"{self.__class__.__name__}({params})"
 

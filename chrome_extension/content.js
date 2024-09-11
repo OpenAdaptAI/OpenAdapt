@@ -22,7 +22,7 @@ function trackMouseEvent(event) {
   // Track y-coordinates
   updateCoordinateMappings('y', clientY, screenY);
 
-  // Ensure only the latest 2 distinct coordinate mappings per dimension are kept
+  // Ensure only the latest distinct coordinate mappings per dimension are kept
   trimMappings(coordMappings.x);
   trimMappings(coordMappings.y);
 

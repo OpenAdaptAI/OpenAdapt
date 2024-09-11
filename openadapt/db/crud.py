@@ -657,12 +657,15 @@ def disable_action_event(session: SaSession, event_id: int) -> None:
 def get_new_session(
     read_only: bool = False,
     read_and_write: bool = False,
+    allow_add_on_read_only: bool = True,
 ) -> sa.orm.Session:
     """Get a new database session.
 
     Args:
         read_only (bool): Whether to open the session in read-only mode.
         read_and_write (bool): Whether to open the session in read-and-write mode.
+        allow_add_on_read_only (bool): Whether to allow session.add on read_only
+            (write to memory, but not to disk).
 
     Returns:
         sa.orm.Session: A new database session.
@@ -678,7 +681,8 @@ def get_new_session(
             """Raise an error when trying to write to a read-only session."""
             raise PermissionError("This session is read-only.")
 
-        #session.add = raise_error_on_write
+        if not allow_add_on_read_only:
+            session.add = raise_error_on_write
         session.delete = raise_error_on_write
         session.commit = raise_error_on_write
         session.flush = raise_error_on_write

@@ -211,7 +211,11 @@ def process_events(
         elif event.type == "browser":
             if config.RECORD_BROWSER_EVENTS:
                 process_event(
-                    event, browser_write_q, write_browser_event, recording, perf_q,
+                    event,
+                    browser_write_q,
+                    write_browser_event,
+                    recording,
+                    perf_q,
                 )
         elif event.type == "action":
             if prev_screen_event is None:
@@ -1200,11 +1204,13 @@ def read_browser_events(
 
             data = json.loads(message)
 
-            event_q.put(Event(
-                timestamp,
-                "browser",
-                {"message": data},
-            ))
+            event_q.put(
+                Event(
+                    timestamp,
+                    "browser",
+                    {"message": data},
+                )
+            )
 
 
 @logger.catch
@@ -1233,7 +1239,10 @@ def run_browser_event_server(
         global ws_server_instance
         with websockets.sync.server.serve(
             lambda ws: read_browser_events(
-                ws, event_q, terminate_processing, recording,
+                ws,
+                event_q,
+                terminate_processing,
+                recording,
             ),
             config.BROWSER_WEBSOCKET_SERVER_IP,
             config.BROWSER_WEBSOCKET_PORT,
@@ -1381,7 +1390,7 @@ def record(
         ),
     )
     event_processor.start()
-    task_by_name["event_processor"] =  event_processor
+    task_by_name["event_processor"] = event_processor
 
     screen_event_writer = multiprocessing.Process(
         target=utils.WrapStdout(write_events),
@@ -1446,7 +1455,7 @@ def record(
         ),
     )
     window_event_writer.start()
-    task_by_name["window_event_writer"] =  window_event_writer
+    task_by_name["window_event_writer"] = window_event_writer
 
     if config.RECORD_VIDEO:
         video_writer = multiprocessing.Process(
@@ -1550,26 +1559,30 @@ def record(
                 task = task_by_name[task_name]
                 task.join()
 
-    join_tasks([
-        "window_event_reader",
-        "browser_event_reader",
-        "screen_event_reader",
-        "keyboard_event_reader",
-        "mouse_event_reader",
-        "event_processor",
-        "screen_event_writer",
-        "browser_event_writer",
-        "action_event_writer",
-        "window_event_writer",
-        "video_writer",
-        "audio_recorder",
-    ])
+    join_tasks(
+        [
+            "window_event_reader",
+            "browser_event_reader",
+            "screen_event_reader",
+            "keyboard_event_reader",
+            "mouse_event_reader",
+            "event_processor",
+            "screen_event_writer",
+            "browser_event_writer",
+            "action_event_writer",
+            "window_event_writer",
+            "video_writer",
+            "audio_recorder",
+        ]
+    )
 
     terminate_perf_event.set()
-    join_tasks([
-        "perf_stats_writer",
-        "mem_writer",
-    ])
+    join_tasks(
+        [
+            "perf_stats_writer",
+            "mem_writer",
+        ]
+    )
 
     if PLOT_PERFORMANCE:
         plotting.plot_performance(recording)

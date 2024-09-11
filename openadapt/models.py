@@ -645,16 +645,22 @@ class BrowserEvent(db.Base):
     action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
 
     def __str__(self) -> str:
-        """Returns a string representation of the BrowserEvent instance without modifying original data."""
+        """Returns a truncated string representation without modifying original data."""
         # Create a copy of the message to avoid modifying the original
         message_copy = copy.deepcopy(self.message)
 
         # Truncate the visibleHtmlString in the copied message if it exists
         if "visibleHtmlString" in message_copy:
-            message_copy["visibleHtmlString"] = utils.truncate_html(message_copy["visibleHtmlString"], max_len=100)
+            message_copy["visibleHtmlString"] = utils.truncate_html(
+                message_copy["visibleHtmlString"], max_len=100
+            )
 
         # Get all attributes except 'message'
-        attributes = {attr: getattr(self, attr) for attr in self.__mapper__.columns.keys() if attr != "message"}
+        attributes = {
+            attr: getattr(self, attr)
+            for attr in self.__mapper__.columns.keys()
+            if attr != "message"
+        }
 
         # Construct the string representation dynamically
         base_repr = ", ".join(f"{key}={value}" for key, value in attributes.items())

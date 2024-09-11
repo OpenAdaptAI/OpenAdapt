@@ -157,7 +157,7 @@ class Config(BaseSettings):
     # Browser Events Record (extension) configurations
     BROWSER_WEBSOCKET_SERVER_IP: str = "localhost"
     BROWSER_WEBSOCKET_PORT: int = 8765
-    BROWSER_WEBSOCKET_MAX_SIZE: int = 2**22  # 1MB
+    BROWSER_WEBSOCKET_MAX_SIZE: int = 2**22  # 4MB
 
     # Warning suppression
     IGNORE_WARNINGS: bool = False
