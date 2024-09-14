@@ -5,13 +5,13 @@ See https://ai.google.dev/tutorials/python_quickstart for documentation.
 
 from pprint import pformat
 
-from loguru import logger
 from PIL import Image
 import fire
 import google.generativeai as genai
 
 from openadapt import cache
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 MAX_TOKENS = 2**20  # 1048576
 MODEL_NAME = [

@@ -65,6 +65,12 @@ export const ActionEvent = ({
                                 <TableCellWithBorder>{timeStampToDateString(event.screenshot_timestamp)}</TableCellWithBorder>
                             </TableRowWithBorder>
                         )}
+                        {event.browser_event_timestamp && (
+                            <TableRowWithBorder>
+                                <TableCellWithBorder>browser event timestamp</TableCellWithBorder>
+                                <TableCellWithBorder>{timeStampToDateString(event.browser_event_timestamp)}</TableCellWithBorder>
+                            </TableRowWithBorder>
+                        )}
                         <TableRowWithBorder>
                             <TableCellWithBorder>window event timestamp</TableCellWithBorder>
                             <TableCellWithBorder>{timeStampToDateString(event.window_event_timestamp)}</TableCellWithBorder>

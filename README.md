@@ -164,6 +164,38 @@ possible memory leak
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
+
+### Capturing Browser Events
+
+To capture (record) browser events in Chrome, follow these steps:
+
+1. Go to: [Chrome Extension Page](chrome://extensions/)
+
+2. Enable `Developer mode` (located at the top right):
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/c97eb9fb-05d6-465d-85b3-332694556272)
+
+3. Click `Load unpacked` (located at the top left).
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/00c8adf5-074a-4655-b132-fd87644007fc)
+
+4. Select the `chrome_extension` directory:
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/71610ed3-f8d4-431a-9a22-d901127b7b0c)
+
+5. You should see the following confirmation, indicating that the extension is loaded:
+
+![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/65433817/7ee19da9-37e0-448f-b9ab-08ef99110e85)
+
+6. Set the flag to `true` if it is currently `false`:
+
+![image](https://github.com/user-attachments/assets/8eba24a3-7c68-4deb-8fbe-9d03cece1482)
+
+7. Start recording. Once recording begins, navigate to the Chrome browser, browse some pages, and perform a few clicks. Then, stop the recording and let it complete successfully.
+
+8. After recording, check the `openadapt.db` table `browser_event`. It should contain all your browser activity logs. You can verify the data's correctness using the `sqlite3` CLI or an extension like `SQLite Viewer` in VS Code to open `data/openadapt.db`.
+
+
 ### Visualize
 
 Quickly visualize the latest recording you created by running the following command:
