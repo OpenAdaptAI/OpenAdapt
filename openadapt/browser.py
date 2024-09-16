@@ -3,7 +3,6 @@
 from statistics import mean, median, stdev
 import json
 
-from bs4 import BeautifulSoup
 from copy import deepcopy
 from dtaidistance import dtw, dtw_ndim
 from sqlalchemy.orm import Session as SaSession
@@ -110,29 +109,17 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
 
     # Iterate over the events in reverse order
     for event in reversed(browser_events):
-        message = event.message
-
-        event_type = message.get("eventType")
-        if event_type != "click":
+        try:
+            soup, target_element = event.parse()
+        except AssertionError as exc:
+            logger.warning(exc)
             continue
-
-        visible_html_string = message.get("visibleHTMLString")
-        if not visible_html_string:
-            logger.warning("No visible HTML data available for event.")
-            continue
-
-        # Parse the visible HTML using BeautifulSoup
-        soup = BeautifulSoup(visible_html_string, "html.parser")
-
-        # Fetch the target element using its data-id
-        target_id = message.get("targetId")
-        target_element = soup.find(attrs={"data-id": target_id})
 
         if not target_element:
-            logger.warning(f"No target element found for targetId: {target_id}")
             continue
 
         # Extract coordMappings from the message
+        message = event.message
         coord_mappings = message.get("coordMappings", {})
         x_mappings = coord_mappings.get("x", {})
         y_mappings = coord_mappings.get("y", {})
@@ -260,8 +247,7 @@ def identify_and_log_smallest_clicked_element(
         logger.warning("No visible HTML data available for click event.")
         return
 
-    # Parse the visible HTML using BeautifulSoup
-    soup = BeautifulSoup(visible_html_string, "html.parser")
+    soup = utils.parse_html(visible_html_string, "html.parser")
     target_element = soup.find(attrs={"data-id": target_id})
     target_area = None
     if not target_element:

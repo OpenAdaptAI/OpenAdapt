@@ -1,4 +1,4 @@
-const DEBUG = false;
+const DEBUG = true;
 
 if (!DEBUG) {
   console.debug = function() {};
@@ -111,7 +111,6 @@ function handleResizeEvent(event) {
  * Record
  */
 
-const DEBUG = true;
 const RETURN_FULL_DOCUMENT = false;
 const MAX_COORDS = 3;
 const SET_SCREEN_COORDS = false;
@@ -464,7 +463,7 @@ function attachInstrumentationEventListeners() {
  */
 
 let debounceTimeoutId = null; // Timeout ID for debouncing
-const DEBOUNCE_DELAY = 200;
+const DEBOUNCE_DELAY = 10;
 
 function setupIntersectionObserver() {
   const observer = new IntersectionObserver(handleIntersection, {

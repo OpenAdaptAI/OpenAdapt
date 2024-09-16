@@ -8,10 +8,7 @@ let currentMode = null; // Maintain the current mode here
 let timeOffset = 0; // Global variable to store the time offset
 
 /*
- * TODO:
- * Ideally we read `WS_SERVER_PORT`, `WS_SERVER_ADDRESS` and
- * `RECONNECT_TIMEOUT_INTERVAL` from config.py,
- * or it gets passed in somehow.
+ * Note: these need to match the corresponding values in config[.defaults].json
  */
 let RECONNECT_TIMEOUT_INTERVAL = 1000; // ms
 let WS_SERVER_PORT = 8765;

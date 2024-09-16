@@ -180,7 +180,6 @@ def make_parent_event(
     children = extra.get("children", [])
     browser_events = [child.browser_event for child in children if child.browser_event]
     if browser_events:
-        assert len(browser_events) <= 1, len(browser_events)
         browser_event = browser_events[0]
         event_dict["browser_event"] = browser_event
 
