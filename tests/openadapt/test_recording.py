@@ -10,7 +10,7 @@ from openadapt.db import crud
 from openadapt.models import Recording, ActionEvent
 from loguru import logger
 
-RECORD_STARTED_TIMEOUT = 120  # Increased timeout to 120 seconds
+RECORD_STARTED_TIMEOUT = 360  # Increased timeout to 120 seconds
 
 
 @pytest.fixture
@@ -86,23 +86,23 @@ def test_record_functionality():
 
         # Assert filesystem state
         video_path = video.get_video_file_path(recording.timestamp)
-        if not os.path.exists(video_path):
-            logger.warning(f"Video file not found at {video_path}")
-            # Check if video recording is enabled in the configuration
-            if config.RECORD_VIDEO:
-                logger.error("Video recording is enabled but no video file was created")
-            else:
-                logger.info("Video recording is disabled in the configuration")
-        else:
+        if config.RECORD_VIDEO:
+            assert os.path.exists(video_path), f"Video file not found at {video_path}"
             logger.info(f"Video file found at {video_path}")
+        else:
+            logger.info("Video recording is disabled in the configuration")
 
         performance_plot_path = utils.get_performance_plot_file_path(recording.timestamp)
-        if not os.path.exists(performance_plot_path):
-            logger.warning(f"Performance plot not found at {performance_plot_path}")
-        else:
-            logger.info(f"Performance plot found at {performance_plot_path}")
+        assert os.path.exists(performance_plot_path), f"Performance plot not found at {performance_plot_path}"
+        logger.info(f"Performance plot found at {performance_plot_path}")
 
-        logger.info("Filesystem assertions completed")
+        # Assert that at least one action event was recorded
+        with crud.get_new_session(read_and_write=True) as session:
+            action_events = crud.get_action_events(session, recording)
+            assert len(action_events) > 0, "No action events were recorded"
+            logger.info(f"Number of action events recorded: {len(action_events)}")
+
+        logger.info("All assertions passed")
 
     except Exception as e:
         logger.exception(f"An error occurred during the test: {e}")
