@@ -10,7 +10,7 @@ from openadapt.db import crud
 from openadapt.models import Recording, ActionEvent
 from loguru import logger
 
-RECORD_STARTED_TIMEOUT = 360  # Increased timeout to 120 seconds
+RECORD_STARTED_TIMEOUT = 360  # Increased timeout to 6 minutes
 
 
 @pytest.fixture
