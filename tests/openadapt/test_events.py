@@ -6,9 +6,9 @@ from typing import Callable, Optional
 import itertools
 
 from deepdiff import DeepDiff
-from loguru import logger
 import pytest
 
+from openadapt.custom_logger import logger
 from openadapt.events import (
     discard_unused_events,
     merge_consecutive_keyboard_events,

@@ -12,6 +12,7 @@ from nicegui import ui
 from openadapt.app.objects.local_file_picker import LocalFilePicker
 from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
 from openadapt.record import record
+from openadapt.utils import WrapStdout
 
 
 class RecordProc:
@@ -56,7 +57,7 @@ class RecordProc:
     def start(self, func: callable, args: tuple, kwargs: dict) -> None:
         """Start the recording process."""
         self.record_proc = multiprocessing.Process(
-            target=func,
+            target=WrapStdout(func),
             args=args,
             kwargs=kwargs,
         )

@@ -8,7 +8,6 @@ import os
 import time
 
 from dictalchemy import DictableModel
-from loguru import logger
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import reflection
 from sqlalchemy.ext.declarative import declarative_base
@@ -17,6 +16,7 @@ from sqlalchemy.schema import MetaData
 import sqlalchemy as sa
 
 from openadapt.config import RECORDING_DIR_PATH, config
+from openadapt.custom_logger import logger
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -37,10 +37,12 @@ class BaseModel(DictableModel):
         # avoid circular import
         from openadapt.utils import EMPTY, row2dict
 
+        ignore_attrs = getattr(self, "_repr_ignore_attrs", [])
+
         params = ", ".join(
             f"{k}={v!r}"  # !r converts value to string using repr (adds quotes)
             for k, v in row2dict(self, follow=False).items()
-            if v not in EMPTY
+            if v not in EMPTY and k not in ignore_attrs
         )
         return f"{self.__class__.__name__}({params})"
 

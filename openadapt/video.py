@@ -7,12 +7,12 @@ import subprocess
 import tempfile
 import threading
 
-from loguru import logger
 from PIL import Image
 import av
 
 from openadapt import utils
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 
 def get_video_file_path(recording_timestamp: float) -> str:
@@ -288,7 +288,7 @@ def extract_frames(
     video_stream = video_container.streams.video[0]  # Assuming the first video stream
 
     # To store matched frames
-    timestamp_frames = {t: None for t in timestamps}
+    frame_by_timestamp = {t: None for t in timestamps}
     # To store closest frame differences
     frame_differences = {t: float("inf") for t in timestamps}
 
@@ -308,7 +308,7 @@ def extract_frames(
                         f"Frame at {frame_timestamp}s is closest for more than one"
                         " timestamp."
                     )
-                timestamp_frames[timestamp] = frame
+                frame_by_timestamp[timestamp] = frame
                 frame_differences[timestamp] = difference
 
     video_container.close()
@@ -319,16 +319,21 @@ def extract_frames(
         for timestamp, difference in frame_differences.items()
         if difference > tolerance
     }
-    logger.info(f"invalid_frame_differences=\n{pformat(invalid_frame_differences)}")
+    if invalid_frame_differences:
+        logger.warning(
+            f"invalid_frame_differences=\n{pformat(invalid_frame_differences)}"
+        )
 
     # Check if all timestamps have been matched
-    for timestamp, frame in timestamp_frames.items():
-        if frame is None:
-            raise Exception(
-                f"No frame found within tolerance for timestamp {timestamp}s."
-            )
+    missing_frame_timestamps = [
+        timestamp for timestamp, frame in frame_by_timestamp.items() if frame is None
+    ]
+    if missing_frame_timestamps:
+        raise Exception(
+            f"No frame within tolerance for timestamps {missing_frame_timestamps}."
+        )
 
     # Convert frames to PIL Image and return
-    extracted_frames = [timestamp_frames[t].to_image() for t in timestamps]
+    extracted_frames = [frame_by_timestamp[t].to_image() for t in timestamps]
 
     return extracted_frames

@@ -5,6 +5,7 @@ export type ActionEvent = {
     recording_timestamp: number;
     screenshot_timestamp?: number;
     window_event_timestamp: number;
+    browser_event_timestamp: number;
     mouse_x: number | null;
     mouse_y: number | null;
     mouse_dx: number | null;
