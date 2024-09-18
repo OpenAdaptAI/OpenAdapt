@@ -9,9 +9,9 @@ import string
 from bokeh.io import output_file, show
 from bokeh.layouts import layout, row
 from bokeh.models.widgets import Div
-from loguru import logger
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.custom_logger import logger
 
 with redirect_stdout_stderr():
     from tqdm import tqdm
@@ -32,6 +32,7 @@ from openadapt.utils import (
     image2utf8,
     row2dict,
     rows2dicts,
+    truncate_html,
 )
 
 SCRUB = config.SCRUB_ENABLED
@@ -142,13 +143,7 @@ def dict2html(
         html_str = f"<table>{rows_html}</table>"
     else:
         html_str = html.escape(str(obj))
-        if len(html_str) > max_len:
-            n = max_len // 2
-            head = html_str[:n]
-            tail = html_str[-n:]
-            snipped = html_str[n:-n]
-            middle = f"<br/>...<i>(snipped {len(snipped):,})...</i><br/>"
-            html_str = head + middle + tail
+        html_str = truncate_html(html_str, max_len)
     return html_str
 
 
@@ -346,10 +341,12 @@ def main(
 
                 action_event_dict = row2dict(action_event)
                 window_event_dict = row2dict(action_event.window_event)
+                browser_event_dict = row2dict(action_event.browser_event)
 
                 if SCRUB:
                     action_event_dict = scrub.scrub_dict(action_event_dict)
                     window_event_dict = scrub.scrub_dict(window_event_dict)
+                    browser_event_dict = scrub.scrub_dict(browser_event_dict)
 
                 rows.append(
                     [
@@ -379,11 +376,43 @@ def main(
                                 <table>
                                     {dict2html(window_event_dict , None)}
                                 </table>
+                                <table>
+                                    {dict2html(browser_event_dict , None)}
+                                </table>
                             """,
                             ),
                             Div(text=f"""
                                 <table>
                                     {dict2html(action_event_dict)}
+                                </table>
+                            """),
+                        ),
+                    ]
+                )
+
+                progress.update()
+
+            progress.close()
+
+    # Visualize BrowserEvents
+    rows.append([row(Div(text="<h2>Browser Events</h2>"))])
+    browser_events = crud.get_browser_events(session, recording)
+    with redirect_stdout_stderr():
+        with tqdm(
+            total=len(browser_events),
+            desc="Preparing HTML (browser events)",
+            unit="event",
+            colour="green",
+            dynamic_ncols=True,
+        ) as progress:
+            for idx, browser_event in enumerate(browser_events):
+                browser_event_dict = row2dict(browser_event)
+                rows.append(
+                    [
+                        row(
+                            Div(text=f"""
+                                <table>
+                                    {dict2html(browser_event_dict)}
                                 </table>
                             """),
                         ),

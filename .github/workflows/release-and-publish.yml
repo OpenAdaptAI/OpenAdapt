@@ -44,17 +44,23 @@ jobs:
               brew install nvm
               poetry run postinstall
               brew install python-tk@3.10
-        - name: Build executables
+        - name: Build MacOS executable
           run: |
               poetry run python -m openadapt.build
               cd dist
               zip -r ../OpenAdapt.app.zip OpenAdapt.app
+              mv OpenAdapt.dmg ..
               cd ..
-        - name: Upload executables
+        - name: Upload MacOS executable
           uses: actions/upload-artifact@v4
           with:
               name: OpenAdapt.app
               path: OpenAdapt.app.zip
+        - name: Upload MacOS installer
+          uses: actions/upload-artifact@v4
+          with:
+              name: OpenAdapt.dmg
+              path: OpenAdapt.dmg
 
   build-windows-executables:
     name: Build Windows app
@@ -83,17 +89,23 @@ jobs:
               cd ../../../
               pip install wheel
               poetry run postinstall
-        - name: Build executables
+        - name: Build Windows executable
           run: |
               poetry run python -m openadapt.build
               cd dist
               7z a -tzip ../OpenAdapt.zip OpenAdapt
+              move OpenAdapt_Installer.exe ..
               cd ..
-        - name: Upload executables
+        - name: Upload Windows executable
           uses: actions/upload-artifact@v4
           with:
               name: OpenAdapt
               path: OpenAdapt.zip
+        - name: Upload Windows installer
+          uses: actions/upload-artifact@v4
+          with:
+              name: OpenAdapt_Installer
+              path: OpenAdapt_Installer.exe
 
   test_on_macos:
     name: Test on macOS
@@ -189,6 +201,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: OpenAdapt
+          path: dist/
+      - name: Download macOS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt.dmg
+          path: dist/
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: OpenAdapt_Installer
           path: dist/
       - name: Python Semantic Release
         id: semantic_release

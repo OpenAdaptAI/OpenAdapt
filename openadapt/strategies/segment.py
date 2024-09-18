@@ -5,15 +5,13 @@ Uses FastSAM for segmentation.
 
 from pprint import pformat
 
-from loguru import logger
-
 from openadapt import adapters, common, models, strategies, utils
+from openadapt.custom_logger import logger
 from openadapt.strategies.visual import (
     add_active_segment_descriptions,
-    get_window_segmentation,
     apply_replay_instructions,
+    get_window_segmentation,
 )
-
 
 INCLUDE_RAW_RECORDING = False
 INCLUDE_RAW_RECORDING_DESCRIPTION = False

@@ -8,17 +8,13 @@ import multiprocessing
 import os
 import pathlib
 import shutil
-import webbrowser
 
 from loguru import logger
 from pydantic import field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-from PySide6.QtWidgets import QMessageBox, QPushButton
-import git
-import sentry_sdk
 
-from openadapt.build_utils import get_root_dir_path, is_running_from_executable
+from openadapt.build_utils import get_root_dir_path
 
 CONFIG_DEFAULTS_FILE_PATH = (
     pathlib.Path(__file__).parent / "config.defaults.json"
@@ -32,6 +28,7 @@ RECORDING_DIR_PATH = (DATA_DIR_PATH / "recordings").absolute()
 PERFORMANCE_PLOTS_DIR_PATH = (DATA_DIR_PATH / "performance").absolute()
 CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
+DATABASE_FILE_PATH = (DATA_DIR_PATH / "openadapt.db").absolute()
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
 
 STOP_STRS = [
@@ -124,7 +121,7 @@ class Config(BaseSettings):
 
     # Database
     DB_ECHO: bool = False
-    DB_URL: ClassVar[str] = f"sqlite:///{(DATA_DIR_PATH / 'openadapt.db').absolute()}"
+    DB_URL: ClassVar[str] = f"sqlite:///{DATABASE_FILE_PATH}"
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
@@ -137,10 +134,12 @@ class Config(BaseSettings):
     OPENAI_MODEL_NAME: str = "gpt-3.5-turbo"
 
     # Record and replay
+    EVENT_BUFFER_QUEUE_SIZE: int = 100
     RECORD_WINDOW_DATA: bool = True
-    RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
+    RECORD_READ_ACTIVE_ELEMENT_STATE: bool
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool
+    RECORD_BROWSER_EVENTS: bool
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool
     RECORD_IMAGES: bool
@@ -155,6 +154,11 @@ class Config(BaseSettings):
         list(stop_str) for stop_str in STOP_STRS
     ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+    # Browser Events Record (extension) configurations
+    BROWSER_WEBSOCKET_SERVER_IP: str = "localhost"
+    BROWSER_WEBSOCKET_PORT: int = 8765
+    BROWSER_WEBSOCKET_MAX_SIZE: int = 2**22  # 4MB
+
     # Warning suppression
     IGNORE_WARNINGS: bool = False
     MAX_NUM_WARNINGS_PER_SECOND: int = 5
@@ -168,6 +172,9 @@ class Config(BaseSettings):
 
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
+
+    # Database File Path
+    DATABASE_FILE_PATH: str = str(DATABASE_FILE_PATH)
 
     # App configurations
     APP_DARK_MODE: bool = False
@@ -286,6 +293,7 @@ class Config(BaseSettings):
             "RECORD_READ_ACTIVE_ELEMENT_STATE",
             "RECORD_VIDEO",
             "RECORD_IMAGES",
+            "RECORD_BROWSER_EVENTS",
             "VIDEO_PIXEL_FORMAT",
         ],
         "general": [
@@ -399,7 +407,7 @@ def maybe_obfuscate(key: str, val: Any) -> Any:
     OBFUSCATE_KEY_PARTS = ("KEY", "PASSWORD", "TOKEN")
     parts = key.split("_")
     if any([part in parts for part in OBFUSCATE_KEY_PARTS]):
-        val = obfuscate(val)
+        val = obfuscate(str(val))
     return val
 
 
@@ -411,46 +419,3 @@ def print_config() -> None:
             if not key.startswith("_") and key.isupper():
                 val = maybe_obfuscate(key, val)
                 logger.info(f"{key}={val}")
-
-        if config.ERROR_REPORTING_ENABLED:
-            if is_running_from_executable():
-                is_reporting_branch = True
-            else:
-                active_branch_name = git.Repo(PARENT_DIR_PATH).active_branch.name
-                logger.info(f"{active_branch_name=}")
-                is_reporting_branch = (
-                    active_branch_name == config.ERROR_REPORTING_BRANCH
-                )
-                logger.info(f"{is_reporting_branch=}")
-            if is_reporting_branch:
-
-                def show_alert() -> None:
-                    """Show an alert to the user."""
-                    msg = QMessageBox()
-                    msg.setIcon(QMessageBox.Warning)
-                    msg.setText("""
-                        An error has occurred. The development team has been notified.
-                        Please join the discord server to get help or send an email to
-                        help@openadapt.ai
-                        """)
-                    discord_button = QPushButton("Join the discord server")
-                    discord_button.clicked.connect(
-                        lambda: webbrowser.open("https://discord.gg/yF527cQbDG")
-                    )
-                    msg.addButton(discord_button, QMessageBox.ActionRole)
-                    msg.addButton(QMessageBox.Ok)
-                    msg.exec()
-
-                def before_send_event(event: Any, hint: Any) -> Any:
-                    """Handle the event before sending it to Sentry."""
-                    try:
-                        show_alert()
-                    except Exception:
-                        pass
-                    return event
-
-                sentry_sdk.init(
-                    dsn=config.ERROR_REPORTING_DSN,
-                    traces_sample_rate=1.0,
-                    before_send=before_send_event,
-                )

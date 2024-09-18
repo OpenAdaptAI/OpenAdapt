@@ -4,12 +4,12 @@ from io import BytesIO
 import base64
 import os
 
-from loguru import logger
 from PIL import Image
 import easyocr
 import requests
 
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.privacy.providers.private_ai import PrivateAIScrubbingProvider
 
 scrub = PrivateAIScrubbingProvider()

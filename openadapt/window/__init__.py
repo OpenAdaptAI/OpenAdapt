@@ -6,9 +6,8 @@ Module: __init__.py
 from typing import Any
 import sys
 
-from loguru import logger
-
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 if sys.platform == "darwin":
     from . import _macos as impl
@@ -33,7 +32,7 @@ def get_active_window_data(
     """
     state = get_active_window_state(include_window_data)
     if not state:
-        return None
+        return {}
     title = state["title"]
     left = state["left"]
     top = state["top"]

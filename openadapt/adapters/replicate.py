@@ -3,7 +3,6 @@
 import io
 import os
 
-from loguru import logger
 from PIL import Image
 import fire
 import replicate
@@ -11,6 +10,7 @@ import requests
 
 from openadapt import cache, utils
 from openadapt.config import config
+from openadapt.custom_logger import logger
 
 
 @cache.cache()
