@@ -1,4 +1,6 @@
 """
+Implements a replay strategy for browser recordings.
+
 TODO:
 - re-use approach from visual.py: segment each screenshot, prompt for descriptions
 """
@@ -16,6 +18,12 @@ from openadapt.custom_logger import logger
 
 # Define ws_server_instance at the top scope
 ws_server_instance = None
+
+# Define a whitelist of essential attributes
+WHITELIST_ATTRIBUTES = [
+    'id', 'class', 'href', 'src', 'alt', 'name', 'type', 'value', 'title', 'data-*', 'aria-*'
+]
+
 
 class BrowserReplayStrategy(strategies.BaseReplayStrategy):
     """ReplayStrategy using HTML and replay instructions."""
@@ -247,11 +255,6 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
         logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
 
-# Define a whitelist of essential attributes
-WHITELIST_ATTRIBUTES = [
-    'id', 'class', 'href', 'src', 'alt', 'name', 'type', 'value', 'title', 'data-*', 'aria-*'
-]
-
 def clean_html_attributes(element: BeautifulSoup) -> str:
     """Retain only essential attributes from an HTML element based on a whitelist.
 
@@ -273,6 +276,7 @@ def clean_html_attributes(element: BeautifulSoup) -> str:
     # Update the element with only whitelisted attributes
     element.attrs = dict(whitelist_attrs)
     return str(element)
+
 
 def filter_and_clean_html(soup: BeautifulSoup) -> str:
     """Filter out irrelevant elements, clean attributes, and log removed elements.
@@ -299,6 +303,7 @@ def filter_and_clean_html(soup: BeautifulSoup) -> str:
 
     # Recreate a simplified HTML structure with only the cleaned elements
     return ''.join(cleaned_elements)
+
 
 def add_browser_elements(action_events: list) -> None:
     """Set the ActionEvent.active_browser_element where appropriate and log actions.

@@ -221,7 +221,9 @@ class ActionEvent(db.Base):
         )
 
     @property
-    def active_browser_element(self) -> BeautifulSoup:
+    def active_browser_element(self) -> BeautifulSoup | None:
+        if not self._active_browser_element:
+            return None
         return utils.parse_html(self._active_browser_element)
 
     @active_browser_element.setter
@@ -232,10 +234,12 @@ class ActionEvent(db.Base):
         self._active_browser_element = str(value)
 
     @property
-    def available_browser_elements(self) -> BeautifulSoup:
+    def available_browser_elements(self) -> BeautifulSoup | None:
         # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#navigating-the-tree
         # The value True matches every tag it can. This code finds all the tags in the
         # document, but none of the text strings
+        if not self._available_browser_elements:
+            return None
         return utils.parse_html(self._available_browser_elements)
 
     @available_browser_elements.setter
@@ -535,6 +539,8 @@ class ActionEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the ActionEvent.
         """
+        if self.active_browser_element:
+            import ipdb; ipdb.set_trace()
         action_dict = deepcopy(
             {
                 key: val
@@ -550,10 +556,20 @@ class ActionEvent(db.Base):
             for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
                 if key in action_dict:
                     del action_dict[key]
+        # TODO XXX: add target_segment_description?
+
+        # Manually add properties to the dictionary
         if self.available_segment_descriptions:
             action_dict["available_segment_descriptions"] = (
                 self.available_segment_descriptions
             )
+        if self.active_browser_element:
+            action_dict["active_browser_element"] = str(self.active_browser_element)
+        if self.available_browser_elements:
+            action_dict["available_browser_elements"] = str(self.available_browser_elements)
+
+        if self.active_browser_element:
+            import ipdb; ipdb.set_trace()
         return action_dict
 
 

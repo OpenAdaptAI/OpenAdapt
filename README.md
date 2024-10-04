@@ -10,7 +10,8 @@ See also:
 - https://github.com/OpenAdaptAI/pynput
 - https://github.com/OpenAdaptAI/atomacos
 
-# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs).
+# OpenAdapt: Open Source Generative Process Automation.
+## AI-First Process Automation with Large Multimodal Models (LMMs).
 
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web Graphical User Interfaces (GUIs).
 
