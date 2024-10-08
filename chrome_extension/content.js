@@ -410,6 +410,7 @@ function handleUserEvent(event) {
     timestamp: timestamp,
     visibleHTMLString,
     visibleHTMLDuration,
+    devicePixelRatio,
   };
 
   if (event instanceof KeyboardEvent) {
@@ -572,4 +573,67 @@ function sendVisibleHTML(eventType) {
 function setupScrollAndResizeListeners() {
   window.addEventListener('scroll', handleScrollEvent, { passive: true });
   window.addEventListener('resize', handleResizeEvent, { passive: true });
+}
+
+/* Debugging */
+
+const DEBUG_DRAW = false;  // Flag for drawing bounding boxes
+
+// Start continuous drawing if DEBUG_DRAW is enabled
+if (DEBUG_DRAW) {
+  startDrawingBoundingBoxes();
+}
+
+/**
+ * Start continuously drawing bounding boxes for visible elements.
+ */
+function startDrawingBoundingBoxes() {
+  function drawBoundingBoxesLoop() {
+    // Clean up existing bounding boxes before drawing new ones
+    cleanUpBoundingBoxes();
+
+    // Query all visible elements and draw their bounding boxes
+    document.querySelectorAll('*').forEach(element => {
+      if (isVisible(element)) {
+        drawBoundingBoxForElement(element);
+      }
+    });
+
+    // Use requestAnimationFrame for continuous updates without performance impact
+    requestAnimationFrame(drawBoundingBoxesLoop);
+  }
+
+  // Kick off the loop
+  drawBoundingBoxesLoop();
+}
+
+/**
+ * Draw a bounding box for the given element.
+ * Uses client coordinates.
+ * @param {HTMLElement} element - The DOM element to draw the bounding box for.
+ */
+function drawBoundingBoxForElement(element) {
+  const { top, left, bottom, right } = element.getBoundingClientRect();
+
+  // Create and style the overlay to represent the bounding box
+  let bboxOverlay = document.createElement('div');
+  bboxOverlay.style.position = 'absolute';
+  bboxOverlay.style.border = '2px solid red';
+  bboxOverlay.style.top = `${top + window.scrollY}px`;  // Adjust for scrolling
+  bboxOverlay.style.left = `${left + window.scrollX}px`;  // Adjust for scrolling
+  bboxOverlay.style.width = `${right - left}px`;
+  bboxOverlay.style.height = `${bottom - top}px`;
+  bboxOverlay.style.pointerEvents = 'none';  // Prevent interference with normal element interactions
+  bboxOverlay.style.zIndex = '9999';  // Ensure it's drawn on top
+  bboxOverlay.setAttribute('data-debug-bbox', element.getAttribute('data-id') || '');
+
+  // Append the overlay to the body
+  document.body.appendChild(bboxOverlay);
+}
+
+/**
+ * Clean up all existing bounding boxes to prevent overlapping or lingering overlays.
+ */
+function cleanUpBoundingBoxes() {
+  document.querySelectorAll('[data-debug-bbox]').forEach(overlay => overlay.remove());
 }
