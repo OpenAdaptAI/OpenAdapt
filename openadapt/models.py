@@ -439,40 +439,37 @@ class ActionEvent(db.Base):
             (ActionEvent) The ActionEvent.
         """
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
-        children = []
-        release_events = []
         if "text" in action_dict:
-            # Splitting actions based on whether they are special keys or characters
-            if action_dict["text"].startswith(name_prefix) and action_dict[
-                "text"
-            ].endswith(name_suffix):
-                # handle multiple key separators
-                # (each key separator must start and end with a prefix and suffix)
+            children = []
+            name_prefix = config.ACTION_TEXT_NAME_PREFIX
+            name_suffix = config.ACTION_TEXT_NAME_SUFFIX
+            text = action_dict["text"]
+
+            # Check if the text contains named keys (starting with the name prefix)
+            contains_named_keys = text.startswith(name_prefix) and text.endswith(name_suffix)
+
+            if contains_named_keys:
+                # Handle named keys, potentially with separator variations
+                release_events = []
                 default_sep = "".join([name_suffix, sep, name_prefix])
-                variation_seps = ["".join([name_suffix, name_prefix])]
                 key_seps = [default_sep]
                 if handle_separator_variations:
+                    variation_seps = ["".join([name_suffix, name_prefix])]
                     key_seps += variation_seps
 
                 prefix_len = len(name_prefix)
                 suffix_len = len(name_suffix)
 
                 key_names = utils.split_by_separators(
-                    action_dict.get("text", "")[prefix_len:-suffix_len],
+                    text[prefix_len:-suffix_len],
                     key_seps,
                 )
                 canonical_key_names = utils.split_by_separators(
                     action_dict.get("canonical_text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
-                logger.info(f"{key_names=}")
-                logger.info(f"{canonical_key_names=}")
 
                 # Process each key name and canonical key name found
-                children = []
-                release_events = []
                 for key_name, canonical_key_name in zip_longest(
                     key_names,
                     canonical_key_names,
@@ -481,19 +478,22 @@ class ActionEvent(db.Base):
                         key_name, canonical_key_name
                     )
                     children.append(press)
-                    release_events.append(
-                        release
-                    )  # Collect release events to append in reverse order later
-
+                    release_events.append(release)
+                children += release_events[::-1]
             else:
-                # Handling regular character sequences
-                sep_len = len(sep)
-                for key_char in action_dict["text"][:: sep_len + 1]:
-                    # Press and release each character one after another
-                    press, release = cls._create_key_events(key_char=key_char)
+                # Handle mixed sequences of named keys and regular characters
+                split_text = text.split(sep)
+                for part in split_text:
+                    if part.startswith(name_prefix) and part.endswith(name_suffix):
+                        # It's a named key
+                        key_name = part[len(name_prefix):-len(name_suffix)]
+                        press, release = cls._create_key_events(key_name=key_name)
+                    else:
+                        # It's a character
+                        press, release = cls._create_key_events(key_char=part)
                     children.append(press)
                     children.append(release)
-            children += release_events[::-1]
+
         rval = ActionEvent(**action_dict, children=children)
         return rval
 
