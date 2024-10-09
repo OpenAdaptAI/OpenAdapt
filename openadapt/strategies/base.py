@@ -21,6 +21,7 @@ class BaseReplayStrategy(ABC):
         self,
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
+        include_a11y_data: bool = True,
     ) -> None:
         """Initialize the BaseReplayStrategy.
 
@@ -34,6 +35,7 @@ class BaseReplayStrategy(ABC):
         self.screenshots = []
         self.window_events = []
         self.frame_times = []
+        self.include_a11y_data = include_a11y_data
 
     @abstractmethod
     def get_next_action_event(
@@ -67,7 +69,10 @@ class BaseReplayStrategy(ABC):
                     continue
 
             self.screenshots.append(screenshot)
-            window_event = models.WindowEvent.get_active_window_event()
+            window_event = models.WindowEvent.get_active_window_event(
+                # TODO: rename
+                include_window_data=self.include_a11y_data,
+            )
             self.window_events.append(window_event)
             try:
                 action_event = self.get_next_action_event(

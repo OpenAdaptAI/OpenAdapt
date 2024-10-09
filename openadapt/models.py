@@ -8,6 +8,7 @@ import copy
 import io
 import sys
 
+from bs4 import BeautifulSoup
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
@@ -147,6 +148,14 @@ class ActionEvent(db.Base):
         "available_segment_descriptions",
         sa.String,
     )
+    _active_browser_element = sa.Column(
+        "active_browser_element",
+        sa.String,
+    )
+    _available_browser_elements = sa.Column(
+        "available_browser_elements",
+        sa.String,
+    )
     mouse_button_name = sa.Column(sa.String)
     mouse_pressed = sa.Column(sa.Boolean)
     key_name = sa.Column(sa.String)
@@ -193,6 +202,7 @@ class ActionEvent(db.Base):
         for key, value in properties.items():
             setattr(self, key, value)
 
+    # TODO: rename "available" to "target"
     @property
     def available_segment_descriptions(self) -> list[str]:
         """Gets the available segment descriptions."""
@@ -209,6 +219,53 @@ class ActionEvent(db.Base):
         self._available_segment_descriptions = self._segment_description_separator.join(
             value
         )
+
+    @property
+    def active_browser_element(self) -> BeautifulSoup | None:
+        if not self._active_browser_element:
+            return None
+        return utils.parse_html(self._active_browser_element)
+
+    @active_browser_element.setter
+    def active_browser_element(self, value: BeautifulSoup) -> None:
+        if not value:
+            logger.warning(f"{value=}")
+            return
+        self._active_browser_element = str(value)
+
+    @property
+    def available_browser_elements(self) -> BeautifulSoup | None:
+        # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#navigating-the-tree
+        # The value True matches every tag it can. This code finds all the tags in the
+        # document, but none of the text strings
+        if not self._available_browser_elements:
+            return None
+        return utils.parse_html(self._available_browser_elements)
+
+    @available_browser_elements.setter
+    def available_browser_elements(self, value: BeautifulSoup | None) -> None:
+        if not value:
+            logger.warning(f"{value=}")
+            return
+        try:
+            self._available_browser_elements = str(value)
+        except Exception as exc:
+            # something myterious is going on, because this works:
+            #   self._available_browser_elements = value
+            # and so does this:
+            #   self._available_browser_elements = 'foo'
+            # but sometimes this:
+            #   self._available_browser_elements = value
+            # produces:
+            #   'NoneType' object is not callable
+            # apparently, so does this:
+            #   BeautifulSoup(soup.prettyify())
+            # XXX TODO: fix this
+            #logger.error(exc)
+            #self._available_browser_elements = '?'
+            #return self.available_browser_elements
+            import ipdb; ipdb.set_trace()
+            foo = 1
 
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
@@ -382,40 +439,37 @@ class ActionEvent(db.Base):
             (ActionEvent) The ActionEvent.
         """
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
-        children = []
-        release_events = []
         if "text" in action_dict:
-            # Splitting actions based on whether they are special keys or characters
-            if action_dict["text"].startswith(name_prefix) and action_dict[
-                "text"
-            ].endswith(name_suffix):
-                # handle multiple key separators
-                # (each key separator must start and end with a prefix and suffix)
+            children = []
+            name_prefix = config.ACTION_TEXT_NAME_PREFIX
+            name_suffix = config.ACTION_TEXT_NAME_SUFFIX
+            text = action_dict["text"]
+
+            # Check if the text contains named keys (starting with the name prefix)
+            contains_named_keys = text.startswith(name_prefix) and text.endswith(name_suffix)
+
+            if contains_named_keys:
+                # Handle named keys, potentially with separator variations
+                release_events = []
                 default_sep = "".join([name_suffix, sep, name_prefix])
-                variation_seps = ["".join([name_suffix, name_prefix])]
                 key_seps = [default_sep]
                 if handle_separator_variations:
+                    variation_seps = ["".join([name_suffix, name_prefix])]
                     key_seps += variation_seps
 
                 prefix_len = len(name_prefix)
                 suffix_len = len(name_suffix)
 
                 key_names = utils.split_by_separators(
-                    action_dict.get("text", "")[prefix_len:-suffix_len],
+                    text[prefix_len:-suffix_len],
                     key_seps,
                 )
                 canonical_key_names = utils.split_by_separators(
                     action_dict.get("canonical_text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
-                logger.info(f"{key_names=}")
-                logger.info(f"{canonical_key_names=}")
 
                 # Process each key name and canonical key name found
-                children = []
-                release_events = []
                 for key_name, canonical_key_name in zip_longest(
                     key_names,
                     canonical_key_names,
@@ -424,19 +478,22 @@ class ActionEvent(db.Base):
                         key_name, canonical_key_name
                     )
                     children.append(press)
-                    release_events.append(
-                        release
-                    )  # Collect release events to append in reverse order later
-
+                    release_events.append(release)
+                children += release_events[::-1]
             else:
-                # Handling regular character sequences
-                sep_len = len(sep)
-                for key_char in action_dict["text"][:: sep_len + 1]:
-                    # Press and release each character one after another
-                    press, release = cls._create_key_events(key_char=key_char)
+                # Handle mixed sequences of named keys and regular characters
+                split_text = text.split(sep)
+                for part in split_text:
+                    if part.startswith(name_prefix) and part.endswith(name_suffix):
+                        # It's a named key
+                        key_name = part[len(name_prefix):-len(name_suffix)]
+                        press, release = cls._create_key_events(key_name=key_name)
+                    else:
+                        # It's a character
+                        press, release = cls._create_key_events(key_char=part)
                     children.append(press)
                     children.append(release)
-            children += release_events[::-1]
+
         rval = ActionEvent(**action_dict, children=children)
         return rval
 
@@ -482,6 +539,8 @@ class ActionEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the ActionEvent.
         """
+        if self.active_browser_element:
+            import ipdb; ipdb.set_trace()
         action_dict = deepcopy(
             {
                 key: val
@@ -497,10 +556,22 @@ class ActionEvent(db.Base):
             for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
                 if key in action_dict:
                     del action_dict[key]
+        # TODO XXX: add target_segment_description?
+
+        # Manually add properties to the dictionary
         if self.available_segment_descriptions:
             action_dict["available_segment_descriptions"] = (
                 self.available_segment_descriptions
             )
+        if self.active_browser_element:
+            action_dict["active_browser_element"] = str(self.active_browser_element)
+        if self.available_browser_elements:
+            # TODO XXX: available browser_elements contains raw HTML. We need to
+            # prompt to convert into descriptions.
+            action_dict["available_browser_elements"] = str(self.available_browser_elements)
+
+        if self.active_browser_element:
+            import ipdb; ipdb.set_trace()
         return action_dict
 
 
@@ -649,10 +720,10 @@ class BrowserEvent(db.Base):
         # Create a copy of the message to avoid modifying the original
         message_copy = copy.deepcopy(self.message)
 
-        # Truncate the visibleHtmlString in the copied message if it exists
-        if "visibleHtmlString" in message_copy:
-            message_copy["visibleHtmlString"] = utils.truncate_html(
-                message_copy["visibleHtmlString"], max_len=100
+        # Truncate the visibleHTMLString in the copied message if it exists
+        if "visibleHTMLString" in message_copy:
+            message_copy["visibleHTMLString"] = utils.truncate_html(
+                message_copy["visibleHTMLString"], max_len=100
             )
 
         # Get all attributes except 'message'
@@ -667,6 +738,40 @@ class BrowserEvent(db.Base):
 
         # Return the complete representation including the truncated message
         return f"BrowserEvent({base_repr}, message={message_copy})"
+
+    def parse(self) -> tuple[BeautifulSoup, BeautifulSoup | None]:
+        """Parses the visible HTML and optionally extracts the target element.
+
+        This method processes the browser event to parse the visible HTML and,
+        if the event has a targetId, extracts the target HTML element.
+
+        Returns:
+            A tuple containing:
+            - BeautifulSoup: The parsed soup of the visible HTML.
+            - BeautifulSoup | None: The target HTML element if the event type is
+                "click"; otherwise, None.
+
+        Raises:
+            AssertionError: If the necessary data is missing.
+        """
+        message = self.message
+
+        visible_html_string = message.get("visibleHTMLString")
+        assert visible_html_string, "Cannot parse without visibleHTMLstring"
+
+        # Parse the visible HTML using BeautifulSoup
+        soup = utils.parse_html(visible_html_string)
+
+        event_type = message.get("eventType")
+        target_element = None
+
+        # Fetch the target element using its data-id
+        target_id = message.get("targetId")
+        if target_id:
+            target_element = soup.find(attrs={"data-id": target_id})
+            assert target_element, f"No target element found for targetId: {target_id}"
+
+        return soup, target_element
 
     # # TODO: implement
     # @classmethod

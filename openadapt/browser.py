@@ -1,16 +1,17 @@
 """Utilities for working with BrowserEvents."""
 
 from statistics import mean, median, stdev
+import json
 
-from bs4 import BeautifulSoup
 from copy import deepcopy
 from dtaidistance import dtw, dtw_ndim
-from loguru import logger
 from sqlalchemy.orm import Session as SaSession
 from tqdm import tqdm
 import numpy as np
+import websockets.sync.server
 
 from openadapt import models, utils
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 
 # action to browser
@@ -79,7 +80,19 @@ KEYBOARD_KEYS = [
 ]
 
 
-def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
+def set_browser_mode(
+    mode: str, websocket: websockets.sync.server.ServerConnection
+) -> None:
+    """Send a message to the browser extension to set the mode."""
+    logger.info(f"{type(websocket)=}")
+    VALID_MODES = ("idle", "record", "replay")
+    assert mode in VALID_MODES, f"{mode=} not in {VALID_MODES=}"
+    message = json.dumps({"type": "SET_MODE", "mode": mode})
+    logger.info(f"sending {message=}")
+    websocket.send(message)
+
+
+def add_screen_tlbr(browser_events: list[models.BrowserEvent], target_element_only: bool = False) -> None:
     """Computes and adds the 'data-tlbr-screen' attribute for each element.
 
     Uses coordMappings provided by JavaScript events. If 'data-tlbr-screen' already
@@ -89,6 +102,8 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
 
     Args:
         browser_events (list[models.BrowserEvent]): list of browser events to process.
+        target_element_only (bool): if True, only process the target element. If False,
+            process all elements with the 'data-tlbr-client' property.
     """
     # Initialize variables to store the most recent valid mappings
     latest_valid_x_mappings = None
@@ -96,29 +111,14 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
 
     # Iterate over the events in reverse order
     for event in reversed(browser_events):
-        message = event.message
-
-        event_type = message.get("eventType")
-        if event_type != "click":
-            continue
-
-        visible_html_string = message.get("visibleHtmlString")
-        if not visible_html_string:
-            logger.warning("No visible HTML data available for event.")
-            continue
-
-        # Parse the visible HTML using BeautifulSoup
-        soup = BeautifulSoup(visible_html_string, "html.parser")
-
-        # Fetch the target element using its data-id
-        target_id = message.get("targetId")
-        target_element = soup.find(attrs={"data-id": target_id})
-
-        if not target_element:
-            logger.warning(f"No target element found for targetId: {target_id}")
+        try:
+            soup, target_element = event.parse()
+        except AssertionError as exc:
+            logger.warning(exc)
             continue
 
         # Extract coordMappings from the message
+        message = event.message
         coord_mappings = message.get("coordMappings", {})
         x_mappings = coord_mappings.get("x", {})
         y_mappings = coord_mappings.get("y", {})
@@ -136,7 +136,7 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
             # Reuse the most recent valid mappings
             if latest_valid_x_mappings is None or latest_valid_y_mappings is None:
                 logger.warning(
-                    f"No valid coordinate mappings available for element: {target_id}"
+                    f"No valid coordinate mappings available for element: {target_element.get('id')}"
                 )
                 continue  # No valid mappings available, skip this event
 
@@ -151,51 +151,52 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent]) -> None:
             y_mappings["client"], y_mappings["screen"]
         )
 
-        # Only process the screen coordinates
-        tlbr_attr = "data-tlbr-screen"
-        try:
-            # Get existing screen coordinates if present
-            existing_screen_coords = (
-                target_element[tlbr_attr] if tlbr_attr in target_element.attrs else None
-            )
-        except KeyError:
-            existing_screen_coords = None
+        # Define function to process element
+        def process_element(element):
+            # Compute the 'data-tlbr-screen' attribute
+            tlbr_attr = "data-tlbr-screen"
+            existing_screen_coords = element.get(tlbr_attr, None)
 
-        # Compute screen coordinates
-        client_coords = target_element.get("data-tlbr-client")
-        if not client_coords:
-            logger.warning(
-                f"Missing client coordinates for element with id: {target_id}"
-            )
-            continue
+            client_coords = element.get("data-tlbr-client")
+            if not client_coords:
+                logger.warning(f"Missing client coordinates for element with id: {element.get('id')}")
+                return
 
-        # Extract client coordinates
-        client_top, client_left, client_bottom, client_right = map(
-            float, client_coords.split(",")
-        )
-
-        # Calculate screen coordinates using the computed scale and offset
-        screen_top = sy_scale * client_top + sy_offset
-        screen_left = sx_scale * client_left + sx_offset
-        screen_bottom = sy_scale * client_bottom + sy_offset
-        screen_right = sx_scale * client_right + sx_offset
-
-        # New computed screen coordinates
-        new_screen_coords = f"{screen_top},{screen_left},{screen_bottom},{screen_right}"
-        logger.info(f"{client_coords=} {existing_screen_coords=} {new_screen_coords=}")
-
-        # Check for existing data-tlbr-screen attribute
-        if existing_screen_coords:
-            assert existing_screen_coords == new_screen_coords, (
-                "Mismatch in computed and existing screen coordinates:"
-                f" {existing_screen_coords} != {new_screen_coords}"
+            # Extract client coordinates
+            client_top, client_left, client_bottom, client_right = map(
+                float, client_coords.split(",")
             )
 
-        # Update the attribute with the new value
-        target_element["data-tlbr-screen"] = new_screen_coords
+            # Calculate screen coordinates using the computed scale and offset
+            screen_top = sy_scale * client_top + sy_offset
+            screen_left = sx_scale * client_left + sx_offset
+            screen_bottom = sy_scale * client_bottom + sy_offset
+            screen_right = sx_scale * client_right + sx_offset
 
-        # Write the updated element back to the message
-        message["visibleHtmlString"] = str(soup)
+            # New computed screen coordinates
+            new_screen_coords = f"{screen_top},{screen_left},{screen_bottom},{screen_right}"
+            logger.info(f"{client_coords=} {existing_screen_coords=} {new_screen_coords=}")
+
+            # Check for existing data-tlbr-screen attribute
+            if existing_screen_coords:
+                assert existing_screen_coords == new_screen_coords, (
+                    "Mismatch in computed and existing screen coordinates:"
+                    f" {existing_screen_coords} != {new_screen_coords}"
+                )
+
+            # Update the attribute with the new value
+            element["data-tlbr-screen"] = new_screen_coords
+
+        # Process elements based on target_element_only flag
+        if target_element_only:
+            process_element(target_element)
+        else:
+            elements_to_process = soup.find_all(attrs={"data-tlbr-client": True})
+            for element in elements_to_process:
+                process_element(element)
+
+        # Write the updated elements back to the message
+        message["visibleHTMLString"] = str(soup)
 
     logger.info("Finished processing all browser events for screen coordinates.")
 
@@ -235,7 +236,7 @@ def identify_and_log_smallest_clicked_element(
     Args:
         browser_event: The browser event containing the click details.
     """
-    visible_html_string = browser_event.message.get("visibleHtmlString")
+    visible_html_string = browser_event.message.get("visibleHTMLString")
     message_id = browser_event.message.get("id")
     logger.info("*" * 10)
     logger.info(f"{message_id=}")
@@ -246,8 +247,7 @@ def identify_and_log_smallest_clicked_element(
         logger.warning("No visible HTML data available for click event.")
         return
 
-    # Parse the visible HTML using BeautifulSoup
-    soup = BeautifulSoup(visible_html_string, "html.parser")
+    soup = utils.parse_html(visible_html_string, "html.parser")
     target_element = soup.find(attrs={"data-id": target_id})
     target_area = None
     if not target_element:
