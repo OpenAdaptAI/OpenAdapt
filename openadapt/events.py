@@ -81,7 +81,7 @@ def get_events(
                 f"{num_process_iters=} "
                 f"{num_action_events=} "
                 f"{num_window_events=} "
-                f"{num_screenshots=}"
+                f"{num_screenshots=} "
                 f"{num_browser_events=}"
             )
             (
@@ -180,7 +180,6 @@ def make_parent_event(
     children = extra.get("children", [])
     browser_events = [child.browser_event for child in children if child.browser_event]
     if browser_events:
-        assert len(browser_events) <= 1, len(browser_events)
         browser_event = browser_events[0]
         event_dict["browser_event"] = browser_event
 

@@ -5,6 +5,8 @@ Module: __init__.py
 # flake8: noqa
 
 from openadapt.strategies.base import BaseReplayStrategy
+from openadapt.strategies.browser import BrowserReplayStrategy
+from openadapt.strategies.visual_browser import VisualBrowserReplayStrategy
 
 # disabled because importing is expensive
 # from openadapt.strategies.demo import DemoReplayStrategy
