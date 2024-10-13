@@ -13,13 +13,6 @@ from loguru import logger
 RECORD_STARTED_TIMEOUT = 360  # Increased timeout to 6 minutes
 
 
-@pytest.fixture
-def setup_db():
-    # Setup the database connection and return the session
-    db_session = crud.get_new_session(read_and_write=True)
-    yield db_session
-    db_session.close()
-
 
 def test_record_functionality():
     logger.info("Starting test_record_functionality")
