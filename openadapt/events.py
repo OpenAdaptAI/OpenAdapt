@@ -81,7 +81,7 @@ def get_events(
                 f"{num_process_iters=} "
                 f"{num_action_events=} "
                 f"{num_window_events=} "
-                f"{num_screenshots=}"
+                f"{num_screenshots=} "
                 f"{num_browser_events=}"
             )
             (

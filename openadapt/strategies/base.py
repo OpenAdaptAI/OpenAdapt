@@ -10,7 +10,7 @@ import numpy as np
 from openadapt import adapters, models, playback, utils
 from openadapt.custom_logger import logger
 
-CHECK_ACTION_COMPLETE = True
+CHECK_ACTION_COMPLETE = False
 MAX_FRAME_TIMES = 1000
 
 
@@ -126,6 +126,13 @@ class BaseReplayStrategy(ABC):
             self.frame_times.pop(0)
 
 
+# TODO XXX handle failure mode:
+"""
+expected_state='After pressing <cmd>-<tab>, I would expect to see the application switcher
+overlay, showing a row of applications that can be cycled through.' is_complete=False
+"""
+# e.g. include next window state in prompt
+# e.g. elaborate specifically for cmd-tab (i.e. that next application should be visible)
 def prompt_is_action_complete(
     current_screenshot: models.Screenshot,
     played_actions: list[models.ActionEvent],

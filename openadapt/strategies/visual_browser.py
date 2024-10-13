@@ -9,12 +9,13 @@ import numpy as np
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
 from openadapt.custom_logger import logger
 
-DEBUG = True
+DEBUG = False
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
 MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
 MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
 MIN_SEGMENT_SIZE_SIM = 0  # threshold for considering segment sizes similar
+SKIP_MOVE_BEFORE_CLICK = True  # workaround for bug in events.remove_move_before_click
 
 
 @dataclass
@@ -370,11 +371,17 @@ def get_window_segmentation(
     else:
 
 
-
-        # XXX
-        return None
+        # TODO XXX: get segments from A11Y, fallback to segmentation
 
 
+        # XXX HACK: skip if this event is "move" and next is "click"
+        # TODO: consolidate with events.remove_move_before_click (currently disabled)
+        # the following was implemented because enabelling remove_move_before_click
+        # had no effect on order in visualize.py
+        if SKIP_MOVE_BEFORE_CLICK:
+            if action_event.name == "move" and action_event.next_event and action_event.next_event.name == "click":
+                logger.info("Skipping 'move' event followed by 'click'")
+                return None
 
         segmentation_adapter = adapters.get_default_segmentation_adapter()
         segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
@@ -392,8 +399,6 @@ def get_window_segmentation(
     masked_images = vision.extract_masked_images(original_image, refined_masks)
     if action_event.browser_event and DEBUG:
         plotting.display_images_table_with_titles(masked_images, element_labels)
-
-    import ipdb; ipdb.set_trace()
 
     if handle_similar_image_groups:
         similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
@@ -432,7 +437,6 @@ def get_window_segmentation(
         plotting.display_images_table_with_titles(masked_images, descriptions)
 
     SEGMENTATIONS.append(segmentation)
-    import ipdb; ipdb.set_trace()
     return segmentation
 
 

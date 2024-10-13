@@ -16,7 +16,9 @@ def test_action_from_dict() -> None:
             "<backspace>-<backspace><backspace>",
             "<backspace><backspace>-<backspace>",
         ],
+
         # TODO: support malformed configurations below
+
         ## all char keys
         "a-b-c": [
             # standard
@@ -27,6 +29,7 @@ def test_action_from_dict() -> None:
             #"a-bc",
             #"ab-c",
         ],
+
         ## mixed named and char
         "<cmd>-t": [
             # standard

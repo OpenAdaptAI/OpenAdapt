@@ -3,7 +3,7 @@
 from collections import OrderedDict
 from copy import deepcopy
 from itertools import zip_longest
-from typing import Any, Type
+from typing import Any, Type, Union
 import copy
 import io
 import sys
@@ -371,6 +371,9 @@ class ActionEvent(db.Base):
         """Validate the text property. Useful for ActionModel(**action_dict)."""
         if not value == self.text:
             logger.warning(f"{value=} did not match {self.text=}")
+            #if self.text:
+            #    import ipdb; ipdb.set_trace()
+            #    foo = 1
 
     @property
     def canonical_text(self) -> str:
@@ -429,6 +432,8 @@ class ActionEvent(db.Base):
     ) -> "ActionEvent":
         """Get an ActionEvent from a dict.
 
+        See tests.openadapt.test_models::test_action_from_dict for behavior details.
+
         Args:
             action_dict (dict): A dictionary representing the action.
             handle_separator_variations (bool): Whether to attempt to handle variations
@@ -439,13 +444,14 @@ class ActionEvent(db.Base):
             (ActionEvent) The ActionEvent.
         """
         sep = config.ACTION_TEXT_SEP
+        children = []
         if "text" in action_dict:
-            children = []
             name_prefix = config.ACTION_TEXT_NAME_PREFIX
             name_suffix = config.ACTION_TEXT_NAME_SUFFIX
             text = action_dict["text"]
 
             # Check if the text contains named keys (starting with the name prefix)
+            # TODO: support sequences of the form <cmd>-a-<cmd>
             contains_named_keys = text.startswith(name_prefix) and text.endswith(name_suffix)
 
             if contains_named_keys:
@@ -573,6 +579,22 @@ class ActionEvent(db.Base):
         if self.active_browser_element:
             import ipdb; ipdb.set_trace()
         return action_dict
+
+    @property
+    def next_event(self) -> Union["ActionEvent", None]:
+        """Get the next ActionEvent chronologically in the same recording.
+
+        Returns:
+            ActionEvent | None: The next ActionEvent, or None if this is the last event.
+        """
+        if not self.recording or not self.recording.action_events:
+            return None
+
+        current_index = self.recording.action_events.index(self)
+        if current_index < len(self.recording.action_events) - 1:
+            return self.recording.action_events[current_index + 1]
+
+        return None
 
 
 class WindowEvent(db.Base):

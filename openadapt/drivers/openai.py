@@ -14,6 +14,8 @@ import requests
 from openadapt import cache, utils
 from openadapt.config import config
 from openadapt.custom_logger import logger
+from tokencost import calculate_prompt_cost, calculate_completion_cost, count_message_tokens
+
 
 MODEL_NAME = [
     "gpt-4-vision-preview",
@@ -24,6 +26,10 @@ MODEL_NAME = [
 MAX_TOKENS = 4096
 # TODO XXX undocumented
 MAX_IMAGES = None
+
+# Track total tokens and cost
+total_tokens_used = 0
+total_cost = 0.0
 
 
 def create_payload(
@@ -134,6 +140,61 @@ def get_response(
     return result
 
 
+def calculate_tokens_and_cost(result: dict, payload: dict) -> tuple[int, float, int, float, float]:
+    """Calculate the tokens and costs for the API call.
+
+    Args:
+        result: The response from the OpenAI API.
+        payload: The original request payload.
+
+    Returns:
+        A tuple containing:
+        - Prompt tokens used
+        - Prompt cost
+        - Completion tokens used
+        - Completion cost
+        - Total cost
+    """
+    # Extract text content from payload messages
+    def extract_text(messages: list[dict]) -> list[dict]:
+        extracted = []
+        for message in messages:
+            role = message["role"]
+            content_list = message["content"]
+            text_content = "".join([item["text"] for item in content_list if item["type"] == "text"])
+            extracted.append({"role": role, "content": text_content})
+        return extracted
+
+    # Extracted messages for token counting
+    prompt_messages = extract_text(payload["messages"])
+    completion_text = result["choices"][0]["message"]["content"]
+
+    # Calculate tokens and costs
+    prompt_tokens = count_message_tokens(prompt_messages, model=payload["model"])
+    completion_tokens = count_message_tokens([{"role": "assistant", "content": completion_text}], model=payload["model"])
+
+    prompt_cost = calculate_prompt_cost(prompt_messages, model=payload["model"])
+    completion_cost = calculate_completion_cost(completion_text, model=payload["model"])
+
+    total_cost = prompt_cost + completion_cost
+    return prompt_tokens, prompt_cost, completion_tokens, completion_cost, total_cost
+
+
+def update_total_usage(
+    prompt_tokens: int, completion_tokens: int, api_call_cost: float
+) -> None:
+    """Update the total token and cost counters.
+
+    Args:
+        prompt_tokens: The number of tokens used in the prompt.
+        completion_tokens: The number of tokens used in the completion.
+        api_call_cost: The total cost of the API call.
+    """
+    global total_tokens_used, total_cost
+    total_tokens_used += prompt_tokens + completion_tokens
+    total_cost += float(api_call_cost)  # Convert Decimal to float
+
+
 def get_completion(payload: dict, dev_mode: bool = False) -> str:
     """Sends a request to the OpenAI API and returns the first message.
 
@@ -151,12 +212,21 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
             return get_completion(payload)
         elif dev_mode:
             import ipdb
-
             ipdb.set_trace()
-            # TODO: handle more errors
         else:
             raise exc
     logger.info(f"result=\n{pformat(result)}")
+
+    # Calculate tokens and cost
+    prompt_tokens, prompt_cost, completion_tokens, completion_cost, api_call_cost = calculate_tokens_and_cost(result, payload)
+
+    # Update total usage
+    update_total_usage(prompt_tokens, completion_tokens, api_call_cost)
+
+    # Log the results
+    logger.info(f"API Call Tokens: {prompt_tokens + completion_tokens}, Total Tokens Used: {total_tokens_used}")
+    logger.info(f"API Call Cost: ${api_call_cost:.6f}, Total Cost: ${total_cost:.6f}")
+
     choices = result["choices"]
     choice = choices[0]
     message = choice["message"]
