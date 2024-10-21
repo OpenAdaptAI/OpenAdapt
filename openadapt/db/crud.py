@@ -28,6 +28,7 @@ from openadapt.models import (
     Screenshot,
     ScrubbedRecording,
     WindowEvent,
+    A11yEvent,
     copy_sa_instance,
 )
 from openadapt.privacy.base import ScrubbingProvider
@@ -285,6 +286,25 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
     session.commit()
     session.refresh(db_obj)
     return db_obj
+
+
+def insert_a11y_event(
+    session: SaSession,
+    event_data: dict,
+) -> None:
+    """Insert an a11y event into the database.
+
+    Args:
+        session (sa.orm.Session): The database session.
+        event_data (dict): The data of the event
+    """
+    handle = event_data["handle"]
+    a11y_data = event_data["a11y_data"]
+    timestamp = event_data["timestamp"]
+    a11y_event = A11yEvent(timestamp=timestamp, handle=handle, data=a11y_data)
+
+    session.add(a11y_event)
+    session.commit()
 
 
 def delete_recording(session: SaSession, recording: Recording) -> None:
@@ -611,6 +631,35 @@ def get_window_events(
             subqueryload(WindowEvent.action_events).joinedload(ActionEvent.screenshot),
         )
         .order_by(WindowEvent.timestamp)
+        .all()
+    )
+
+
+def get_a11y_events(
+    session: SaSession,
+    recording: Recording,
+) -> list[A11yEvent]:
+    """Get accessibility events for a given recording.
+
+    Args:
+        session (SaSession): The SQLAlchemy session.
+        recording (Recording): The recording object.
+
+    Returns:
+        list[A11yEvent]: A list of accessibility events for the recording.
+    """
+    return (
+        session.query(A11yEvent)
+        .join(
+            WindowEvent,
+            (A11yEvent.handle == WindowEvent.handle)
+            & (A11yEvent.timestamp == WindowEvent.timestamp),
+        )
+        .filter(WindowEvent.recording_id == recording.id)
+        .options(
+            joinedload(A11yEvent.window_event).joinedload(WindowEvent.recording),
+        )
+        .order_by(A11yEvent.timestamp)
         .all()
     )
 

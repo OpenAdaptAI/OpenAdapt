@@ -135,7 +135,7 @@ class Config(BaseSettings):
 
     # Record and replay
     EVENT_BUFFER_QUEUE_SIZE: int = 100
-    RECORD_WINDOW_DATA: bool = True
+    RECORD_A11Y_DATA: bool = True
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool
     RECORD_VIDEO: bool
     RECORD_AUDIO: bool

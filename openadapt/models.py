@@ -504,6 +504,25 @@ class ActionEvent(db.Base):
         return action_dict
 
 
+class A11yEvent(db.Base):
+    """Class representing an accessibility (a11y) event in the database."""
+
+    __tablename__ = "a11y_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    timestamp = sa.Column(ForceFloat)
+    handle = sa.Column(sa.Integer)
+    data = sa.Column(sa.JSON)
+
+    __table_args__ = (
+        sa.ForeignKeyConstraint(
+            ["handle", "timestamp"], ["window_event.handle", "window_event.timestamp"]
+        ),
+    )
+
+    window_event = sa.orm.relationship("WindowEvent", back_populates="a11y_event")
+
+
 class WindowEvent(db.Base):
     """Class representing a window event in the database."""
 
@@ -513,34 +532,53 @@ class WindowEvent(db.Base):
     recording_timestamp = sa.Column(ForceFloat)
     recording_id = sa.Column(sa.ForeignKey("recording.id"))
     timestamp = sa.Column(ForceFloat)
-    state = sa.Column(sa.JSON)
     title = sa.Column(sa.String)
     left = sa.Column(sa.Integer)
     top = sa.Column(sa.Integer)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
-    window_id = sa.Column(sa.String)
+    handle = sa.Column(sa.Integer)
+
+    __table_args__ = (
+        sa.UniqueConstraint("handle", "timestamp", name="uix_handle_timestamp"),
+    )
 
     recording = sa.orm.relationship("Recording", back_populates="window_events")
     action_events = sa.orm.relationship("ActionEvent", back_populates="window_event")
+    a11y_event = sa.orm.relationship(
+        "A11yEvent", uselist=False, back_populates="window_event"
+    )
 
     @classmethod
     def get_active_window_event(
         cls: "WindowEvent",
-        # TODO: rename to include_a11y_data
-        include_window_data: bool = True,
+        include_a11y_data: bool = True,
     ) -> "WindowEvent":
         """Get the active window event.
 
         Args:
-            include_window_data (bool): whether to include a11y data.
+            include_a11y_data (bool): whether to include a11y data.
 
         Returns:
             (WindowEvent) the active window event.
         """
         from openadapt import window
 
-        return WindowEvent(**window.get_active_window_data(include_window_data))
+        window_event_data = window.get_active_window_data(include_a11y_data)
+        a11y_event = None
+
+        if include_a11y_data:
+            a11y_event_data = window_event_data.get("state")
+            window_event_data.pop("state", None)
+            a11y_event_handle = window_event_data.get("handle")
+            a11y_event = A11yEvent(data=a11y_event_data, handle=a11y_event_handle)
+
+        window_event = WindowEvent(**window_event_data)
+
+        if a11y_event:
+            window_event.a11y_event = a11y_event
+
+        return window_event
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
         """Scrub the window event."""
@@ -563,6 +601,7 @@ class WindowEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the WindowEvent.
         """
+        a11y_data = self.a11y_event.data
         window_dict = deepcopy(
             {
                 key: val
@@ -596,37 +635,51 @@ class WindowEvent(db.Base):
             window_dict.pop("width")
             window_dict.pop("height")
 
-        if "state" in window_dict:
-            if include_data:
-                key_suffixes = [
-                    "value",
-                    "h",
-                    "w",
-                    "x",
-                    "y",
-                    "description",
-                    "title",
-                    "help",
-                ]
-                if sys.platform == "win32":
-                    logger.warning(
-                        "key_suffixes have not yet been defined on Windows."
-                        "You can help by uncommenting the lines below and pasting "
-                        "the contents of the window_dict into a new GitHub Issue."
-                    )
-                    # from pprint import pformat
-                    # logger.info(f"window_dict=\n{pformat(window_dict)}")
-                    # import ipdb; ipdb.set_trace()
-                window_state = window_dict["state"]
-                window_state["data"] = utils.clean_dict(
-                    utils.filter_keys(
-                        window_state["data"],
-                        key_suffixes,
-                    )
-                )
-            else:
-                window_dict["state"].pop("data")
-            window_dict["state"].pop("meta")
+        if a11y_data:
+            window_dict = deepcopy(
+                {
+                    key: val
+                    for key, val in utils.row2dict(
+                        self.a11y_event, follow=False
+                    ).items()
+                    if val not in EMPTY_VALS
+                    and not key.endswith("timestamp")
+                    and not key.endswith("id")
+                    # and not isinstance(getattr(models.WindowEvent, key), property)
+                }
+            )
+            if "a11y_data" in window_dict:
+                if include_data:
+                    key_suffixes = [
+                        "value",
+                        "h",
+                        "w",
+                        "x",
+                        "y",
+                        "description",
+                        "title",
+                        "help",
+                    ]
+                    if sys.platform == "win32":
+                        logger.warning(
+                            "key_suffixes have not yet been defined on Windows."
+                            "You can help by uncommenting the lines below and pasting "
+                            "the contents of the window_dict into a new GitHub Issue."
+                        )
+                        # from pprint import pformat
+                        # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                        # import ipdb; ipdb.set_trace()
+                    if "a11y_data" in window_dict:
+                        window_state = window_dict["a11y_data"]
+                        window_state["data"] = utils.clean_dict(
+                            utils.filter_keys(
+                                window_state["data"],
+                                key_suffixes,
+                            )
+                        )
+                else:
+                    window_dict["a11y_data"].pop("data")
+                window_dict["a11y_data"].pop("meta")
         return window_dict
 
 

@@ -47,7 +47,7 @@ from openadapt.models import ActionEvent
 
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
-EVENT_TYPES = ("screen", "action", "window", "browser")
+EVENT_TYPES = ("screen", "action", "window", "browser", "a11y")
 LOG_LEVEL = "INFO"
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
@@ -56,6 +56,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "action": True,
     "window": True,
     "browser": True,
+    "a11y": True,
 }
 PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
@@ -133,6 +134,7 @@ def process_events(
     action_write_q: sq.SynchronizedQueue,
     window_write_q: sq.SynchronizedQueue,
     browser_write_q: sq.SynchronizedQueue,
+    a11y_write_q: sq.SynchronizedQueue,
     video_write_q: sq.SynchronizedQueue,
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
@@ -142,6 +144,7 @@ def process_events(
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
     num_browser_events: multiprocessing.Value,
+    num_a11y_events: multiprocessing.Value,
     num_video_events: multiprocessing.Value,
 ) -> None:
     """Process events from the event queue and write them to write queues.
@@ -152,6 +155,7 @@ def process_events(
         action_write_q: A queue for writing action events.
         window_write_q: A queue for writing window events.
         browser_write_q: A queue for writing browser events,
+        a11y_write_q: A queue for writing a11y events.
         video_write_q: A queue for writing video events.
         perf_q: A queue for collecting performance data.
         recording: The recording object.
@@ -161,6 +165,7 @@ def process_events(
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
         num_browser_events: A counter for the number of browser events.
+        num_a11y_events: A counter for the number of a11y events.
         num_video_events: A counter for the number of video events.
     """
     utils.set_start_time(recording.timestamp)
@@ -173,6 +178,7 @@ def process_events(
     prev_saved_screen_timestamp = 0
     prev_saved_window_timestamp = 0
     started = False
+    window_events_waiting_for_a11y = queue.Queue()
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
         if not started:
@@ -208,6 +214,8 @@ def process_events(
                 num_video_events.value += 1
         elif event.type == "window":
             prev_window_event = event
+            if config.RECORD_A11Y_DATA:
+                window_events_waiting_for_a11y.put_nowait(event)
         elif event.type == "browser":
             if config.RECORD_BROWSER_EVENTS:
                 process_event(
@@ -270,6 +278,24 @@ def process_events(
                 )
                 num_window_events.value += 1
                 prev_saved_window_timestamp = prev_window_event.timestamp
+        elif event.type == "a11y":
+            try:
+                window_event = window_events_waiting_for_a11y.get_nowait()
+            except queue.Empty as exc:
+                logger.warning(
+                    f"Discarding A11yEvent with no corresponding WindowEvent: {exc}"
+                )
+                continue
+            event.data["timestamp"] = window_event.timestamp
+            process_event(
+                event,
+                a11y_write_q,
+                write_a11y_event,
+                recording,
+                perf_q,
+            )
+            num_a11y_events.value += 1
+            logger.debug(f"A11yEvent processed: {event}")
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -339,6 +365,26 @@ def write_window_event(
     """
     assert event.type == "window", event
     crud.insert_window_event(db, recording, event.timestamp, event.data)
+    perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+
+
+def write_a11y_event(
+    db: crud.SaSession,
+    recording: Recording,
+    event: Event,
+    perf_q: sq.SynchronizedQueue,
+) -> None:
+    """Write an a11y event to the database and update the performance queue.
+
+    Args:
+        db: The database session.
+        recording: The recording object.
+        event: An a11y event to be written.
+        perf_q: A queue for collecting performance data.
+    """
+    assert event.type == "a11y", event
+    data = event.data
+    crud.insert_a11y_event(db, data)
     perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
 
 
@@ -741,6 +787,8 @@ def read_window_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_counter: multiprocessing.Value,
+    read_a11y_data: bool,
+    event_name: str,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -749,6 +797,8 @@ def read_window_events(
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
         started_counter: Value to increment once started.
+        read_a11y_data: Whether to read a11y_data.
+        event_name: The name of the event.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -756,7 +806,7 @@ def read_window_events(
     prev_window_data = {}
     started = False
     while not terminate_processing.is_set():
-        window_data = window.get_active_window_data()
+        window_data = window.get_active_window_data(include_a11y_data=read_a11y_data)
         if not window_data:
             continue
 
@@ -765,9 +815,8 @@ def read_window_events(
                 started_counter.value += 1
             started = True
 
-        if window_data["title"] != prev_window_data.get("title") or window_data[
-            "window_id"
-        ] != prev_window_data.get("window_id"):
+        # for logging purposes only
+        if window_data["handle"] != prev_window_data.get("handle"):
             # TODO: fix exception sometimes triggered by the next line on win32:
             #   File "\Python39\lib\threading.py" line 917, in run
             #   File "...\openadapt\record.py", line 277, in read window events
@@ -775,15 +824,19 @@ def read_window_events(
             #   File "...\env\lib\site-packages\loguru\_logger.py", line 1964, in _log
             #       for handler in core.handlers.values):
             #   RuntimeError: dictionary changed size during iteration
-            _window_data = window_data
-            _window_data.pop("state")
-            logger.info(f"{_window_data=}")
+            window_data["timestamp"] = utils.get_timestamp()
+            if read_a11y_data:
+                _window_data = window_data.copy()
+                _window_data.pop("a11y_data")
+                logger.info(f"{_window_data=}")
+            else:
+                logger.info(f"{window_data=}")
         if window_data != prev_window_data:
-            logger.debug("Queuing window event for writing")
+            logger.debug("Queuing {event_name} event for writing")
             event_q.put(
                 Event(
                     utils.get_timestamp(),
-                    "window",
+                    event_name,
                     window_data,
                 )
             )
@@ -1318,6 +1371,7 @@ def record(
     action_write_q = sq.SynchronizedQueue()
     window_write_q = sq.SynchronizedQueue()
     browser_write_q = sq.SynchronizedQueue()
+    a11y_write_q = sq.SynchronizedQueue()
     video_write_q = sq.SynchronizedQueue()
     # TODO: save write times to DB; display performance plot in visualize.py
     perf_q = sq.SynchronizedQueue()
@@ -1328,11 +1382,32 @@ def record(
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            started_counter,
+            False,
+            "window",
+        ),
     )
     window_event_reader.start()
     task_by_name["window_event_reader"] = window_event_reader
 
+    if config.RECORD_A11Y_DATA:
+        a11y_event_reader = threading.Thread(
+            target=read_window_events,
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                started_counter,
+                True,
+                "a11y",
+            ),
+        )
+        a11y_event_reader.start()
+        task_by_name["a11y_event_reader"] = a11y_event_reader
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
             target=run_browser_event_server,
@@ -1366,6 +1441,7 @@ def record(
     num_screen_events = multiprocessing.Value("i", 0)
     num_window_events = multiprocessing.Value("i", 0)
     num_browser_events = multiprocessing.Value("i", 0)
+    num_a11y_events = multiprocessing.Value("i", 0)
     num_video_events = multiprocessing.Value("i", 0)
 
     event_processor = threading.Thread(
@@ -1376,6 +1452,7 @@ def record(
             action_write_q,
             window_write_q,
             browser_write_q,
+            a11y_write_q,
             video_write_q,
             perf_q,
             recording,
@@ -1385,6 +1462,7 @@ def record(
             num_action_events,
             num_window_events,
             num_browser_events,
+            num_a11y_events,
             num_video_events,
         ),
     )
@@ -1406,6 +1484,23 @@ def record(
     )
     screen_event_writer.start()
     task_by_name["screen_event_writer"] = screen_event_writer
+
+    if config.RECORD_A11Y_DATA:
+        a11y_event_writer = multiprocessing.Process(
+            target=write_events,
+            args=(
+                "a11y",
+                write_a11y_event,
+                a11y_write_q,
+                num_a11y_events,
+                perf_q,
+                recording,
+                terminate_processing,
+                started_counter,
+            ),
+        )
+        a11y_event_writer.start()
+        task_by_name["a11y_event_writer"] = a11y_event_writer
 
     if config.RECORD_BROWSER_EVENTS:
         browser_event_writer = multiprocessing.Process(
@@ -1568,6 +1663,7 @@ def record(
             "event_processor",
             "screen_event_writer",
             "browser_event_writer",
+            "a11y_event_writer",
             "action_event_writer",
             "window_event_writer",
             "video_writer",

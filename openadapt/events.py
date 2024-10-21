@@ -46,6 +46,7 @@ def get_events(
     action_events = crud.get_action_events(db, recording)
     window_events = crud.get_window_events(db, recording)
     browser_events = crud.get_browser_events(db, recording)
+    a11y_events = crud.get_a11y_events(db, recording)
     screenshots = crud.get_screenshots(db, recording)
 
     browser_stats = browser.assign_browser_events(db, action_events, browser_events)
@@ -67,11 +68,13 @@ def get_events(
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
     num_browser_events = len(browser_events)
+    num_a11y_events = len(a11y_events)
 
     num_action_events_raw = num_action_events
     num_window_events_raw = num_window_events
     num_screenshots_raw = num_screenshots
     num_browser_events_raw = num_browser_events
+    num_a11y_events_raw = num_a11y_events
     duration_raw = action_events[-1].timestamp - action_events[0].timestamp
 
     num_process_iters = 0
@@ -83,23 +86,27 @@ def get_events(
                 f"{num_window_events=} "
                 f"{num_screenshots=}"
                 f"{num_browser_events=}"
+                f"{num_a11y_events=}"
             )
             (
                 action_events,
                 window_events,
                 screenshots,
                 browser_events,
+                a11y_events,
             ) = merge_events(
                 action_events,
                 window_events,
                 screenshots,
                 browser_events,
+                a11y_events,
             )
             if (
                 len(action_events) == num_action_events
                 and len(window_events) == num_window_events
                 and len(screenshots) == num_screenshots
                 and len(browser_events) == num_browser_events
+                and len(a11y_events) == num_a11y_events
             ):
                 break
             num_process_iters += 1
@@ -107,6 +114,7 @@ def get_events(
             num_window_events = len(window_events)
             num_screenshots = len(screenshots)
             num_browser_events = len(browser_events)
+            num_a11y_events = len(a11y_events)
             if num_process_iters == MAX_PROCESS_ITERS:
                 break
 
@@ -130,6 +138,10 @@ def get_events(
         meta["num_browser_events"] = format_num(
             num_browser_events,
             num_browser_events_raw,
+        )
+        meta["num_a11y_events"] = format_num(
+            num_a11y_events,
+            num_a11y_events_raw,
         )
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
@@ -823,10 +835,12 @@ def merge_events(
     window_events: list[models.WindowEvent],
     screenshots: list[models.Screenshot],
     browser_events: list[models.BrowserEvent],
+    a11y_events: list[models.A11yEvent],
 ) -> tuple[
     list[models.ActionEvent],
     list[models.WindowEvent],
     list[models.Screenshot],
+    list[models.A11yEvent],
 ]:
     """Merge redundant action events, window events, and screenshots.
 
@@ -834,6 +848,7 @@ def merge_events(
         action_events (list): The list of action events.
         window_events (list): The list of window events.
         screenshots (list): The list of screenshots.
+        a11y_events (list): The list of a11y events.
 
     Returns:
         tuple: A tuple containing the processed action events, window events,
@@ -843,13 +858,19 @@ def merge_events(
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
     num_browser_events = len(browser_events)
+    num_a11y_events = len(a11y_events)
     num_total = (
-        num_action_events + num_window_events + num_screenshots + num_browser_events
+        num_action_events
+        + num_window_events
+        + num_screenshots
+        + num_browser_events
+        + num_a11y_events
     )
     logger.info(
         "before"
         f" {num_action_events=} {num_window_events=}"
         f" {num_screenshots=} {num_browser_events=} "
+        f"{num_a11y_events=} "
         f"{num_total=}"
     )
     process_fns = [
@@ -893,12 +914,22 @@ def merge_events(
             action_events,
             "browser_event_timestamp",
         )
+        a11y_events = discard_unused_events(
+            a11y_events,
+            action_events,
+            "timestamp",
+        )
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
     num_browser_events_ = len(browser_events)
+    num_a11y_events_ = len(a11y_events)
     num_total_ = (
-        num_action_events_ + num_window_events_ + num_screenshots_ + num_browser_events_
+        num_action_events_
+        + num_window_events_
+        + num_screenshots_
+        + num_browser_events_
+        + num_a11y_events_
     )
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
@@ -906,15 +937,17 @@ def merge_events(
     pct_browser_events = (
         num_browser_events_ / num_browser_events if num_browser_events else None
     )
+    pct_a11y_events = num_a11y_events_ / num_a11y_events
     pct_total = num_total_ / num_total
     logger.info(
         "after"
         f" {num_action_events_=} {num_window_events_=}"
         f" {num_screenshots_=} {num_browser_events_=}"
+        f"{num_a11y_events_=} {num_a11y_events_=} "
         f" {num_total_=}"
     )
     logger.info(
         f"{pct_action_events=} {pct_window_events=} {pct_screenshots=}"
-        f" {pct_browser_events=} {pct_total=}"
+        f" {pct_browser_events=} {pct_a11y_events=} {pct_total=}"
     )
-    return action_events, window_events, screenshots, browser_events
+    return action_events, window_events, screenshots, browser_events, a11y_events

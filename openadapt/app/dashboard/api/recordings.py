@@ -11,6 +11,7 @@ from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.plotting import display_event
 from openadapt.utils import image2utf8, row2dict
+from openadapt.visualize import dict2html
 
 
 class RecordingsAPI:
@@ -112,6 +113,8 @@ class RecordingsAPI:
 
             for action_event in action_events:
                 event_dict = row2dict(action_event)
+                a11y_dict = row2dict(action_event.window_event.a11y_event)
+                event_dict["a11y_data"] = dict2html(a11y_dict)
                 try:
                     image = display_event(action_event)
                     width, height = image.size

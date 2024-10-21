@@ -41,7 +41,7 @@ export const ActionEvent = ({
     let content = (
         <Grid align='center'>
             <Grid.Col span={8}>
-                <Table w={400} withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
+                <Table withTableBorder withColumnBorders my={20} className='border-2 border-gray-300 border-solid'>
                     <Table.Tbody>
                         {typeof event.id === 'number' && (
                             <TableRowWithBorder>
@@ -63,12 +63,6 @@ export const ActionEvent = ({
                             <TableRowWithBorder>
                                 <TableCellWithBorder>screenshot timestamp</TableCellWithBorder>
                                 <TableCellWithBorder>{timeStampToDateString(event.screenshot_timestamp)}</TableCellWithBorder>
-                            </TableRowWithBorder>
-                        )}
-                        {event.browser_event_timestamp && (
-                            <TableRowWithBorder>
-                                <TableCellWithBorder>browser event timestamp</TableCellWithBorder>
-                                <TableCellWithBorder>{timeStampToDateString(event.browser_event_timestamp)}</TableCellWithBorder>
                             </TableRowWithBorder>
                         )}
                         <TableRowWithBorder>
@@ -142,6 +136,50 @@ export const ActionEvent = ({
                     </Table.Tbody>
                 </Table>
             </Grid.Col>
+            {event.a11y_data && (
+                <Grid.Col span={12}>
+                        <Accordion className="w-full">
+                            <Accordion.Item value="a11y_data">
+                                <Accordion.Control>
+                                    <div className="text-blue-500 w-full cursor-pointer">
+                                        Accessibility Data
+                                    </div>
+                                </Accordion.Control>
+                                <Accordion.Panel>
+                                    <Table  withTableBorder withColumnBorders my={20} className="border-2 border-gray-300 border-solid w-full">
+                                        <Table.Tbody>
+                                            <style>
+                                                {`
+                                                    .table-nested table {
+                                                    border-collapse: collapse;
+                                                    border: 1px solid #d1d5db;
+                                                    }
+                                                    
+                                                    .table-nested th,
+                                                    .table-nested td {
+                                                    border: 1px solid #d1d5db;
+                                                    padding: 8px;
+                                                    text-align: left;
+                                                    }
+                                                    
+                                                    .table-nested th {
+                                                    background-color: #f9fafb;
+                                                    font-weight: bold;
+                                                    }
+                                                    
+                                                    .table-nested td {
+                                                    background-color: #ffffff;
+                                                    }
+                                                `}
+                                            </style>
+                                            <div className="table-nested w-full" dangerouslySetInnerHTML={{ __html: event.a11y_data }} />
+                                        </Table.Tbody>
+                                    </Table>
+                                </Accordion.Panel>
+                            </Accordion.Item>
+                        </Accordion>   
+                </Grid.Col>
+            )}
             <Grid.Col span={4}>
                 <RemoveActionEvent event={event} />
             </Grid.Col>

@@ -13,7 +13,7 @@ import Quartz
 from openadapt.custom_logger import logger
 
 
-def get_active_window_state(read_window_data: bool) -> dict | None:
+def get_active_window_state(read_a11y_data: bool) -> dict | None:
     """Get the state of the active window.
 
     Returns:
@@ -23,7 +23,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
     # pywinctl performance on macOS is unusable, see:
     # https://github.com/Kalmat/PyWinCtl/issues/29
     meta = get_active_window_meta()
-    if read_window_data:
+    if read_a11y_data:
         data = get_window_data(meta)
     else:
         data = {}
@@ -33,7 +33,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
     ]
     title_parts = [part for part in title_parts if part]
     title = " ".join(title_parts)
-    window_id = meta["kCGWindowNumber"]
+    handle = meta["kCGWindowNumber"]
     bounds = meta["kCGWindowBounds"]
     left = bounds["X"]
     top = bounds["Y"]
@@ -45,7 +45,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
         "top": top,
         "width": width,
         "height": height,
-        "window_id": window_id,
+        "handle": handle,
         "meta": meta,
         "data": data,
     }
