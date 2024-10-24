@@ -161,7 +161,6 @@ def calculate_tokens_and_cost(
         - Completion cost
         - Total cost
     """
-
     # Extract text content from payload messages
     def extract_text(messages: list[dict]) -> list[dict]:
         extracted = []
