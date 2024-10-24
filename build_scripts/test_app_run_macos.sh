@@ -1,53 +1,41 @@
 #!/bin/bash
 
-# unzip the app
-
+# Unzip the app
 ZIPFILE_PATH="$(pwd)/dist/OpenAdapt.app.zip"
 unzip -o "$ZIPFILE_PATH" -d "$(pwd)/dist"
 
-APP_PATH="$(pwd)/dist/OpenAdapt.app/Contents/MacOS/OpenAdapt.app"
-
-# print current directory
+# Current directory for reference
 echo "Current directory: $(pwd)"
+
+# Path to the app
+APP_PATH="$(pwd)/dist/OpenAdapt.app"
+EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/OpenAdapt"
 echo "App path: $APP_PATH"
+echo "Executable path: $EXECUTABLE_PATH"
+
+# Verify app exists
+if [ ! -d "$APP_PATH" ]; then
+    echo "Error: Could not find app at $APP_PATH"
+    exit 1
+fi
+
+if [ ! -f "$EXECUTABLE_PATH" ]; then
+    echo "Error: Could not find executable at $EXECUTABLE_PATH"
+    exit 1
+fi
 
 # Run the app
 open "$APP_PATH"
 
-# Allow some time for the application to launch
+# Wait for app to start
 sleep 30
 
-# Verify that the executable exists
-if [ -z "$APP_PATH" ]; then
-    echo "Error: Could not find executable in $APP_PATH"
-    exit 1
-fi
-
-# Get the process IDs
-PIDS=$(pgrep -f "$APP_PATH")
-
-# Verify that the process IDs were found
-if [ -z "$PIDS" ]; then
-    echo "Error: Could not find process IDs for $APP_PATH"
-    exit 1
-fi
-
-# Variable to track if any process is still running
-ALL_PROCESSES_RUNNING=true
-
-# Check if the processes are still running
-for PID in $PIDS; do
-    if ! ps -p $PID > /dev/null; then
-        echo "Process $PID is not running"
-        ALL_PROCESSES_RUNNING=false
-        break
-    fi
-done
-
-# Set the exit code variable based on the processes' status
-if [ "$ALL_PROCESSES_RUNNING" = true ]; then
+# Check for running process - try both the app name and binary name
+if pgrep -f "OpenAdapt" > /dev/null || pgrep -f "OpenAdapt.app" > /dev/null; then
+    echo "Process is running"
     EXIT_CODE=0
 else
+    echo "Error: Could not find process IDs for OpenAdapt"
     EXIT_CODE=1
 fi
 
