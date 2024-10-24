@@ -34,7 +34,7 @@ jobs:
           with:
               fetch-depth: 0
         - name: Set up Python
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
               python-version: '3.10'
         - name: Install dependencies
@@ -73,7 +73,7 @@ jobs:
           with:
               fetch-depth: 0
         - name: Set up Python
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
               python-version: '3.10'
         - name: Set up Node.js
@@ -184,7 +184,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Install the latest version of the project
@@ -235,7 +235,7 @@ jobs:
         with:
           ref: main
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Publish to PyPI
