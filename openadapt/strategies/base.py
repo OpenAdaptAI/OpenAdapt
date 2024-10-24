@@ -10,7 +10,7 @@ import numpy as np
 from openadapt import adapters, models, playback, utils
 from openadapt.custom_logger import logger
 
-CHECK_ACTION_COMPLETE = True
+CHECK_ACTION_COMPLETE = False
 MAX_FRAME_TIMES = 1000
 
 
@@ -21,12 +21,14 @@ class BaseReplayStrategy(ABC):
         self,
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
+        include_a11y_data: bool = True,
     ) -> None:
         """Initialize the BaseReplayStrategy.
 
         Args:
             recording (models.Recording): The recording to replay.
             max_frame_times (int): The maximum number of frame times to track.
+            include_a11y_data (bool): Whether to include accessibility data.
         """
         self.recording = recording
         self.max_frame_times = max_frame_times
@@ -34,6 +36,7 @@ class BaseReplayStrategy(ABC):
         self.screenshots = []
         self.window_events = []
         self.frame_times = []
+        self.include_a11y_data = include_a11y_data
 
     @abstractmethod
     def get_next_action_event(
@@ -67,7 +70,10 @@ class BaseReplayStrategy(ABC):
                     continue
 
             self.screenshots.append(screenshot)
-            window_event = models.WindowEvent.get_active_window_event()
+            window_event = models.WindowEvent.get_active_window_event(
+                # TODO: rename
+                include_window_data=self.include_a11y_data,
+            )
             self.window_events.append(window_event)
             try:
                 action_event = self.get_next_action_event(
@@ -121,6 +127,16 @@ class BaseReplayStrategy(ABC):
             self.frame_times.pop(0)
 
 
+# TODO XXX handle failure mode:
+"""
+expected_state='After pressing <cmd>-<tab>, I would expect to see the application
+switcher overlay, showing a row of applications that can be cycled through.'
+is_complete=False
+"""
+
+
+# e.g. include next window state in prompt
+# e.g. elaborate specifically for cmd-tab (i.e. that next application should be visible)
 def prompt_is_action_complete(
     current_screenshot: models.Screenshot,
     played_actions: list[models.ActionEvent],

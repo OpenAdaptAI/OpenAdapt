@@ -423,6 +423,7 @@ def get_action_events(
         .options(
             joinedload(ActionEvent.recording),
             joinedload(ActionEvent.screenshot),
+            joinedload(ActionEvent.browser_event),
             subqueryload(ActionEvent.window_event).joinedload(
                 WindowEvent.action_events
             ),

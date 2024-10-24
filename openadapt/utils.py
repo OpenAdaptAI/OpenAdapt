@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 
+from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
@@ -990,6 +991,49 @@ def truncate_html(html_str: str, max_len: int) -> str:
         middle = f"<br/>...<i>(snipped {len(snipped):,})</i>...<br/>"
         html_str = head + middle + tail
     return html_str
+
+
+def parse_html(html: str, parser: str = "html.parser") -> BeautifulSoup:
+    """Parse the visible HTML using BeautifulSoup."""
+    soup = BeautifulSoup(html, parser)
+    return soup
+
+
+def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
+    """Convert an HTML string to a processed version suitable for LLM prompts.
+
+    Args:
+        html: The input HTML string.
+        convert_to_markdown: If True, converts the HTML to Markdown. Defaults to False.
+
+    Returns:
+        A string with preserved semantic structure and interactable elements.
+        If convert_to_markdown is True, the string is in Markdown format.
+    """
+    # Parse HTML with BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Remove non-interactive and unnecessary elements
+    for tag in soup(["style", "script", "noscript", "meta", "head", "iframe"]):
+        tag.decompose()
+
+    assert not convert_to_markdown, "poetry add html2text"
+    if convert_to_markdown:
+        # XXX TODO:
+        import html2text
+
+        # Initialize html2text converter
+        converter = html2text.HTML2Text()
+        converter.ignore_links = False  # Keep all links
+        converter.ignore_images = False  # Keep all images
+        converter.body_width = 0  # Preserve original width without wrapping
+
+        # Convert the cleaned HTML to Markdown
+        markdown = converter.handle(str(soup))
+        return markdown
+
+    # Return processed HTML as a string if Markdown conversion is not required
+    return str(soup)
 
 
 class WrapStdout:

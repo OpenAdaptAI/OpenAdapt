@@ -81,7 +81,7 @@ def get_events(
                 f"{num_process_iters=} "
                 f"{num_action_events=} "
                 f"{num_window_events=} "
-                f"{num_screenshots=}"
+                f"{num_screenshots=} "
                 f"{num_browser_events=}"
             )
             (
@@ -90,6 +90,7 @@ def get_events(
                 screenshots,
                 browser_events,
             ) = merge_events(
+                db,
                 action_events,
                 window_events,
                 screenshots,
@@ -180,7 +181,7 @@ def make_parent_event(
     children = extra.get("children", [])
     browser_events = [child.browser_event for child in children if child.browser_event]
     if browser_events:
-        assert len(browser_events) <= 1, len(browser_events)
+        # TODO: store additional browser events as children on first browser event?
         browser_event = browser_events[0]
         event_dict["browser_event"] = browser_event
 
@@ -347,13 +348,23 @@ def merge_consecutive_mouse_scroll_events(
     def get_merged_events(
         to_merge: list[models.ActionEvent], state: dict[str, Any]
     ) -> list[models.ActionEvent]:
-        state["dt"] += to_merge[-1].timestamp - to_merge[0].timestamp
-        mouse_dx = sum(event.mouse_dx for event in to_merge)
-        mouse_dy = sum(event.mouse_dy for event in to_merge)
-        merged_event = to_merge[-1]
-        merged_event.timestamp -= state["dt"]
-        merged_event.mouse_dx = mouse_dx
-        merged_event.mouse_dy = mouse_dy
+        total_mouse_dx = sum(event.mouse_dx for event in to_merge)
+        total_mouse_dy = sum(event.mouse_dy for event in to_merge)
+        first_child = to_merge[0]
+        last_child = to_merge[-1]
+        merged_event = make_parent_event(
+            first_child,
+            {
+                "name": "scroll",
+                "mouse_x": first_child.mouse_x,
+                "mouse_y": first_child.mouse_y,
+                "mouse_dx": total_mouse_dx,
+                "mouse_dy": total_mouse_dy,
+                "timestamp": first_child.timestamp - state["dt"],
+                "children": to_merge,
+            },
+        )
+        state["dt"] += last_child.timestamp - first_child.timestamp
         return [merged_event]
 
     return merge_consecutive_action_events(
@@ -818,7 +829,54 @@ def discard_unused_events(
     return referred_events
 
 
+def filter_invalid_window_events(
+    db: crud.SaSession,
+    action_events: list[models.ActionEvent],
+    min_width: int = 100,
+    min_height: int = 100,
+) -> list[models.WindowEvent]:
+    """Filter out invalid window events by updating action events.
+
+    Update the associated window_event_timestamp and window_event_id
+    in action events to the previous valid window event in the sequence
+    if the current window event is invalid. Return a list of valid window events.
+
+    Args:
+        action_events (list[models.ActionEvent]): The list of action events.
+        min_width (int): Minimum allowable width for a valid window event.
+            Default is 100.
+        min_height (int): Minimum allowable height for a valid window event.
+            Default is 100.
+
+    Returns:
+        list[models.WindowEvent]: A list of valid window events.
+    """
+
+    def is_valid_window_event(event: models.WindowEvent) -> bool:
+        return event and event.width >= min_width and event.height >= min_height
+
+    prev_valid_window = None
+    valid_window_events = []
+
+    for action in action_events:
+        if is_valid_window_event(action.window_event):
+            prev_valid_window = action.window_event
+            valid_window_events.append(action.window_event)
+        else:
+            assert prev_valid_window is not None, "No previous valid window event found"
+            action.window_event_id = prev_valid_window.id
+            action.window_event_timestamp = prev_valid_window.timestamp
+            action.window_event = prev_valid_window
+
+    db.add_all(action_events)
+    logger.info(
+        "Completed filtering and updating invalid window events in action events."
+    )
+    return valid_window_events
+
+
 def merge_events(
+    db: crud.SaSession,
     action_events: list[models.ActionEvent],
     window_events: list[models.WindowEvent],
     screenshots: list[models.Screenshot],
@@ -893,6 +951,10 @@ def merge_events(
             action_events,
             "browser_event_timestamp",
         )
+
+    # TODO: prevent invalid window events from being triggered to begin with
+    window_events = filter_invalid_window_events(db, action_events)
+
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
