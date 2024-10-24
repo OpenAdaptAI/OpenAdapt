@@ -3,6 +3,7 @@ from typing import Any, Literal, Union
 import pickle
 import plistlib
 import re
+import time
 
 import AppKit
 import ApplicationServices
@@ -117,17 +118,37 @@ def get_window_data(window_meta: dict) -> dict:
 
 def dump_state(
     element: Union[AppKit.NSArray, list, AppKit.NSDictionary, dict, Any],
-    elements: set = None,
-) -> Union[dict, list]:
+    elements: set | None = None,
+    max_depth: int = 10,
+    current_depth: int = 0,
+    timeout: float | None = None,
+    start_time: float | None = None,
+) -> Union[dict, list, None]:
     """Dump the state of the given element and its descendants.
 
     Args:
         element: The element to dump the state for.
         elements (set): Set to track elements to prevent circular traversal.
+        max_depth (int): Maximum depth for recursion.
+        current_depth (int): Current depth in the recursion.
+        timeout (float): Maximum time in seconds for the dump_state operation.
+        start_time (float): Start time of the dump_state operation.
 
     Returns:
-        dict or list: State of element and descendants as dict or list
+        dict or list or None: State of element and descendants as dict or list,
+        or None if max depth reached
     """
+    if timeout is not None and start_time is None:
+        start_time = time.time()
+
+    if current_depth >= max_depth:
+        return None
+
+    if timeout is not None and start_time is not None:
+        if time.time() - start_time > timeout:
+            logger.warning("dump_state timed out")
+            return None
+
     elements = elements or set()
     if element in elements:
         return
@@ -136,14 +157,14 @@ def dump_state(
     if isinstance(element, AppKit.NSArray) or isinstance(element, list):
         state = []
         for child in element:
-            _state = dump_state(child, elements)
+            _state = dump_state(child, elements, max_depth, current_depth + 1, timeout, start_time)
             if _state:
                 state.append(_state)
         return state
     elif isinstance(element, AppKit.NSDictionary) or isinstance(element, dict):
         state = {}
         for k, v in element.items():
-            _state = dump_state(v, elements)
+            _state = dump_state(v, elements, max_depth, current_depth + 1, timeout, start_time)
             if _state:
                 state[k] = _state
         return state
@@ -179,7 +200,7 @@ def dump_state(
                 ):
                     continue
 
-                _state = dump_state(attr_val, elements)
+                _state = dump_state(attr_val, elements, max_depth, current_depth + 1, timeout, start_time)
                 if _state:
                     state[attr_name] = _state
             return state

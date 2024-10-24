@@ -261,11 +261,14 @@ def display_event(
     width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
     # dim area outside window event
-    x0 = window_event.left * width_ratio
-    y0 = window_event.top * height_ratio
-    x1 = x0 + window_event.width * width_ratio
-    y1 = y0 + window_event.height * height_ratio
-    image = draw_rectangle(x0, y0, x1, y1, image, outline_width=5)
+    if not window_event:
+        logger.error(f"{window_event=}")
+    else:
+        x0 = window_event.left * width_ratio
+        y0 = window_event.top * height_ratio
+        x1 = x0 + window_event.width * width_ratio
+        y1 = y0 + window_event.height * height_ratio
+        image = draw_rectangle(x0, y0, x1, y1, image, outline_width=5)
 
     # display diff bbox
     if diff:

@@ -9,7 +9,7 @@ import numpy as np
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
 from openadapt.custom_logger import logger
 
-DEBUG = False
+DEBUG = True
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
 MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
@@ -62,6 +62,8 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
             if not active_segment_idx:
                 logger.warning(f"{active_segment_idx=}")
                 active_segment_description = "(None)"
+                # XXX TODO
+                import ipdb; ipdb.set_trace()
             else:
                 active_segment_description = window_segmentation.descriptions[
                     active_segment_idx
@@ -174,7 +176,8 @@ class VisualBrowserReplayStrategy(
         modified_reference_action = self.modified_actions[self.recording_action_idx]
         self.recording_action_idx += 1
 
-        if modified_reference_action.name in common.MOUSE_EVENTS:
+        # TODO XXX: how to handle scroll position?
+        if modified_reference_action.name in common.PRECISE_MOUSE_EVENTS:
             modified_reference_action.screenshot = active_screenshot
             modified_reference_action.window_event = active_window
             modified_reference_action.recording = self.recording
@@ -238,6 +241,8 @@ def get_active_segment(
     # Adjust action coordinates to be relative to the cropped window's top-left corner
     adjusted_mouse_x = (action.mouse_x - action.window_event.left) * width_ratio
     adjusted_mouse_y = (action.mouse_y - action.window_event.top) * height_ratio
+    logger.info(f"{action.mouse_x=} {action.window_event.left=} {adjusted_mouse_x=}")
+    logger.info(f"{action.mouse_y=} {action.window_event.top=} {adjusted_mouse_y=}")
 
     active_index = None
 
@@ -288,6 +293,10 @@ def get_active_segment(
         )
         # Display the image without blocking
         image.show()
+
+    if active_index is None:
+        # XXX TODO
+        import ipdb; ipdb.set_trace()
 
     return active_index
 

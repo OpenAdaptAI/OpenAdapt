@@ -8,25 +8,29 @@ let currentMode = "idle"; // Default mode is 'idle'
 let recordListenersAttached = false; // Track if record listeners are currently attached
 let replayObserversAttached = false; // Track if replay observers are currently attached
 
+function setMode(mode) {
+  currentMode = mode;
+  console.log(`Mode set to: ${currentMode}`);
+
+  // Attach or detach listeners based on mode
+  if (currentMode === 'record') {
+    if (!recordListenersAttached) attachRecordListeners();
+    if (replayObserversAttached) disconnectReplayObservers(); // Detach replay observers if needed
+  } else if (currentMode === 'replay') {
+    debounceSendVisibleHTML('setmode');
+    if (!replayObserversAttached) attachReplayObservers();
+    if (recordListenersAttached) detachRecordListeners(); // Detach record listeners if needed
+  } else if (currentMode === 'idle') {
+    if (recordListenersAttached) detachRecordListeners();
+    if (replayObserversAttached) disconnectReplayObservers();
+  }
+}
+
 // Listen for messages from the background script or Python process
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Received message:", message);
   if (message.type === 'SET_MODE') {
-    currentMode = message.mode;
-    console.log(`Mode set to: ${currentMode}`);
-
-    // Attach or detach listeners based on mode
-    if (currentMode === 'record') {
-      if (!recordListenersAttached) attachRecordListeners();
-      if (replayObserversAttached) disconnectReplayObservers(); // Detach replay observers if needed
-    } else if (currentMode === 'replay') {
-      debounceSendVisibleHTML('setmode');
-      if (!replayObserversAttached) attachReplayObservers();
-      if (recordListenersAttached) detachRecordListeners(); // Detach record listeners if needed
-    } else if (currentMode === 'idle') {
-      if (recordListenersAttached) detachRecordListeners();
-      if (replayObserversAttached) disconnectReplayObservers();
-    }
+    setMode(message.mode);
   }
 });
 
@@ -39,30 +43,61 @@ function attachRecordListeners() {
   }
 }
 
-// Attach user-generated event listeners
+/**
+ * Attach event listeners for user-generated events, with specific capturing behavior.
+ */
 function attachUserEventListeners() {
-  console.log("attachUserEventListeners()");
-  const eventsToCapture = ['click', 'keydown', 'keyup'];
+  const eventTargetMap = {
+    'click': document.body,
+    'keydown': document.body,
+    'keyup': document.body,
+    'mousemove': document.body,
+    'scroll': document,
+  };
 
-  eventsToCapture.forEach(eventType => {
-    document.body.addEventListener(eventType, handleUserEvent, true);
+  const eventDebounceDelayMap = {
+    'click': 0, // No debounce
+    'keydown': 0, // No debounce
+    'keyup': 0, // No debounce
+    'mousemove': 100, // 100ms debounce
+    'scroll': 100, // 100ms debounce
+  };
+
+  const lastEventTimeMap = new Map();
+
+  // Attach event listeners
+  Object.entries(eventTargetMap).forEach(([eventType, target]) => {
+    target.addEventListener(eventType, (event) => {
+      const debounceDelay = eventDebounceDelayMap[eventType];
+      const lastEventTime = lastEventTimeMap.get(eventType) || 0;
+      const now = Date.now();
+
+      if (now - lastEventTime >= debounceDelay) {
+        console.log({ eventType });
+        handleUserEvent(event);
+        lastEventTimeMap.set(eventType, now);
+      }
+    }, true);
   });
 }
 
 // Attach instrumentation event listeners
 function attachInstrumentationEventListeners() {
-  console.log("attachInstrumentationEventListeners()");
-  const eventsToCapture = ['mousedown', 'mouseup', 'mousemove'];
-
+  const eventsToCapture = [
+    'mousedown',
+    'mouseup',
+    'mousemove',
+  ];
   eventsToCapture.forEach(eventType => {
     document.body.addEventListener(eventType, trackMouseEvent, true);
   });
 }
 
+
 // Detach all event listeners for recording mode
 function detachRecordListeners() {
   const eventsToCapture = [
-    'click', 'keydown', 'keyup', 'mousedown', 'mouseup', 'mousemove'
+    'click', 'keydown', 'keyup', 'mousedown', 'mouseup', 'mousemove',
   ];
 
   eventsToCapture.forEach(eventType => {
@@ -396,12 +431,34 @@ function validateCoordinates(event, eventTarget, attrType, coordX, coordY) {
   }
 }
 
+let lastScrollPosition = { x: window.scrollX, y: window.scrollY };
+
 function handleUserEvent(event) {
-  const eventTarget = event.target;
+  let eventTarget = event.target;
+
+  // Fallback to eventTarget.activeElement if event.target is not an HTMLElement
+  if (!(eventTarget instanceof HTMLElement)) {
+    console.warn(`Event target is not an HTMLElement: ${eventTarget}, using eventTarget.activeElement instead.`);
+    eventTarget = eventTarget.activeElement;
+  }
+
   const eventTargetId = generateElementIdAndBbox(eventTarget);
   const timestamp = Date.now() / 1000;  // Convert to Python-compatible seconds
 
   const { visibleHTMLString, visibleHTMLDuration } = getVisibleHTMLString();
+
+  // Calculate scroll displacement
+  const currentScrollX = window.scrollX;
+  const currentScrollY = window.scrollY;
+  const scrollDeltaX = currentScrollX - lastScrollPosition.x;
+  const scrollDeltaY = currentScrollY - lastScrollPosition.y;
+
+  // Update last scroll position
+  lastScrollPosition = { x: currentScrollX, y: currentScrollY };
+
+  // Retrieve the last recorded mouse coordinates from coordMappings
+  const lastMouseClientX = coordMappings.x.client[coordMappings.x.client.length - 1] || -1;
+  const lastMouseClientY = coordMappings.y.client[coordMappings.y.client.length - 1] || -1;
 
   const eventData = {
     type: 'USER_EVENT',
@@ -427,37 +484,20 @@ function handleUserEvent(event) {
     if (SET_SCREEN_COORDS) {
       validateCoordinates(event, eventTarget, 'screen', 'screenX', 'screenY');
     }
+  } else if (event.type == 'scroll') {
+    eventData.scrollDeltaX = scrollDeltaX;
+    // negative to match pynput
+    eventData.scrollDeltaY = -scrollDeltaY;
+    // Use last known mouse coordinates for scroll events
+    eventData.clientX = lastMouseClientX;
+    eventData.clientY = lastMouseClientY;
+    console.log(JSON.stringify(coordMappings));
+    console.log("scroll", { eventData });
   }
+
   sendMessageToBackgroundScript(eventData);
 }
 
-// Attach event listeners for user-generated events
-function attachUserEventListeners() {
-  const eventsToCapture = [
-    'click',
-    // input events are triggered after the DOM change is written, so we can't use them
-    // (since the resulting HTML would not look as the DOM was at the time the
-    // user took the action, i.e. immediately before)
-    //'input',
-    'keydown',
-    'keyup',
-  ];
-
-  eventsToCapture.forEach(eventType => {
-    document.body.addEventListener(eventType, handleUserEvent, true);
-  });
-}
-
-function attachInstrumentationEventListeners() {
-  const eventsToCapture = [
-    'mousedown',
-    'mouseup',
-    'mousemove',
-  ];
-  eventsToCapture.forEach(eventType => {
-    document.body.addEventListener(eventType, trackMouseEvent, true);
-  });
-}
 
 /*
  * Replay

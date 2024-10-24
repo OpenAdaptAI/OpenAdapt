@@ -25,7 +25,7 @@ MODEL_NAME = [
 # TODO XXX: per model
 MAX_TOKENS = 4096
 # TODO XXX undocumented
-MAX_IMAGES = None
+MAX_IMAGES = 90
 
 # Track total tokens and cost
 total_tokens_used = 0
