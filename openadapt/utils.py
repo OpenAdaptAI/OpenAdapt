@@ -994,13 +994,11 @@ def truncate_html(html_str: str, max_len: int) -> str:
 
 
 def parse_html(html: str, parser: str = "html.parser") -> BeautifulSoup:
-    # Parse the visible HTML using BeautifulSoup
+    """Parse the visible HTML using BeautifulSoup."""
     soup = BeautifulSoup(html, parser)
     return soup
 
 
-# XXX TODO:
-# import html2text
 def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
     """Convert an HTML string to a processed version suitable for LLM prompts.
 
@@ -1021,6 +1019,9 @@ def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
 
     assert not convert_to_markdown, "poetry add html2text"
     if convert_to_markdown:
+        # XXX TODO:
+        import html2text
+
         # Initialize html2text converter
         converter = html2text.HTML2Text()
         converter.ignore_links = False  # Keep all links

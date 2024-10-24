@@ -843,8 +843,10 @@ def filter_invalid_window_events(
 
     Args:
         action_events (list[models.ActionEvent]): The list of action events.
-        min_width (int): Minimum allowable width for a valid window event. Default is 100.
-        min_height (int): Minimum allowable height for a valid window event. Default is 100.
+        min_width (int): Minimum allowable width for a valid window event.
+            Default is 100.
+        min_height (int): Minimum allowable height for a valid window event.
+            Default is 100.
 
     Returns:
         list[models.WindowEvent]: A list of valid window events.

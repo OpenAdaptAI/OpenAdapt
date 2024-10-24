@@ -28,6 +28,7 @@ class BaseReplayStrategy(ABC):
         Args:
             recording (models.Recording): The recording to replay.
             max_frame_times (int): The maximum number of frame times to track.
+            include_a11y_data (bool): Whether to include accessibility data.
         """
         self.recording = recording
         self.max_frame_times = max_frame_times
@@ -128,8 +129,9 @@ class BaseReplayStrategy(ABC):
 
 # TODO XXX handle failure mode:
 """
-expected_state='After pressing <cmd>-<tab>, I would expect to see the application switcher
-overlay, showing a row of applications that can be cycled through.' is_complete=False
+expected_state='After pressing <cmd>-<tab>, I would expect to see the application
+switcher overlay, showing a row of applications that can be cycled through.'
+is_complete=False
 """
 
 

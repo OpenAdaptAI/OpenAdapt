@@ -1,3 +1,5 @@
+"""Like visual.py but using instrumented DOM to generate segments instead of FastSAM."""
+
 from dataclasses import dataclass
 from pprint import pformat
 import time
@@ -463,9 +465,9 @@ def get_dom_masks(
     display_masks: bool = DEBUG_DISPLAY_MASKS,
     display_screenshot_with_labels: bool = DEBUG_DISPLAY_LABELLED_SCREENSHOT,
 ) -> tuple[list[np.ndarray], list[str]]:
-    """
-    Returns a list of binary masks for DOM elements in the given ActionEvent
-    and a list of corresponding strings containing the element's data-id and
+    """Returns a list of binary masks for DOM elements in the given ActionEvent.
+
+    Also returns a list of corresponding strings containing the element's data-id and
     its top, left, bottom, right coordinates, scaled according to the screen.
 
     Args:
@@ -494,7 +496,8 @@ def get_dom_masks(
     masks = []
     element_info = []
 
-    # If we want to display the screenshot with labels, create a drawable version of the screenshot
+    # If we want to display the screenshot with labels, create a drawable version of
+    # the screenshot
     if display_screenshot_with_labels:
         screenshot_with_labels = action_event.screenshot.image.copy()
         draw_screenshot = ImageDraw.Draw(screenshot_with_labels)
@@ -545,7 +548,8 @@ def get_dom_masks(
                 f" {bottom_scaled}, {right_scaled})"
             )
 
-            # If display_screenshot_with_labels is True, draw the bounding boxes and labels
+            # If display_screenshot_with_labels is True, draw the bounding boxes and
+            # labels
             if display_screenshot_with_labels:
                 draw_screenshot.rectangle(
                     [(left_scaled, top_scaled), (right_scaled, bottom_scaled)],
@@ -566,7 +570,8 @@ def get_dom_masks(
         except (ValueError, KeyError) as exc:
             logger.warning(f"Failed to process {element=}: {exc}")
 
-    # If display_screenshot_with_labels is True, show the screenshot with the drawn labels
+    # If display_screenshot_with_labels is True, show the screenshot with the drawn
+    # labels
     if display_screenshot_with_labels:
         logger.debug("Displaying screenshot with bounding boxes and labels")
         screenshot_with_labels.show()
@@ -575,11 +580,13 @@ def get_dom_masks(
 
 
 def get_tlbr(element: BeautifulSoup, attr: str = "data-tlbr-screen") -> list[int]:
+    """Get bounding box tuple."""
     top, left, bottom, right = [float(val) for val in element[attr].split(",")]
     return top, left, bottom, right
 
 
 def calculate_area(element: BeautifulSoup) -> int:
+    """Calculate area of an element."""
     top, left, bottom, right = get_tlbr(element)
     return (right - left) * (bottom - top)
 

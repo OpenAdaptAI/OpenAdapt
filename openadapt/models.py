@@ -148,14 +148,6 @@ class ActionEvent(db.Base):
         "available_segment_descriptions",
         sa.String,
     )
-    _active_browser_element = sa.Column(
-        "active_browser_element",
-        sa.String,
-    )
-    _available_browser_elements = sa.Column(
-        "available_browser_elements",
-        sa.String,
-    )
     mouse_button_name = sa.Column(sa.String)
     mouse_pressed = sa.Column(sa.Boolean)
     key_name = sa.Column(sa.String)
@@ -219,55 +211,6 @@ class ActionEvent(db.Base):
         self._available_segment_descriptions = self._segment_description_separator.join(
             value
         )
-
-    @property
-    def active_browser_element(self) -> BeautifulSoup | None:
-        if not self._active_browser_element:
-            return None
-        return utils.parse_html(self._active_browser_element)
-
-    @active_browser_element.setter
-    def active_browser_element(self, value: BeautifulSoup) -> None:
-        if not value:
-            logger.warning(f"{value=}")
-            return
-        self._active_browser_element = str(value)
-
-    @property
-    def available_browser_elements(self) -> BeautifulSoup | None:
-        # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#navigating-the-tree
-        # The value True matches every tag it can. This code finds all the tags in the
-        # document, but none of the text strings
-        if not self._available_browser_elements:
-            return None
-        return utils.parse_html(self._available_browser_elements)
-
-    @available_browser_elements.setter
-    def available_browser_elements(self, value: BeautifulSoup | None) -> None:
-        if not value:
-            logger.warning(f"{value=}")
-            return
-        try:
-            self._available_browser_elements = str(value)
-        except Exception as exc:
-            # something myterious is going on, because this works:
-            #   self._available_browser_elements = value
-            # and so does this:
-            #   self._available_browser_elements = 'foo'
-            # but sometimes this:
-            #   self._available_browser_elements = value
-            # produces:
-            #   'NoneType' object is not callable
-            # apparently, so does this:
-            #   BeautifulSoup(soup.prettyify())
-            # XXX TODO: fix this
-            # logger.error(exc)
-            # self._available_browser_elements = '?'
-            # return self.available_browser_elements
-            import ipdb
-
-            ipdb.set_trace()
-            foo = 1
 
     children = sa.orm.relationship("ActionEvent")
     # TODO: replacing the above line with the following two results in an error:
@@ -794,7 +737,6 @@ class BrowserEvent(db.Base):
         # Parse the visible HTML using BeautifulSoup
         soup = utils.parse_html(visible_html_string)
 
-        event_type = message.get("eventType")
         target_element = None
 
         # Fetch the target element using its data-id

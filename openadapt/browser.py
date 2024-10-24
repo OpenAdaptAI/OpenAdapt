@@ -3,7 +3,7 @@
 from statistics import mean, median, stdev
 import json
 
-from copy import deepcopy
+from bs4 import BeautifulSoup
 from dtaidistance import dtw, dtw_ndim
 from sqlalchemy.orm import Session as SaSession
 from tqdm import tqdm
@@ -120,7 +120,7 @@ def add_screen_tlbr(
     prev_valid = [None] * n
     next_valid = [None] * n
 
-    def update_valid_mappings(index: int):
+    def update_valid_mappings(index: int) -> tuple[dict, dict] | None:
         """Helper to check if the event at the given index has valid coordMappings."""
         message = browser_events[index].message
         coord_mappings = message.get("coordMappings", {})
@@ -174,7 +174,13 @@ def add_screen_tlbr(
         else:
             prev_client_y = client_y
 
-    def process_element(element, sx_scale, sx_offset, sy_scale, sy_offset):
+    def process_element(
+        element: BeautifulSoup,
+        sx_scale: float,
+        sx_offset: float,
+        sy_scale: float,
+        sy_offset: float,
+    ) -> None:
         """Helper to compute and update 'data-tlbr-screen' attribute for an element."""
         tlbr_attr = "data-tlbr-screen"
         existing_screen_coords = element.get(tlbr_attr, None)
@@ -212,8 +218,12 @@ def add_screen_tlbr(
         element["data-tlbr-screen"] = new_screen_coords
 
     def process_event(
-        event: models.BrowserEvent, sx_scale, sx_offset, sy_scale, sy_offset
-    ):
+        event: models.BrowserEvent,
+        sx_scale: float,
+        sx_offset: float,
+        sy_scale: float,
+        sy_offset: float,
+    ) -> None:
         """Helper to process a single browser event."""
         try:
             soup, target_element = event.parse()
@@ -416,7 +426,7 @@ def is_action_event(
 
     Args:
         event: The action event to check.
-        action_name: The action name (e.g. "click", "press", "release", "move", "scroll").
+        action_name: The action name (eg "click", "press", "release", "move", "scroll").
         key_or_button: The key or button associated with the action.
 
     Returns:
@@ -444,8 +454,8 @@ def is_browser_event(
 
     Args:
         event: The browser event to check.
-        action_name (str): The action name (e.g. "click", "press", "release", "move", "scroll").
-        key_or_button (str): The key or button associated with the action.
+        action_name: The action name (eg "click", "press", "release", "move", "scroll").
+        key_or_button: The key or button associated with the action.
 
     Returns:
         bool: True if the event matches the action name and key/button, False otherwise.
@@ -845,14 +855,6 @@ def assign_browser_events(
             for i, j in filtered_path:
                 action_event = action_filtered_events[i]
                 browser_event = browser_filtered_events[j]
-
-                # Ensure both action_event and browser_event are managed by the session
-                # action_event = session.merge(action_event)
-                # browser_event = session.merge(browser_event)
-                # if not hasattr(action_event, '_sa_instance_state'):
-                #    action_event = session.query(models.ActionEvent).get(action_event.id)
-                # if not hasattr(browser_event, '_sa_instance_state'):
-                #    browser_event = session.query(models.BrowserEvent).get(browser_event.id)
 
                 action_event.browser_event_timestamp = browser_event.timestamp
                 action_event.browser_event_id = browser_event.id

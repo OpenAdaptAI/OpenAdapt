@@ -6,7 +6,7 @@ from openadapt import models
 def test_action_from_dict() -> None:
     """Test ActionEvent.from_dict()."""
     input_variations_by_expected_output = {
-        ## all named keys
+        # all named keys
         "<backspace>-<backspace>-<backspace>": [
             # standard
             "<backspace>-<backspace>-<backspace>",
@@ -17,7 +17,7 @@ def test_action_from_dict() -> None:
             "<backspace><backspace>-<backspace>",
         ],
         # TODO: support malformed configurations below
-        ## all char keys
+        # all char keys
         "a-b-c": [
             # standard
             "a-b-c",
@@ -27,7 +27,7 @@ def test_action_from_dict() -> None:
             # "a-bc",
             # "ab-c",
         ],
-        ## mixed named and char
+        # mixed named and char
         "<cmd>-t": [
             # standard
             "<cmd>-t",
