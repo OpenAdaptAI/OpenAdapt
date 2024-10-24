@@ -261,10 +261,12 @@ class ActionEvent(db.Base):
             # apparently, so does this:
             #   BeautifulSoup(soup.prettyify())
             # XXX TODO: fix this
-            #logger.error(exc)
-            #self._available_browser_elements = '?'
-            #return self.available_browser_elements
-            import ipdb; ipdb.set_trace()
+            # logger.error(exc)
+            # self._available_browser_elements = '?'
+            # return self.available_browser_elements
+            import ipdb
+
+            ipdb.set_trace()
             foo = 1
 
     children = sa.orm.relationship("ActionEvent")
@@ -371,7 +373,7 @@ class ActionEvent(db.Base):
         """Validate the text property. Useful for ActionModel(**action_dict)."""
         if not value == self.text:
             logger.warning(f"{value=} did not match {self.text=}")
-            #if self.text:
+            # if self.text:
             #    import ipdb; ipdb.set_trace()
             #    foo = 1
 
@@ -452,7 +454,9 @@ class ActionEvent(db.Base):
 
             # Check if the text contains named keys (starting with the name prefix)
             # TODO: support sequences of the form <cmd>-a-<cmd>
-            contains_named_keys = text.startswith(name_prefix) and text.endswith(name_suffix)
+            contains_named_keys = text.startswith(name_prefix) and text.endswith(
+                name_suffix
+            )
 
             if contains_named_keys:
                 # Handle named keys, potentially with separator variations
@@ -492,7 +496,7 @@ class ActionEvent(db.Base):
                 for part in split_text:
                     if part.startswith(name_prefix) and part.endswith(name_suffix):
                         # It's a named key
-                        key_name = part[len(name_prefix):-len(name_suffix)]
+                        key_name = part[len(name_prefix) : -len(name_suffix)]
                         press, release = cls._create_key_events(key_name=key_name)
                     else:
                         # It's a character
@@ -546,7 +550,9 @@ class ActionEvent(db.Base):
             dictionary containing relevant properties from the ActionEvent.
         """
         if self.active_browser_element:
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
         action_dict = deepcopy(
             {
                 key: val
@@ -574,10 +580,14 @@ class ActionEvent(db.Base):
         if self.available_browser_elements:
             # TODO XXX: available browser_elements contains raw HTML. We need to
             # prompt to convert into descriptions.
-            action_dict["available_browser_elements"] = str(self.available_browser_elements)
+            action_dict["available_browser_elements"] = str(
+                self.available_browser_elements
+            )
 
         if self.active_browser_element:
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
         return action_dict
 
     @property

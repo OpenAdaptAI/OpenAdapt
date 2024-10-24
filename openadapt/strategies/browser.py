@@ -156,8 +156,7 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
         self.instructions = instructions
         self.action_history = []
         self.modified_actions = self.apply_replay_instructions(
-            recording.processed_action_events,
-            instructions
+            recording.processed_action_events, instructions
         )
         self.action_event_idx = 0
 
@@ -195,8 +194,7 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
         # First, try the direct approach based on planned sequence.
         try:
             action = self._execute_planned_action(
-                screenshot=screenshot,
-                current_window_event=window_event
+                screenshot=screenshot, current_window_event=window_event
             )
             if action:
                 return action
@@ -239,7 +237,9 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
 
         # Find target element in the current DOM.
         recent_visible_html = self.get_recent_visible_html()
-        soup, target_element = self._find_element_in_dom(planned_action, recent_visible_html)
+        soup, target_element = self._find_element_in_dom(
+            planned_action, recent_visible_html
+        )
 
         if target_element:
             planned_action.active_browser_element = target_element
@@ -316,7 +316,9 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
         )
         print(prompt)
         # XXX
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
         prompt_adapter = adapters.get_default_prompt_adapter()
         content = prompt_adapter.prompt(prompt, system_prompt=system_prompt)
         content_dict = utils.parse_code_snippet(content)
@@ -325,7 +327,9 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
             action_dicts = content_dict["actions"]
         except TypeError as exc:
             logger.warning(exc)
-            action_dicts = content_dict  # OpenAI sometimes returns a list of dicts directly.
+            action_dicts = (
+                content_dict  # OpenAI sometimes returns a list of dicts directly.
+            )
 
         modified_actions = []
         for action_dict in action_dicts:
@@ -343,8 +347,10 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
         Returns:
             Tuple[BeautifulSoup, Tag or None]: Parsed HTML and the target element or None.
         """
-        soup = BeautifulSoup(html, 'html.parser')
-        target_selector = planned_action.active_browser_element  # Assuming selector or similar identifier is used.
+        soup = BeautifulSoup(html, "html.parser")
+        target_selector = (
+            planned_action.active_browser_element
+        )  # Assuming selector or similar identifier is used.
         target_element = soup.select_one(target_selector)  # Simplify finding elements.
 
         return soup, target_element
@@ -352,14 +358,27 @@ class BrowserReplayStrategy(strategies.BaseReplayStrategy):
     def __del__(self) -> None:
         """Clean up resources and log action history."""
         self.terminate_processing.set()
-        action_history_dicts = [action.to_prompt_dict() for action in self.action_history]
+        action_history_dicts = [
+            action.to_prompt_dict() for action in self.action_history
+        ]
         logger.info(f"action_history=\n{pformat(action_history_dicts)}")
 
 
 # Define a whitelist of essential attributes
 WHITELIST_ATTRIBUTES = [
-    'id', 'class', 'href', 'src', 'alt', 'name', 'type', 'value', 'title', 'data-*', 'aria-*'
+    "id",
+    "class",
+    "href",
+    "src",
+    "alt",
+    "name",
+    "type",
+    "value",
+    "title",
+    "data-*",
+    "aria-*",
 ]
+
 
 def clean_html_attributes(element: BeautifulSoup) -> str:
     """Retain only essential attributes from an HTML element based on a whitelist.
@@ -374,14 +393,21 @@ def clean_html_attributes(element: BeautifulSoup) -> str:
 
     # Go through each attribute in the element and keep only whitelisted ones
     for attr_name, attr_value in element.attrs.items():
-        if attr_name in WHITELIST_ATTRIBUTES or attr_name.startswith('data-') or attr_name.startswith('aria-'):
+        if (
+            attr_name in WHITELIST_ATTRIBUTES
+            or attr_name.startswith("data-")
+            or attr_name.startswith("aria-")
+        ):
             whitelist_attrs.append((attr_name, attr_value))
         else:
-            logger.debug(f"Removing attribute from <{element.name}>: {attr_name}='{attr_value}'")
-    
+            logger.debug(
+                f"Removing attribute from <{element.name}>: {attr_name}='{attr_value}'"
+            )
+
     # Update the element with only whitelisted attributes
     element.attrs = dict(whitelist_attrs)
     return str(element)
+
 
 def filter_and_clean_html(soup: BeautifulSoup) -> str:
     """Filter out irrelevant elements, clean attributes, and log removed elements.
@@ -393,7 +419,7 @@ def filter_and_clean_html(soup: BeautifulSoup) -> str:
         A string representing the cleaned HTML.
     """
     # Define relevant elements for action replay
-    relevant_tags = ['a', 'button', 'div', 'span', 'input', 'img', 'form', 'iframe']
+    relevant_tags = ["a", "button", "div", "span", "input", "img", "form", "iframe"]
     relevant_elements = []
 
     # Find relevant elements and log removal of irrelevant ones
@@ -407,5 +433,4 @@ def filter_and_clean_html(soup: BeautifulSoup) -> str:
     cleaned_elements = [clean_html_attributes(el) for el in relevant_elements]
 
     # Recreate a simplified HTML structure with only the cleaned elements
-    return ''.join(cleaned_elements)
-
+    return "".join(cleaned_elements)

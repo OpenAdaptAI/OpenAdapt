@@ -62,8 +62,9 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
             if not active_segment_idx:
                 logger.warning(f"{active_segment_idx=}")
                 active_segment_description = "(None)"
-                # XXX TODO
-                import ipdb; ipdb.set_trace()
+                # XXX TODO handle
+                logger.error(f"{active_segment_idx=}")
+                # import ipdb; ipdb.set_trace()
             else:
                 active_segment_description = window_segmentation.descriptions[
                     active_segment_idx
@@ -295,8 +296,9 @@ def get_active_segment(
         image.show()
 
     if active_index is None:
-        # XXX TODO
-        import ipdb; ipdb.set_trace()
+        # XXX TODO handle
+        logger.error(f"{active_index=}")
+        # import ipdb; ipdb.set_trace()
 
     return active_index
 
@@ -341,10 +343,8 @@ def find_similar_image_segmentation(
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
-
     # TODO: document or remove
     return_similar_segmentation: bool = False,
-
     handle_similar_image_groups: bool = False,
 ) -> Segmentation:
     """Segments the active window from the action event's screenshot.
@@ -378,17 +378,18 @@ def get_window_segmentation(
     if action_event.browser_event:
         refined_masks, element_labels = get_dom_masks(action_event)
     else:
-
-
         # TODO XXX: get segments from A11Y, fallback to segmentation
-
 
         # XXX HACK: skip if this event is "move" and next is "click"
         # TODO: consolidate with events.remove_move_before_click (currently disabled)
         # the following was implemented because enabelling remove_move_before_click
         # had no effect on order in visualize.py
         if SKIP_MOVE_BEFORE_CLICK:
-            if action_event.name == "move" and action_event.next_event and action_event.next_event.name == "click":
+            if (
+                action_event.name == "move"
+                and action_event.next_event
+                and action_event.next_event.name == "click"
+            ):
                 logger.info("Skipping 'move' event followed by 'click'")
                 return None
 
@@ -474,7 +475,7 @@ def get_dom_masks(
         min_extent (float, optional): Minimum extent of an element.
             Defaults to MIN_EXTENT.
         display_masks (bool, optional): Whether to display the masks.
-        display_screenshot_with_labels (bool, optional): Whether to display screenshot 
+        display_screenshot_with_labels (bool, optional): Whether to display screenshot
             with bounding boxes and labels.
 
     Returns:
@@ -489,25 +490,25 @@ def get_dom_masks(
     soup, target_element = browser_event.parse()
     elements = soup.find_all(attrs={"data-tlbr-screen": True})
     elements.sort(key=lambda el: calculate_area(el))
-    
+
     masks = []
     element_info = []
-    
+
     # If we want to display the screenshot with labels, create a drawable version of the screenshot
     if display_screenshot_with_labels:
         screenshot_with_labels = action_event.screenshot.image.copy()
         draw_screenshot = ImageDraw.Draw(screenshot_with_labels)
-    
+
     for element in elements:
         try:
             area = calculate_area(element)
             if area < min_element_area_pixels:
                 logger.info(f"skipping {area=} < {min_element_area_pixels=}")
                 continue
-            
+
             # Remove child masks from mask
             child_area = 0
-            for child in element.find_all(attrs={'data-tlbr-screen': True}):
+            for child in element.find_all(attrs={"data-tlbr-screen": True}):
                 child_area += calculate_area(child)
             adjusted_area = max(0, area - child_area)
             extent = adjusted_area / area if area > 0 else 0
@@ -515,44 +516,56 @@ def get_dom_masks(
             if extent < min_extent:
                 logger.info(f"<{min_extent=}, skipping")
                 continue
-            
+
             # Create a binary mask for the element
-            mask_img = Image.new('L', action_event.screenshot.image.size, color=0)
+            mask_img = Image.new("L", action_event.screenshot.image.size, color=0)
             draw = ImageDraw.Draw(mask_img)
-            
+
             # Get the element's top, left, bottom, right in window coordinates
             top, left, bottom, right = get_tlbr(element)
-            
+
             # Apply scale ratios to convert to image space
             top_scaled = top * height_ratio
             left_scaled = left * width_ratio
             bottom_scaled = bottom * height_ratio
             right_scaled = right * width_ratio
 
-            draw.rectangle([(left_scaled, top_scaled), (right_scaled, bottom_scaled)], fill=255)
-            
+            draw.rectangle(
+                [(left_scaled, top_scaled), (right_scaled, bottom_scaled)], fill=255
+            )
+
             # Convert the mask to a numpy array
             mask = np.array(mask_img, dtype=np.uint8) / 255
             masks.append(mask)
-            
+
             # Collect element data-id and scaled coordinates
             data_id = element.get("data-id", "unknown")
             element_info.append(
-                f"data-id: {data_id}, tlbr: ({top_scaled}, {left_scaled}, {bottom_scaled}, {right_scaled})"
+                f"data-id: {data_id}, tlbr: ({top_scaled}, {left_scaled},"
+                f" {bottom_scaled}, {right_scaled})"
             )
-            
+
             # If display_screenshot_with_labels is True, draw the bounding boxes and labels
             if display_screenshot_with_labels:
-                draw_screenshot.rectangle([(left_scaled, top_scaled), (right_scaled, bottom_scaled)], outline="red", width=2)
-                draw_screenshot.text((left_scaled, top_scaled), f"{data_id}: ({top_scaled}, {left_scaled}, {bottom_scaled}, {right_scaled})", fill="yellow")
-            
+                draw_screenshot.rectangle(
+                    [(left_scaled, top_scaled), (right_scaled, bottom_scaled)],
+                    outline="red",
+                    width=2,
+                )
+                draw_screenshot.text(
+                    (left_scaled, top_scaled),
+                    f"{data_id}: ({top_scaled}, {left_scaled}, {bottom_scaled},"
+                    f" {right_scaled})",
+                    fill="yellow",
+                )
+
             if display_masks:
                 logger.debug(f"Displaying mask for {element=}")
                 mask_img.show()  # Display the mask using PIL.Image.imshow()
-            
+
         except (ValueError, KeyError) as exc:
             logger.warning(f"Failed to process {element=}: {exc}")
-    
+
     # If display_screenshot_with_labels is True, show the screenshot with the drawn labels
     if display_screenshot_with_labels:
         logger.debug("Displaying screenshot with bounding boxes and labels")
@@ -562,7 +575,7 @@ def get_dom_masks(
 
 
 def get_tlbr(element: BeautifulSoup, attr: str = "data-tlbr-screen") -> list[int]:
-    top, left, bottom, right = [float(val) for val in element[attr].split(',')]
+    top, left, bottom, right = [float(val) for val in element[attr].split(",")]
     return top, left, bottom, right
 
 

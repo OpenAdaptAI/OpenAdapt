@@ -833,7 +833,7 @@ def filter_invalid_window_events(
     db: crud.SaSession,
     action_events: list[models.ActionEvent],
     min_width: int = 100,
-    min_height: int = 100
+    min_height: int = 100,
 ) -> list[models.WindowEvent]:
     """Filter out invalid window events by updating action events.
 
@@ -849,6 +849,7 @@ def filter_invalid_window_events(
     Returns:
         list[models.WindowEvent]: A list of valid window events.
     """
+
     def is_valid_window_event(event: models.WindowEvent) -> bool:
         return event and event.width >= min_width and event.height >= min_height
 
@@ -866,7 +867,9 @@ def filter_invalid_window_events(
             action.window_event = prev_valid_window
 
     db.add_all(action_events)
-    logger.info("Completed filtering and updating invalid window events in action events.")
+    logger.info(
+        "Completed filtering and updating invalid window events in action events."
+    )
     return valid_window_events
 
 

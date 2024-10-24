@@ -238,7 +238,7 @@ def make_scroll_event(
             "mouse_dy": dy,
         },
         get_pre_children=get_children,
-     )
+    )
 
 
 def make_click_events(

@@ -14,7 +14,11 @@ import requests
 from openadapt import cache, utils
 from openadapt.config import config
 from openadapt.custom_logger import logger
-from tokencost import calculate_prompt_cost, calculate_completion_cost, count_message_tokens
+from tokencost import (
+    calculate_prompt_cost,
+    calculate_completion_cost,
+    count_message_tokens,
+)
 
 
 MODEL_NAME = [
@@ -140,7 +144,9 @@ def get_response(
     return result
 
 
-def calculate_tokens_and_cost(result: dict, payload: dict) -> tuple[int, float, int, float, float]:
+def calculate_tokens_and_cost(
+    result: dict, payload: dict
+) -> tuple[int, float, int, float, float]:
     """Calculate the tokens and costs for the API call.
 
     Args:
@@ -155,13 +161,16 @@ def calculate_tokens_and_cost(result: dict, payload: dict) -> tuple[int, float, 
         - Completion cost
         - Total cost
     """
+
     # Extract text content from payload messages
     def extract_text(messages: list[dict]) -> list[dict]:
         extracted = []
         for message in messages:
             role = message["role"]
             content_list = message["content"]
-            text_content = "".join([item["text"] for item in content_list if item["type"] == "text"])
+            text_content = "".join(
+                [item["text"] for item in content_list if item["type"] == "text"]
+            )
             extracted.append({"role": role, "content": text_content})
         return extracted
 
@@ -171,7 +180,9 @@ def calculate_tokens_and_cost(result: dict, payload: dict) -> tuple[int, float, 
 
     # Calculate tokens and costs
     prompt_tokens = count_message_tokens(prompt_messages, model=payload["model"])
-    completion_tokens = count_message_tokens([{"role": "assistant", "content": completion_text}], model=payload["model"])
+    completion_tokens = count_message_tokens(
+        [{"role": "assistant", "content": completion_text}], model=payload["model"]
+    )
 
     prompt_cost = calculate_prompt_cost(prompt_messages, model=payload["model"])
     completion_cost = calculate_completion_cost(completion_text, model=payload["model"])
@@ -212,19 +223,25 @@ def get_completion(payload: dict, dev_mode: bool = False) -> str:
             return get_completion(payload)
         elif dev_mode:
             import ipdb
+
             ipdb.set_trace()
         else:
             raise exc
     logger.info(f"result=\n{pformat(result)}")
 
     # Calculate tokens and cost
-    prompt_tokens, prompt_cost, completion_tokens, completion_cost, api_call_cost = calculate_tokens_and_cost(result, payload)
+    prompt_tokens, prompt_cost, completion_tokens, completion_cost, api_call_cost = (
+        calculate_tokens_and_cost(result, payload)
+    )
 
     # Update total usage
     update_total_usage(prompt_tokens, completion_tokens, api_call_cost)
 
     # Log the results
-    logger.info(f"API Call Tokens: {prompt_tokens + completion_tokens}, Total Tokens Used: {total_tokens_used}")
+    logger.info(
+        f"API Call Tokens: {prompt_tokens + completion_tokens}, Total Tokens Used:"
+        f" {total_tokens_used}"
+    )
     logger.info(f"API Call Cost: ${api_call_cost:.6f}, Total Cost: ${total_cost:.6f}")
 
     choices = result["choices"]

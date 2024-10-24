@@ -102,7 +102,9 @@ def set_browser_mode(
     websocket.send(message)
 
 
-def add_screen_tlbr(browser_events: list[models.BrowserEvent], target_element_only: bool = False) -> None:
+def add_screen_tlbr(
+    browser_events: list[models.BrowserEvent], target_element_only: bool = False
+) -> None:
     """Computes and adds the 'data-tlbr-screen' attribute for each element.
 
     Uses coordMappings provided by JavaScript events. If 'data-tlbr-screen' already
@@ -179,7 +181,9 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent], target_element_on
 
         client_coords = element.get("data-tlbr-client")
         if not client_coords:
-            logger.warning(f"Missing client coordinates for element with id: {element.get('id')}")
+            logger.warning(
+                f"Missing client coordinates for element with id: {element.get('id')}"
+            )
             return
 
         # Extract client coordinates
@@ -207,7 +211,9 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent], target_element_on
         # Update the attribute with the new value
         element["data-tlbr-screen"] = new_screen_coords
 
-    def process_event(event: models.BrowserEvent, sx_scale, sx_offset, sy_scale, sy_offset):
+    def process_event(
+        event: models.BrowserEvent, sx_scale, sx_offset, sy_scale, sy_offset
+    ):
         """Helper to process a single browser event."""
         try:
             soup, target_element = event.parse()
@@ -250,15 +256,20 @@ def add_screen_tlbr(browser_events: list[models.BrowserEvent], target_element_on
         # Check if there are sufficient data points; if not, use closest valid mappings
         if not are_mappings_valid(x_mappings, y_mappings):
             # Determine which of prev_valid or next_valid to use
-            closest_mappings = prev_valid[idx] if prev_valid[idx] is not None else next_valid[idx]
+            closest_mappings = (
+                prev_valid[idx] if prev_valid[idx] is not None else next_valid[idx]
+            )
 
             if closest_mappings is None:
                 # this means that no mappings are available anywhere, which means
                 # we can't handle browser events at all
                 logger.error(
-                    f"No valid coordinate mappings available for element in event at index {idx}"
+                    "No valid coordinate mappings available for element in event at"
+                    f" index {idx}"
                 )
-                import ipdb; ipdb.set_trace()
+                import ipdb
+
+                ipdb.set_trace()
                 continue  # No valid mappings available, skip this event
 
             x_mappings, y_mappings = closest_mappings
@@ -543,7 +554,9 @@ def evaluate_alignment(
     action_events: list,
     browser_events: list,
     spatial: bool = SPATIAL,
-) -> tuple[int, list[float], list[float], list[float], list[float], list[float], list[float]]:
+) -> tuple[
+    int, list[float], list[float], list[float], list[float], list[float], list[float]
+]:
     """Evaluate the alignment between action events and browser events.
 
     Args:
@@ -584,7 +597,7 @@ def evaluate_alignment(
     logger.info(f"Alignment for {event_type} Events")
     for i, j in filtered_path:
         action_event = action_events[i]
-        #browser_event = deepcopy(browser_events[j])
+        # browser_event = deepcopy(browser_events[j])
         browser_event = browser_events[j]
 
         action_event_type = action_event.name.lower()
@@ -603,7 +616,9 @@ def evaluate_alignment(
             local_time_differences.append(local_time_difference)
 
             # Compute differences between mouse positions
-            if browser_event.message.get("scrollDeltaX") or browser_event.message.get("scrollDeltaY"):
+            if browser_event.message.get("scrollDeltaX") or browser_event.message.get(
+                "scrollDeltaY"
+            ):
                 # TODO XXX: accumulate differences before comparing to account for
                 # different sampling rates
                 mouse_dx_difference = (
@@ -778,8 +793,8 @@ def assign_browser_events(
 
     # Add keyboard events dynamically
     event_pairs.extend(
-        [(f"Key Press {key.upper()}", "press", key) for key in KEYBOARD_KEYS] +
-        [(f"Key Release {key.upper()}", "release", key) for key in KEYBOARD_KEYS]
+        [(f"Key Press {key.upper()}", "press", key) for key in KEYBOARD_KEYS]
+        + [(f"Key Release {key.upper()}", "release", key) for key in KEYBOARD_KEYS]
     )
 
     # Initialize statistics
@@ -813,7 +828,7 @@ def assign_browser_events(
                 browser_events,
             )
         )
-        #if action_name == "move":
+        # if action_name == "move":
         #    import ipdb; ipdb.set_trace()
 
         if action_filtered_events or browser_filtered_events:
@@ -832,11 +847,11 @@ def assign_browser_events(
                 browser_event = browser_filtered_events[j]
 
                 # Ensure both action_event and browser_event are managed by the session
-                #action_event = session.merge(action_event)
-                #browser_event = session.merge(browser_event)
-                #if not hasattr(action_event, '_sa_instance_state'):
+                # action_event = session.merge(action_event)
+                # browser_event = session.merge(browser_event)
+                # if not hasattr(action_event, '_sa_instance_state'):
                 #    action_event = session.query(models.ActionEvent).get(action_event.id)
-                #if not hasattr(browser_event, '_sa_instance_state'):
+                # if not hasattr(browser_event, '_sa_instance_state'):
                 #    browser_event = session.query(models.BrowserEvent).get(browser_event.id)
 
                 action_event.browser_event_timestamp = browser_event.timestamp

@@ -157,14 +157,18 @@ def dump_state(
     if isinstance(element, AppKit.NSArray) or isinstance(element, list):
         state = []
         for child in element:
-            _state = dump_state(child, elements, max_depth, current_depth + 1, timeout, start_time)
+            _state = dump_state(
+                child, elements, max_depth, current_depth + 1, timeout, start_time
+            )
             if _state:
                 state.append(_state)
         return state
     elif isinstance(element, AppKit.NSDictionary) or isinstance(element, dict):
         state = {}
         for k, v in element.items():
-            _state = dump_state(v, elements, max_depth, current_depth + 1, timeout, start_time)
+            _state = dump_state(
+                v, elements, max_depth, current_depth + 1, timeout, start_time
+            )
             if _state:
                 state[k] = _state
         return state
@@ -200,7 +204,14 @@ def dump_state(
                 ):
                     continue
 
-                _state = dump_state(attr_val, elements, max_depth, current_depth + 1, timeout, start_time)
+                _state = dump_state(
+                    attr_val,
+                    elements,
+                    max_depth,
+                    current_depth + 1,
+                    timeout,
+                    start_time,
+                )
                 if _state:
                     state[attr_name] = _state
             return state

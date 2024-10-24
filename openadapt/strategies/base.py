@@ -131,6 +131,8 @@ class BaseReplayStrategy(ABC):
 expected_state='After pressing <cmd>-<tab>, I would expect to see the application switcher
 overlay, showing a row of applications that can be cycled through.' is_complete=False
 """
+
+
 # e.g. include next window state in prompt
 # e.g. elaborate specifically for cmd-tab (i.e. that next application should be visible)
 def prompt_is_action_complete(

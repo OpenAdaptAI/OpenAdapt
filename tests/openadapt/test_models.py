@@ -16,30 +16,30 @@ def test_action_from_dict() -> None:
             "<backspace>-<backspace><backspace>",
             "<backspace><backspace>-<backspace>",
         ],
-
         # TODO: support malformed configurations below
-
         ## all char keys
         "a-b-c": [
             # standard
             "a-b-c",
             # malformed
-            #"abc",
+            # "abc",
             # mixed
-            #"a-bc",
-            #"ab-c",
+            # "a-bc",
+            # "ab-c",
         ],
-
         ## mixed named and char
         "<cmd>-t": [
             # standard
             "<cmd>-t",
             # malformed
-            #"<cmd>t",
+            # "<cmd>t",
         ],
     }
 
-    for expected_output, input_variations in input_variations_by_expected_output.items():
+    for (
+        expected_output,
+        input_variations,
+    ) in input_variations_by_expected_output.items():
         for input_variation in input_variations:
             action_dict = {
                 "name": "type",
