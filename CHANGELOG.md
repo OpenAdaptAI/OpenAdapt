@@ -2,6 +2,47 @@
 
 
 
+## v0.41.0 (2024-10-24)
+
+### Feature
+
+* feat(browser.py): add BrowserReplayStrategy; support browser modes record/replay (#872)
+
+* add BrowserReplayStrategy; support browser modes record/replay
+
+* minor refactor
+
+* black/flake8
+
+* update README
+
+* improve README
+
+* add BrowserReplayStrategy to README
+
+* add strategies/visual_browser.py
+
+* fix Action.from_dict and test_action_from_dict to support &lt;cmd&gt;-t
+
+* calculate_tokens_and_cost; bugfix ActionEvent.fromdict; add ActionEvent.next_event; add TODOs; add visual_browser.py::SKIP_MOVE_BEFORE_CLICK
+
+* handle mousemove/scroll; add_screen_tlbr forwards and backwards; RAW_PRECISE/IMPRECISE_MOUSE_EVENTS; openai.MAX_IMAGES = 90; fix merge_consecutive_mouse_scroll_events and tests; filter_invalid_window_events; dump_state timeout;
+
+* add TODO
+
+* noqa ([`d31fde0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d31fde080157260e1bb3a8c61a337c22ea2d1520))
+
+### Unknown
+
+* Improve macOS app test script reliability and error handling (#885)
+
+* Improve macOS app test script reliability and error handling
+
+* Update actions/setup-python to v5 to resolve deprecation warnings ([`c1075f1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c1075f1becc186ab0f9ac24f64ddb0b666f19d88))
+
+* /nh -&gt; 2&gt;nul ([`99bbe0e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/99bbe0eaf20f84af292d216a1439605b6bdd6f1e))
+
+
 ## v0.40.0 (2024-09-11)
 
 ### Feature
