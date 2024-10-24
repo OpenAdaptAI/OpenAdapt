@@ -1,5 +1,7 @@
 """Like visual.py but using instrumented DOM to generate segments instead of FastSAM."""
 
+# TODO XXX: fix caching
+
 from dataclasses import dataclass
 from pprint import pformat
 import time
