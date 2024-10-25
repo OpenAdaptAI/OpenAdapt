@@ -1,6 +1,5 @@
 """Module for customizing multiprocessing.Queue to avoid NotImplementedError."""
 
-
 from multiprocessing.queues import Queue
 from typing import Any
 import multiprocessing

@@ -44,11 +44,13 @@ def show_alert() -> None:
     msg = QMessageBox()
     msg.setIcon(QMessageBox.Warning)
     msg.setWindowIcon(QIcon(ICON_PATH))
-    msg.setText("""
+    msg.setText(
+        """
         An error has occurred. The development team has been notified.
         Please join the discord server to get help or send an email to
         help@openadapt.ai
-        """)
+        """
+    )
     discord_button = QPushButton("Join the discord server")
     discord_button.clicked.connect(
         lambda: webbrowser.open("https://discord.gg/yF527cQbDG")

@@ -3,6 +3,7 @@
 Usage:
     python3 -m openadapt.start
 """
+
 import subprocess
 
 from openadapt.app.main import run_app

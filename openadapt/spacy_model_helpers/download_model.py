@@ -1,6 +1,5 @@
 """Download the spacy model."""
 
-
 import json
 import os
 import pathlib
@@ -67,13 +66,10 @@ def download_spacy_model(model_name: str) -> None:
             for filename in filenames:
                 if filename.endswith(".whl"):
                     continue
-                relative_path = (
-                    f"{pathlib.Path(dirpath).relative_to(model_dir)}/{filename}"
-                    .replace(
-                        "\\", "/"
-                    ).replace(
-                        "./", ""
-                    )
+                relative_path = f"{pathlib.Path(dirpath).relative_to(model_dir)}/{filename}".replace(
+                    "\\", "/"
+                ).replace(
+                    "./", ""
                 )
                 url = (
                     "https://huggingface.co/spacy/en_core_web_trf/resolve/main/"

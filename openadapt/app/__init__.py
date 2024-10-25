@@ -11,7 +11,14 @@ import time
 from openadapt.record import record
 from openadapt.utils import WrapStdout
 
-__all__ = ['RecordProc', 'record_proc', 'stop_record', 'is_recording', 'quick_record', 'FPATH']
+__all__ = [
+    "RecordProc",
+    "record_proc",
+    "stop_record",
+    "is_recording",
+    "quick_record",
+    "FPATH",
+]
 
 # Define FPATH
 FPATH = pathlib.Path(__file__).parent
@@ -105,4 +112,3 @@ def quick_record(
             "log_memory": False,
         },
     )
-
