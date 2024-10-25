@@ -186,18 +186,6 @@ This will start a web server locally, and then open a tab in your browser that l
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/48d27459-4be8-4b96-beb0-1973953b8a09)
 
-For a desktop app-based visualization, run:
-
-```
-python -m openadapt.app.visualize
-```
-
-This will open a scrollable window that looks something like this:
-
-<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
-
-<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
-
 ### Playback
 
 You can play back the recording using the following command:
