@@ -7,6 +7,7 @@ Create Date: 2024-04-24 19:34:00.000152
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = "f9586c10a561"
@@ -27,18 +28,26 @@ def upgrade() -> None:
         "performance_stat",
     ]:
         session.execute(
-            f"UPDATE {table} SET recording_id = (SELECT id FROM recording WHERE"
-            f" recording.timestamp = {table}.recording_timestamp)"
+            text(
+                f"UPDATE {table} SET recording_id = (SELECT id FROM recording WHERE"
+                f" recording.timestamp = {table}.recording_timestamp)"
+            )
         )
 
     session.execute(
-        "UPDATE action_event SET window_event_id = (SELECT id FROM window_event WHERE"
-        " window_event.timestamp = action_event.window_event_timestamp)"
+        text(
+            "UPDATE action_event SET window_event_id = (SELECT id FROM window_event WHERE"
+            " window_event.timestamp = action_event.window_event_timestamp)"
+        )
     )
     session.execute(
-        "UPDATE action_event SET screenshot_id = (SELECT id FROM screenshot WHERE"
-        " screenshot.timestamp = action_event.screenshot_timestamp)"
+        text(
+            "UPDATE action_event SET screenshot_id = (SELECT id FROM screenshot WHERE"
+            " screenshot.timestamp = action_event.screenshot_timestamp)"
+        )
     )
+
+    session.commit()
 
 
 def downgrade() -> None:
