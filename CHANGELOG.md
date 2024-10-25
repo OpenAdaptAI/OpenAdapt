@@ -2,6 +2,13 @@
 
 
 
+## v0.42.0 (2024-10-25)
+
+### Feature
+
+* feat(build): improve build script reliability (#886) ([`ea743a2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ea743a2ab5acd5627cb669ba1cadbcce0555194d))
+
+
 ## v0.41.0 (2024-10-24)
 
 ### Feature
