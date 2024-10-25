@@ -66,7 +66,8 @@ def download_spacy_model(model_name: str) -> None:
             for filename in filenames:
                 if filename.endswith(".whl"):
                     continue
-                relative_path = f"{pathlib.Path(dirpath).relative_to(model_dir)}/{filename}".replace(
+                # TODO: noqa below is a hack to force compatibility between flake8/black
+                relative_path = f"{pathlib.Path(dirpath).relative_to(model_dir)}/{filename}".replace(  # noqa: E501
                     "\\", "/"
                 ).replace(
                     "./", ""

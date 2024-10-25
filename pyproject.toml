@@ -135,6 +135,7 @@ capture = "openadapt.capture:test"
 postinstall = "scripts.postinstall:main"
 
 [tool.black]
+line-length = 88
 extend-exclude = '''
 /(
     venv
