@@ -21,6 +21,7 @@ from openadapt.config import CAPTURE_DIR_PATH, print_config
 from openadapt.db import crud
 from openadapt.error_reporting import configure_error_reporting
 from openadapt.models import Recording
+from openadapt.strategies.base import BaseReplayStrategy
 
 LOG_LEVEL = "INFO"
 
@@ -51,12 +52,12 @@ def replay(
     """
     utils.configure_logging(logger, LOG_LEVEL)
     print_config()
-    configure_error_reporting()
-    posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
+    #configure_error_reporting()
+    #posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
 
-    if status_pipe:
-        # TODO: move to Strategy?
-        status_pipe.send({"type": "replay.started"})
+    #if status_pipe:
+    #    # TODO: move to Strategy?
+    #    status_pipe.send({"type": "replay.started"})
 
     session = crud.get_new_session(read_only=True)
 
@@ -70,7 +71,7 @@ def replay(
 
     logger.info(f"{strategy_name=}")
 
-    strategy_class_by_name = utils.get_strategy_class_by_name()
+    strategy_class_by_name = get_strategy_class_by_name()
     if strategy_name not in strategy_class_by_name:
         strategy_names = [
             name
@@ -116,6 +117,20 @@ def replay(
         logger.remove(handler)
 
     return rval
+
+
+def get_strategy_class_by_name() -> dict:
+    """Get a dictionary of strategy classes by their names.
+
+    Returns:
+        dict: A dictionary of strategy classes.
+    """
+    strategy_classes = BaseReplayStrategy.__subclasses__()
+    class_by_name = {cls.__name__: cls for cls in strategy_classes}
+    logger.debug(f"{class_by_name=}")
+    return class_by_name
+
+
 
 
 # Entry point
