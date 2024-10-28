@@ -52,10 +52,10 @@ def replay(
     """
     utils.configure_logging(logger, LOG_LEVEL)
     print_config()
-    #configure_error_reporting()
-    #posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
+    # configure_error_reporting()
+    # posthog.capture(event="replay.started", properties={"strategy_name": strategy_name})
 
-    #if status_pipe:
+    # if status_pipe:
     #    # TODO: move to Strategy?
     #    status_pipe.send({"type": "replay.started"})
 
@@ -129,8 +129,6 @@ def get_strategy_class_by_name() -> dict:
     class_by_name = {cls.__name__: cls for cls in strategy_classes}
     logger.debug(f"{class_by_name=}")
     return class_by_name
-
-
 
 
 # Entry point

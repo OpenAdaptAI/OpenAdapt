@@ -108,7 +108,7 @@ def do_fastsam(
             labels=False,
             boxes=False,
             probs=False,
-            color_mode='instance',
+            color_mode="instance",
         )
     )
 
