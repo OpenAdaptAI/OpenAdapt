@@ -426,6 +426,20 @@ def take_screenshot() -> Image.Image:
     return image
 
 
+def get_strategy_class_by_name() -> dict:
+    """Get a dictionary of strategy classes by their names.
+
+    Returns:
+        dict: A dictionary of strategy classes.
+    """
+    from openadapt.strategies import BaseReplayStrategy
+
+    strategy_classes = BaseReplayStrategy.__subclasses__()
+    class_by_name = {cls.__name__: cls for cls in strategy_classes}
+    logger.debug(f"{class_by_name=}")
+    return class_by_name
+
+
 def get_performance_plot_file_path(recording_timestamp: float) -> str:
     """Get the filename for the performance plot.
 
