@@ -17,6 +17,7 @@ import urllib.request
 from loguru import logger  # TODO: from openadapt import custom_logger?
 
 # Third-party packages
+import cv2
 import gradio_client
 import nicegui
 import oa_pynput
@@ -151,6 +152,14 @@ def build_pyinstaller() -> None:
     # Copy additional metadata files
     for package in packages_metadata_to_copy:
         spec.extend(["--copy-metadata", package])
+
+    # PyInstaller spec additions
+    spec.extend([
+        "--hidden-import=cv2",
+        "--hidden-import=cv2.cv2",
+        "--add-binary",
+        f"{Path(cv2.__file__).parent}\\*.dll;cv2"
+    ])
 
     # Run PyInstaller with the generated spec
     subprocess.call(spec)
