@@ -7,14 +7,16 @@ Example usage:
 """
 
 from pathlib import Path
+import importlib
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
+from loguru import logger  # TODO: from openadapt import custom_logger?
 
+# Third-party packages
 import gradio_client
 import nicegui
 import oa_pynput
@@ -24,15 +26,14 @@ import pyqttoast
 import spacy_alignments
 import ultralytics
 import whisper
-
+from openadapt.build_utils import get_root_dir_path
 from openadapt.config import POSTHOG_HOST, POSTHOG_PUBLIC_KEY
 
 if sys.platform == "win32":
     import screen_recorder_sdk
 
-
 def build_pyinstaller() -> None:
-    """Build the application using PyInstaller."""
+    """Build the application using PyInstaller with enhanced handling for missing imports and dependencies."""
     additional_packages_to_install = [
         nicegui,
         oa_pynput,
@@ -46,32 +47,17 @@ def build_pyinstaller() -> None:
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
-    packages_to_exclude = [
-        "pytest",
-        "py",
-    ]
-
-    packages_metadata_to_copy = [
-        "replicate",
-    ]
+    packages_to_exclude = ["pytest", "_pytest", "py"]
+    packages_metadata_to_copy = ["replicate"]
 
     OPENADAPT_DIR = Path(__file__).parent
     ROOT_DIR = OPENADAPT_DIR.parent
 
+    # Build the frontend if on Windows
+    npm_build_command = ["npm", "run", "build"]
     if sys.platform == "win32":
         subprocess.run(
-            ["npm", "run", "build"],
-            cwd=OPENADAPT_DIR / "app" / "dashboard",
-            shell=True,
-            env={
-                **os.environ,
-                "NEXT_PUBLIC_POSTHOG_HOST": POSTHOG_HOST,
-                "NEXT_PUBLIC_POSTHOG_PUBLIC_KEY": POSTHOG_PUBLIC_KEY,
-            },
-        )
-    else:
-        subprocess.run(
-            "npm run build",
+            npm_build_command,
             cwd=OPENADAPT_DIR / "app" / "dashboard",
             shell=True,
             env={
@@ -81,20 +67,32 @@ def build_pyinstaller() -> None:
             },
         )
 
+    # Define the initial PyInstaller spec
     spec = [
         "pyi-makespec",
         f"{OPENADAPT_DIR / 'entrypoint.py'}",
         f"--icon={OPENADAPT_DIR / 'app' / 'assets' / 'logo.ico'}",
         "--name",
-        "OpenAdapt",  # name
-        # "--onefile", # trade startup speed for smaller file size
+        "OpenAdapt",
         "--onedir",
-        # prevent console appearing, only use with ui.run(native=True, ...)
         "--windowed",
         "--hidden-import=tiktoken_ext.openai_public",
         "--hidden-import=tiktoken_ext",
         "--hidden-import=replicate",
+        "--hidden-import=pkg_resources._vendor.jaraco.functools",
+        "--hidden-import=pkg_resources._vendor.jaraco.context",
+        "--hidden-import=pkg_resources._vendor.jaraco.text",
+        "--hidden-import=pysqlite2",
+        "--hidden-import=MySQLdb",
+        "--hidden-import=importlib_resources.trees",
+        "--hidden-import=matplotlib.backends.backend_qtagg",
+        "--hidden-import=matplotlib.backends.qt_compat",
+        "--hidden-import=PySide6.QtGui",
+        "--hidden-import=PySide6.QtWidgets",
+        "--hidden-import=PySide6.QtCore",
     ]
+
+    # Specify directories and files to ignore
     ignore_dirs = [
         "__pycache__",
         ".vscode",
@@ -131,53 +129,43 @@ def build_pyinstaller() -> None:
         "openadapt/app/dashboard/tsconfig.json",
     ]
 
+    # Add necessary files to PyInstaller spec
     for root, dirs, files in os.walk(OPENADAPT_DIR):
         if any(ignore_dir in root for ignore_dir in ignore_dirs):
             continue
         for file in files:
             relative_path = Path(root).relative_to(OPENADAPT_DIR) / file
             file_relative_path = f'{Path("openadapt") / relative_path}'
-            if any(
-                file_relative_path.endswith(str(Path(ext)))
-                for ext in ignore_file_extensions
-            ):
+            if any(file_relative_path.endswith(str(Path(ext))) for ext in ignore_file_extensions):
                 continue
-            spec.append("--add-data")
-            file_parent_dir = Path(file_relative_path).parent
-            spec.append(f"{Path(root) / file}:{file_parent_dir}")
+            spec.extend(["--add-data", f"{Path(root) / file}:{Path(file_relative_path).parent}"])
 
+    # Include data files for additional packages
     for package in additional_packages_to_install:
-        spec.append("--add-data")
-        spec.append(f"{Path(package.__file__).parent}:{Path(package.__name__)}")
+        spec.extend(["--add-data", f"{Path(package.__file__).parent}:{Path(package.__name__)}"])
 
+    # Exclude unnecessary packages
     for package in packages_to_exclude:
-        spec.append("--exclude-module")
-        spec.append(package)
+        spec.extend(["--exclude-module", package])
 
+    # Copy additional metadata files
     for package in packages_metadata_to_copy:
-        spec.append("--copy-metadata")
-        spec.append(package)
+        spec.extend(["--copy-metadata", package])
 
+    # Run PyInstaller with the generated spec
     subprocess.call(spec)
-
-    # building
+    logger.info("Running PyInstaller.")
     proc = subprocess.Popen("pyinstaller OpenAdapt.spec --noconfirm", shell=True)
     proc.wait()
 
-    # cleanup
+    # Cleanup temporary spec file
     os.remove("OpenAdapt.spec")
 
+    # macOS-specific setup
     if sys.platform == "darwin":
-        # because the app needs a stdout and stderr, we use a shell script to run the
-        # app on new terminal
         shutil.move(
             ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt",
-            ROOT_DIR
-            / "dist"
-            / "OpenAdapt.app"
-            / "Contents"
-            / "MacOS"
-            / "OpenAdapt.app",
+            ROOT_DIR / "dist" / "OpenAdapt.app" / "Contents" / "MacOS" / "OpenAdapt.app",
         )
         shutil.copy(
             ROOT_DIR / "build_scripts" / "macos.sh",
@@ -257,7 +245,6 @@ Name: "{{group}}\\{{cm:UninstallProgram,OpenAdapt}}"; Filename: "{{uninstallexe}
     try:
         subprocess.run([str(inno_setup_compiler), str(INNO_SETUP_PATH)], check=True)
     finally:
-        # Wait a moment before cleaning up
         time.sleep(2)
         try:
             shutil.rmtree(temp_dir)
@@ -277,3 +264,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
