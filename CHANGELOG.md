@@ -2,6 +2,21 @@
 
 
 
+## v0.42.1 (2024-10-30)
+
+### Fix
+
+* fix(build): add tokencost to build.py, update pyinstaller to 6.11.0, new ERROR_REPORTING_DSN ([`e7ad4e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e7ad4e5b1bf55c01dfa66a4f5de0f0a9d02a9c94))
+
+* fix(replay): fix poetry lock, ulralytics.py, update ERROR_REPORTING_DSN
+
+* fix dependencies, update ultralytics.py
+
+* update ERROR_REPORTING_DSN
+
+* black ([`0ce11f3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ce11f30a2951287a5b01affade39745f0757b0d))
+
+
 ## v0.42.0 (2024-10-25)
 
 ### Feature
