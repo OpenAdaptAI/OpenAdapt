@@ -7,7 +7,7 @@ import time
 from oa_pynput import keyboard, mouse
 import numpy as np
 
-from openadapt import adapters, models, playback, utils
+from openadapt import adapters, config, models, playback, utils
 from openadapt.custom_logger import logger
 
 CHECK_ACTION_COMPLETE = False
@@ -21,7 +21,7 @@ class BaseReplayStrategy(ABC):
         self,
         recording: models.Recording,
         max_frame_times: int = MAX_FRAME_TIMES,
-        include_a11y_data: bool = True,
+        include_a11y_data: bool = config.RECORD_READ_ACTIVE_ELEMENT_STATE,
     ) -> None:
         """Initialize the BaseReplayStrategy.
 
