@@ -22,6 +22,7 @@ import pycocotools
 import pydicom
 import pyqttoast
 import spacy_alignments
+import tokencost
 import ultralytics
 import whisper
 
@@ -43,12 +44,15 @@ def build_pyinstaller() -> None:
         pycocotools,
         pyqttoast,
         whisper,
+        tokencost,
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
     packages_to_exclude = [
         "pytest",
         "py",
+        "_pytest",
+        "sympy.testing",
     ]
 
     packages_metadata_to_copy = [
