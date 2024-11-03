@@ -4,6 +4,12 @@ import { ColorSchemeScript, MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications';
 import { Shell } from '@/components/Shell'
 import { CSPostHogProvider } from './providers';
+import { Poppins } from 'next/font/google';
+
+const poppins = Poppins({
+    subsets: ['latin'],
+    weight: ['400', '700'],
+  });
 
 export const metadata = {
     title: 'OpenAdapt.AI',
@@ -20,7 +26,7 @@ export default function RootLayout({
                 <ColorSchemeScript />
             </head>
             <CSPostHogProvider>
-                <body>
+                <body className={poppins.className}>
                     <MantineProvider>
                         <Notifications />
                             <Shell>

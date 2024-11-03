@@ -21,7 +21,7 @@ export const Navbar = ({
                     href={route.path}
                     key={route.path}
                     className={
-                        (currentRoute === route.path ? 'bg-gray-200' : '') +
+                        (currentRoute === route.path ? 'bg-gray-300 rounded-lg' : '') +
                         ' p-5 no-underline flex items-center gap-x-1 transition hover:gap-x-2 ease-out'
                     }
                 >
