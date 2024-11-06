@@ -2,6 +2,13 @@
 
 
 
+## v0.42.2 (2024-11-06)
+
+### Fix
+
+* fix(recording): specify pywinauto types as strings (#913) ([`4955237`](https://github.com/OpenAdaptAI/OpenAdapt/commit/495523716950f222c652104aa75cd99b620f88f2))
+
+
 ## v0.42.1 (2024-10-30)
 
 ### Fix
