@@ -1,8 +1,10 @@
 from pprint import pprint
+from typing import TYPE_CHECKING
 import pickle
 import time
 
-import pywinauto
+if TYPE_CHECKING:
+    import pywinauto
 
 from openadapt.custom_logger import logger
 
@@ -53,7 +55,7 @@ def get_active_window_state(read_window_data: bool) -> dict:
 
 
 def get_active_window_meta(
-    active_window: pywinauto.application.WindowSpecification,
+    active_window: "pywinauto.application.WindowSpecification",
 ) -> dict:
     """Get the meta information of the active window.
 
@@ -88,18 +90,22 @@ def get_active_element_state(x: int, y: int) -> dict:
     return properties
 
 
-def get_active_window() -> pywinauto.application.WindowSpecification:
+def get_active_window() -> "pywinauto.application.WindowSpecification":
     """Get the active window object.
 
     Returns:
         pywinauto.application.WindowSpecification: The active window object.
     """
+    import pywinauto
+
     app = pywinauto.application.Application(backend="uia").connect(active_only=True)
     window = app.top_window()
     return window.wrapper_object()
 
 
-def get_element_properties(element: pywinauto.application.WindowSpecification) -> dict:
+def get_element_properties(
+    element: "pywinauto.application.WindowSpecification",
+) -> dict:
     """Recursively retrieves the properties of each element and its children.
 
     Args:
@@ -132,7 +138,7 @@ def get_element_properties(element: pywinauto.application.WindowSpecification) -
     return properties
 
 
-def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
+def dictify_rect(rect: "pywinauto.win32structures.RECT") -> dict:
     """Convert a rectangle object to a dictionary.
 
     Args:
@@ -150,7 +156,7 @@ def dictify_rect(rect: pywinauto.win32structures.RECT) -> dict:
     return rect_dict
 
 
-def get_properties(element: pywinauto.application.WindowSpecification) -> dict:
+def get_properties(element: "pywinauto.application.WindowSpecification") -> dict:
     """Retrieves specific writable properties of an element.
 
     This function retrieves a dictionary of writable properties for a given element.
@@ -168,6 +174,7 @@ def get_properties(element: pywinauto.application.WindowSpecification) -> dict:
 
     """
     _element_class = element.__class__
+    import pywinauto
 
     class TempElement(element.__class__):
         writable_props = pywinauto.base_wrapper.BaseWrapper.writable_props
