@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openadapt"
-version = "0.42.0"
+version = "0.42.2"
 description = "GUI Process Automation with Transformers"
 authors = [
     'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
@@ -48,7 +48,7 @@ torch = "^2.0.0"
 tqdm = "4.64.0"
 transformers = "4.29.2"
 python-dotenv = "1.0.0"
-pyinstaller = "6.5.0"
+pyinstaller = "6.11.0"
 setuptools-lint = "^0.6.0"
 sphinx = "7.0.1"
 spacy = "^3.5.3"

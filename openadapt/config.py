@@ -125,7 +125,8 @@ class Config(BaseSettings):
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
     ERROR_REPORTING_DSN: ClassVar = (
-        "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
+        # "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
+        "https://5d24fc5a2e674ea6b42275e5702499ce@app.glitchtip.com/8771"
     )
     ERROR_REPORTING_BRANCH: ClassVar = "main"
 
