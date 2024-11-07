@@ -120,7 +120,7 @@ def make_action_event(
 
 
 def get_children_with_timestamps(
-    get_children: Callable[[], list[ActionEvent]]
+    get_children: Callable[[], list[ActionEvent]],
 ) -> list[ActionEvent]:
     """Get the list of children events with timestamps.
 
@@ -615,7 +615,7 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
 
 
 def make_type_event(
-    get_children: Optional[Callable[[], list[ActionEvent]]]
+    get_children: Optional[Callable[[], list[ActionEvent]]],
 ) -> ActionEvent:
     """Create a type event with the given children events.
 

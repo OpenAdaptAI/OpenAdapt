@@ -57,11 +57,8 @@ def get_engine() -> sa.engine:
     return engine
 
 
-def get_base(engine: sa.engine) -> sa.engine:
+def get_base() -> sa.engine:
     """Create and return the base model with the provided engine.
-
-    Args:
-        engine (sa.engine): The database engine to bind to the base model.
 
     Returns:
         sa.engine: The base model object.
@@ -69,14 +66,13 @@ def get_base(engine: sa.engine) -> sa.engine:
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     Base = declarative_base(
         cls=BaseModel,
-        bind=engine,
         metadata=metadata,
     )
     return Base
 
 
 engine = get_engine()
-Base = get_base(engine)
+Base = get_base()
 Session = sessionmaker(bind=engine)
 
 

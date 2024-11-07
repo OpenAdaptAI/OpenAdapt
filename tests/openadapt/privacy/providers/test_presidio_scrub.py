@@ -1,6 +1,5 @@
 """Module to test PresidioScrubbingProvider."""
 
-
 from io import BytesIO
 import os
 import re
@@ -210,8 +209,7 @@ def test_scrub_all_together() -> None:
         " He was born on 01/01/1980."
     )
     assert (
-        scrub.scrub_text(text_with_pii_phi)
-        == "<PERSON> email is <EMAIL_ADDRESS> and"
+        scrub.scrub_text(text_with_pii_phi) == "<PERSON> email is <EMAIL_ADDRESS> and"
         " his phone number is <PHONE_NUMBER>."
         "His credit card number is <CREDIT_CARD> and"
         " his social security number is <US_SSN>."

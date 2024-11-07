@@ -1,6 +1,5 @@
 """Configuration module for OpenAdapt."""
 
-
 from enum import Enum
 from typing import Any, ClassVar, Type, Union
 import json

@@ -1,6 +1,5 @@
 """Tests for the CRUD operations in the openadapt.db.crud module."""
 
-
 from unittest.mock import patch
 
 import pytest
