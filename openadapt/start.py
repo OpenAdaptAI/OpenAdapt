@@ -6,8 +6,8 @@ Usage:
 
 import subprocess
 
-from openadapt.app.main import run_app
 from openadapt.custom_logger import logger
+from openadapt.deprecated.app.main import run_app
 
 
 def main() -> None:

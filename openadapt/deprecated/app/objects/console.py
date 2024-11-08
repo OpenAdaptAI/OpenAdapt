@@ -1,4 +1,4 @@
-"""openadapt.app.objects.console module.
+"""openadapt.deprecated.app.objects.console module.
 
 This module provides the Console class for redirecting stderr to a NiceGUI log.
 

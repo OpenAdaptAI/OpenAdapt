@@ -1,4 +1,4 @@
-"""openadapt.app.objects.local_file_picker module.
+"""openadapt.deprecated.app.objects.local_file_picker module.
 
 This module provides the LocalFilePicker class for selecting
  a file from the local filesystem.
@@ -6,7 +6,7 @@ This module provides the LocalFilePicker class for selecting
 https://github.com/zauberzeug/nicegui/tree/main/examples/local_file_picker
 
 Example usage:
-    from openadapt.app.objects.local_file_picker import LocalFilePicker
+    from openadapt.deprecated.app.objects.local_file_picker import LocalFilePicker
 
     async def pick_file():
         result = await LocalFilePicker("~", multiple=True)

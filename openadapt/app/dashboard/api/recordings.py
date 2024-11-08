@@ -4,9 +4,9 @@ import json
 
 from fastapi import APIRouter, WebSocket
 
-from openadapt.app import cards
 from openadapt.custom_logger import logger
 from openadapt.db import crud
+from openadapt.deprecated.app import cards
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.plotting import display_event

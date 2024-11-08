@@ -1,4 +1,4 @@
-"""openadapt.app.cards module.
+"""openadapt.deprecated.app.cards module.
 
 This module provides functions for managing UI cards in the OpenAdapt application.
 """
@@ -9,8 +9,8 @@ import time
 
 from nicegui import ui
 
-from openadapt.app.objects.local_file_picker import LocalFilePicker
-from openadapt.app.util import get_scrub, set_dark, set_scrub, sync_switch
+from openadapt.deprecated.app.objects.local_file_picker import LocalFilePicker
+from openadapt.deprecated.app.util import get_scrub, set_dark, set_scrub, sync_switch
 from openadapt.record import record
 from openadapt.utils import WrapStdout
 

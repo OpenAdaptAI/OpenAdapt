@@ -1,9 +1,9 @@
-"""openadapt.app.util module.
+"""openadapt.deprecated.app.util module.
 
 This module provides utility functions for the OpenAdapt application.
 
 Example usage:
-    from openadapt.app.util import clear_db, on_import, on_export, sync_switch, set_dark
+    from openadapt.deprecated.app.util import clear_db, on_import, on_export, sync_switch, set_dark
 
     clear_db()
     on_import(selected_file, delete=False, src="openadapt.db")
@@ -19,8 +19,8 @@ import sys
 
 from nicegui import elements, ui
 
-from openadapt.app.objects import console
 from openadapt.config import config
+from openadapt.deprecated.app.objects import console
 from openadapt.scripts.reset_db import reset_db
 
 

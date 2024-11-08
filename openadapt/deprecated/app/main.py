@@ -1,9 +1,9 @@
-"""openadapt.app.main module.
+"""openadapt.deprecated.app.main module.
 
 This module provides the main entry point for running the OpenAdapt application.
 
 Example usage:
-    from openadapt.app import run_app
+    from openadapt.deprecated.app import run_app
 
     run_app()
 """
@@ -17,10 +17,10 @@ import pathlib
 from nicegui import app, ui
 
 from openadapt import replay
-from openadapt.app.cards import recording_prompt, select_import, settings
-from openadapt.app.objects.console import Console
-from openadapt.app.util import clear_db, on_export, on_import
 from openadapt.config import config
+from openadapt.deprecated.app.cards import recording_prompt, select_import, settings
+from openadapt.deprecated.app.objects.console import Console
+from openadapt.deprecated.app.util import clear_db, on_export, on_import
 
 SERVER = "127.0.0.1:8000/upload"
 FPATH = pathlib.Path(__file__).parent
