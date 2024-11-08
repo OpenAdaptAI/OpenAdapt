@@ -16,7 +16,6 @@ import time
 import urllib.request
 
 import gradio_client
-import nicegui
 import oa_pynput
 import pycocotools
 import pydicom
@@ -35,7 +34,6 @@ if sys.platform == "win32":
 def build_pyinstaller() -> None:
     """Build the application using PyInstaller."""
     additional_packages_to_install = [
-        nicegui,
         oa_pynput,
         pydicom,
         spacy_alignments,
