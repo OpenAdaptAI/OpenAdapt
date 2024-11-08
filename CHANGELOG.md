@@ -2,6 +2,35 @@
 
 
 
+## v0.42.3 (2024-11-08)
+
+### Chore
+
+* chore(dependencies): update various libraries; deprecate NiceGUI (#888)
+
+* deprecate nicegui; move app/tray.py dependencies to app/__init__.py
+
+* remove bind; update README
+
+* Fix: wrap raw SQL queries in `text()` to prevent ArgumentError
+
+* black
+
+* noqa ([`50e4a3e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/50e4a3e701f55461156b04800948a000c466e86b))
+
+### Fix
+
+* fix(build): remove deprecated modules; remove numpy2 from poetry.lock
+
+* fix: Fix build issues due to numpy
+
+* fix: Fix broken imports
+
+* chore: Remove uses of nicegui and clean up files ([`de91850`](https://github.com/OpenAdaptAI/OpenAdapt/commit/de9185068d1270b35c8623284118f84886de3c27))
+
+* fix(build): remove nicegui from build.py ([`02cb0fe`](https://github.com/OpenAdaptAI/OpenAdapt/commit/02cb0fead02573269e5067990ed41b2255e2ccb4))
+
+
 ## v0.42.2 (2024-11-06)
 
 ### Fix
