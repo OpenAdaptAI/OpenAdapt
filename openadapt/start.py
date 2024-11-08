@@ -7,7 +7,6 @@ Usage:
 import subprocess
 
 from openadapt.custom_logger import logger
-from openadapt.deprecated.app.main import run_app
 
 
 def main() -> None:
@@ -23,8 +22,6 @@ def main() -> None:
     if "git pull" in result.stdout:
         subprocess.run(["git", "pull", "-q"])
         logger.info("Updated the OpenAdapt App")
-
-    run_app()  # start gui
 
 
 if __name__ == "__main__":
