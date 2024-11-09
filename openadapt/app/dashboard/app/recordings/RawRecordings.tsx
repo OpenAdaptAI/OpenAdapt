@@ -32,9 +32,9 @@ export const RawRecordings = () => {
                 {name: 'ID', accessor: 'id'},
                 {name: 'Description', accessor: 'task_description'},
                 {name: 'Start time', accessor: (recording: Recording) => recording.video_start_time ? timeStampToDateString(recording.video_start_time) : 'N/A'},
-                {name: 'Timestamp', accessor: (recording: Recording) => recording.timestamp ? timeStampToDateString(recording.timestamp) : 'N/A'},
+                // {name: 'Timestamp', accessor: (recording: Recording) => recording.timestamp ? timeStampToDateString(recording.timestamp) : 'N/A'},
                 {name: 'Monitor Width/Height', accessor: (recording: Recording) => `${recording.monitor_width}/${recording.monitor_height}`},
-                {name: 'Double Click Interval Seconds/Pixels', accessor: (recording: Recording) => `${recording.double_click_interval_seconds}/${recording.double_click_distance_pixels}`},
+                // {name: 'Double Click Interval Seconds/Pixels', accessor: (recording: Recording) => `${recording.double_click_interval_seconds}/${recording.double_click_distance_pixels}`},
             ]}
             data={recordings}
             refreshData={fetchRecordings}
