@@ -1,6 +1,5 @@
 """Entrypoint to deploy the uploader to AWS Lambda."""
 
-
 import pathlib
 import subprocess
 
