@@ -18,7 +18,7 @@ with redirect_stdout_stderr():
     import fire
 
 from openadapt import db, utils
-from openadapt.config import RECORDING_DIR_PATH
+from openadapt.config import RECORDING_DIR_PATH, config
 from openadapt.db import crud
 from openadapt.video import get_video_file_path
 
@@ -124,7 +124,6 @@ def send_recording(recording_id: int) -> None:
         recording_id (int): The ID of the recording to send.
     """
     zip_file_path = export_recording_to_folder(recording_id)
-    print(zip_file_path)
 
     assert zip_file_path, zip_file_path
     try:
@@ -188,17 +187,19 @@ def upload_recording_to_s3(user_id: str, recording_id: int) -> None:
             zip_file_path = export_recording_to_folder(recording_id)
 
             # Upload the zip file to the S3 bucket
-            utils.upload_file_to_s3(
-                zip_file_path,
-                {
-                    "user_id": user_id,
-                },
-            )
+            key = utils.upload_file_to_s3(zip_file_path)
 
             # Delete the zip file after uploading
             if os.path.exists(zip_file_path):
                 os.remove(zip_file_path)
                 logger.info(f"deleted {zip_file_path=}")
+            with crud.get_new_session(read_and_write=True) as session:
+                crud.mark_uploading_complete(
+                    session,
+                    recording_id,
+                    uploaded_key=key,
+                    uploaded_to_custom_bucket=config.OVERWRITE_RECORDING_DESTINATION,
+                )
         except Exception as exc:
             logger.exception(exc)
 

@@ -21,6 +21,11 @@
     "RECORD_BROWSER_EVENTS": false,
     "RECORD_FULL_VIDEO": false,
     "RECORD_IMAGES": false,
+    "OVERWRITE_RECORDING_DESTINATION": false,
+    "RECORDING_PUBLIC_KEY": "",
+    "RECORDING_PRIVATE_KEY": "",
+    "RECORDING_BUCKET_NAME": "openadapt",
+    "RECORDING_BUCKET_REGION": "us-east-1",
     "LOG_MEMORY": false,
     "STOP_SEQUENCES": [
         [

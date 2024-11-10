@@ -21,7 +21,12 @@ class SettingsAPI:
         return self.app
 
     Category = Literal[
-        "api_keys", "scrubbing", "record_and_replay", "general", "onboarding"
+        "api_keys",
+        "scrubbing",
+        "record_and_replay",
+        "general",
+        "onboarding",
+        "recording_upload",
     ]
 
     @staticmethod

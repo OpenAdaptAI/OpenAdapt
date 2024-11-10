@@ -5,6 +5,7 @@ from copy import deepcopy
 from itertools import zip_longest
 from typing import Any, Type, Union
 import copy
+import enum
 import io
 import sys
 
@@ -99,6 +100,15 @@ class Recording(db.Base):
         "AudioInfo", back_populates="recording", cascade="all, delete-orphan"
     )
 
+    class UploadStatus(enum.Enum):
+        NOT_UPLOADED = "not_uploaded"
+        UPLOADING = "uploading"
+        UPLOADED = "uploaded"
+
+    upload_status = sa.Column(sa.Enum(UploadStatus), default=UploadStatus.NOT_UPLOADED)
+    uploaded_key = sa.Column(sa.String)
+    uploaded_to_custom_bucket = sa.Column(sa.Boolean, default=False)
+
     _processed_action_events = None
 
     @property
@@ -119,6 +129,12 @@ class Recording(db.Base):
             scrubber (ScrubbingProvider): The scrubbing provider to use.
         """
         self.task_description = scrubber.scrub_text(self.task_description)
+
+    def asdict(self) -> dict:
+        """Get a dictionary representation of the recording."""
+        ret = super().asdict()
+        ret["upload_status"] = ret["upload_status"].value
+        return ret
 
 
 class ActionEvent(db.Base):

@@ -29,7 +29,6 @@ CAPTURE_DIR_PATH = (DATA_DIR_PATH / "captures").absolute()
 VIDEO_DIR_PATH = DATA_DIR_PATH / "videos"
 DATABASE_FILE_PATH = (DATA_DIR_PATH / "openadapt.db").absolute()
 DATABASE_LOCK_FILE_PATH = DATA_DIR_PATH / "openadapt.db.lock"
-RECORDING_UPLOAD_URL = ""
 
 STOP_STRS = [
     "oa.stop",
@@ -180,6 +179,14 @@ class Config(BaseSettings):
     # App configurations
     APP_DARK_MODE: bool = False
 
+    # Upload recording configurations
+    RECORDING_UPLOAD_URL: ClassVar[str] = ""
+    OVERWRITE_RECORDING_DESTINATION: bool = False
+    RECORDING_PUBLIC_KEY: str = ""
+    RECORDING_PRIVATE_KEY: str = ""
+    RECORDING_BUCKET_NAME: str = "openadapt"
+    RECORDING_BUCKET_REGION: str = "us-east-1"
+
     # Scrubbing configurations
     SCRUB_ENABLED: bool = False
     SCRUB_CHAR: str = "*"
@@ -300,6 +307,13 @@ class Config(BaseSettings):
         "general": [
             "UNIQUE_USER_ID",
             "REDIRECT_TO_ONBOARDING",
+        ],
+        "recording_upload": [
+            "OVERWRITE_RECORDING_DESTINATION",
+            "RECORDING_PUBLIC_KEY",
+            "RECORDING_PRIVATE_KEY",
+            "RECORDING_BUCKET_NAME",
+            "RECORDING_BUCKET_REGION",
         ],
     }
 

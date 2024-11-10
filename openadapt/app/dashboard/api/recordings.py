@@ -3,16 +3,17 @@
 import json
 
 from fastapi import APIRouter, WebSocket
+from starlette.responses import RedirectResponse
 
-from openadapt.custom_logger import logger
 from openadapt.config import config
+from openadapt.custom_logger import logger
 from openadapt.db import crud
 from openadapt.deprecated.app import cards
 from openadapt.events import get_events
 from openadapt.models import Recording
 from openadapt.plotting import display_event
 from openadapt.share import upload_recording_to_s3
-from openadapt.utils import image2utf8, row2dict
+from openadapt.utils import get_recording_url, image2utf8, row2dict
 
 
 class RecordingsAPI:
@@ -33,6 +34,9 @@ class RecordingsAPI:
         self.app.add_api_route("/status", self.recording_status)
         self.app.add_api_route(
             "/{recording_id}/upload", self.upload_recording, methods=["POST"]
+        )
+        self.app.add_api_route(
+            "/{recording_id}/view", self.view_recording, methods=["GET"]
         )
         self.recording_detail_route()
         return self.app
@@ -70,8 +74,20 @@ class RecordingsAPI:
 
     def upload_recording(self, recording_id: int) -> dict[str, str]:
         """Upload a recording."""
+        with crud.get_new_session(read_and_write=True) as session:
+            crud.start_uploading_recording(session, recording_id)
         upload_recording_to_s3(config.UNIQUE_USER_ID, recording_id)
         return {"message": "Recording uploaded"}
+
+    @staticmethod
+    def view_recording(recording_id: int) -> dict[str, str]:
+        """View a recording."""
+        session = crud.get_new_session(read_only=True)
+        recording = crud.get_recording_by_id(session, recording_id)
+        url = get_recording_url(
+            recording.uploaded_key, recording.uploaded_to_custom_bucket
+        )
+        return RedirectResponse(url)
 
     def recording_detail_route(self) -> None:
         """Add the recording detail route as a websocket."""

@@ -219,4 +219,6 @@ def export_recording(recording_id: int) -> str:
     target_engine = create_engine(target_db_url, future=True)
 
     db_file_path = copy_recording_data(engine, target_engine, recording_id)
+    # close the target engine
+    target_engine.dispose()
     return db_file_path

@@ -20,8 +20,8 @@ from openadapt.custom_logger import logger
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
-    BrowserEvent,
     AudioInfo,
+    BrowserEvent,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -915,6 +915,31 @@ def mark_scrubbing_complete(session: SaSession, scrubbed_recording_id: int) -> N
     """Mark scrubbing as complete for a recording."""
     scrubbed_recording = session.query(ScrubbedRecording).get(scrubbed_recording_id)
     scrubbed_recording.scrubbed = True
+    session.commit()
+
+
+def start_uploading_recording(session: SaSession, recording_id: int) -> None:
+    """Mark a recording as being uploaded."""
+    session.query(Recording).filter(Recording.id == recording_id).update(
+        {"upload_status": Recording.UploadStatus.UPLOADING}
+    )
+    session.commit()
+
+
+def mark_uploading_complete(
+    session: SaSession,
+    recording_id: int,
+    uploaded_key: str,
+    uploaded_to_custom_bucket: bool,
+) -> None:
+    """Mark a recording as being uploaded."""
+    session.query(Recording).filter(Recording.id == recording_id).update(
+        {
+            "upload_status": Recording.UploadStatus.UPLOADED,
+            "uploaded_key": uploaded_key,
+            "uploaded_to_custom_bucket": uploaded_to_custom_bucket,
+        }
+    )
     session.commit()
 
 
