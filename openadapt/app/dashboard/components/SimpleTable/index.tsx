@@ -1,1 +1,1 @@
-export { SimpleTable } from './SimpleTable';
+export { SimpleTable } from './SimpleTable'

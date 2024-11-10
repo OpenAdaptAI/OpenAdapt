@@ -19,5 +19,5 @@ export const routes: Route[] = [
     {
         name: 'Onboarding',
         path: '/onboarding',
-    }
+    },
 ]

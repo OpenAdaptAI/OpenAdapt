@@ -1,9 +1,9 @@
 import './globals.css'
 
 import { ColorSchemeScript, MantineProvider } from '@mantine/core'
-import { Notifications } from '@mantine/notifications';
+import { Notifications } from '@mantine/notifications'
 import { Shell } from '@/components/Shell'
-import { CSPostHogProvider } from './providers';
+import { CSPostHogProvider } from './providers'
 
 export const metadata = {
     title: 'OpenAdapt.AI',
@@ -23,9 +23,7 @@ export default function RootLayout({
                 <body>
                     <MantineProvider>
                         <Notifications />
-                            <Shell>
-                                {children}
-                            </Shell>
+                        <Shell>{children}</Shell>
                     </MantineProvider>
                 </body>
             </CSPostHogProvider>

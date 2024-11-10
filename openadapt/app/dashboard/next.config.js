@@ -11,7 +11,7 @@ const nextConfig = {
             },
             {
                 source: '/api/:path*',
-                destination: `http://127.0.0.1:${DASHBOARD_SERVER_PORT}/api/:path*`
+                destination: `http://127.0.0.1:${DASHBOARD_SERVER_PORT}/api/:path*`,
             },
             {
                 source: '/docs',

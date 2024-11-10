@@ -32,9 +32,7 @@ export const Shell = ({ children }: Props) => {
                 />
                 <Box className="h-full flex items-center px-5 gap-x-2">
                     <Image src={logo.src} alt="OpenAdapt" w={40} />
-                    <Text>
-                        OpenAdapt.AI
-                    </Text>
+                    <Text>OpenAdapt.AI</Text>
                 </Box>
             </AppShell.Header>
 

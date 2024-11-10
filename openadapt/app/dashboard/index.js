@@ -17,9 +17,12 @@ const checkPort = (port) => {
 }
 
 // check if both ports are not being used
-const { DASHBOARD_CLIENT_PORT, DASHBOARD_SERVER_PORT, REDIRECT_TO_ONBOARDING } = process.env
-Promise.all([checkPort(DASHBOARD_CLIENT_PORT), checkPort(DASHBOARD_SERVER_PORT)])
-.then(([clientPort, serverPort]) => {
+const { DASHBOARD_CLIENT_PORT, DASHBOARD_SERVER_PORT, REDIRECT_TO_ONBOARDING } =
+    process.env
+Promise.all([
+    checkPort(DASHBOARD_CLIENT_PORT),
+    checkPort(DASHBOARD_SERVER_PORT),
+]).then(([clientPort, serverPort]) => {
     if (clientPort !== DASHBOARD_CLIENT_PORT) {
         console.error(`Port ${DASHBOARD_CLIENT_PORT} is already in use`)
         process.exit(1)
@@ -33,10 +36,13 @@ Promise.all([checkPort(DASHBOARD_CLIENT_PORT), checkPort(DASHBOARD_SERVER_PORT)]
 
 function spawnChildProcess() {
     // Spawn child process to run `npm run dev`
-    let childProcess;
+    let childProcess
 
     if (process.platform === 'win32') {
-        childProcess = spawn('npm', ['run', 'dev:windows'], { stdio: 'inherit', shell: true })
+        childProcess = spawn('npm', ['run', 'dev:windows'], {
+            stdio: 'inherit',
+            shell: true,
+        })
     } else {
         childProcess = spawn('npm', ['run', 'dev'], { stdio: 'inherit' })
     }
@@ -55,9 +61,9 @@ function spawnChildProcess() {
     })
 
     // Handle SIG signals
-    const signals = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP'];
+    const signals = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP']
 
-    signals.forEach(signal => {
+    signals.forEach((signal) => {
         process.on(signal, () => {
             childProcess.kill(signal)
         })

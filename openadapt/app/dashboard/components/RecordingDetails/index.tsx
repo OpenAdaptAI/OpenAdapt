@@ -1,1 +1,1 @@
-export { RecordingDetails } from './RecordingDetails';
+export { RecordingDetails } from './RecordingDetails'

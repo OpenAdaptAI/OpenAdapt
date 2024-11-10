@@ -16,7 +16,9 @@ export const Navbar = () => {
                     href={route.path}
                     key={route.path}
                     className={
-                        (currentRoute.includes(route.path) ? 'bg-gray-200' : '') +
+                        (currentRoute.includes(route.path)
+                            ? 'bg-gray-200'
+                            : '') +
                         ' p-5 no-underline flex items-center gap-x-1 transition hover:gap-x-2 ease-out border-0 border-b-2 border-gray-100 border-solid'
                     }
                 >

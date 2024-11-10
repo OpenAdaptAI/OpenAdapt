@@ -1,5 +1,4 @@
-'use client';
-
+'use client'
 
 import { Box, Button, Stack, Text, TextInput } from '@mantine/core'
 import { isNotEmpty, useForm } from '@mantine/form'
@@ -12,8 +11,8 @@ export const RegisterForUpdates = () => {
             email: '',
         },
         validate: {
-          email: isNotEmpty('Email is required'),
-        }
+            email: isNotEmpty('Email is required'),
+        },
     })
     useEffect(() => {
         fetch('/api/settings', {
@@ -22,7 +21,7 @@ export const RegisterForUpdates = () => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                REDIRECT_TO_ONBOARDING: false
+                REDIRECT_TO_ONBOARDING: false,
             }),
         })
     }, [])
