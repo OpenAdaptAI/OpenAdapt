@@ -1,5 +1,8 @@
 import { UseFormReturnType } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
+import { getSettings } from '../utils'
+
+export const getRecordingUploadSettings = () => getSettings<RecordingUploadSettings>('recording_upload')
 
 export function validateScrubbingSettings(settings: Record<string, string>) {
     const errors: Record<string, string> = {}
@@ -101,4 +104,5 @@ export type RecordingUploadSettings = {
     RECORDING_PRIVATE_KEY: string
     RECORDING_BUCKET_NAME: string
     RECORDING_BUCKET_REGION: string
+    RECORDING_DELETION_ENABLED: boolean
 }

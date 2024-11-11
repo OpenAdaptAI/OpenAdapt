@@ -1104,8 +1104,6 @@ class WrapStdout:
 
 def get_recording_url(uploaded_key: str, uploaded_to_custom_bucket: bool) -> str:
     """Get the URL of a recording."""
-    if not uploaded_key:
-        return None
     if uploaded_to_custom_bucket:
         s3 = boto3.client(
             "s3",
@@ -1127,6 +1125,34 @@ def get_recording_url(uploaded_key: str, uploaded_to_custom_bucket: bool) -> str
             },
         )
         return resp.json()["url"]
+
+
+def delete_uploaded_recording(
+    recording_id: int, uploaded_key: str, uploaded_to_custom_bucket: bool
+) -> str:
+    def inner():
+        if uploaded_to_custom_bucket:
+            s3 = boto3.client(
+                "s3",
+                region_name=config.RECORDING_BUCKET_REGION,
+                aws_access_key_id=config.RECORDING_PUBLIC_KEY,
+                aws_secret_access_key=config.RECORDING_PRIVATE_KEY,
+            )
+            s3.delete_object(Bucket=config.RECORDING_BUCKET_NAME, Key=uploaded_key)
+        else:
+            requests.post(
+                config.RECORDING_UPLOAD_URL,
+                json={
+                    "key": uploaded_key,
+                    "lambda_function": "delete_object",
+                },
+            )
+        from openadapt.db import crud
+
+        with crud.get_new_session(read_and_write=True) as session:
+            crud.delete_uploaded_recording(session, recording_id)
+
+    threading.Thread(target=inner).start()
 
 
 if __name__ == "__main__":

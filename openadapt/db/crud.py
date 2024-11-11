@@ -943,6 +943,21 @@ def mark_uploading_complete(
     session.commit()
 
 
+def delete_uploaded_recording(
+    session: SaSession,
+    recording_id: int,
+) -> None:
+    """Delete an uploaded recording."""
+    session.query(Recording).filter(Recording.id == recording_id).update(
+        {
+            "upload_status": Recording.UploadStatus.NOT_UPLOADED,
+            "uploaded_key": None,
+            "uploaded_to_custom_bucket": False,
+        }
+    )
+    session.commit()
+
+
 def acquire_db_lock(timeout: int = 60) -> bool:
     """Check if the database is locked.
 

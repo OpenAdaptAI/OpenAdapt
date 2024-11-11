@@ -75,6 +75,13 @@ export const Form = ({ settings }: Props) => {
                         {...form.getInputProps('RECORDING_BUCKET_REGION')}
                     />
                 </Grid.Col>
+                <Grid.Col span={12}>
+                    <Checkbox
+                        label="Enable recording deletion"
+                        {...form.getInputProps('RECORDING_DELETION_ENABLED')}
+                        checked={form.values.RECORDING_DELETION_ENABLED}
+                    />
+                </Grid.Col>
             </Grid>
             <Flex mt={40} columnGap={20}>
                 <Button disabled={!form.isDirty()} type="submit">

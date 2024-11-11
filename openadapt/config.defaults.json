@@ -26,6 +26,7 @@
     "RECORDING_PRIVATE_KEY": "",
     "RECORDING_BUCKET_NAME": "openadapt",
     "RECORDING_BUCKET_REGION": "us-east-1",
+    "RECORDING_DELETION_ENABLED": false,
     "LOG_MEMORY": false,
     "STOP_SEQUENCES": [
         [

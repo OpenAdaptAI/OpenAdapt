@@ -186,6 +186,7 @@ class Config(BaseSettings):
     RECORDING_PRIVATE_KEY: str = ""
     RECORDING_BUCKET_NAME: str = "openadapt"
     RECORDING_BUCKET_REGION: str = "us-east-1"
+    RECORDING_DELETION_ENABLED: bool = False
 
     # Scrubbing configurations
     SCRUB_ENABLED: bool = False
@@ -314,6 +315,7 @@ class Config(BaseSettings):
             "RECORDING_PRIVATE_KEY",
             "RECORDING_BUCKET_NAME",
             "RECORDING_BUCKET_REGION",
+            "RECORDING_DELETION_ENABLED",
         ],
     }
 

@@ -27,11 +27,12 @@ Resources:
             Method: post
       Policies:
         - Statement:
-          - Sid: S3GetPutObjectPolicy
+          - Sid: S3GetPutDeleteObjectPolicy
             Effect: Allow
             Action:
               - s3:PutObject
               - s3:GetObject
+              - s3:DeleteObject
             Resource: !Sub "arn:aws:s3:::openadapt/*"
 
 Outputs:
