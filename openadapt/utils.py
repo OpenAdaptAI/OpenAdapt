@@ -1132,7 +1132,10 @@ def get_recording_url(uploaded_key: str, uploaded_to_custom_bucket: bool) -> str
 def delete_uploaded_recording(
     recording_id: int, uploaded_key: str, uploaded_to_custom_bucket: bool
 ) -> str:
-    def inner():
+    """Delete a recording from cloud."""
+
+    def inner() -> None:
+        """Delete a recording from cloud."""
         if uploaded_to_custom_bucket:
             s3 = boto3.client(
                 "s3",

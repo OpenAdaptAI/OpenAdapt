@@ -101,6 +101,8 @@ class Recording(db.Base):
     )
 
     class UploadStatus(enum.Enum):
+        """Enum representing the upload status of a recording."""
+
         NOT_UPLOADED = "not_uploaded"
         UPLOADING = "uploading"
         UPLOADED = "uploaded"

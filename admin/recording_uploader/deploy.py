@@ -51,7 +51,8 @@ def main(region_name: str = "us-east-1", destroy: bool = False) -> None:
             logger.info("Lambda function deleted successfully.")
         else:
             stdout = ret.stdout.decode("utf-8") if ret.stdout else ""
-            # find the url, which is in the format https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/upload/
+            # find the url, which is in the format
+            # https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/upload/
             url_match = re.search(
                 r"https://([^\.]+)\.execute-api\.([^\.]+)\.amazonaws\.com/Prod/upload/",
                 stdout,

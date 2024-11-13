@@ -103,7 +103,7 @@ class RecordingsAPI:
 
     @staticmethod
     def delete_recording_on_cloud(recording_id: int) -> dict[str, bool]:
-        """Delete a recording from cloud"""
+        """Delete a recording from cloud."""
         session = crud.get_new_session(read_only=True)
         recording = crud.get_recording_by_id(session, recording_id)
         if recording.upload_status == Recording.UploadStatus.NOT_UPLOADED:

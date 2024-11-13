@@ -1,7 +1,6 @@
 """Lambda function for generating a presigned URL for uploading a recording to S3."""
 
 from typing import Any
-from uuid import uuid4
 import json
 
 from botocore.client import Config
@@ -70,7 +69,7 @@ def get_presigned_url(data: dict) -> dict:
 
 
 def delete_object(data: dict) -> dict:
-    """Delete an object from the s3 bucket
+    """Delete an object from the s3 bucket.
 
     Args:
         data (dict): The data from the request.
