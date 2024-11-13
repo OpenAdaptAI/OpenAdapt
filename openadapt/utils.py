@@ -950,13 +950,39 @@ def get_posthog_instance() -> DistinctIDPosthog:
     return posthog
 
 
+def retry_with_exceptions(max_retries: int = 5) -> Callable:
+    """Decorator to retry a function while keeping track of exceptions."""
+
+    def decorator_retry(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper_retry(*args: tuple, **kwargs: dict[str, Any]) -> Any:
+            exceptions = []
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, exceptions=exceptions, **kwargs)
+                except Exception as exc:
+                    logger.warning(exc)
+                    exceptions.append(str(exc))
+                    retries += 1
+            raise RuntimeError(
+                f"Failed after {max_retries} retries with exceptions: {exceptions}"
+            )
+
+        return wrapper_retry
+
+    return decorator_retry
+
+
+@retry_with_exceptions()
 def upload_file_to_s3(file_path: str) -> requests.Response:
     """Upload a file to an S3 bucket.
 
     Args:
         file_path (str): The path to the file to upload.
     """
-    filename = os.path.basename(file_path)
+    file_name = os.path.basename(file_path)
+    logger.info(f"Uploading {file_name} to S3")
     key = f"recordings/{config.UNIQUE_USER_ID}/{uuid4()}.zip"
     if not config.OVERWRITE_RECORDING_DESTINATION:
         resp = requests.post(
@@ -990,33 +1016,9 @@ def upload_file_to_s3(file_path: str) -> requests.Response:
         )
 
     with open(file_path, "rb") as file:
-        files = {"file": (filename, file)}
+        files = {"file": (file_name, file)}
         resp = requests.put(upload_url, files=files)
         return key
-
-
-def retry_with_exceptions(max_retries: int = 5) -> Callable:
-    """Decorator to retry a function while keeping track of exceptions."""
-
-    def decorator_retry(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper_retry(*args: tuple, **kwargs: dict[str, Any]) -> Any:
-            exceptions = []
-            retries = 0
-            while retries < max_retries:
-                try:
-                    return func(*args, exceptions=exceptions, **kwargs)
-                except Exception as exc:
-                    logger.warning(exc)
-                    exceptions.append(str(exc))
-                    retries += 1
-            raise RuntimeError(
-                f"Failed after {max_retries} retries with exceptions: {exceptions}"
-            )
-
-        return wrapper_retry
-
-    return decorator_retry
 
 
 def truncate_html(html_str: str, max_len: int) -> str:
