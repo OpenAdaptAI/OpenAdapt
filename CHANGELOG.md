@@ -2,6 +2,13 @@
 
 
 
+## v0.42.4 (2024-11-15)
+
+### Fix
+
+* fix(crud): Use subqueryload for all joins (#920) ([`a73439a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a73439ac76fb04f10a04679a456a46572a6ad7be))
+
+
 ## v0.42.3 (2024-11-08)
 
 ### Chore
