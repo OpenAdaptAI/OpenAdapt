@@ -20,8 +20,8 @@ from openadapt.custom_logger import logger
 from openadapt.db.db import Session, get_read_only_session_maker
 from openadapt.models import (
     ActionEvent,
-    BrowserEvent,
     AudioInfo,
+    BrowserEvent,
     MemoryStat,
     PerformanceStat,
     Recording,
@@ -573,8 +573,8 @@ def get_screenshots(
         session.query(Screenshot)
         .filter(Screenshot.recording_id == recording.id)
         .options(
-            joinedload(Screenshot.action_event).joinedload(ActionEvent.recording),
-            subqueryload(Screenshot.action_event).joinedload(ActionEvent.screenshot),
+            subqueryload(Screenshot.action_event).subqueryload(ActionEvent.recording),
+            subqueryload(Screenshot.action_event).subqueryload(ActionEvent.screenshot),
             subqueryload(Screenshot.recording),
         )
         .order_by(Screenshot.timestamp)
