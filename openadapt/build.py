@@ -16,12 +16,12 @@ import time
 import urllib.request
 
 import gradio_client
-import nicegui
 import oa_pynput
 import pycocotools
 import pydicom
 import pyqttoast
 import spacy_alignments
+import tokencost
 import ultralytics
 import whisper
 
@@ -34,7 +34,6 @@ if sys.platform == "win32":
 def build_pyinstaller() -> None:
     """Build the application using PyInstaller."""
     additional_packages_to_install = [
-        nicegui,
         oa_pynput,
         pydicom,
         spacy_alignments,
@@ -43,12 +42,15 @@ def build_pyinstaller() -> None:
         pycocotools,
         pyqttoast,
         whisper,
+        tokencost,
     ]
     if sys.platform == "win32":
         additional_packages_to_install.append(screen_recorder_sdk)
     packages_to_exclude = [
         "pytest",
         "py",
+        "_pytest",
+        "sympy.testing",
     ]
 
     packages_metadata_to_copy = [

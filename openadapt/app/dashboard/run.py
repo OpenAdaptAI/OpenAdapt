@@ -1,6 +1,5 @@
 """This module contains the functions to run the dashboard web application."""
 
-
 from threading import Thread
 import os
 import pathlib

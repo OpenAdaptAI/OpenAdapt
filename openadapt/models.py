@@ -3,16 +3,17 @@
 from collections import OrderedDict
 from copy import deepcopy
 from itertools import zip_longest
-from typing import Any, Type
+from typing import Any, Type, Union
+import copy
 import io
 import sys
 
+from bs4 import BeautifulSoup
 from oa_pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
 
-from openadapt import window
 from openadapt.config import config
 from openadapt.custom_logger import logger
 from openadapt.db import db
@@ -44,6 +45,7 @@ class Recording(db.Base):
     """Class representing a recording in the database."""
 
     __tablename__ = "recording"
+    _repr_ignore_attrs = ["config"]
 
     id = sa.Column(sa.Integer, primary_key=True)
     timestamp = sa.Column(ForceFloat)
@@ -82,6 +84,12 @@ class Recording(db.Base):
         "WindowEvent",
         back_populates="recording",
         order_by="WindowEvent.timestamp",
+        cascade="all, delete-orphan",
+    )
+    browser_events = sa.orm.relationship(
+        "BrowserEvent",
+        back_populates="recording",
+        order_by="BrowserEvent.timestamp",
         cascade="all, delete-orphan",
     )
     scrubbed_recordings = sa.orm.relationship(
@@ -129,6 +137,8 @@ class ActionEvent(db.Base):
     screenshot_id = sa.Column(sa.ForeignKey("screenshot.id"))
     window_event_timestamp = sa.Column(ForceFloat)
     window_event_id = sa.Column(sa.ForeignKey("window_event.id"))
+    browser_event_timestamp = sa.Column(ForceFloat)
+    browser_event_id = sa.Column(sa.ForeignKey("browser_event.id"))
     mouse_x = sa.Column(sa.Numeric(asdecimal=False))
     mouse_y = sa.Column(sa.Numeric(asdecimal=False))
     mouse_dx = sa.Column(sa.Numeric(asdecimal=False))
@@ -184,6 +194,7 @@ class ActionEvent(db.Base):
         for key, value in properties.items():
             setattr(self, key, value)
 
+    # TODO: rename "available" to "target"
     @property
     def available_segment_descriptions(self) -> list[str]:
         """Gets the available segment descriptions."""
@@ -214,6 +225,7 @@ class ActionEvent(db.Base):
     recording = sa.orm.relationship("Recording", back_populates="action_events")
     screenshot = sa.orm.relationship("Screenshot", back_populates="action_event")
     window_event = sa.orm.relationship("WindowEvent", back_populates="action_events")
+    browser_event = sa.orm.relationship("BrowserEvent", back_populates="action_events")
 
     # TODO: playback_timestamp / original_timestamp
 
@@ -257,11 +269,14 @@ class ActionEvent(db.Base):
             self.canonical_key_vk,
         )
 
-    def _text(self, canonical: bool = False) -> str | None:
+    def _text(
+        self,
+        canonical: bool = False,
+        name_prefix: str = config.ACTION_TEXT_NAME_PREFIX,
+        name_suffix: str = config.ACTION_TEXT_NAME_SUFFIX,
+    ) -> str | None:
         """Helper method to generate the text representation of the action event."""
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         if self.children:
             parts = [
                 child.canonical_text if canonical else child.text
@@ -301,6 +316,9 @@ class ActionEvent(db.Base):
         """Validate the text property. Useful for ActionModel(**action_dict)."""
         if not value == self.text:
             logger.warning(f"{value=} did not match {self.text=}")
+            # if self.text:
+            #    import ipdb; ipdb.set_trace()
+            #    foo = 1
 
     @property
     def canonical_text(self) -> str:
@@ -359,6 +377,8 @@ class ActionEvent(db.Base):
     ) -> "ActionEvent":
         """Get an ActionEvent from a dict.
 
+        See tests.openadapt.test_models::test_action_from_dict for behavior details.
+
         Args:
             action_dict (dict): A dictionary representing the action.
             handle_separator_variations (bool): Whether to attempt to handle variations
@@ -369,40 +389,40 @@ class ActionEvent(db.Base):
             (ActionEvent) The ActionEvent.
         """
         sep = config.ACTION_TEXT_SEP
-        name_prefix = config.ACTION_TEXT_NAME_PREFIX
-        name_suffix = config.ACTION_TEXT_NAME_SUFFIX
         children = []
-        release_events = []
         if "text" in action_dict:
-            # Splitting actions based on whether they are special keys or characters
-            if action_dict["text"].startswith(name_prefix) and action_dict[
-                "text"
-            ].endswith(name_suffix):
-                # handle multiple key separators
-                # (each key separator must start and end with a prefix and suffix)
+            name_prefix = config.ACTION_TEXT_NAME_PREFIX
+            name_suffix = config.ACTION_TEXT_NAME_SUFFIX
+            text = action_dict["text"]
+
+            # Check if the text contains named keys (starting with the name prefix)
+            # TODO: support sequences of the form <cmd>-a-<cmd>
+            contains_named_keys = text.startswith(name_prefix) and text.endswith(
+                name_suffix
+            )
+
+            if contains_named_keys:
+                # Handle named keys, potentially with separator variations
+                release_events = []
                 default_sep = "".join([name_suffix, sep, name_prefix])
-                variation_seps = ["".join([name_suffix, name_prefix])]
                 key_seps = [default_sep]
                 if handle_separator_variations:
+                    variation_seps = ["".join([name_suffix, name_prefix])]
                     key_seps += variation_seps
 
                 prefix_len = len(name_prefix)
                 suffix_len = len(name_suffix)
 
                 key_names = utils.split_by_separators(
-                    action_dict.get("text", "")[prefix_len:-suffix_len],
+                    text[prefix_len:-suffix_len],
                     key_seps,
                 )
                 canonical_key_names = utils.split_by_separators(
                     action_dict.get("canonical_text", "")[prefix_len:-suffix_len],
                     key_seps,
                 )
-                logger.info(f"{key_names=}")
-                logger.info(f"{canonical_key_names=}")
 
                 # Process each key name and canonical key name found
-                children = []
-                release_events = []
                 for key_name, canonical_key_name in zip_longest(
                     key_names,
                     canonical_key_names,
@@ -411,19 +431,22 @@ class ActionEvent(db.Base):
                         key_name, canonical_key_name
                     )
                     children.append(press)
-                    release_events.append(
-                        release
-                    )  # Collect release events to append in reverse order later
-
+                    release_events.append(release)
+                children += release_events[::-1]
             else:
-                # Handling regular character sequences
-                sep_len = len(sep)
-                for key_char in action_dict["text"][:: sep_len + 1]:
-                    # Press and release each character one after another
-                    press, release = cls._create_key_events(key_char=key_char)
+                # Handle mixed sequences of named keys and regular characters
+                split_text = text.split(sep)
+                for part in split_text:
+                    if part.startswith(name_prefix) and part.endswith(name_suffix):
+                        # It's a named key
+                        key_name = part[len(name_prefix) : -len(name_suffix)]
+                        press, release = cls._create_key_events(key_name=key_name)
+                    else:
+                        # It's a character
+                        press, release = cls._create_key_events(key_char=part)
                     children.append(press)
                     children.append(release)
-            children += release_events[::-1]
+
         rval = ActionEvent(**action_dict, children=children)
         return rval
 
@@ -469,6 +492,10 @@ class ActionEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the ActionEvent.
         """
+        if self.active_browser_element:
+            import ipdb
+
+            ipdb.set_trace()
         action_dict = deepcopy(
             {
                 key: val
@@ -484,11 +511,43 @@ class ActionEvent(db.Base):
             for key in ("mouse_x", "mouse_y", "mouse_dx", "mouse_dy"):
                 if key in action_dict:
                     del action_dict[key]
+        # TODO XXX: add target_segment_description?
+
+        # Manually add properties to the dictionary
         if self.available_segment_descriptions:
             action_dict["available_segment_descriptions"] = (
                 self.available_segment_descriptions
             )
+        if self.active_browser_element:
+            action_dict["active_browser_element"] = str(self.active_browser_element)
+        if self.available_browser_elements:
+            # TODO XXX: available browser_elements contains raw HTML. We need to
+            # prompt to convert into descriptions.
+            action_dict["available_browser_elements"] = str(
+                self.available_browser_elements
+            )
+
+        if self.active_browser_element:
+            import ipdb
+
+            ipdb.set_trace()
         return action_dict
+
+    @property
+    def next_event(self) -> Union["ActionEvent", None]:
+        """Get the next ActionEvent chronologically in the same recording.
+
+        Returns:
+            ActionEvent | None: The next ActionEvent, or None if this is the last event.
+        """
+        if not self.recording or not self.recording.action_events:
+            return None
+
+        current_index = self.recording.action_events.index(self)
+        if current_index < len(self.recording.action_events) - 1:
+            return self.recording.action_events[current_index + 1]
+
+        return None
 
 
 class WindowEvent(db.Base):
@@ -525,6 +584,8 @@ class WindowEvent(db.Base):
         Returns:
             (WindowEvent) the active window event.
         """
+        from openadapt import window
+
         return WindowEvent(**window.get_active_window_data(include_window_data))
 
     def scrub(self, scrubber: ScrubbingProvider | TextScrubbingMixin) -> None:
@@ -533,7 +594,12 @@ class WindowEvent(db.Base):
         if self.state is not None:
             self.state = scrubber.scrub_dict(self.state)
 
-    def to_prompt_dict(self, include_data: bool = True) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_data: bool = True,
+        add_centroid: bool = True,
+        remove_bbox: bool = False,
+    ) -> dict[str, Any]:
         """Convert into a dict, excluding properties not necessary for prompting.
 
         Args:
@@ -553,28 +619,139 @@ class WindowEvent(db.Base):
                 # and not isinstance(getattr(models.WindowEvent, key), property)
             }
         )
-        if include_data:
-            key_suffixes = ["value", "h", "w", "x", "y", "description", "title", "help"]
-            if sys.platform == "win32":
-                logger.warning(
-                    "key_suffixes have not yet been defined on Windows."
-                    "You can help by uncommenting the lines below and pasting "
-                    "the contents of the window_dict into a new GitHub Issue."
+
+        if add_centroid:
+            left = window_dict["left"]
+            top = window_dict["top"]
+            width = window_dict["width"]
+            height = window_dict["height"]
+
+            # Compute the centroid of the bounding box
+            centroid_x = left + width / 2
+            centroid_y = top + height / 2
+
+            # Add centroid in the prompt dict { "centroid": }
+            window_dict["centroid"] = {
+                "x": centroid_x,
+                "y": centroid_y,
+            }
+
+        if remove_bbox:
+            window_dict.pop("left")
+            window_dict.pop("top")
+            window_dict.pop("width")
+            window_dict.pop("height")
+
+        if "state" in window_dict:
+            if include_data:
+                key_suffixes = [
+                    "value",
+                    "h",
+                    "w",
+                    "x",
+                    "y",
+                    "description",
+                    "title",
+                    "help",
+                ]
+                if sys.platform == "win32":
+                    logger.warning(
+                        "key_suffixes have not yet been defined on Windows."
+                        "You can help by uncommenting the lines below and pasting "
+                        "the contents of the window_dict into a new GitHub Issue."
+                    )
+                    # from pprint import pformat
+                    # logger.info(f"window_dict=\n{pformat(window_dict)}")
+                    # import ipdb; ipdb.set_trace()
+                window_state = window_dict["state"]
+                window_state["data"] = utils.clean_dict(
+                    utils.filter_keys(
+                        window_state["data"],
+                        key_suffixes,
+                    )
                 )
-                # from pprint import pformat
-                # logger.info(f"window_dict=\n{pformat(window_dict)}")
-                # import ipdb; ipdb.set_trace()
-            window_state = window_dict["state"]
-            window_state["data"] = utils.clean_dict(
-                utils.filter_keys(
-                    window_state["data"],
-                    key_suffixes,
-                )
-            )
-        else:
-            window_dict["state"].pop("data")
-        window_dict["state"].pop("meta")
+            else:
+                window_dict["state"].pop("data")
+            window_dict["state"].pop("meta")
         return window_dict
+
+
+class BrowserEvent(db.Base):
+    """Class representing a browser event in the database."""
+
+    __tablename__ = "browser_event"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_timestamp = sa.Column(ForceFloat)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    message = sa.Column(sa.JSON)
+    timestamp = sa.Column(ForceFloat)
+
+    recording = sa.orm.relationship("Recording", back_populates="browser_events")
+    action_events = sa.orm.relationship("ActionEvent", back_populates="browser_event")
+
+    def __str__(self) -> str:
+        """Returns a truncated string representation without modifying original data."""
+        # Create a copy of the message to avoid modifying the original
+        message_copy = copy.deepcopy(self.message)
+
+        # Truncate the visibleHTMLString in the copied message if it exists
+        if "visibleHTMLString" in message_copy:
+            message_copy["visibleHTMLString"] = utils.truncate_html(
+                message_copy["visibleHTMLString"], max_len=100
+            )
+
+        # Get all attributes except 'message'
+        attributes = {
+            attr: getattr(self, attr)
+            for attr in self.__mapper__.columns.keys()
+            if attr != "message"
+        }
+
+        # Construct the string representation dynamically
+        base_repr = ", ".join(f"{key}={value}" for key, value in attributes.items())
+
+        # Return the complete representation including the truncated message
+        return f"BrowserEvent({base_repr}, message={message_copy})"
+
+    def parse(self) -> tuple[BeautifulSoup, BeautifulSoup | None]:
+        """Parses the visible HTML and optionally extracts the target element.
+
+        This method processes the browser event to parse the visible HTML and,
+        if the event has a targetId, extracts the target HTML element.
+
+        Returns:
+            A tuple containing:
+            - BeautifulSoup: The parsed soup of the visible HTML.
+            - BeautifulSoup | None: The target HTML element if the event type is
+                "click"; otherwise, None.
+
+        Raises:
+            AssertionError: If the necessary data is missing.
+        """
+        message = self.message
+
+        visible_html_string = message.get("visibleHTMLString")
+        assert visible_html_string, "Cannot parse without visibleHTMLstring"
+
+        # Parse the visible HTML using BeautifulSoup
+        soup = utils.parse_html(visible_html_string)
+
+        target_element = None
+
+        # Fetch the target element using its data-id
+        target_id = message.get("targetId")
+        if target_id:
+            target_element = soup.find(attrs={"data-id": target_id})
+            assert target_element, f"No target element found for targetId: {target_id}"
+
+        return soup, target_element
+
+    # # TODO: implement
+    # @classmethod
+    # def get_active_browser_event(
+    #     cls: "BrowserEvent",
+    # ) -> "BrowserEvent":
 
 
 class FrameCache:

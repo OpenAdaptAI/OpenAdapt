@@ -3,9 +3,9 @@
 Usage:
     python3 -m openadapt.start
 """
+
 import subprocess
 
-from openadapt.app.main import run_app
 from openadapt.custom_logger import logger
 
 
@@ -22,8 +22,6 @@ def main() -> None:
     if "git pull" in result.stdout:
         subprocess.run(["git", "pull", "-q"])
         logger.info("Updated the OpenAdapt App")
-
-    run_app()  # start gui
 
 
 if __name__ == "__main__":

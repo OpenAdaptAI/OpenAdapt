@@ -1,6 +1,5 @@
 """Spacy model init file."""
 
-
 from pathlib import Path
 
 from spacy.language import Language

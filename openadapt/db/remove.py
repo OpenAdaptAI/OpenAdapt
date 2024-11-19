@@ -2,6 +2,7 @@
 
 Usage: python -m openadapt.db.remove [--all | --latest | --id <recording_id>]
 """
+
 from sys import stdout
 
 import click

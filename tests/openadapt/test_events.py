@@ -120,7 +120,7 @@ def make_action_event(
 
 
 def get_children_with_timestamps(
-    get_children: Callable[[], list[ActionEvent]]
+    get_children: Callable[[], list[ActionEvent]],
 ) -> list[ActionEvent]:
     """Get the list of children events with timestamps.
 
@@ -215,17 +215,30 @@ def make_click_event(
     )
 
 
-def make_scroll_event(dy: int = 0, dx: int = 0) -> ActionEvent:
+def make_scroll_event(
+    get_children: Optional[Callable[[], list[ActionEvent]]] = None,
+    dy: int = 0,
+    dx: int = 0,
+) -> ActionEvent:
     """Create a scroll event with the given attributes.
 
     Args:
+        get_children (Callable[[], list[ActionEvent]]): Function that returns
+          the list of children events.
         dy (int, optional): Vertical scroll amount. Defaults to 0.
         dx (int, optional): Horizontal scroll amount. Defaults to 0.
 
     Returns:
         ActionEvent: An instance of the ActionEvent class representing the scroll event.
     """
-    return make_action_event({"name": "scroll", "mouse_dx": dx, "mouse_dy": dy})
+    return make_action_event(
+        {
+            "name": "scroll",
+            "mouse_dx": dx,
+            "mouse_dy": dy,
+        },
+        get_pre_children=get_children,
+    )
 
 
 def make_click_events(
@@ -467,9 +480,23 @@ def test_merge_consecutive_mouse_scroll_events() -> None:
     expected_events = rows2dicts(
         [
             make_move_event(),
-            make_scroll_event(dx=2),
+            make_scroll_event(
+                lambda: [
+                    make_scroll_event(dx=2),
+                    make_scroll_event(dx=1),
+                    make_scroll_event(dx=-1),
+                ],
+                dx=2,
+            ),
             make_move_event(),
-            make_scroll_event(dx=1, dy=1),
+            make_scroll_event(
+                lambda: [
+                    make_scroll_event(dy=1),
+                    make_scroll_event(dx=1),
+                ],
+                dx=1,
+                dy=1,
+            ),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")
@@ -588,7 +615,7 @@ def make_release_event(char: str = None, name: str = None) -> ActionEvent:
 
 
 def make_type_event(
-    get_children: Optional[Callable[[], list[ActionEvent]]]
+    get_children: Optional[Callable[[], list[ActionEvent]]],
 ) -> ActionEvent:
     """Create a type event with the given children events.
 
@@ -633,7 +660,7 @@ def test_merge_consecutive_keyboard_events() -> None:
         make_press_event("h"),
         make_release_event("g"),
         make_release_event("h"),
-        make_scroll_event(1),
+        make_scroll_event(dx=1),
     ]
     logger.info(f"raw_events=\n{pformat(rows2dicts(raw_events))}")
     reset_timestamp()
@@ -660,7 +687,7 @@ def test_merge_consecutive_keyboard_events() -> None:
                     make_release_event("h"),
                 ]
             ),
-            make_scroll_event(1),
+            make_scroll_event(dx=1),
         ]
     )
     logger.info(f"expected_events=\n{pformat(expected_events)}")

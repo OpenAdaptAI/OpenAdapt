@@ -2,6 +2,470 @@
 
 
 
+## v0.42.4 (2024-11-15)
+
+### Fix
+
+* fix(crud): Use subqueryload for all joins (#920) ([`a73439a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a73439ac76fb04f10a04679a456a46572a6ad7be))
+
+
+## v0.42.3 (2024-11-08)
+
+### Chore
+
+* chore(dependencies): update various libraries; deprecate NiceGUI (#888)
+
+* deprecate nicegui; move app/tray.py dependencies to app/__init__.py
+
+* remove bind; update README
+
+* Fix: wrap raw SQL queries in `text()` to prevent ArgumentError
+
+* black
+
+* noqa ([`50e4a3e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/50e4a3e701f55461156b04800948a000c466e86b))
+
+### Fix
+
+* fix(build): remove deprecated modules; remove numpy2 from poetry.lock
+
+* fix: Fix build issues due to numpy
+
+* fix: Fix broken imports
+
+* chore: Remove uses of nicegui and clean up files ([`de91850`](https://github.com/OpenAdaptAI/OpenAdapt/commit/de9185068d1270b35c8623284118f84886de3c27))
+
+* fix(build): remove nicegui from build.py ([`02cb0fe`](https://github.com/OpenAdaptAI/OpenAdapt/commit/02cb0fead02573269e5067990ed41b2255e2ccb4))
+
+
+## v0.42.2 (2024-11-06)
+
+### Fix
+
+* fix(recording): specify pywinauto types as strings (#913) ([`4955237`](https://github.com/OpenAdaptAI/OpenAdapt/commit/495523716950f222c652104aa75cd99b620f88f2))
+
+
+## v0.42.1 (2024-10-30)
+
+### Fix
+
+* fix(build): add tokencost to build.py, update pyinstaller to 6.11.0, new ERROR_REPORTING_DSN ([`e7ad4e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e7ad4e5b1bf55c01dfa66a4f5de0f0a9d02a9c94))
+
+* fix(replay): fix poetry lock, ulralytics.py, update ERROR_REPORTING_DSN
+
+* fix dependencies, update ultralytics.py
+
+* update ERROR_REPORTING_DSN
+
+* black ([`0ce11f3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ce11f30a2951287a5b01affade39745f0757b0d))
+
+
+## v0.42.0 (2024-10-25)
+
+### Feature
+
+* feat(build): improve build script reliability (#886) ([`ea743a2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/ea743a2ab5acd5627cb669ba1cadbcce0555194d))
+
+
+## v0.41.0 (2024-10-24)
+
+### Feature
+
+* feat(browser.py): add BrowserReplayStrategy; support browser modes record/replay (#872)
+
+* add BrowserReplayStrategy; support browser modes record/replay
+
+* minor refactor
+
+* black/flake8
+
+* update README
+
+* improve README
+
+* add BrowserReplayStrategy to README
+
+* add strategies/visual_browser.py
+
+* fix Action.from_dict and test_action_from_dict to support &lt;cmd&gt;-t
+
+* calculate_tokens_and_cost; bugfix ActionEvent.fromdict; add ActionEvent.next_event; add TODOs; add visual_browser.py::SKIP_MOVE_BEFORE_CLICK
+
+* handle mousemove/scroll; add_screen_tlbr forwards and backwards; RAW_PRECISE/IMPRECISE_MOUSE_EVENTS; openai.MAX_IMAGES = 90; fix merge_consecutive_mouse_scroll_events and tests; filter_invalid_window_events; dump_state timeout;
+
+* add TODO
+
+* noqa ([`d31fde0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d31fde080157260e1bb3a8c61a337c22ea2d1520))
+
+### Unknown
+
+* Improve macOS app test script reliability and error handling (#885)
+
+* Improve macOS app test script reliability and error handling
+
+* Update actions/setup-python to v5 to resolve deprecation warnings ([`c1075f1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/c1075f1becc186ab0f9ac24f64ddb0b666f19d88))
+
+* /nh -&gt; 2&gt;nul ([`99bbe0e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/99bbe0eaf20f84af292d216a1439605b6bdd6f1e))
+
+
+## v0.40.0 (2024-09-11)
+
+### Feature
+
+* feat(chrome_extension): correct commit format for semantic release ([`532ec3f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/532ec3fa663b8a680da0cc097a56f753bb397bfb))
+
+### Unknown
+
+* feat(browser_extension) add browser_extension and openadapt.browser (#744)
+
+* add old chrome extension files
+
+* add old changes back, related to chrome extension, in openadapt dir
+
+* try web socket solution, add asyncio and websockets libraries to poetry
+
+* now we can log the dom changes ina a desctop running python process
+
+* remove the old nativeMessaging extension code
+
+* rename dir
+
+* save the dom chages into dummy db: chrome.db
+
+* fix actions tests
+
+* ran `poetry run black --preview . --exclude &#39;alembic&#39;`
+
+* remove sockets.py
+
+* fix falke8 formatting issues
+
+* ran `poetry run black --preview . --exclude &#39;alembic&#39;`
+
+* add browser event code
+
+* chrome extension work wip
+
+* fix reset_db python file.
+
+* now, extension messages can be seen in logs when the recording is started.
+
+* till trying to fix the issue: record functione execution gets stuck at read_browser_events due to asyncio.runForever
+
+* browser_events can be seen in db
+
+* ran black and flake8
+
+* add documentation in extension side js files and remove unused files
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#pullrequestreview-2163565340
+
+Update readme.md
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668787418
+remove mlds logo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668782507
+
+add todo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668782930
+
+add NAMED_CONSTANT
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668785377
+
+remove unused lines in content.js
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668788679
+
+uncomment for `alembic upgrade`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668788679
+
+resolve this
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668790311
+
+remove unwanted obfuscate keys
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668791304
+
+used joinedload
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668792409
+
+remove unwanted return
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668793589
+
+Ran the following:
+- `alembic revision --autogenerate -m &#34;regenrate with browser_event table&#34;`
+- `alembic upgrade head`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668795476
+
+remove unwanted commetns lines
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668796268
+
+remove commented lines
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files#r1668802201
+
+added this todo
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668803476
+
+optimize browser events record  by adding an option to include to record or not like audio
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1668797431
+
+move constants to config
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676066028
+
+update readme
+
+* update readme again
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676066895
+
+update config default for RECORD_BROWSER_EVENTS
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676069410
+
+removed unessary comment in events.py
+
+* Update openadapt/models.py
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676070009
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676071070
+
+resolve d
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/3836c3d165bb11c5615c83a0df65f6cdc155f93f#r1676068390
+
+resolved
+
+* ran black on openadapt dir
+`poetry run black --preview openadapt/`
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1676813676
+
+fixed faiing tests
+
+* update the form type script
+
+* add the record browser flag in classification group
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691451352
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691417341
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691424083
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/config.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691427223
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691427223
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691450866
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/config.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/aa7b1ae7df8fb7045abb5d71d1d41a09f2d8bea2#r1691430453
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744/files/aa7b1ae7df8fb7045abb5d71d1d41a09f2d8bea2#r1691430453
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Remove 3 unused functions owing to:
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454036
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454395
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691454487
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691449435
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691449435
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Rename owing to: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691406587
+
+* Rename const: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691406587
+
+* Remove unused: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691428462
+
+* Use ClassVar again: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691426324
+
+* Update openadapt/models.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691432709
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691432709
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691440931
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691440931
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Update openadapt/record.py: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691446147
+
+https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691446147
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+
+* Move string to const: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691405762
+
+* Correct Grammatical errors: https://github.com/OpenAdaptAI/OpenAdapt/pull/744#discussion_r1691404444
+
+* fix visualize and reformat
+
+* fix alembic migrations
+
+* Intersection/MutationObserver; _repr_ignore_attrs; fix process_events
+
+* synchronize timestamps
+
+* attachWindowEventListeners
+
+* recreate alembic migration
+
+* sync; buffer
+
+* add dtw.py (wip)
+
+* remove sorting and syncing; working experiments/dtw.py
+
+* fix content.js
+
+* report screenX/screenY; fix getScreenCoordinates; compute coordinate differences
+
+* wip
+
+* remove observers; composite distance; task_by_name
+
+* replace eventBuffer with coordMappings; compute tlbr-screen in browser.py
+
+* assign_browser_events in events.py
+
+* black; docstrings
+
+* flake8
+
+* update test
+
+* black
+
+* add test_browser.py
+
+---------
+
+Co-authored-by: pate1595 &lt;kmp.patel@utoronto.ca&gt;
+Co-authored-by: Krish Patel &lt;65433817+KrishPatel13@users.noreply.github.com&gt; ([`49d71d1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/49d71d1ce6c78df657498426b5f2638585df9aa7))
+
+
+## v0.39.3 (2024-08-07)
+
+### Fix
+
+* fix: remove duplicate import (#870) ([`e776ed8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e776ed88dddd1eeaf773bd2dca5a0aea27da46ce))
+
+* fix: only import window if necessary (#869)
+
+Only import window if necessary ([`efc941d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/efc941d34a4cabc7178112d5ca707fb6b956af52))
+
+
+## v0.39.2 (2024-08-06)
+
+### Fix
+
+* fix(video): upgrade to pyav 12.3.0 (#868)
+
+Fixes #862 ([`d7f463c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d7f463c7a17006162248007262515cd6c28b3e38))
+
+
+## v0.39.1 (2024-07-25)
+
+### Fix
+
+* fix(installer): fix installer upload (#866)
+
+* Update release-and-publish.yml: upload installers
+
+* Update release-and-publish.yml: fix case ([`489b9c2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/489b9c201d318fba09320b3c3e414ee1713ccafc))
+
+* fix(VisualReplayStrategy): avoid re-using failing segmentations ([`0045ebb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0045ebb1f98cc74983ab1265266aed870ff54d7d))
+
+* fix(installer, audio): postinstall whisper; download installer artefacts (#865)
+
+* postinstall whisper; download installer artefacts
+
+* poetry lock ([`a4470c3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a4470c372417cb0a22ee1a44193b6f23de44d96e))
+
+
+## v0.39.0 (2024-07-25)
+
+### Feature
+
+* feat(installer): upload installers (#863) ([`47fa551`](https://github.com/OpenAdaptAI/OpenAdapt/commit/47fa551b204c749f6649815bcf01def9d06257c3))
+
+
+## v0.38.0 (2024-07-25)
+
+### Feature
+
+* feat: add_centroid in WindowEvent.to_prompt_dict (#840)
+
+* add centroid in window_dict output
+
+* black
+
+---------
+
+Co-authored-by: Richard Abrich &lt;richard.abrich@mldsai.com&gt;
+Co-authored-by: Richard Abrich &lt;richard.abrich@gmail.com&gt; ([`5118b39`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5118b39ed087d2d74cbc29d5e2f3694a25d4e5de))
+
+* feat(action verification): implement replay action verification (#857)
+
+* add is_action_event_complete
+
+* retry_with_exceptions in apply_replay_instructions
+
+* fix parse_code_snippet
+
+* add error_reporting.py
+
+* refactor video.py
+
+* black/flake8
+
+* add module docstring
+
+* CHECK_ACTION_COMPLETE ([`b288c07`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b288c074b4546e1ea495bf23c7a0f9ea75fcf8a5))
+
+### Unknown
+
+* fix keyerror if no state in window_dict ([`001c8fa`](https://github.com/OpenAdaptAI/OpenAdapt/commit/001c8fa88d8d9f1a9a18db844e216f7a2be6d4f2))
+
+
 ## v0.37.0 (2024-07-19)
 
 ### Feature

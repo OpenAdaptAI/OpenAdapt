@@ -1,65 +1,25 @@
-"""Large Multimodal Model with replay instructions.
+"""Like visual.py but using instrumented DOM to generate segments instead of FastSAM."""
 
-1. Get active element descriptions
-
-For each processed event, if it is a mouse event:
-    - segment the event's active window
-    - get a natural language description of each element
-
-2. Modify actions according to replay instructions
-
-Get a natural language description of what the active element should be given the
-replay instructions.
-
-3. Replay modified events
-
-For each modified event:
-
-    a. Convert descriptions to coordinates
-
-        If it is a click, scroll, or the last in a sequence of isolated <tab> events:
-            - segment the current active window
-            - determine the coordinates of the modified active element
-
-    b. Replay modified event
-
-See prompts for details:
-- openadapt/prompts/system.j2
-- openadapt/prompts/description.j2
-- openadapt/prompts/apply_replay_instructions.j2
-
-Todo:
-- handle tab sequences
-- re-use individual segments of previous segmentations
-- handle distinct segments which look identical (e.g. spreadsheet cells)
-    - e.g. include segment mask in prompt
-    - e.g. annotate grid positions
-    - e.g. describe relative positions
-- update actions during replay
-- handle API failures
-
-
-Usage:
-
-    $ python -m openadapt.replay VisualReplayStrategy --instructions "<instructions>"
-"""
+# TODO XXX: fix caching
 
 from dataclasses import dataclass
 from pprint import pformat
 import time
 
+from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
 import numpy as np
 
 from openadapt import adapters, common, models, plotting, strategies, utils, vision
 from openadapt.custom_logger import logger
 
-DEBUG = False
+DEBUG = True
 DEBUG_REPLAY = False
 SEGMENTATIONS = []  # TODO: store to db
 MIN_SCREENSHOT_SSIM = 0.9  # threshold for considering screenshots structurally similar
 MIN_SEGMENT_SSIM = 0.95  # threshold for considering segments structurally similar
 MIN_SEGMENT_SIZE_SIM = 0  # threshold for considering segment sizes similar
+SKIP_MOVE_BEFORE_CLICK = True  # workaround for bug in events.remove_move_before_click
 
 
 @dataclass
@@ -99,10 +59,16 @@ def add_active_segment_descriptions(action_events: list[models.ActionEvent]) -> 
         # TODO: handle terminal <tab> event
         if action.name in common.MOUSE_EVENTS:
             window_segmentation = get_window_segmentation(action)
+            if not window_segmentation:
+                logger.warning(f"{window_segmentation=}")
+                continue
             active_segment_idx = get_active_segment(action, window_segmentation)
             if not active_segment_idx:
                 logger.warning(f"{active_segment_idx=}")
                 active_segment_description = "(None)"
+                # XXX TODO handle
+                logger.error(f"{active_segment_idx=}")
+                # import ipdb; ipdb.set_trace()
             else:
                 active_segment_description = window_segmentation.descriptions[
                     active_segment_idx
@@ -131,7 +97,7 @@ def apply_replay_instructions(
         "prompts/system.j2",
     )
     prompt = utils.render_template_from_file(
-        "prompts/apply_replay_instructions.j2",
+        "prompts/apply_replay_instructions--browser.j2",
         actions=actions_dict,
         replay_instructions=replay_instructions,
         exceptions=exceptions,
@@ -155,7 +121,7 @@ def apply_replay_instructions(
     return modified_actions
 
 
-class VisualReplayStrategy(
+class VisualBrowserReplayStrategy(
     strategies.base.BaseReplayStrategy,
 ):
     """ReplayStrategy using Large Multimodal Model and replay instructions."""
@@ -215,7 +181,8 @@ class VisualReplayStrategy(
         modified_reference_action = self.modified_actions[self.recording_action_idx]
         self.recording_action_idx += 1
 
-        if modified_reference_action.name in common.MOUSE_EVENTS:
+        # TODO XXX: how to handle scroll position?
+        if modified_reference_action.name in common.PRECISE_MOUSE_EVENTS:
             modified_reference_action.screenshot = active_screenshot
             modified_reference_action.window_event = active_window
             modified_reference_action.recording = self.recording
@@ -279,6 +246,8 @@ def get_active_segment(
     # Adjust action coordinates to be relative to the cropped window's top-left corner
     adjusted_mouse_x = (action.mouse_x - action.window_event.left) * width_ratio
     adjusted_mouse_y = (action.mouse_y - action.window_event.top) * height_ratio
+    logger.info(f"{action.mouse_x=} {action.window_event.left=} {adjusted_mouse_x=}")
+    logger.info(f"{action.mouse_y=} {action.window_event.top=} {adjusted_mouse_y=}")
 
     active_index = None
 
@@ -330,6 +299,11 @@ def get_active_segment(
         # Display the image without blocking
         image.show()
 
+    if active_index is None:
+        # XXX TODO handle
+        logger.error(f"{active_index=}")
+        # import ipdb; ipdb.set_trace()
+
     return active_index
 
 
@@ -373,6 +347,8 @@ def find_similar_image_segmentation(
 def get_window_segmentation(
     action_event: models.ActionEvent,
     exceptions: list[Exception] | None = None,
+    # TODO: document or remove
+    return_similar_segmentation: bool = False,
     handle_similar_image_groups: bool = False,
 ) -> Segmentation:
     """Segments the active window from the action event's screenshot.
@@ -387,11 +363,13 @@ def get_window_segmentation(
         Segmentation object containing detailed segmentation information.
     """
     screenshot = action_event.screenshot
-    original_image = screenshot.cropped_image
+    # XXX TODO in visual.py we use screenshot.cropped_image, but to use that here
+    # we need to modify data-tlbr-screen
+    original_image = screenshot.image
     if DEBUG:
         original_image.show()
 
-    if not exceptions:
+    if return_similar_segmentation and not exceptions:
         similar_segmentation, similar_segmentation_diff = (
             find_similar_image_segmentation(original_image)
         )
@@ -401,20 +379,40 @@ def get_window_segmentation(
             # non-zero regions of similar_segmentation_diff
             return similar_segmentation
 
-    segmentation_adapter = adapters.get_default_segmentation_adapter()
-    segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
-    if DEBUG:
-        segmented_image.show()
+    if action_event.browser_event:
+        refined_masks, element_labels = get_dom_masks(action_event)
+    else:
+        # TODO XXX: get segments from A11Y, fallback to segmentation
 
-    masks = vision.get_masks_from_segmented_image(segmented_image)
-    if DEBUG:
-        plotting.display_binary_images_grid(masks)
+        # XXX HACK: skip if this event is "move" and next is "click"
+        # TODO: consolidate with events.remove_move_before_click (currently disabled)
+        # the following was implemented because enabelling remove_move_before_click
+        # had no effect on order in visualize.py
+        if SKIP_MOVE_BEFORE_CLICK:
+            if (
+                action_event.name == "move"
+                and action_event.next_event
+                and action_event.next_event.name == "click"
+            ):
+                logger.info("Skipping 'move' event followed by 'click'")
+                return None
 
-    refined_masks = vision.refine_masks(masks)
-    if DEBUG:
-        plotting.display_binary_images_grid(refined_masks)
+        segmentation_adapter = adapters.get_default_segmentation_adapter()
+        segmented_image = segmentation_adapter.fetch_segmented_image(original_image)
+        if DEBUG:
+            segmented_image.show()
+
+        masks = vision.get_masks_from_segmented_image(segmented_image)
+        if DEBUG:
+            plotting.display_binary_images_grid(masks)
+
+        refined_masks = vision.refine_masks(masks)
+        if DEBUG:
+            plotting.display_binary_images_grid(refined_masks)
 
     masked_images = vision.extract_masked_images(original_image, refined_masks)
+    if action_event.browser_event and DEBUG:
+        plotting.display_images_table_with_titles(masked_images, element_labels)
 
     if handle_similar_image_groups:
         similar_idx_groups, ungrouped_idxs, _, _ = vision.get_similar_image_idxs(
@@ -454,6 +452,145 @@ def get_window_segmentation(
 
     SEGMENTATIONS.append(segmentation)
     return segmentation
+
+
+MIN_ELEMENT_AREA_PIXELS = 10
+MIN_EXTENT = 0.1
+DEBUG_DISPLAY_MASKS = False
+DEBUG_DISPLAY_LABELLED_SCREENSHOT = True
+
+
+def get_dom_masks(
+    action_event: models.ActionEvent,
+    min_element_area_pixels: int = MIN_ELEMENT_AREA_PIXELS,
+    min_extent: float = MIN_EXTENT,
+    display_masks: bool = DEBUG_DISPLAY_MASKS,
+    display_screenshot_with_labels: bool = DEBUG_DISPLAY_LABELLED_SCREENSHOT,
+) -> tuple[list[np.ndarray], list[str]]:
+    """Returns a list of binary masks for DOM elements in the given ActionEvent.
+
+    Also returns a list of corresponding strings containing the element's data-id and
+    its top, left, bottom, right coordinates, scaled according to the screen.
+
+    Args:
+        action_event (models.ActionEvent): The ActionEvent to extract DOM masks from.
+        min_element_area_pixels (int, optional): Minimum area of an element in pixels.
+            Defaults to MIN_ELEMENT_AREA_PIXELS.
+        min_extent (float, optional): Minimum extent of an element.
+            Defaults to MIN_EXTENT.
+        display_masks (bool, optional): Whether to display the masks.
+        display_screenshot_with_labels (bool, optional): Whether to display screenshot
+            with bounding boxes and labels.
+
+    Returns:
+        tuple[list[np.ndarray], list[str]]: A tuple containing a list of binary masks
+        and a list of strings with the data-id and coordinates for each mask.
+    """
+    # Get scale ratios for x and y
+    width_ratio, height_ratio = utils.get_scale_ratios(action_event)
+
+    browser_event = action_event.browser_event
+    assert browser_event, action_event
+    soup, target_element = browser_event.parse()
+    elements = soup.find_all(attrs={"data-tlbr-screen": True})
+    elements.sort(key=lambda el: calculate_area(el))
+
+    masks = []
+    element_info = []
+
+    # If we want to display the screenshot with labels, create a drawable version of
+    # the screenshot
+    if display_screenshot_with_labels:
+        screenshot_with_labels = action_event.screenshot.image.copy()
+        draw_screenshot = ImageDraw.Draw(screenshot_with_labels)
+
+    for element in elements:
+        try:
+            area = calculate_area(element)
+            if area < min_element_area_pixels:
+                logger.info(f"skipping {area=} < {min_element_area_pixels=}")
+                continue
+
+            # Remove child masks from mask
+            child_area = 0
+            for child in element.find_all(attrs={"data-tlbr-screen": True}):
+                child_area += calculate_area(child)
+            adjusted_area = max(0, area - child_area)
+            extent = adjusted_area / area if area > 0 else 0
+            logger.info(f"{extent=}")
+            if extent < min_extent:
+                logger.info(f"<{min_extent=}, skipping")
+                continue
+
+            # Create a binary mask for the element
+            mask_img = Image.new("L", action_event.screenshot.image.size, color=0)
+            draw = ImageDraw.Draw(mask_img)
+
+            # Get the element's top, left, bottom, right in window coordinates
+            top, left, bottom, right = get_tlbr(element)
+
+            # Apply scale ratios to convert to image space
+            top_scaled = top * height_ratio
+            left_scaled = left * width_ratio
+            bottom_scaled = bottom * height_ratio
+            right_scaled = right * width_ratio
+
+            draw.rectangle(
+                [(left_scaled, top_scaled), (right_scaled, bottom_scaled)], fill=255
+            )
+
+            # Convert the mask to a numpy array
+            mask = np.array(mask_img, dtype=np.uint8) / 255
+            masks.append(mask)
+
+            # Collect element data-id and scaled coordinates
+            data_id = element.get("data-id", "unknown")
+            element_info.append(
+                f"data-id: {data_id}, tlbr: ({top_scaled}, {left_scaled},"
+                f" {bottom_scaled}, {right_scaled})"
+            )
+
+            # If display_screenshot_with_labels is True, draw the bounding boxes and
+            # labels
+            if display_screenshot_with_labels:
+                draw_screenshot.rectangle(
+                    [(left_scaled, top_scaled), (right_scaled, bottom_scaled)],
+                    outline="red",
+                    width=2,
+                )
+                draw_screenshot.text(
+                    (left_scaled, top_scaled),
+                    f"{data_id}: ({top_scaled}, {left_scaled}, {bottom_scaled},"
+                    f" {right_scaled})",
+                    fill="yellow",
+                )
+
+            if display_masks:
+                logger.debug(f"Displaying mask for {element=}")
+                mask_img.show()  # Display the mask using PIL.Image.imshow()
+
+        except (ValueError, KeyError) as exc:
+            logger.warning(f"Failed to process {element=}: {exc}")
+
+    # If display_screenshot_with_labels is True, show the screenshot with the drawn
+    # labels
+    if display_screenshot_with_labels:
+        logger.debug("Displaying screenshot with bounding boxes and labels")
+        screenshot_with_labels.show()
+
+    return masks, element_info
+
+
+def get_tlbr(element: BeautifulSoup, attr: str = "data-tlbr-screen") -> list[int]:
+    """Get bounding box tuple."""
+    top, left, bottom, right = [float(val) for val in element[attr].split(",")]
+    return top, left, bottom, right
+
+
+def calculate_area(element: BeautifulSoup) -> int:
+    """Calculate area of an element."""
+    top, left, bottom, right = get_tlbr(element)
+    return (right - left) * (bottom - top)
 
 
 def prompt_for_descriptions(

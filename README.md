@@ -35,9 +35,8 @@ with the power of Large Multimodal Modals (LMMs) by:
 - Recording screenshots and associated user input
 - Aggregating and visualizing user input and recordings for development
 - Converting screenshots and user input into tokenized format
-- Generating synthetic input via transformer model completions
-- Generating task trees by analyzing recordings (work-in-progress)
-- Replaying synthetic input to complete tasks (work-in-progress)
+- Generating and replaying synthetic input via transformer model completions
+- Generating process graphs by analyzing recording logs (work-in-progress)
 
 The goal is similar to that of
 [Robotic Process Automation](https://en.wikipedia.org/wiki/Robotic_process_automation),
@@ -164,6 +163,7 @@ possible memory leak
 pointing the cursor and left or right clicking, as described in this
 [open issue](https://github.com/OpenAdaptAI/OpenAdapt/issues/145)
 
+
 ### Visualize
 
 Quickly visualize the latest recording you created by running the following command:
@@ -186,18 +186,6 @@ This will start a web server locally, and then open a tab in your browser that l
 
 ![image](https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/48d27459-4be8-4b96-beb0-1973953b8a09)
 
-For a desktop app-based visualization, run:
-
-```
-python -m openadapt.app.visualize
-```
-
-This will open a scrollable window that looks something like this:
-
-<img width="1512" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/451dd467-20ae-4ce7-a3b4-f888635afe8c">
-
-<img width="1511" alt="image" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/13264cf6-46c0-4413-a29d-59bdd040a32e">
-
 ### Playback
 
 You can play back the recording using the following command:
@@ -211,6 +199,7 @@ Other replay strategies include:
 - [`StatefulReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/stateful.py): Early proof-of-concept which uses the OpenAI GPT-4 API with prompts constructed via OS-level window data.
 - (*)[`VisualReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual.py): Uses [Fast Segment Anything Model (FastSAM)](https://github.com/CASIA-IVA-Lab/FastSAM) to segment active window.
 - (*)[`VanillaReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/vanilla.py): Assumes the model is capable of directly reasoning on states and actions accurately. With future frontier models, we hope that this script will suddenly work a lot better.
+- (*)[`VisualBrowserReplayStrategy`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/openadapt/strategies/visual_browser.py): Like VisualReplayStrategy but generates segments from the visible DOM read by the browser extension.
 
 
 The (*) prefix indicates strategies which accept an "instructions" parameter that is used to modify the recording, e.g.:
@@ -220,6 +209,22 @@ python -m openadapt.replay VanillaReplayStrategy --instructions "calculate 9-8"
 ```
 
 See https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt/strategies for a complete list. More ReplayStrategies coming soon! (see [Contributing](#Contributing)).
+
+### Browser integration
+
+To record browser events in Google Chrome (required by the `BrowserReplayStrategy`), follow these steps:
+
+1. Go to your Chrome extensions page by entering [chrome://extensions](chrome://extensions/) in your address bar.
+
+2. Enable `Developer mode` (located at the top right).
+
+3. Click `Load unpacked` (located at the top left).
+
+4. Select the `chrome_extension` directory in the OpenAdapt repo.
+
+5. Make sure the Chrome extension is enabled (the switch to the right of the OpenAdapt extension widget is turned on).
+
+6. Set the `RECORD_BROWSER_EVENTS` flag to `true` in `openadapt/data/config.json`.
 
 ## Features
 
@@ -273,13 +278,6 @@ We are thrilled to open new contract positions for developers passionate about p
 We're looking forward to your contributions. Let's build the future 🚀
 
 ## Contributing
-
-### Notable Works-in-progress (incomplete, see https://github.com/OpenAdaptAI/OpenAdapt/pulls and https://github.com/OpenAdaptAI/OpenAdapt/issues/ for more)
-
-- [Video Recording Hardware Acceleration](https://github.com/OpenAdaptAI/OpenAdapt/issues/570) (help wanted)
-- [Audio Narration](https://github.com/OpenAdaptAI/OpenAdapt/pull/346) (help wanted)
-- [Chrome Extension](https://github.com/OpenAdaptAI/OpenAdapt/pull/364) (help wanted)
-- [Gemini Vision](https://github.com/OpenAdaptAI/OpenAdapt/issues/551) (help wanted)
 
 ### Replay Problem Statement
 

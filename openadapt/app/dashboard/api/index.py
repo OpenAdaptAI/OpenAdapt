@@ -1,6 +1,5 @@
 """API endpoints for the dashboard."""
 
-
 from pathlib import Path
 import os
 

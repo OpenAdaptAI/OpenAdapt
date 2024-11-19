@@ -7,6 +7,7 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
 from openadapt.build_utils import redirect_stdout_stderr
+from openadapt.error_reporting import configure_error_reporting
 from openadapt.custom_logger import logger
 
 
@@ -19,6 +20,7 @@ def run_openadapt() -> None:
             from openadapt.config import print_config
 
             print_config()
+            configure_error_reporting()
             load_alembic_context()
             tray._run()
         except Exception as exc:

@@ -1,27 +1,14 @@
-"""openadapt.app module.
+"""openadapt.deprecated.app.cards module.
 
-This module provides core functionality for the OpenAdapt application.
+This module provides functions for managing UI cards in the OpenAdapt application.
 """
 
 from datetime import datetime
 import multiprocessing
-import pathlib
 import time
 
 from openadapt.record import record
 from openadapt.utils import WrapStdout
-
-__all__ = [
-    "RecordProc",
-    "record_proc",
-    "stop_record",
-    "is_recording",
-    "quick_record",
-    "FPATH",
-]
-
-# Define FPATH
-FPATH = pathlib.Path(__file__).parent
 
 
 class RecordProc:
@@ -47,7 +34,7 @@ class RecordProc:
         self.terminate_processing.clear()
         self.terminate_recording.clear()
         self.record_proc = None
-        self.has_initiated_stop = False
+        record_proc.has_initiated_stop = False
 
     def wait(self) -> None:
         """Wait for the recording process to finish."""

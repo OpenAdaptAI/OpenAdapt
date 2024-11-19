@@ -1,6 +1,5 @@
 """Module to test cropping functionality."""
 
-
 from unittest import mock
 from unittest.mock import Mock
 

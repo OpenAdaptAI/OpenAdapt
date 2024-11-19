@@ -34,7 +34,7 @@ REM Variable to track if any process is still running
 set "ALL_PROCESSES_RUNNING=true"
 
 REM Check if the processes are still running
-tasklist /fi "pid eq %PID%" /nh | find /i "OpenAdapt.exe" >nul
+tasklist /fi "PID eq %PID%" 2>nul | find /i "OpenAdapt.exe" >nul
 if errorlevel 1 (
     echo Process %PID% is not running
     set "ALL_PROCESSES_RUNNING=false"

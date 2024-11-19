@@ -1,6 +1,5 @@
 """Module for customizing multiprocessing.Queue to avoid NotImplementedError."""
 
-
 from multiprocessing.queues import Queue
 from typing import Any
 import multiprocessing
@@ -8,7 +7,7 @@ import multiprocessing
 # Credit: https://gist.github.com/FanchenBao/d8577599c46eab1238a81857bb7277c9
 
 # The following implementation of custom SynchronizedQueue to avoid NotImplementedError
-# when calling queue.qsize() in MacOS X comes almost entirely from this github
+# when calling queue.qsize() in MacOS comes almost entirely from this github
 # discussion: https://github.com/keras-team/autokeras/issues/368
 # Necessary modification is made to make the code compatible with Python3.
 
@@ -50,7 +49,7 @@ class SynchronizedQueue(Queue):
     """A portable implementation of multiprocessing.Queue.
 
     Because of multithreading / multiprocessing semantics, Queue.qsize() may
-    raise the NotImplementedError exception on Unix platforms like Mac OS X
+    raise the NotImplementedError exception on Unix platforms like Mac OS
     where sem_getvalue() is not implemented. This subclass addresses this
     problem by using a synchronized shared counter (initialized to zero) and
     increasing / decreasing its value every time the put() and get() methods

@@ -7,7 +7,7 @@ import time
 from scipy.spatial import distance
 import numpy as np
 
-from openadapt import common, models, utils
+from openadapt import browser, common, models, utils
 from openadapt.custom_logger import logger
 from openadapt.db import crud
 
@@ -45,7 +45,11 @@ def get_events(
     start_time = time.time()
     action_events = crud.get_action_events(db, recording)
     window_events = crud.get_window_events(db, recording)
+    browser_events = crud.get_browser_events(db, recording)
     screenshots = crud.get_screenshots(db, recording)
+
+    browser_stats = browser.assign_browser_events(db, action_events, browser_events)
+    browser.log_stats(browser_stats)
 
     if recording.original_recording_id:
         # if recording is a copy, it already has its events processed when it
@@ -62,10 +66,12 @@ def get_events(
     assert num_action_events > 0, "No action events found."
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
+    num_browser_events = len(browser_events)
 
     num_action_events_raw = num_action_events
     num_window_events_raw = num_window_events
     num_screenshots_raw = num_screenshots
+    num_browser_events_raw = num_browser_events
     duration_raw = action_events[-1].timestamp - action_events[0].timestamp
 
     num_process_iters = 0
@@ -75,34 +81,40 @@ def get_events(
                 f"{num_process_iters=} "
                 f"{num_action_events=} "
                 f"{num_window_events=} "
-                f"{num_screenshots=}"
+                f"{num_screenshots=} "
+                f"{num_browser_events=}"
             )
             (
                 action_events,
                 window_events,
                 screenshots,
-            ) = process_events(
+                browser_events,
+            ) = merge_events(
+                db,
                 action_events,
                 window_events,
                 screenshots,
+                browser_events,
             )
             if (
                 len(action_events) == num_action_events
                 and len(window_events) == num_window_events
                 and len(screenshots) == num_screenshots
+                and len(browser_events) == num_browser_events
             ):
                 break
             num_process_iters += 1
             num_action_events = len(action_events)
             num_window_events = len(window_events)
             num_screenshots = len(screenshots)
+            num_browser_events = len(browser_events)
             if num_process_iters == MAX_PROCESS_ITERS:
                 break
 
     if meta is not None:
-        format_num = (
-            lambda num, raw_num: f"{num} of {raw_num} ({(num / raw_num):.2%})"
-        )  # noqa: E731
+        format_num = lambda num, raw_num: (  # noqa: E731
+            f"{num} of {raw_num} ({(num / raw_num):.2%})" if raw_num else "0"
+        )
         meta["num_process_iters"] = num_process_iters
         meta["num_action_events"] = format_num(
             num_action_events,
@@ -115,6 +127,10 @@ def get_events(
         meta["num_screenshots"] = format_num(
             num_screenshots,
             num_screenshots_raw,
+        )
+        meta["num_browser_events"] = format_num(
+            num_browser_events,
+            num_browser_events_raw,
         )
 
         duration = action_events[-1].timestamp - action_events[0].timestamp
@@ -129,7 +145,7 @@ def get_events(
         event="get_events.completed", properties={"recording_id": recording.id}
     )
 
-    return action_events  # , window_events, screenshots
+    return action_events  # , window_events, screenshots, browser_events
 
 
 def make_parent_event(
@@ -152,13 +168,23 @@ def make_parent_event(
         "recording_timestamp": child.recording_timestamp,
         "window_event_timestamp": child.window_event_timestamp,
         "screenshot_timestamp": child.screenshot_timestamp,
+        "browser_event_timestamp": child.browser_event_timestamp,
         "recording": child.recording,
         "window_event": child.window_event,
         "screenshot": child.screenshot,
+        "browser_event": child.browser_event,
     }
     extra = extra or {}
     for key, val in extra.items():
         event_dict[key] = val
+
+    children = extra.get("children", [])
+    browser_events = [child.browser_event for child in children if child.browser_event]
+    if browser_events:
+        # TODO: store additional browser events as children on first browser event?
+        browser_event = browser_events[0]
+        event_dict["browser_event"] = browser_event
+
     action_event = models.ActionEvent(**event_dict)
     return action_event
 
@@ -322,13 +348,23 @@ def merge_consecutive_mouse_scroll_events(
     def get_merged_events(
         to_merge: list[models.ActionEvent], state: dict[str, Any]
     ) -> list[models.ActionEvent]:
-        state["dt"] += to_merge[-1].timestamp - to_merge[0].timestamp
-        mouse_dx = sum(event.mouse_dx for event in to_merge)
-        mouse_dy = sum(event.mouse_dy for event in to_merge)
-        merged_event = to_merge[-1]
-        merged_event.timestamp -= state["dt"]
-        merged_event.mouse_dx = mouse_dx
-        merged_event.mouse_dy = mouse_dy
+        total_mouse_dx = sum(event.mouse_dx for event in to_merge)
+        total_mouse_dy = sum(event.mouse_dy for event in to_merge)
+        first_child = to_merge[0]
+        last_child = to_merge[-1]
+        merged_event = make_parent_event(
+            first_child,
+            {
+                "name": "scroll",
+                "mouse_x": first_child.mouse_x,
+                "mouse_y": first_child.mouse_y,
+                "mouse_dx": total_mouse_dx,
+                "mouse_dy": total_mouse_dy,
+                "timestamp": first_child.timestamp - state["dt"],
+                "children": to_merge,
+            },
+        )
+        state["dt"] += last_child.timestamp - first_child.timestamp
         return [merged_event]
 
     return merge_consecutive_action_events(
@@ -793,16 +829,64 @@ def discard_unused_events(
     return referred_events
 
 
-def process_events(
+def filter_invalid_window_events(
+    db: crud.SaSession,
+    action_events: list[models.ActionEvent],
+    min_width: int = 100,
+    min_height: int = 100,
+) -> list[models.WindowEvent]:
+    """Filter out invalid window events by updating action events.
+
+    Update the associated window_event_timestamp and window_event_id
+    in action events to the previous valid window event in the sequence
+    if the current window event is invalid. Return a list of valid window events.
+
+    Args:
+        action_events (list[models.ActionEvent]): The list of action events.
+        min_width (int): Minimum allowable width for a valid window event.
+            Default is 100.
+        min_height (int): Minimum allowable height for a valid window event.
+            Default is 100.
+
+    Returns:
+        list[models.WindowEvent]: A list of valid window events.
+    """
+
+    def is_valid_window_event(event: models.WindowEvent) -> bool:
+        return event and event.width >= min_width and event.height >= min_height
+
+    prev_valid_window = None
+    valid_window_events = []
+
+    for action in action_events:
+        if is_valid_window_event(action.window_event):
+            prev_valid_window = action.window_event
+            valid_window_events.append(action.window_event)
+        else:
+            assert prev_valid_window is not None, "No previous valid window event found"
+            action.window_event_id = prev_valid_window.id
+            action.window_event_timestamp = prev_valid_window.timestamp
+            action.window_event = prev_valid_window
+
+    db.add_all(action_events)
+    logger.info(
+        "Completed filtering and updating invalid window events in action events."
+    )
+    return valid_window_events
+
+
+def merge_events(
+    db: crud.SaSession,
     action_events: list[models.ActionEvent],
     window_events: list[models.WindowEvent],
     screenshots: list[models.Screenshot],
+    browser_events: list[models.BrowserEvent],
 ) -> tuple[
     list[models.ActionEvent],
     list[models.WindowEvent],
     list[models.Screenshot],
 ]:
-    """Process action events, window events, and screenshots.
+    """Merge redundant action events, window events, and screenshots.
 
     Args:
         action_events (list): The list of action events.
@@ -813,17 +897,17 @@ def process_events(
         tuple: A tuple containing the processed action events, window events,
           and screenshots.
     """
-    # For debugging
-    # _action_events = action_events
-    # _window_events = window_events
-    # _screenshots = screenshots
-
     num_action_events = len(action_events)
     num_window_events = len(window_events)
     num_screenshots = len(screenshots)
-    num_total = num_action_events + num_window_events + num_screenshots
+    num_browser_events = len(browser_events)
+    num_total = (
+        num_action_events + num_window_events + num_screenshots + num_browser_events
+    )
     logger.info(
-        f"before {num_action_events=} {num_window_events=} {num_screenshots=} "
+        "before"
+        f" {num_action_events=} {num_window_events=}"
+        f" {num_screenshots=} {num_browser_events=} "
         f"{num_total=}"
     )
     process_fns = [
@@ -862,19 +946,37 @@ def process_events(
             action_events,
             "screenshot_timestamp",
         )
+        browser_events = discard_unused_events(
+            browser_events,
+            action_events,
+            "browser_event_timestamp",
+        )
+
+    # TODO: prevent invalid window events from being triggered to begin with
+    window_events = filter_invalid_window_events(db, action_events)
+
     num_action_events_ = len(action_events)
     num_window_events_ = len(window_events)
     num_screenshots_ = len(screenshots)
-    num_total_ = num_action_events_ + num_window_events_ + num_screenshots_
+    num_browser_events_ = len(browser_events)
+    num_total_ = (
+        num_action_events_ + num_window_events_ + num_screenshots_ + num_browser_events_
+    )
     pct_action_events = num_action_events_ / num_action_events
     pct_window_events = num_window_events_ / num_window_events
     pct_screenshots = num_screenshots_ / num_screenshots
+    pct_browser_events = (
+        num_browser_events_ / num_browser_events if num_browser_events else None
+    )
     pct_total = num_total_ / num_total
     logger.info(
-        f"after {num_action_events_=} {num_window_events_=} {num_screenshots_=} "
-        f"{num_total_=}"
+        "after"
+        f" {num_action_events_=} {num_window_events_=}"
+        f" {num_screenshots_=} {num_browser_events_=}"
+        f" {num_total_=}"
     )
     logger.info(
-        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=} {pct_total=}"
+        f"{pct_action_events=} {pct_window_events=} {pct_screenshots=}"
+        f" {pct_browser_events=} {pct_total=}"
     )
-    return action_events, window_events, screenshots
+    return action_events, window_events, screenshots, browser_events
