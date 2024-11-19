@@ -38,11 +38,11 @@ export function SimpleTable<T extends Record<string, any>>({
             </Table.Thead>
             <Table.Tbody>
                 {data.map((row, rowIndex) => (
-                    <Table.Tr key={rowIndex} className="hover:cursor-pointer hover:bg-blue-100/70
+                    <Table.Tr key={rowIndex} className="group/row hover:cursor-pointer hover:bg-blue-100/70
                        group-hover:border-blue-200
                        transition-colors duration-200" onClick={onClickRow(row)}>
-                        {columns.map(({accessor}, accesorIndex) => (
-                            <Table.Td key={accesorIndex} py={20}>
+                        {columns.map(({accessor, name: columnName}, accesorIndex) => (
+                            <Table.Td key={accesorIndex} py={20} className={`${columnName === 'Video' ? 'opacity-80 group-hover/row:opacity-100 transition-opacity duration-300' : ''}`}>
                                 {typeof accessor === 'string' ? row[accessor] : accessor(row)}
                             </Table.Td>
                         ))}
