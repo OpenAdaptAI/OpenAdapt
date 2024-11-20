@@ -9,6 +9,7 @@ export type Recording = {
     task_description: string;
     video_start_time: number | null;
     original_recording_id: number | null;
+    screenshots: string[];
 }
 
 export enum RecordingStatus {
