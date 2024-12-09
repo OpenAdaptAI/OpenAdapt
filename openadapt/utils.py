@@ -961,9 +961,11 @@ def retry_with_exceptions(max_retries: int = 5) -> Callable:
                     logger.warning(exc)
                     exceptions.append(str(exc))
                     retries += 1
+                    last_exception = exc
+            # Raise the final exception with a detailed message and keep its traceback
             raise RuntimeError(
                 f"Failed after {max_retries} retries with exceptions: {exceptions}"
-            )
+            ) from last_exception
 
         return wrapper_retry
 

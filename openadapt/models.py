@@ -492,10 +492,6 @@ class ActionEvent(db.Base):
         Returns:
             dictionary containing relevant properties from the ActionEvent.
         """
-        if self.active_browser_element:
-            import ipdb
-
-            ipdb.set_trace()
         action_dict = deepcopy(
             {
                 key: val
@@ -518,6 +514,9 @@ class ActionEvent(db.Base):
             action_dict["available_segment_descriptions"] = (
                 self.available_segment_descriptions
             )
+
+        # TODO:
+        """
         if self.active_browser_element:
             action_dict["active_browser_element"] = str(self.active_browser_element)
         if self.available_browser_elements:
@@ -526,11 +525,7 @@ class ActionEvent(db.Base):
             action_dict["available_browser_elements"] = str(
                 self.available_browser_elements
             )
-
-        if self.active_browser_element:
-            import ipdb
-
-            ipdb.set_trace()
+        """
         return action_dict
 
     @property
