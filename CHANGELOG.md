@@ -2,6 +2,13 @@
 
 
 
+## v0.42.5 (2024-12-09)
+
+### Fix
+
+* fix(models): remove active_browser_element / available_browser_elements ([`85d601e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/85d601e622545f1bc29b2e8def550c6b96f32377))
+
+
 ## v0.42.4 (2024-11-15)
 
 ### Fix
