@@ -435,8 +435,10 @@ def plot_performance(
         if view_file:
             if sys.platform == "darwin":
                 os.system(f"open {fpath}")
-            else:
+            elif sys.platform == "win32":
                 os.system(f"start {fpath}")
+            else:
+                os.system(f"xdg-open {fpath}")
     else:
         plt.savefig(BytesIO(), format="png")  # save fig to void
         if view_file:

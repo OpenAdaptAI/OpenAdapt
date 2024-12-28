@@ -53,6 +53,9 @@ from openadapt.models import ActionEvent
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
 SCT = mss.mss()
+# TODO: determine programmatically in Linux
+DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS = 0.5
+DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS = 5
 
 _logger_lock = threading.Lock()
 _start_time = None
@@ -232,7 +235,7 @@ def get_double_click_interval_seconds() -> float:
 
         return windll.user32.GetDoubleClickTime() / 1000
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        return DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS
 
 
 def get_double_click_distance_pixels() -> int:
@@ -260,7 +263,7 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
 
 
 def get_monitor_dims() -> tuple[int, int]:

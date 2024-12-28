@@ -1,5 +1,7 @@
 """Capture the screen, audio, and camera as a video on macOS and Windows.
 
+TODO: support Linux
+
 Module: capture.py
 """
 
@@ -7,12 +9,13 @@ import sys
 
 if sys.platform == "darwin":
     from . import _macos as impl
+    device = impl.Capture()
 elif sys.platform == "win32":
     from . import _windows as impl
+    device = impl.Capture()
 else:
-    raise Exception(f"Unsupported platform: {sys.platform}")
-
-device = impl.Capture()
+    print(f"WARNING: openadapt.capture is not yet supported on {sys.platform=}")
+    device = None
 
 
 def get_capture() -> impl.Capture:
@@ -26,19 +29,22 @@ def get_capture() -> impl.Capture:
 
 def start(audio: bool = False, camera: bool = False) -> None:
     """Start the capture."""
-    device.start(audio=audio, camera=camera)
+    if device:
+        device.start(audio=audio, camera=camera)
 
 
 def stop() -> None:
     """Stop the capture."""
-    device.stop()
+    if device:
+        device.stop()
 
 
 def test() -> None:
     """Test the capture."""
-    device.start()
-    input("Press enter to stop")
-    device.stop()
+    if device:
+        device.start()
+        input("Press enter to stop")
+        device.stop()
 
 
 if __name__ in ("__main__", "capture"):

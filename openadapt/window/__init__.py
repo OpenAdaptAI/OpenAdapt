@@ -15,7 +15,8 @@ elif sys.platform in ("win32", "linux"):
     # TODO: implement Linux
     from . import _windows as impl
 else:
-    raise Exception(f"Unsupported platform: {sys.platform}")
+    impl = None
+    logger.warning(f"openadapt.window is not yet supported on {sys.platform=}")
 
 
 def get_active_window_data(

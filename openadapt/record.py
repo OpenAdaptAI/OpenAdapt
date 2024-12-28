@@ -20,7 +20,7 @@ import threading
 import time
 import tracemalloc
 
-from oa_pynput import keyboard, mouse
+from pynput import keyboard, mouse
 from pympler import tracker
 import av
 
@@ -577,7 +577,7 @@ def trigger_action_event(
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
-def on_move(event_q: queue.Queue, x: int, y: int, injected: bool) -> None:
+def on_move(event_q: queue.Queue, x: int, y: int, injected: bool = False) -> None:
     """Handles the 'move' event.
 
     Args:
@@ -603,7 +603,7 @@ def on_click(
     y: int,
     button: mouse.Button,
     pressed: bool,
-    injected: bool,
+    injected: bool = False,
 ) -> None:
     """Handles the 'click' event.
 
@@ -638,7 +638,7 @@ def on_scroll(
     y: int,
     dx: int,
     dy: int,
-    injected: bool,
+    injected: bool = False,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -949,7 +949,7 @@ def read_keyboard_events(
     def on_press(
         event_q: queue.Queue,
         key: keyboard.Key | keyboard.KeyCode,
-        injected: bool,
+        injected: bool = False,
     ) -> None:
         """Event handler for key press events.
 
@@ -1000,7 +1000,7 @@ def read_keyboard_events(
     def on_release(
         event_q: queue.Queue,
         key: keyboard.Key | keyboard.KeyCode,
-        injected: bool,
+        injected: bool = False,
     ) -> None:
         """Event handler for key release events.
 
