@@ -5,16 +5,30 @@ import time
 
 from openadapt.custom_logger import logger
 
+# Global X server connection
+_conn = None
+
+
+def get_x_server_connection() -> xcffib.Connection:
+    """Get or create a global connection to the X server.
+
+    Returns:
+        xcffib.Connection: A global connection object.
+    """
+    global _conn
+    if _conn is None:
+        _conn = xcffib.connect()
+    return _conn
+
 
 def get_active_window_meta() -> dict | None:
-    """Retrieve metadata of the active window using X server directly.
+    """Retrieve metadata of the active window using a persistent X server connection.
 
     Returns:
         dict or None: A dictionary containing metadata of the active window.
     """
     try:
-        # Connect to the X server
-        conn = xcffib.connect()
+        conn = get_x_server_connection()
         root = conn.get_setup().roots[0].root
 
         # Get the _NET_ACTIVE_WINDOW atom
