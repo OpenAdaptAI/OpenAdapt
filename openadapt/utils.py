@@ -52,11 +52,11 @@ from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
-SCT = mss.mss()
 # TODO: determine programmatically in Linux
 DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS = 0.5
 DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS = 5
 
+_sct = None
 _logger_lock = threading.Lock()
 _start_time = None
 _start_perf_counter = None
@@ -266,6 +266,13 @@ def get_double_click_distance_pixels() -> int:
         return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
 
 
+def get_sct() -> Any:
+    global _sct
+    if _sct is None:
+        _sct = mss.mss()
+    return _sct
+
+
 def get_monitor_dims() -> tuple[int, int]:
     """Get the dimensions of the monitor.
 
@@ -273,7 +280,7 @@ def get_monitor_dims() -> tuple[int, int]:
         tuple[int, int]: The width and height of the monitor.
     """
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-    monitor = SCT.monitors[0]
+    monitor = get_sct().monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
     return monitor_width, monitor_height
@@ -423,8 +430,9 @@ def take_screenshot() -> Image.Image:
         PIL.Image: The screenshot image.
     """
     # monitor 0 is all in one
-    monitor = SCT.monitors[0]
-    sct_img = SCT.grab(monitor)
+    sct = get_sct()
+    monitor = sct.monitors[0]
+    sct_img = sct.grab(monitor)
     image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
     return image
 

@@ -32,7 +32,9 @@ def get_active_window_meta() -> dict | None:
         root = conn.get_setup().roots[0].root
 
         # Get the _NET_ACTIVE_WINDOW atom
-        atom = conn.core.InternAtom(False, len("_NET_ACTIVE_WINDOW"), "_NET_ACTIVE_WINDOW").reply().atom
+        atom = conn.core.InternAtom(
+            False, len("_NET_ACTIVE_WINDOW"), "_NET_ACTIVE_WINDOW"
+        ).reply().atom
 
         # Fetch the active window ID
         active_window = conn.core.GetProperty(
@@ -42,7 +44,7 @@ def get_active_window_meta() -> dict | None:
             return None
 
         # Convert the value to a proper bytes object
-        window_id_bytes = b"".join(active_window.value[:4])  # Concatenate bytes
+        window_id_bytes = b"".join(active_window.value)  # Concatenate bytes
         window_id = int.from_bytes(window_id_bytes, byteorder="little")
 
         # Get window geometry
