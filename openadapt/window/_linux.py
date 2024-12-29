@@ -43,7 +43,7 @@ def get_active_window_meta() -> dict | None:
         if not active_window.value_len:
             return None
 
-        window_id = int.from_bytes(active_window.value, byteorder="little")
+        window_id = int.from_bytes(active_window.value, byteorder="native")
 
         # Get window geometry
         geom = conn.core.GetGeometry(window_id).reply()
