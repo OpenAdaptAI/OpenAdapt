@@ -82,7 +82,7 @@ def get_window_title(conn: xcffib.Connection, window_id: int) -> str:
             False, window_id, atom_net_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
         ).reply()
         if title_property.value_len > 0:
-            title_bytes = bytes(title_property.value)  # Convert to proper bytes
+            title_bytes = b"".join(title_property.value)  # Convert using b"".join()
             return title_bytes.decode("utf-8")
 
         # Fallback to WM_NAME
@@ -93,7 +93,7 @@ def get_window_title(conn: xcffib.Connection, window_id: int) -> str:
             False, window_id, atom_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
         ).reply()
         if title_property.value_len > 0:
-            title_bytes = bytes(title_property.value)  # Convert to proper bytes
+            title_bytes = b"".join(title_property.value)  # Convert using b"".join()
             return title_bytes.decode("utf-8")
     except Exception as exc:
         logger.warning(f"Failed to retrieve window title: {exc}")
