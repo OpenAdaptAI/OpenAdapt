@@ -11,7 +11,7 @@ from openadapt.custom_logger import logger
 
 if sys.platform == "darwin":
     from . import _macos as impl
-elif sys.platform in ("win32", "linux"):
+elif sys.platform == "win32":
     # TODO: implement Linux
     from . import _windows as impl
 else:
