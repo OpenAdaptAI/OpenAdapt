@@ -74,14 +74,27 @@ def get_window_title(conn: xcffib.Connection, window_id: int) -> str:
         str: The title of the window, or an empty string if unavailable.
     """
     try:
-        atom = conn.core.InternAtom(
+        # Attempt to fetch _NET_WM_NAME
+        atom_net_wm_name = conn.core.InternAtom(
             False, len("_NET_WM_NAME"), "_NET_WM_NAME"
         ).reply().atom
         title_property = conn.core.GetProperty(
-            False, window_id, atom, xcffib.xproto.Atom.STRING, 0, 1024
+            False, window_id, atom_net_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
         ).reply()
         if title_property.value_len > 0:
-            return title_property.value.decode("utf-8")
+            title_bytes = bytes(title_property.value)  # Convert to proper bytes
+            return title_bytes.decode("utf-8")
+
+        # Fallback to WM_NAME
+        atom_wm_name = conn.core.InternAtom(
+            False, len("WM_NAME"), "WM_NAME"
+        ).reply().atom
+        title_property = conn.core.GetProperty(
+            False, window_id, atom_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
+        ).reply()
+        if title_property.value_len > 0:
+            title_bytes = bytes(title_property.value)  # Convert to proper bytes
+            return title_bytes.decode("utf-8")
     except Exception as exc:
         logger.warning(f"Failed to retrieve window title: {exc}")
     return ""
