@@ -59,7 +59,10 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
         dict or None: A dictionary containing the state of the active window,
           or None if the state is not available.
     """
+    if not impl:
+        return None
     # TODO: save window identifier (a window's title can change, or
+    # multiple windows can have the same title)
     try:
         return impl.get_active_window_state(read_window_data)
     except Exception as exc:
@@ -78,6 +81,8 @@ def get_active_element_state(x: int, y: int) -> dict | None:
         dict or None: A dictionary containing the state of the active element,
         or None if the state is not available.
     """
+    if not impl:
+        return None
     try:
         return impl.get_active_element_state(x, y)
     except Exception as exc:
