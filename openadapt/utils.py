@@ -11,6 +11,7 @@ import ast
 import base64
 import importlib.metadata
 import inspect
+import multiprocessing
 import os
 import sys
 import threading
@@ -61,7 +62,7 @@ _start_time = None
 _start_perf_counter = None
 
 # Process-local storage for MSS instances
-_process_local = threading.local()
+_process_local = multiprocessing.local()
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
