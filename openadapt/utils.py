@@ -221,6 +221,22 @@ def override_double_click_interval_seconds(
     get_double_click_interval_seconds.override_value = override_value
 
 
+def get_linux_setting(gnome_command, kde_command, default_value):
+    """Try to get a setting from GNOME or KDE, falling back to a default value."""
+    try:
+        # Try GNOME first
+        output = subprocess.check_output(gnome_command, shell=True).decode().strip()
+        return int(output)
+    except (subprocess.CalledProcessError, ValueError):
+        try:
+            # If GNOME fails, try KDE
+            output = subprocess.check_output(kde_command, shell=True).decode().strip()
+            return int(output)
+        except (subprocess.CalledProcessError, ValueError):
+            # If both fail, return the default value
+            return default_value
+
+
 def get_double_click_interval_seconds() -> float:
     """Get the double click interval in seconds.
 
@@ -239,18 +255,10 @@ def get_double_click_interval_seconds() -> float:
 
         return windll.user32.GetDoubleClickTime() / 1000
     elif sys.platform.startswith("linux"):
-        try:
-            output = subprocess.check_output(
-                ["xprop", "-root", "_NET_DOUBLE_CLICK_TIME"], stderr=subprocess.DEVNULL
-            ).decode()
-            if "_NET_DOUBLE_CLICK_TIME(CARDINAL)" in output:
-                interval_ms = int(output.split()[-1])
-                return interval_ms / 1000
-        except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
-            logger.warning(
-                "Failed to fetch double click interval. Falling back to default."
-            )
-        return DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickInterval"
+        value = get_linux_setting(gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS * 1000)
+        return value / 1000  # Convert from milliseconds to seconds
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
@@ -280,21 +288,9 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     elif sys.platform.startswith("linux"):
-        try:
-            output = subprocess.check_output(
-                ["xdpyinfo"], stderr=subprocess.DEVNULL
-            ).decode()
-            for line in output.splitlines():
-                if "resolution:" in line:
-                    dpi = int(line.split()[1].split("x")[0])  # Get horizontal DPI
-                    # Estimate double-click distance as 4mm converted to pixels.
-                    # 1 inch = 25.4mm, so dpi / 25.4 = pixels per mm.
-                    return int(dpi / 25.4 * 4)
-        except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
-            logger.warning(
-                "Failed to fetch double click distance. Falling back to default."
-            )
-        return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click-distance"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
+        return get_linux_setting(gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS)
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
