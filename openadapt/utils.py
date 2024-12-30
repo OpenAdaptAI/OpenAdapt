@@ -60,8 +60,8 @@ _logger_lock = threading.Lock()
 _start_time = None
 _start_perf_counter = None
 
-# Thread-local storage to ensure thread-safe reuse of `mss` instances
-_thread_local = threading.local()
+# Process-local storage for MSS instances
+_process_local = threading.local()
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
@@ -268,11 +268,11 @@ def get_double_click_distance_pixels() -> int:
         return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
 
 
-def get_thread_local_sct() -> mss.mss:
+def get_process_local_sct() -> mss.mss:
     """Retrieve or create the `mss` instance for the current thread."""
-    if not hasattr(_thread_local, "sct"):
-        _thread_local.sct = mss.mss()
-    return _thread_local.sct
+    if not hasattr(_process_local, "sct"):
+        _process_local.sct = mss.mss()
+    return _process_local.sct
 
 
 def get_monitor_dims() -> tuple[int, int]:
@@ -282,7 +282,7 @@ def get_monitor_dims() -> tuple[int, int]:
         tuple[int, int]: The width and height of the monitor.
     """
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-    monitor = get_thread_local_sct().monitors[0]
+    monitor = get_process_local_sct().monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
     return monitor_width, monitor_height
@@ -432,7 +432,7 @@ def take_screenshot() -> Image.Image:
         PIL.Image: The screenshot image.
     """
     # monitor 0 is all in one
-    sct = get_thread_local_sct()
+    sct = get_process_local_sct()
     monitor = sct.monitors[0]
     sct_img = sct.grab(monitor)
     image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
