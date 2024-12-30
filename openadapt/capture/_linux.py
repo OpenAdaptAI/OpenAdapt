@@ -13,7 +13,7 @@ class Capture:
 
     def __init__(self) -> None:
         """Initialize the capture object."""
-        if platform != "linux":
+        if not platform.startswith("linux"):
             assert platform == "linux", platform
 
         self.is_recording = False

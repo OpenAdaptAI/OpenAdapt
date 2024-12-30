@@ -9,13 +9,12 @@ if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform == "win32":
     from . import _windows as impl
-elif sys.platform == "linux":
+elif sys.platform.startswith("linux"):
     from . import _linux as impl
 else:
-    print(f"WARNING: openadapt.capture is not yet supported on {sys.platform=}")
-    impl = None
+    raise Exception(f"Unsupported platform: {sys.platform}")
 
-device = impl.Capture() if impl else None
+device = impl.Capture()
 
 
 def get_capture() -> impl.Capture:
@@ -29,22 +28,19 @@ def get_capture() -> impl.Capture:
 
 def start(audio: bool = False, camera: bool = False) -> None:
     """Start the capture."""
-    if device:
-        device.start(audio=audio, camera=camera)
+    device.start(audio=audio, camera=camera)
 
 
 def stop() -> None:
     """Stop the capture."""
-    if device:
-        device.stop()
+    device.stop()
 
 
 def test() -> None:
     """Test the capture."""
-    if device:
-        device.start()
-        input("Press enter to stop")
-        device.stop()
+    device.start()
+    input("Press enter to stop")
+    device.stop()
 
 
 if __name__ in ("__main__", "capture"):
