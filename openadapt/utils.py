@@ -257,7 +257,9 @@ def get_double_click_interval_seconds() -> float:
     elif sys.platform.startswith("linux"):
         gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
         kde_cmd = "kreadconfig5 --group KDE --key DoubleClickInterval"
-        value = get_linux_setting(gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS * 1000)
+        value = get_linux_setting(
+            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS * 1000
+        )
         return value / 1000  # Convert from milliseconds to seconds
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
@@ -288,9 +290,13 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     elif sys.platform.startswith("linux"):
-        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click-distance"
+        gnome_cmd = (
+            "gsettings get org.gnome.desktop.peripherals.mouse double-click-distance"
+        )
         kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
-        return get_linux_setting(gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS)
+        return get_linux_setting(
+            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
+        )
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
