@@ -222,7 +222,7 @@ def override_double_click_interval_seconds(
     get_double_click_interval_seconds.override_value = override_value
 
 
-def get_linux_setting(gnome_command, kde_command, default_value):
+def get_linux_setting(gnome_command: str, kde_command: str, default_value: int) -> int:
     """Try to get a setting from GNOME or KDE, falling back to a default value."""
     try:
         # Try GNOME first
