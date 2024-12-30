@@ -1323,7 +1323,12 @@ def record(
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, task_started_events.setdefault('window_event_reader', threading.Event())),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("window_event_reader", threading.Event()),
+        ),
     )
     window_event_reader.start()
     task_by_name["window_event_reader"] = window_event_reader
@@ -1331,28 +1336,50 @@ def record(
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
             target=run_browser_event_server,
-            args=(event_q, terminate_processing, recording, task_started_events.setdefault('browser_event_reader', threading.Event())),
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                task_started_events.setdefault(
+                    "browser_event_reader", threading.Event()
+                ),
+            ),
         )
         browser_event_reader.start()
         task_by_name["browser_event_reader"] = browser_event_reader
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
-        args=(event_q, terminate_processing, recording, task_started_events.setdefault('screen_event_reader', threading.Event())),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("screen_event_reader", threading.Event()),
+        ),
     )
     screen_event_reader.start()
     task_by_name["screen_event_reader"] = screen_event_reader
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
-        args=(event_q, terminate_processing, recording, task_started_events.setdefault('keyboard_event_reader', threading.Event())),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("keyboard_event_reader", threading.Event()),
+        ),
     )
     keyboard_event_reader.start()
     task_by_name["keyboard_event_reader"] = keyboard_event_reader
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
-        args=(event_q, terminate_processing, recording, task_started_events.setdefault('mouse_event_reader', threading.Event())),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("mouse_event_reader", threading.Event()),
+        ),
     )
     mouse_event_reader.start()
     task_by_name["mouse_event_reader"] = mouse_event_reader
@@ -1375,7 +1402,7 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            task_started_events.setdefault('event_processor', threading.Event()),
+            task_started_events.setdefault("event_processor", threading.Event()),
             num_screen_events,
             num_action_events,
             num_window_events,
@@ -1396,7 +1423,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            task_started_events.setdefault('screen_event_writer', multiprocessing.Event()),
+            task_started_events.setdefault(
+                "screen_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     screen_event_writer.start()
@@ -1413,7 +1442,9 @@ def record(
                 perf_q,
                 recording,
                 terminate_processing,
-                task_started_events.setdefault('browser_event_writer', multiprocessing.Event()),
+                task_started_events.setdefault(
+                    "browser_event_writer", multiprocessing.Event()
+                ),
             ),
         )
         browser_event_writer.start()
@@ -1429,7 +1460,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            task_started_events.setdefault('action_event_writer', multiprocessing.Event()),
+            task_started_events.setdefault(
+                "action_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     action_event_writer.start()
@@ -1445,7 +1478,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            task_started_events.setdefault('window_event_writer', multiprocessing.Event()),
+            task_started_events.setdefault(
+                "window_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     window_event_writer.start()
@@ -1462,7 +1497,7 @@ def record(
                 perf_q,
                 recording,
                 terminate_processing,
-                task_started_events.setdefault('video_writer', multiprocessing.Event()),
+                task_started_events.setdefault("video_writer", multiprocessing.Event()),
                 video_pre_callback,
                 video_post_callback,
             ),
@@ -1476,7 +1511,9 @@ def record(
             args=(
                 recording,
                 terminate_processing,
-                task_started_events.setdefault('audio_event_writer', multiprocessing.Event()),
+                task_started_events.setdefault(
+                    "audio_event_writer", multiprocessing.Event()
+                ),
             ),
         )
         audio_recorder.start()
@@ -1489,7 +1526,9 @@ def record(
             perf_q,
             recording,
             terminate_perf_event,
-            task_started_events.setdefault('perf_stats_writer', multiprocessing.Event()),
+            task_started_events.setdefault(
+                "perf_stats_writer", multiprocessing.Event()
+            ),
         ),
     )
     perf_stats_writer.start()
@@ -1503,7 +1542,7 @@ def record(
                 recording,
                 terminate_perf_event,
                 record_pid,
-                task_started_events.setdefault('mem_writer', multiprocessing.Event()),
+                task_started_events.setdefault("mem_writer", multiprocessing.Event()),
             ),
         )
         mem_writer.start()
@@ -1524,7 +1563,9 @@ def record(
         started_tasks = sum(event.is_set() for event in task_started_events.values())
         if started_tasks >= expected_starts:
             break
-        waiting_for = [task for task, event in task_started_events.items() if not event.is_set()]
+        waiting_for = [
+            task for task, event in task_started_events.items() if not event.is_set()
+        ]
         logger.info(f"Waiting for tasks to start: {waiting_for}")
         logger.info(f"Started tasks: {started_tasks}/{expected_starts}")
         time.sleep(1)  # Sleep to reduce busy waiting

@@ -32,9 +32,11 @@ def get_active_window_meta() -> dict | None:
         root = conn.get_setup().roots[0].root
 
         # Get the _NET_ACTIVE_WINDOW atom
-        atom = conn.core.InternAtom(
-            False, len("_NET_ACTIVE_WINDOW"), "_NET_ACTIVE_WINDOW"
-        ).reply().atom
+        atom = (
+            conn.core.InternAtom(False, len("_NET_ACTIVE_WINDOW"), "_NET_ACTIVE_WINDOW")
+            .reply()
+            .atom
+        )
 
         # Fetch the active window ID
         active_window = conn.core.GetProperty(
@@ -75,9 +77,11 @@ def get_window_title(conn: xcffib.Connection, window_id: int) -> str:
     """
     try:
         # Attempt to fetch _NET_WM_NAME
-        atom_net_wm_name = conn.core.InternAtom(
-            False, len("_NET_WM_NAME"), "_NET_WM_NAME"
-        ).reply().atom
+        atom_net_wm_name = (
+            conn.core.InternAtom(False, len("_NET_WM_NAME"), "_NET_WM_NAME")
+            .reply()
+            .atom
+        )
         title_property = conn.core.GetProperty(
             False, window_id, atom_net_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
         ).reply()
@@ -86,9 +90,9 @@ def get_window_title(conn: xcffib.Connection, window_id: int) -> str:
             return title_bytes.decode("utf-8")
 
         # Fallback to WM_NAME
-        atom_wm_name = conn.core.InternAtom(
-            False, len("WM_NAME"), "WM_NAME"
-        ).reply().atom
+        atom_wm_name = (
+            conn.core.InternAtom(False, len("WM_NAME"), "WM_NAME").reply().atom
+        )
         title_property = conn.core.GetProperty(
             False, window_id, atom_wm_name, xcffib.xproto.Atom.STRING, 0, 1024
         ).reply()
