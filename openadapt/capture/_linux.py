@@ -1,14 +1,9 @@
-"""Allows for capturing the screen and audio on Linux.
-
-usage: see bottom of file
-"""
-
-import os
 import subprocess
+import os
 from datetime import datetime
 from sys import platform
-import wave
 import pyaudio
+import wave
 
 from openadapt.config import CAPTURE_DIR_PATH
 
@@ -18,7 +13,8 @@ class Capture:
 
     def __init__(self) -> None:
         """Initialize the capture object."""
-        assert platform == "linux", platform
+        if platform != "linux":
+            assert platform == "linux", platform
 
         self.is_recording = False
         self.audio_out = None
@@ -28,6 +24,19 @@ class Capture:
 
         # Initialize PyAudio
         self.audio = pyaudio.PyAudio()
+
+    def get_screen_resolution(self) -> tuple:
+        """Get the screen resolution dynamically using xrandr."""
+        try:
+            # Get screen resolution using xrandr
+            output = subprocess.check_output(
+                "xrandr | grep '*' | awk '{print $1}'", shell=True
+            )
+            resolution = output.decode("utf-8").strip()
+            width, height = resolution.split("x")
+            return int(width), int(height)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to get screen resolution: {e}")
 
     def start(self, audio: bool = True, camera: bool = False) -> None:
         """Start capturing the screen, audio, and camera.
@@ -44,10 +53,13 @@ class Capture:
         if not os.path.exists(capture_dir):
             os.mkdir(capture_dir)
 
+        # Get the screen resolution dynamically
+        screen_width, screen_height = self.get_screen_resolution()
+
         # Start video capture using ffmpeg
         video_filename = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + ".mp4"
         self.video_out = os.path.join(capture_dir, video_filename)
-        self._start_video_capture()
+        self._start_video_capture(screen_width, screen_height)
 
         # Start audio capture
         if audio:
@@ -55,17 +67,24 @@ class Capture:
             self.audio_out = os.path.join(capture_dir, audio_filename)
             self._start_audio_capture()
 
-    def _start_video_capture(self) -> None:
-        """Start capturing the screen using ffmpeg."""
+    def _start_video_capture(self, width: int, height: int) -> None:
+        """Start capturing the screen using ffmpeg with the dynamic resolution."""
         cmd = [
             "ffmpeg",
-            "-f", "x11grab",  # Capture X11 display
-            "-video_size", "1920x1080",  # Set resolution
-            "-framerate", "30",  # Set frame rate
-            "-i", ":0.0",  # Capture from display 0
-            "-c:v", "libx264",  # Video codec
-            "-preset", "ultrafast",  # Speed/quality tradeoff
-            "-y", self.video_out  # Output file
+            "-f",
+            "x11grab",  # Capture X11 display
+            "-video_size",
+            f"{width}x{height}",  # Use dynamic screen resolution
+            "-framerate",
+            "30",  # Set frame rate
+            "-i",
+            ":0.0",  # Capture from display 0
+            "-c:v",
+            "libx264",  # Video codec
+            "-preset",
+            "ultrafast",  # Speed/quality tradeoff
+            "-y",
+            self.video_out,  # Output file
         ]
         self.video_proc = subprocess.Popen(cmd)
 
@@ -77,12 +96,14 @@ class Capture:
             rate=44100,
             input=True,
             frames_per_buffer=1024,
-            stream_callback=self._audio_callback
+            stream_callback=self._audio_callback,
         )
         self.audio_frames = []
         self.audio_stream.start_stream()
 
-    def _audio_callback(self, in_data: bytes, frame_count: int, time_info: dict, status: int) -> tuple:
+    def _audio_callback(
+        self, in_data: bytes, frame_count: int, time_info: dict, status: int
+    ) -> tuple:
         """Callback function to process audio data."""
         self.audio_frames.append(in_data)
         return (None, pyaudio.paContinue)
