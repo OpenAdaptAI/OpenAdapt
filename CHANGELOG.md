@@ -2,6 +2,31 @@
 
 
 
+## v0.43.1 (2024-12-30)
+
+### Build
+
+* build: support python&gt;=3.10,3.14
+
+* python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* use drag-threshold for linux double_click_distance_threshold
+
+* httpx==0.27.2 ([`7a0aa8e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7a0aa8ef6f5a909c877f181d7756d81d4339ec20))
+
+### Fix
+
+* fix(buid): python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* Revert &#34;build: support python&gt;=3.10,3.14&#34;
+
+This reverts commit 7a0aa8ef6f5a909c877f181d7756d81d4339ec20.
+
+* python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* simplify get_double_click_distance_pixels on linux ([`64c9241`](https://github.com/OpenAdaptAI/OpenAdapt/commit/64c92418bb2add1fd7672832c091580604a3102f))
+
+
 ## v0.43.0 (2024-12-30)
 
 ### Feature
