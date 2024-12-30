@@ -317,7 +317,7 @@ def get_double_click_distance_pixels() -> int:
                     ["xinput", "list-props", str(device_id)], text=True
                 )
                 match = re.search(
-                    r"libinput Scrolling Pixel Distance \\((\\d+)\\):\\s+(\\d+)",
+                    r"libinput Scrolling Pixel Distance \((\d+)\):\s+(\d+)",
                     output,
                 )
                 if match:
