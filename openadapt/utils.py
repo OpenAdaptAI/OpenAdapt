@@ -12,6 +12,7 @@ import base64
 import importlib.metadata
 import inspect
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -265,6 +266,25 @@ def get_double_click_interval_seconds() -> float:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
 
+def get_linux_device_id(device_name: str) -> int | None:
+    """Get the device ID for a device containing the given name.
+
+    Args:
+        device_name (str): The name to search for in device listings.
+
+    Returns:
+        Optional[int]: The device ID if found, None otherwise.
+    """
+    try:
+        output = subprocess.check_output(["xinput", "list"], text=True)
+        match = re.search(f"\\b{re.escape(device_name)}\\b.*?id=(\\d+)", output)
+        if match:
+            return int(match.group(1))
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    return None
+
+
 def get_double_click_distance_pixels() -> int:
     """Get the double click distance in pixels.
 
@@ -290,11 +310,20 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     elif sys.platform.startswith("linux"):
-        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
-        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
-        return get_linux_setting(
-            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
-        )
+        device_id = get_linux_device_id("Mouse")
+        if device_id is not None:
+            try:
+                output = subprocess.check_output(
+                    ["xinput", "list-props", str(device_id)], text=True
+                )
+                match = re.search(
+                    r"libinput Scrolling Pixel Distance \\((\\d+)\\):\\s+(\\d+)",
+                    output,
+                )
+                if match:
+                    return int(match.group(2))
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
