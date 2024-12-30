@@ -55,7 +55,7 @@ from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
-# TODO: determine programmatically in Linux
+# TODO: move to config.py
 DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS = 0.5
 DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS = 5
 
