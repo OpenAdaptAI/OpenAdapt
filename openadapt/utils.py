@@ -12,6 +12,7 @@ import base64
 import importlib.metadata
 import inspect
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -237,8 +238,21 @@ def get_double_click_interval_seconds() -> float:
         from ctypes import windll
 
         return windll.user32.GetDoubleClickTime() / 1000
-    else:
+    elif sys.platform.startswith("linux"):
+        try:
+            output = subprocess.check_output(
+                ["xprop", "-root", "_NET_DOUBLE_CLICK_TIME"], stderr=subprocess.DEVNULL
+            ).decode()
+            if "_NET_DOUBLE_CLICK_TIME(CARDINAL)" in output:
+                interval_ms = int(output.split()[-1])
+                return interval_ms / 1000
+        except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+            logger.warning(
+                "Failed to fetch double click interval. Falling back to default."
+            )
         return DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS
+    else:
+        raise Exception(f"Unsupported platform: {sys.platform}")
 
 
 def get_double_click_distance_pixels() -> int:
@@ -265,8 +279,24 @@ def get_double_click_distance_pixels() -> int:
         if x != y:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
-    else:
+    elif sys.platform.startswith("linux"):
+        try:
+            output = subprocess.check_output(
+                ["xdpyinfo"], stderr=subprocess.DEVNULL
+            ).decode()
+            for line in output.splitlines():
+                if "resolution:" in line:
+                    dpi = int(line.split()[1].split("x")[0])  # Get horizontal DPI
+                    # Estimate double-click distance as 4mm converted to pixels.
+                    # 1 inch = 25.4mm, so dpi / 25.4 = pixels per mm.
+                    return int(dpi / 25.4 * 4)
+        except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+            logger.warning(
+                "Failed to fetch double click distance. Falling back to default."
+            )
         return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
+    else:
+        raise Exception(f"Unsupported platform: {sys.platform}")
 
 
 def get_process_local_sct() -> mss.mss:
