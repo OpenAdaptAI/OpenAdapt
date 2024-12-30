@@ -1,7 +1,5 @@
 """Capture the screen, audio, and camera as a video on macOS and Windows.
 
-TODO: support Linux
-
 Module: capture.py
 """
 

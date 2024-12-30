@@ -149,7 +149,7 @@ def get_window_data(meta: dict) -> dict:
     Returns:
         dict: Detailed data of the window.
     """
-    # Placeholder for additional detailed data retrieval.
+    # TODO: implement, e.g. with pyatspi
     return {}
 
 
