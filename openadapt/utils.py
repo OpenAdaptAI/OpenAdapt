@@ -290,9 +290,7 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     elif sys.platform.startswith("linux"):
-        gnome_cmd = (
-            "gsettings get org.gnome.desktop.peripherals.mouse double-click-distance"
-        )
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
         kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
         return get_linux_setting(
             gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
