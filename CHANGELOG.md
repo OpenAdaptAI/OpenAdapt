@@ -2,6 +2,29 @@
 
 
 
+## v0.43.0 (2024-12-30)
+
+### Feature
+
+* feat(record): add Linux support
+
+* oa_pynput -&gt; pynput
+
+* add window/_linux.py
+
+* multiprocessing_utils; xcffib
+
+* global monitor_width/monitor_height
+
+* add capture._linux
+
+* cleanup
+
+* get_double_click_interval_seconds/pixels on linux
+
+* get_xinput_property ([`e7589f3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e7589f3cc0ef216fffaf5a1b8582eb9973e8c74a))
+
+
 ## v0.42.5 (2024-12-09)
 
 ### Fix
