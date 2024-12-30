@@ -299,7 +299,7 @@ def get_xinput_property(device_id: int, property_name: str) -> int | None:
         output = subprocess.check_output(
             ["xinput", "list-props", str(device_id)], text=True
         )
-        match = re.search(rf"{re.escape(property_name)} \\(\\d+\\):\\s+(\\d+)", output)
+        match = re.search(rf"{property_name} \((\d+)\):\s+(\d+)", output)
         if match:
             return int(match.group(2))
     except (subprocess.CalledProcessError, FileNotFoundError):
