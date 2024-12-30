@@ -38,26 +38,29 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: sh install/install_openadapt.sh
 
-      - name: Install uv
-        run: pip install uv
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.5.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
 
       - name: Cache deps
         id: cache-deps
         uses: actions/cache@v2
         with:
-          path: .uv
-          key: pydeps-${{ hashFiles('**/pyproject.toml') }}
+          path: .venv
+          key: pydeps-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install dependencies
+      - run: poetry install --no-interaction --no-root
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: uv install
 
       - name: Activate virtualenv
         run: source .venv/bin/activate
         if: steps.cache-deps.outputs.cache-hit == 'true'
 
       - name: Check formatting with Black
-        run: uv run black --preview --check . --exclude '/(alembic|\.cache|\.uv|venv|contrib|__pycache__)/'
+        run: poetry run black --preview --check . --exclude '/(alembic|\.cache|\.venv|venv|contrib|__pycache__)/'
 
       - name: Run Flake8
-        run: uv run flake8 --exclude=alembic,.venv,venv,contrib,.cache,.git
+        run: poetry run flake8 --exclude=alembic,.venv,venv,contrib,.cache,.git

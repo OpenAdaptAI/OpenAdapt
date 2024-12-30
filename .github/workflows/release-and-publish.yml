@@ -39,14 +39,14 @@ jobs:
               python-version: '3.10'
         - name: Install dependencies
           run: |
-              pip install uv
-              uv install
+              pip install poetry
+              poetry install
               brew install nvm
-              uv run python scripts/postinstall
+              poetry run postinstall
               brew install python-tk@3.10
         - name: Build MacOS executable
           run: |
-              uv run python -m openadapt.build
+              poetry run python -m openadapt.build
               cd dist
               zip -r ../OpenAdapt.app.zip OpenAdapt.app
               mv OpenAdapt.dmg ..
@@ -82,16 +82,16 @@ jobs:
               node-version: 21
         - name: Install dependencies
           run: |
-              pip install uv
-              uv install
+              pip install poetry
+              poetry install
               cd openadapt/app/dashboard
               npm install
               cd ../../../
               pip install wheel
-              uv run python scripts/postinstall.py
+              poetry run postinstall
         - name: Build Windows executable
           run: |
-              uv run python -m openadapt.build
+              poetry run python -m openadapt.build
               cd dist
               7z a -tzip ../OpenAdapt.zip OpenAdapt
               move OpenAdapt_Installer.exe ..
@@ -190,8 +190,8 @@ jobs:
       - name: Install the latest version of the project
         run: |
           git pull
-          pip install uv
-          uv install
+          pip install poetry
+          poetry install
       - name: Download macOS executable
         uses: actions/download-artifact@v4
         with:
@@ -238,9 +238,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install uv
-        run: pip install uv
       - name: Publish to PyPI
         env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: uv publish
+            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          pip install poetry
+          poetry install
+          poetry config pypi-token.pypi $PYPI_TOKEN
+          poetry build
+          poetry publish --no-interaction --skip-existing
