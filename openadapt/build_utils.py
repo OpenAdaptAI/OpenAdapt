@@ -17,13 +17,15 @@ def get_root_dir_path() -> pathlib.Path:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
         return path
-    else:
+    elif sys.platform == "win32":
         # if windows, get the path to the %APPDATA% directory and set the path
         # for all user preferences
         path = pathlib.Path.home() / "AppData" / "Roaming" / "openadapt"
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
         return path
+    else:
+        print(f"WARNING: openadapt.build_utils is not yet supported on {sys.platform=}")
 
 
 def is_running_from_executable() -> bool:

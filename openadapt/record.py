@@ -20,7 +20,7 @@ import threading
 import time
 import tracemalloc
 
-from oa_pynput import keyboard, mouse
+from pynput import keyboard, mouse
 from pympler import tracker
 import av
 
@@ -64,6 +64,9 @@ STOP_SEQUENCES = config.STOP_SEQUENCES
 
 stop_sequence_detected = False
 ws_server_instance = None
+
+# TODO XXX replace with utils.get_monitor_dims() once fixed
+monitor_width, monitor_height = utils.take_screenshot().size
 
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
@@ -138,7 +141,7 @@ def process_events(
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
     terminate_processing: multiprocessing.Event,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
     num_screen_events: multiprocessing.Value,
     num_action_events: multiprocessing.Value,
     num_window_events: multiprocessing.Value,
@@ -157,7 +160,7 @@ def process_events(
         perf_q: A queue for collecting performance data.
         recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
         num_screen_events: A counter for the number of screen events.
         num_action_events: A counter for the number of action events.
         num_window_events: A counter for the number of window events.
@@ -177,8 +180,7 @@ def process_events(
     while not terminate_processing.is_set() or not event_q.empty():
         event = event_q.get()
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
         logger.trace(f"{event=}")
         assert event.type in EVENT_TYPES, event
@@ -371,7 +373,7 @@ def write_events(
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
     terminate_processing: multiprocessing.Event,
-    started_counter: multiprocessing.Value,
+    started_event: multiprocessing.Event,
     pre_callback: Callable[[float], dict] | None = None,
     post_callback: Callable[[dict], None] | None = None,
 ) -> None:
@@ -385,7 +387,7 @@ def write_events(
         perf_q: A queue for collecting performance data.
         recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
-        started_counter: Value to increment once started.
+        started_event: Event to increment once started.
         pre_callback: Optional function to call before main loop. Takes recording
             timestamp as only argument, returns a state dict.
         post_callback: Optional function to call after main loop. Takes state dict as
@@ -422,8 +424,7 @@ def write_events(
                 for _ in range(num_processed):
                     progress.update()
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
         try:
             event = write_q.get_nowait()
@@ -460,10 +461,8 @@ def video_pre_callback(db: crud.SaSession, recording: Recording) -> dict[str, An
         dict[str, Any]: The updated state.
     """
     video_file_path = video.get_video_file_path(recording.timestamp)
-    # TODO XXX replace with utils.get_monitor_dims() once fixed
-    width, height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = (
-        video.initialize_video_writer(video_file_path, width, height)
+        video.initialize_video_writer(video_file_path, monitor_width, monitor_height)
     )
     crud.update_video_start_time(db, recording, video_start_timestamp)
     return {
@@ -577,7 +576,7 @@ def trigger_action_event(
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
-def on_move(event_q: queue.Queue, x: int, y: int, injected: bool) -> None:
+def on_move(event_q: queue.Queue, x: int, y: int, injected: bool = False) -> None:
     """Handles the 'move' event.
 
     Args:
@@ -603,7 +602,7 @@ def on_click(
     y: int,
     button: mouse.Button,
     pressed: bool,
-    injected: bool,
+    injected: bool = False,
 ) -> None:
     """Handles the 'click' event.
 
@@ -638,7 +637,7 @@ def on_scroll(
     y: int,
     dx: int,
     dy: int,
-    injected: bool,
+    injected: bool = False,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -705,7 +704,7 @@ def read_screen_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
     # TODO: throttle
     # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
     # max_memory_percent: float = 50.0,  # Maximum allowed memory percent
@@ -717,7 +716,7 @@ def read_screen_events(
         event_q: A queue for adding screen events.
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -729,8 +728,7 @@ def read_screen_events(
             logger.warning("Screenshot was None")
             continue
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
     logger.info("Done")
@@ -741,7 +739,7 @@ def read_window_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
 ) -> None:
     """Read window events and add them to the event queue.
 
@@ -749,7 +747,7 @@ def read_window_events(
         event_q: A queue for adding window events.
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -762,8 +760,7 @@ def read_window_events(
             continue
 
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
 
         if window_data["title"] != prev_window_data.get("title") or window_data[
@@ -796,7 +793,7 @@ def performance_stats_writer(
     perf_q: sq.SynchronizedQueue,
     recording: Recording,
     terminate_processing: multiprocessing.Event,
-    started_counter: multiprocessing.Value,
+    started_event: multiprocessing.Event,
 ) -> None:
     """Write performance stats to the database.
 
@@ -806,7 +803,7 @@ def performance_stats_writer(
         perf_q: A queue for collecting performance data.
         recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -816,8 +813,7 @@ def performance_stats_writer(
     session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set() or not perf_q.empty():
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
         try:
             event_type, start_time, end_time = perf_q.get_nowait()
@@ -838,7 +834,7 @@ def memory_writer(
     recording: Recording,
     terminate_processing: multiprocessing.Event,
     record_pid: int,
-    started_counter: multiprocessing.Value,
+    started_event: multiprocessing.Event,
 ) -> None:
     """Writes memory usage statistics to the database.
 
@@ -847,7 +843,7 @@ def memory_writer(
         terminate_processing (multiprocessing.Event): The event used to terminate
           the process.
         record_pid (int): The process ID to monitor memory usage for.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
 
     Returns:
         None
@@ -862,8 +858,7 @@ def memory_writer(
     session = crud.get_new_session(read_and_write=True)
     while not terminate_processing.is_set():
         if not started:
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             started = True
         memory_usage_bytes = 0
 
@@ -928,7 +923,7 @@ def read_keyboard_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
 ) -> None:
     """Reads keyboard events and adds them to the event queue.
 
@@ -937,7 +932,7 @@ def read_keyboard_events(
         terminate_processing (multiprocessing.Event): The event to signal termination
           of event reading.
         recording (Recording): The recording object.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
 
     Returns:
         None
@@ -949,7 +944,7 @@ def read_keyboard_events(
     def on_press(
         event_q: queue.Queue,
         key: keyboard.Key | keyboard.KeyCode,
-        injected: bool,
+        injected: bool = False,
     ) -> None:
         """Event handler for key press events.
 
@@ -1000,7 +995,7 @@ def read_keyboard_events(
     def on_release(
         event_q: queue.Queue,
         key: keyboard.Key | keyboard.KeyCode,
-        injected: bool,
+        injected: bool = False,
     ) -> None:
         """Event handler for key release events.
 
@@ -1028,8 +1023,7 @@ def read_keyboard_events(
 
     # NOTE: listener may not have actually started by now
     # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    with started_counter.get_lock():
-        started_counter.value += 1
+    started_event.set()
 
     terminate_processing.wait()
     keyboard_listener.stop()
@@ -1039,7 +1033,7 @@ def read_mouse_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
 ) -> None:
     """Reads mouse events and adds them to the event queue.
 
@@ -1047,7 +1041,7 @@ def read_mouse_events(
         event_q: The event queue to add the mouse events to.
         terminate_processing: The event to signal termination of event reading.
         recording: The recording object.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
 
     Returns:
         None
@@ -1063,8 +1057,7 @@ def read_mouse_events(
 
     # NOTE: listener may not have actually started by now
     # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    with started_counter.get_lock():
-        started_counter.value += 1
+    started_event.set()
 
     terminate_processing.wait()
     mouse_listener.stop()
@@ -1073,14 +1066,14 @@ def read_mouse_events(
 def record_audio(
     recording: Recording,
     terminate_processing: multiprocessing.Event,
-    started_counter: multiprocessing.Value,
+    started_event: multiprocessing.Event,
 ) -> None:
     """Record audio narration during the recording and store data in database.
 
     Args:
         recording: The recording object.
         terminate_processing: An event to signal the termination of the process.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
     """
     utils.configure_logging(logger, LOG_LEVEL)
     utils.set_start_time(recording.timestamp)
@@ -1110,8 +1103,7 @@ def record_audio(
 
     # NOTE: listener may not have actually started by now
     # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    with started_counter.get_lock():
-        started_counter.value += 1
+    started_event.set()
 
     terminate_processing.wait()
     audio_stream.stop()
@@ -1222,7 +1214,7 @@ def run_browser_event_server(
     event_q: queue.Queue,
     terminate_processing: Event,
     recording: Recording,
-    started_counter: multiprocessing.Value,
+    started_event: threading.Event,
 ) -> None:
     """Run the browser event server.
 
@@ -1230,7 +1222,7 @@ def run_browser_event_server(
         event_q: A queue for adding browser events.
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
-        started_counter: Value to increment once started.
+        started_event: Event to set once started.
 
     Returns:
         None
@@ -1253,8 +1245,7 @@ def run_browser_event_server(
         ) as server:
             ws_server_instance = server
             logger.info("WebSocket server started")
-            with started_counter.get_lock():
-                started_counter.value += 1
+            started_event.set()
             server.serve_forever()
 
     # Start the server in a separate thread
@@ -1327,12 +1318,17 @@ def record(
     perf_q = sq.SynchronizedQueue()
     if terminate_processing is None:
         terminate_processing = multiprocessing.Event()
-    started_counter = multiprocessing.Value("i", 0)
     task_by_name = {}
+    task_started_events = {}
 
     window_event_reader = threading.Thread(
         target=read_window_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("window_event_reader", threading.Event()),
+        ),
     )
     window_event_reader.start()
     task_by_name["window_event_reader"] = window_event_reader
@@ -1340,28 +1336,50 @@ def record(
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
             target=run_browser_event_server,
-            args=(event_q, terminate_processing, recording, started_counter),
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                task_started_events.setdefault(
+                    "browser_event_reader", threading.Event()
+                ),
+            ),
         )
         browser_event_reader.start()
         task_by_name["browser_event_reader"] = browser_event_reader
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("screen_event_reader", threading.Event()),
+        ),
     )
     screen_event_reader.start()
     task_by_name["screen_event_reader"] = screen_event_reader
 
     keyboard_event_reader = threading.Thread(
         target=read_keyboard_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("keyboard_event_reader", threading.Event()),
+        ),
     )
     keyboard_event_reader.start()
     task_by_name["keyboard_event_reader"] = keyboard_event_reader
 
     mouse_event_reader = threading.Thread(
         target=read_mouse_events,
-        args=(event_q, terminate_processing, recording, started_counter),
+        args=(
+            event_q,
+            terminate_processing,
+            recording,
+            task_started_events.setdefault("mouse_event_reader", threading.Event()),
+        ),
     )
     mouse_event_reader.start()
     task_by_name["mouse_event_reader"] = mouse_event_reader
@@ -1384,7 +1402,7 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            started_counter,
+            task_started_events.setdefault("event_processor", threading.Event()),
             num_screen_events,
             num_action_events,
             num_window_events,
@@ -1405,7 +1423,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            started_counter,
+            task_started_events.setdefault(
+                "screen_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     screen_event_writer.start()
@@ -1422,7 +1442,9 @@ def record(
                 perf_q,
                 recording,
                 terminate_processing,
-                started_counter,
+                task_started_events.setdefault(
+                    "browser_event_writer", multiprocessing.Event()
+                ),
             ),
         )
         browser_event_writer.start()
@@ -1438,7 +1460,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            started_counter,
+            task_started_events.setdefault(
+                "action_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     action_event_writer.start()
@@ -1454,7 +1478,9 @@ def record(
             perf_q,
             recording,
             terminate_processing,
-            started_counter,
+            task_started_events.setdefault(
+                "window_event_writer", multiprocessing.Event()
+            ),
         ),
     )
     window_event_writer.start()
@@ -1471,7 +1497,7 @@ def record(
                 perf_q,
                 recording,
                 terminate_processing,
-                started_counter,
+                task_started_events.setdefault("video_writer", multiprocessing.Event()),
                 video_pre_callback,
                 video_post_callback,
             ),
@@ -1485,7 +1511,9 @@ def record(
             args=(
                 recording,
                 terminate_processing,
-                started_counter,
+                task_started_events.setdefault(
+                    "audio_event_writer", multiprocessing.Event()
+                ),
             ),
         )
         audio_recorder.start()
@@ -1498,7 +1526,9 @@ def record(
             perf_q,
             recording,
             terminate_perf_event,
-            started_counter,
+            task_started_events.setdefault(
+                "perf_stats_writer", multiprocessing.Event()
+            ),
         ),
     )
     perf_stats_writer.start()
@@ -1512,7 +1542,7 @@ def record(
                 recording,
                 terminate_perf_event,
                 record_pid,
-                started_counter,
+                task_started_events.setdefault("mem_writer", multiprocessing.Event()),
             ),
         )
         mem_writer.start()
@@ -1530,9 +1560,16 @@ def record(
     expected_starts = len(task_by_name)
     logger.info(f"{expected_starts=}")
     while True:
-        if started_counter.value >= expected_starts:
+        started_tasks = sum(event.is_set() for event in task_started_events.values())
+        if started_tasks >= expected_starts:
             break
-        time.sleep(0.1)  # Sleep to reduce busy waiting
+        waiting_for = [
+            task for task, event in task_started_events.items() if not event.is_set()
+        ]
+        logger.info(f"Waiting for tasks to start: {waiting_for}")
+        logger.info(f"Started tasks: {started_tasks}/{expected_starts}")
+        time.sleep(1)  # Sleep to reduce busy waiting
+
     for _ in range(5):
         logger.info("*" * 40)
     logger.info("All readers and writers have started. Waiting for input events...")

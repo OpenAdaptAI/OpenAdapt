@@ -9,7 +9,7 @@ import io
 import sys
 
 from bs4 import BeautifulSoup
-from oa_pynput import keyboard
+from pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
 import sqlalchemy as sa
@@ -649,9 +649,9 @@ class WindowEvent(db.Base):
                     "title",
                     "help",
                 ]
-                if sys.platform == "win32":
+                if sys.platform != "darwin":
                     logger.warning(
-                        "key_suffixes have not yet been defined on Windows."
+                        "key_suffixes have not yet been defined on {sys.platform=}."
                         "You can help by uncommenting the lines below and pasting "
                         "the contents of the window_dict into a new GitHub Issue."
                     )

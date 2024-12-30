@@ -11,9 +11,10 @@ from openadapt.custom_logger import logger
 
 if sys.platform == "darwin":
     from . import _macos as impl
-elif sys.platform in ("win32", "linux"):
-    # TODO: implement Linux
+elif sys.platform == "win32":
     from . import _windows as impl
+elif sys.platform.startswith("linux"):
+    from . import _linux as impl
 else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 
@@ -59,6 +60,7 @@ def get_active_window_state(read_window_data: bool) -> dict | None:
           or None if the state is not available.
     """
     # TODO: save window identifier (a window's title can change, or
+    # multiple windows can have the same title)
     try:
         return impl.get_active_window_state(read_window_data)
     except Exception as exc:

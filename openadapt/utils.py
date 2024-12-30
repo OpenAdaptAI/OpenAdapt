@@ -12,6 +12,8 @@ import base64
 import importlib.metadata
 import inspect
 import os
+import re
+import subprocess
 import sys
 import threading
 import time
@@ -20,6 +22,7 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import multiprocessing_utils
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 from openadapt.custom_logger import logger
@@ -52,11 +55,16 @@ from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
-SCT = mss.mss()
+# TODO: move to config.py
+DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS = 0.5
+DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS = 5
 
 _logger_lock = threading.Lock()
 _start_time = None
 _start_perf_counter = None
+
+# Process-local storage for MSS instances
+_process_local = multiprocessing_utils.local()
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
@@ -214,6 +222,22 @@ def override_double_click_interval_seconds(
     get_double_click_interval_seconds.override_value = override_value
 
 
+def get_linux_setting(gnome_command: str, kde_command: str, default_value: int) -> int:
+    """Try to get a setting from GNOME or KDE, falling back to a default value."""
+    try:
+        # Try GNOME first
+        output = subprocess.check_output(gnome_command, shell=True).decode().strip()
+        return int(output)
+    except (subprocess.CalledProcessError, ValueError):
+        try:
+            # If GNOME fails, try KDE
+            output = subprocess.check_output(kde_command, shell=True).decode().strip()
+            return int(output)
+        except (subprocess.CalledProcessError, ValueError):
+            # If both fail, return the default value
+            return default_value
+
+
 def get_double_click_interval_seconds() -> float:
     """Get the double click interval in seconds.
 
@@ -231,8 +255,56 @@ def get_double_click_interval_seconds() -> float:
         from ctypes import windll
 
         return windll.user32.GetDoubleClickTime() / 1000
+    elif sys.platform.startswith("linux"):
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickInterval"
+        value = get_linux_setting(
+            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS * 1000
+        )
+        return value / 1000  # Convert from milliseconds to seconds
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        raise Exception(f"Unsupported platform: {sys.platform}")
+
+
+def get_linux_device_id(device_name: str) -> int | None:
+    """Get the device ID for a device containing the given name.
+
+    Args:
+        device_name (str): The name to search for in device listings.
+
+    Returns:
+        Optional[int]: The device ID if found, None otherwise.
+    """
+    try:
+        output = subprocess.check_output(["xinput", "list"], text=True)
+        match = re.search(f"\\b{re.escape(device_name)}\\b.*?id=(\\d+)", output)
+        if match:
+            return int(match.group(1))
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    return None
+
+
+def get_xinput_property(device_id: int, property_name: str) -> int | None:
+    """Get a specific property value from xinput for a given device.
+
+    Args:
+        device_id (int): The ID of the device.
+        property_name (str): The name of the property to search for.
+
+    Returns:
+        Optional[int]: The property value if found, None otherwise.
+    """
+    try:
+        output = subprocess.check_output(
+            ["xinput", "list-props", str(device_id)], text=True
+        )
+        match = re.search(rf"{property_name} \((\d+)\):\s+(\d+)", output)
+        if match:
+            return int(match.group(2))
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    return None
 
 
 def get_double_click_distance_pixels() -> int:
@@ -259,8 +331,22 @@ def get_double_click_distance_pixels() -> int:
         if x != y:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
+    elif sys.platform.startswith("linux"):
+        device_id = get_linux_device_id("Mouse")
+        if device_id is not None:
+            value = get_xinput_property(device_id, "libinput Scrolling Pixel Distance")
+            if value is not None:
+                return value
+        return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        raise Exception(f"Unsupported platform: {sys.platform}")
+
+
+def get_process_local_sct() -> mss.mss:
+    """Retrieve or create the `mss` instance for the current thread."""
+    if not hasattr(_process_local, "sct"):
+        _process_local.sct = mss.mss()
+    return _process_local.sct
 
 
 def get_monitor_dims() -> tuple[int, int]:
@@ -270,7 +356,7 @@ def get_monitor_dims() -> tuple[int, int]:
         tuple[int, int]: The width and height of the monitor.
     """
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-    monitor = SCT.monitors[0]
+    monitor = get_process_local_sct().monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
     return monitor_width, monitor_height
@@ -420,8 +506,9 @@ def take_screenshot() -> Image.Image:
         PIL.Image: The screenshot image.
     """
     # monitor 0 is all in one
-    monitor = SCT.monitors[0]
-    sct_img = SCT.grab(monitor)
+    sct = get_process_local_sct()
+    monitor = sct.monitors[0]
+    sct_img = sct.grab(monitor)
     image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
     return image
 
