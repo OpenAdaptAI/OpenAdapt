@@ -294,7 +294,9 @@ def get_double_click_distance_pixels() -> int:
         gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse drag-threshold"
         kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
         return get_linux_setting(
-            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS,
+            gnome_cmd,
+            kde_cmd,
+            DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS,
         )
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
