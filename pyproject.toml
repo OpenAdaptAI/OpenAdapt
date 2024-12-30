@@ -19,7 +19,7 @@ homepage = "https://openadapt.ai/"
 "Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
 
 [tool.poetry.dependencies]
-python = "3.10.x"
+python = ">=3.10,<3.14"
 alembic = "1.8.1"
 black = "^24.8.0"
 pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
