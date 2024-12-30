@@ -3916,6 +3916,23 @@ files = [
 typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.11\""}
 
 [[package]]
+name = "multiprocessing-utils"
+version = "0.4"
+description = "Multiprocessing utils (shared locks and thread locals)"
+optional = false
+python-versions = "*"
+files = [
+    {file = "multiprocessing_utils-0.4-py2.py3-none-any.whl", hash = "sha256:c232e0bbc6ba753ca7a0df5d49b0cc4e26454635d4f373f5133c551aec8c27ee"},
+    {file = "multiprocessing_utils-0.4.tar.gz", hash = "sha256:43281d5e017d9b3f3e6114762c21f10c2a2b0392837c5096380e6c413ae79b6c"},
+]
+
+[package.dependencies]
+six = "*"
+
+[package.extras]
+test = ["tox"]
+
+[[package]]
 name = "murmurhash"
 version = "1.0.10"
 description = "Cython bindings for MurmurHash"
@@ -8969,6 +8986,19 @@ files = [
 ]
 
 [[package]]
+name = "xcffib"
+version = "1.5.0"
+description = "A drop in replacement for xpyb, an XCB python binding"
+optional = false
+python-versions = "*"
+files = [
+    {file = "xcffib-1.5.0.tar.gz", hash = "sha256:a95c9465f2f97b4fcede606bd1e08407a32df71cb760fd57bfe53677db691acc"},
+]
+
+[package.dependencies]
+cffi = ">=1.1.0"
+
+[[package]]
 name = "yarl"
 version = "1.17.1"
 description = "Yet another URL library"
@@ -9121,4 +9151,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = "3.10.x"
-content-hash = "c308a565dc79a85f2da6bce428d5af53fb03c8e531114a6bfa00299a613ce803"
+content-hash = "5ee4ca5a50f3fc9e3e2b43028b9b6dcb8318e58bf0e4cf01a4df32d9d5c425c2"

@@ -11,7 +11,6 @@ import ast
 import base64
 import importlib.metadata
 import inspect
-import multiprocessing
 import os
 import sys
 import threading
@@ -21,6 +20,7 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import multiprocessing_utils
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 from openadapt.custom_logger import logger
@@ -62,7 +62,7 @@ _start_time = None
 _start_perf_counter = None
 
 # Process-local storage for MSS instances
-_process_local = multiprocessing.local()
+_process_local = multiprocessing_utils.local()
 
 
 def configure_logging(logger: logger, log_level: str) -> None:

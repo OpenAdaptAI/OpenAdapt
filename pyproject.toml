@@ -24,6 +24,7 @@ alembic = "1.8.1"
 black = "^24.8.0"
 pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
 pywin32 = { version = "306", markers = "sys_platform == 'win32'" }
+xcffib = { version = "1.5.0", markers = "sys_platform == 'linux'" }
 ascii-magic = "2.3.0"
 bokeh = "2.4.3"
 clipboard = "0.0.4"
@@ -109,6 +110,7 @@ numba = "^0.60.0"
 llvmlite = "^0.43.0"
 ell-ai = "^0.0.14"
 pynput = "^1.7.7"
+multiprocessing-utils = "^0.4"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
