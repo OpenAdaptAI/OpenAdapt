@@ -12,7 +12,6 @@ import base64
 import importlib.metadata
 import inspect
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -266,47 +265,6 @@ def get_double_click_interval_seconds() -> float:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
 
-def get_linux_device_id(device_name: str) -> int | None:
-    """Get the device ID for a device containing the given name.
-
-    Args:
-        device_name (str): The name to search for in device listings.
-
-    Returns:
-        Optional[int]: The device ID if found, None otherwise.
-    """
-    try:
-        output = subprocess.check_output(["xinput", "list"], text=True)
-        match = re.search(f"\\b{re.escape(device_name)}\\b.*?id=(\\d+)", output)
-        if match:
-            return int(match.group(1))
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    return None
-
-
-def get_xinput_property(device_id: int, property_name: str) -> int | None:
-    """Get a specific property value from xinput for a given device.
-
-    Args:
-        device_id (int): The ID of the device.
-        property_name (str): The name of the property to search for.
-
-    Returns:
-        Optional[int]: The property value if found, None otherwise.
-    """
-    try:
-        output = subprocess.check_output(
-            ["xinput", "list-props", str(device_id)], text=True
-        )
-        match = re.search(rf"{property_name} \((\d+)\):\s+(\d+)", output)
-        if match:
-            return int(match.group(2))
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    return None
-
-
 def get_double_click_distance_pixels() -> int:
     """Get the double click distance in pixels.
 
@@ -332,12 +290,12 @@ def get_double_click_distance_pixels() -> int:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
     elif sys.platform.startswith("linux"):
-        device_id = get_linux_device_id("Mouse")
-        if device_id is not None:
-            value = get_xinput_property(device_id, "libinput Scrolling Pixel Distance")
-            if value is not None:
-                return value
-        return DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS
+        # Use 'drag-threshold' as a proxy for double-click distance
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse drag-threshold"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
+        return get_linux_setting(
+            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS,
+        )
     else:
         raise Exception(f"Unsupported platform: {sys.platform}")
 
