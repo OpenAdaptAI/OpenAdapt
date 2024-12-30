@@ -9,13 +9,15 @@ import sys
 
 if sys.platform == "darwin":
     from . import _macos as impl
-    device = impl.Capture()
 elif sys.platform == "win32":
     from . import _windows as impl
-    device = impl.Capture()
+elif sys.platform == "linux":
+    from . import _linux as impl
 else:
     print(f"WARNING: openadapt.capture is not yet supported on {sys.platform=}")
-    device = None
+    impl = None
+
+device = impl.Capture() if impl else None
 
 
 def get_capture() -> impl.Capture:

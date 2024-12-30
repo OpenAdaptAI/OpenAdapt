@@ -21,10 +21,8 @@ class Capture:
             pid (int, optional): The process ID of the window to capture.
             Defaults to 0 (the entire screen)
         """
-        if platform != "win32":
-            raise NotImplementedError(
-                "This is the Windows implementation, please use the macOS version"
-            )
+        assert platform == "win32", platform
+
         self.is_recording = False
         self.video_out = None
         self.audio_out = None
