@@ -44,16 +44,12 @@ jobs:
         id: cache-deps
         uses: actions/cache@v2
         with:
-          path: .uv
+          path: .venv
           key: pydeps-${{ hashFiles('**/pyproject.toml') }}
 
-      - name: Install dependencies
+      - name: Create virtual environment
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: uv install
-
-      - name: Activate virtualenv
-        run: source .venv/bin/activate
-        if: steps.cache-deps.outputs.cache-hit == 'true'
+        run: uv venv
 
       - name: Check formatting with Black
         run: uv run black --preview --check . --exclude '/(alembic|\.cache|\.uv|venv|contrib|__pycache__)/'

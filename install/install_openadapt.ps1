@@ -359,7 +359,7 @@ Install-VCRedist
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
 RunAndCheck "pip install uv" "Run ``pip install uv``"
-RunAndCheck "uv install" "Run ``uv install``"
+RunAndCheck "uv venv" "Run ``uv venv``"
 RunAndCheck "uv run python scripts/postinstall.py" "Install other dependencies" -SkipCleanup:$true
 RunAndCheck "cd openadapt"
 RunAndCheck "uv run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true

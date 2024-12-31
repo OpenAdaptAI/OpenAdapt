@@ -156,7 +156,7 @@ cd OpenAdapt
 RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 
 RunAndCheck "pip3.10 install uv " "Install uv"
-RunAndCheck "uv install" "Install Python dependencies"
+RunAndCheck "uv venv" "Create virtual environment"
 RunAndCheck "uv run python scripts/postinstall.py" "Install other dependencies"
 RunAndCheck "cd openadapt"
 RunAndCheck "uv run alembic upgrade head" "Update database"

@@ -40,7 +40,6 @@ jobs:
         - name: Install dependencies
           run: |
               pip install uv
-              uv install
               brew install nvm
               uv run python scripts/postinstall
               brew install python-tk@3.10
@@ -83,11 +82,10 @@ jobs:
         - name: Install dependencies
           run: |
               pip install uv
-              uv install
               cd openadapt/app/dashboard
               npm install
               cd ../../../
-              pip install wheel
+              uv pip install wheel
               uv run python scripts/postinstall.py
         - name: Build Windows executable
           run: |
@@ -191,7 +189,6 @@ jobs:
         run: |
           git pull
           pip install uv
-          uv install
       - name: Download macOS executable
         uses: actions/download-artifact@v4
         with:
