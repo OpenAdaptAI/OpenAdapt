@@ -155,14 +155,11 @@ RunAndCheck "git clone $REPO_URL" "Clone git repo"
 cd OpenAdapt
 RunAndCheck "git checkout $BRANCH" "Checkout branch $BRANCH"
 
-RunAndCheck "pip3.10 install poetry" "Install Poetry"
-RunAndCheck "poetry install" "Install Python dependencies"
-RunAndCheck "poetry run postinstall" "Install other dependencies"
+RunAndCheck "pip3.10 install uv " "Install uv"
+RunAndCheck "uv install" "Install Python dependencies"
+RunAndCheck "uv run python scripts/postinstall.py" "Install other dependencies"
 RunAndCheck "cd openadapt"
-RunAndCheck "poetry run alembic upgrade head" "Update database"
+RunAndCheck "uv run alembic upgrade head" "Update database"
 RunAndCheck "cd .."
-RunAndCheck "poetry run pytest" "Run tests"
-if [ -z "$SKIP_POETRY_SHELL" ]; then
-    RunAndCheck "poetry shell" "Activate virtual environment"
-fi
+RunAndCheck "uv run pytest" "Run tests"
 echo OpenAdapt installed successfully!

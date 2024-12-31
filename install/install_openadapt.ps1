@@ -358,14 +358,14 @@ Install-VCRedist
 # OpenAdapt Setup
 RunAndCheck "git clone -q https://github.com/MLDSAI/OpenAdapt.git" "clone git repo"
 Set-Location .\OpenAdapt
-RunAndCheck "pip install poetry" "Run ``pip install poetry``"
-RunAndCheck "poetry install" "Run ``poetry install``"
-RunAndCheck "poetry run postinstall" "Install other dependencies" -SkipCleanup:$true
+RunAndCheck "pip install uv" "Run ``pip install uv``"
+RunAndCheck "uv install" "Run ``uv install``"
+RunAndCheck "uv run python scripts/postinstall.py" "Install other dependencies" -SkipCleanup:$true
 RunAndCheck "cd openadapt"
-RunAndCheck "poetry run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
+RunAndCheck "uv run alembic upgrade head" "Run ``alembic upgrade head``" -SkipCleanup:$true
 RunAndCheck "cd .."
-RunAndCheck "poetry run pytest" "Run ``Pytest``" -SkipCleanup:$true
+RunAndCheck "uv run pytest" "Run ``Pytest``" -SkipCleanup:$true
 Write-Host "OpenAdapt installed Successfully!" -ForegroundColor Green
-Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd'; poetry shell"
+Start-Process powershell -Verb RunAs -ArgumentList "-NoExit", "-Command", "Set-Location -Path '$pwd';"
 
 ################################   SCRIPT    ###################################
