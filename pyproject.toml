@@ -111,6 +111,7 @@ llvmlite = "^0.43.0"
 ell-ai = "^0.0.14"
 pynput = "^1.7.7"
 multiprocessing-utils = "^0.4"
+whisper = "^1.1.10"
 [tool.pytest.ini_options]
 filterwarnings = [
     # suppress warnings starting from "setuptools>=67.3"
