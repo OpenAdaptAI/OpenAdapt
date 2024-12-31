@@ -23,24 +23,6 @@ def install_detectron2() -> None:
         sys.exit(1)
 
 
-def install_whisper() -> None:
-    """Install Whisper from its GitHub repository."""
-    try:
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "git+https://github.com/openai/whisper.git",
-                "--no-build-isolation",
-            ]
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"Error installing Whisper: {e}")
-        sys.exit(1)
-
-
 def install_dashboard() -> None:
     """Install dashboard dependencies based on the operating system."""
     original_directory = os.getcwd()
@@ -82,7 +64,6 @@ def main() -> None:
     """Main function to install dependencies."""
     try:
         install_detectron2()
-        install_whisper()
         install_dashboard()
     except Exception as e:
         print(f"Unhandled error: {e}")
