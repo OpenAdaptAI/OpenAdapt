@@ -8916,19 +8916,6 @@ files = [
 test = ["pytest (>=6.0.0)", "setuptools (>=65)"]
 
 [[package]]
-name = "whisper"
-version = "1.1.10"
-description = "Fixed size round-robin style database"
-optional = false
-python-versions = "*"
-files = [
-    {file = "whisper-1.1.10.tar.gz", hash = "sha256:435b4fb843c4c752719bdf0511a652d5be710e9bb35ad9ebe3b133268ee31c44"},
-]
-
-[package.dependencies]
-six = "*"
-
-[[package]]
 name = "win32-setctime"
 version = "1.1.0"
 description = "A small Python utility to set file creation time on Windows"
@@ -9187,4 +9174,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.14"
-content-hash = "c121006a327c37fcf2fd5c34ea1505502430f3d759f9b0398fcace156ca97351"
+content-hash = "9a2eee9b8b5c894c3e6080044fb6942bd179602edf728c9f216b1c0cf4ba45ac"
