@@ -35,7 +35,6 @@ with redirect_stdout_stderr():
 
 import numpy as np
 import psutil
-import sounddevice
 import soundfile
 import websockets.sync.server
 import whisper
@@ -1081,6 +1080,8 @@ def record_audio(
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     audio_frames = []  # to store audio frames
+
+    import sounddevice
 
     def audio_callback(
         indata: np.ndarray, frames: int, time: Any, status: sounddevice.CallbackFlags

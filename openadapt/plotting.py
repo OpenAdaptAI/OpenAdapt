@@ -228,6 +228,7 @@ def display_event(
     diff: bool = False,
     darken_outside: float | None = None,
     display_text: bool = True,
+    dim_outside_window: bool = True,
 ) -> Image.Image:
     """Display an action event on the image.
 
@@ -247,6 +248,7 @@ def display_event(
           the ellipse for mouse events. Range 0-1, where 1 is completely black.
           Defaults to None (no darkening).
         display_text (bool): Whether to display action text. Defaults to True.
+        dim_outside_window (bool): Whether to dim outside the WindowEvent area.
 
     Returns:
         PIL.Image.Image: The image with the action event displayed on it.
@@ -267,14 +269,15 @@ def display_event(
     width_ratio, height_ratio = utils.get_scale_ratios(action_event)
 
     # dim area outside window event
-    if not window_event:
-        logger.error(f"{window_event=}")
-    else:
-        x0 = window_event.left * width_ratio
-        y0 = window_event.top * height_ratio
-        x1 = x0 + window_event.width * width_ratio
-        y1 = y0 + window_event.height * height_ratio
-        image = draw_rectangle(x0, y0, x1, y1, image, outline_width=5)
+    if dim_outside_window:
+        if not window_event:
+            logger.error(f"{window_event=}")
+        else:
+            x0 = window_event.left * width_ratio
+            y0 = window_event.top * height_ratio
+            x1 = x0 + window_event.width * width_ratio
+            y1 = y0 + window_event.height * height_ratio
+            image = draw_rectangle(x0, y0, x1, y1, image, outline_width=5)
 
     # display diff bbox
     if diff:
