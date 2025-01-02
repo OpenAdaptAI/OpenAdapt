@@ -1,35 +1,29 @@
-"""Generate action descriptions."""
-
 from pprint import pformat
-
 from loguru import logger
-import cv2
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-
 from openadapt.db import crud
 
 
 def embed_description(
-    image: np.ndarray,
+    image: Image.Image,
     description: str,
     x: int = None,
     y: int = None,
-) -> np.ndarray:
+) -> Image.Image:
     """Embed a description into an image at the specified location.
 
     Args:
-        image (np.ndarray): The image to annotate.
+        image (Image.Image): The image to annotate.
         description (str): The text to embed.
         x (int, optional): The x-coordinate. Defaults to None (centered).
         y (int, optional): The y-coordinate. Defaults to None (centered).
 
     Returns:
-        np.ndarray: The annotated image.
+        Image.Image: The annotated image.
     """
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 1
-    font_color = (255, 255, 255)  # White
-    line_type = 1
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()  # Replace with a TTF font if needed
 
     # Split description into multiple lines
     max_width = 60  # Maximum characters per line
@@ -47,34 +41,27 @@ def embed_description(
 
     # Default to center if coordinates are not provided
     if x is None or y is None:
-        x = image.shape[1] // 2
-        y = image.shape[0] // 2
+        x = image.width // 2
+        y = image.height // 2
 
-    # Draw semi-transparent background and text
+    # Calculate text dimensions and draw semi-transparent background and text
     for i, line in enumerate(lines):
-        text_size, _ = cv2.getTextSize(line, font, font_scale, line_type)
-        text_x = max(0, min(x - text_size[0] // 2, image.shape[1] - text_size[0]))
-        text_y = y + i * 20
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        text_x = max(0, min(x - text_width // 2, image.width - text_width))
+        text_y = y + i * text_height
 
         # Draw background
-        cv2.rectangle(
-            image,
-            (text_x - 15, text_y - 25),
-            (text_x + text_size[0] + 15, text_y + 15),
-            (0, 0, 0),
-            -1,
+        background_box = (
+            text_x - 15,
+            text_y - 5,
+            text_x + text_width + 15,
+            text_y + text_height + 5,
         )
+        draw.rectangle(background_box, fill=(0, 0, 0, 128))
 
         # Draw text
-        cv2.putText(
-            image,
-            line,
-            (text_x, text_y),
-            font,
-            font_scale,
-            font_color,
-            line_type,
-        )
+        draw.text((text_x, text_y), line, fill=(255, 255, 255), font=font)
 
     return image
 
@@ -88,8 +75,8 @@ def main() -> None:
         for action in action_events:
             description, image = action.prompt_for_description(return_image=True)
 
-            # Convert image to numpy array for OpenCV compatibility
-            image = np.array(image)
+            # Convert image to PIL.Image for compatibility
+            image = Image.fromarray(np.array(image))
 
             if action.mouse_x is not None and action.mouse_y is not None:
                 # Use the mouse coordinates for mouse events
@@ -105,8 +92,7 @@ def main() -> None:
 
             logger.info(f"{action=}")
             logger.info(f"{description=}")
-            cv2.imshow("Annotated Image", annotated_image)
-            cv2.waitKey(0)
+            annotated_image.show()  # Opens the annotated image using the default viewer
             descriptions.append(description)
 
         logger.info(f"descriptions=\n{pformat(descriptions)}")
