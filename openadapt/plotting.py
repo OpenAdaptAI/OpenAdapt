@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 import matplotlib.pyplot as plt
 import numpy as np
 
-from openadapt import common, contrib, models, utils
+from openadapt import common, models, utils
 from openadapt.config import PERFORMANCE_PLOTS_DIR_PATH, config
 from openadapt.custom_logger import logger
 from openadapt.models import ActionEvent
@@ -226,6 +226,8 @@ def display_event(
     marker_fill_transparency: float = 0.25,
     marker_outline_transparency: float = 0.5,
     diff: bool = False,
+    darken_outside: float | None = None,
+    display_text: bool = True,
 ) -> Image.Image:
     """Display an action event on the image.
 
@@ -241,6 +243,10 @@ def display_event(
           marker outline. Defaults to 0.5.
         diff (bool): Flag indicating whether to display the diff image.
           Defaults to False.
+        darken_outside (float | None): How much to darken the areas outside
+          the ellipse for mouse events. Range 0-1, where 1 is completely black.
+          Defaults to None (no darkening).
+        display_text (bool): Whether to display action text. Defaults to True.
 
     Returns:
         PIL.Image.Image: The image with the action event displayed on it.
@@ -292,14 +298,50 @@ def display_event(
     if action_event.name in common.MOUSE_EVENTS:
         x = action_event.mouse_x * width_ratio
         y = action_event.mouse_y * height_ratio
-        image, ellipse_width, ellipse_height = draw_ellipse(x, y, image)
+        image, ellipse_width, ellipse_height = draw_ellipse(
+            x,
+            y,
+            image,
+            width_pct=marker_width_pct,
+            height_pct=marker_height_pct,
+            fill_transparency=marker_fill_transparency,
+            outline_transparency=marker_outline_transparency,
+        )
+
+        # Apply darkening outside the ellipse if darken_outside is set
+        if darken_outside is not None:
+            darken_outside = max(0, min(darken_outside, 1))  # Ensure between 0 and 1
+            mask = Image.new("L", image.size, 255)  # Start with a white mask
+            draw = ImageDraw.Draw(mask)
+            # Black ellipse
+            draw.ellipse(
+                (
+                    x - ellipse_width / 2,
+                    y - ellipse_height / 2,
+                    x + ellipse_width / 2,
+                    y + ellipse_height / 2,
+                ),
+                fill=0,
+            )
+            # Create a transparent dark overlay
+            overlay = Image.new(
+                "RGBA", image.size, (0, 0, 0, int(255 * darken_outside))
+            )
+            # Use the mask to apply the overlay only outside the ellipse
+            image = Image.alpha_composite(
+                image,
+                Image.composite(
+                    overlay, Image.new("RGBA", image.size, (0, 0, 0, 0)), mask
+                ),
+            )
 
         # draw text
         dx = action_event.mouse_dx or 0
         dy = action_event.mouse_dy or 0
         d_text = f" {dx=} {dy=}" if dx or dy else ""
         text = f"{action_event.name}{d_text}"
-        image = draw_text(x, y + ellipse_height / 2, text, image)
+        if display_text:
+            image = draw_text(x, y + ellipse_height / 2, text, image)
     elif action_event.name in common.KEY_EVENTS:
         x = recording.monitor_width * width_ratio / 2
         y = recording.monitor_height * height_ratio / 2
@@ -322,7 +364,8 @@ def display_event(
                     " original text."
                 )
 
-        image = draw_text(x, y, text, image, outline=True)
+        if display_text:
+            image = draw_text(x, y, text, image, outline=True)
     else:
         raise Exception("unhandled {action_event.name=}")
 
@@ -792,6 +835,8 @@ def get_marked_image(
         Image.Image: The marked image, where marks and/or masks are applied based on
         the specified confidence and IoU thresholds and the include flags.
     """
+    from openadapt import contrib
+
     image_arr = np.asarray(original_image)
 
     # The rest of this function is copied from

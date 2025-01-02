@@ -357,24 +357,26 @@ def get_scale_ratios(
     return width_ratio, height_ratio
 
 
-# TODO: png
-def image2utf8(image: Image.Image, include_prefix: bool = True) -> str:
+def image2utf8(image: Image.Image, image_format: str = "JPEG") -> str:
     """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
-        include_prefix (bool): Whether to include the "data:" prefix.
+        image_format (str): The format of the image ("JPEG" or "PNG").
 
     Returns:
         str: The UTF-8 encoded image.
     """
+    KNOWN_FORMATS = ("JPEG", "PNG")
+    assert image_format in KNOWN_FORMATS, (image_format, KNOWN_FORMATS)
     if not image:
         return ""
     image = image.convert("RGB")
     buffered = BytesIO()
-    image.save(buffered, format="JPEG")
+    image.save(buffered, format=image_format.upper())
     image_str = base64.b64encode(buffered.getvalue())
-    base64_prefix = bytes("data:image/jpeg;base64,", encoding="utf-8")
+    fmt = image_format.lower()
+    base64_prefix = bytes(f"data:image/{fmt};base64,", encoding="utf-8")
     image_base64 = base64_prefix + image_str
     image_utf8 = image_base64.decode("utf-8")
     return image_utf8

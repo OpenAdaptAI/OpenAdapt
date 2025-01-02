@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "openadapt"
 version = "0.43.1"
-description = "GUI Process Automation with Transformers"
+description = "Generative Process Automation"
 authors = [
-    'OpenAdapt.AI Team <richard.abrich@mldsai.com>',
+    'Richard Abrich <richard@openadapt.ai>',
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -12,14 +12,14 @@ classifiers = [
 
 readme = "README.md"
 
-repository = "https://github.com/mldsai/openadapt"
+repository = "https://github.com/OpenAdaptAI/OpenAdapt"
 homepage = "https://openadapt.ai/"
 
 [tool.poetry.urls]
-"Bug Tracker" = "https://github.com/MLDSAI/OpenAdapt/issues"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14"
+python = ">=3.10,<3.12"
 alembic = "1.8.1"
 black = "^24.8.0"
 pygetwindow = { version = "<0.0.5", markers = "sys_platform == 'win32'" }
@@ -85,7 +85,7 @@ boto3 = "^1.28.30"
 botocore = "^1.31.30"
 easyocr = "^1.7.0"
 spacy-curated-transformers = "^0.2.0"
-anthropic = "^0.34.2"
+anthropic = "0.42.0"
 orjson = "^3.9.15"
 replicate = "^0.25.0"
 gradio-client = "0.15.0"
