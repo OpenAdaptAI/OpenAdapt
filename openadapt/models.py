@@ -573,6 +573,7 @@ class ActionEvent(db.Base):
             darken_outside=0.7,
             display_text=False,
             marker_fill_transparency=0,
+            dim_outside_window=False,
         )
 
         if self.text:
