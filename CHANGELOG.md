@@ -2,6 +2,29 @@
 
 
 
+## v0.45.0 (2025-01-02)
+
+### Feature
+
+* feat: run OpenAdapt inside Anthropic Computer Use (#934)
+
+* import sounddevice inside record_audio()
+
+* utils.get_scaling_factor
+
+* describe_actions.py with PIL
+
+* show text in top left
+
+* max_width = image.width
+
+* dim_outside_window
+
+* add module docstring
+
+* add browser to visualize.py ([`8a79c83`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8a79c83aabe3a084f0a99767236ed859d235f099))
+
+
 ## v0.44.0 (2025-01-02)
 
 ### Build
