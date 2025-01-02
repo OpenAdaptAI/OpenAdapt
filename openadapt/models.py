@@ -341,6 +341,7 @@ class ActionEvent(db.Base):
 
     @property
     def raw_text(self) -> str:
+        """Return a string containing the raw action text (without separators)."""
         return "".join(self.text.split(config.ACTION_TEXT_SEP))
 
     def __str__(self) -> str:
