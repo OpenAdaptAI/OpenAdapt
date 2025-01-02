@@ -159,6 +159,7 @@ def main(
     recording_id: int = None,
     diff_video: bool = False,
     cleanup: bool = True,
+    browser: str = None,
 ) -> bool:
     """Visualize a recording.
 
@@ -167,6 +168,7 @@ def main(
         recording_id (int, optional): The ID of the recording to visualize.
         diff_video (bool): Whether to diff Screenshots against video frames.
         cleanup (bool): Whether to remove the HTML file after it is displayed.
+        browser (str, optional): Command to open the browser executable.
 
     Returns:
         bool: True if visualization was successful, None otherwise.
@@ -445,7 +447,8 @@ def main(
     result = show(  # noqa: F841
         layout(
             rows,
-        )
+        ),
+        browser=browser,
     )
 
     def _cleanup() -> None:
