@@ -2,6 +2,45 @@
 
 
 
+## v0.44.0 (2025-01-02)
+
+### Build
+
+* build: add openai-whisper
+
+* remove install_whisper from postinstall
+
+* poetry add openai-whisper ([`e595dd3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e595dd37196111fee504cc4e605708150701a719))
+
+### Feature
+
+* feat(models): add `ActionEvent.prompt_for_description` (#933)
+
+* add ActionEvent.prompt_for_description
+
+* add display_event(darken_outside, display_text)
+
+* add experiments/describe_action.py
+
+* default RECORD_AUDIO to false
+
+* use joinedload in get_latest_recording
+
+* set anthropic.py MODEL_NAME to claude-3-5-sonnet-20241022
+
+* support PNG in utils.image2utf8
+
+* python&gt;=3.10,&lt;3.12 ([`266b9bf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/266b9bfdc321d7eb2cf0b4d5b1db0833061db11c))
+
+### Unknown
+
+* Revert &#34;poetry -&gt; uv&#34;
+
+This reverts commit 615c17602e2cd33b290d2b16015bb60cfa38a7d0. ([`5a8b9bc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a8b9bcb9e21a4f6f08a9dba7bb00e64daa6d631))
+
+* poetry -&gt; uv ([`615c176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/615c17602e2cd33b290d2b16015bb60cfa38a7d0))
+
+
 ## v0.43.1 (2024-12-30)
 
 ### Build
