@@ -1,3 +1,5 @@
+"""Generate natural language descriptions from actions."""
+
 from pprint import pformat
 from loguru import logger
 from PIL import Image, ImageDraw
