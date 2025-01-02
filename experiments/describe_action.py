@@ -81,7 +81,6 @@ def embed_description(
 
 def main() -> None:
     """Main function."""
-
     with crud.get_new_session(read_only=True) as session:
         recording = crud.get_latest_recording(session)
         action_events = recording.processed_action_events
