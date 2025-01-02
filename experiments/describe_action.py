@@ -10,7 +10,10 @@ from openadapt.db import crud
 
 
 def embed_description(
-    image: np.ndarray, description: str, x: int = None, y: int = None,
+    image: np.ndarray,
+    description: str,
+    x: int = None,
+    y: int = None,
 ) -> np.ndarray:
     """Embed a description into an image at the specified location.
 
