@@ -32,7 +32,7 @@ def embed_description(
     font = get_font("Arial.ttf", font_size)
 
     # Split description into multiple lines
-    max_width = 60  # Maximum characters per line
+    max_width = image.width
     words = description.split()
     lines = []
     current_line = []
