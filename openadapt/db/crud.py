@@ -337,16 +337,18 @@ def get_all_scrubbed_recordings(
 
 
 def get_latest_recording(session: SaSession) -> Recording:
-    """Get the latest recording.
-
-    Args:
-        session (sa.orm.Session): The database session.
-
-    Returns:
-        Recording: The latest recording object.
-    """
+    """Get the latest recording with preloaded relationships."""
     return (
-        session.query(Recording).order_by(sa.desc(Recording.timestamp)).limit(1).first()
+        session.query(Recording)
+        .options(
+            sa.orm.joinedload(Recording.screenshots),
+            sa.orm.joinedload(Recording.action_events)
+            .joinedload(ActionEvent.screenshot)
+            .joinedload(Screenshot.recording),
+            sa.orm.joinedload(Recording.window_events),
+        )
+        .order_by(sa.desc(Recording.timestamp))
+        .first()
     )
 
 

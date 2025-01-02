@@ -5,14 +5,14 @@ from pprint import pprint
 from PIL import Image
 import anthropic
 
-from openadapt import cache, utils
+from openadapt import cache
 from openadapt.config import config
 from openadapt.custom_logger import logger
 
 MAX_TOKENS = 4096
 # from https://docs.anthropic.com/claude/docs/vision
 MAX_IMAGES = 20
-MODEL_NAME = "claude-3-opus-20240229"
+MODEL_NAME = "claude-3-5-sonnet-20241022"
 
 
 @cache.cache()
@@ -24,6 +24,8 @@ def create_payload(
     max_tokens: int | None = None,
 ) -> dict:
     """Creates the payload for the Anthropic API request with image support."""
+    from openadapt import utils
+
     messages = []
 
     user_message_content = []
@@ -36,7 +38,7 @@ def create_payload(
     # Add base64 encoded images to the user message content
     if images:
         for image in images:
-            image_base64 = utils.image2utf8(image)
+            image_base64 = utils.image2utf8(image, "PNG")
             # Extract media type and base64 data
             # TODO: don't add it to begin with
             media_type, image_base64_data = image_base64.split(";base64,", 1)
@@ -90,7 +92,7 @@ def get_completion(
     """Sends a request to the Anthropic API and returns the response."""
     client = anthropic.Anthropic(api_key=api_key)
     try:
-        response = client.messages.create(**payload)
+        response = client.beta.messages.create(**payload)
     except Exception as exc:
         logger.exception(exc)
         if dev_mode:

@@ -7,6 +7,7 @@ from typing import Any, Type, Union
 import copy
 import io
 import sys
+import textwrap
 
 from bs4 import BeautifulSoup
 from pynput import keyboard
@@ -16,6 +17,7 @@ import sqlalchemy as sa
 
 from openadapt.config import config
 from openadapt.custom_logger import logger
+from openadapt.drivers import anthropic
 from openadapt.db import db
 from openadapt.privacy.base import ScrubbingProvider, TextScrubbingMixin
 from openadapt.privacy.providers import ScrubProvider
@@ -110,6 +112,9 @@ class Recording(db.Base):
         if not self._processed_action_events:
             session = crud.get_new_session(read_only=True)
             self._processed_action_events = events.get_events(session, self)
+            # Preload screenshots to avoid lazy loading later
+            for event in self._processed_action_events:
+                event.screenshot
         return self._processed_action_events
 
     def scrub(self, scrubber: ScrubbingProvider) -> None:
@@ -125,6 +130,7 @@ class ActionEvent(db.Base):
     """Class representing an action event in the database."""
 
     __tablename__ = "action_event"
+    _repr_ignore_attrs = ["reducer_names"]
 
     _segment_description_separator = ";"
 
@@ -332,6 +338,10 @@ class ActionEvent(db.Base):
         """Validate canonical_text property. Useful for ActionModel(**action_dict)."""
         if not value == self.canonical_text:
             logger.warning(f"{value=} did not match {self.canonical_text=}")
+
+    @property
+    def raw_text(self) -> str:
+        return "".join(self.text.split(config.ACTION_TEXT_SEP))
 
     def __str__(self) -> str:
         """Return a string representation of the action event."""
@@ -543,6 +553,75 @@ class ActionEvent(db.Base):
             return self.recording.action_events[current_index + 1]
 
         return None
+
+    def prompt_for_description(self, return_image: bool = False) -> str:
+        """Use the Anthropic API to describe what is happening in the action event.
+
+        Args:
+            return_image (bool): Whether to return the image sent to the model.
+
+        Returns:
+            str: The description of the action event.
+        """
+        from openadapt.plotting import display_event
+
+        image = display_event(
+            self,
+            marker_width_pct=0.05,
+            marker_height_pct=0.05,
+            darken_outside=0.7,
+            display_text=False,
+            marker_fill_transparency=0,
+        )
+
+        if self.text:
+            description = f"Type '{self.raw_text}'"
+        else:
+            prompt = (
+                "What user interface element is contained in the highlighted circle "
+                "of the image?"
+            )
+            # TODO: disambiguate
+            system_prompt = textwrap.dedent(
+                """
+                Briefly describe the user interface element in the screenshot at the
+                highlighted location.
+                For example:
+                - "OK button"
+                - "URL bar"
+                - "Down arrow"
+                DO NOT DESCRIBE ANYTHING OUTSIDE THE HIGHLIGHTED AREA.
+                Do not append anything like "is contained within the highlighted circle
+                in the calculator interface." Just name the user interface element.
+            """
+            )
+
+            logger.info(f"system_prompt=\n{system_prompt}")
+            logger.info(f"prompt=\n{prompt}")
+
+            # Call the Anthropic API
+            element = anthropic.prompt(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                images=[image],
+            )
+
+            if self.name == "move":
+                description = f"Move mouse to '{element}'"
+            elif self.name == "scroll":
+                # TODO: "scroll to", dx/dy
+                description = f"Scroll mouse on '{element}'"
+            elif "click" in self.name:
+                description = (
+                    f"{self.mouse_button_name.capitalize()} {self.name} '{element}'"
+                )
+            else:
+                raise ValueError(f"Unhandled {self.name=} {self}")
+
+        if return_image:
+            return description, image
+        else:
+            return description
 
 
 class WindowEvent(db.Base):
