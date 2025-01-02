@@ -1087,6 +1087,18 @@ def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
     return str(soup)
 
 
+def get_scaling_factor() -> int:
+    """Determine the scaling factor using AppKit on macOS."""
+    if sys.platform == "darwin":
+        from AppKit import NSScreen
+
+        main_screen = NSScreen.mainScreen()
+        backing_scale = main_screen.backingScaleFactor()
+        logger.info(f"Backing Scale Factor: {backing_scale}")
+        return int(backing_scale)
+    return 1  # Default for Windows/Linux
+
+
 class WrapStdout:
     """Class to be used a target for multiprocessing.Process."""
 

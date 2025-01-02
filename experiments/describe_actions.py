@@ -1,8 +1,13 @@
 from pprint import pformat
 from loguru import logger
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import numpy as np
+
 from openadapt.db import crud
+from openadapt.plotting import get_font
+from openadapt.utils import get_scaling_factor
+
+scaling_factor = get_scaling_factor()
 
 
 def embed_description(
@@ -23,7 +28,8 @@ def embed_description(
         Image.Image: The annotated image.
     """
     draw = ImageDraw.Draw(image)
-    font = ImageFont.load_default()  # Replace with a TTF font if needed
+    font_size = 30  # Set font size (2x the default size)
+    font = get_font("Arial.ttf", font_size)
 
     # Split description into multiple lines
     max_width = 60  # Maximum characters per line
@@ -39,10 +45,14 @@ def embed_description(
     if current_line:
         lines.append(" ".join(current_line))
 
-    # Default to center if coordinates are not provided
+    # Default to top left if coordinates are not provided
     if x is None or y is None:
-        x = image.width // 2
-        y = image.height // 2
+        x = 0
+        y = 0
+
+    # Adjust coordinates for scaling factor
+    x = int(x * scaling_factor)
+    y = int(y * scaling_factor)
 
     # Calculate text dimensions and draw semi-transparent background and text
     for i, line in enumerate(lines):
@@ -83,8 +93,8 @@ def main() -> None:
                 annotated_image = embed_description(
                     image,
                     description,
-                    x=int(action.mouse_x) * 2,
-                    y=int(action.mouse_y) * 2,
+                    x=int(action.mouse_x),
+                    y=int(action.mouse_y),
                 )
             else:
                 # Center the text for other events
