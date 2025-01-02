@@ -13,16 +13,16 @@ scaling_factor = get_scaling_factor()
 def embed_description(
     image: Image.Image,
     description: str,
-    x: int = None,
-    y: int = None,
+    x: int = 0,
+    y: int = 0,
 ) -> Image.Image:
     """Embed a description into an image at the specified location.
 
     Args:
         image (Image.Image): The image to annotate.
         description (str): The text to embed.
-        x (int, optional): The x-coordinate. Defaults to None (centered).
-        y (int, optional): The y-coordinate. Defaults to None (centered).
+        x (int, optional): The x-coordinate. Defaults to 0.
+        y (int, optional): The y-coordinate. Defaults to 0.
 
     Returns:
         Image.Image: The annotated image.
@@ -44,11 +44,6 @@ def embed_description(
             current_line = [word]
     if current_line:
         lines.append(" ".join(current_line))
-
-    # Default to top left if coordinates are not provided
-    if x is None or y is None:
-        x = 0
-        y = 0
 
     # Adjust coordinates for scaling factor
     x = int(x * scaling_factor)
@@ -93,8 +88,6 @@ def main() -> None:
                 annotated_image = embed_description(
                     image,
                     description,
-                    x=int(action.mouse_x),
-                    y=int(action.mouse_y),
                 )
             else:
                 # Center the text for other events
