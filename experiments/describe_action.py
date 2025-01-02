@@ -1,3 +1,5 @@
+"""Generate action descriptions."""
+
 from pprint import pformat
 
 from loguru import logger
@@ -7,7 +9,9 @@ import numpy as np
 from openadapt.db import crud
 
 
-def embed_description(image, description, x=None, y=None):
+def embed_description(
+    image: np.ndarray, description: str, x: int = None, y: int = None,
+) -> np.ndarray:
     """Embed a description into an image at the specified location.
 
     Args:
@@ -73,6 +77,8 @@ def embed_description(image, description, x=None, y=None):
 
 
 def main() -> None:
+    """Main function."""
+
     with crud.get_new_session(read_only=True) as session:
         recording = crud.get_latest_recording(session)
         action_events = recording.processed_action_events
