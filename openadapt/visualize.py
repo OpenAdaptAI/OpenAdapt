@@ -444,15 +444,13 @@ def main(
     os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
     output_file(fname_out, title=title)
 
-    # Open the file using the specified browser command or fallback
+    result = show(layout(rows))  # noqa: F841
+
     if browser:
         import subprocess
 
         logger.info(f"Opening browser with command: {browser}")
         subprocess.run([browser, f"file://{fname_out}"], check=True)
-    else:
-        logger.info("Falling back to default browser behavior")
-        result = show(layout(rows))  # noqa: F841
 
     def _cleanup() -> None:
         os.remove(fname_out)
