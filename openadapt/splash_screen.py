@@ -8,7 +8,8 @@ from PySide6.QtWidgets import QApplication, QLabel, QProgressBar, QSplashScreen
 class LoadingScreen(QSplashScreen):
     """A minimal splash screen for."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the loading screen."""
         pixmap = QPixmap(400, 100)
         pixmap.fill(QColor(0, 0, 0, 180))
 
@@ -59,25 +60,25 @@ class LoadingScreen(QSplashScreen):
             }
         """)
 
-    def update_status(self, message: str):
+    def update_status(self, message: str) -> None:
         """Update the status message displayed on the splash screen."""
         self.status_label.setText(message)
         self.repaint()
         QApplication.processEvents()
 
-    def update_progress(self, value: int):
+    def update_progress(self, value: int) -> None:
         """Update progress value with immediate visual feedback."""
         value = max(0, min(100, value))
         # for smooth progress updates
         QTimer.singleShot(0, lambda: self._do_update(value))
 
-    def _do_update(self, value):
+    def _do_update(self, value: int) -> None:
         """Internal method to perform the actual progress update."""
         self.progress_bar.setValue(value)
         self.repaint()
         QApplication.processEvents()
 
-    def show(self):
+    def show(self) -> None:
         """Show the splash screen."""
         super().show()
         self.raise_()

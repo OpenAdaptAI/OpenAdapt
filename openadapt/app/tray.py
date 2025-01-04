@@ -104,7 +104,19 @@ class DashboardMonitor(QObject):
 
     ready = Signal()
 
-    def __init__(self, app: QApplication = None, port=5173):
+    def __init__(self, app: QApplication = None, port: int = 5173) -> None:
+        """Initializes the DashboardMonitor.
+
+        Args:
+            app (QApplication, optional): The QApplication instance. Defaults to None.
+            port (int, optional): The port number for the dashboard. Defaults to 5173.
+
+        Attributes:
+            stop_flag (Event): An event flag to signal stopping the monitor.
+            port (int): The port number for the dashboard.
+            _is_ready (bool): A flag indicating if the monitor is ready.
+            monitor_thread (QThread or None): The thread for monitoring.
+        """
         super().__init__()
         self.stop_flag = Event()
         self.port = port
@@ -123,16 +135,16 @@ class DashboardMonitor(QObject):
         # Connect to our own ready signal to update state
         self.ready.connect(self._update_ready_state)
 
-    def _update_ready_state(self):
+    def _update_ready_state(self) -> None:
         """Update internal ready state when signal is emitted."""
         self._is_ready = True
         print("DEBUG(DashboardMonitor): Ready state updated")
 
-    def on_thread_finished(self):
+    def on_thread_finished(self) -> None:
         """Handle thread finished signal."""
         logger.info("Dashboard monitor thread finished")
 
-    def monitor_startup(self):
+    def monitor_startup(self) -> None:
         """Monitor dashboard startup process."""
         logger.info("Starting dashboard monitoring")
         start_time = time.time()
@@ -162,7 +174,7 @@ class DashboardMonitor(QObject):
         finally:
             self.monitor_thread.quit()
 
-    def on_dashboard_ready(self):
+    def on_dashboard_ready(self) -> None:
         """Handle dashboard being ready."""
         try:
             self.ready.emit()
@@ -170,12 +182,12 @@ class DashboardMonitor(QObject):
         except Exception as e:
             logger.error(f"Error emitting signal: {e}")
 
-    def check_ready_state(self):
+    def check_ready_state(self) -> None:
         """Check if dashboard is ready and re-emit if necessary."""
         if self._is_ready:
             QTimer.singleShot(0, self.on_dashboard_ready)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop monitoring and cleanup thread."""
         logger.info("Stopping dashboard monitor")
         self.stop_flag.set()
@@ -615,7 +627,7 @@ class SystemTrayIcon:
         except Exception as e:
             logger.error(f"Launch dashboard error: {e}")
 
-    def on_dashboard_ready(self):
+    def on_dashboard_ready(self) -> None:
         """Handle dashboard being ready."""
         logger.info("Dashboard is ready - performing final setup")
 

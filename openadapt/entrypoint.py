@@ -6,10 +6,8 @@ import sys
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from openadapt.app import tray
 from openadapt.build_utils import redirect_stdout_stderr
 from openadapt.custom_logger import logger
-from openadapt.error_reporting import configure_error_reporting
 from openadapt.splash_screen import LoadingScreen
 
 
@@ -19,20 +17,26 @@ class LoadingManager(QObject):
     progress_updated = Signal(int, str)
     loading_complete = Signal()
 
-    def __init__(self, splash_screen, app):
+    def __init__(self, splash_screen: LoadingScreen, app: QApplication) -> None:
+        """Initializes the main application entry point.
+
+        Args:
+            splash_screen: The splash screen to be displayed during startup.
+            app: The main application instance.
+        """
         super().__init__()
         self.splash = splash_screen
         self.app = app
         self.progress_updated.connect(self._update_progress)
 
-    def _update_progress(self, value, message):
+    def _update_progress(self, value: int, message: str) -> None:
         """Update progress bar and process events."""
         self.splash.update_progress(value)
         self.splash.update_status(message)
         self.app.processEvents()
         logger.debug(f"Progress: {value}% - {message}")
 
-    def start_loading_sequence(self):
+    def start_loading_sequence(self) -> None:
         """Execute the loading sequence with visible progress updates."""
         # Initial setup - 0%
         self.progress_updated.emit(0, "Initializing...")
@@ -41,16 +45,18 @@ class LoadingManager(QObject):
         try:
             from openadapt.config import print_config
 
-            print_config()
             self.progress_updated.emit(20, "Loading configuration...")
+            print_config()
         except Exception as e:
             logger.error(f"Configuration error: {e}")
             return False
 
         # Error reporting setup - 40%
         try:
-            configure_error_reporting()
+            from openadapt.error_reporting import configure_error_reporting
+
             self.progress_updated.emit(40, "Configuring error reporting...")
+            configure_error_reporting()
         except Exception as e:
             logger.error(f"Error reporting setup failed: {e}")
             return False
@@ -67,6 +73,8 @@ class LoadingManager(QObject):
 
         # System tray setup - 80%
         try:
+            from openadapt.app import tray
+
             self.progress_updated.emit(80, "Setting up system tray...")
             tray_instance = tray.SystemTrayIcon(app=self.app)
 
@@ -98,7 +106,7 @@ def run_openadapt() -> None:
             if not tray_instance:
                 raise Exception("Loading sequence failed")
 
-            def on_dashboard_ready():
+            def on_dashboard_ready() -> None:
                 logger.info("Dashboard ready - closing splash screen")
                 loading_manager.progress_updated.emit(100, "Ready!")
 
@@ -120,7 +128,14 @@ def run_openadapt() -> None:
             # Connect dashboard monitor signals
             if hasattr(tray_instance, "dashboard_monitor"):
 
-                def on_dashboard_ready_wrapper():
+                def on_dashboard_ready_wrapper() -> None:
+                    """Wrapper function that logs a debug message.
+
+                    calls the on_dashboard_ready function.
+
+                    Returns:
+                        None
+                    """
                     logger.debug("Dashboard ready wrapper called")
                     on_dashboard_ready()
 
@@ -130,14 +145,13 @@ def run_openadapt() -> None:
                     )
                     logger.debug("Signal handler connected")
 
-                    # If dashboard monitor thread is not running, assume it's already ready
                     if (
                         not hasattr(tray_instance.dashboard_monitor, "monitor_thread")
                         or not tray_instance.dashboard_monitor.monitor_thread.isRunning()
                     ):
                         logger.debug(
-                            "Dashboard appears to be already ready, calling handler"
-                            " directly"
+                            "Dashboard appears to be already ready, "
+                            "calling handler directly"
                         )
                         on_dashboard_ready_wrapper()
 
