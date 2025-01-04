@@ -18,14 +18,16 @@ class LoadingScreen(QSplashScreen):
         self.title_label = QLabel("OpenAdapt", self)
         self.title_label.setGeometry(0, 15, 400, 30)
         self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setStyleSheet("""
+        self.title_label.setStyleSheet(
+            """
             QLabel {
                 color: #FFFFFF;
                 font-family: Arial;
                 font-size: 20px;
                 font-weight: bold;
             }
-        """)
+        """
+        )
 
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setGeometry(50, 55, 300, 6)
@@ -39,7 +41,8 @@ class LoadingScreen(QSplashScreen):
 
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
 
-        self.progress_bar.setStyleSheet("""
+        self.progress_bar.setStyleSheet(
+            """
             QProgressBar {
                 border: none;
                 background: rgba(255, 255, 255, 0.1);
@@ -50,15 +53,18 @@ class LoadingScreen(QSplashScreen):
                     stop:0 #2196F3, stop:1 #64B5F6);
                 border-radius: 3px;
             }
-        """)
+        """
+        )
 
-        self.status_label.setStyleSheet("""
+        self.status_label.setStyleSheet(
+            """
             QLabel {
                 color: #CCCCCC;
                 font-size: 11px;
                 font-family: Arial;
             }
-        """)
+        """
+        )
 
     def update_status(self, message: str) -> None:
         """Update the status message displayed on the splash screen."""

@@ -147,7 +147,7 @@ def run_openadapt() -> None:
 
                     if (
                         not hasattr(tray_instance.dashboard_monitor, "monitor_thread")
-                        or not tray_instance.dashboard_monitor.monitor_thread.isRunning()
+                        or not tray_instance.dashboard_monitor.monitor_thread.isRunning()  # noqa: E501
                     ):
                         logger.debug(
                             "Dashboard appears to be already ready, "
