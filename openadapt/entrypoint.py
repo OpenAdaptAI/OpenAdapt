@@ -43,9 +43,10 @@ class LoadingManager(QObject):
 
         # Configuration - 20%
         try:
+            self.progress_updated.emit(20, "Loading configuration...")
+
             from openadapt.config import print_config
 
-            self.progress_updated.emit(20, "Loading configuration...")
             print_config()
         except Exception as e:
             logger.error(f"Configuration error: {e}")
@@ -53,9 +54,10 @@ class LoadingManager(QObject):
 
         # Error reporting setup - 40%
         try:
+            self.progress_updated.emit(40, "Configuring error reporting...")
+
             from openadapt.error_reporting import configure_error_reporting
 
-            self.progress_updated.emit(40, "Configuring error reporting...")
             configure_error_reporting()
         except Exception as e:
             logger.error(f"Error reporting setup failed: {e}")
@@ -63,19 +65,21 @@ class LoadingManager(QObject):
 
         # Database context - 60%
         try:
+            self.progress_updated.emit(60, "Loading database context...")
+
             from openadapt.alembic.context_loader import load_alembic_context
 
             load_alembic_context()
-            self.progress_updated.emit(60, "Loading database context...")
         except Exception as e:
             logger.error(f"Database context loading failed: {e}")
             return False
 
         # System tray setup - 80%
         try:
+            self.progress_updated.emit(80, "Setting up system tray...")
+
             from openadapt.app import tray
 
-            self.progress_updated.emit(80, "Setting up system tray...")
             tray_instance = tray.SystemTrayIcon(app=self.app)
 
         except Exception as e:

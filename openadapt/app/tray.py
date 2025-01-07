@@ -3,6 +3,21 @@
 usage: `python -m openadapt.app.tray` or `poetry run app`
 """
 
+import sys
+import asyncio
+import os
+
+# Fix for Windows ProactorEventLoop
+if sys.platform == "win32":
+    try:
+        if isinstance(
+            asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy
+        ):
+            # Use WindowsSelectorEventLoopPolicy instead
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception as e:
+        print(f"Failed to set event loop policy: {e}")
+
 from datetime import datetime
 from functools import partial
 from pprint import pformat
@@ -10,8 +25,6 @@ from threading import Event, Thread
 from typing import Any, Callable
 import inspect
 import multiprocessing
-import os
-import sys
 import time
 
 from pyqttoast import Toast, ToastButtonAlignment, ToastIcon, ToastPosition, ToastPreset
