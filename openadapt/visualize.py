@@ -159,6 +159,7 @@ def main(
     recording_id: int = None,
     diff_video: bool = False,
     cleanup: bool = True,
+    browser: str = None,
 ) -> bool:
     """Visualize a recording.
 
@@ -167,6 +168,7 @@ def main(
         recording_id (int, optional): The ID of the recording to visualize.
         diff_video (bool): Whether to diff Screenshots against video frames.
         cleanup (bool): Whether to remove the HTML file after it is displayed.
+        browser (str, optional): Command to open the browser executable.
 
     Returns:
         bool: True if visualization was successful, None otherwise.
@@ -442,11 +444,13 @@ def main(
     os.makedirs(RECORDING_DIR_PATH, exist_ok=True)
     output_file(fname_out, title=title)
 
-    result = show(  # noqa: F841
-        layout(
-            rows,
-        )
-    )
+    result = show(layout(rows))  # noqa: F841
+
+    if browser:
+        import subprocess
+
+        logger.info(f"Opening browser with command: {browser}")
+        subprocess.run([browser, f"file://{fname_out}"], check=True)
 
     def _cleanup() -> None:
         os.remove(fname_out)

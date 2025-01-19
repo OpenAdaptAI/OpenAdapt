@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pprint import pformat
 import time
 
-from oa_pynput import keyboard, mouse
+from pynput import keyboard, mouse
 import numpy as np
 
 from openadapt import adapters, models, playback, utils

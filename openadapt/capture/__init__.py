@@ -9,6 +9,8 @@ if sys.platform == "darwin":
     from . import _macos as impl
 elif sys.platform == "win32":
     from . import _windows as impl
+elif sys.platform.startswith("linux"):
+    from . import _linux as impl
 else:
     raise Exception(f"Unsupported platform: {sys.platform}")
 

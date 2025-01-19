@@ -16,7 +16,7 @@ import time
 import urllib.request
 
 import gradio_client
-import oa_pynput
+import pynput
 import pycocotools
 import pydicom
 import pyqttoast
@@ -34,7 +34,7 @@ if sys.platform == "win32":
 def build_pyinstaller() -> None:
     """Build the application using PyInstaller."""
     additional_packages_to_install = [
-        oa_pynput,
+        pynput,
         pydicom,
         spacy_alignments,
         gradio_client,
@@ -275,6 +275,8 @@ def main() -> None:
         create_macos_dmg()
     elif sys.platform == "win32":
         create_windows_installer()
+    else:
+        print(f"WARNING: openadapt.build is not yet supported on {sys.platform=}")
 
 
 if __name__ == "__main__":

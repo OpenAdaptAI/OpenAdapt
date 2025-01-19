@@ -12,6 +12,7 @@ import base64
 import importlib.metadata
 import inspect
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -20,6 +21,7 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
+import multiprocessing_utils
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 from openadapt.custom_logger import logger
@@ -52,11 +54,16 @@ from openadapt.models import ActionEvent
 
 # TODO: move to constants.py
 EMPTY = (None, [], {}, "")
-SCT = mss.mss()
+# TODO: move to config.py
+DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS = 0.5
+DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS = 5
 
 _logger_lock = threading.Lock()
 _start_time = None
 _start_perf_counter = None
+
+# Process-local storage for MSS instances
+_process_local = multiprocessing_utils.local()
 
 
 def configure_logging(logger: logger, log_level: str) -> None:
@@ -214,6 +221,22 @@ def override_double_click_interval_seconds(
     get_double_click_interval_seconds.override_value = override_value
 
 
+def get_linux_setting(gnome_command: str, kde_command: str, default_value: int) -> int:
+    """Try to get a setting from GNOME or KDE, falling back to a default value."""
+    try:
+        # Try GNOME first
+        output = subprocess.check_output(gnome_command, shell=True).decode().strip()
+        return int(output)
+    except (subprocess.CalledProcessError, ValueError):
+        try:
+            # If GNOME fails, try KDE
+            output = subprocess.check_output(kde_command, shell=True).decode().strip()
+            return int(output)
+        except (subprocess.CalledProcessError, ValueError):
+            # If both fail, return the default value
+            return default_value
+
+
 def get_double_click_interval_seconds() -> float:
     """Get the double click interval in seconds.
 
@@ -231,8 +254,15 @@ def get_double_click_interval_seconds() -> float:
         from ctypes import windll
 
         return windll.user32.GetDoubleClickTime() / 1000
+    elif sys.platform.startswith("linux"):
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse double-click"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickInterval"
+        value = get_linux_setting(
+            gnome_cmd, kde_cmd, DEFAULT_DOUBLE_CLICK_INTERVAL_SECONDS * 1000
+        )
+        return value / 1000  # Convert from milliseconds to seconds
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        raise Exception(f"Unsupported platform: {sys.platform}")
 
 
 def get_double_click_distance_pixels() -> int:
@@ -259,8 +289,24 @@ def get_double_click_distance_pixels() -> int:
         if x != y:
             logger.warning(f"{x=} != {y=}")
         return max(x, y)
+    elif sys.platform.startswith("linux"):
+        # Use 'drag-threshold' as a proxy for double-click distance
+        gnome_cmd = "gsettings get org.gnome.desktop.peripherals.mouse drag-threshold"
+        kde_cmd = "kreadconfig5 --group KDE --key DoubleClickDistance"
+        return get_linux_setting(
+            gnome_cmd,
+            kde_cmd,
+            DEFAULT_DOUBLE_CLICK_DISTANCE_PIXELS,
+        )
     else:
-        raise Exception(f"Unsupported {sys.platform=}")
+        raise Exception(f"Unsupported platform: {sys.platform}")
+
+
+def get_process_local_sct() -> mss.mss:
+    """Retrieve or create the `mss` instance for the current thread."""
+    if not hasattr(_process_local, "sct"):
+        _process_local.sct = mss.mss()
+    return _process_local.sct
 
 
 def get_monitor_dims() -> tuple[int, int]:
@@ -270,7 +316,7 @@ def get_monitor_dims() -> tuple[int, int]:
         tuple[int, int]: The width and height of the monitor.
     """
     # TODO XXX: replace with get_screenshot().size and remove get_scale_ratios?
-    monitor = SCT.monitors[0]
+    monitor = get_process_local_sct().monitors[0]
     monitor_width = monitor["width"]
     monitor_height = monitor["height"]
     return monitor_width, monitor_height
@@ -311,24 +357,26 @@ def get_scale_ratios(
     return width_ratio, height_ratio
 
 
-# TODO: png
-def image2utf8(image: Image.Image, include_prefix: bool = True) -> str:
+def image2utf8(image: Image.Image, image_format: str = "JPEG") -> str:
     """Convert an image to UTF-8 format.
 
     Args:
         image (PIL.Image.Image): The image to convert.
-        include_prefix (bool): Whether to include the "data:" prefix.
+        image_format (str): The format of the image ("JPEG" or "PNG").
 
     Returns:
         str: The UTF-8 encoded image.
     """
+    KNOWN_FORMATS = ("JPEG", "PNG")
+    assert image_format in KNOWN_FORMATS, (image_format, KNOWN_FORMATS)
     if not image:
         return ""
     image = image.convert("RGB")
     buffered = BytesIO()
-    image.save(buffered, format="JPEG")
+    image.save(buffered, format=image_format.upper())
     image_str = base64.b64encode(buffered.getvalue())
-    base64_prefix = bytes("data:image/jpeg;base64,", encoding="utf-8")
+    fmt = image_format.lower()
+    base64_prefix = bytes(f"data:image/{fmt};base64,", encoding="utf-8")
     image_base64 = base64_prefix + image_str
     image_utf8 = image_base64.decode("utf-8")
     return image_utf8
@@ -420,8 +468,9 @@ def take_screenshot() -> Image.Image:
         PIL.Image: The screenshot image.
     """
     # monitor 0 is all in one
-    monitor = SCT.monitors[0]
-    sct_img = SCT.grab(monitor)
+    sct = get_process_local_sct()
+    monitor = sct.monitors[0]
+    sct_img = sct.grab(monitor)
     image = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
     return image
 
@@ -961,9 +1010,11 @@ def retry_with_exceptions(max_retries: int = 5) -> Callable:
                     logger.warning(exc)
                     exceptions.append(str(exc))
                     retries += 1
+                    last_exception = exc
+            # Raise the final exception with a detailed message and keep its traceback
             raise RuntimeError(
                 f"Failed after {max_retries} retries with exceptions: {exceptions}"
-            )
+            ) from last_exception
 
         return wrapper_retry
 
@@ -1034,6 +1085,18 @@ def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
 
     # Return processed HTML as a string if Markdown conversion is not required
     return str(soup)
+
+
+def get_scaling_factor() -> int:
+    """Determine the scaling factor using AppKit on macOS."""
+    if sys.platform == "darwin":
+        from AppKit import NSScreen
+
+        main_screen = NSScreen.mainScreen()
+        backing_scale = main_screen.backingScaleFactor()
+        logger.info(f"Backing Scale Factor: {backing_scale}")
+        return int(backing_scale)
+    return 1  # Default for Windows/Linux
 
 
 class WrapStdout:

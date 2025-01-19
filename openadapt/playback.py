@@ -1,6 +1,6 @@
 """Utilities for playing back ActionEvents."""
 
-from oa_pynput import keyboard, mouse
+from pynput import keyboard, mouse
 
 from openadapt.common import KEY_EVENTS, MOUSE_EVENTS
 from openadapt.custom_logger import logger

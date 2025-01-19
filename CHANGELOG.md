@@ -2,6 +2,123 @@
 
 
 
+## v0.45.0 (2025-01-02)
+
+### Feature
+
+* feat: run OpenAdapt inside Anthropic Computer Use (#934)
+
+* import sounddevice inside record_audio()
+
+* utils.get_scaling_factor
+
+* describe_actions.py with PIL
+
+* show text in top left
+
+* max_width = image.width
+
+* dim_outside_window
+
+* add module docstring
+
+* add browser to visualize.py ([`8a79c83`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8a79c83aabe3a084f0a99767236ed859d235f099))
+
+
+## v0.44.0 (2025-01-02)
+
+### Build
+
+* build: add openai-whisper
+
+* remove install_whisper from postinstall
+
+* poetry add openai-whisper ([`e595dd3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e595dd37196111fee504cc4e605708150701a719))
+
+### Feature
+
+* feat(models): add `ActionEvent.prompt_for_description` (#933)
+
+* add ActionEvent.prompt_for_description
+
+* add display_event(darken_outside, display_text)
+
+* add experiments/describe_action.py
+
+* default RECORD_AUDIO to false
+
+* use joinedload in get_latest_recording
+
+* set anthropic.py MODEL_NAME to claude-3-5-sonnet-20241022
+
+* support PNG in utils.image2utf8
+
+* python&gt;=3.10,&lt;3.12 ([`266b9bf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/266b9bfdc321d7eb2cf0b4d5b1db0833061db11c))
+
+### Unknown
+
+* Revert &#34;poetry -&gt; uv&#34;
+
+This reverts commit 615c17602e2cd33b290d2b16015bb60cfa38a7d0. ([`5a8b9bc`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a8b9bcb9e21a4f6f08a9dba7bb00e64daa6d631))
+
+* poetry -&gt; uv ([`615c176`](https://github.com/OpenAdaptAI/OpenAdapt/commit/615c17602e2cd33b290d2b16015bb60cfa38a7d0))
+
+
+## v0.43.1 (2024-12-30)
+
+### Build
+
+* build: support python&gt;=3.10,3.14
+
+* python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* use drag-threshold for linux double_click_distance_threshold
+
+* httpx==0.27.2 ([`7a0aa8e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7a0aa8ef6f5a909c877f181d7756d81d4339ec20))
+
+### Fix
+
+* fix(buid): python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* Revert &#34;build: support python&gt;=3.10,3.14&#34;
+
+This reverts commit 7a0aa8ef6f5a909c877f181d7756d81d4339ec20.
+
+* python = &#34;&gt;=3.10,&lt;3.14&#34;
+
+* simplify get_double_click_distance_pixels on linux ([`64c9241`](https://github.com/OpenAdaptAI/OpenAdapt/commit/64c92418bb2add1fd7672832c091580604a3102f))
+
+
+## v0.43.0 (2024-12-30)
+
+### Feature
+
+* feat(record): add Linux support
+
+* oa_pynput -&gt; pynput
+
+* add window/_linux.py
+
+* multiprocessing_utils; xcffib
+
+* global monitor_width/monitor_height
+
+* add capture._linux
+
+* cleanup
+
+* get_double_click_interval_seconds/pixels on linux
+
+* get_xinput_property ([`e7589f3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e7589f3cc0ef216fffaf5a1b8582eb9973e8c74a))
+
+
+## v0.42.5 (2024-12-09)
+
+### Fix
+
+* fix(models): remove active_browser_element / available_browser_elements ([`85d601e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/85d601e622545f1bc29b2e8def550c6b96f32377))
+
+
 ## v0.42.4 (2024-11-15)
 
 ### Fix
