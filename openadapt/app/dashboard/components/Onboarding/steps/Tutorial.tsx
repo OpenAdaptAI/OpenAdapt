@@ -13,7 +13,7 @@ function BountyCard(props: { bounty: Bounty }) {
       href={props.bounty.task.url}
       target="_blank"
       rel="noopener"
-      className="block group relative h-full rounded-lg border border-gray-400/50 dark:border-indigo-500/50 bg-gradient-to-br from-gray-300/30 via-gray-300/40 to-gray-300/50 dark:from-indigo-600/20 dark:via-indigo-600/30 dark:to-indigo-600/40 md:gap-8 transition-colors hover:border-gray-400 hover:dark:border-indigo-500 hover:bg-gray-300/10 hover:dark:bg-gray-600/5 !no-underline"
+      className="block group relative h-full rounded-lg bg-background/80 border-gray-400/50 hover:border-indigo-500 hover:bg-background !no-underline"
     >
       <div className="relative h-full p-4">
         <div className="text-2xl font-bold text-green-500 group-hover:text-green-600 dark:text-green-400 dark:group-hover:text-green-300 transition-colors">

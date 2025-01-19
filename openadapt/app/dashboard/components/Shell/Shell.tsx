@@ -3,6 +3,7 @@
 import { AppShell, Box, Burger, Image, Text } from '@mantine/core'
 import React from 'react'
 import { Navbar } from '../Navbar'
+import { usePathname } from 'next/navigation'
 import { useDisclosure } from '@mantine/hooks'
 import logo from '../../../assets/logo_inverted.png'
 
@@ -11,6 +12,8 @@ type Props = {
 }
 
 export const Shell = ({ children }: Props) => {
+    const pathname = usePathname()
+    const isRecordingDetails = pathname?.includes('/recordings/detail')
     return (
         <AppShell
         navbar={{
@@ -32,7 +35,7 @@ export const Shell = ({ children }: Props) => {
                 <Navbar />
             </AppShell.Navbar>
 
-            <AppShell.Main className='bg-[radial-gradient(circle_at_center,_rgb(191,219,254),_rgb(255,237,213))]'>{children}</AppShell.Main>
+            <AppShell.Main className={isRecordingDetails ? 'bg-slate-100' : 'bg-[radial-gradient(circle_at_center,_rgb(191,219,254),_rgb(255,237,213))]'}>{children}</AppShell.Main>
         </AppShell>
     )
 }
