@@ -19,22 +19,22 @@ module.exports = {
                 '3xl': '2.369rem',
                 '4xl': '3.158rem',
                 '5xl': '4.210rem',
-              },
-              fontFamily: {
+            },
+            fontFamily: {
                 heading: ['var(--font-poppins)'],
                 body: ['var(--font-poppins)'],
-              },
-              fontWeight: {
+            },
+            fontWeight: {
                 normal: '400',
                 bold: '700',
-              },
-              colors: {
-                'text': '#e7e5e4',
-                'background': '#00001f',
-                'primary': '#2f27ce',
-                'secondary': '#6259a1',
-                'accent': '#6c78f9',
-               },
+            },
+            colors: {
+                text: '#e7e5e4',
+                background: '#00001f',
+                primary: '#2f27ce',
+                secondary: '#6259a1',
+                accent: '#6c78f9',
+            },
         },
     },
     plugins: [],

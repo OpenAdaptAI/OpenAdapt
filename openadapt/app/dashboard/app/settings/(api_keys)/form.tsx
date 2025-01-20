@@ -1,41 +1,45 @@
-'use client';
+'use client'
 
-import React, { useEffect } from 'react';
-import { useForm } from '@mantine/form';
-import { saveSettings } from '../utils';
+import React, { useEffect } from 'react'
+import { useForm } from '@mantine/form'
+import { saveSettings } from '../utils'
 
 type Props = {
-    settings: Record<string, string>;
+    settings: Record<string, string>
 }
 
 export const Form = ({ settings }: Props) => {
     const form = useForm({
         initialValues: JSON.parse(JSON.stringify(settings)),
-    });
+    })
 
     useEffect(() => {
-        form.setValues(JSON.parse(JSON.stringify(settings)));
-        form.setInitialValues(JSON.parse(JSON.stringify(settings)));
-    }, [settings]);
+        form.setValues(JSON.parse(JSON.stringify(settings)))
+        form.setInitialValues(JSON.parse(JSON.stringify(settings)))
+    }, [settings])
 
     function resetForm() {
-        form.reset();
+        form.reset()
     }
 
-    const inputClasses = "w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 bg-white";
-    const labelClasses = "block text-sm font-medium text-gray-700 mb-1";
-    const fieldsetClasses = "border border-gray-200 rounded-xl p-6 bg-zinc-100 shadow-lg relative mt-2";
-    const legendClasses = "absolute -top-3 bg-primary/80 px-2 text-sm font-semibold text-zinc-200 shadow-lg rounded-lg";
+    const inputClasses =
+        'w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 bg-white'
+    const labelClasses = 'block text-sm font-medium text-gray-700 mb-1'
+    const fieldsetClasses =
+        'border border-gray-200 rounded-xl p-6 bg-zinc-100 shadow-lg relative mt-2'
+    const legendClasses =
+        'absolute -top-3 bg-primary/80 px-2 text-sm font-semibold text-zinc-200 shadow-lg rounded-lg'
 
     return (
-        <form onSubmit={form.onSubmit(saveSettings(form))} className="max-w-6xl mx-auto p-6">
+        <form
+            onSubmit={form.onSubmit(saveSettings(form))}
+            className="max-w-6xl mx-auto p-6"
+        >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Privacy Section */}
                 <div>
                     <fieldset className={fieldsetClasses}>
-                        <legend className={legendClasses}>
-                            PRIVACY
-                        </legend>
+                        <legend className={legendClasses}>PRIVACY</legend>
                         <div className="space-y-4">
                             <div>
                                 <label className={labelClasses}>
@@ -45,7 +49,9 @@ export const Form = ({ settings }: Props) => {
                                     type="text"
                                     placeholder="Please enter your Private AI API key"
                                     className={inputClasses}
-                                    {...form.getInputProps('PRIVATE_AI_API_KEY')}
+                                    {...form.getInputProps(
+                                        'PRIVATE_AI_API_KEY'
+                                    )}
                                 />
                             </div>
                         </div>
@@ -55,9 +61,7 @@ export const Form = ({ settings }: Props) => {
                 {/* Segmentation Section */}
                 <div>
                     <fieldset className={fieldsetClasses}>
-                        <legend className={legendClasses}>
-                            SEGMENTATION
-                        </legend>
+                        <legend className={legendClasses}>SEGMENTATION</legend>
                         <div className="space-y-4">
                             <div>
                                 <label className={labelClasses}>
@@ -67,7 +71,9 @@ export const Form = ({ settings }: Props) => {
                                     type="text"
                                     placeholder="Please enter your Replicate API token"
                                     className={inputClasses}
-                                    {...form.getInputProps('REPLICATE_API_TOKEN')}
+                                    {...form.getInputProps(
+                                        'REPLICATE_API_TOKEN'
+                                    )}
                                 />
                             </div>
                         </div>
@@ -77,9 +83,7 @@ export const Form = ({ settings }: Props) => {
                 {/* Completions Section */}
                 <div className="md:col-span-1">
                     <fieldset className={fieldsetClasses}>
-                        <legend className={legendClasses}>
-                            COMPLETIONS
-                        </legend>
+                        <legend className={legendClasses}>COMPLETIONS</legend>
                         <div className="space-y-4">
                             <div>
                                 <label className={labelClasses}>
@@ -138,5 +142,5 @@ export const Form = ({ settings }: Props) => {
                 </button>
             </div>
         </form>
-    );
-};
+    )
+}

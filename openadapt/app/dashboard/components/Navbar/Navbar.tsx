@@ -16,9 +16,11 @@ export const Navbar = () => {
                     <div
                         className={`
                             flex items-center p-3 rounded-md transition-all transform group
-                            ${currentRoute.includes(route.path)
-                                ? 'bg-primary text-zinc-300'
-                                : 'text-zinc-300'}
+                            ${
+                                currentRoute.includes(route.path)
+                                    ? 'bg-primary text-zinc-300'
+                                    : 'text-zinc-300'
+                            }
                             hover:scale-105 hover:bg-blue-600/30 hover:text-white
                         `}
                     >
@@ -26,9 +28,11 @@ export const Navbar = () => {
                             size={20}
                             className={`
                                 mr-3 transition-transform duration-200
-                                ${currentRoute.includes(route.path)
-                                    ? 'text-blue-400'
-                                    : 'text-gray-400 group-hover:text-white'}
+                                ${
+                                    currentRoute.includes(route.path)
+                                        ? 'text-blue-400'
+                                        : 'text-gray-400 group-hover:text-white'
+                                }
                             `}
                             stroke={1.5}
                         />
@@ -37,9 +41,11 @@ export const Navbar = () => {
                             size={18}
                             className={`
                                 ml-2 transition-transform duration-200
-                                ${currentRoute.includes(route.path)
-                                    ? 'text-blue-400'
-                                    : 'text-gray-400 group-hover:text-white'}
+                                ${
+                                    currentRoute.includes(route.path)
+                                        ? 'text-blue-400'
+                                        : 'text-gray-400 group-hover:text-white'
+                                }
                                 group-hover:translate-x-2
                             `}
                             stroke={1.5}
