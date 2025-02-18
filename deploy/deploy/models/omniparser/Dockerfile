@@ -44,6 +44,12 @@ RUN . /opt/conda/etc/profile.d/conda.sh && conda activate omni && \
     done && \
     mv weights/icon_caption weights/icon_caption_florence
 
+# Pre-download OCR models during build
+RUN . /opt/conda/etc/profile.d/conda.sh && conda activate omni && \
+    cd /app/OmniParser && \
+    python3 -c "import easyocr; reader = easyocr.Reader(['en']); print('Downloaded EasyOCR model')" && \
+    python3 -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(lang='en', use_angle_cls=False, use_gpu=False, show_log=False); print('Downloaded PaddleOCR model')"
+
 CMD ["python3", "/app/OmniParser/omnitool/omniparserserver/omniparserserver.py", \
      "--som_model_path", "/app/OmniParser/weights/icon_detect/model.pt", \
      "--caption_model_path", "/app/OmniParser/weights/icon_caption_florence", \

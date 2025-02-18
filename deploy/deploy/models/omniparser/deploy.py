@@ -10,6 +10,9 @@ import fire
 import paramiko
 
 
+CLEANUP_ON_FAILURE = False
+
+
 class Config(BaseSettings):
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
@@ -559,11 +562,12 @@ class Deploy:
 
         except Exception as e:
             logger.error(f"Deployment failed: {e}")
-            # Attempt cleanup on failure
-            try:
-                Deploy.stop()
-            except Exception as cleanup_error:
-                logger.error(f"Cleanup after failure also failed: {cleanup_error}")
+            if CLEANUP_ON_FAILURE:
+                # Attempt cleanup on failure
+                try:
+                    Deploy.stop()
+                except Exception as cleanup_error:
+                    logger.error(f"Cleanup after failure also failed: {cleanup_error}")
             raise
 
         logger.info("Deployment completed successfully!")
