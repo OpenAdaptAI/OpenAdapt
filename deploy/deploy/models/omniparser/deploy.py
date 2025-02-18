@@ -543,5 +543,45 @@ class Deploy:
         except subprocess.CalledProcessError as e:
             logger.error(f"SSH connection failed: {e}")
 
+    @staticmethod
+    def stop(
+        project_name: str = config.PROJECT_NAME,
+        security_group_name: str = config.AWS_EC2_SECURITY_GROUP,
+    ) -> None:
+        """
+        Terminates the EC2 instance and deletes the associated security group.
+
+        Args:
+            project_name (str): The project name used to tag the instance. Defaults to config.PROJECT_NAME.
+            security_group_name (str): The name of the security group to delete. Defaults to config.AWS_EC2_SECURITY_GROUP.
+        """
+        ec2_resource = boto3.resource('ec2')
+        ec2_client = boto3.client('ec2')
+
+        # Terminate EC2 instances
+        instances = ec2_resource.instances.filter(
+            Filters=[
+                {'Name': 'tag:Name', 'Values': [project_name]},
+                {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'shutting-down', 'stopped', 'stopping']}
+            ]
+        )
+
+        for instance in instances:
+            logger.info(f"Terminating instance: ID - {instance.id}")
+            instance.terminate()
+            instance.wait_until_terminated()
+            logger.info(f"Instance {instance.id} terminated successfully.")
+
+        # Delete security group
+        try:
+            ec2_client.delete_security_group(GroupName=security_group_name)
+            logger.info(f"Deleted security group: {security_group_name}")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'InvalidGroup.NotFound':
+                logger.info(f"Security group {security_group_name} does not exist or already deleted.")
+            else:
+                logger.error(f"Error deleting security group: {e}")
+
+
 if __name__ == "__main__":
     fire.Fire(Deploy)
