@@ -2,7 +2,6 @@
 
 import argparse
 import base64
-import io
 import requests
 
 from loguru import logger
@@ -40,19 +39,6 @@ def image_to_base64(image_path: str) -> str:
     """
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
-
-
-def base64_to_image(base64_string: str) -> Image.Image:
-    """Convert a base64 string to PIL Image.
-
-    Args:
-        base64_string: Base64 encoded string of an image
-
-    Returns:
-        Image.Image: PIL Image object
-    """
-    img_data = base64.b64decode(base64_string)
-    return Image.open(io.BytesIO(img_data))
 
 
 def plot_results(
