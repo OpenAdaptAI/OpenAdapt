@@ -1,3 +1,5 @@
+"""Deployment module for OmniParser on AWS EC2."""
+
 import os
 import subprocess
 import time
@@ -14,6 +16,8 @@ CLEANUP_ON_FAILURE = False
 
 
 class Config(BaseSettings):
+    """Configuration settings for deployment."""
+
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
     AWS_REGION: str
@@ -28,19 +32,27 @@ class Config(BaseSettings):
     COMMAND_TIMEOUT: int = 600  # 10 minutes
 
     class Config:
+        """Pydantic configuration class."""
+
         env_file = ".env"
         env_file_encoding = "utf-8"
 
     @property
     def AWS_EC2_KEY_NAME(self) -> str:
+        """Get the EC2 key pair name."""
+
         return f"{self.PROJECT_NAME}-key"
 
     @property
     def AWS_EC2_KEY_PATH(self) -> str:
+        """Get the path to the EC2 key file."""
+
         return f"./{self.AWS_EC2_KEY_NAME}.pem"
 
     @property
     def AWS_EC2_SECURITY_GROUP(self) -> str:
+        """Get the EC2 security group name."""
+
         return f"{self.PROJECT_NAME}-SecurityGroup"
 
 
@@ -50,6 +62,15 @@ config = Config()
 def create_key_pair(
     key_name: str = config.AWS_EC2_KEY_NAME, key_path: str = config.AWS_EC2_KEY_PATH
 ) -> str | None:
+    """Create an EC2 key pair.
+
+    Args:
+        key_name: Name of the key pair
+        key_path: Path where to save the key file
+
+    Returns:
+        str | None: Key name if successful, None otherwise
+    """
     ec2_client = boto3.client("ec2", region_name=config.AWS_REGION)
     try:
         key_pair = ec2_client.create_key_pair(KeyName=key_name)

@@ -1,3 +1,5 @@
+"""Client module for interacting with the OmniParser server."""
+
 import argparse
 import base64
 import io
@@ -8,6 +10,11 @@ from PIL import Image, ImageDraw
 
 
 def parse_arguments():
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments
+    """
     parser = argparse.ArgumentParser(description="Omniparser Client")
     parser.add_argument(
         "--image_path", type=str, required=True, help="Path to the image"
@@ -23,16 +30,39 @@ def parse_arguments():
 
 
 def image_to_base64(image_path):
+    """Convert an image file to base64 string.
+
+    Args:
+        image_path: Path to the image file
+
+    Returns:
+        str: Base64 encoded string of the image
+    """
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
 def base64_to_image(base64_string):
+    """Convert a base64 string to PIL Image.
+
+    Args:
+        base64_string: Base64 encoded string of an image
+
+    Returns:
+        Image.Image: PIL Image object
+    """
     img_data = base64.b64decode(base64_string)
     return Image.open(io.BytesIO(img_data))
 
 
 def plot_results(original_image_path, som_image_base64, parsed_content_list):
+    """Plot parsing results on the original image.
+
+    Args:
+        original_image_path: Path to the original image
+        som_image_base64: Base64 encoded SOM image
+        parsed_content_list: List of parsed content with bounding boxes
+    """
     # Open original image
     image = Image.open(original_image_path)
     width, height = image.size
@@ -69,6 +99,7 @@ def plot_results(original_image_path, som_image_base64, parsed_content_list):
 
 
 def main():
+    """Main entry point for the client application."""
     args = parse_arguments()
 
     # Remove trailing slash from server_url if present
