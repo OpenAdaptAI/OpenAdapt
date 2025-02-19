@@ -45,19 +45,16 @@ class Config(BaseSettings):
     @property
     def AWS_EC2_KEY_NAME(self) -> str:
         """Get the EC2 key pair name."""
-
         return f"{self.PROJECT_NAME}-key"
 
     @property
     def AWS_EC2_KEY_PATH(self) -> str:
         """Get the path to the EC2 key file."""
-
         return f"./{self.AWS_EC2_KEY_NAME}.pem"
 
     @property
     def AWS_EC2_SECURITY_GROUP(self) -> str:
         """Get the EC2 security group name."""
-
         return f"{self.PROJECT_NAME}-SecurityGroup"
 
 
@@ -312,6 +309,36 @@ def configure_ec2_instance(
     max_cmd_retries: int = 20,
     cmd_retry_delay: int = 30,
 ) -> tuple[str | None, str | None]:
+    """Configure an EC2 instance with necessary dependencies and Docker setup.
+
+    This function either configures an existing EC2 instance specified by instance_id
+    and instance_ip, or deploys and configures a new instance. It installs Docker and
+    other required dependencies, and sets up the environment for running containers.
+
+    Args:
+        instance_id: Optional ID of an existing EC2 instance to configure.
+            If None, a new instance will be deployed.
+        instance_ip: Optional IP address of an existing EC2 instance.
+            Required if instance_id is provided.
+        max_ssh_retries: Maximum number of SSH connection attempts.
+            Defaults to 20 attempts.
+        ssh_retry_delay: Delay in seconds between SSH connection attempts.
+            Defaults to 20 seconds.
+        max_cmd_retries: Maximum number of command execution retries.
+            Defaults to 20 attempts.
+        cmd_retry_delay: Delay in seconds between command execution retries.
+            Defaults to 30 seconds.
+
+    Returns:
+        tuple[str | None, str | None]: A tuple containing:
+            - The instance ID (str) or None if configuration failed
+            - The instance's public IP address (str) or None if configuration failed
+
+    Raises:
+        RuntimeError: If command execution fails
+        paramiko.SSHException: If SSH connection fails
+        Exception: For other unexpected errors during configuration
+    """
     if not instance_id:
         ec2_instance_id, ec2_instance_ip = deploy_ec2_instance()
     else:
@@ -706,8 +733,7 @@ class Deploy:
         project_name: str = config.PROJECT_NAME,
         security_group_name: str = config.AWS_EC2_SECURITY_GROUP,
     ) -> None:
-        """
-        Terminates the EC2 instance and deletes the associated security group.
+        """Terminates the EC2 instance and deletes the associated security group.
 
         Args:
             project_name (str): The project name used to tag the instance.

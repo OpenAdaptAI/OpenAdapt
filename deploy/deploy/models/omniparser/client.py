@@ -119,7 +119,7 @@ def parse_image(
         logger.error(f"Error: {e}")
 
 
-def main():
+def main() -> None:
     """Main entry point for the client application."""
     fire.Fire(parse_image)
 
