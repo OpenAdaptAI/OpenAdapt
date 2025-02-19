@@ -38,6 +38,11 @@ class Config(BaseSettings):
         env_file_encoding = "utf-8"
 
     @property
+    def CONTAINER_NAME(self) -> str:
+        """Get the container name."""
+        return f"{self.PROJECT_NAME}-container"
+
+    @property
     def AWS_EC2_KEY_NAME(self) -> str:
         """Get the EC2 key pair name."""
 
@@ -515,18 +520,18 @@ class Deploy:
                 # Build and run Docker container
                 docker_commands = [
                     # Remove any existing container
-                    "sudo docker rm -f omniparser-container || true",
+                    "sudo docker rm -f {config.CONTAINER_NAME} || true",
                     # Remove any existing image
-                    "sudo docker rmi omniparser || true",
+                    "sudo docker rmi {config.PROJECT_NAME} || true",
                     # Build new image
                     (
                         "cd OmniParser && sudo docker build --progress=plain "
-                        "-t omniparser ."
+                        "-t {config.PROJECT_NAME} ."
                     ),
                     # Run new container
                     (
                         "sudo docker run -d -p 8000:8000 --gpus all --name "
-                        "omniparser-container omniparser"
+                        "{config.CONTAINER_NAME} {config.PROJECT_NAME}"
                     ),
                 ]
 
@@ -538,7 +543,7 @@ class Deploy:
                 # Wait for container to start and check its logs
                 logger.info("Waiting for container to start...")
                 time.sleep(10)  # Give container time to start
-                execute_command(ssh_client, "docker logs omniparser-container")
+                execute_command(ssh_client, "docker logs {config.CONTAINER_NAME}")
 
                 # Wait for server to become responsive
                 logger.info("Waiting for server to become responsive...")
@@ -568,7 +573,7 @@ class Deploy:
                     raise RuntimeError("Server failed to start properly")
 
                 # Final status check
-                execute_command(ssh_client, "docker ps | grep omniparser-container")
+                execute_command(ssh_client, "docker ps | grep {config.CONTAINER_NAME}")
 
                 server_url = f"http://{instance_ip}:{config.PORT}"
                 logger.info(f"Deployment complete. Server running at: {server_url}")
@@ -591,7 +596,7 @@ class Deploy:
                 logger.error(f"Error during deployment: {e}")
                 # Get container logs for debugging
                 try:
-                    execute_command(ssh_client, "docker logs omniparser-container")
+                    execute_command(ssh_client, "docker logs {config.CONTAINER_NAME}")
                 except Exception as exc:
                     logger.warning(f"{exc=}")
                     pass
