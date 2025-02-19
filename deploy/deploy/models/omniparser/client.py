@@ -1,31 +1,11 @@
 """Client module for interacting with the OmniParser server."""
 
-import argparse
 import base64
+import fire
 import requests
 
 from loguru import logger
 from PIL import Image, ImageDraw
-
-
-def parse_arguments() -> argparse.Namespace:
-    """Parse command line arguments.
-
-    Returns:
-        argparse.Namespace: Parsed command line arguments
-    """
-    parser = argparse.ArgumentParser(description="Omniparser Client")
-    parser.add_argument(
-        "--image_path", type=str, required=True, help="Path to the image"
-    )
-    parser.add_argument(
-        "--server_url",
-        type=str,
-        required=True,
-        help="URL of the Omniparser server (e.g., http://localhost:8000)",
-    )
-    args = parser.parse_args()
-    return args
 
 
 def image_to_base64(image_path: str) -> str:
@@ -88,15 +68,21 @@ def plot_results(
     image.show()
 
 
-def main() -> None:
-    """Main entry point for the client application."""
-    args = parse_arguments()
+def parse_image(
+    image_path: str,
+    server_url: str,
+) -> None:
+    """Parse an image using the OmniParser server.
 
+    Args:
+        image_path: Path to the image file
+        server_url: URL of the OmniParser server
+    """
     # Remove trailing slash from server_url if present
-    server_url = args.server_url.rstrip("/")
+    server_url = server_url.rstrip("/")
 
     # Convert image to base64
-    base64_image = image_to_base64(args.image_path)
+    base64_image = image_to_base64(image_path)
 
     # Prepare request
     url = f"{server_url}/parse/"
@@ -119,7 +105,7 @@ def main() -> None:
         parsed_content_list = result["parsed_content_list"]
 
         # Plot results
-        plot_results(args.image_path, som_image_base64, parsed_content_list)
+        plot_results(image_path, som_image_base64, parsed_content_list)
 
         # Print latency
         logger.info(f"API Latency: {result['latency']:.2f} seconds")
@@ -131,6 +117,11 @@ def main() -> None:
         logger.error(f"Error making request to API: {e}")
     except Exception as e:
         logger.error(f"Error: {e}")
+
+
+def main():
+    """Main entry point for the client application."""
+    fire.Fire(parse_image)
 
 
 if __name__ == "__main__":
