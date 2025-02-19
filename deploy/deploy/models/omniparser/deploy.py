@@ -88,6 +88,14 @@ def create_key_pair(
 
 
 def get_or_create_security_group_id(ports: list[int] = [22, config.PORT]) -> str | None:
+    """Get existing security group or create a new one.
+    
+    Args:
+        ports: List of ports to open in the security group
+        
+    Returns:
+        str | None: Security group ID if successful, None otherwise
+    """
     ec2 = boto3.client("ec2", region_name=config.AWS_REGION)
 
     ip_permissions = [
@@ -167,6 +175,18 @@ def deploy_ec2_instance(
     key_name: str = config.AWS_EC2_KEY_NAME,
     disk_size: int = config.AWS_EC2_DISK_SIZE,
 ) -> tuple[str | None, str | None]:
+    """Deploy a new EC2 instance or return existing one.
+    
+    Args:
+        ami: AMI ID to use for the instance
+        instance_type: EC2 instance type
+        project_name: Name tag for the instance
+        key_name: Name of the key pair to use
+        disk_size: Size of the root volume in GB
+        
+    Returns:
+        tuple[str | None, str | None]: Instance ID and public IP if successful
+    """
     ec2 = boto3.resource("ec2")
     ec2_client = boto3.client("ec2")
 
@@ -371,64 +391,65 @@ def configure_ec2_instance(
     ssh_client.close()
     return ec2_instance_id, ec2_instance_ip
 
+def execute_command(ssh_client: paramiko.SSHClient, command: str) -> None:
+	"""Execute a command and handle its output safely."""
+	logger.info(f"Executing: {command}")
+	stdin, stdout, stderr = ssh_client.exec_command(
+		command,
+		timeout=config.COMMAND_TIMEOUT,
+		# get_pty=True
+	)
+
+	# Stream output in real-time
+	while not stdout.channel.exit_status_ready():
+		if stdout.channel.recv_ready():
+			try:
+				line = stdout.channel.recv(1024).decode("utf-8", errors="replace")
+				if line.strip():  # Only log non-empty lines
+					logger.info(line.strip())
+			except Exception as e:
+				logger.warning(f"Error decoding stdout: {e}")
+
+		if stdout.channel.recv_stderr_ready():
+			try:
+				line = stdout.channel.recv_stderr(1024).decode(
+					"utf-8", errors="replace"
+				)
+				if line.strip():  # Only log non-empty lines
+					logger.error(line.strip())
+			except Exception as e:
+				logger.warning(f"Error decoding stderr: {e}")
+
+	exit_status = stdout.channel.recv_exit_status()
+
+	# Capture any remaining output
+	try:
+		remaining_stdout = stdout.read().decode("utf-8", errors="replace")
+		if remaining_stdout.strip():
+			logger.info(remaining_stdout.strip())
+	except Exception as e:
+		logger.warning(f"Error decoding remaining stdout: {e}")
+
+	try:
+		remaining_stderr = stderr.read().decode("utf-8", errors="replace")
+		if remaining_stderr.strip():
+			logger.error(remaining_stderr.strip())
+	except Exception as e:
+		logger.warning(f"Error decoding remaining stderr: {e}")
+
+	if exit_status != 0:
+		error_msg = f"Command failed with exit status {exit_status}: {command}"
+		logger.error(error_msg)
+		raise RuntimeError(error_msg)
+
+	logger.info(f"Successfully executed: {command}")
 
 class Deploy:
-    @staticmethod
-    def execute_command(ssh_client: paramiko.SSHClient, command: str) -> None:
-        """Execute a command and handle its output safely."""
-        logger.info(f"Executing: {command}")
-        stdin, stdout, stderr = ssh_client.exec_command(
-            command,
-            timeout=config.COMMAND_TIMEOUT,
-            # get_pty=True
-        )
-
-        # Stream output in real-time
-        while not stdout.channel.exit_status_ready():
-            if stdout.channel.recv_ready():
-                try:
-                    line = stdout.channel.recv(1024).decode("utf-8", errors="replace")
-                    if line.strip():  # Only log non-empty lines
-                        logger.info(line.strip())
-                except Exception as e:
-                    logger.warning(f"Error decoding stdout: {e}")
-
-            if stdout.channel.recv_stderr_ready():
-                try:
-                    line = stdout.channel.recv_stderr(1024).decode(
-                        "utf-8", errors="replace"
-                    )
-                    if line.strip():  # Only log non-empty lines
-                        logger.error(line.strip())
-                except Exception as e:
-                    logger.warning(f"Error decoding stderr: {e}")
-
-        exit_status = stdout.channel.recv_exit_status()
-
-        # Capture any remaining output
-        try:
-            remaining_stdout = stdout.read().decode("utf-8", errors="replace")
-            if remaining_stdout.strip():
-                logger.info(remaining_stdout.strip())
-        except Exception as e:
-            logger.warning(f"Error decoding remaining stdout: {e}")
-
-        try:
-            remaining_stderr = stderr.read().decode("utf-8", errors="replace")
-            if remaining_stderr.strip():
-                logger.error(remaining_stderr.strip())
-        except Exception as e:
-            logger.warning(f"Error decoding remaining stderr: {e}")
-
-        if exit_status != 0:
-            error_msg = f"Command failed with exit status {exit_status}: {command}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-
-        logger.info(f"Successfully executed: {command}")
+	"""Class handling deployment operations for OmniParser."""
 
     @staticmethod
     def start() -> None:
+        """Start a new deployment of OmniParser on EC2."""
         try:
             instance_id, instance_ip = configure_ec2_instance()
             assert instance_ip, f"invalid {instance_ip=}"
@@ -487,7 +508,7 @@ class Deploy:
                 # Execute setup commands
                 for command in setup_commands:
                     logger.info(f"Executing setup command: {command}")
-                    Deploy.execute_command(ssh_client, command)
+                    execute_command(ssh_client, command)
 
                 # Build and run Docker container
                 docker_commands = [
@@ -510,12 +531,12 @@ class Deploy:
                 # Execute Docker commands
                 for command in docker_commands:
                     logger.info(f"Executing Docker command: {command}")
-                    Deploy.execute_command(ssh_client, command)
+                    execute_command(ssh_client, command)
 
                 # Wait for container to start and check its logs
                 logger.info("Waiting for container to start...")
                 time.sleep(10)  # Give container time to start
-                Deploy.execute_command(ssh_client, "docker logs omniparser-container")
+                execute_command(ssh_client, "docker logs omniparser-container")
 
                 # Wait for server to become responsive
                 logger.info("Waiting for server to become responsive...")
@@ -527,7 +548,7 @@ class Deploy:
                     try:
                         # Check if server is responding
                         check_command = f"curl -s http://localhost:{config.PORT}/probe/"
-                        Deploy.execute_command(ssh_client, check_command)
+                        execute_command(ssh_client, check_command)
                         server_ready = True
                         break
                     except Exception as e:
@@ -545,9 +566,7 @@ class Deploy:
                     raise RuntimeError("Server failed to start properly")
 
                 # Final status check
-                Deploy.execute_command(
-                    ssh_client, "docker ps | grep omniparser-container"
-                )
+                execute_command(ssh_client, "docker ps | grep omniparser-container")
 
                 server_url = f"http://{instance_ip}:{config.PORT}"
                 logger.info(f"Deployment complete. Server running at: {server_url}")
@@ -570,9 +589,7 @@ class Deploy:
                 logger.error(f"Error during deployment: {e}")
                 # Get container logs for debugging
                 try:
-                    Deploy.execute_command(
-                        ssh_client, "docker logs omniparser-container"
-                    )
+                    execute_command(ssh_client, "docker logs omniparser-container")
                 except Exception as exc:
                     logger.warning(f"{exc=}")
                     pass
@@ -595,6 +612,7 @@ class Deploy:
 
     @staticmethod
     def status() -> None:
+        """Check the status of deployed instances."""
         ec2 = boto3.resource("ec2")
         instances = ec2.instances.filter(
             Filters=[{"Name": "tag:Name", "Values": [config.PROJECT_NAME]}]
@@ -616,7 +634,11 @@ class Deploy:
 
     @staticmethod
     def ssh(non_interactive: bool = False) -> None:
-        """SSH into the running instance."""
+        """SSH into the running instance.
+        
+        Args:
+            non_interactive: If True, run in non-interactive mode
+        """
         # Get instance IP
         ec2 = boto3.resource("ec2")
         instances = ec2.instances.filter(

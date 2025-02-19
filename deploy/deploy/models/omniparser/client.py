@@ -9,7 +9,7 @@ from loguru import logger
 from PIL import Image, ImageDraw
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments.
 
     Returns:
@@ -29,7 +29,7 @@ def parse_arguments():
     return args
 
 
-def image_to_base64(image_path):
+def image_to_base64(image_path: str) -> str:
     """Convert an image file to base64 string.
 
     Args:
@@ -42,7 +42,7 @@ def image_to_base64(image_path):
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
-def base64_to_image(base64_string):
+def base64_to_image(base64_string: str) -> Image.Image:
     """Convert a base64 string to PIL Image.
 
     Args:
@@ -55,7 +55,11 @@ def base64_to_image(base64_string):
     return Image.open(io.BytesIO(img_data))
 
 
-def plot_results(original_image_path, som_image_base64, parsed_content_list):
+def plot_results(
+    original_image_path: str,
+    som_image_base64: str,
+    parsed_content_list: list[dict[str, list[float]]],
+) -> None:
     """Plot parsing results on the original image.
 
     Args:
@@ -98,7 +102,7 @@ def plot_results(original_image_path, som_image_base64, parsed_content_list):
     image.show()
 
 
-def main():
+def main() -> None:
     """Main entry point for the client application."""
     args = parse_arguments()
 
