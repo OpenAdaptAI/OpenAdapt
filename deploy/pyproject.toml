@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deploy"
+version = "0.1.0"
+authors = [
+    { name="Richard Abrich", email="richard@openadapt.ai" },
+]
+description = "Deployment tools for OpenAdapt models"
+requires-python = ">=3.10"
+dependencies = [
+    "boto3>=1.36.22",
+    "fire>=0.7.0",
+    "loguru>=0.7.0",
+    "paramiko>=3.5.1",
+    "pillow>=11.1.0",
+    "pydantic>=2.10.6",
+    "pydantic-settings>=2.7.1",
+    "requests>=2.32.3",
+]
