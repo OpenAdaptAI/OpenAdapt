@@ -2,6 +2,15 @@
 
 
 
+## v0.46.0 (2025-02-20)
+
+### Feature
+
+* feat(deploy): add automated OmniParser deployment
+
+* add working omniparser deploy.py, Dockerfile, pyproject.toml, README.md, .env.example, .dockerignore, client.py ([`8acd7c0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8acd7c0c09b3c833168f67227ed304f9e51e2f81))
+
+
 ## v0.45.0 (2025-01-02)
 
 ### Feature
