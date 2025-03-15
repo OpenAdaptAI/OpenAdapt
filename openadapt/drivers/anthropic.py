@@ -76,6 +76,7 @@ def create_payload(
         "model": model,
         "max_tokens": max_tokens,
         "messages": messages,
+        "betas": ["computer-use-2024-10-22"],
     }
 
     # Add system_prompt as a top-level parameter if provided
