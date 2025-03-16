@@ -68,7 +68,9 @@ class OmniMCPRunner:
         claude_api_key=None,
         use_normalized_coordinates=False,
         debug_dir=None,
-        allow_no_parser=False
+        allow_no_parser=False,
+        auto_deploy_parser=True,
+        skip_confirmation=False
     ):
         """Run OmniMCP in CLI mode.
         
@@ -87,13 +89,17 @@ class OmniMCPRunner:
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
             allow_no_parser: If True, continue even if OmniParser is not available
+            auto_deploy_parser: If True, attempt to deploy OmniParser if not available (default: True)
+            skip_confirmation: If True, skip user confirmation for OmniParser deployment
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
             use_normalized_coordinates=use_normalized_coordinates,
-            allow_no_parser=allow_no_parser
+            allow_no_parser=allow_no_parser,
+            auto_deploy_parser=auto_deploy_parser,
+            skip_confirmation=skip_confirmation
         )
         
         # Handle debug directory if specified
@@ -119,7 +125,9 @@ class OmniMCPRunner:
         claude_api_key=None,
         use_normalized_coordinates=False,
         debug_dir=None,
-        allow_no_parser=False
+        allow_no_parser=False,
+        auto_deploy_parser=True,
+        skip_confirmation=False
     ):
         """Run OmniMCP as an MCP server.
         
@@ -140,13 +148,17 @@ class OmniMCPRunner:
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
             allow_no_parser: If True, continue even if OmniParser is not available
+            auto_deploy_parser: If True, attempt to deploy OmniParser if not available (default: True)
+            skip_confirmation: If True, skip user confirmation for OmniParser deployment
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
             use_normalized_coordinates=use_normalized_coordinates,
-            allow_no_parser=allow_no_parser
+            allow_no_parser=allow_no_parser,
+            auto_deploy_parser=auto_deploy_parser,
+            skip_confirmation=skip_confirmation
         )
         
         # Handle debug directory if specified
@@ -172,7 +184,9 @@ class OmniMCPRunner:
         claude_api_key=None,
         use_normalized_coordinates=False,
         debug_dir=None,
-        allow_no_parser=False
+        allow_no_parser=False,
+        auto_deploy_parser=True,
+        skip_confirmation=False
     ):
         """Run OmniMCP in debug mode.
         
@@ -190,13 +204,17 @@ class OmniMCPRunner:
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
             allow_no_parser: If True, continue even if OmniParser is not available
+            auto_deploy_parser: If True, attempt to deploy OmniParser if not available (default: True)
+            skip_confirmation: If True, skip user confirmation for OmniParser deployment
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
             use_normalized_coordinates=use_normalized_coordinates,
-            allow_no_parser=allow_no_parser
+            allow_no_parser=allow_no_parser,
+            auto_deploy_parser=auto_deploy_parser,
+            skip_confirmation=skip_confirmation
         )
         
         # Create debug directory if not specified

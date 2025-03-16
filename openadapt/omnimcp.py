@@ -303,7 +303,9 @@ class OmniMCP:
         server_url: Optional[str] = None,
         claude_api_key: Optional[str] = None,
         use_normalized_coordinates: bool = False,
-        allow_no_parser: bool = False
+        allow_no_parser: bool = False,
+        auto_deploy_parser: bool = True,
+        skip_confirmation: bool = False
     ):
         """Initialize OmniMCP.
         
@@ -312,6 +314,8 @@ class OmniMCP:
             claude_api_key: API key for Claude (overrides config)
             use_normalized_coordinates: If True, use normalized (0-1) coordinates
             allow_no_parser: If True, continue even if OmniParser is not available
+            auto_deploy_parser: If True, attempt to deploy OmniParser if not available
+            skip_confirmation: If True, skip user confirmation for deployment
         """
         self.omniparser = OmniParserProvider(server_url)
         self.visual_state = VisualState()
@@ -330,13 +334,39 @@ class OmniMCP:
         
         # Ensure OmniParser is running
         if not self.omniparser.is_available():
-            logger.info("OmniParser not available, attempting to deploy...")
-            self.omniparser.deploy()
+            # Inform user about missing OmniParser
+            if auto_deploy_parser:
+                # Get user confirmation if needed
+                deploy_confirmed = skip_confirmation
+                # TODO: Implement a simplified AWS configuration process
+                # Create an OpenAdapt.AI API key generation system that eliminates the need
+                # for users to manually configure AWS_SECRET_ACCESS_KEY and AWS_ACCESS_ID
+                if not skip_confirmation:
+                    user_input = input(
+                        "\nOmniParser is not available. Would you like to deploy it now? [y/N]: "
+                    ).lower()
+                    deploy_confirmed = user_input in ["y", "yes"]
+                
+                # Attempt to deploy OmniParser if confirmed
+                if deploy_confirmed:
+                    logger.info("Deploying OmniParser service...")
+                    deploy_success = self.omniparser.deploy()
+                    if deploy_success:
+                        logger.info("OmniParser deployed successfully.")
+                    else:
+                        logger.error("Failed to deploy OmniParser.")
+                elif not allow_no_parser:
+                    # User declined deployment and allow_no_parser isn't set
+                    raise RuntimeError(
+                        "OmniParser deployment was declined. Please ensure it's running, "
+                        "use --auto-deploy-parser, or use --allow-no-parser flag."
+                    )
             
-            # Check again after deployment attempt
+            # Final check after deployment attempt
             if not self.omniparser.is_available() and not allow_no_parser:
                 raise RuntimeError(
-                    "OmniParser server is not available. Please ensure it's running or use --allow-no-parser flag."
+                    "OmniParser server is not available. Please ensure it's running, "
+                    "use --auto-deploy-parser, or use --allow-no-parser flag."
                 )
     
     def update_visual_state(self) -> VisualState:

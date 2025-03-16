@@ -72,8 +72,14 @@ omnimcp debug
 # Connect to a remote OmniParser server
 omnimcp cli --server-url=https://your-omniparser-server.example.com
 
+# Deploy OmniParser automatically without confirming
+omnimcp cli --auto-deploy-parser --skip-confirmation
+
 # Allow running even if OmniParser isn't available (limited functionality)
 omnimcp cli --allow-no-parser
+
+# Disable automatic OmniParser deployment attempt
+omnimcp cli --auto-deploy-parser=False
 
 # With additional options
 omnimcp cli --use-normalized-coordinates
@@ -89,11 +95,27 @@ OmniMCP requires access to an OmniParser server for analyzing screenshots:
    omnimcp cli --server-url=https://your-omniparser-server.example.com
    ```
 
-2. **Use the Default Local Server**
+2. **Auto-Deploy OmniParser** (Convenient but requires AWS credentials)
+   - By default, OmniMCP will offer to deploy OmniParser if not available
+   - You can control this behavior with these flags:
+     ```bash
+     # Deploy without asking for confirmation
+     omnimcp cli --auto-deploy-parser --skip-confirmation
+     
+     # Disable auto-deployment completely
+     omnimcp cli --auto-deploy-parser=False
+     ```
+
+3. **Use the Default Local Server**
    - OmniMCP will try to connect to `http://localhost:8000` by default
    - This requires running an OmniParser server locally
 
-By default, OmniMCP will fail if it can't connect to an OmniParser server. Use the `--allow-no-parser` flag to run with limited functionality when no parser is available.
+4. **Run Without OmniParser** (Limited functionality)
+   - Use the `--allow-no-parser` flag to run even without OmniParser
+   - Claude will only see raw screenshots without UI element detection
+   ```bash
+   omnimcp cli --allow-no-parser
+   ```
 
 ### Future Direction: Anthropic ComputerUse Integration
 
