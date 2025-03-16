@@ -9,7 +9,7 @@ import io
 import sys
 import textwrap
 
-from bs4 import BeautifulSoup
+# Lazy import BeautifulSoup when needed
 from pynput import keyboard
 from PIL import Image, ImageChops
 import numpy as np
@@ -790,7 +790,7 @@ class BrowserEvent(db.Base):
         # Return the complete representation including the truncated message
         return f"BrowserEvent({base_repr}, message={message_copy})"
 
-    def parse(self) -> tuple[BeautifulSoup, BeautifulSoup | None]:
+    def parse(self) -> "tuple['BeautifulSoup', 'BeautifulSoup | None']":
         """Parses the visible HTML and optionally extracts the target element.
 
         This method processes the browser event to parse the visible HTML and,
@@ -798,8 +798,8 @@ class BrowserEvent(db.Base):
 
         Returns:
             A tuple containing:
-            - BeautifulSoup: The parsed soup of the visible HTML.
-            - BeautifulSoup | None: The target HTML element if the event type is
+            - bs4.BeautifulSoup: The parsed soup of the visible HTML.
+            - bs4.BeautifulSoup | None: The target HTML element if the event type is
                 "click"; otherwise, None.
 
         Raises:
