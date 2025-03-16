@@ -4,7 +4,9 @@ from types import ModuleType
 
 from openadapt.config import config
 
-from . import prompt, replicate, som, ultralytics
+# Lazy imports when required instead of importing everything
+# Add omniparser which is needed for OmniMCP
+from . import omniparser
 
 
 # TODO: remove
