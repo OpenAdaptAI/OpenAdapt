@@ -50,6 +50,14 @@ import fire
 from openadapt.omnimcp import OmniMCP
 from openadapt.custom_logger import logger
 
+# TODO: Consider Anthropic ComputerUse integration
+# Anthropic's ComputerUse (https://docs.anthropic.com/en/docs/agents-and-tools/computer-use)
+# provides an official approach for Claude to control computers. While OmniMCP already
+# implements a similar agent loop pattern, future work could:
+# 1. Refine our existing agent loop to better align with ComputerUse's approach
+# 2. Support Anthropic's containerized environment as a deployment option
+# 3. Offer compatibility with Anthropic's official computer control tools
+
 
 class OmniMCPRunner:
     """OmniMCP runner with different modes of operation."""

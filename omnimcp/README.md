@@ -95,9 +95,33 @@ OmniMCP requires access to an OmniParser server for analyzing screenshots:
 
 By default, OmniMCP will fail if it can't connect to an OmniParser server. Use the `--allow-no-parser` flag to run with limited functionality when no parser is available.
 
-### TODO: Anthropic ComputerUse Integration
+### Future Direction: Anthropic ComputerUse Integration
 
-Future versions may integrate with Anthropic's ComputerUse system, which provides an official way for Claude to interact with computers through a virtualized desktop environment.
+OmniMCP and Anthropic's [ComputerUse](https://docs.anthropic.com/en/docs/agents-and-tools/computer-use) both enable Claude to control computers, but with different architectural approaches:
+
+#### Key Differences
+
+**Integration Approach:**
+- **OmniMCP** uses OmniParser for understanding UI elements
+- **ComputerUse** captures screenshots and provides them directly to Claude
+
+**Environment:**
+- **OmniMCP** runs directly on the host system with minimal dependencies
+- **ComputerUse** operates in a containerized virtual desktop environment
+
+**MCP vs. Anthropic-defined Tools:**
+- **OmniMCP** uses the Model Control Protocol (MCP), a structured protocol for AI models to interact with tools
+- **ComputerUse** uses Anthropic-defined tools (`computer`, `text_editor`, and `bash`) via Claude's tool use API
+
+#### Potential Integration Paths
+
+Future OmniMCP development could:
+1. **Dual Protocol Support**: Support both MCP and Anthropic-defined tools
+2. **Container Option**: Provide a containerized deployment similar to ComputerUse
+3. **Unified Approach**: Create a bridge between MCP and ComputerUse tools
+4. **Feature Parity**: Incorporate ComputerUse capabilities while maintaining MCP compatibility
+
+Both approaches have merits, and integrating aspects of ComputerUse could enhance OmniMCP's capabilities while preserving its lightweight nature and existing MCP integration.
 
 ## Features
 
