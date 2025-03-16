@@ -34,10 +34,11 @@ import fire
 from loguru import logger
 from pynput import keyboard, mouse
 
+from anthropic import Anthropic
+
 from openadapt import utils
 from omnimcp.adapters.omniparser import OmniParserProvider
-from openadapt.config import config
-from openadapt.drivers import anthropic
+from omnimcp.config import config
 
 
 class ScreenElement:
@@ -708,12 +709,16 @@ Here is the structured data of the UI elements:
 Describe the overall screen, main elements, and possible interactions a user might perform.
 """
         
-        # Get response from Claude
-        response = anthropic.prompt(
-            prompt=prompt, 
-            system_prompt=system_prompt,
-            api_key=self.claude_api_key
-        )
+        # Get response from Claude using Anthropic SDK
+        client = Anthropic(api_key=self.claude_api_key)
+        response = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        ).content[0].text
         
         return response
     
@@ -768,12 +773,16 @@ Please analyze this UI element and provide a detailed description:
 Describe what this element is, what it does, and how a user might interact with it.
 """
         
-        # Get response from Claude
-        response = anthropic.prompt(
-            prompt=prompt, 
-            system_prompt=system_prompt,
-            api_key=self.claude_api_key
-        )
+        # Get response from Claude using Anthropic SDK
+        client = Anthropic(api_key=self.claude_api_key)
+        response = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        ).content[0].text
         
         return response
     
@@ -811,12 +820,16 @@ Based on this screen state, {prompt}
 You have access to a structured description of the current screen through the Model Context Protocol.
 Analyze the UI elements and provide clear, concise guidance based on the current screen state."""
         
-        # Get response from Claude
-        response = anthropic.prompt(
-            prompt=full_prompt, 
-            system_prompt=system_prompt,
-            api_key=self.claude_api_key
-        )
+        # Get response from Claude using Anthropic SDK
+        client = Anthropic(api_key=self.claude_api_key)
+        response = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": full_prompt}
+            ]
+        ).content[0].text
         
         return response
     

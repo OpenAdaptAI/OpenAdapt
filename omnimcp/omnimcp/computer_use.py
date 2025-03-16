@@ -25,7 +25,7 @@ from loguru import logger
 
 # Import pathing first to ensure OpenAdapt is in the path
 from . import pathing
-from openadapt.config import config
+from omnimcp.config import config
 
 
 def ensure_docker_installed():

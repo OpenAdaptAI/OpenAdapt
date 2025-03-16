@@ -3,8 +3,7 @@
 # Setup path to include OpenAdapt modules
 from . import pathing
 
-# Import from OpenAdapt modules
-from openadapt.omnimcp import OmniMCP
-from openadapt.run_omnimcp import main
+# Import from local modules
+from .omnimcp import OmniMCP
 
 __version__ = "0.1.0"
