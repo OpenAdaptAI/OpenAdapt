@@ -15,7 +15,7 @@ Usage:
     server = create_omnimcp_server(omnimcp)
     server.run()
     
-    # Alternatively, run interactively (no MCP)
+    # Alternatively, run in CLI mode (no MCP)
     omnimcp = OmniMCP()
     omnimcp.run_interactive()
 """
