@@ -248,7 +248,9 @@ class VisualState:
             Image: Annotated screenshot with bounding boxes
         """
         if not self.screenshot:
-            return Image.new('RGB', (800, 600), color='white')
+            # Get monitor dimensions instead of using hardcoded values
+            monitor_width, monitor_height = utils.get_monitor_dims()
+            return Image.new('RGB', (monitor_width, monitor_height), color='white')
         
         # Create a copy of the screenshot
         img = self.screenshot.copy()
