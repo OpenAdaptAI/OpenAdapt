@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 
-from bs4 import BeautifulSoup
+# BeautifulSoup import moved to parse_html function
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
@@ -1044,8 +1044,9 @@ def truncate_html(html_str: str, max_len: int) -> str:
     return html_str
 
 
-def parse_html(html: str, parser: str = "html.parser") -> BeautifulSoup:
+def parse_html(html: str, parser: str = "html.parser") -> "BeautifulSoup":
     """Parse the visible HTML using BeautifulSoup."""
+    from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, parser)
     return soup
 
@@ -1062,6 +1063,7 @@ def get_html_prompt(html: str, convert_to_markdown: bool = False) -> str:
         If convert_to_markdown is True, the string is in Markdown format.
     """
     # Parse HTML with BeautifulSoup
+    from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
 
     # Remove non-interactive and unnecessary elements

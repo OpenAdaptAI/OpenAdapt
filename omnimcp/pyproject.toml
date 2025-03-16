@@ -22,6 +22,7 @@ dependencies = [
     "mcp>=0.9.0",              # Model Control Protocol
     "requests>=2.31.0",        # HTTP requests for OmniParser
     "mss>=6.1.0",              # Screen capture
+    "jinja2>=3.0.0",           # For templating
 ]
 
 [project.scripts]
