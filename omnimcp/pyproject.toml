@@ -25,6 +25,7 @@ dependencies = [
     "jinja2>=3.0.0",           # For templating
     "posthog>=2.0.0",          # For analytics
     "multiprocessing-utils>=0.1.0", # For process-local storage
+    "numpy>=1.21.0",           # For array operations
 ]
 
 [project.scripts]
