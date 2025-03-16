@@ -1,0 +1,1 @@
+"""Model Control Protocol (MCP) implementation for OpenAdapt."""
