@@ -29,6 +29,8 @@ dependencies = [
     "orjson>=3.8.0",           # For fast JSON handling
     "dictalchemy3>=1.0.0",     # For SQLAlchemy dict utils
     "joblib>=1.2.0",           # For caching
+    "boto3>=1.26.0",           # For AWS services
+    "botocore>=1.29.0"         # For AWS SDK
 ]
 
 [project.scripts]
