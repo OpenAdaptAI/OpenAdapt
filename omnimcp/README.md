@@ -47,7 +47,17 @@ source .venv/bin/activate
 .venv\Scripts\activate.bat
 ```
 
-Then run OmniMCP:
+### Development
+
+For development and testing, you can reset the environment with:
+
+```bash
+# Reset the virtual environment and reinstall dependencies
+cd /path/to/OpenAdapt/omnimcp
+rm -rf .venv && chmod +x install.sh && ./install.sh
+```
+
+### Running OmniMCP
 
 ```bash
 # Run CLI mode (direct command input)

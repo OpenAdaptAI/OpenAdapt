@@ -24,6 +24,7 @@ dependencies = [
     "mss>=6.1.0",              # Screen capture
     "jinja2>=3.0.0",           # For templating
     "posthog>=2.0.0",          # For analytics
+    "multiprocessing-utils>=0.1.0", # For process-local storage
 ]
 
 [project.scripts]

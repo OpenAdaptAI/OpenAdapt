@@ -21,7 +21,7 @@ import time
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageEnhance
 from posthog import Posthog
-import multiprocessing_utils
+# import multiprocessing_utils - moved to functions that use it
 
 from openadapt.build_utils import is_running_from_executable, redirect_stdout_stderr
 from openadapt.custom_logger import logger
@@ -63,6 +63,7 @@ _start_time = None
 _start_perf_counter = None
 
 # Process-local storage for MSS instances
+import multiprocessing_utils
 _process_local = multiprocessing_utils.local()
 
 
