@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnimcp"
+version = "0.1.0"
+description = "OmniMCP - Model Control Protocol for UI Automation"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "OpenAdapt Team"}
+]
+
+dependencies = [
+    "pynput>=1.7.6",           # Keyboard and mouse control
+    "pillow>=10.0.0",          # Image processing
+    "fire>=0.4.0",             # CLI functionality
+    "anthropic>=0.42.0",       # Claude API
+    "loguru>=0.6.0",           # Logging
+    "mcp>=0.9.0",              # Model Control Protocol
+    "requests>=2.31.0",        # HTTP requests for OmniParser
+    "mss>=6.1.0",              # Screen capture
+]
+
+[project.scripts]
+omnimcp = "omnimcp.run_omnimcp:main"
