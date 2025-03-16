@@ -23,6 +23,7 @@ dependencies = [
     "requests>=2.31.0",        # HTTP requests for OmniParser
     "mss>=6.1.0",              # Screen capture
     "jinja2>=3.0.0",           # For templating
+    "posthog>=2.0.0",          # For analytics
 ]
 
 [project.scripts]
