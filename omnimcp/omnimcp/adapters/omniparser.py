@@ -132,16 +132,99 @@ class OmniParserProvider:
         Returns:
             bool: True if successfully deployed or already running, False otherwise
         """
-        # Check if already running
+        # First check if there's an existing EC2 instance running OmniParser
+        try:
+            import boto3
+            from deploy.deploy.models.omniparser.deploy import config
+            ec2 = boto3.resource("ec2", region_name=config.AWS_REGION)
+            instances = ec2.instances.filter(
+                Filters=[
+                    {"Name": "tag:Name", "Values": [config.PROJECT_NAME]},
+                    {"Name": "instance-state-name", "Values": ["running"]},
+                ]
+            )
+            
+            # Get the first running instance
+            instance = next(iter(instances), None)
+            if instance and instance.public_ip_address:
+                remote_url = f"http://{instance.public_ip_address}:8000"
+                logger.info(f"Found existing OmniParser instance at: {remote_url}")
+                
+                # Update the client to use the remote URL
+                self.server_url = remote_url
+                self.client = OmniParserClient(self.server_url)
+                
+                # Check if the server is responding
+                if self.client.check_server_available():
+                    logger.info(f"Successfully connected to existing OmniParser server at {remote_url}")
+                    return True
+                else:
+                    logger.info(f"Found existing instance but server not responding at {remote_url}. Will attempt to deploy.")
+        except Exception as e:
+            logger.warning(f"Error checking for existing EC2 instances: {e}")
+        
+        # Check if local server is running
         if self.status()["is_available"]:
-            logger.info("OmniParser service is already running")
+            logger.info("OmniParser service is already running locally")
             return True
             
-        # Try to deploy using the deployment script
+        # If we get here, we need to deploy a new instance
         try:
+            # The correct import path is deploy.deploy.models.omniparser.deploy
             from deploy.deploy.models.omniparser.deploy import Deploy
             logger.info("Deploying OmniParser service...")
-            Deploy.start()
+            
+            # Modify this class to capture the remote server URL
+            class DeployWithUrlCapture(Deploy):
+                @staticmethod
+                def start():
+                    # Get original implementation
+                    result = Deploy.start()
+                    
+                    # Get EC2 instances with matching tags
+                    import boto3
+                    from deploy.deploy.models.omniparser.deploy import config
+                    ec2 = boto3.resource("ec2", region_name=config.AWS_REGION)
+                    instances = ec2.instances.filter(
+                        Filters=[
+                            {"Name": "tag:Name", "Values": [config.PROJECT_NAME]},
+                            {"Name": "instance-state-name", "Values": ["running"]},
+                        ]
+                    )
+                    
+                    # Get the first running instance
+                    instance = next(iter(instances), None)
+                    if instance and instance.public_ip_address:
+                        return f"http://{instance.public_ip_address}:8000"
+                    
+                    return result
+            
+            # Get the remote server URL
+            remote_url = DeployWithUrlCapture.start()
+            
+            # If we got a URL back, update the client to use it
+            if isinstance(remote_url, str) and remote_url.startswith("http://"):
+                logger.info(f"OmniParser deployed at: {remote_url}")
+                self.server_url = remote_url
+                self.client = OmniParserClient(self.server_url)
+                
+                # Verify the server is available
+                import time
+                
+                # Try multiple times to connect to the remote server
+                max_retries = 30
+                retry_interval = 10
+                
+                for i in range(max_retries):
+                    is_available = self.client.check_server_available()
+                    if is_available:
+                        logger.info(f"Successfully connected to remote OmniParser server at {remote_url}")
+                        return True
+                    
+                    logger.info(f"Server not ready at {remote_url}. Attempt {i+1}/{max_retries}. Waiting {retry_interval} seconds...")
+                    time.sleep(retry_interval)
+            
+            # Fall back to checking localhost
             return self.status()["is_available"]
         except Exception as e:
             logger.error(f"Failed to deploy OmniParser service: {e}")

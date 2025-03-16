@@ -1,6 +1,7 @@
 """Deployment module for OmniParser on AWS EC2."""
 
 import os
+import pathlib
 import subprocess
 import time
 
@@ -50,7 +51,8 @@ class Config(BaseSettings):
     @property
     def AWS_EC2_KEY_PATH(self) -> str:
         """Get the path to the EC2 key file."""
-        return f"./{self.AWS_EC2_KEY_NAME}.pem"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, f"{self.AWS_EC2_KEY_NAME}.pem")
 
     @property
     def AWS_EC2_SECURITY_GROUP(self) -> str:
@@ -64,7 +66,7 @@ config = Config()
 def create_key_pair(
     key_name: str = config.AWS_EC2_KEY_NAME, key_path: str = config.AWS_EC2_KEY_PATH
 ) -> str | None:
-    """Create an EC2 key pair.
+    """Create a new EC2 key pair.
 
     Args:
         key_name: Name of the key pair
@@ -74,6 +76,8 @@ def create_key_pair(
         str | None: Key name if successful, None otherwise
     """
     ec2_client = boto3.client("ec2", region_name=config.AWS_REGION)
+    
+    # Create the new key pair
     try:
         key_pair = ec2_client.create_key_pair(KeyName=key_name)
         private_key = key_pair["KeyMaterial"]
@@ -87,6 +91,109 @@ def create_key_pair(
     except ClientError as e:
         logger.error(f"Error creating key pair: {e}")
         return None
+
+
+def backup_key_file(key_path: str) -> str | None:
+    """Backup a key file.
+    
+    Args:
+        key_path: Path to the key file to backup
+        
+    Returns:
+        str | None: Path to the backup file if successful, None otherwise
+    """
+    if not os.path.exists(key_path):
+        logger.warning(f"Cannot backup non-existent key file: {key_path}")
+        return None
+        
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = f"{key_path}.backup.{timestamp}"
+    
+    try:
+        os.rename(key_path, backup_path)
+        os.chmod(backup_path, 0o400)  # Set read-only permissions
+        logger.info(f"Successfully backed up key file to {backup_path}")
+        return backup_path
+    except Exception as e:
+        logger.error(f"Failed to back up key file: {e}")
+        return None
+
+
+def manage_key_pair(
+    key_name: str = config.AWS_EC2_KEY_NAME, 
+    key_path: str = config.AWS_EC2_KEY_PATH
+) -> bool:
+    """Manage EC2 key pair, attempting to reuse existing key when possible.
+    
+    This function intelligently handles key pair management by:
+    1. Checking if the key pair exists in AWS and locally
+    2. Reusing existing key pairs when available
+    3. Creating new key pairs when needed
+    4. Backing up local keys when appropriate
+    
+    Args:
+        key_name: Name of the key pair
+        key_path: Path where to save the key file
+        
+    Returns:
+        bool: True if a valid key pair is available, False otherwise
+    """
+    ec2_client = boto3.client("ec2", region_name=config.AWS_REGION)
+    
+    # Check if key pair exists in AWS
+    try:
+        ec2_client.describe_key_pairs(KeyNames=[key_name])
+        key_exists_in_aws = True
+        logger.info(f"Found existing key pair in AWS: {key_name}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "InvalidKeyPair.NotFound":
+            key_exists_in_aws = False
+            logger.info(f"Key pair {key_name} not found in AWS, will create new one")
+        else:
+            logger.error(f"Error checking key pair in AWS: {e}")
+            return False
+    
+    # Check if we have the local key file
+    key_exists_locally = os.path.exists(key_path)
+    
+    if key_exists_in_aws and key_exists_locally:
+        # Best case - we have both, can reuse
+        logger.info(f"Reusing existing key pair {key_name} with local file {key_path}")
+        return True
+        
+    elif key_exists_in_aws and not key_exists_locally:
+        # We need to recreate - key exists in AWS but we don't have the file
+        logger.warning(f"AWS key pair {key_name} exists but local file not found")
+        logger.warning("Will delete AWS key and create a new one")
+        
+        # Delete the AWS key since we don't have the local file
+        try:
+            ec2_client.delete_key_pair(KeyName=key_name)
+            logger.info(f"Deleted AWS key pair {key_name}")
+        except ClientError as e:
+            logger.error(f"Error deleting key pair from AWS: {e}")
+            return False
+        
+        # Create new key pair
+        return create_key_pair(key_name, key_path) is not None
+        
+    elif not key_exists_in_aws and key_exists_locally:
+        # Key doesn't exist in AWS but we have a local file - backup and create new
+        if not backup_key_file(key_path):
+            # If backup fails, attempt to remove the file
+            try:
+                os.remove(key_path)
+                logger.info(f"Removed existing key file {key_path}")
+            except Exception as e:
+                logger.error(f"Failed to remove existing key file: {e}")
+                return False
+        
+        # Create new key pair
+        return create_key_pair(key_name, key_path) is not None
+        
+    else:
+        # Simple case - neither exists, just create a new key pair
+        return create_key_pair(key_name, key_path) is not None
 
 
 def get_or_create_security_group_id(ports: list[int] = [22, config.PORT]) -> str | None:
@@ -140,9 +247,23 @@ def get_or_create_security_group_id(ports: list[int] = [22, config.PORT]) -> str
     except ClientError as e:
         if e.response["Error"]["Code"] == "InvalidGroup.NotFound":
             try:
+                # Get the default VPC ID first
+                vpcs = boto3.client('ec2', region_name=config.AWS_REGION).describe_vpcs(
+                    Filters=[{'Name': 'isDefault', 'Values': ['true']}]
+                )
+                
+                if not vpcs['Vpcs']:
+                    logger.error("No default VPC found in this region")
+                    return None
+                
+                default_vpc_id = vpcs['Vpcs'][0]['VpcId']
+                logger.info(f"Using default VPC: {default_vpc_id}")
+                
+                # Create security group in the default VPC
                 response = ec2.create_security_group(
                     GroupName=config.AWS_EC2_SECURITY_GROUP,
                     Description="Security group for OmniParser deployment",
+                    VpcId=default_vpc_id,
                     TagSpecifications=[
                         {
                             "ResourceType": "security-group",
@@ -174,9 +295,48 @@ def deploy_ec2_instance(
     ami: str = config.AWS_EC2_AMI,
     instance_type: str = config.AWS_EC2_INSTANCE_TYPE,
     project_name: str = config.PROJECT_NAME,
-    key_name: str = config.AWS_EC2_KEY_NAME,
+    key_name: str = None,
     disk_size: int = config.AWS_EC2_DISK_SIZE,
+    force_cleanup: bool = True,
 ) -> tuple[str | None, str | None]:
+    # Use PROJECT_NAME from config
+    # If key_name is not provided, use the one from config
+    if key_name is None:
+        key_name = config.AWS_EC2_KEY_NAME
+    
+    # Initialize EC2 client and resource
+    ec2_client = boto3.client("ec2", region_name=config.AWS_REGION)
+    ec2_resource = boto3.resource("ec2", region_name=config.AWS_REGION)
+    
+    # Get the default VPC ID
+    try:
+        vpcs = ec2_client.describe_vpcs(Filters=[{'Name': 'isDefault', 'Values': ['true']}])
+        if not vpcs['Vpcs']:
+            logger.error("No default VPC found in this region")
+            return None, None
+        default_vpc_id = vpcs['Vpcs'][0]['VpcId']
+        logger.info(f"Found default VPC ID: {default_vpc_id}")
+    except Exception as e:
+        logger.error(f"Error finding default VPC: {e}")
+        return None, None
+        
+    # Force cleanup of existing resources if requested
+    if force_cleanup:
+        logger.info(f"Forcing cleanup of existing resources for {project_name}")
+        
+        # Try to delete the key pair
+        try:
+            ec2_client.delete_key_pair(KeyName=key_name)
+            logger.info(f"Deleted existing key pair: {key_name}")
+        except ClientError as e:
+            logger.info(f"Key pair deletion result: {e}")
+            
+        # Try to delete security group
+        try:
+            ec2_client.delete_security_group(GroupName=config.AWS_EC2_SECURITY_GROUP)
+            logger.info(f"Deleted existing security group: {config.AWS_EC2_SECURITY_GROUP}")
+        except ClientError as e:
+            logger.info(f"Security group deletion result: {e}")
     """Deploy a new EC2 instance or return existing one.
 
     Args:
@@ -247,21 +407,21 @@ def deploy_ec2_instance(
         )
         return None, None
 
-    # Create new key pair
+    # Key pair handling - use the path from config
     try:
-        if os.path.exists(config.AWS_EC2_KEY_PATH):
-            logger.info(f"Removing existing key file {config.AWS_EC2_KEY_PATH}")
-            os.remove(config.AWS_EC2_KEY_PATH)
-
-        try:
-            ec2_client.delete_key_pair(KeyName=key_name)
-            logger.info(f"Deleted existing key pair {key_name}")
-        except ClientError:
-            pass  # Key pair doesn't exist, which is fine
-
-        if not create_key_pair(key_name):
-            logger.error("Failed to create key pair")
-            return None, None
+        # Use the key path from config
+        key_path = config.AWS_EC2_KEY_PATH
+        
+        # If we don't have the key file, create a new one
+        # We'll get the proper error later when we try to SSH if it doesn't work
+        if not os.path.exists(key_path):
+            logger.info(f"Key file {key_path} not found, creating a simple one")
+            try:
+                create_key_pair(key_name)
+            except Exception as e:
+                # Even if create_key_pair fails, we'll still proceed
+                # The key might exist in AWS already but we don't have the file
+                logger.warning(f"Could not create key pair: {e}, trying to proceed anyway")
     except Exception as e:
         logger.error(f"Error managing key pair: {e}")
         return None, None
@@ -276,21 +436,71 @@ def deploy_ec2_instance(
         },
     }
 
-    new_instance = ec2.create_instances(
-        ImageId=ami,
-        MinCount=1,
-        MaxCount=1,
-        InstanceType=instance_type,
-        KeyName=key_name,
-        SecurityGroupIds=[security_group_id],
-        BlockDeviceMappings=[ebs_config],
-        TagSpecifications=[
-            {
-                "ResourceType": "instance",
-                "Tags": [{"Key": "Name", "Value": project_name}],
-            },
-        ],
-    )[0]
+    # Find a subnet in the default VPC
+    try:
+        subnets_response = ec2_client.describe_subnets(
+            Filters=[{'Name': 'vpc-id', 'Values': [default_vpc_id]}]
+        )
+        if not subnets_response['Subnets']:
+            logger.info(f"No subnets found in VPC {default_vpc_id}. Creating a new subnet...")
+            # Create a subnet in the default VPC - choose a CIDR block that's likely available
+            # Getting availability zones for the region
+            azs = ec2_client.describe_availability_zones()
+            first_az = azs['AvailabilityZones'][0]['ZoneName']
+            
+            # Create a subnet in the first AZ
+            subnet_response = ec2_client.create_subnet(
+                VpcId=default_vpc_id,
+                CidrBlock='172.31.0.0/20',  # This is a common default VPC CIDR block
+                AvailabilityZone=first_az
+            )
+            subnet_id = subnet_response['Subnet']['SubnetId']
+            logger.info(f"Created new subnet: {subnet_id} in VPC {default_vpc_id} in AZ {first_az}")
+        else:
+            # Get the first available subnet
+            subnet_id = subnets_response['Subnets'][0]['SubnetId']
+            logger.info(f"Using subnet: {subnet_id} in VPC {default_vpc_id}")
+        
+        # Make sure key pair exists
+        try:
+            # Verify if key pair exists
+            ec2_client.describe_key_pairs(KeyNames=[key_name])
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "InvalidKeyPair.NotFound":
+                # Key pair doesn't exist, create it
+                logger.info(f"Key pair {key_name} not found, creating a new one")
+                key_pair = ec2_client.create_key_pair(KeyName=key_name)
+                private_key = key_pair["KeyMaterial"]
+                
+                with open(config.AWS_EC2_KEY_PATH, "w") as key_file:
+                    key_file.write(private_key)
+                os.chmod(config.AWS_EC2_KEY_PATH, 0o400)  # Set read-only permissions
+                logger.info(f"Created new key pair {key_name} and saved to {config.AWS_EC2_KEY_PATH}")
+            else:
+                # Some other error occurred
+                logger.error(f"Error checking key pair: {e}")
+                return None, None
+        
+        # Create instance with specific VPC subnet
+        new_instance = ec2_resource.create_instances(
+            ImageId=ami,
+            MinCount=1,
+            MaxCount=1,
+            InstanceType=instance_type,
+            KeyName=key_name,
+            SecurityGroupIds=[security_group_id],
+            SubnetId=subnet_id,  # Specify the subnet in the correct VPC
+            BlockDeviceMappings=[ebs_config],
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [{"Key": "Name", "Value": project_name}],
+                },
+            ],
+        )[0]
+    except Exception as e:
+        logger.error(f"Error creating instance: {e}")
+        return None, None
 
     new_instance.wait_until_running()
     new_instance.reload()
@@ -308,6 +518,8 @@ def configure_ec2_instance(
     ssh_retry_delay: int = 20,
     max_cmd_retries: int = 20,
     cmd_retry_delay: int = 30,
+    key_path: str | None = None,  # Optional key path override
+    project_name: str = config.PROJECT_NAME,  # Project name for context
 ) -> tuple[str | None, str | None]:
     """Configure an EC2 instance with necessary dependencies and Docker setup.
 
@@ -340,12 +552,18 @@ def configure_ec2_instance(
         Exception: For other unexpected errors during configuration
     """
     if not instance_id:
+        # Use values from config
         ec2_instance_id, ec2_instance_ip = deploy_ec2_instance()
     else:
         ec2_instance_id = instance_id
         ec2_instance_ip = instance_ip
 
-    key = paramiko.RSAKey.from_private_key_file(config.AWS_EC2_KEY_PATH)
+    # Use the override key_path if provided, otherwise use the config value
+    actual_key_path = key_path if key_path else config.AWS_EC2_KEY_PATH
+    
+    logger.info(f"Using key path: {actual_key_path}")
+    
+    key = paramiko.RSAKey.from_private_key_file(actual_key_path)
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -547,18 +765,18 @@ class Deploy:
                 # Build and run Docker container
                 docker_commands = [
                     # Remove any existing container
-                    "sudo docker rm -f {config.CONTAINER_NAME} || true",
+                    f"sudo docker rm -f {config.CONTAINER_NAME} || true",
                     # Remove any existing image
-                    "sudo docker rmi {config.PROJECT_NAME} || true",
+                    f"sudo docker rmi {config.PROJECT_NAME} || true",
                     # Build new image
                     (
                         "cd OmniParser && sudo docker build --progress=plain "
-                        "-t {config.PROJECT_NAME} ."
+                        f"-t {config.PROJECT_NAME} ."
                     ),
                     # Run new container
                     (
                         "sudo docker run -d -p 8000:8000 --gpus all --name "
-                        "{config.CONTAINER_NAME} {config.PROJECT_NAME}"
+                        f"{config.CONTAINER_NAME} {config.PROJECT_NAME}"
                     ),
                 ]
 
@@ -570,7 +788,7 @@ class Deploy:
                 # Wait for container to start and check its logs
                 logger.info("Waiting for container to start...")
                 time.sleep(10)  # Give container time to start
-                execute_command(ssh_client, "docker logs {config.CONTAINER_NAME}")
+                execute_command(ssh_client, f"docker logs {config.CONTAINER_NAME}")
 
                 # Wait for server to become responsive
                 logger.info("Waiting for server to become responsive...")
@@ -600,7 +818,7 @@ class Deploy:
                     raise RuntimeError("Server failed to start properly")
 
                 # Final status check
-                execute_command(ssh_client, "docker ps | grep {config.CONTAINER_NAME}")
+                execute_command(ssh_client, f"docker ps | grep {config.CONTAINER_NAME}")
 
                 server_url = f"http://{instance_ip}:{config.PORT}"
                 logger.info(f"Deployment complete. Server running at: {server_url}")
@@ -623,7 +841,7 @@ class Deploy:
                 logger.error(f"Error during deployment: {e}")
                 # Get container logs for debugging
                 try:
-                    execute_command(ssh_client, "docker logs {config.CONTAINER_NAME}")
+                    execute_command(ssh_client, f"docker logs {config.CONTAINER_NAME}")
                 except Exception as exc:
                     logger.warning(f"{exc=}")
                     pass
