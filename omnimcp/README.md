@@ -4,22 +4,50 @@ OmniMCP is a UI automation system that enables Claude to control the computer th
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.10 or 3.11
+- [uv](https://github.com/astral-sh/uv) - Fast Python package installer and resolver
+  ```bash
+  # Install uv
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+### Install OmniMCP
+
 ```bash
 # Clone the OpenAdapt repository
 git clone https://github.com/OpenAdaptAI/OpenAdapt.git
-cd OpenAdapt
+cd OpenAdapt/omnimcp
 
-# Install OmniMCP in development mode (this avoids installing the full OpenAdapt package)
-cd omnimcp
-python -m pip install -e .
+# Run the installation script (creates a virtual environment using uv)
+# For Unix/Mac:
+./install.sh
+# Note: If you get a permission error, run: chmod +x ./install.sh
+
+# For Windows:
+install.bat
 ```
 
 This installation method:
-1. Only installs the dependencies needed for OmniMCP
-2. Sets up Python to find OpenAdapt modules without installing the full package
-3. Allows you to run OmniMCP commands directly
+1. Creates an isolated virtual environment using uv
+2. Only installs the dependencies needed for OmniMCP
+3. Sets up Python to find OpenAdapt modules without installing the full package
+4. Allows you to run OmniMCP commands directly without polluting your system Python
 
 ## Usage
+
+After installation, activate the virtual environment:
+
+```bash
+# For Unix/Mac
+source .venv/bin/activate
+
+# For Windows
+.venv\Scripts\activate.bat
+```
+
+Then run OmniMCP:
 
 ```bash
 # Run CLI mode (direct command input)
