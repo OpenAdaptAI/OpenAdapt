@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10,<3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "OpenAdapt Team"}
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
 ]
 
 dependencies = [
@@ -26,6 +26,7 @@ dependencies = [
     "posthog>=2.0.0",          # For analytics
     "multiprocessing-utils>=0.1.0", # For process-local storage
     "numpy>=1.21.0",           # For array operations
+    "orjson>=3.8.0",           # For fast JSON handling
 ]
 
 [project.scripts]
