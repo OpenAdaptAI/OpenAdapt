@@ -41,3 +41,7 @@ build/
 
 OpenAdapt.spec
 build_scripts/OpenAdapt.iss
+
+omnimcp/omnimcp.egg-info
+**/__pycache__
+omnimcp/.env
