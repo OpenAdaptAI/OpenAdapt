@@ -14,23 +14,24 @@ authors = [
 ]
 
 dependencies = [
-    "pynput>=1.7.6",           # Keyboard and mouse control
-    "pillow>=10.0.0",          # Image processing
-    "fire>=0.4.0",             # CLI functionality
-    "anthropic>=0.42.0",       # Claude API
-    "loguru>=0.6.0",           # Logging
-    "mcp>=0.9.0",              # Model Control Protocol
-    "requests>=2.31.0",        # HTTP requests for OmniParser
-    "mss>=6.1.0",              # Screen capture
-    "jinja2>=3.0.0",           # For templating
-    "posthog>=2.0.0",          # For analytics
+    "pynput>=1.7.6", # Keyboard and mouse control
+    "pillow>=10.0.0", # Image processing
+    "fire>=0.4.0", # CLI functionality
+    "anthropic>=0.42.0", # Claude API
+    "loguru>=0.6.0", # Logging
+    "mcp>=0.9.0", # Model Control Protocol
+    "requests>=2.31.0", # HTTP requests for OmniParser
+    "mss>=6.1.0", # Screen capture
+    "jinja2>=3.0.0", # For templating
+    "posthog>=2.0.0", # For analytics
     "multiprocessing-utils>=0.1.0", # For process-local storage
-    "numpy>=1.21.0",           # For array operations
-    "orjson>=3.8.0",           # For fast JSON handling
-    "dictalchemy3>=1.0.0",     # For SQLAlchemy dict utils
-    "joblib>=1.2.0",           # For caching
-    "boto3>=1.26.0",           # For AWS services
-    "botocore>=1.29.0"         # For AWS SDK
+    "numpy>=1.21.0", # For array operations
+    "orjson>=3.8.0", # For fast JSON handling
+    "dictalchemy3>=1.0.0", # For SQLAlchemy dict utils
+    "joblib>=1.2.0", # For caching
+    "boto3>=1.26.0", # For AWS services # For AWS SDK
+    "botocore>=1.29.0",
+    "paramiko>=3.5.1",
 ]
 
 [project.scripts]

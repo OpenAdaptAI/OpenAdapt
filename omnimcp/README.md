@@ -2,7 +2,9 @@
 
 OmniMCP is a UI automation system that enables Claude to control the computer through the Model Control Protocol (MCP). It combines OmniParser's visual understanding with Claude's natural language capabilities to automate UI interactions.
 
-## Installation
+## Standalone Installation (minimal dependencies)
+
+This standalone package provides OmniMCP with minimal dependencies, letting you use the core functionality without installing all of OpenAdapt's dependencies. It's part of a larger refactoring effort to make components more modular and easier to use.
 
 ### Prerequisites
 
@@ -32,8 +34,7 @@ install.bat
 This installation method:
 1. Creates an isolated virtual environment using uv
 2. Only installs the dependencies needed for OmniMCP
-3. Sets up Python to find OpenAdapt modules without installing the full package
-4. Allows you to run OmniMCP commands directly without polluting your system Python
+3. Sets up Python to find the required OpenAdapt modules without installing the full package
 
 ## Usage
 
@@ -75,8 +76,8 @@ omnimcp cli --server-url=https://your-omniparser-server.example.com
 # Deploy OmniParser automatically without confirming
 omnimcp cli --auto-deploy-parser --skip-confirmation
 
-# Allow running even if OmniParser isn't available (limited functionality)
-omnimcp cli --allow-no-parser
+# IMPORTANT: Always use auto-deploy with skip-confirmation
+omnimcp cli --auto-deploy-parser --skip-confirmation
 
 # Disable automatic OmniParser deployment attempt
 omnimcp cli --auto-deploy-parser=False
@@ -110,11 +111,10 @@ OmniMCP requires access to an OmniParser server for analyzing screenshots:
    - OmniMCP will try to connect to `http://localhost:8000` by default
    - This requires running an OmniParser server locally
 
-4. **Run Without OmniParser** (Limited functionality)
-   - Use the `--allow-no-parser` flag to run even without OmniParser
-   - Claude will only see raw screenshots without UI element detection
+4. **IMPORTANT: Always Use Auto-Deploy with Skip-Confirmation**
+   - For best results, always use these flags together:
    ```bash
-   omnimcp cli --allow-no-parser
+   omnimcp cli --auto-deploy-parser --skip-confirmation
    ```
 
 ### Future Direction: Anthropic ComputerUse Integration

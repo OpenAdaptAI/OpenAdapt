@@ -350,6 +350,13 @@ class OmniMCP:
                 # Attempt to deploy OmniParser if confirmed
                 if deploy_confirmed:
                     logger.info("Deploying OmniParser service...")
+                    
+                    # TODO: This is a temporary fix to avoid key name conflicts
+                    # The proper fix would be to modify the deploy module to
+                    # properly respect the PROJECT_NAME from omnimcp/.env or deploy/.env
+                    import os
+                    os.environ["PROJECT_NAME"] = "omnimcp"  # Using the omnimcp project name
+                    
                     deploy_success = self.omniparser.deploy()
                     if deploy_success:
                         logger.info("OmniParser deployed successfully.")
