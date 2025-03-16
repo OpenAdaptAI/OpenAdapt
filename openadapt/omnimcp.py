@@ -302,7 +302,8 @@ class OmniMCP:
         self,
         server_url: Optional[str] = None,
         claude_api_key: Optional[str] = None,
-        use_normalized_coordinates: bool = False
+        use_normalized_coordinates: bool = False,
+        allow_no_parser: bool = False
     ):
         """Initialize OmniMCP.
         
@@ -310,11 +311,13 @@ class OmniMCP:
             server_url: URL of OmniParser server
             claude_api_key: API key for Claude (overrides config)
             use_normalized_coordinates: If True, use normalized (0-1) coordinates
+            allow_no_parser: If True, continue even if OmniParser is not available
         """
         self.omniparser = OmniParserProvider(server_url)
         self.visual_state = VisualState()
         self.claude_api_key = claude_api_key or config.ANTHROPIC_API_KEY
         self.use_normalized_coordinates = use_normalized_coordinates
+        self.allow_no_parser = allow_no_parser
         
         # Initialize controllers for keyboard and mouse
         self.keyboard_controller = keyboard.Controller()
@@ -329,6 +332,12 @@ class OmniMCP:
         if not self.omniparser.is_available():
             logger.info("OmniParser not available, attempting to deploy...")
             self.omniparser.deploy()
+            
+            # Check again after deployment attempt
+            if not self.omniparser.is_available() and not allow_no_parser:
+                raise RuntimeError(
+                    "OmniParser server is not available. Please ensure it's running or use --allow-no-parser flag."
+                )
     
     def update_visual_state(self) -> VisualState:
         """Take screenshot and update visual state using OmniParser.
@@ -339,16 +348,31 @@ class OmniMCP:
         # Take screenshot
         screenshot = utils.take_screenshot()
         
-        # Convert to bytes
-        img_byte_arr = io.BytesIO()
-        screenshot.save(img_byte_arr, format='PNG')
-        img_bytes = img_byte_arr.getvalue()
+        # Update the screenshot in visual state regardless of parser availability
+        self.visual_state.screenshot = screenshot
+        self.visual_state.timestamp = time.time()
         
-        # Parse with OmniParser
-        result = self.omniparser.parse_screenshot(img_bytes)
-        
-        # Update visual state
-        self.visual_state.update_from_omniparser(result, screenshot)
+        # If OmniParser is available, use it to analyze the screenshot
+        if self.omniparser.is_available():
+            # Convert to bytes
+            img_byte_arr = io.BytesIO()
+            screenshot.save(img_byte_arr, format='PNG')
+            img_bytes = img_byte_arr.getvalue()
+            
+            # Parse with OmniParser
+            result = self.omniparser.parse_screenshot(img_bytes)
+            
+            # Update visual state
+            self.visual_state.update_from_omniparser(result, screenshot)
+        elif not self.allow_no_parser:
+            # If parser not available and not allowed to continue without it, raise error
+            raise RuntimeError(
+                "OmniParser server is not available. Cannot update visual state."
+            )
+        else:
+            # If parser not available but allowed to continue, log warning
+            logger.warning("OmniParser not available. Visual state will have no UI elements.")
+            self.visual_state.elements = []
         
         return self.visual_state
     

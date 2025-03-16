@@ -69,10 +69,35 @@ omnimcp server
 # Run in debug mode to visualize screen elements
 omnimcp debug
 
+# Connect to a remote OmniParser server
+omnimcp cli --server-url=https://your-omniparser-server.example.com
+
+# Allow running even if OmniParser isn't available (limited functionality)
+omnimcp cli --allow-no-parser
+
 # With additional options
 omnimcp cli --use-normalized-coordinates
 omnimcp debug --debug-dir=/path/to/debug/folder
 ```
+
+### OmniParser Configuration
+
+OmniMCP requires access to an OmniParser server for analyzing screenshots:
+
+1. **Use a Remote OmniParser Server** (Recommended)
+   ```bash
+   omnimcp cli --server-url=https://your-omniparser-server.example.com
+   ```
+
+2. **Use the Default Local Server**
+   - OmniMCP will try to connect to `http://localhost:8000` by default
+   - This requires running an OmniParser server locally
+
+By default, OmniMCP will fail if it can't connect to an OmniParser server. Use the `--allow-no-parser` flag to run with limited functionality when no parser is available.
+
+### TODO: Anthropic ComputerUse Integration
+
+Future versions may integrate with Anthropic's ComputerUse system, which provides an official way for Claude to interact with computers through a virtualized desktop environment.
 
 ## Features
 

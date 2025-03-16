@@ -59,7 +59,8 @@ class OmniMCPRunner:
         server_url=None,
         claude_api_key=None,
         use_normalized_coordinates=False,
-        debug_dir=None
+        debug_dir=None,
+        allow_no_parser=False
     ):
         """Run OmniMCP in CLI mode.
         
@@ -77,12 +78,14 @@ class OmniMCPRunner:
             claude_api_key: Claude API key (if not provided, uses value from config.py)
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
+            allow_no_parser: If True, continue even if OmniParser is not available
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
-            use_normalized_coordinates=use_normalized_coordinates
+            use_normalized_coordinates=use_normalized_coordinates,
+            allow_no_parser=allow_no_parser
         )
         
         # Handle debug directory if specified
@@ -107,7 +110,8 @@ class OmniMCPRunner:
         server_url=None,
         claude_api_key=None,
         use_normalized_coordinates=False,
-        debug_dir=None
+        debug_dir=None,
+        allow_no_parser=False
     ):
         """Run OmniMCP as an MCP server.
         
@@ -127,12 +131,14 @@ class OmniMCPRunner:
             claude_api_key: Claude API key (if not provided, uses value from config.py)
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
+            allow_no_parser: If True, continue even if OmniParser is not available
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
-            use_normalized_coordinates=use_normalized_coordinates
+            use_normalized_coordinates=use_normalized_coordinates,
+            allow_no_parser=allow_no_parser
         )
         
         # Handle debug directory if specified
@@ -157,7 +163,8 @@ class OmniMCPRunner:
         server_url=None,
         claude_api_key=None,
         use_normalized_coordinates=False,
-        debug_dir=None
+        debug_dir=None,
+        allow_no_parser=False
     ):
         """Run OmniMCP in debug mode.
         
@@ -174,12 +181,14 @@ class OmniMCPRunner:
             claude_api_key: Claude API key (if not provided, uses value from config.py)
             use_normalized_coordinates: Use normalized (0-1) coordinates instead of pixels
             debug_dir: Directory to save debug visualizations
+            allow_no_parser: If True, continue even if OmniParser is not available
         """
         # Create OmniMCP instance
         omnimcp = OmniMCP(
             server_url=server_url,
             claude_api_key=claude_api_key,  # Will use config.ANTHROPIC_API_KEY if None
-            use_normalized_coordinates=use_normalized_coordinates
+            use_normalized_coordinates=use_normalized_coordinates,
+            allow_no_parser=allow_no_parser
         )
         
         # Create debug directory if not specified
