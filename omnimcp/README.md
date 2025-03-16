@@ -70,6 +70,9 @@ omnimcp server
 # Run in debug mode to visualize screen elements
 omnimcp debug
 
+# Run Computer Use mode (Anthropic's official Computer Use integration)
+computer-use
+
 # Connect to a remote OmniParser server
 omnimcp cli --server-url=https://your-omniparser-server.example.com
 
@@ -85,6 +88,12 @@ omnimcp cli --auto-deploy-parser=False
 # With additional options
 omnimcp cli --use-normalized-coordinates
 omnimcp debug --debug-dir=/path/to/debug/folder
+
+# Computer Use with specific model
+computer-use --model=claude-3-opus-20240229
+
+# Computer Use with auto-deploy of OmniParser
+computer-use --auto-deploy-parser --skip-confirmation
 ```
 
 ### OmniParser Configuration
@@ -159,8 +168,10 @@ OmniMCP uses code from the OpenAdapt repository but with a minimal set of depend
 
 - `omnimcp/pyproject.toml`: Minimal dependency list
 - `omnimcp/setup.py`: Setup script that adds OpenAdapt to the Python path
-- Original modules from OpenAdapt:
-  - `openadapt/omnimcp.py`: Core functionality
-  - `openadapt/run_omnimcp.py`: CLI interface
-  - `openadapt/adapters/omniparser.py`: OmniParser integration
-  - `openadapt/mcp/`: Model Control Protocol implementation
+- `omnimcp/omnimcp/` package:
+  - `omnimcp/omnimcp/omnimcp.py`: Core OmniMCP functionality
+  - `omnimcp/omnimcp/run_omnimcp.py`: CLI interface
+  - `omnimcp/omnimcp/computer_use.py`: Computer Use integration
+  - `omnimcp/omnimcp/pathing.py`: Python path configuration
+  - `omnimcp/omnimcp/adapters/omniparser.py`: OmniParser client and provider
+  - `omnimcp/omnimcp/mcp/server.py`: Model Control Protocol server implementation

@@ -5,8 +5,8 @@ UI automation capabilities to Claude through a standardized interface.
 
 Usage:
     # Import and create server instance
-    from openadapt.mcp.server import create_omnimcp_server
-    from openadapt.omnimcp import OmniMCP
+    from omnimcp.mcp.server import create_omnimcp_server
+    from omnimcp.omnimcp import OmniMCP
 
     # Create OmniMCP instance
     omnimcp = OmniMCP()
@@ -22,9 +22,8 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
 from mcp.server.fastmcp import FastMCP
-
-from openadapt.custom_logger import logger
 
 
 def create_debug_directory() -> str:

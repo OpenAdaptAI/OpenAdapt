@@ -7,10 +7,9 @@ import base64
 import io
 from typing import Dict, List, Any, Optional
 
+from loguru import logger
 import requests
 from PIL import Image
-
-from openadapt.custom_logger import logger
 
 
 class OmniParserClient:

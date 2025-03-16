@@ -5,8 +5,8 @@ take actions through keyboard and mouse primitives based on natural language req
 
 Usage:
     # Basic usage with MCP server
-    from openadapt.omnimcp import OmniMCP
-    from openadapt.mcp.server import create_omnimcp_server
+    from omnimcp.omnimcp import OmniMCP
+    from omnimcp.mcp.server import create_omnimcp_server
     
     # Create OmniMCP instance
     omnimcp = OmniMCP()
@@ -31,12 +31,12 @@ from typing import Dict, List, Any, Optional, Tuple, Union, Callable
 
 from PIL import Image, ImageDraw
 import fire
+from loguru import logger
 from pynput import keyboard, mouse
 
 from openadapt import utils
-from openadapt.adapters.omniparser import OmniParserProvider
+from omnimcp.adapters.omniparser import OmniParserProvider
 from openadapt.config import config
-from openadapt.custom_logger import logger
 from openadapt.drivers import anthropic
 
 
@@ -973,14 +973,14 @@ Only return valid JSON. Do not include any other text in your response."""
     
     def run_mcp_server(self):
         """Run the MCP server for this OmniMCP instance."""
-        from openadapt.mcp.server import create_omnimcp_server
+        from omnimcp.mcp.server import create_omnimcp_server
         
         server = create_omnimcp_server(self)
         server.run()
     
     async def run_mcp_server_async(self):
         """Run the MCP server asynchronously."""
-        from openadapt.mcp.server import create_omnimcp_server
+        from omnimcp.mcp.server import create_omnimcp_server
         
         server = create_omnimcp_server(self)
         await server.run_async()
