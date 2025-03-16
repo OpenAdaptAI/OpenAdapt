@@ -27,6 +27,7 @@ dependencies = [
     "multiprocessing-utils>=0.1.0", # For process-local storage
     "numpy>=1.21.0",           # For array operations
     "orjson>=3.8.0",           # For fast JSON handling
+    "dictalchemy>=0.1.2.7",    # For SQLAlchemy dict utils
 ]
 
 [project.scripts]
