@@ -162,3 +162,22 @@ upload_to_release = true
 upload_to_repository = false
 repository_url = "https://upload.pypi.org/legacy/"
 build_command = "pip install poetry && poetry env use python3.10 && poetry build"
+
+[tool.poetry.extras]
+recorder = [
+    "pynput",
+    "pillow",
+    "numpy",
+    "psutil",
+    "tqdm",
+    "fire",
+    "loguru",
+    "soundfile",
+    "multiprocessing-utils",
+    "screen-recorder-sdk",      # Windows only
+    "pyaudio",                  # Windows/Linux
+    "pywin32",                  # Windows only
+    "oa-atomacos",              # macOS only
+    "pyobjc-framework-avfoundation", # macOS only
+    "xcffib"                    # Linux only
+]
