@@ -13,6 +13,7 @@ from openadapt.strategies.visual_browser import VisualBrowserReplayStrategy
 from openadapt.strategies.naive import NaiveReplayStrategy
 from openadapt.strategies.segment import SegmentReplayStrategy
 from openadapt.strategies.stateful import StatefulReplayStrategy
+from openadapt.strategies.llm_adaptive_strategy import LLMAdaptiveStrategy
 from openadapt.strategies.vanilla import VanillaReplayStrategy
 from openadapt.strategies.visual import VisualReplayStrategy
 
