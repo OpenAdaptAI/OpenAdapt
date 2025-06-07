@@ -8,6 +8,7 @@ import copy
 import io
 import sys
 import textwrap
+import time
 
 from bs4 import BeautifulSoup
 from pynput import keyboard
@@ -99,6 +100,16 @@ class Recording(db.Base):
     )
     audio_info = sa.orm.relationship(
         "AudioInfo", back_populates="recording", cascade="all, delete-orphan"
+    )
+    recording_embeddings = sa.orm.relationship(
+        "RecordingEmbedding",
+        back_populates="recording",
+        cascade="all, delete-orphan",
+    )
+    recording_summaries = sa.orm.relationship(
+        "RecordingSummary",
+        back_populates="recording",
+        cascade="all, delete-orphan",
     )
 
     _processed_action_events = None
@@ -1185,6 +1196,34 @@ class Replay(db.Base):
     strategy_name = sa.Column(sa.String)
     strategy_args = sa.Column(sa.JSON)
     git_hash = sa.Column(sa.String)
+
+
+class RecordingEmbedding(db.Base):
+    """Class representing a recording embedding in the database."""
+
+    __tablename__ = "recording_embedding"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    embedding = sa.Column(sa.JSON)  # Assuming sqlite-vss can handle JSON
+    model_name = sa.Column(sa.String)  # To store the name of the embedding model used
+    timestamp = sa.Column(ForceFloat, default=time.time)
+
+    recording = sa.orm.relationship("Recording", back_populates="recording_embeddings")
+
+
+class RecordingSummary(db.Base):
+    """Class representing a hierarchical summary of a recording."""
+
+    __tablename__ = "recording_summary"
+
+    id = sa.Column(sa.Integer, primary_key=True)
+    recording_id = sa.Column(sa.ForeignKey("recording.id"))
+    summary_text = sa.Column(sa.Text)
+    summary_level = sa.Column(sa.String)  # e.g., "high", "mid", "low"
+    timestamp = sa.Column(ForceFloat, default=time.time)
+
+    recording = sa.orm.relationship("Recording", back_populates="recording_summaries")
 
 
 def copy_sa_instance(sa_instance: db.Base, **kwargs: dict) -> db.Base:

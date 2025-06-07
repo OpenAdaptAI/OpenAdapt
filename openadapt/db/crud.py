@@ -29,8 +29,10 @@ from openadapt.models import (
     ScrubbedRecording,
     WindowEvent,
     copy_sa_instance,
+    RecordingEmbedding,
 )
 from openadapt.privacy.base import ScrubbingProvider
+from openadapt.embed import get_embedding, get_configured_model_name
 
 BATCH_SIZE = 1
 
@@ -284,6 +286,11 @@ def insert_recording(session: SaSession, recording_data: dict) -> Recording:
     session.add(db_obj)
     session.commit()
     session.refresh(db_obj)
+
+    # Add embedding
+    if db_obj.task_description:
+        add_or_update_embedding(session, db_obj, db_obj.task_description)
+
     return db_obj
 
 
@@ -966,3 +973,58 @@ def release_db_lock(raise_exception: bool = True) -> None:
             logger.error("Database lock file not found.")
             raise
     logger.info("Database lock released.")
+
+
+def add_or_update_embedding(session: SaSession, recording: Recording, text: str) -> None:
+    """Adds or updates the embedding for a given recording and text.
+
+    Args:
+        session: The database session.
+        recording: The Recording object.
+        text: The text to embed (e.g., task_description).
+    """
+    current_model_name = get_configured_model_name()
+    embedding_vector = get_embedding(text, model_name=current_model_name)
+    if embedding_vector:
+        # Check if an embedding already exists for this recording and model
+        existing_embedding = (
+            session.query(RecordingEmbedding)
+            .filter_by(recording_id=recording.id, model_name=current_model_name)
+            .first()
+        )
+        if existing_embedding:
+            existing_embedding.embedding = embedding_vector
+            existing_embedding.timestamp = time.time()
+            logger.info(f"Updated embedding for recording_id={recording.id} using model='{current_model_name}'")
+        else:
+            new_embedding = RecordingEmbedding(
+                recording_id=recording.id,
+                embedding=embedding_vector,
+                model_name=current_model_name,
+            )
+            session.add(new_embedding)
+            logger.info(f"Added new embedding for recording_id={recording.id} using model='{current_model_name}'")
+        session.commit()
+    else:
+        logger.warning(
+            f"Could not generate or save embedding for recording_id={recording.id}"
+        )
+
+
+def get_similar_recordings_by_embedding(
+    session: SaSession, query_embedding: list[float], top_n: int = 5
+) -> list[Recording]:
+    """Finds recordings with the most similar embeddings to the query_embedding
+    using pure Python similarity search with NumPy and SciPy.
+
+    Args:
+        session: The database session.
+        query_embedding: The embedding vector of the user's query.
+        top_n: The number of similar recordings to return.
+
+    Returns:
+        A list of Recording objects, ordered by similarity (most similar first).
+    """
+    from openadapt.similarity_search import get_similar_recordings_by_embedding_legacy
+    
+    return get_similar_recordings_by_embedding_legacy(session, query_embedding, top_n)

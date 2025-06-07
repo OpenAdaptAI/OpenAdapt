@@ -227,6 +227,9 @@ class Config(BaseSettings):
     # Spacy configurations
     SPACY_MODEL_NAME: str = "en_core_web_trf"
 
+    # Embedding configurations
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+
     # Dashboard configurations
     DASHBOARD_CLIENT_PORT: int = 3000
     DASHBOARD_SERVER_PORT: int = 8000

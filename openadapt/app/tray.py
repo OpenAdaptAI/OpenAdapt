@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -44,6 +45,7 @@ from openadapt.replay import replay
 from openadapt.strategies.base import BaseReplayStrategy
 from openadapt.utils import WrapStdout, get_posthog_instance
 from openadapt.visualize import main as visualize
+from openadapt.similarity_search import get_enhanced_similarity_search
 
 # ensure all strategies are registered
 import openadapt.strategies  # noqa: F401
@@ -143,6 +145,12 @@ class SystemTrayIcon:
         self.record_action = TrackedQAction("Record")
         self.record_action.triggered.connect(self._record)
         self.menu.addAction(self.record_action)
+
+        self.search_action = TrackedQAction("💬 What do you want help with today?")
+        self.search_action.triggered.connect(self._search_workflows)
+        self.menu.addAction(self.search_action)
+        
+        self.menu.addSeparator()
 
         self.visualize_menu = self.menu.addMenu("Visualize")
         self.replay_menu = self.menu.addMenu("Replay")
@@ -256,6 +264,310 @@ class SystemTrayIcon:
         """Stop recording."""
         Thread(target=stop_record).start()
 
+    def _search_workflows(self) -> None:
+        """Handle natural language workflow search with multiple results."""
+        search_query, ok = QInputDialog.getText(
+            None,
+            "💬 OpenAdapt Assistant",
+            "What do you want help with today?\n(e.g., 'calculate taxes', 'organize files', 'send email')",
+            text=""
+        )
+        
+        if not ok or not search_query.strip():
+            return
+            
+        logger.info(f"User wants help with: {search_query}")
+        self.show_toast("Finding relevant workflows...")
+        
+        try:
+            with crud.get_new_session(read_only=True) as session:
+                results = get_enhanced_similarity_search(session, search_query, top_n=5)
+                
+                if not results:
+                    self.show_toast(
+                        "No matching workflows found. Try recording a workflow first!",
+                        duration=5000
+                    )
+                    return
+                
+                filtered_results = [(r, c) for r, c in results if c >= 0.1]
+                
+                if not filtered_results:
+                    self.show_toast(
+                        f"No good matches found for '{search_query}'. Try different keywords.",
+                        duration=5000
+                    )
+                    return
+                
+                self._show_workflow_selection(filtered_results, search_query)
+
+        except Exception as e:
+            logger.error(f"Error searching workflows: {e}")
+            self.show_toast("Search failed. Please try again.", duration=5000)
+
+    def _show_workflow_selection(self, results: list, search_query: str) -> None:
+        """Show a dialog with multiple workflow options for selection."""
+        dialog = QDialog()
+        dialog.setWindowTitle("Select a Workflow")
+        dialog.setMinimumWidth(700)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        header_label = QLabel(f"Found workflows for: \"{search_query}\"")
+        header_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        layout.addWidget(header_label)
+
+        workflow_group = QGroupBox("Select a workflow to replay:")
+        workflow_group.setFont(QFont("Segoe UI", 10))
+        workflow_layout = QVBoxLayout(workflow_group)
+        workflow_layout.setSpacing(10)
+        
+        self.workflow_buttons = []
+        for recording, confidence in results:
+            confidence_pct = confidence * 100
+            if confidence_pct >= 80: confidence_color = "#28a745"
+            elif confidence_pct >= 60: confidence_color = "#ffc107"
+            else: confidence_color = "#dc3545"
+
+            btn = QPushButton(recording.task_description)
+            btn.setMinimumHeight(50)
+            btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Normal))
+            btn.setStyleSheet(f"border-left: 5px solid {confidence_color}; text-align: left; padding: 10px;")
+            
+            timestamp_str = datetime.fromtimestamp(recording.timestamp).strftime('%b %d, %Y %H:%M')
+            metadata_text = f"Confidence: {confidence_pct:.1f}%  •  Recorded: {timestamp_str}"
+            metadata_label = QLabel(metadata_text)
+            metadata_label.setFont(QFont("Segoe UI", 9))
+            metadata_label.setStyleSheet(f"color: {confidence_color}; padding: 0 0 0 5px;")
+            
+            item_layout = QVBoxLayout()
+            item_layout.setSpacing(2)
+            item_layout.addWidget(btn)
+            item_layout.addWidget(metadata_label)
+            workflow_layout.addLayout(item_layout)
+
+            btn.clicked.connect(lambda checked, r=recording: self._handle_workflow_selection(r, search_query))
+            self.workflow_buttons.append(btn)
+        
+        layout.addWidget(workflow_group)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Cancel)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box, 0, Qt.AlignRight)
+        
+        dialog.exec()
+    
+    def _handle_workflow_selection(self, recording: Recording, search_query: str) -> None:
+        """Handle selection from the workflow selection dialog."""
+        logger.info(f"User selected workflow: {recording.task_description}")
+        
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, QDialog):
+                widget.close()
+        
+        self.show_toast(f"Selected: {recording.task_description}")
+        self._replay_from_search(recording, search_query)
+
+    def _replay(self, recording: Recording) -> None:
+        """Dynamically select and configure a replay strategy."""
+        dialog = QDialog()
+        dialog.setWindowTitle("Configure Replay Strategy")
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Select Replay Strategy:")
+        combo_box = QComboBox()
+        strategies = {
+            cls.__name__: cls
+            for cls in BaseReplayStrategy.__subclasses__()
+            if not cls.__name__.endswith("Mixin")
+            and cls.__name__ != "DemoReplayStrategy"
+        }
+        combo_box.addItems(strategies.keys())
+        if "VisualReplayStrategy" in strategies:
+            combo_box.setCurrentText("VisualReplayStrategy")
+
+        strategy_label = QLabel()
+        strategy_label.setWordWrap(True)
+        
+        layout.addWidget(label)
+        layout.addWidget(combo_box)
+        layout.addWidget(strategy_label)
+
+        args_container = QWidget()
+        args_layout = QVBoxLayout(args_container)
+        args_container.setLayout(args_layout)
+        layout.addWidget(args_container)
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        def update_args_inputs() -> None:
+            """Update argument inputs."""
+            while args_layout.count():
+                args_layout.takeAt(0).widget().deleteLater()
+
+            strategy_class = strategies[combo_box.currentText()]
+            strategy_label.setText(strategy_class.__doc__ or "No description available.")
+
+            sig = inspect.signature(strategy_class.__init__)
+            for param in sig.parameters.values():
+                if param.name in ("self", "recording"):
+                    continue
+                
+                arg_label = QLabel(f"{param.name.replace('_', ' ').title()}:")
+                if param.annotation is bool:
+                    arg_input = QComboBox()
+                    arg_input.addItems(["False", "True"])
+                    if param.default:
+                        arg_input.setCurrentIndex(int(param.default))
+                else:
+                    arg_input = QLineEdit()
+                    if param.default is not inspect.Parameter.empty:
+                        arg_input.setText(str(param.default))
+                
+                args_layout.addWidget(arg_label)
+                args_layout.addWidget(arg_input)
+
+        combo_box.currentIndexChanged.connect(update_args_inputs)
+        update_args_inputs()
+
+        if dialog.exec() == QDialog.Accepted:
+            selected_strategy = strategies[combo_box.currentText()]
+            sig = inspect.signature(selected_strategy.__init__)
+            kwargs = {}
+            widget_idx = 0
+            for param in sig.parameters.values():
+                if param.name in ("self", "recording"):
+                    continue
+                arg_widget = args_layout.itemAt(widget_idx * 2 + 1).widget()
+                value = arg_widget.currentText() == "True" if isinstance(arg_widget, QComboBox) else arg_widget.text()
+                try:
+                    kwargs[param.name] = param.annotation(value) if param.annotation != inspect.Parameter.empty else value
+                except (ValueError, TypeError):
+                    kwargs[param.name] = value
+                widget_idx += 1
+
+            self.child_conn.send({"type": "replay.starting"})
+            replay_proc = multiprocessing.Process(
+                target=WrapStdout(replay),
+                args=(selected_strategy.__name__, False, None, recording, self.child_conn),
+                kwargs=kwargs,
+                daemon=True,
+            )
+            replay_proc.start()
+
+    def _replay_from_search(self, recording: Recording, search_query: str) -> None:
+        """Replay a recording with search query context."""
+        dialog = QDialog()
+        dialog.setWindowTitle("Configure Replay")
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        header_text = f"<div style='font-size: 11pt; font-weight: bold;'>Replay: {recording.task_description}</div>"
+        header_text += f"<div style='font-size: 9pt;'>From search: \"{search_query}\"</div>"
+        header_label = QLabel(header_text)
+        layout.addWidget(header_label)
+
+        strategy_group = QGroupBox("Replay Strategy")
+        strategy_group.setFont(QFont("Segoe UI", 10))
+        strategy_layout = QVBoxLayout(strategy_group)
+        
+        combo_box = QComboBox()
+        strategies = {
+            cls.__name__: cls for cls in BaseReplayStrategy.__subclasses__()
+            if not cls.__name__.endswith("Mixin") and cls.__name__ != "DemoReplayStrategy"
+        }
+        combo_box.addItems(strategies.keys())
+        if "VisualReplayStrategy" in strategies:
+            combo_box.setCurrentText("VisualReplayStrategy")
+        
+        strategy_label = QLabel()
+        strategy_label.setWordWrap(True)
+        strategy_label.setFont(QFont("Segoe UI", 9))
+        
+        strategy_layout.addWidget(combo_box)
+        strategy_layout.addWidget(strategy_label)
+        layout.addWidget(strategy_group)
+
+        args_container = QWidget()
+        args_layout = QVBoxLayout(args_container)
+        args_layout.setContentsMargins(0,0,0,0)
+        args_layout.setSpacing(10)
+        layout.addWidget(args_container)
+
+        def update_args_inputs() -> None:
+            """Update argument inputs, hiding instructions."""
+            while args_layout.count():
+                args_layout.takeAt(0).widget().deleteLater()
+
+            strategy_class = strategies[combo_box.currentText()]
+            strategy_label.setText(strategy_class.__doc__ or "No description available.")
+            
+            sig = inspect.signature(strategy_class.__init__)
+            has_visible_params = False
+            for param in sig.parameters.values():
+                if param.name in ("self", "recording", "instructions", "str_input"):
+                    continue
+                has_visible_params = True
+                
+                param_label = QLabel(f"{param.name.replace('_', ' ').title()}:")
+                param_label.setFont(QFont("Segoe UI", 10))
+                
+                if param.annotation is bool:
+                    arg_input = QComboBox()
+                    arg_input.addItems(["False", "True"])
+                    if param.default:
+                        arg_input.setCurrentIndex(int(param.default))
+                else:
+                    arg_input = QLineEdit(str(param.default) if param.default is not inspect.Parameter.empty else "")
+                
+                args_layout.addWidget(param_label)
+                args_layout.addWidget(arg_input)
+            args_container.setVisible(has_visible_params)
+
+        combo_box.currentIndexChanged.connect(update_args_inputs)
+        update_args_inputs()
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        if dialog.exec() == QDialog.Accepted:
+            selected_strategy = strategies[combo_box.currentText()]
+            sig = inspect.signature(selected_strategy.__init__)
+            kwargs = {}
+            widget_idx = 0
+            for param in sig.parameters.values():
+                if param.name in ("instructions", "str_input"):
+                    kwargs[param.name] = search_query
+                    continue
+                if param.name in ("self", "recording"):
+                    continue
+
+                if args_container.isVisible():
+                    arg_widget = args_layout.itemAt(widget_idx * 2 + 1).widget()
+                    value = arg_widget.currentText() == "True" if isinstance(arg_widget, QComboBox) else arg_widget.text()
+                    try:
+                        kwargs[param.name] = param.annotation(value) if param.annotation != inspect.Parameter.empty else value
+                    except (ValueError, TypeError):
+                        kwargs[param.name] = value
+                    widget_idx += 1
+
+            logger.info(f"Replaying with kwargs: {pformat(kwargs)}")
+            self.child_conn.send({"type": "replay.starting"})
+            replay_proc = multiprocessing.Process(
+                target=WrapStdout(replay),
+                args=(selected_strategy.__name__, False, None, recording, self.child_conn),
+                kwargs=kwargs,
+                daemon=True,
+            )
+            replay_proc.start()
+
     def _visualize(self, recording: Recording) -> None:
         """Visualize a recording.
 
@@ -274,145 +586,6 @@ class SystemTrayIcon:
         except Exception as e:
             logger.error(e)
             self.show_toast("Visualization failed.")
-
-    def _replay(self, recording: Recording) -> None:
-        """Dynamically select and configure a replay strategy."""
-        # TODO: refactor into class, like ConfirmDeleteDialog
-        dialog = QDialog()
-        dialog.setWindowTitle("Configure Replay Strategy")
-        layout = QVBoxLayout(dialog)
-
-        # Strategy selection
-        label = QLabel("Select Replay Strategy:")
-        combo_box = QComboBox()
-        strategies = {
-            cls.__name__: cls
-            for cls in BaseReplayStrategy.__subclasses__()
-            if not cls.__name__.endswith("Mixin")
-            and cls.__name__ != "DemoReplayStrategy"
-        }
-        strategy_names = list(strategies.keys())
-        logger.info(f"{strategy_names=}")
-        combo_box.addItems(strategy_names)
-
-        # Set default strategy
-        default_strategy = "VisualReplayStrategy"
-        default_index = combo_box.findText(default_strategy)
-        if default_index != -1:  # Ensure the strategy is found in the list
-            combo_box.setCurrentIndex(default_index)
-        else:
-            logger.warning(f"{default_strategy=} not found")
-
-        strategy_label = QLabel()
-        layout.addWidget(label)
-        layout.addWidget(combo_box)
-        layout.addWidget(strategy_label)
-
-        # Container for argument widgets
-        args_container = QWidget()
-        args_layout = QVBoxLayout(args_container)
-        args_container.setLayout(args_layout)
-        layout.addWidget(args_container)
-
-        # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-
-        def update_args_inputs() -> None:
-            """Update argument inputs."""
-            # Clear existing widgets
-            while args_layout.count():
-                widget_to_remove = args_layout.takeAt(0).widget()
-                if widget_to_remove is not None:
-                    widget_to_remove.setParent(None)
-                    widget_to_remove.deleteLater()
-
-            strategy_class = strategies[combo_box.currentText()]
-
-            strategy_label.setText(strategy_class.__doc__)
-
-            sig = inspect.signature(strategy_class.__init__)
-            for param in sig.parameters.values():
-                if param.name != "self" and param.name != "recording":
-                    arg_label = QLabel(f"{param.name.replace('_', ' ').capitalize()}:")
-
-                    # Determine if the parameter is a boolean
-                    if param.annotation is bool:
-                        # Create a combobox for boolean values
-                        arg_input = QComboBox()
-                        arg_input.addItems(["True", "False"])
-                        # Set default value if exists
-                        if param.default is not inspect.Parameter.empty:
-                            default_index = 0 if param.default else 1
-                            arg_input.setCurrentIndex(default_index)
-                    else:
-                        # Create a line edit for non-boolean values
-                        arg_input = QLineEdit()
-                        annotation_str = self.format_annotation(param.annotation)
-                        arg_input.setPlaceholderText(annotation_str or "str")
-                        # Set default text if there is a default value
-                        if param.default is not inspect.Parameter.empty:
-                            arg_input.setText(str(param.default))
-
-                    args_layout.addWidget(arg_label)
-                    args_layout.addWidget(arg_input)
-
-            args_container.adjustSize()
-            dialog.adjustSize()
-            dialog.setMinimumSize(0, 0)  # Reset the minimum size to allow shrinking
-
-        combo_box.currentIndexChanged.connect(update_args_inputs)
-        update_args_inputs()  # Initial update
-
-        # Show dialog and process the result
-        if dialog.exec() == QDialog.Accepted:
-            selected_strategy = strategies[combo_box.currentText()]
-            sig = inspect.signature(selected_strategy.__init__)
-            kwargs = {}
-            index = 0
-            for param_name, param in sig.parameters.items():
-                if param_name in ["self", "recording"]:
-                    continue
-                widget = args_layout.itemAt(index * 2 + 1).widget()
-                if param.annotation is bool:
-                    # For boolean, get True/False from the combobox selection
-                    value = widget.currentText() == "True"
-                else:
-                    # Convert the text to the annotated type if possible
-                    text = widget.text()
-                    try:
-                        # Cast text to the parameter's annotated type
-                        value = (
-                            param.annotation(text)
-                            if param.annotation != inspect.Parameter.empty
-                            else text
-                        )
-                    except ValueError as exc:
-                        logger.warning(f"{exc=}")
-                        value = text
-                kwargs[param_name] = value
-                index += 1
-            logger.info(f"kwargs=\n{pformat(kwargs)}")
-
-            self.child_conn.send({"type": "replay.starting"})
-            record_replay = False
-            recording_timestamp = None
-            strategy_name = selected_strategy.__name__
-            replay_proc = multiprocessing.Process(
-                target=WrapStdout(replay),
-                args=(
-                    strategy_name,
-                    record_replay,
-                    recording_timestamp,
-                    recording,
-                    self.child_conn,
-                ),
-                kwargs=kwargs,
-                daemon=True,
-            )
-            replay_proc.start()
 
     def _delete(self, recording: Recording) -> None:
         """Delete a recording after confirmation.
@@ -705,52 +878,30 @@ class ConfirmDeleteDialog(QDialog):
     """Dialog window to confirm recording deletion."""
 
     def __init__(self, recording_description: str) -> None:
-        """Initialize.
-
-        Args:
-            recording_description (str): The Recording's description.
-        """
+        """Initialize."""
         super().__init__()
-        self.setWindowTitle("Confirm Delete")
+        self.setWindowTitle("Confirm Deletion")
         self.build_ui(recording_description)
 
     def build_ui(self, recording_description: str) -> None:
-        """Build the dialog window.
-
-        Args:
-            recording_description (str): The recording description.
-        """
-        # Setup layout
+        """Build the dialog window."""
         layout = QVBoxLayout(self)
 
-        # Add description text
         label = QLabel(
             f"Are you sure you want to delete the recording '{recording_description}'?"
         )
         label.setWordWrap(True)
         layout.addWidget(label)
 
-        # Add buttons
-        button_layout = QHBoxLayout()
-        yes_button = QPushButton("Yes")
-        no_button = QPushButton("No")
-        button_layout.addWidget(yes_button)
-        button_layout.addWidget(no_button)
-        layout.addLayout(button_layout)
-
-        # Connect buttons
-        yes_button.clicked.connect(self.accept)
-        no_button.clicked.connect(self.reject)
+        button_box = QDialogButtonBox(QDialogButtonBox.Yes | QDialogButtonBox.No)
+        button_box.button(QDialogButtonBox.Yes).setStyleSheet("color: red;")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
 
     def exec_(self) -> bool:
-        """Show the dialog window and return the user input.
-
-        Returns:
-            bool: The user's input.
-        """
-        if super().exec_() == QDialog.Accepted:
-            return True
-        return False
+        """Show the dialog window and return the user input."""
+        return super().exec_() == QDialog.Accepted
 
 
 def _run() -> None:
