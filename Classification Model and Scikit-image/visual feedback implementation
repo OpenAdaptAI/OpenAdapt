@@ -1,0 +1,87 @@
+from sklearn.model_selection import train_test_split
+
+X = data.content
+y = data.language
+
+data.dropna(inplace=True)
+data.drop_duplicates(inplace=True)
+
+# Train/Test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+from nltk.tokenize.regexp import WhitespaceTokenizer
+WhitespaceTokenizer().tokenize("This is a whitespace tokenizer!")  # ['This', 'is', 'a', 'whitespace', 'tokenizer!']
+
+import pandas as pd
+data = pd.read_csv("file.csv")
+from sklearn.preprocessing import FunctionTransformer
+
+def preprocess(x):
+    return pd.Series(x).replace(r'\b([A-Za-z])\1+\b', '', regex=True)\
+        .replace(r'\b[A-Za-z]\b', '', regex=True)
+
+transformer = FunctionTransformer(preprocess)
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+token_pattern = r"""([A-Za-z_]\w*\b|[!\#\$%\&\*\+:\-\./<=>\?@\\\^_\|\~]+|[ \t\(\),;\{\}\[\]"'`])"""
+
+vectorizer = TfidfVectorizer(token_pattern=token_pattern, max_features=3000)
+
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+
+# Four Models to be compared
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+
+
+clf_pipe = Pipeline([('preprocessing', transformer), ('vectorizer', vectorizer), ('clf', clf)])
+GNB_pipe = Pipeline([('transformer', FunctionTransformer(lambda x: x.todense(), accept_sparse=True)), ('GNB', GaussianNB())])
+
+param_grid = dict(clf=[GNB_pipe, LogisticRegression(max_iter = 400), RandomForestClassifier(), MLPClassifier(max_iter = 400))])
+grid_search = GridSearchCV(clf_pipe, param_grid=param_grid, cv=3)
+grid_search.fit(X_train, y_train)
+
+FunctionTransformer(lambda x: x.todense(), accept_sparse=True)
+
+final_clf = grid_search.best_estimator_ # Estimator that was chosen by the search (highest score)
+best_score = grid_search.best_score_ # Mean cross-validated score of the best_estimator
+comparaison_result = pd.DataFrame(grid_search.cv_results_).sort_values(by=['rank_test_score']) # Table detailing CV results for each model
+
+# Defining classifier
+
+best_params = grid_search_RF.best_params_
+
+{
+ 'clf__criterion': 'gini',
+ 'clf__max_features': 'sqrt',
+ 'clf__min_samples_split': 3,
+ 'clf__n_estimators': 300
+}
+clf = RandomForestClassifier(n_jobs=4)
+
+# RandomForest parameters
+param_grid_RF = {"clf__n_estimators" : [200, 300, 400] ,
+                 "clf__criterion" : ["gini", "entropy"], 
+                 "clf__min_samples_split" : [2, 3], 
+                 "clf__max_features" : ["sqrt", None, "log2"]
+                }
+
+#### Grid search on RandomForest
+pipe_RF = Pipeline([('preprocessing', transformer),
+                    ('vectorizer', vectorizer),
+                    ('clf', clf)])
+grid_search_RF = GridSearchCV(pipe_RF, param_grid=param_grid_RF, cv=3)
+grid_search_RF.fit(X_train, y_train)
+
+pipe_RF.set_params(**best_params)
+
+import re
+from lime.lime_text import LimeTextExplainer
+
+explainer = LimeTextExplainer(class_names=model.classes_, split_expression=lambda x: re.findall(token_pattern, x))
+

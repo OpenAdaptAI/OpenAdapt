@@ -1,0 +1,17 @@
+import json
+
+file_path = "YOUR_JSON_FILE_PATH"
+with open(file_path, 'r') as f:
+    lang_table = json.load(f)
+
+data["extension"] = data["sample_path"].apply(lambda x: x.split('.')[-1])
+data["language"] = data["extension"].replace({ext: lang for lang, exts in lang_table.items() for ext in exts})
+
+import json
+
+file_path = "YOUR_JSON_FILE_PATH"
+with open(file_path, 'r') as f:
+    lang_table = json.load(f)
+
+data["extension"] = data["sample_path"].apply(lambda x: x.split('.')[-1])
+data["language"] = data["extension"].replace({ext: lang for lang, exts in lang_table.items() for ext in exts})

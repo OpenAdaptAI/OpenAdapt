@@ -1,0 +1,343 @@
+import skimage as ski
+camera = ski.data.camera()
+type(camera)
+<type 'numpy.ndarray'>
+
+ccamera.shape
+(512, 512)
+camera.size
+262144
+
+camera.min(), camera.max()
+(0, 255)
+camera.mean()
+118.31400299072266
+
+# Get the value of the pixel at the 10th row and 20th column
+camera[10, 20]
+153
+# Set to black the pixel at the 3rd row and 10th column
+camera[3, 10] = 0
+
+# Set the first ten lines to "black" (0)
+camera[:10] = 0
+
+mask = camera < 87
+# Set to "white" (255) the pixels where mask is True
+camera[mask] = 255
+
+import numpy as np
+inds_r = np.arange(len(camera))
+inds_c = 4 * inds_r % len(camera)
+camera[inds_r, inds_c] = 0
+
+nrows, ncols = camera.shape
+row, col = np.ogrid[:nrows, :ncols]
+cnt_row, cnt_col = nrows / 2, ncols / 2
+outer_disk_mask = ((row - cnt_row)**2 + (col - cnt_col)**2 >
+                   (nrows / 2)**2)
+camera[outer_disk_mask] = 0
+
+lower_half = row > cnt_row
+lower_half_disk = np.logical_and(lower_half, outer_disk_mask)
+camera = data.camera()
+camera[lower_half_disk] = 0
+
+cat = ski.data.chelsea()
+type(cat)
+<type 'numpy.ndarray'>
+cat.shape
+(300, 451, 3)
+
+cat[10, 20]
+array([151, 129, 115], dtype=uint8)
+# Set the pixel at (50th row, 60th column) to "black"
+cat[50, 60] = 0
+# set the pixel at (50th row, 61st column) to "green"
+cat[50, 61] = [0, 255, 0]  # [red, green, blue]
+
+import numpy as np
+import scipy as sp
+import skimage as ski
+rng = np.random.default_rng()
+im3d = rng.random((100, 1000, 1000))
+seeds = sp.ndimage.label(im3d < 0.1)[0]
+ws = ski.segmentation.watershed(im3d, seeds)
+
+slics = ski.segmentation.slic(im3d, spacing=[5, 1, 1], channel_axis=None)
+
+edges = np.empty_like(im3d)
+for pln, image in enumerate(im3d):
+    # Iterate over the leading dimension
+    edges[pln] = ski.filters.sobel(image)
+    
+def in_order_multiply(arr, scalar):
+    for plane in list(range(arr.shape[0])):
+        arr[plane, :, :] *= scalar
+
+def out_of_order_multiply(arr, scalar):
+    for plane in list(range(arr.shape[2])):
+        arr[:, :, plane] *= scalar
+
+import time
+rng = np.random.default_rng()
+im3d = rng.random((100, 1024, 1024))
+t0 = time.time(); x = in_order_multiply(im3d, 5); t1 = time.time()
+print("%.2f seconds" % (t1 - t0))  
+0.14 seconds
+s0 = time.time(); x = out_of_order_multiply(im3d, 5); s1 = time.time()
+print("%.2f seconds" % (s1 - s0))  
+1.18 seconds
+print("Speedup: %.1fx" % ((s1 - s0) / (t1 - t0)))  
+Speedup: 8.6x
+
+for timepoint in image5d:  
+    # Each timepoint is a 3D multichannel image
+    do_something_with(timepoint)
+    
+ import numpy as np
+import skimage as ski
+image = np.arange(0, 50, 10, dtype=np.uint8)
+print(image.astype(float)) # These float values are out of range.
+[  0.  10.  20.  30.  40.]
+print(ski.util.img_as_float(image))
+[ 0.          0.03921569  0.07843137  0.11764706  0.15686275]
+
+import skimage as ski
+image = np.array([0, 0.5, 1], dtype=float)
+ski.util.img_as_ubyte(image)
+array([  0, 128, 255], dtype=uint8)
+
+image = np.array([0, 0.5, 0.503, 1], dtype=float)
+ski.util.img_as_ubyte(image)
+array([  0, 128, 128, 255], dtype=uint8)
+
+image = ski.data.coins()
+image.dtype, image.min(), image.max(), image.shape
+(dtype('uint8'), 1, 252, (303, 384))
+rescaled = ski.transform.rescale(image, 0.5)
+(rescaled.dtype, np.round(rescaled.min(), 4),
+ np.round(rescaled.max(), 4), rescaled.shape)
+(dtype('float64'), 0.0147, 0.9456, (152, 192))
+rescaled = ski.transform.rescale(image, 0.5, preserve_range=True)
+(rescaled.dtype, np.round(rescaled.min()),
+ np.round(rescaled.max()), rescaled.shape)
+(dtype('float64'), 4.0, 241.0, (152, 192))
+
+out = ski.util.img_as_uint(sobel(image))
+plt.imshow(out)
+
+out = ski.util.img_as_uint(sobel(image))
+plt.imshow(out)
+
+image = image[:, :, ::-1]
+
+import skimage as ski
+image = ski.util.img_as_float(any_opencv_image)
+
+import skimage as ski
+cv_image = ski.util.img_as_ubyte(any_skimage_image)
+
+import skimage as ski
+image = ski.util.img_as_float(func1(func2(image)))
+processed_image = custom_func(image)
+ def custom_func(image):
+    image = ski.util.img_as_float(image)
+    # do something
+
+processed_image = custom_func(func1(func2(image)))
+
+import skimage as ski
+image = ski.exposure.rescale_intensity(img10bit, in_range=(0, 2**10 - 1))
+
+image = ski.exposure.rescale_intensity(img10bit, in_range='uint10')
+
+image = ski.exposure.rescale_intensity(img_int32, out_range=(0, 2**31 - 1))
+img_uint8 = ski.util.img_as_ubyte(image)
+
+skimage/io/_plugins/mpl.py
+skimage/io/_plugins/mpl.ini
+
+[mpl] <-- name of the plugin, may be anything
+
+# This is mpl.py
+
+[mpl]
+provides = imshow, _app_show
+
+import matplotlib.pyplot as plt
+
+def imshow(img):
+    plt.imshow(img)
+description = Matplotlib image I/O plugin
+provides = imshow <-- a comma-separated list, one or more of
+                      imshow, imsave, imread, _app_show
+
+# This is mpl.py
+
+import matplotlib.pyplot as plt
+
+def imshow(img):
+    plt.imshow(img)
+
+def _app_show():
+    plt.show()
+    
+
+import skimage as ski
+ski.io.find_available_plugins()
+{'gtk': ['imshow'],
+ 'matplotlib': ['imshow', 'imread', 'imread_collection'],
+ 'pil': ['imread', 'imsave', 'imread_collection'],
+ 'test': ['imsave', 'imshow', 'imread', 'imread_collection'],}
+ 
+ski.io.find_available_plugins(loaded=True)
+{'matplotlib': ['imshow', 'imread', 'imread_collection'],
+ 'pil': ['imread', 'imsave', 'imread_collection']}
+ 
+ski.io.use_plugin('pil') # Use all capabilities provided by PIL
+
+ski.io.use_plugin('pil', 'imread') # Use only the imread capability of PIL
+
+ski.io.plugin_info('pil')
+
+{'description': 'Image reading via the Python Imaging Library',
+ 'provides': 'imread, imsave'}
+ 
+ # bright saturated red
+red_pixel_rgb = np.array([[[255, 0, 0]]], dtype=np.uint8)
+color.rgb2hsv(red_pixel_rgb)
+array([[[ 0.,  1.,  1.]]])
+# darker saturated blue
+dark_blue_pixel_rgb = np.array([[[0, 0, 100]]], dtype=np.uint8)
+color.rgb2hsv(dark_blue_pixel_rgb)
+array([[[ 0.66666667,  1.        ,  0.39215686]]])
+# less saturated pink
+pink_pixel_rgb = np.array([[[255, 100, 255]]], dtype=np.uint8)
+color.rgb2hsv(pink_pixel_rgb)
+array([[[ 0.83333333,  0.60784314,  1.        ]]])
+
+import skimage as ski
+img_rgba = ski.data.logo()
+img_rgb = ski.color.rgba2rgb(img_rgba)
+
+img = ski.data.astronaut()
+img_gray = ski.color.rgb2gray(img)
+
+red_pixel = np.array([[[255, 0, 0]]], dtype=np.uint8)
+ski.color.rgb2gray(red_pixel)
+array([[ 0.2125]])
+green_pixel = np.array([[[0, 255, 0]]], dtype=np.uint8)
+ski.color.rgb2gray(green_pixel)
+array([[ 0.7154]])
+
+import skimage as ski
+img = ski.data.camera()
+inverted_img = ski.util.invert(img)
+
+import numpy as np
+import skimage as ski
+image = np.array([[1, 3], [1, 1]])
+ski.exposure.histogram(image)
+(array([3, 0, 1]), array([1, 2, 3]))
+
+import skimage as ski
+text = ski.data.text()
+text.min(), text.max()
+(10, 197)
+better_contrast = ski.exposure.rescale_intensity(text)
+better_contrast.min(), better_contrast.max()
+(0, 255)
+
+moon = ski.data.moon()
+v_min, v_max = np.percentile(moon, (0.2, 99.8))
+v_min, v_max
+(10.0, 186.0)
+better_contrast = ski.exposure.rescale_intensity(moon, in_range=(v_min, v_max))
+
+import skimage as ski
+img = ski.data.astronaut()
+top_left = img[:100, :100]
+
+from skimage import data, color
+from skimage.transform import rescale, resize, downscale_local_mean
+
+image = color.rgb2gray(data.astronaut())
+
+image_rescaled = rescale(image, 0.25, anti_aliasing=False)
+image_resized = resize(
+    image, (image.shape[0] // 4, image.shape[1] // 4), anti_aliasing=True
+)
+image_downscaled = downscale_local_mean(image, (4, 3))
+
+import numpy as np
+import skimage as ski
+
+tform = ski.transform.EuclideanTransform(
+   rotation=np.pi / 12.,
+   translation = (100, -20)
+   )
+   
+   matrix = np.array([[np.cos(np.pi/12), -np.sin(np.pi/12), 100],
+                   [np.sin(np.pi/12), np.cos(np.pi/12), -20],
+                   [0, 0, 1]])
+tform = ski.transform.EuclideanTransform(matrix)
+
+img = ski.util.img_as_float(ski.data.chelsea())
+tf_img = ski.transform.warp(img, tform.inverse)
+
+text = ski.data.text()
+
+src = np.array([[0, 0], [0, 50], [300, 50], [300, 0]])
+dst = np.array([[155, 15], [65, 40], [260, 130], [360, 95]])
+
+tform3 = ski.transform.ProjectiveTransform()
+tform3.estimate(src, dst)
+warped = ski.transform.warp(text, tform3, output_shape=(50, 300))
+
+import skimage as ski
+
+def task(image):
+    """
+    Apply some functions and return an image.
+    """
+    image = ski.restoration.denoise_tv_chambolle(
+        image[0][0], weight=0.1, channel_axis=-1
+    )
+    fd, hog_image = ski.feature.hog(
+        ski.color.rgb2gray(image),
+        orientations=8,
+        pixels_per_cell=(16, 16),
+        cells_per_block=(1, 1),
+        visualize=True
+    )
+    return hog_image
+
+
+# Prepare images
+hubble = ski.data.hubble_deep_field()
+width = 10
+pics = ski.util.view_as_windows(
+    hubble, (width, hubble.shape[1], hubble.shape[2]), step=width
+)
+
+def classic_loop():
+    for image in pics:
+        task(image)
+
+
+%timeit classic_loop()
+
+def comprehension_loop():
+    [task(image) for image in pics]
+
+%timeit comprehension_loop()
+
+from joblib import Parallel, delayed
+def joblib_loop():
+    Parallel(n_jobs=4)(delayed(task)(i) for i in pics)
+
+%timeit joblib_loop()
+
+import skimage as ski
+ski.util.lookfor('eigenvalue')
