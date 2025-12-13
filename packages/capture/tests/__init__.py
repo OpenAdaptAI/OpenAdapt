@@ -1,1 +1,1 @@
-"""Tests for openadapt-record."""
+"""Tests for openadapt-capture."""

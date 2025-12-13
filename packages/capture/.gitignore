@@ -45,3 +45,9 @@ Thumbs.db
 
 # uv
 uv.lock
+
+# Environment variables (contains API keys)
+.env
+
+# Demo captures (large data files)
+demo_*/

@@ -22,18 +22,44 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0.0",
+    "pynput>=1.7.0",
+    "av>=10.0.0",
+    "Pillow>=9.0.0",
+    "fire>=0.7.1",
+    "mss>=6.0.0",
+    "sounddevice>=0.5.3",
+    "soundfile>=0.13.1",
+    "openai-whisper>=20250625",
+    "pydantic-settings>=2.12.0",
+    "openai>=2.11.0",
 ]
 
 [project.optional-dependencies]
+# Whisper transcription (large dependency)
+transcribe = [
+    "openai-whisper>=20230314",
+]
+
+# Privacy scrubbing support
 privacy = [
     "openadapt-privacy>=0.1.0",
+]
+
+# Everything
+all = [
+    "openadapt-capture[transcribe,privacy]",
 ]
 
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
+    "matplotlib>=3.5.0",
+    "numpy>=1.21.0",
 ]
+
+[project.scripts]
+capture = "openadapt_capture.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/openadapt-capture"
@@ -57,3 +83,9 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+]
