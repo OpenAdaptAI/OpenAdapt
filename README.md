@@ -296,7 +296,7 @@ We are thrilled to open new contract positions for developers passionate about p
 - **Skills**: Passion for writing and/or documentation
 
 ### 🔍 How to Apply
-- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [OpenAdapt.web](https://github.com/OpenAdaptAI/OpenAdapt.web). Format your PR title as `[Proposal] <your title here>`
+- **Step 1**: Submit an empty Pull Request to [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) or [openadapt-web](https://github.com/OpenAdaptAI/openadapt-web). Format your PR title as `[Proposal] <your title here>`
 - **Step 2**: Include a brief, informal outline of your approach in the PR description. Feel free to add any questions you might have.
 - **Need Clarifications?** Reach out to us on [Discord](https://discord.gg/yF527cQbDG).
 
