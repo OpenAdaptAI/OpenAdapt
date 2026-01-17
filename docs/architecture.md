@@ -79,26 +79,26 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    subgraph Record["1. Record"]
-        A[User Demo] --> B[Capture Session]
-        B --> C[Screenshots + Events]
+    subgraph Demonstrate["1. Demonstrate"]
+        A[Human Trajectory] --> B[Capture Session]
+        B --> C[Observations + Actions]
     end
 
     subgraph Store["2. Store"]
         C --> D[JSON/Parquet Files]
-        D --> E[Demo Library]
+        D --> E[Demonstration Library]
     end
 
-    subgraph Train["3. Train"]
-        E --> F[Data Loading]
-        F --> G[Model Training]
+    subgraph Learn["3. Learn"]
+        E --> F[Trajectory Abstraction]
+        F --> G[Policy Learning]
         G --> H[Checkpoint]
     end
 
-    subgraph Deploy["4. Deploy"]
-        H --> I[Agent Policy]
+    subgraph Execute["4. Execute"]
+        H --> I[Trained Policy]
         I --> J[Inference]
-        J --> K[Action Replay]
+        J --> K[Agent Deployment]
     end
 
     subgraph Evaluate["5. Evaluate"]
@@ -164,17 +164,17 @@ graph TD
 
 | Package | Responsibility | Key Exports |
 |---------|---------------|-------------|
-| **openadapt-capture** | GUI recording, event capture, storage | `CaptureSession`, `Recorder`, `Action` |
-| **openadapt-ml** | Model training, inference, adapters | `QwenVLAdapter`, `Trainer`, `AgentPolicy` |
+| **openadapt-capture** | Demonstration collection, observation-action capture, storage | `CaptureSession`, `Recorder`, `Action` |
+| **openadapt-ml** | Policy learning, training, inference | `QwenVLAdapter`, `Trainer`, `AgentPolicy` |
 | **openadapt-evals** | Benchmark evaluation, metrics | `ApiAgent`, `BenchmarkAdapter`, `evaluate_agent_on_benchmark` |
-| **openadapt-viewer** | HTML visualization, replay viewer | `PageBuilder`, `HTMLBuilder` |
+| **openadapt-viewer** | Trajectory visualization | `PageBuilder`, `HTMLBuilder` |
 
 ### Optional Packages
 
 | Package | Responsibility | Use Case |
 |---------|---------------|----------|
-| **openadapt-grounding** | UI element localization | Improved click accuracy with element detection |
-| **openadapt-retrieval** | Multimodal demo search | Find similar demonstrations for few-shot prompting |
+| **openadapt-grounding** | UI element grounding | Improved action accuracy with element detection |
+| **openadapt-retrieval** | Multimodal trajectory search | Find similar demonstrations for few-shot policy learning |
 | **openadapt-privacy** | PII/PHI scrubbing | Redact sensitive data before storage/training |
 
 ## Evaluation Loop
@@ -275,14 +275,14 @@ graph LR
 pip install openadapt
 
 # Individual packages
-pip install openadapt[capture]     # GUI capture/recording
-pip install openadapt[ml]          # ML training and inference
+pip install openadapt[capture]     # Demonstration collection
+pip install openadapt[ml]          # Policy learning and inference
 pip install openadapt[evals]       # Benchmark evaluation
-pip install openadapt[viewer]      # HTML visualization
+pip install openadapt[viewer]      # Trajectory visualization
 
 # Optional packages
-pip install openadapt[grounding]   # UI element localization
-pip install openadapt[retrieval]   # Demo search/retrieval
+pip install openadapt[grounding]   # UI element grounding
+pip install openadapt[retrieval]   # Trajectory retrieval
 pip install openadapt[privacy]     # PII/PHI scrubbing
 
 # Bundles

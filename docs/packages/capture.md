@@ -1,6 +1,6 @@
 # openadapt-capture
 
-GUI recording, event capture, and storage.
+Demonstration collection, observation-action capture, and storage.
 
 **Repository**: [OpenAdaptAI/openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture)
 
@@ -14,17 +14,17 @@ pip install openadapt-capture
 
 ## Overview
 
-The capture package records user interactions with desktop and web GUIs, including:
+The capture package collects human demonstrations from desktop and web GUIs, including:
 
-- Screenshots at configurable intervals
-- Mouse events (clicks, movement, scrolling)
-- Keyboard events (key presses, text input)
+- Observations (screenshots) at configurable intervals
+- Actions: mouse events (clicks, movement, scrolling)
+- Actions: keyboard events (key presses, text input)
 - Window and application context
-- Timing information
+- Timing information for trajectory reconstruction
 
 ## CLI Commands
 
-### Start Recording
+### Start Demonstration Collection
 
 ```bash
 openadapt capture start --name my-task
@@ -37,27 +37,27 @@ Options:
 - `--no-screenshots` - Disable screenshot capture
 - `--no-keyboard` - Disable keyboard capture
 
-### Stop Recording
+### Stop Demonstration Collection
 
 ```bash
 openadapt capture stop
 ```
 
-Or press `Ctrl+C` in the recording terminal.
+Or press `Ctrl+C` in the capture terminal.
 
-### List Captures
+### List Demonstrations
 
 ```bash
 openadapt capture list
 ```
 
-### View a Capture
+### View a Demonstration Trajectory
 
 ```bash
 openadapt capture view my-task
 ```
 
-### Delete a Capture
+### Delete a Demonstration
 
 ```bash
 openadapt capture delete my-task
@@ -75,41 +75,41 @@ session = CaptureSession(name="my-task")
 recorder = Recorder(session)
 recorder.start()
 
-# ... user performs actions ...
+# ... user demonstrates the task ...
 
 # Stop recording
 recorder.stop()
 
-# Access captured data
-events = session.get_events()
-screenshots = session.get_screenshots()
+# Access captured trajectory data
+actions = session.get_actions()
+observations = session.get_observations()  # screenshots
 ```
 
 ## Data Format
 
-Captures are stored as JSON/Parquet files:
+Demonstrations are stored as JSON/Parquet files:
 
 ```
-captures/
+demonstrations/
   my-task/
     metadata.json       # Session metadata
-    events.parquet      # Event data
-    screenshots/        # Screenshot images
+    actions.parquet     # Action data (observation-action pairs)
+    observations/       # Screenshot images (observations)
       0001.png
       0002.png
       ...
 ```
 
-### Event Schema
+### Action Schema
 
 ```python
 {
-    "timestamp": float,      # Unix timestamp
-    "type": str,            # "mouse_click", "key_press", etc.
+    "timestamp": float,        # Unix timestamp
+    "action_type": str,        # "click", "type", "scroll", etc.
     "data": {
-        # Event-specific data
+        # Action-specific data
     },
-    "screenshot_id": int    # Reference to screenshot
+    "observation_id": int      # Reference to observation (screenshot)
 }
 ```
 
@@ -117,11 +117,11 @@ captures/
 
 | Export | Description |
 |--------|-------------|
-| `CaptureSession` | Manages a capture session |
-| `Recorder` | Records user interactions |
+| `CaptureSession` | Manages a demonstration collection session |
+| `Recorder` | Captures observation-action pairs |
 | `Action` | Represents a user action |
-| `MouseEvent` | Mouse event data |
-| `KeyboardEvent` | Keyboard event data |
+| `Observation` | Represents an observation (screenshot) |
+| `Trajectory` | Sequence of observation-action pairs |
 
 ## Platform Support
 
@@ -133,6 +133,6 @@ captures/
 
 ## Related Packages
 
-- [openadapt-privacy](privacy.md) - Scrub PII/PHI from captures
-- [openadapt-viewer](viewer.md) - Visualize capture data
-- [openadapt-ml](ml.md) - Train models on captures
+- [openadapt-privacy](privacy.md) - Scrub PII/PHI from demonstrations
+- [openadapt-viewer](viewer.md) - Visualize trajectories
+- [openadapt-ml](ml.md) - Learn policies from demonstrations

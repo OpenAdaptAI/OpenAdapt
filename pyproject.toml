@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-    {name = "MLDSAI Inc.", email = "richard@mldsai.com"}
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
 ]
 keywords = ["gui", "automation", "ml", "rpa", "agent", "vlm", "computer-use"]
 classifiers = [

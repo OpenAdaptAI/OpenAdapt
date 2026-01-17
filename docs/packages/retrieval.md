@@ -1,6 +1,6 @@
 # openadapt-retrieval
 
-Multimodal demonstration retrieval for few-shot prompting.
+Multimodal trajectory retrieval for few-shot policy learning.
 
 **Repository**: [OpenAdaptAI/openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval)
 
@@ -16,47 +16,47 @@ pip install openadapt-retrieval
 
 The retrieval package enables:
 
-- Semantic search over captured demonstrations
-- Few-shot example selection for prompting
+- Semantic search over demonstration trajectories
+- Few-shot example selection for policy learning
 - Multimodal similarity (text + image)
 - Demonstration library management
 
 ## Use Cases
 
-### Few-Shot Prompting
+### Few-Shot Policy Learning
 
-Find similar demonstrations to use as examples when prompting an LMM.
+Find similar demonstrations to use as examples when learning agent policies.
 
-### Transfer Learning
+### Trajectory Transfer
 
-Retrieve relevant demonstrations for new tasks.
+Retrieve relevant demonstration trajectories for new tasks.
 
 ### Demonstration Discovery
 
-Search your library of captured demonstrations.
+Search your library of demonstration trajectories.
 
 ## Python API
 
 ```python
 from openadapt_retrieval import DemoIndex, retrieve_similar
 
-# Build an index over your captures
+# Build an index over your demonstrations
 index = DemoIndex()
-index.add_captures(["task-1", "task-2", "task-3"])
+index.add_demonstrations(["task-1", "task-2", "task-3"])
 
-# Retrieve similar demonstrations
-screenshot = load_screenshot()
+# Retrieve similar demonstration trajectories
+observation = load_screenshot()
 similar = index.search(
-    query_image=screenshot,
+    query_image=observation,
     query_text="click the submit button",
     top_k=3
 )
 
 for result in similar:
-    print(f"{result.capture_name}: {result.similarity:.2f}")
+    print(f"{result.demonstration_name}: {result.similarity:.2f}")
 ```
 
-### Integration with ML
+### Integration with Policy Learning
 
 ```python
 from openadapt_ml import AgentPolicy
@@ -69,8 +69,9 @@ policy = AgentPolicy.from_checkpoint(
     retrieval_index=index
 )
 
-# Predictions include relevant examples
-action = policy.predict(screenshot, use_retrieval=True)
+# Policy uses similar trajectory examples for few-shot learning
+observation = load_screenshot()
+action = policy.predict(observation, use_retrieval=True)
 ```
 
 ## CLI Commands
@@ -87,7 +88,7 @@ openadapt retrieval index --captures task-1 task-2 task-3
 openadapt retrieval search --image screenshot.png --text "click submit"
 ```
 
-### List Indexed Captures
+### List Indexed Demonstrations
 
 ```bash
 openadapt retrieval list
@@ -97,7 +98,7 @@ openadapt retrieval list
 
 | Export | Description |
 |--------|-------------|
-| `DemoIndex` | Demonstration index |
+| `DemoIndex` | Demonstration trajectory index |
 | `retrieve_similar` | Similarity search |
 | `Embedding` | Vector embedding |
 | `SearchResult` | Search result data |
@@ -118,7 +119,7 @@ Indexes are stored as pickle files:
 indexes/
   demo_index.pkl      # Main index
   embeddings.npy      # Vector embeddings
-  metadata.json       # Capture metadata
+  metadata.json       # Demonstration metadata
 ```
 
 ## Performance
@@ -131,5 +132,5 @@ indexes/
 
 ## Related Packages
 
-- [openadapt-capture](capture.md) - Record demonstrations to index
-- [openadapt-ml](ml.md) - Use retrieval in training
+- [openadapt-capture](capture.md) - Collect demonstrations to index
+- [openadapt-ml](ml.md) - Use retrieval in policy learning

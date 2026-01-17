@@ -212,11 +212,19 @@ flowchart TB
     %% MODEL LAYER
     %% ═══════════════════════════════════════════════════════════════════════
     subgraph Models["Model Layer (VLMs)"]
-        direction LR
-        CLAUDE["Claude"]
-        GPT["GPT-4o"]
-        GEMINI["Gemini"]
-        QWEN["Qwen-VL"]
+        direction TB
+        subgraph APIModels["API Models"]
+            direction LR
+            CLAUDE["Claude"]
+            GPT["GPT-4o"]
+            GEMINI["Gemini"]
+        end
+        subgraph OpenSource["Open Source / Fine-tuned"]
+            direction LR
+            QWEN3["Qwen3-VL"]
+            UITARS["UI-TARS"]
+            OPENCUA["OpenCUA"]
+        end
     end
 
     %% ═══════════════════════════════════════════════════════════════════════

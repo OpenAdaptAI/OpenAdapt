@@ -1,15 +1,15 @@
 # Quick Start
 
-This guide walks you through recording a demonstration, training a model, and evaluating it.
+This guide walks you through collecting a demonstration, learning a policy, and evaluating the agent.
 
 ## Prerequisites
 
 - OpenAdapt installed with required packages: `pip install openadapt[all]`
 - macOS users: [Grant required permissions](permissions.md)
 
-## 1. Record a Demonstration
+## 1. Collect a Demonstration
 
-Start recording your screen and inputs:
+Start capturing your screen and inputs:
 
 ```bash
 openadapt capture start --name my-task
@@ -22,14 +22,14 @@ Now perform the task you want to automate:
 3. Navigate menus
 4. Complete your workflow
 
-When finished, stop recording:
+When finished, stop the capture:
 
 ```bash
 # Press Ctrl+C in the terminal, or:
 openadapt capture stop
 ```
 
-## 2. View the Recording
+## 2. View the Trajectory
 
 Inspect what was captured:
 
@@ -37,15 +37,15 @@ Inspect what was captured:
 openadapt capture view my-task
 ```
 
-This opens an HTML viewer showing:
+This opens a trajectory viewer showing:
 
-- Screenshots at each step
-- Mouse and keyboard events
+- Observations (screenshots) at each step
+- Actions (mouse and keyboard events)
 - Timing information
 
-## 3. List Your Captures
+## 3. List Your Demonstrations
 
-See all recorded demonstrations:
+See all collected demonstrations:
 
 ```bash
 openadapt capture list
@@ -59,25 +59,25 @@ my-task      45       2m 30s     2026-01-16
 login-demo   23       1m 15s     2026-01-15
 ```
 
-## 4. Train a Model
+## 4. Learn a Policy
 
-Train a model on your recorded demonstration:
+Learn an agent policy from your demonstration trajectory:
 
 ```bash
 openadapt train start --capture my-task --model qwen3vl-2b
 ```
 
-Monitor training progress:
+Monitor policy learning progress:
 
 ```bash
 openadapt train status
 ```
 
-Training creates a checkpoint file in `training_output/`.
+Policy learning creates a checkpoint file in `training_output/`.
 
-## 5. Evaluate the Model
+## 5. Evaluate the Agent
 
-Test your trained model on a benchmark:
+Test your trained policy on a benchmark:
 
 ```bash
 openadapt eval run --checkpoint training_output/model.pt --benchmark waa
@@ -103,7 +103,7 @@ openadapt eval run --agent api-claude --benchmark waa
 
 ## Complete Workflow Example
 
-Here is a complete example from start to finish:
+Here is a complete example demonstrating the full pipeline:
 
 ```bash
 # 1. Install OpenAdapt
@@ -112,21 +112,21 @@ pip install openadapt[all]
 # 2. Check system requirements
 openadapt doctor
 
-# 3. Record a task
+# 3. Collect a demonstration
 openadapt capture start --name email-reply
 # ... perform the task ...
 # Press Ctrl+C to stop
 
-# 4. View the recording
+# 4. View the trajectory
 openadapt capture view email-reply
 
-# 5. Train a model
+# 5. Learn a policy
 openadapt train start --capture email-reply --model qwen3vl-2b
 
-# 6. Wait for training to complete
+# 6. Wait for policy learning to complete
 openadapt train status
 
-# 7. Evaluate
+# 7. Evaluate the agent
 openadapt eval run --checkpoint training_output/model.pt --benchmark waa
 ```
 

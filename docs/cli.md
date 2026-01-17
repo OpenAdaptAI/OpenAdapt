@@ -42,11 +42,11 @@ This verifies:
 
 ## Capture Commands
 
-Commands for recording user demonstrations.
+Commands for collecting human demonstrations.
 
 ### capture start
 
-Start a new recording session.
+Start a new demonstration collection session.
 
 ```bash
 openadapt capture start --name <name> [options]
@@ -64,25 +64,25 @@ openadapt capture start --name <name> [options]
 **Examples:**
 
 ```bash
-# Basic recording
+# Basic demonstration collection
 openadapt capture start --name login-task
 
-# Recording without screenshots
+# Demonstration collection without screenshots
 openadapt capture start --name audio-task --no-screenshots
 
-# Recording with slower screenshot interval
+# Demonstration collection with slower screenshot interval
 openadapt capture start --name slow-task --interval 1.0
 ```
 
 ### capture stop
 
-Stop the current recording.
+Stop the current demonstration collection.
 
 ```bash
 openadapt capture stop
 ```
 
-Alternatively, press `Ctrl+C` in the recording terminal.
+Alternatively, press `Ctrl+C` in the capture terminal.
 
 ### capture list
 
@@ -103,7 +103,7 @@ form-fill      89       5m 42s     2026-01-14
 
 ### capture view
 
-Open the viewer for a capture.
+Open the trajectory viewer for a demonstration.
 
 ```bash
 openadapt capture view <name> [options]
@@ -113,13 +113,13 @@ openadapt capture view <name> [options]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `<name>` | Yes | Name of the capture to view |
+| `<name>` | Yes | Name of the demonstration to view |
 | `--port` | No | Server port (default: 8080) |
 | `--no-browser` | No | Don't open browser automatically |
 
 ### capture delete
 
-Delete a capture.
+Delete a demonstration.
 
 ```bash
 openadapt capture delete <name>
@@ -129,11 +129,11 @@ openadapt capture delete <name>
 
 ## Train Commands
 
-Commands for training ML models.
+Commands for policy learning from demonstrations.
 
 ### train start
 
-Start training a model on a capture.
+Start policy learning from a demonstration.
 
 ```bash
 openadapt train start --capture <name> --model <model> [options]
@@ -143,7 +143,7 @@ openadapt train start --capture <name> --model <model> [options]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--capture` | Yes | Name of the capture to train on |
+| `--capture` | Yes | Name of the demonstration to train on |
 | `--model` | Yes | Model architecture |
 | `--epochs` | No | Number of training epochs (default: 10) |
 | `--batch-size` | No | Batch size (default: 4) |
@@ -159,10 +159,10 @@ openadapt train start --capture <name> --model <model> [options]
 **Examples:**
 
 ```bash
-# Basic training
+# Basic policy learning
 openadapt train start --capture login-task --model qwen3vl-2b
 
-# Training with custom parameters
+# Policy learning with custom parameters
 openadapt train start \
     --capture login-task \
     --model qwen3vl-7b \
@@ -173,7 +173,7 @@ openadapt train start \
 
 ### train status
 
-Check training progress.
+Check policy learning progress.
 
 ```bash
 openadapt train status
@@ -191,7 +191,7 @@ ETA: 15 minutes
 
 ### train stop
 
-Stop the current training.
+Stop the current policy learning.
 
 ```bash
 openadapt train stop

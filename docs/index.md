@@ -4,7 +4,7 @@
 
 OpenAdapt is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
-Record GUI demonstrations, train ML models, and evaluate agents - all from a unified CLI.
+Collect human demonstrations, learn agent policies, and evaluate autonomous execution - all from a unified CLI.
 
 [Join Discord](https://discord.gg/yF527cQbDG){ .md-button .md-button--primary }
 [View on GitHub](https://github.com/OpenAdaptAI/OpenAdapt){ .md-button }
@@ -15,24 +15,24 @@ Record GUI demonstrations, train ML models, and evaluate agents - all from a uni
 
 OpenAdapt bridges the gap between powerful AI models and everyday software automation. Instead of writing complex scripts or learning APIs, you simply:
 
-1. **Record** - Demonstrate a task by doing it yourself
-2. **Train** - Let OpenAdapt learn from your demonstration
-3. **Deploy** - Run your trained agent to automate the task
-4. **Evaluate** - Measure performance on standardized benchmarks
+1. **Demonstrate** - Show the agent how to perform a task by doing it yourself
+2. **Learn** - Let OpenAdapt learn an agent policy from your demonstration trajectory
+3. **Execute** - Deploy your trained agent to autonomously perform the task
+4. **Evaluate** - Measure agent performance on standardized benchmarks
 
 ```mermaid
 flowchart LR
-    subgraph Record["1. Record"]
-        A[User Demo] --> B[Capture]
+    subgraph Demonstrate["1. Demonstrate"]
+        A[Human Trajectory] --> B[Capture]
     end
 
-    subgraph Train["2. Train"]
-        B --> C[ML Model]
+    subgraph Learn["2. Learn"]
+        B --> C[Policy Learning]
     end
 
-    subgraph Deploy["3. Deploy"]
-        C --> D[Agent Policy]
-        D --> E[Action Replay]
+    subgraph Execute["3. Execute"]
+        C --> D[Trained Policy]
+        D --> E[Agent Deployment]
     end
 
     subgraph Evaluate["4. Evaluate"]
@@ -53,7 +53,7 @@ flowchart LR
 Works with any Large Multimodal Model - Claude, GPT-4V, Gemini, Qwen-VL, or your own fine-tuned models.
 
 ### Learn from Demonstration
-No prompting required. OpenAdapt learns directly from how you perform tasks, automatically generating the right prompts.
+No manual prompt engineering required. OpenAdapt learns agent policies directly from your demonstration trajectories.
 
 ### Universal GUI Support
 Works with all desktop GUIs including native applications, web browsers, and virtualized environments.
@@ -71,14 +71,14 @@ Install OpenAdapt with the features you need:
 pip install openadapt[all]  # Everything
 ```
 
-Record a demonstration:
+Collect a demonstration:
 
 ```bash
 openadapt capture start --name my-task
 # Perform your task, then press Ctrl+C
 ```
 
-Train a model:
+Learn a policy:
 
 ```bash
 openadapt train start --capture my-task --model qwen3vl-2b
@@ -100,12 +100,12 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 
 | Package | Description |
 |---------|-------------|
-| [openadapt-capture](packages/capture.md) | Event recording and storage |
-| [openadapt-ml](packages/ml.md) | ML engine, training, inference |
+| [openadapt-capture](packages/capture.md) | Demonstration collection and storage |
+| [openadapt-ml](packages/ml.md) | Policy learning, training, inference |
 | [openadapt-evals](packages/evals.md) | Benchmark evaluation |
-| [openadapt-viewer](packages/viewer.md) | HTML visualization |
-| [openadapt-grounding](packages/grounding.md) | UI element localization |
-| [openadapt-retrieval](packages/retrieval.md) | Multimodal demo retrieval |
+| [openadapt-viewer](packages/viewer.md) | Trajectory visualization |
+| [openadapt-grounding](packages/grounding.md) | UI element grounding |
+| [openadapt-retrieval](packages/retrieval.md) | Trajectory retrieval |
 | [openadapt-privacy](packages/privacy.md) | PII/PHI scrubbing |
 
 See the full [Architecture Documentation](architecture.md) for detailed diagrams.
