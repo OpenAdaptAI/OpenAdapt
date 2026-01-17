@@ -1,3 +1,28 @@
+> ## Important Notice: New Modular Architecture Available
+>
+> **This repository contains the legacy monolithic OpenAdapt codebase (v0.46.0), which is now frozen.**
+>
+> Active development has moved to a new **modular meta-package architecture** with better maintainability and cleaner separation of concerns.
+>
+> **New packages:**
+> | Package | Description |
+> |---------|-------------|
+> | `openadapt` | Meta-package with unified CLI (v1.0.0+) |
+> | `openadapt-ml` | ML engine, training, inference |
+> | `openadapt-capture` | Event recording and storage |
+> | `openadapt-evals` | Benchmark evaluation |
+> | `openadapt-viewer` | HTML visualization |
+> | `openadapt-grounding` | UI element localization |
+> | `openadapt-retrieval` | Demo retrieval |
+>
+> **Quick start:** `pip install openadapt[all]`
+>
+> **Migration guide:** See [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for migration instructions.
+>
+> **Legacy users:** This codebase remains available. Install with `pip install openadapt==0.46.0`
+
+---
+
 [Join us on Discord](https://discord.gg/yF527cQbDG)
 
 [Read our Architecture document](https://github.com/OpenAdaptAI/OpenAdapt/wiki/OpenAdapt-Architecture-(draft))
