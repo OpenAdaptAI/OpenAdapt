@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to add a new use case! Default text extracted from https://github.com/MLDSAI/OpenAdapt/issues/72#issuecomment-1601991759.
+        Thanks for taking the time to add a new use case! Default text extracted from https://github.com/OpenAdaptAI/OpenAdapt/issues/72#issuecomment-1601991759.
   - type: input
     id: role
     attributes:

@@ -1,1 +1,23 @@
 blank_issues_enabled: true
+contact_links:
+  - name: openadapt-capture issues
+    url: https://github.com/OpenAdaptAI/openadapt-capture/issues
+    about: For issues related to GUI recording and capture
+  - name: openadapt-ml issues
+    url: https://github.com/OpenAdaptAI/openadapt-ml/issues
+    about: For issues related to ML training and inference
+  - name: openadapt-evals issues
+    url: https://github.com/OpenAdaptAI/openadapt-evals/issues
+    about: For issues related to benchmark evaluation
+  - name: openadapt-viewer issues
+    url: https://github.com/OpenAdaptAI/openadapt-viewer/issues
+    about: For issues related to HTML visualization
+  - name: openadapt-grounding issues
+    url: https://github.com/OpenAdaptAI/openadapt-grounding/issues
+    about: For issues related to UI element localization
+  - name: openadapt-retrieval issues
+    url: https://github.com/OpenAdaptAI/openadapt-retrieval/issues
+    about: For issues related to multimodal demo retrieval
+  - name: openadapt-privacy issues
+    url: https://github.com/OpenAdaptAI/openadapt-privacy/issues
+    about: For issues related to PII/PHI scrubbing
