@@ -102,104 +102,240 @@ openadapt doctor                          Check system requirements
 
 ## How It Works
 
-See the full [Architecture Documentation](docs/architecture.md) for detailed diagrams.
+See the full [Architecture Evolution](docs/architecture-evolution.md) for detailed documentation.
+
+### Three-Phase Pipeline
 
 ```mermaid
 flowchart TB
-    %% Main workflow phases
-    subgraph Record["1. RECORD"]
-        direction TB
-        DEMO[User Demo] --> CAPTURE[openadapt-capture]
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% DATA SOURCES (Multi-Source Ingestion)
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph DataSources["Data Sources"]
+        direction LR
+        HUMAN["Human Demos"]
+        SYNTH["Synthetic Data"]:::future
+        BENCH_DATA["Benchmark Tasks"]
     end
 
-    subgraph Train["2. TRAIN"]
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% PHASE 1: DEMONSTRATE (Observation Collection)
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph Demonstrate["1. DEMONSTRATE (Observation Collection)"]
         direction TB
-        DATA[Captured Data] --> ML[openadapt-ml]
+        CAP["Capture<br/>openadapt-capture"]
+        PRIV["Privacy<br/>openadapt-privacy"]
+        STORE[("Demo Library")]
+
+        CAP --> PRIV
+        PRIV --> STORE
     end
 
-    subgraph Deploy["3. DEPLOY"]
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% PHASE 2: LEARN (Policy Acquisition)
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph Learn["2. LEARN (Policy Acquisition)"]
         direction TB
-        MODEL[Trained Model] --> AGENT[Agent Policy]
-        AGENT --> REPLAY[Action Replay]
+
+        subgraph RetrievalPath["Retrieval Path"]
+            EMB["Embed"]
+            IDX["Index"]
+            SEARCH["Search"]
+            EMB --> IDX --> SEARCH
+        end
+
+        subgraph TrainingPath["Training Path"]
+            LOADER["Load"]
+            TRAIN["Train"]
+            CKPT[("Checkpoint")]
+            LOADER --> TRAIN --> CKPT
+        end
+
+        subgraph ProcessMining["Process Mining"]:::futureBlock
+            ABSTRACT["Abstract"]:::future
+            PATTERNS["Patterns"]:::future
+            ABSTRACT --> PATTERNS
+        end
     end
 
-    subgraph Evaluate["4. EVALUATE"]
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% PHASE 3: EXECUTE (Agent Deployment)
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph Execute["3. EXECUTE (Agent Deployment)"]
         direction TB
-        BENCH[Benchmarks] --> EVALS[openadapt-evals]
-        EVALS --> METRICS[Metrics]
+
+        subgraph AgentCore["Agent Core"]
+            OBS["Observe"]
+            POLICY["Policy<br/>(Demo-Conditioned)"]
+            GROUND["Grounding<br/>openadapt-grounding"]
+            ACT["Act"]
+
+            OBS --> POLICY
+            POLICY --> GROUND
+            GROUND --> ACT
+        end
+
+        subgraph SafetyGate["Safety Gate"]:::safetyBlock
+            VALIDATE["Validate"]
+            CONFIRM["Confirm"]:::future
+            VALIDATE --> CONFIRM
+        end
+
+        subgraph Evaluation["Evaluation"]
+            EVALS["Evals<br/>openadapt-evals"]
+            METRICS["Metrics"]
+            EVALS --> METRICS
+        end
+
+        ACT --> VALIDATE
+        VALIDATE --> EVALS
     end
 
-    %% Main flow connections
-    CAPTURE --> DATA
-    ML --> MODEL
-    AGENT --> BENCH
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% THE ABSTRACTION LADDER (Side Panel)
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph AbstractionLadder["Abstraction Ladder"]
+        direction TB
+        L0["Literal<br/>(Raw Events)"]
+        L1["Symbolic<br/>(Semantic Actions)"]
+        L2["Template<br/>(Parameterized)"]
+        L3["Semantic<br/>(Intent)"]:::future
+        L4["Goal<br/>(Task Spec)"]:::future
 
-    %% Viewer - independent component
-    VIEWER[openadapt-viewer]
-    VIEWER -.->|"view at any phase"| Record
-    VIEWER -.->|"view at any phase"| Train
-    VIEWER -.->|"view at any phase"| Deploy
-    VIEWER -.->|"view at any phase"| Evaluate
+        L0 --> L1
+        L1 --> L2
+        L2 -.-> L3
+        L3 -.-> L4
+    end
 
-    %% Optional packages with integration points
-    PRIVACY[openadapt-privacy]
-    RETRIEVAL[openadapt-retrieval]
-    GROUNDING[openadapt-grounding]
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% MODEL LAYER
+    %% ═══════════════════════════════════════════════════════════════════════
+    subgraph Models["Model Layer (VLMs)"]
+        direction LR
+        CLAUDE["Claude"]
+        GPT["GPT-4o"]
+        GEMINI["Gemini"]
+        QWEN["Qwen-VL"]
+    end
 
-    PRIVACY -.->|"PII/PHI scrubbing"| CAPTURE
-    RETRIEVAL -.->|"demo retrieval"| ML
-    GROUNDING -.->|"UI localization"| REPLAY
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% MAIN DATA FLOW
+    %% ═══════════════════════════════════════════════════════════════════════
 
-    %% Styling
-    classDef corePhase fill:#e1f5fe,stroke:#01579b
-    classDef optionalPkg fill:#fff3e0,stroke:#e65100,stroke-dasharray: 5 5
-    classDef viewerPkg fill:#e8f5e9,stroke:#2e7d32,stroke-dasharray: 3 3
+    %% Data sources feed into phases
+    HUMAN --> CAP
+    SYNTH -.-> LOADER
+    BENCH_DATA --> EVALS
 
-    class Record,Train,Deploy,Evaluate corePhase
-    class PRIVACY,RETRIEVAL,GROUNDING optionalPkg
-    class VIEWER viewerPkg
+    %% Demo library feeds learning
+    STORE --> EMB
+    STORE --> LOADER
+    STORE -.-> ABSTRACT
+
+    %% Learning outputs feed execution
+    SEARCH -->|"demo context"| POLICY
+    CKPT -->|"trained policy"| POLICY
+    PATTERNS -.->|"templates"| POLICY
+
+    %% Model connections
+    POLICY --> Models
+    GROUND --> Models
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FEEDBACK LOOPS (Evaluation-Driven)
+    %% ═══════════════════════════════════════════════════════════════════════
+    METRICS -->|"success traces"| STORE
+    METRICS -.->|"training signal"| TRAIN
+
+    %% Retrieval in BOTH training AND evaluation
+    SEARCH -->|"eval conditioning"| EVALS
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% STYLING
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    %% Phase colors
+    classDef phase1 fill:#3498DB,stroke:#1A5276,color:#fff
+    classDef phase2 fill:#27AE60,stroke:#1E8449,color:#fff
+    classDef phase3 fill:#9B59B6,stroke:#6C3483,color:#fff
+
+    %% Component states
+    classDef implemented fill:#2ECC71,stroke:#1E8449,color:#fff
+    classDef future fill:#95A5A6,stroke:#707B7C,color:#fff,stroke-dasharray: 5 5
+    classDef futureBlock fill:#f5f5f5,stroke:#95A5A6,stroke-dasharray: 5 5
+    classDef safetyBlock fill:#E74C3C,stroke:#A93226,color:#fff
+
+    %% Model layer
+    classDef models fill:#F39C12,stroke:#B7950B,color:#fff
+
+    %% Apply styles
+    class CAP,PRIV,STORE phase1
+    class EMB,IDX,SEARCH,LOADER,TRAIN,CKPT phase2
+    class OBS,POLICY,GROUND,ACT,VALIDATE,EVALS,METRICS phase3
+    class CLAUDE,GPT,GEMINI,QWEN models
+    class L0,L1,L2 implemented
 ```
 
-OpenAdapt:
-- Records screenshots and user input events
-- Trains ML models on demonstrations
-- Generates and replays synthetic input via model completions
-- Evaluates agents on GUI automation benchmarks
+### Core Innovation: Demo-Conditioned Prompting
 
-**Key differentiators:**
-1. Model agnostic - works with any LMM
-2. Auto-prompted from human demonstration (not user-prompted)
-3. Works with all desktop GUIs including virtualized and web
-4. Open source (MIT license)
+OpenAdapt's key differentiator is **demonstration-conditioned automation** - "show, don't tell":
+
+| Traditional Agent | OpenAdapt Agent |
+|-------------------|-----------------|
+| User writes prompts | User records demonstration |
+| Ambiguous instructions | Grounded in actual UI |
+| Requires prompt engineering | No technical expertise needed |
+| Context-free | Context from similar demos |
+
+**Retrieval powers BOTH training AND evaluation**: Similar demonstrations are retrieved as context for the VLM, improving accuracy from 33% to 100% on first-action benchmarks.
+
+### Key Concepts
+
+- **Policy/Grounding Separation**: The Policy decides *what* to do; Grounding determines *where* to do it
+- **Safety Gate**: Runtime validation layer before action execution (confirm mode for high-risk actions)
+- **Abstraction Ladder**: Progressive generalization from literal replay to goal-level automation
+- **Evaluation-Driven Feedback**: Success traces become new training data
+
+**Legend:** Solid = Implemented | Dashed = Future
 
 ---
 
-## Key Concepts
+## Terminology (Aligned with GUI Agent Literature)
 
-### Meta-Package Structure
+| Term | Description |
+|------|-------------|
+| **Observation** | What the agent perceives (screenshot, accessibility tree) |
+| **Action** | What the agent does (click, type, scroll, etc.) |
+| **Trajectory** | Sequence of observation-action pairs |
+| **Demonstration** | Human-provided example trajectory |
+| **Policy** | Decision-making component that maps observations to actions |
+| **Grounding** | Mapping intent to specific UI elements (coordinates) |
+
+## Meta-Package Structure
 
 OpenAdapt v1.0+ uses a **modular architecture** where the main `openadapt` package acts as a meta-package that coordinates focused sub-packages:
 
-- **Core Packages**: Essential for the main workflow
-  - `openadapt-capture` - Records screenshots and input events
-  - `openadapt-ml` - Trains models on demonstrations
-  - `openadapt-evals` - Evaluates agents on benchmarks
+- **Core Packages**: Essential for the three-phase pipeline
+  - `openadapt-capture` - DEMONSTRATE phase: Collects observations and actions
+  - `openadapt-ml` - LEARN phase: Trains policies from demonstrations
+  - `openadapt-evals` - EXECUTE phase: Evaluates agents on benchmarks
 
 - **Optional Packages**: Enhance specific workflow phases
-  - `openadapt-privacy` - Integrates at **Record** phase for PII/PHI scrubbing
-  - `openadapt-retrieval` - Integrates at **Train** phase for multimodal demo retrieval
-  - `openadapt-grounding` - Integrates at **Deploy** phase for UI element localization
+  - `openadapt-privacy` - DEMONSTRATE: PII/PHI scrubbing before storage
+  - `openadapt-retrieval` - LEARN + EXECUTE: Demo conditioning for both training and evaluation
+  - `openadapt-grounding` - EXECUTE: UI element localization (SoM, OmniParser)
 
-- **Independent Components**:
-  - `openadapt-viewer` - HTML visualization that works with any phase
+- **Cross-Cutting**:
+  - `openadapt-viewer` - Trajectory visualization at any phase
 
 ### Two Paths to Automation
 
-1. **Custom Training Path**: Record demonstrations -> Train your own model -> Deploy agent
+1. **Custom Training Path**: Demonstrate -> Train policy -> Deploy agent
    - Best for: Repetitive tasks specific to your workflow
    - Requires: `openadapt[core]`
 
-2. **API Agent Path**: Use pre-trained LMM APIs (Claude, GPT-4V, etc.) -> Evaluate on benchmarks
+2. **API Agent Path**: Use pre-trained VLM APIs (Claude, GPT-4V, etc.) with demo conditioning
    - Best for: General-purpose automation, rapid prototyping
    - Requires: `openadapt[evals]`
 
