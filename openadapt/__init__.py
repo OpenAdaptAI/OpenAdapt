@@ -25,13 +25,13 @@ def __getattr__(name: str):
         "EventType",
         "MouseButton",
     ):
-        from openadapt_capture import (
+        from openadapt_capture import (  # noqa: F401
+            Action,
             Capture,
             CaptureSession,
-            Recorder,
-            Action,
             EventType,
             MouseButton,
+            Recorder,
         )
 
         return locals()[name]
@@ -43,10 +43,10 @@ def __getattr__(name: str):
         "ApiAgent",
         "evaluate_agent_on_benchmark",
     ):
-        from openadapt_evals import (
+        from openadapt_evals import (  # noqa: F401
+            ApiAgent,
             BenchmarkAdapter,
             BenchmarkTask,
-            ApiAgent,
             evaluate_agent_on_benchmark,
         )
 
@@ -54,21 +54,25 @@ def __getattr__(name: str):
 
     # Viewer package
     if name in ("PageBuilder", "HTMLBuilder"):
-        from openadapt_viewer import PageBuilder, HTMLBuilder
+        from openadapt_viewer import HTMLBuilder, PageBuilder  # noqa: F401
 
         return locals()[name]
 
     # ML package (heavy - only import if explicitly requested)
     if name in ("QwenVLAdapter", "train", "Trainer"):
-        from openadapt_ml import QwenVLAdapter
-        from openadapt_ml.training import Trainer
+        from openadapt_ml import QwenVLAdapter  # noqa: F401
+        from openadapt_ml.training import Trainer  # noqa: F401
 
         return locals().get(name)
 
     # Grounding package (optional)
     if name in ("Grounder", "OmniGrounder", "GeminiGrounder"):
         try:
-            from openadapt_grounding import Grounder, OmniGrounder, GeminiGrounder
+            from openadapt_grounding import (  # noqa: F401
+                GeminiGrounder,
+                Grounder,
+                OmniGrounder,
+            )
 
             return locals()[name]
         except ImportError:
@@ -80,7 +84,7 @@ def __getattr__(name: str):
     # Retrieval package (optional)
     if name in ("DemoRetriever", "DemoLibrary"):
         try:
-            from openadapt_retrieval import DemoRetriever, DemoLibrary
+            from openadapt_retrieval import DemoLibrary, DemoRetriever  # noqa: F401
 
             return locals()[name]
         except ImportError:

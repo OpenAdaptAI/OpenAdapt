@@ -45,6 +45,7 @@ def main():
 # Capture Commands
 # =============================================================================
 
+
 @main.group()
 def capture():
     """Record GUI demonstrations.
@@ -80,6 +81,7 @@ def capture_start(name: str, audio: bool, transcribe: bool):
 
         # Wait for keyboard interrupt
         import signal
+
         signal.pause()
 
     except ImportError:
@@ -106,13 +108,14 @@ def capture_list(path: str):
     """List available captures."""
     try:
         from pathlib import Path
+
         from openadapt_capture import load_capture
 
         captures_found = 0
         for capture_dir in Path(path).iterdir():
             if capture_dir.is_dir():
                 try:
-                    capture = load_capture(str(capture_dir))
+                    load_capture(str(capture_dir))  # Validate it's a capture
                     click.echo(f"  {capture_dir.name}")
                     captures_found += 1
                 except Exception:
@@ -135,6 +138,7 @@ def capture_view(name: str, open: bool):
     """View a capture recording."""
     try:
         from pathlib import Path
+
         from openadapt_capture import create_html
 
         capture_path = Path(name)
@@ -148,6 +152,7 @@ def capture_view(name: str, open: bool):
 
         if open:
             import webbrowser
+
             webbrowser.open(f"file://{output_path.absolute()}")
 
     except ImportError:
@@ -158,6 +163,7 @@ def capture_view(name: str, open: bool):
 # =============================================================================
 # Train Commands
 # =============================================================================
+
 
 @main.group()
 def train():
@@ -178,10 +184,12 @@ def train():
 @click.option("--config", help="Path to training config YAML")
 @click.option("--output", "-o", default="training_output", help="Output directory")
 @click.option("--open/--no-open", default=True, help="Open dashboard in browser")
-def train_start(capture: str, model: str, config: Optional[str], output: str, open: bool):
+def train_start(
+    capture: str, model: str, config: Optional[str], output: str, open: bool
+):
     """Start model training."""
     try:
-        click.echo(f"Starting training...")
+        click.echo("Starting training...")
         click.echo(f"  Capture: {capture}")
         click.echo(f"  Model: {model}")
         click.echo(f"  Output: {output}")
@@ -208,8 +216,8 @@ def train_start(capture: str, model: str, config: Optional[str], output: str, op
 def train_status(output: str):
     """Check training status."""
     try:
-        from pathlib import Path
         import json
+        from pathlib import Path
 
         log_path = Path(output) / "training_log.json"
         if not log_path.exists():
@@ -227,7 +235,7 @@ def train_status(output: str):
         click.echo(f"Status: {status}")
         click.echo(f"Epoch: {epoch}")
         click.echo(f"Loss: {loss:.4f}")
-        click.echo(f"Elapsed: {elapsed/60:.1f} minutes")
+        click.echo(f"Elapsed: {elapsed / 60:.1f} minutes")
 
     except Exception as e:
         click.echo(f"Error reading training status: {e}", err=True)
@@ -254,6 +262,7 @@ def train_stop(output: str):
 # Eval Commands
 # =============================================================================
 
+
 @main.group()
 def eval():
     """Evaluate models on benchmarks.
@@ -269,28 +278,39 @@ def eval():
 
 @eval.command("run")
 @click.option("--checkpoint", "-c", help="Path to model checkpoint")
-@click.option("--agent", "-a", type=click.Choice(["api-claude", "api-openai"]),
-              help="API agent to use")
+@click.option(
+    "--agent",
+    "-a",
+    type=click.Choice(["api-claude", "api-openai"]),
+    help="API agent to use",
+)
 @click.option("--benchmark", "-b", default="waa", help="Benchmark name")
 @click.option("--tasks", "-t", default=10, help="Number of tasks")
 @click.option("--server", "-s", help="WAA server URL for live eval")
 @click.option("--demo", help="Demo file for agent")
-def eval_run(checkpoint: Optional[str], agent: Optional[str], benchmark: str,
-             tasks: int, server: Optional[str], demo: Optional[str]):
+def eval_run(
+    checkpoint: Optional[str],
+    agent: Optional[str],
+    benchmark: str,
+    tasks: int,
+    server: Optional[str],
+    demo: Optional[str],
+):
     """Run benchmark evaluation."""
     try:
         from openadapt_evals import (
             ApiAgent,
-            WAAMockAdapter,
             WAALiveAdapter,
-            evaluate_agent_on_benchmark,
+            WAAMockAdapter,
             compute_metrics,
+            evaluate_agent_on_benchmark,
         )
 
         # Create agent
         if checkpoint:
             click.echo(f"Loading model from: {checkpoint}")
             from openadapt_evals import PolicyAgent
+
             eval_agent = PolicyAgent(checkpoint_path=checkpoint)
         elif agent:
             provider = "anthropic" if "claude" in agent else "openai"
@@ -339,8 +359,8 @@ def eval_mock(tasks: int, output: str):
         from openadapt_evals import (
             SmartMockAgent,
             WAAMockAdapter,
-            evaluate_agent_on_benchmark,
             compute_metrics,
+            evaluate_agent_on_benchmark,
         )
 
         click.echo(f"Running mock evaluation with {tasks} tasks...")
@@ -362,6 +382,7 @@ def eval_mock(tasks: int, output: str):
 # =============================================================================
 # Serve Command
 # =============================================================================
+
 
 @main.command()
 @click.option("--port", "-p", default=8080, help="Port to serve on")
@@ -396,6 +417,7 @@ def serve(port: int, output: str, open: bool):
 # Utility Commands
 # =============================================================================
 
+
 @main.command()
 def version():
     """Show version information for all packages."""
@@ -429,6 +451,7 @@ def doctor():
 
     # Check Python version
     import platform
+
     click.echo(f"\nPython: {platform.python_version()}")
     click.echo(f"Platform: {platform.system()} {platform.release()}")
 
@@ -464,6 +487,7 @@ def doctor():
     click.echo("\nGPU:")
     try:
         import torch
+
         if torch.cuda.is_available():
             click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -476,6 +500,7 @@ def doctor():
     # Check API keys
     click.echo("\nAPI Keys:")
     import os
+
     keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
     for key in keys:
         if os.environ.get(key):

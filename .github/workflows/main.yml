@@ -14,53 +14,29 @@ jobs:
 
     strategy:
       matrix:
-        # TODO: add windows matrix
-        os: [macos-latest]
-
-    env:
-      REPO: ${{ github.event.pull_request.head.repo.full_name }}
-      BRANCH: ${{ github.event.pull_request.head.ref }}
-      SKIP_POETRY_SHELL: 1
+        os: [macos-latest, ubuntu-latest]
+        python-version: ['3.10', '3.11', '3.12']
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ env.BRANCH }}
-          repository: ${{ env.REPO }}
+        uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.python-version }}
 
-      - name: Run tests using the shell script (macOS compatible).
-        if: matrix.os == 'macos-latest'
-        run: sh install/install_openadapt.sh
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.5.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+      - name: Lint with ruff
+        run: |
+          ruff check openadapt/
+          ruff format --check openadapt/
 
-      - name: Cache deps
-        id: cache-deps
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
-
-      - run: poetry install --no-interaction --no-root
-        if: steps.cache-deps.outputs.cache-hit != 'true'
-
-      - name: Activate virtualenv
-        run: source .venv/bin/activate
-        if: steps.cache-deps.outputs.cache-hit == 'true'
-
-      - name: Check formatting with Black
-        run: poetry run black --preview --check . --exclude '/(alembic|\.cache|\.venv|venv|contrib|__pycache__)/'
-
-      - name: Run Flake8
-        run: poetry run flake8 --exclude=alembic,.venv,venv,contrib,.cache,.git
+      - name: Verify package imports
+        run: |
+          python -c "from openadapt.cli import main; print('CLI import OK')"
+          python -c "from openadapt.version import __version__; print(f'Version: {__version__}')"
