@@ -27,6 +27,7 @@ This document is written from the perspective of a skeptical reviewer at a top v
 8. [Realistic Timeline](#8-realistic-timeline)
 9. [Risk Mitigation](#9-risk-mitigation)
 10. [Action Items](#10-action-items)
+11. [Path to Main Track Publication (Parallel Track)](#11-path-to-main-track-publication-parallel-track)
 
 ---
 
@@ -439,6 +440,236 @@ Based on related work, likely reviewers include researchers from:
 - [ ] **User study design** - For CHI/UIST submission
 - [ ] **Run user study** - n=20-30 participants
 - [ ] **Write full paper** - 10 pages for CHI/UIST
+
+---
+
+## 11. Path to Main Track Publication (Parallel Track)
+
+This section provides a rigorous assessment of what would be required to publish in a main track venue (NeurIPS, ICML, ICLR) rather than a workshop. This is a parallel track that requires substantially more investment.
+
+### 11.1 Honest Assessment: Why Current Work is Workshop-Level
+
+Our current contribution is fundamentally **prompt engineering**, not machine learning research. While valuable for practitioners, this positions us poorly for ML venues that expect learned components, theoretical insights, or architectural innovations.
+
+**Table: Anticipated Reviewer Concerns for Main Track Submission**
+
+| Concern | Severity | Our Current Status | What Main Track Requires |
+|---------|----------|-------------------|--------------------------|
+| No learned component | **Critical** | True - retrieval uses heuristic similarity | Train retrieval end-to-end for downstream task |
+| Single demo format | **High** | True - behavior-only format hardcoded | Learn optimal format/compression |
+| Heuristic retrieval (BM25/embedding) | **High** | True - not optimized for action accuracy | Retrieval that optimizes task success, not similarity |
+| Limited evaluation | **High** | 45 tasks, 1 model, 1 platform | 200+ tasks, 3+ models, 2+ benchmarks |
+| No comparison to fine-tuning | **High** | True | Show when prompting beats/complements fine-tuning |
+| No theoretical analysis | **Medium** | True - purely empirical | Information-theoretic or PAC-learning analysis |
+| Engineering focus | **Medium** | True - system building, not research | Clear algorithmic or theoretical contribution |
+| No ablation of demo components | **Medium** | Partial | Systematic ablation with significance tests |
+
+**Bottom line**: A main track reviewer at NeurIPS/ICML will likely say: "This is a well-executed engineering project with an empirical evaluation, but where is the research contribution? Adding demos to prompts is not novel."
+
+### 11.2 Required Technical Contributions (Options to Elevate)
+
+To elevate from workshop to main track, we need at least ONE of the following technical contributions:
+
+#### Option A: Learned Demo Retrieval (RECOMMENDED)
+
+**Effort**: 2-3 months | **Risk**: Medium | **Novelty**: High
+
+**Core idea**: Train the retrieval system to optimize action accuracy, not semantic similarity.
+
+**Why this works**: Current retrieval uses off-the-shelf embeddings (CLIP, text similarity) that optimize for semantic match. But the best demo for a task may not be the most semantically similar - it may be one that provides the right procedural template or spatial priors.
+
+**Technical approach**:
+1. Collect retrieval training data: (query, demo, action_accuracy) tuples
+2. Train retrieval scorer to predict action accuracy given (query, demo) pair
+3. Use contrastive learning: demos that help should score higher than demos that don't
+4. Evaluate: Does learned retrieval outperform heuristic retrieval?
+
+**Key experiments**:
+- Retrieval recall@k vs action accuracy correlation
+- Learned vs heuristic retrieval on held-out tasks
+- Analysis of what the model learns (which demo features matter?)
+
+**Related work to cite**:
+- REALM (Guu et al., 2020) - Retrieval-augmented language model pretraining
+- Atlas (Izacard et al., 2022) - Few-shot learning with retrieval
+- DocPrompting (Zhou et al., 2022) - Retrieve docs for code generation
+
+**Why reviewers would accept**: "First demonstration that learned retrieval improves demo-conditioned GUI agents, with analysis of what retrieval features matter."
+
+#### Option B: Learned Prompt Synthesis
+
+**Effort**: 3-4 months | **Risk**: Medium-High | **Novelty**: High
+
+**Core idea**: Learn to synthesize optimal demo prompts rather than using fixed templates.
+
+**Technical approach**:
+1. Define prompt template space (what to include, how to format, compression level)
+2. Use LLM-in-the-loop optimization (APE-style) to find optimal templates
+3. Alternatively, train a small model to select/compress demo content
+4. Evaluate: Does learned synthesis outperform hand-crafted templates?
+
+**Key experiments**:
+- Template ablation with learned selection
+- Compression ratio vs accuracy tradeoff
+- Cross-task transfer of learned templates
+
+**Related work to cite**:
+- APE (Zhou et al., 2022) - Automatic prompt engineering
+- DSPy (Khattab et al., 2023) - Programmatic prompt optimization
+- PromptBreeder (Fernando et al., 2023) - Self-referential prompt evolution
+
+**Why reviewers would accept**: "Novel prompt synthesis method that learns to format demonstrations for maximal downstream utility."
+
+#### Option C: Behavioral Cloning with Demo-Augmentation
+
+**Effort**: 4-6 months | **Risk**: High | **Novelty**: Very High
+
+**Core idea**: Fine-tune a VLM using demonstration-augmented behavioral cloning.
+
+**Technical approach**:
+1. Collect behavioral cloning dataset: (screenshot, task, action) tuples
+2. Augment each example with retrieved demonstration context
+3. Fine-tune VLM with demo in context vs without
+4. Compare: Does demo-augmented fine-tuning outperform standard fine-tuning?
+
+**Key experiments**:
+- Fine-tuning with/without demo augmentation
+- Sample efficiency: Do demos reduce required training data?
+- Analysis of attention patterns: Does the model attend to demos?
+
+**Related work to cite**:
+- CogAgent (Hong et al., 2023) - GUI agent fine-tuning
+- SeeClick (Cheng et al., 2024) - Visual grounding for GUI
+- RT-2 (Brohan et al., 2023) - Vision-language-action models
+
+**Why reviewers would accept**: "First demonstration that demo-augmentation improves fine-tuned GUI agents, with analysis of when prompting vs fine-tuning is preferred."
+
+**Caveat**: This requires significant compute ($2-5k GPU, 4-6 weeks training) and expertise in VLM fine-tuning.
+
+#### Option D: Theoretical Analysis
+
+**Effort**: 2-3 months | **Risk**: High | **Novelty**: Medium
+
+**Core idea**: Provide theoretical analysis of why demonstrations help GUI agents.
+
+**Technical approach**:
+1. Information-theoretic analysis: How much information do demos provide?
+2. PAC-learning analysis: Sample complexity with/without demos
+3. Formal model of GUI task space and demo utility
+
+**Key contributions**:
+- Theoretical bound on demo utility
+- Characterization of when demos help vs hurt
+- Connection to few-shot learning theory
+
+**Related work to cite**:
+- Brown et al. (2020) - GPT-3 few-shot capabilities
+- Xie et al. (2021) - Why in-context learning works
+- Min et al. (2022) - Rethinking demonstration role
+
+**Why reviewers would accept**: "Theoretical understanding of demonstration utility for GUI agents, with empirical validation."
+
+**Caveat**: Requires theoretical ML expertise; risk of disconnect between theory and practice.
+
+### 11.3 Additional Experiments Required
+
+Beyond the technical contribution, main track requires substantially more empirical evidence:
+
+**Benchmark Coverage**:
+| Benchmark | Tasks Required | Current Status | Effort |
+|-----------|---------------|----------------|--------|
+| Windows Agent Arena (WAA) | 50+ tasks | 8 tasks (incomplete) | 3-4 weeks |
+| WebArena | 100+ tasks | 0 tasks | 4-6 weeks |
+| OSWorld (optional) | 50+ tasks | 0 tasks | 4-6 weeks |
+
+**Evaluation Metrics**:
+- **First-action accuracy**: Already measured, but on non-standard tasks
+- **Episode success rate**: Not measured - REQUIRED for main track
+- **Step efficiency**: Actions per successful task
+- **Grounding accuracy**: Correct element identification rate
+
+**Multi-Model Comparison**:
+| Model | Priority | Status |
+|-------|----------|--------|
+| Claude Sonnet 4.5 | Required | Tested |
+| GPT-4V | Required | Not tested |
+| Gemini 1.5 Pro | Required | Not tested |
+| Qwen-VL | Nice to have | Not tested |
+| Open-source (LLaVA) | Nice to have | Not tested |
+
+**Ablation Studies**:
+1. Demo format: full trace vs behavior-only vs action-only
+2. Number of demos: k=1, 3, 5, 10
+3. Demo relevance: exact match vs same-domain vs random
+4. Demo recency: fresh demos vs stale demos
+5. Model scale: Does demo benefit scale with model size?
+
+**Statistical Requirements**:
+- 3+ seeds per experiment for variance estimation
+- 95% confidence intervals on all metrics
+- Statistical significance tests (McNemar's, permutation tests)
+- Effect sizes (Cohen's h, odds ratios)
+
+### 11.4 Timeline and Resources
+
+**Minimum timeline for main track submission**:
+
+| Phase | Duration | Activities |
+|-------|----------|------------|
+| **Phase 1**: Technical contribution | 2-4 months | Implement learned retrieval or prompt synthesis |
+| **Phase 2**: Large-scale evaluation | 2-3 months | WAA (50+), WebArena (100+), multi-model |
+| **Phase 3**: Analysis & writing | 1-2 months | Ablations, significance tests, paper writing |
+| **Total** | **6-9 months** | From start to submission-ready |
+
+**Resource requirements**:
+
+| Resource | Estimate | Notes |
+|----------|----------|-------|
+| Dedicated researchers | 1-2 FTE | Cannot be done part-time |
+| GPU compute | $2-5k | For fine-tuning experiments (Option C) |
+| API credits | $1-3k | Multi-model evaluation at scale |
+| Azure VM (WAA) | $200-500 | Extended evaluation runs |
+| Human annotation | $500-1k | Demo quality labels, retrieval training data |
+
+**Total estimated cost**: $5-10k (excluding researcher time)
+
+### 11.5 Honest Recommendation
+
+**For a small team with limited resources**:
+- **Focus on workshop paper**. The workshop contribution is solid and achievable.
+- Do NOT attempt main track unless you can dedicate 1-2 researchers full-time for 6+ months.
+- A rejected main track submission wastes 6-9 months and demoralizes the team.
+
+**For a team with dedicated resources**:
+- **Pursue Option A (Learned Retrieval)** as the most tractable path to main track.
+- This adds a clear learned component while building on existing infrastructure.
+- Expected timeline: 6-7 months to submission-ready.
+- Honest acceptance probability: 25-35% at NeurIPS/ICML (still challenging).
+
+**Do NOT attempt main track if**:
+- You cannot dedicate 1-2 researchers full-time to this project
+- You do not have ML research expertise (vs engineering expertise)
+- You need a publication in < 6 months
+- You are not prepared for likely rejection and iteration
+
+**The workshop path is not a consolation prize**. Top workshops at NeurIPS/ICML have excellent visibility, lead to valuable feedback, and establish priority for your ideas. Many impactful papers started as workshop papers.
+
+### 11.6 Additional References for Main Track
+
+**Retrieval-Augmented Learning**:
+- Guu, K., Lee, K., Tung, Z., Pasupat, P., & Chang, M. W. (2020). REALM: Retrieval-augmented language model pre-training. *ICML 2020*.
+- Izacard, G., Lewis, P., Lomeli, M., Hosseini, L., Petroni, F., Schick, T., ... & Grave, E. (2022). Atlas: Few-shot learning with retrieval augmented language models. *arXiv preprint arXiv:2208.03299*.
+- Zhou, S., Alon, U., Xu, F. F., Wang, Z., Jiang, Z., & Neubig, G. (2022). DocPrompting: Generating code by retrieving the docs. *ICLR 2023*.
+
+**Automatic Prompt Engineering**:
+- Zhou, Y., Muresanu, A. I., Han, Z., Paster, K., Pitis, S., Chan, H., & Ba, J. (2022). Large language models are human-level prompt engineers. *ICLR 2023*.
+- Khattab, O., Santhanam, K., Li, X. L., Hall, D., Liang, P., Potts, C., & Zaharia, M. (2023). DSPy: Compiling declarative language model calls into self-improving pipelines. *arXiv preprint arXiv:2310.03714*.
+- Fernando, C., Banarse, D., Michalewski, H., Osindero, S., & Rocktäschel, T. (2023). PromptBreeder: Self-referential self-improvement via prompt evolution. *arXiv preprint arXiv:2309.16797*.
+
+**GUI Agent Fine-Tuning**:
+- Hong, W., Wang, W., Lv, Q., Xu, J., Yu, W., Ji, J., ... & Tang, J. (2023). CogAgent: A visual language model for GUI agents. *arXiv preprint arXiv:2312.08914*.
+- Cheng, K., Sun, Q., Chu, Y., Xu, F., Li, Y., Zhang, J., & Wu, Z. (2024). SeeClick: Harnessing GUI grounding for advanced visual GUI agents. *arXiv preprint arXiv:2401.10935*.
+- Brohan, A., Brown, N., Carbajal, J., Chebotar, Y., Chen, X., Choromanski, K., ... & Zitkovich, B. (2023). RT-2: Vision-language-action models transfer web knowledge to robotic control. *arXiv preprint arXiv:2307.15818*.
 
 ---
 
