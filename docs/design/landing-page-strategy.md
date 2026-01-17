@@ -371,7 +371,7 @@ No vendor lock-in, ever.
 
 ### 5.5 For Developers Section
 
-```
+````
 ## Built for Developers
 
 ### Modular Architecture
@@ -404,7 +404,7 @@ Integrated with Windows Agent Arena (WAA), WebArena, and OSWorld.
 Compare your models against published baselines.
 
 [View Documentation] [GitHub Repository]
-```
+````
 
 ### 5.6 For Enterprise Section
 
