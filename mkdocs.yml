@@ -116,8 +116,23 @@ nav:
       - openadapt-grounding: packages/grounding.md
       - openadapt-retrieval: packages/retrieval.md
       - openadapt-privacy: packages/privacy.md
-  - Architecture: architecture.md
+  - Architecture:
+      - Overview: architecture.md
+      - Evolution: architecture-evolution.md
+  - Design:
+      - Index: design/INDEX.md
+      - System Tray App: design/openadapt-tray.md
+      - Tray Logging: design/tray-logging.md
+      - Telemetry: design/telemetry-design.md
+      - Landing Page: design/landing-page-strategy.md
+      - Repo Rename Analysis: design/repo-rename-analysis.md
+  - Roadmap:
+      - Priorities: roadmap-priorities.md
+      - Publications: publication-roadmap.md
   - CLI Reference: cli.md
   - Contributing: contributing.md
   - Legacy:
       - Legacy Freeze: legacy/freeze.md
+      - Legacy Freeze (Alt): LEGACY_FREEZE.md
+  - Reference:
+      - macOS Permissions: permissions-macos.md
