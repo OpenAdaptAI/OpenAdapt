@@ -1,6 +1,6 @@
 # OpenAdapt Roadmap - Priorities
 
-**Last Updated**: January 16, 2026
+**Last Updated**: January 17, 2026
 **Version**: 1.1.0
 **Status**: Active Development
 
@@ -523,12 +523,12 @@ P3: Documentation Site ───────────────────
 
 | Resource | Purpose | Status |
 |----------|---------|--------|
-| Azure credits | WAA benchmark VM | Needed |
-| Anthropic API key | Claude testing | Available |
-| OpenAI API key | GPT-4V testing | Needed |
-| Google API key | Gemini testing | Needed |
-| Test machines | Windows 10/11, Ubuntu 22.04/24.04 | Needed |
-| DNS access | docs.openadapt.ai CNAME | Needed |
+| Azure credits | WAA benchmark VM | Available |
+| Anthropic API key | Claude testing | Available (in openadapt-ml/.env) |
+| OpenAI API key | GPT-4V testing | Available (in openadapt-ml/.env) |
+| Google API key | Gemini testing | Available (in openadapt-ml/.env) |
+| Test machines | Windows 10/11, Ubuntu 22.04/24.04 | Provision using existing tooling |
+| DNS access | docs.openadapt.ai CNAME | Done |
 
 ---
 
