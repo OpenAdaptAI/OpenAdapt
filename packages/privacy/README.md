@@ -1,5 +1,11 @@
 # openadapt-privacy
 
+[![Build Status](https://github.com/OpenAdaptAI/openadapt-privacy/workflows/Tests/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-privacy/actions)
+[![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
+[![Downloads](https://img.shields.io/pypi/dm/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+
 Privacy scrubbing for GUI automation data - PII/PHI detection and redaction.
 
 ## Installation
