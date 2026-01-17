@@ -99,29 +99,59 @@ openadapt doctor                          Check system requirements
 See the full [Architecture Documentation](docs/architecture.md) for detailed diagrams.
 
 ```mermaid
-flowchart LR
-    subgraph Record["1. Record"]
-        A[User Demo] --> B[Capture]
+flowchart TB
+    %% Main workflow phases
+    subgraph Record["1. RECORD"]
+        direction TB
+        DEMO[User Demo] --> CAPTURE[openadapt-capture]
     end
 
-    subgraph Train["2. Train"]
-        B --> C[ML Model]
+    subgraph Train["2. TRAIN"]
+        direction TB
+        DATA[Captured Data] --> ML[openadapt-ml]
     end
 
-    subgraph Deploy["3. Deploy"]
-        C --> D[Agent Policy]
-        D --> E[Action Replay]
+    subgraph Deploy["3. DEPLOY"]
+        direction TB
+        MODEL[Trained Model] --> AGENT[Agent Policy]
+        AGENT --> REPLAY[Action Replay]
     end
 
-    subgraph Evaluate["4. Evaluate"]
-        D --> F[Benchmark]
-        F --> G[Metrics]
+    subgraph Evaluate["4. EVALUATE"]
+        direction TB
+        BENCH[Benchmarks] --> EVALS[openadapt-evals]
+        EVALS --> METRICS[Metrics]
     end
 
-    %% Optional enhancements
-    GROUND[Grounding] -.-> E
-    RETRIEVE[Retrieval] -.-> C
-    PRIV[Privacy] -.-> B
+    %% Main flow connections
+    CAPTURE --> DATA
+    ML --> MODEL
+    AGENT --> BENCH
+
+    %% Viewer - independent component
+    VIEWER[openadapt-viewer]
+    VIEWER -.->|"view at any phase"| Record
+    VIEWER -.->|"view at any phase"| Train
+    VIEWER -.->|"view at any phase"| Deploy
+    VIEWER -.->|"view at any phase"| Evaluate
+
+    %% Optional packages with integration points
+    PRIVACY[openadapt-privacy]
+    RETRIEVAL[openadapt-retrieval]
+    GROUNDING[openadapt-grounding]
+
+    PRIVACY -.->|"PII/PHI scrubbing"| CAPTURE
+    RETRIEVAL -.->|"demo retrieval"| ML
+    GROUNDING -.->|"UI localization"| REPLAY
+
+    %% Styling
+    classDef corePhase fill:#e1f5fe,stroke:#01579b
+    classDef optionalPkg fill:#fff3e0,stroke:#e65100,stroke-dasharray: 5 5
+    classDef viewerPkg fill:#e8f5e9,stroke:#2e7d32,stroke-dasharray: 3 3
+
+    class Record,Train,Deploy,Evaluate corePhase
+    class PRIVACY,RETRIEVAL,GROUNDING optionalPkg
+    class VIEWER viewerPkg
 ```
 
 OpenAdapt:
@@ -135,6 +165,66 @@ OpenAdapt:
 2. Auto-prompted from human demonstration (not user-prompted)
 3. Works with all desktop GUIs including virtualized and web
 4. Open source (MIT license)
+
+---
+
+## Key Concepts
+
+### Meta-Package Structure
+
+OpenAdapt v1.0+ uses a **modular architecture** where the main `openadapt` package acts as a meta-package that coordinates focused sub-packages:
+
+- **Core Packages**: Essential for the main workflow
+  - `openadapt-capture` - Records screenshots and input events
+  - `openadapt-ml` - Trains models on demonstrations
+  - `openadapt-evals` - Evaluates agents on benchmarks
+
+- **Optional Packages**: Enhance specific workflow phases
+  - `openadapt-privacy` - Integrates at **Record** phase for PII/PHI scrubbing
+  - `openadapt-retrieval` - Integrates at **Train** phase for multimodal demo retrieval
+  - `openadapt-grounding` - Integrates at **Deploy** phase for UI element localization
+
+- **Independent Components**:
+  - `openadapt-viewer` - HTML visualization that works with any phase
+
+### Two Paths to Automation
+
+1. **Custom Training Path**: Record demonstrations -> Train your own model -> Deploy agent
+   - Best for: Repetitive tasks specific to your workflow
+   - Requires: `openadapt[core]`
+
+2. **API Agent Path**: Use pre-trained LMM APIs (Claude, GPT-4V, etc.) -> Evaluate on benchmarks
+   - Best for: General-purpose automation, rapid prototyping
+   - Requires: `openadapt[evals]`
+
+---
+
+## Installation Paths
+
+Choose your installation based on your use case:
+
+```
+What do you want to do?
+|
++-- Just evaluate API agents on benchmarks?
+|   +-- pip install openadapt[evals]
+|
++-- Train custom models on your demonstrations?
+|   +-- pip install openadapt[core]
+|
++-- Full suite with all optional packages?
+|   +-- pip install openadapt[all]
+|
++-- Minimal CLI only (add packages later)?
+    +-- pip install openadapt
+```
+
+| Installation | Included Packages | Use Case |
+|-------------|-------------------|----------|
+| `openadapt` | CLI only | Start minimal, add what you need |
+| `openadapt[evals]` | + evals | Benchmark API agents (Claude, GPT-4V) |
+| `openadapt[core]` | + capture, ml, viewer | Full training workflow |
+| `openadapt[all]` | + privacy, retrieval, grounding | Everything including optional enhancements |
 
 ---
 
