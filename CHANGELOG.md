@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.0.2 (2026-01-17)
+
+### Bug Fixes
+
+- Remove unsupported style separators from Mermaid subgraph declarations
+  ([#974](https://github.com/OpenAdaptAI/OpenAdapt/pull/974),
+  [`114b067`](https://github.com/OpenAdaptAI/OpenAdapt/commit/114b06798f634aa3002785e5f4b6fae8f3b5c3bf))
+
+
 ## v1.0.1 (2026-01-17)
 
 ### Bug Fixes
