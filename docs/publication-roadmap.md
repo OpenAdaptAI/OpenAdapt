@@ -1,527 +1,505 @@
-# OpenAdapt Publication Roadmap
+# OpenAdapt Publication Roadmap: A Critical Assessment
 
-**Version**: 1.0
+**Version**: 2.0
 **Date**: January 2026
-**Status**: Active Planning
+**Status**: Honest Evaluation
 **Author**: OpenAdapt Research Team
 
 ---
 
-## Executive Summary
+## Preamble: Intellectual Honesty
 
-This roadmap outlines the publication strategy for OpenAdapt's core research contributions. The primary innovation is **demonstration-conditioned GUI agents**, which achieve dramatic accuracy improvements (33% to 100% first-action accuracy) by conditioning VLM agents on human demonstrations rather than relying solely on natural language instructions.
+This document is written from the perspective of a skeptical reviewer at a top venue. The goal is not to inflate claims but to identify what is genuinely publishable, what experiments are actually needed, and what timeline is realistic given current resources.
+
+**Guiding principle**: Better to publish a solid workshop paper than to submit an overreaching main track paper that gets rejected.
 
 ---
 
 ## Table of Contents
 
-1. [Publishable Contributions](#1-publishable-contributions)
-2. [Publication Timeline](#2-publication-timeline)
-3. [Required Experiments](#3-required-experiments)
-4. [Author Contributions](#4-author-contributions)
-5. [Venue Analysis](#5-venue-analysis)
-6. [Existing Drafts and Assets](#6-existing-drafts-and-assets)
+1. [Current State of Evidence](#1-current-state-of-evidence)
+2. [Honest Contribution Assessment](#2-honest-contribution-assessment)
+3. [Weakness Analysis](#3-weakness-analysis)
+4. [Required Experiments for Defensible Claims](#4-required-experiments-for-defensible-claims)
+5. [Statistical Rigor Requirements](#5-statistical-rigor-requirements)
+6. [Related Work Gap Analysis](#6-related-work-gap-analysis)
+7. [Venue Fit Analysis](#7-venue-fit-analysis)
+8. [Realistic Timeline](#8-realistic-timeline)
+9. [Risk Mitigation](#9-risk-mitigation)
+10. [Action Items](#10-action-items)
 
 ---
 
-## 1. Publishable Contributions
+## 1. Current State of Evidence
 
-### 1.1 Demo-Conditioned GUI Agents (Core Innovation)
+### 1.1 What We Actually Have
 
-**The Big Result**: Demonstration conditioning improves first-action accuracy from 33% to 100% on macOS tasks, with expected similar improvements (+30-50pp) on Windows Agent Arena (WAA).
+| Experiment | n | Result | Statistical Validity | Benchmark |
+|------------|---|--------|---------------------|-----------|
+| macOS demo-conditioning (first-action) | 45 | 46.7% -> 100% | **Moderate** (single model, single platform) | Non-standard |
+| WAA baseline (interrupted) | 8 | 12.5% success | **Weak** (incomplete, agent bugs) | Standard |
+| Length-matched control | 45 | 57.8% | **Useful** (rules out token length) | Non-standard |
 
-**Key Claims**:
-- Demonstrations capture implicit knowledge that natural language prompts cannot convey
-- Demo retrieval enables automatic selection of relevant examples from a library
-- The "show, don't tell" paradigm reduces prompt engineering burden
-- Works with any VLM backend (Claude, GPT, Gemini, Qwen-VL)
+### 1.2 Critical Assessment of Current Results
 
-**Research Questions Addressed**:
-1. How much does demonstration context improve GUI agent performance?
-2. Can we automatically retrieve relevant demonstrations for new tasks?
-3. What is the transfer efficiency between similar tasks across platforms?
+**The 100% first-action accuracy claim**:
+- **Scope**: All 45 tasks share the SAME correct first action (click Apple menu)
+- **Implication**: This measures whether a demo can transfer procedural entry points, NOT general task-solving
+- **Limitation**: Not comparable to any published benchmark
+- **Honest framing**: "Demo-conditioning eliminates spatial bias in navigation initialization"
 
-**Preliminary Results** (from `/Users/abrichr/oa/src/openadapt-ml/docs/experiments/`):
-- Zero-shot (instruction only): 33% first-action accuracy
-- Demo-conditioned: 100% first-action accuracy (+67pp improvement)
-- Demo persists across ALL steps (critical P0 fix for episode success)
+**The WAA baseline**:
+- **Status**: 1/8 tasks passed (12.5%)
+- **Problem**: Run was interrupted; agent had bugs unrelated to our method
+- **Implication**: We do not yet have a clean zero-shot baseline on a standard benchmark
 
-**WAA Predictions** (from experiment design):
-- Zero-shot expected: 10-20% task success (consistent with SOTA ~19.5%)
-- Demo-conditioned expected: 40-70% task success (+30-50pp improvement)
+### 1.3 What We Do NOT Have
 
----
-
-### 1.2 Modular Open-Source Architecture (Meta-Package Design)
-
-**Contribution**: A composable, model-agnostic architecture for GUI automation research.
-
-**Key Components**:
-| Package | Responsibility | Key Innovation |
-|---------|---------------|----------------|
-| `openadapt-capture` | GUI recording | Cross-platform event + a11y tree capture |
-| `openadapt-ml` | Training & inference | Model-agnostic VLM adapters |
-| `openadapt-evals` | Benchmark evaluation | Unified adapter for WAA, WebArena |
-| `openadapt-retrieval` | Demo search | Multimodal (text+image) embedding with Qwen3-VL |
-| `openadapt-grounding` | Element localization | Multiple providers (OmniParser, Florence2, Gemini) |
-| `openadapt-viewer` | Visualization | Interactive HTML trajectory viewer |
-| `openadapt-privacy` | PII scrubbing | Privacy-preserving demonstration storage |
-
-**Technical Highlights**:
-- Abstraction ladder: Literal -> Symbolic -> Template -> Semantic -> Goal
-- Process graph representations for temporal context
-- Three-phase architecture: DEMONSTRATE -> LEARN -> EXECUTE
-- Feedback loops for continuous improvement
-
-**Prior Art Comparison**:
-| System | Open Source | Modular | Demo-Conditioned | Multi-VLM |
-|--------|------------|---------|------------------|-----------|
-| OpenAdapt | Yes | Yes | **Yes** | Yes |
-| Claude Computer Use | No | No | No | No |
-| UFO | Partial | No | No | No |
-| SeeAct | Yes | No | No | No |
+1. **Standard benchmark results** - No complete WAA, WebArena, or OSWorld evaluation
+2. **Multi-model comparison** - Only Claude Sonnet 4.5 tested
+3. **Episode success rate** - Only first-action accuracy measured
+4. **Statistical significance tests** - No p-values, confidence intervals, or effect sizes
+5. **Ablation studies** - No systematic ablation of demo components
+6. **Retrieval experiments** - Retrieval system not evaluated
+7. **User studies** - No human evaluation of system usability
 
 ---
 
-### 1.3 Benchmark Evaluation Framework (WAA Integration)
+## 2. Honest Contribution Assessment
 
-**Contribution**: Unified evaluation infrastructure for GUI agent benchmarks.
+### 2.1 What Is ACTUALLY Novel?
 
-**Key Features**:
-- `BenchmarkAdapter` abstract interface for any benchmark
-- `WAALiveAdapter` with HTTP-based `/evaluate` endpoint
-- `ApiAgent` supporting Claude, GPT-5.1, Gemini backends
-- `RetrievalAugmentedAgent` for automatic demo selection
-- Execution trace collection with screenshots per step
-- HTML viewer for result analysis
+| Claimed Contribution | Novelty Assessment | Prior Work |
+|---------------------|-------------------|------------|
+| Demo-conditioned GUI agents | **Moderate** - PbD is old; VLM+demo is emerging | UINav (2023), SUGILITE (2017) |
+| "Show don't tell" paradigm | **Low** - Standard few-shot prompting | GPT-3 (2020), chain-of-thought |
+| Multimodal demo retrieval | **Moderate** - Novel application to GUI domain | RAG literature extensive |
+| Modular architecture | **Low** - Engineering contribution | Many open-source frameworks |
+| Cross-platform support | **Low** - Engineering contribution | SeeAct, UFO also support multiple platforms |
 
-**Benchmark Coverage**:
-| Benchmark | Status | Tasks | Domain |
-|-----------|--------|-------|--------|
-| Windows Agent Arena (WAA) | Implemented | 154 tasks | Windows desktop |
-| Mock Benchmark | Implemented | N tasks | Testing |
-| WebArena | Partial | 812 tasks | Web browser |
-| OSWorld | Planned | 369 tasks | Cross-platform |
+### 2.2 Defensible Novel Claims
 
-**WAA Task Selection** (from experiment design):
-- 10 carefully selected tasks across 4 enterprise-relevant domains
-- Browser/Edge (3 tasks): Privacy settings, bookmarks, font size
-- Office/LibreOffice (3 tasks): Fill blanks, charts, alignment
-- Settings (2 tasks): Notifications, Night Light scheduling
-- File Explorer (2 tasks): Archive creation, view changes
+After honest assessment, the defensible novel contribution is:
+
+> **Demonstration-conditioned prompting for VLM-based GUI agents**: We show that providing a human demonstration in the VLM prompt substantially improves action selection accuracy compared to instruction-only prompting. This is a *prompting strategy*, not a new model architecture or training method.
+
+**This is NOT**:
+- A new model architecture
+- A training/fine-tuning method
+- A new benchmark
+- A theoretical contribution
+
+### 2.3 Contribution Positioning
+
+**Honest positioning**: This is an **empirical study** showing that a simple prompting intervention (including demonstrations) improves GUI agent performance. The contribution is:
+
+1. **Empirical finding**: Demonstrations help, and we quantify by how much
+2. **Analysis**: We explain WHY (spatial bias, procedural priors)
+3. **Practical method**: We provide an open-source implementation
+
+**What reviewers will say**: "This is straightforward few-shot prompting applied to GUI agents. What is technically novel?"
+
+**Our response must be**: "The contribution is empirical, not algorithmic. We systematically evaluate demo-conditioning across N tasks and M models, providing the first rigorous study of this prompting strategy for GUI automation."
 
 ---
 
-### 1.4 Multimodal Retrieval for Demo Conditioning
+## 3. Weakness Analysis
 
-**Contribution**: Automatic demonstration retrieval using VLM embeddings.
+### 3.1 Anticipated Reviewer Criticisms
 
-**Technical Approach**:
-- **Embedder**: Qwen3-VL-Embedding with Matryoshka Representation Learning (MRL)
-- **Index**: FAISS vector index with cosine similarity
-- **Query**: Multimodal (task text + current screenshot)
-- **Reranking**: Cross-encoder for top-k refinement
+| Criticism | Severity | Our Current Status | Mitigation |
+|-----------|----------|-------------------|------------|
+| "All tasks share the same first action" | **Critical** | True - intentional design | Expand to diverse first actions |
+| "Only one model tested" | **High** | True | Add GPT-4V, Gemini |
+| "Non-standard benchmark" | **High** | True | Complete WAA evaluation |
+| "No episode success rate" | **High** | True | Run multi-step evaluation |
+| "Small sample size" | **Medium** | n=45 is reasonable | Add more tasks |
+| "No statistical tests" | **Medium** | True | Add McNemar's test, bootstrap CI |
+| "Limited to English/macOS" | **Medium** | True | Acknowledge as limitation |
+| "Retrieval system not evaluated" | **Medium** | True | Either evaluate or remove claims |
+| "No comparison to fine-tuning" | **Medium** | True | Acknowledge; position as prompt-only |
+| "Engineering contribution, not research" | **Low** | Partially true | Emphasize empirical findings |
 
-**Key Classes** (from `openadapt-retrieval`):
-```python
-# Core retrieval interface
-retriever = MultimodalDemoRetriever(embedding_dim=512)
-retriever.add_demo(demo_id, task, screenshot, app_name)
-retriever.build_index()
-results = retriever.retrieve(task, screenshot, top_k=3)
+### 3.2 Weaknesses We CANNOT Fix Before Submission
+
+1. **Fundamental novelty** - Demo-conditioning is not architecturally novel
+2. **Benchmark saturation** - If WAA shows <20% improvement, contribution weakens
+3. **Single-domain focus** - GUI automation is narrow; no multi-domain transfer
+
+### 3.3 Weaknesses We CAN Fix
+
+1. **Benchmark coverage** - Run complete WAA evaluation (1-2 weeks)
+2. **Multi-model comparison** - Add GPT-4V, Gemini (1 week)
+3. **Statistical rigor** - Add proper tests (1-2 days)
+4. **Diverse first actions** - Design new task set (1 week)
+5. **Episode success** - Extend evaluation (1 week)
+
+---
+
+## 4. Required Experiments for Defensible Claims
+
+### 4.1 Minimum Viable Experiments (for Workshop Paper)
+
+| Experiment | Tasks | Models | Trials/Task | Total Runs | Effort |
+|------------|-------|--------|-------------|------------|--------|
+| WAA zero-shot baseline | 20 | 2 | 3 | 120 | 1 week |
+| WAA demo-conditioned | 20 | 2 | 3 | 120 | 1 week |
+| **Total** | 20 | 2 | 6 | 240 | 2 weeks |
+
+**Why 3 trials per task?**
+- GUI actions have stochasticity (model sampling, UI timing)
+- Enables variance estimation and significance testing
+- Standard practice in agent evaluation literature
+
+### 4.2 Full Conference Paper Requirements
+
+| Experiment | Tasks | Models | Trials | Total Runs | Effort |
+|------------|-------|--------|--------|------------|--------|
+| WAA evaluation | 50+ | 3 | 3 | 450+ | 3 weeks |
+| WebArena evaluation | 100+ | 2 | 3 | 600+ | 4 weeks |
+| Ablation: demo format | 20 | 1 | 3 | 60 | 1 week |
+| Ablation: demo length | 20 | 1 | 3 | 60 | 1 week |
+| Ablation: # demos (k=1,3,5) | 20 | 1 | 3 | 180 | 2 weeks |
+| Cross-task transfer | 20 | 1 | 3 | 60 | 1 week |
+| **Total** | ~230 | 3-5 | 3+ | ~1500 | 10-12 weeks |
+
+### 4.3 Essential Ablations
+
+1. **Demo format ablation**
+   - Full trace (screenshot descriptions + actions + results)
+   - Behavior-only (actions + results)
+   - Action-only (just the action sequence)
+
+2. **Demo relevance ablation**
+   - Exact-match demo (same task)
+   - Same-domain demo (e.g., any Settings task)
+   - Cross-domain demo (e.g., Browser demo for Settings task)
+   - Random demo
+
+3. **Number of demos (k)**
+   - k=1, 3, 5
+   - Does more demos help, or just add noise?
+
+### 4.4 Baselines We MUST Compare Against
+
+| Baseline | Description | Why Essential |
+|----------|-------------|---------------|
+| Zero-shot instruction only | No demo, just task description | Primary comparison |
+| Zero-shot + CoT | "Think step by step" | Fair comparison to prompting methods |
+| Few-shot examples (text) | Text-only examples, no screenshots | Isolate visual contribution |
+| SOTA on WAA | GPT-5.1 + OmniParser (~19.5%) | Establish relative performance |
+| Random policy | Random clicks | Sanity check |
+
+---
+
+## 5. Statistical Rigor Requirements
+
+### 5.1 Required Statistical Tests
+
+| Test | Purpose | When to Use |
+|------|---------|-------------|
+| **McNemar's test** | Paired comparison of binary outcomes | Zero-shot vs demo on same tasks |
+| **Bootstrap confidence intervals** | Uncertainty estimation | All accuracy metrics |
+| **Effect size (Cohen's h)** | Practical significance | Accompany p-values |
+| **Bonferroni correction** | Multiple comparisons | When testing multiple models/conditions |
+
+### 5.2 Minimum Sample Sizes
+
+For detecting a 20 percentage point improvement with 80% power (alpha=0.05):
+- **Per-condition**: n >= 39 tasks (we have 45, sufficient)
+- **With 3 trials per task**: 39 x 3 = 117 total observations
+
+For detecting a 10 percentage point improvement:
+- **Per-condition**: n >= 199 tasks (we do NOT have this)
+- **Implication**: If effect is smaller than expected, we may be underpowered
+
+### 5.3 Reporting Standards
+
+Every result table must include:
+1. Mean accuracy
+2. Standard deviation (across trials)
+3. 95% confidence interval
+4. Sample size (n)
+5. Statistical test and p-value for key comparisons
+
+**Example**:
+```
+| Condition | Accuracy | 95% CI | p-value (vs zero-shot) |
+|-----------|----------|--------|------------------------|
+| Zero-shot | 33.3% | [22.1, 46.0] | - |
+| Demo-conditioned | 68.9% | [55.7, 80.1] | p<0.001 (McNemar) |
 ```
 
-**Performance Considerations**:
-- Qwen3-VL: ~6-8 GB VRAM, ~50-200ms per embedding
-- CLIP fallback: ~2 GB VRAM, ~10-50ms per embedding
-- Flexible dimensions via MRL: 256, 512, 1024, 2048
+---
+
+## 6. Related Work Gap Analysis
+
+### 6.1 Papers We MUST Cite
+
+**GUI Agents & Benchmarks**:
+1. Bonatti et al. (2024) - Windows Agent Arena
+2. Zhou et al. (2023) - WebArena
+3. Xie et al. (2024) - OSWorld
+4. Cheng et al. (2024) - SeeClick
+5. Kim et al. (2024) - Crab benchmark
+6. Gur et al. (2024) - WebAgent
+
+**VLM-based Agents**:
+7. Wang et al. (2024) - Mobile-Agent
+8. Zhang et al. (2024) - UFO
+9. Lu et al. (2024) - WebVoyager
+10. Anthropic (2024) - Claude Computer Use
+
+**Programming by Demonstration**:
+11. Li et al. (2023) - UINav
+12. Li et al. (2017) - SUGILITE
+13. Cypher et al. (1993) - Watch What I Do (foundational PbD text)
+
+**Visual Grounding**:
+14. Chen et al. (2024) - OmniParser
+15. Yang et al. (2023) - Set-of-Marks
+
+**Few-shot Prompting & RAG**:
+16. Brown et al. (2020) - GPT-3 few-shot
+17. Wei et al. (2022) - Chain-of-thought
+18. Lewis et al. (2020) - RAG
+
+### 6.2 Potential Reviewers
+
+Based on related work, likely reviewers include researchers from:
+- Microsoft Research (WAA, UFO, OmniParser teams)
+- Google DeepMind (WebAgent, PaLM teams)
+- CMU HCII (SUGILITE, UINav teams)
+- Allen Institute for AI (general VLM agents)
+- Stanford HAI (human-AI interaction)
+
+**Implication**: Paper must respectfully position against UFO, SeeClick, and other Microsoft/Google work.
+
+### 6.3 How We Differ From Prior Work
+
+| Prior Work | Their Approach | Our Difference |
+|------------|---------------|----------------|
+| UINav | Referee model for demo quality | We don't evaluate demo quality |
+| SUGILITE | NL + GUI disambiguation | We use full VLM reasoning |
+| UFO | Dual-agent architecture | We use single VLM with demo context |
+| WebVoyager | Web-specific agent | We target desktop applications |
+| Claude Computer Use | Production agent, no demos | We add demo conditioning |
+
+**Honest assessment**: The difference from Claude Computer Use is simply "add a demo to the prompt." This is the core contribution, and we must own it.
 
 ---
 
-## 2. Publication Timeline
+## 7. Venue Fit Analysis
 
-### Phase 1: Short-Term (Q1 2026)
+### 7.1 Realistic Venue Assessment
 
-#### 2.1.1 Blog Post / Technical Report
+| Venue | Fit | Honest Chance | Rationale |
+|-------|-----|---------------|-----------|
+| **NeurIPS main track** | Poor | <20% | Contribution too incremental for main track |
+| **NeurIPS Datasets & Benchmarks** | Poor | N/A | We don't propose a new benchmark |
+| **ICML main track** | Poor | <20% | Same as NeurIPS |
+| **ICLR main track** | Poor | <20% | Needs stronger learning contribution |
+| **CHI main track** | Moderate | 30-40% | Good fit IF we add user study |
+| **UIST main track** | Good | 40-50% | Systems + empirical evaluation |
+| **ACL/EMNLP** | Poor | <20% | Not sufficiently NLP-focused |
+| **AAAI** | Moderate | 30-40% | More accepting of applied work |
+| **LLM Agents Workshop (NeurIPS)** | Excellent | 60-70% | Perfect scope and contribution level |
+| **CHI Late-Breaking Work** | Excellent | 70%+ | Low barrier, good fit |
+| **UIST Demo Track** | Excellent | 60-70% | Live demo is compelling |
 
-**Target**: January-February 2026
-**Venue**: OpenAdapt blog, HuggingFace, towards data science
-**Effort**: 1-2 weeks
+### 7.2 Recommended Strategy
 
-**Content**:
-- Demo-conditioned GUI agents: The "show, don't tell" paradigm
-- Preliminary results (33% -> 100% accuracy)
-- Open-source release announcement
-- Interactive demo with viewer
+**Phase 1 (Immediate)**: Target **LLM Agents Workshop @ NeurIPS 2026** or **ICML 2026**
+- Deadline: ~3 months before conference
+- Page limit: 4-8 pages
+- Contribution bar: Lower than main track
+- Allows us to establish priority and get feedback
 
-**Deliverables**:
-- [ ] Write blog post (~2000 words)
-- [ ] Create figures (architecture diagram, accuracy comparison)
-- [ ] Record demo video (2-3 minutes)
-- [ ] Publish to blog + cross-post to HN, Reddit, Twitter
+**Phase 2 (If workshop goes well)**: Expand to **CHI 2027** or **UIST 2026**
+- Add user study (n=20-30)
+- Expand benchmark coverage
+- 10-page full paper
 
----
+**Phase 3 (Long shot)**: Only pursue NeurIPS/ICML main track IF:
+- WAA shows >30pp improvement over SOTA
+- We discover unexpected insights during analysis
+- Reviewers at workshop suggest main-track potential
 
-#### 2.1.2 arXiv Preprint
+### 7.3 Venue-Specific Requirements
 
-**Target**: February-March 2026
-**Venue**: arXiv cs.AI, cs.HC
-**Effort**: 3-4 weeks
+**For CHI acceptance**:
+- User study with statistical analysis (n >= 20)
+- Qualitative analysis (interviews, think-aloud)
+- Discussion of implications for HCI
+- Ethical considerations
 
-**Title Options**:
-1. "Show, Don't Tell: Demonstration-Conditioned GUI Automation with Vision-Language Models"
-2. "OpenAdapt: An Open Framework for Demo-Conditioned GUI Agents"
-3. "From Demonstrations to Actions: Retrieval-Augmented GUI Automation"
-
-**Existing Drafts**:
-- `/Users/abrichr/oa/src/omnimcp/paper/omnimcp_whitepaper.tex` - Spatial-temporal framework
-- `/Users/abrichr/oa/src/omnimcp/paper/omnimcp_arxiv.tex` - Full arXiv draft (1056 lines)
-
-**Structure** (based on existing drafts):
-1. Abstract
-2. Introduction (demo-conditioning motivation)
-3. Related Work (GUI automation, VLM agents, PbD)
-4. Method
-   - Architecture overview
-   - Demo-conditioned prompting
-   - Retrieval-augmented generation
-5. Experiments
-   - macOS demo experiment
-   - WAA benchmark evaluation
-   - Ablation studies
-6. Results
-   - First-action accuracy
-   - Episode success rate
-   - Transfer across platforms
-7. Discussion & Limitations
-8. Conclusion
-
-**Deliverables**:
-- [ ] Complete WAA experiments (10 tasks x 2 conditions)
-- [ ] Update existing LaTeX draft with new results
-- [ ] Add retrieval system section
-- [ ] Create supplementary materials (code, demos)
-- [ ] Submit to arXiv
+**For Workshop acceptance**:
+- Clear empirical contribution
+- Reproducible experiments
+- Honest limitations discussion
+- Interesting future directions
 
 ---
 
-### Phase 2: Medium-Term (Q2-Q3 2026)
+## 8. Realistic Timeline
 
-#### 2.2.1 Workshop Paper
+### 8.1 Minimum Viable Timeline (Workshop Paper)
 
-**Target**: April-June 2026
-**Venues** (submission deadlines vary):
-| Venue | Conference | Deadline | Focus |
-|-------|-----------|----------|-------|
-| LLM Agents Workshop | ICML 2026 | ~March | Agent architectures |
-| Human-AI Workshop | CHI 2026 | ~Dec 2025 | Human-AI collaboration |
-| AutoML Workshop | NeurIPS 2026 | ~Sept | Automation |
+| Week | Tasks | Dependencies |
+|------|-------|--------------|
+| **1-2** | Fix WAA environment, run clean baseline | VM stable |
+| **3-4** | Run demo-conditioned WAA experiments | Baseline done |
+| **5** | Statistical analysis, write results | Experiments done |
+| **6** | Write introduction, related work | - |
+| **7** | Internal review, revisions | Draft done |
+| **8** | Submit to workshop | - |
 
-**Format**: 4-8 pages + references
-**Effort**: 2-3 weeks (building on preprint)
+**Total: 8 weeks** from today to submission-ready
 
-**Focus**: Demo retrieval and conditioning system
-**Novelty**: Multimodal retrieval for GUI automation
+### 8.2 Realistic Timeline (CHI Full Paper)
 
----
+| Month | Tasks |
+|-------|-------|
+| **1-2** | Complete WAA + WebArena experiments |
+| **3** | Design and run user study |
+| **4** | Analyze user study, write draft |
+| **5** | Internal review, revisions |
+| **6** | Submit to CHI |
 
-#### 2.2.2 Demo Paper (CHI/UIST)
+**Total: 6 months** (CHI 2027 deadline: ~September 2026)
 
-**Target**: CHI 2027 or UIST 2026
-**Venues**:
-| Venue | Deadline | Acceptance Rate |
-|-------|----------|-----------------|
-| CHI Demo Track | Sept 2026 | ~50% |
-| UIST Demo Track | April 2026 | ~40% |
-
-**Format**: 2-4 pages + live demo
-**Effort**: 2 weeks for paper, 1 week for demo prep
-
-**Demo Content**:
-1. Record a demonstration (any application)
-2. Show retrieval selecting similar demos
-3. Execute task with demo conditioning
-4. Visualize predictions in viewer
-
-**Deliverables**:
-- [ ] Prepare stable demo environment
-- [ ] Create video walkthrough
-- [ ] Write demo paper
-- [ ] Prepare live demo hardware/software
-
----
-
-### Phase 3: Long-Term (Q4 2026 - 2027)
-
-#### 2.3.1 Full Conference Paper
-
-**Target**: NeurIPS 2026, ICML 2027, or ICLR 2027
-**Effort**: 3-6 months
-
-**Venues**:
-| Venue | Deadline | Page Limit | Focus |
-|-------|----------|------------|-------|
-| NeurIPS | May 2026 | 9+refs | ML methods |
-| ICML | Feb 2027 | 8+refs | ML methods |
-| ICLR | Oct 2026 | 8+refs | Representations |
-| AAAI | Aug 2026 | 7+refs | AI systems |
-| ACL | Feb 2027 | 8+refs | NLP/multimodal |
-
-**Contribution Options**:
-
-**Option A: Demo-Conditioning Method Paper** (NeurIPS/ICML)
-- Focus: Retrieval-augmented demo conditioning
-- Experiments: WAA, WebArena, OSWorld comparison
-- Ablations: Retrieval methods, embedding models, k values
-- Baselines: Zero-shot, few-shot, fine-tuned
-
-**Option B: Systems Paper** (MLSys)
-- Focus: Modular architecture for GUI automation
-- Experiments: Latency, throughput, grounding accuracy
-- Comparisons: End-to-end vs modular approaches
-
-**Option C: HCI Paper** (CHI Full)
-- Focus: Human-AI collaboration in task automation
-- User study: Demo creation time, task success, trust
-- Qualitative: User preferences, failure modes
-
----
-
-## 3. Required Experiments
-
-### 3.1 Completed Experiments
-
-| Experiment | Status | Location | Result |
-|------------|--------|----------|--------|
-| macOS demo-conditioning | Done | `openadapt-ml/docs/experiments/` | 33% -> 100% |
-| Demo prompt format | Done | Same | Behavior-only format best |
-| API baselines | Done | `openadapt-evals` | Claude, GPT working |
-
----
-
-### 3.2 Required for arXiv (P0)
-
-| Experiment | Description | Effort | Status |
-|------------|-------------|--------|--------|
-| WAA zero-shot baseline | 10 tasks, no demos | 2-3 hours | Pending |
-| WAA demo-conditioned | 10 tasks, with demos | 2-3 hours | Pending |
-| Demo creation | Write demos for 10 WAA tasks | 4-6 hours | Design complete |
-| Statistical analysis | Significance tests, confidence intervals | 1-2 hours | Pending |
-
-**WAA Task List** (from experiment design):
-1. Edge: Do Not Track
-2. Edge: Bookmark to bar
-3. Edge: Font size
-4. LibreOffice Calc: Fill blanks
-5. LibreOffice Calc: Chart creation
-6. LibreOffice Writer: Center align
-7. Settings: Notifications off
-8. Settings: Night Light schedule
-9. File Explorer: Archive folder
-10. File Explorer: Details view
-
----
-
-### 3.3 Required for Workshop/Demo Paper (P1)
-
-| Experiment | Description | Effort | Status |
-|------------|-------------|--------|--------|
-| Retrieval accuracy | Measure if correct demo retrieved | 1 day | Pending |
-| Retrieval latency | Embedding + search time | 2 hours | Pending |
-| Cross-domain transfer | Demo from app A helps app B | 1 week | Pending |
-| Demo library size | Performance vs library size | 2-3 days | Pending |
-
----
-
-### 3.4 Required for Full Conference Paper (P2)
-
-| Experiment | Description | Effort | Status |
-|------------|-------------|--------|--------|
-| WebArena evaluation | 100+ web tasks | 1-2 weeks | Pending |
-| OSWorld evaluation | Cross-platform tasks | 2-3 weeks | Pending |
-| Fine-tuning comparison | Demo prompting vs fine-tuning | 2-4 weeks | Pending |
-| Ablation: VLM backend | Claude vs GPT vs Gemini | 1 week | Partial |
-| Ablation: Embedding model | Qwen3-VL vs CLIP vs ColPali | 1 week | Pending |
-| Ablation: Demo format | Full trace vs behavior-only | 3 days | Partial |
-| User study | N=20-30 participants | 2-4 weeks | Pending |
-
----
-
-## 4. Author Contributions
-
-### 4.1 Proposed Author Order
-
-**Lead Authors** (equal contribution):
-1. **Richard Abrich** - Architecture, demo-conditioning, experiments
-2. **[Contributor 2]** - Retrieval system, embeddings
-
-**Contributing Authors**:
-3. **[Contributor 3]** - WAA benchmark integration
-4. **[Contributor 4]** - Grounding module
-5. **[Contributor 5]** - Viewer and visualization
-
-**Acknowledgments**:
-- OmniParser team (Microsoft)
-- Windows Agent Arena team (Microsoft)
-- Open-source contributors
-
----
-
-### 4.2 Contribution Matrix
-
-| Contribution | Lead | Contributors |
-|--------------|------|--------------|
-| Architecture design | RA | - |
-| Demo-conditioning method | RA | - |
-| Retrieval system | - | - |
-| WAA integration | RA | - |
-| Grounding providers | RA | - |
-| Experiments: macOS | RA | - |
-| Experiments: WAA | RA | - |
-| Writing: Introduction | RA | - |
-| Writing: Method | RA | - |
-| Writing: Experiments | RA | - |
-| Figures and diagrams | RA | - |
-| Code open-sourcing | RA | - |
-
----
-
-## 5. Venue Analysis
-
-### 5.1 Target Venues by Contribution Type
-
-#### Systems/Architecture
-| Venue | Deadline | Fit | Notes |
-|-------|----------|-----|-------|
-| MLSys | Jan 2026 | Good | Modular architecture focus |
-| OSDI | May 2026 | Medium | More systems-focused |
-| SoCC | June 2026 | Medium | Cloud systems angle |
-
-#### ML Methods
-| Venue | Deadline | Fit | Notes |
-|-------|----------|-----|-------|
-| NeurIPS | May 2026 | Excellent | Demo-conditioning as retrieval |
-| ICML | Feb 2027 | Excellent | Method + experiments |
-| ICLR | Oct 2026 | Good | Representation learning angle |
-
-#### HCI/Agents
-| Venue | Deadline | Fit | Notes |
-|-------|----------|-----|-------|
-| CHI | Sept 2026 | Excellent | Human-AI, user study |
-| UIST | April 2026 | Excellent | Demo interaction |
-| IUI | Oct 2026 | Good | Intelligent interfaces |
-
-#### NLP/Multimodal
-| Venue | Deadline | Fit | Notes |
-|-------|----------|-----|-------|
-| ACL | Feb 2027 | Good | Multimodal grounding |
-| EMNLP | May 2026 | Good | VLM applications |
-| NAACL | Dec 2026 | Good | Shorter, regional |
-
----
-
-### 5.2 Workshop Opportunities
-
-| Workshop | Conference | Typical Deadline | Focus |
-|----------|-----------|------------------|-------|
-| LLM Agents | ICML/NeurIPS | 2-3 months before | Agent architectures |
-| Human-AI Interaction | CHI/IUI | Variable | Collaboration |
-| AutoML | NeurIPS | September | Automation |
-| Efficient ML | ICML/NeurIPS | Variable | Efficiency |
-
----
-
-## 6. Existing Drafts and Assets
-
-### 6.1 Paper Drafts
-
-| File | Location | Status | Content |
-|------|----------|--------|---------|
-| `omnimcp_whitepaper.tex` | `/Users/abrichr/oa/src/omnimcp/paper/` | Complete (whitepaper) | Spatial-temporal framework, 530 lines |
-| `omnimcp_arxiv.tex` | `/Users/abrichr/oa/src/omnimcp/paper/` | Complete (arXiv format) | Full paper, 1056 lines, benchmarks pending |
-| `omnimcp_whitepaper.pdf` | Same | Compiled | 2.7 MB |
-| `omnimcp_arxiv.pdf` | Same | Compiled | 133 KB |
-
-### 6.2 Figures
-
-| Figure | Location | Description |
-|--------|----------|-------------|
-| `spatial-features.png` | `/Users/abrichr/oa/src/omnimcp/paper/` | Spatial feature understanding |
-| `temporal-features.png` | Same | Temporal feature understanding |
-| `api-generation.png` | Same | Internal API generation |
-| `api-publication.png` | Same | External API (MCP) publication |
-
-### 6.3 Documentation
-
-| Document | Location | Relevance |
-|----------|----------|-----------|
-| `architecture-evolution.md` | `/Users/abrichr/oa/src/OpenAdapt/docs/` | Full architecture description |
-| `waa_demo_experiment_design.md` | `/Users/abrichr/oa/src/openadapt-ml/docs/experiments/` | WAA experiment details |
-| `waa-evaluator-integration.md` | `/Users/abrichr/oa/src/openadapt-evals/docs/research/` | Evaluation methodology |
-| `CLAUDE.md` files | Various repos | Implementation details |
-
-### 6.4 Code Assets
-
-| Asset | Location | Description |
-|-------|----------|-------------|
-| openadapt-capture | GitHub | Recording package |
-| openadapt-ml | GitHub | Training/inference |
-| openadapt-evals | GitHub | Benchmarks |
-| openadapt-retrieval | GitHub | Demo retrieval |
-| openadapt-grounding | GitHub | UI localization |
-| openadapt-viewer | GitHub | Visualization |
-
----
-
-## 7. Action Items
-
-### Immediate (This Week)
-
-- [ ] Complete 10 WAA demo documents
-- [ ] Run WAA zero-shot baseline
-- [ ] Run WAA demo-conditioned evaluation
-- [ ] Update omnimcp_arxiv.tex with new results
-
-### Short-Term (Next 2 Weeks)
-
-- [ ] Write blog post announcing demo-conditioning results
-- [ ] Create comparison figure (zero-shot vs demo-conditioned)
-- [ ] Record demo video
-- [ ] Finalize arXiv submission
-
-### Medium-Term (Next Month)
-
-- [ ] Implement retrieval accuracy metrics
-- [ ] Run cross-domain transfer experiments
-- [ ] Identify workshop submission targets
-- [ ] Begin CHI/UIST demo preparation
-
----
-
-## 8. Risk Assessment
+### 8.3 Timeline Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| WAA results don't match predictions | Medium | High | Focus on subset where demos help most |
-| Retrieval accuracy insufficient | Low | Medium | Add reranking, increase demo library |
-| Competition publishes first | Medium | Medium | Differentiate with open-source, modularity |
-| Reviewer skepticism of accuracy claims | Medium | Medium | Multiple seeds, statistical tests |
+| WAA environment issues | High | 2-3 week delay | Have backup mock evaluation |
+| Results don't match expectations | Medium | May kill paper | Pivot to analysis/negative results |
+| API rate limits/costs | Medium | 1-2 week delay | Budget API costs upfront |
+| Co-author availability | Medium | Variable | Start writing in parallel |
 
 ---
 
-## 9. References
+## 9. Risk Mitigation
 
-### Key Citations for Paper
+### 9.1 If WAA Results Are Disappointing
 
-1. **Windows Agent Arena** - Bonatti et al., 2024. Microsoft benchmark, SOTA 19.5%.
-2. **OmniParser** - Chen et al., 2024. Vision-only UI parsing.
-3. **Set-of-Mark** - Yang et al., 2023. Visual grounding via labels.
-4. **Claude Computer Use** - Anthropic, 2024. Production VLM agent.
-5. **UFO** - Microsoft, 2024. Windows agent architecture.
-6. **Qwen-VL** - Alibaba, 2024. Open-source VLM.
-7. **WebArena** - Zhou et al., 2023. Web automation benchmark.
-8. **OSWorld** - Xie et al., 2024. Cross-platform benchmark.
+**Scenario**: Demo-conditioning shows <10pp improvement on WAA
+
+**Options**:
+1. **Pivot to analysis paper**: Why doesn't demo-conditioning help on WAA?
+2. **Focus on narrow success cases**: Which task categories benefit most?
+3. **Negative results paper**: "When Demonstrations Don't Help"
+4. **Workshop-only publication**: Present findings, get feedback
+
+### 9.2 If Experiments Take Too Long
+
+**Scenario**: Cannot complete experiments before deadline
+
+**Options**:
+1. **Reduce scope**: Fewer tasks, fewer models, one benchmark
+2. **Workshop paper first**: Lower bar, establish priority
+3. **arXiv preprint**: Stake claim while continuing experiments
+4. **Target later deadline**: Better to submit complete work
+
+### 9.3 If Reviewers Reject on Novelty
+
+**Mitigation in paper**:
+- Explicitly position as *empirical study*, not algorithmic contribution
+- Emphasize the magnitude of improvement and practical value
+- Provide extensive ablations to show what matters
+- Open-source all code and data
+
+---
+
+## 10. Action Items
+
+### 10.1 Immediate (This Week)
+
+- [ ] **Fix WAA environment** - Resolve Navi agent bugs or switch to API agent
+- [ ] **Define exact task set** - Select 20+ WAA tasks with diverse first actions
+- [ ] **Budget API costs** - Estimate cost for 500+ API calls
+
+### 10.2 Short-Term (Weeks 2-4)
+
+- [ ] **Run zero-shot baseline** - 20 tasks x 2 models x 3 trials
+- [ ] **Write demos for all tasks** - Using behavior-only format
+- [ ] **Run demo-conditioned evaluation** - Same tasks, with demos
+- [ ] **Statistical analysis** - McNemar's test, bootstrap CIs
+
+### 10.3 Medium-Term (Weeks 5-8)
+
+- [ ] **Write workshop paper** - 4-6 pages, focus on empirical results
+- [ ] **Create figures** - Accuracy comparison, demo format examples
+- [ ] **Internal review** - Get feedback from 2-3 people
+- [ ] **Submit to workshop** - LLM Agents Workshop or similar
+
+### 10.4 Long-Term (Months 3-6)
+
+- [ ] **Expand to WebArena** - Additional benchmark coverage
+- [ ] **User study design** - For CHI/UIST submission
+- [ ] **Run user study** - n=20-30 participants
+- [ ] **Write full paper** - 10 pages for CHI/UIST
+
+---
+
+## Appendix A: Honest Framing for Paper
+
+### Abstract Template
+
+> We present an empirical study of demonstration-conditioned prompting for vision-language model (VLM) GUI agents. While prior work has explored VLMs for GUI automation, we systematically evaluate the effect of including human demonstrations in the prompt. Across N tasks on the Windows Agent Arena benchmark, we find that demo-conditioning improves task success rate from X% to Y% (p < 0.01), representing a Z percentage point improvement. We analyze which task categories benefit most and identify limitations where demonstrations do not help. Our findings suggest that simple prompting interventions can substantially improve GUI agent performance without fine-tuning, and we release our code and demo library to facilitate future research.
+
+### Title Options (Honest)
+
+1. "Does Showing Help? An Empirical Study of Demo-Conditioned GUI Agents"
+2. "From Instructions to Demonstrations: Improving VLM GUI Agents Through Example"
+3. "Show, Don't Just Tell: The Value of Demonstrations for GUI Automation"
+
+### Contribution Statement Template
+
+> Our contributions are:
+> 1. **Empirical study**: We conduct the first systematic evaluation of demo-conditioning for VLM GUI agents across N tasks and M models
+> 2. **Analysis**: We identify which task categories and UI patterns benefit most from demonstrations
+> 3. **Practical method**: We provide an open-source implementation with demo retrieval capabilities
+> 4. **Dataset**: We release a library of K human demonstrations for GUI tasks
+
+---
+
+## Appendix B: Cost Estimates
+
+### API Costs (Conservative)
+
+| Model | Input ($/1M) | Output ($/1M) | Est. calls | Est. cost |
+|-------|--------------|---------------|------------|-----------|
+| Claude Sonnet 4.5 | $3 | $15 | 1000 | ~$50-100 |
+| GPT-4V | $10 | $30 | 1000 | ~$100-200 |
+| Gemini Pro Vision | $0.25 | $0.50 | 1000 | ~$10-20 |
+| **Total** | - | - | 3000 | ~$200-400 |
+
+### Compute Costs (Azure)
+
+| Resource | Rate | Hours | Cost |
+|----------|------|-------|------|
+| D4ds_v5 (WAA VM) | $0.19/hr | 100 | ~$20 |
+| Storage | $0.02/GB | 100GB | ~$2 |
+| **Total** | - | - | ~$25 |
+
+---
+
+## Appendix C: Reviewer Response Templates
+
+### "This is just few-shot prompting"
+
+> We agree that demo-conditioning can be viewed as a form of few-shot prompting. However, GUI automation presents unique challenges compared to standard NLP tasks: (1) visual grounding requires understanding spatial relationships in screenshots, (2) multi-step tasks require maintaining procedural context, and (3) UI variations across platforms and applications create distribution shift. Our contribution is demonstrating that demonstrations substantially help in this domain (X% -> Y%), characterizing when they help (task category analysis), and providing practical infrastructure (demo retrieval, open-source code) for practitioners.
+
+### "Sample size is too small"
+
+> We acknowledge this limitation. With n=N tasks and 3 trials each, we are powered to detect a 20pp effect at 80% power. Our observed effect of Zpp is well above this threshold, and our statistical tests (McNemar's, bootstrap CI) confirm significance. We have expanded our task set to N tasks for the camera-ready version.
+
+### "Results may not generalize beyond tested benchmarks"
+
+> This is a valid concern. We have focused on WAA as it represents realistic enterprise desktop tasks. In future work, we plan to evaluate on WebArena and OSWorld to assess cross-benchmark generalization. However, we note that the WAA benchmark itself covers diverse applications (browser, office, file management, settings) and our positive results across these categories suggest some generalizability within desktop environments.
 
 ---
 
 *Last updated: January 2026*
+*This is a living document. Update as experiments complete and understanding deepens.*
