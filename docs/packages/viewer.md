@@ -1,6 +1,6 @@
 # openadapt-viewer
 
-HTML visualization components for capture data.
+Trajectory visualization components for demonstration data.
 
 **Repository**: [OpenAdaptAI/openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer)
 
@@ -16,14 +16,14 @@ pip install openadapt-viewer
 
 The viewer package provides:
 
-- HTML-based visualization of captures
-- Interactive replay viewer
-- Event timeline display
-- Screenshot galleries
+- HTML-based visualization of demonstration trajectories
+- Interactive trajectory viewer
+- Action timeline display
+- Observation galleries
 
 ## CLI Commands
 
-### View a Capture
+### View a Demonstration Trajectory
 
 ```bash
 openadapt capture view my-task
@@ -49,8 +49,8 @@ Access the dashboard at `http://localhost:8080`.
 ```python
 from openadapt_viewer import PageBuilder, HTMLBuilder
 
-# Build a viewer page for a capture
-builder = PageBuilder(capture_name="my-task")
+# Build a viewer page for a demonstration
+builder = PageBuilder(demonstration="my-task")
 html = builder.build()
 
 # Save to file
@@ -59,29 +59,29 @@ with open("viewer.html", "w") as f:
 
 # Or use HTMLBuilder for custom visualizations
 html_builder = HTMLBuilder()
-html_builder.add_screenshot(screenshot_path, events)
-html_builder.add_timeline(events)
+html_builder.add_observation(screenshot_path, actions)
+html_builder.add_timeline(actions)
 html = html_builder.render()
 ```
 
 ## Viewer Features
 
-### Screenshot Gallery
+### Observation Gallery
 
-Browse all captured screenshots with navigation controls.
+Browse all captured observations (screenshots) with navigation controls.
 
-### Event Timeline
+### Action Timeline
 
 Interactive timeline showing:
 
-- Mouse events (clicks, movement)
-- Keyboard events (key presses)
-- Screenshot timestamps
-- Event metadata
+- Mouse actions (clicks, movement)
+- Keyboard actions (key presses)
+- Observation timestamps
+- Action metadata
 
-### Replay Controls
+### Trajectory Playback Controls
 
-- Play/pause replay
+- Play/pause trajectory playback
 - Speed controls (0.5x, 1x, 2x)
 - Step forward/backward
 - Jump to specific time
@@ -90,16 +90,16 @@ Interactive timeline showing:
 
 - Export as HTML (static)
 - Export as video (MP4)
-- Export event log (JSON)
+- Export trajectory log (JSON)
 
 ## Key Exports
 
 | Export | Description |
 |--------|-------------|
-| `PageBuilder` | Builds viewer pages |
+| `PageBuilder` | Builds trajectory viewer pages |
 | `HTMLBuilder` | Low-level HTML construction |
-| `TimelineWidget` | Timeline visualization |
-| `ScreenshotGallery` | Screenshot browser |
+| `TimelineWidget` | Action timeline visualization |
+| `ObservationGallery` | Observation browser |
 
 ## Customization
 
@@ -109,27 +109,27 @@ Interactive timeline showing:
 from openadapt_viewer import PageBuilder, Theme
 
 builder = PageBuilder(
-    capture_name="my-task",
+    demonstration="my-task",
     theme=Theme.DARK  # or Theme.LIGHT
 )
 ```
 
-### Custom Event Rendering
+### Custom Action Rendering
 
 ```python
-from openadapt_viewer import PageBuilder, EventRenderer
+from openadapt_viewer import PageBuilder, ActionRenderer
 
-class CustomRenderer(EventRenderer):
-    def render_mouse_click(self, event):
-        return f"<div class='custom-click'>{event}</div>"
+class CustomRenderer(ActionRenderer):
+    def render_click(self, action):
+        return f"<div class='custom-click'>{action}</div>"
 
 builder = PageBuilder(
-    capture_name="my-task",
+    demonstration="my-task",
     renderer=CustomRenderer()
 )
 ```
 
 ## Related Packages
 
-- [openadapt-capture](capture.md) - Record data to visualize
+- [openadapt-capture](capture.md) - Collect demonstrations to visualize
 - [openadapt-privacy](privacy.md) - Scrub sensitive data before viewing

@@ -1,6 +1,6 @@
 # OpenAdapt Architecture Evolution
 
-**Version**: 2.0
+**Version**: 3.0
 **Date**: January 2026
 **Status**: Living Document
 
@@ -8,130 +8,348 @@
 
 ## Executive Summary
 
-This document synthesizes OpenAdapt's original alpha vision with modern GUI agent state-of-the-art (SOTA) research. It defines the architectural principles, implementation status, and roadmap for OpenAdapt as the leading open-source demonstration-conditioned GUI automation framework.
+This document traces the evolution of OpenAdapt from its original alpha vision through the modern modular implementation, synthesizing state-of-the-art GUI agent research into a unified framework. OpenAdapt's core innovation is **demonstration-conditioned automation**: "show, don't tell."
 
 ---
 
 ## Table of Contents
 
-1. [Core Insight: Demonstration-Conditioned Automation](#1-core-insight-demonstration-conditioned-automation)
+1. [Original Alpha Vision](#1-original-alpha-vision)
 2. [The Abstraction Ladder](#2-the-abstraction-ladder)
-3. [Three-Phase Architecture](#3-three-phase-architecture)
-4. [Package Responsibilities](#4-package-responsibilities)
-5. [Feedback Loops](#5-feedback-loops)
-6. [Model Layer](#6-model-layer)
-7. [Implementation Status](#7-implementation-status)
-8. [Architecture Diagrams](#8-architecture-diagrams)
-9. [Key Design Principles](#9-key-design-principles)
-10. [Research Alignment](#10-research-alignment)
-11. [Future Directions](#11-future-directions)
+3. [Core Innovation: Demo-Conditioned Agents](#3-core-innovation-demo-conditioned-agents)
+4. [Modern Architecture](#4-modern-architecture)
+5. [SOTA GUI Agent Integration](#5-sota-gui-agent-integration)
+6. [Package Responsibilities](#6-package-responsibilities)
+7. [Feedback Loops](#7-feedback-loops)
+8. [Implementation Status](#8-implementation-status)
+9. [Architecture Evolution Diagrams](#9-architecture-evolution-diagrams)
+10. [Future Directions](#10-future-directions)
 
 ---
 
-## 1. Core Insight: Demonstration-Conditioned Automation
+## 1. Original Alpha Vision
 
-### The Fundamental Differentiator
+### The Three-Stage Pipeline (2023)
 
-OpenAdapt's fundamental differentiator is **demonstration-conditioned automation**: "show, don't tell."
-
-| Approach | Description | Example |
-|----------|-------------|---------|
-| **Prompt-Driven** (Traditional) | User describes what to do in natural language | "Book a flight from NYC to LA for next Tuesday" |
-| **Demo-Conditioned** (OpenAdapt) | Agent learns from watching user perform the task | Record user booking a flight, replay with new parameters |
-
-### Why This Matters
-
-1. **Reduced Ambiguity**: Demonstrations capture implicit knowledge that's hard to verbalize
-2. **Grounded in Reality**: Agents learn from actual UI interactions, not abstract descriptions
-3. **Lower Barrier to Entry**: Users don't need prompt engineering skills
-4. **Validated Improvement**: 33% to 100% first-action accuracy with demo conditioning (internal benchmarks)
-
-### The "Show, Don't Tell" Principle
+OpenAdapt was conceived as a three-stage pipeline for AI-first process automation:
 
 ```
-Traditional Agent:
-  User: "Click the submit button"
-  Agent: [Which submit button? What context? What state?]
++=====================+     +=====================+     +=====================+
+|                     |     |                     |     |                     |
+|      RECORDING      | --> |      ANALYSIS       | --> |       REPLAY        |
+|                     |     |                     |     |                     |
+|  Capture human      |     |  Convert to         |     |  Generate and       |
+|  demonstrations:    |     |  tokenized format   |     |  replay synthetic   |
+|  - Screenshots      |     |  for LMM            |     |  input via model    |
+|  - User input       |     |  processing         |     |  completions        |
+|                     |     |                     |     |                     |
++=====================+     +=====================+     +=====================+
+```
 
-Demo-Conditioned Agent:
-  User: [Records clicking the blue "Submit Order" button after filling form]
-  Agent: [Learns the full context: form state, button appearance, preceding actions]
+### Original Design Goals
+
+From the legacy README:
+
+> "The goal is similar to that of Robotic Process Automation (RPA), except that we use Large Multimodal Models instead of conventional RPA tools."
+
+**Key Differentiators (Alpha)**:
+1. **Model Agnostic** - Works with any LMM
+2. **Auto-Prompted** - Learns from demonstration, not user prompts
+3. **Grounded in Existing Processes** - Mitigates hallucinations
+4. **Universal GUI Support** - Desktop, web, and virtualized (Citrix)
+5. **Open Source** - MIT license
+
+### Legacy Monolithic Implementation
+
+The alpha codebase (`legacy/openadapt/`) implemented:
+
+```
+openadapt/
+  record.py           # Screenshot/event capture
+  replay.py           # Strategy-based playback
+  models.py           # Recording, ActionEvent, Screenshot, WindowEvent
+  events.py           # Event aggregation/processing
+  strategies/
+    base.py           # BaseReplayStrategy abstract class
+    naive.py          # Direct literal replay
+    stateful.py       # GPT-4 + OS-level window data
+    vanilla.py        # Full VLM reasoning per step
+    visual.py         # FastSAM segmentation
+    visual_browser.py # DOM-based segments
+  adapters/
+    anthropic.py      # Claude API integration
+    openai.py         # GPT API integration
+    replicate.py      # Open-source model hosting
+  privacy/
+    base.py           # Scrubbing provider interface
+    providers/        # Presidio, AWS Comprehend, Private AI
+```
+
+### The Strategy Pattern (Original)
+
+The original architecture used a `BaseReplayStrategy` abstract class:
+
+```python
+class BaseReplayStrategy(ABC):
+    """Base class for implementing replay strategies."""
+
+    def __init__(self, recording: Recording) -> None:
+        self.recording = recording
+        self.action_events = []
+        self.screenshots = []
+        self.window_events = []
+
+    @abstractmethod
+    def get_next_action_event(
+        self,
+        screenshot: Screenshot,
+        window_event: WindowEvent,
+    ) -> ActionEvent:
+        """Get the next action based on current observation."""
+        pass
+
+    def run(self) -> None:
+        """Execute the replay loop."""
+        while True:
+            screenshot = Screenshot.take_screenshot()
+            window_event = WindowEvent.get_active_window_event()
+            action_event = self.get_next_action_event(screenshot, window_event)
+            if action_event:
+                playback.play_action_event(action_event, ...)
+```
+
+This pattern evolved into the modern policy/grounding separation.
+
+### Alpha Data Model
+
+```python
+class Recording:
+    """Container for a demonstration session."""
+    id: int
+    timestamp: float
+    task_description: str
+    action_events: list[ActionEvent]
+    screenshots: list[Screenshot]
+    window_events: list[WindowEvent]
+
+class ActionEvent:
+    """A single user action (click, type, scroll, etc.)."""
+    name: str                    # "click", "type", "scroll", "press", "release"
+    timestamp: float
+    screenshot: Screenshot       # Screenshot just before action
+    window_event: WindowEvent    # Active window state
+    mouse_x, mouse_y: int        # Mouse coordinates
+    key_char, key_name: str      # Keyboard input
+    element_state: dict          # Accessibility info
+
+class Screenshot:
+    """A captured screen image."""
+    timestamp: float
+    png_data: bytes
+    image: PIL.Image
 ```
 
 ---
 
 ## 2. The Abstraction Ladder
 
-OpenAdapt processes demonstrations through progressive abstraction levels, enabling generalization, transfer learning, and explainability.
+### Core Concept: Progressive Abstraction
 
-### Abstraction Levels
+OpenAdapt processes demonstrations through ascending levels of abstraction, enabling generalization and transfer learning.
 
 ```
-Level 0 - LITERAL (Raw Events)
-    { press: "h", press: "i", press: " ", press: "b", press: "o", press: "b" }
-
-         | Reduction (aggregate consecutive events)
-         v
-
-Level 1 - SYMBOLIC (Semantic Actions)
-    { type: "hi bob" }
-
-         | Anonymization (extract parameters)
-         v
-
-Level 2 - TEMPLATE (Parameterized Actions)
-    { type: "hi <firstname>" }
-
-         | Process Mining (discover patterns)
-         v
-
-Level 3 - SEMANTIC (Intent Recognition)
-    { greet: user }
-
-         | Goal Composition (high-level planning)
-         v
-
-Level 4 - GOAL (Task Specification)
-    "Say hello to the customer"
++=========================================================================+
+|                                                                         |
+|  Level 4: GOAL (Task Specification)                              FUTURE |
+|  "Say hello to the customer"                                            |
+|                                                                         |
+|           ^                                                             |
+|           | Goal Composition (high-level planning)                      |
+|           |                                                             |
++=========================================================================+
+|                                                                         |
+|  Level 3: SEMANTIC (Intent Recognition)                         FUTURE |
+|  { action: "greet", target: "user" }                                    |
+|                                                                         |
+|           ^                                                             |
+|           | Process Mining (discover patterns)                          |
+|           |                                                             |
++=========================================================================+
+|                                                                         |
+|  Level 2: TEMPLATE (Parameterized Actions)                      PARTIAL |
+|  { type: "hi <firstname>" }                                             |
+|                                                                         |
+|           ^                                                             |
+|           | Anonymization (extract parameters)                          |
+|           |                                                             |
++=========================================================================+
+|                                                                         |
+|  Level 1: SYMBOLIC (Semantic Actions)                       IMPLEMENTED |
+|  { type: "hi bob" }                                                     |
+|                                                                         |
+|           ^                                                             |
+|           | Reduction (aggregate consecutive events)                    |
+|           |                                                             |
++=========================================================================+
+|                                                                         |
+|  Level 0: LITERAL (Raw Events)                              IMPLEMENTED |
+|  { press: "h" }, { press: "i" }, { press: " " }, { press: "b" }, ...    |
+|                                                                         |
++=========================================================================+
 ```
 
-### Abstraction Benefits
+### Abstraction Level Details
+
+| Level | Name | Representation | Transformation | Status |
+|-------|------|----------------|----------------|--------|
+| 0 | **Literal** | Raw keypresses, mouse coords | None (raw capture) | **Implemented** |
+| 1 | **Symbolic** | Aggregated actions (`type "hello"`) | Event reduction | **Implemented** |
+| 2 | **Template** | Parameterized (`type "<greeting>"`) | Regex extraction | **Partial** |
+| 3 | **Semantic** | Intent-level (`greet user`) | LLM intent recognition | **Research** |
+| 4 | **Goal** | Task description ("Welcome customer") | Goal composition | **Future** |
+
+### Why Abstraction Matters
 
 | Level | Enables | Example Use Case |
 |-------|---------|------------------|
-| Literal | Exact replay | Debugging, audit trails |
+| Literal | Exact replay, debugging | Audit trails, regression tests |
 | Symbolic | Human-readable logs | Training data visualization |
 | Template | Parameterized replay | Same task, different data |
 | Semantic | Cross-application transfer | Greeting in any messaging app |
 | Goal | Natural language control | "Greet the next customer" |
 
-### Current Implementation Status
+### Current Implementation
 
-- **Literal to Symbolic**: Implemented in `openadapt-capture` (event aggregation)
-- **Symbolic to Template**: Partially implemented (regex-based extraction)
-- **Template to Semantic**: Research stage (LLM-based intent recognition)
-- **Semantic to Goal**: Future work (requires process mining)
+**Literal to Symbolic** (`openadapt-capture`):
+- Event aggregation in `events.py`
+- Consecutive keypresses become `type` actions
+- Mouse drags become `drag` actions
+- Click sequences become `doubleclick` or `tripleclick`
+
+**Symbolic to Template** (Partial):
+- Regex-based parameter extraction
+- User-defined placeholders
+
+**Template to Semantic** (Research):
+- LLM-based intent recognition
+- Pattern library discovery
+
+**Semantic to Goal** (Future):
+- Process mining algorithms
+- Cross-demo pattern extraction
+
+---
+
+## 3. Core Innovation: Demo-Conditioned Agents
+
+### The Fundamental Differentiator
+
+OpenAdapt's core insight is **demonstration-conditioned automation**: "show, don't tell."
+
+```
++-------------------------------------------------------------------+
+|                     TRADITIONAL APPROACH                           |
++-------------------------------------------------------------------+
+|                                                                    |
+|  User: "Click the submit button"                                   |
+|                                                                    |
+|  Agent: [Which submit button? What context? What state?]           |
+|         [Multiple submit buttons on page?]                         |
+|         [Different applications have different buttons]            |
+|                                                                    |
+|  Result: AMBIGUOUS -> Requires prompt engineering                  |
+|                                                                    |
++-------------------------------------------------------------------+
+
++-------------------------------------------------------------------+
+|                    DEMO-CONDITIONED APPROACH                       |
++-------------------------------------------------------------------+
+|                                                                    |
+|  User: [Records clicking the blue "Submit Order" button            |
+|         after filling out form fields]                             |
+|                                                                    |
+|  Agent: [Learns full context:                                      |
+|          - Form state before action                                |
+|          - Button appearance and location                          |
+|          - Preceding actions in sequence                           |
+|          - Window/application context]                             |
+|                                                                    |
+|  Result: GROUNDED -> No prompt engineering needed                  |
+|                                                                    |
++-------------------------------------------------------------------+
+```
+
+### Why Demo-Conditioning Works
+
+1. **Captures Implicit Knowledge**: Users demonstrate things they can't easily verbalize
+2. **Grounded in Reality**: Actions tied to actual UI states, not abstract descriptions
+3. **Reduces Ambiguity**: Visual context eliminates interpretation errors
+4. **Lower Barrier**: No prompt engineering skills required
+
+### Empirical Results
+
+Demo conditioning improves first-action accuracy:
+
+| Approach | First-Action Accuracy | Notes |
+|----------|----------------------|-------|
+| Prompt-only | ~33% | Ambiguity in action selection |
+| Demo-conditioned | ~100% | Full context from demonstration |
+
+### The "Show, Don't Tell" Principle
+
+```python
+# Traditional: Prompt-driven
+agent.execute("Click the submit button")
+# -> Which submit button? What state? What context?
+
+# Demo-Conditioned: Demonstration-driven
+demo = capture_demonstration()  # User clicks specific submit button
+agent = train_policy(demo)      # Agent learns the full context
+agent.execute(new_context)      # Agent adapts to variations
+```
 
 ---
 
-## 3. Three-Phase Architecture
+## 4. Modern Architecture
 
-OpenAdapt operates in three distinct phases, each with dedicated packages and responsibilities.
-
-### Phase Overview
+### Evolution: Monolith to Meta-Package
 
 ```
-+------------------+     +------------------+     +------------------+
-|                  |     |                  |     |                  |
-|    DEMONSTRATE   | --> |      LEARN       | --> |     EXECUTE      |
-|                  |     |                  |     |                  |
-|  (Observation    |     |  (Policy         |     |  (Agent          |
-|   Collection)    |     |   Acquisition)   |     |   Deployment)    |
-|                  |     |                  |     |                  |
-+------------------+     +------------------+     +------------------+
+ALPHA (2023-2024)                        MODERN (2025+)
++====================+                   +====================+
+|                    |                   |     openadapt      |
+|     openadapt      |                   |    (meta-pkg)      |
+|    (monolithic)    |                   +=========+=========+
+|                    |                             |
+|  - record.py       |           +-----------------+-----------------+
+|  - replay.py       |           |         |       |       |         |
+|  - strategies/     |      +----+----+ +--+--+ +--+--+ +--+--+ +----+----+
+|  - models.py       |      |capture  | | ml  | |evals| |viewer| |optional |
+|  - adapters/       |      +---------+ +-----+ +-----+ +------+ +---------+
+|  - privacy/        |
+|  - visualize.py    |      + grounding, retrieval, privacy
+|                    |
++====================+
 ```
 
----
+### The Modern Three-Phase Architecture
+
+Building on the alpha vision, the modern architecture formalizes three phases:
+
+```
++=======================+     +=======================+     +=======================+
+||                     ||     ||                     ||     ||                     ||
+||     DEMONSTRATE     || --> ||       LEARN         || --> ||      EXECUTE        ||
+||                     ||     ||                     ||     ||                     ||
+||  (Observation       ||     ||  (Policy            ||     ||  (Agent             ||
+||   Collection)       ||     ||   Acquisition)      ||     ||   Deployment)       ||
+||                     ||     ||                     ||     ||                     ||
+||  Packages:          ||     ||  Packages:          ||     ||  Packages:          ||
+||  - capture          ||     ||  - ml               ||     ||  - evals            ||
+||  - privacy          ||     ||  - retrieval        ||     ||  - grounding        ||
+||                     ||     ||                     ||     ||                     ||
++=======================+     +=======================+     +=======================+
+```
 
 ### Phase 1: DEMONSTRATE (Observation Collection)
 
@@ -148,18 +366,7 @@ OpenAdapt operates in three distinct phases, each with dedicated packages and re
 - Window metadata (title, bounds, process)
 - Audio transcription (optional)
 
-**Privacy Integration**:
-- Optional PII/PHI scrubbing before storage
-- Configurable redaction levels
-
-**Storage Format**:
-- JSON for metadata and events
-- Parquet for efficient batch access
-- PNG/JPEG for screenshots
-
 **Packages**: `openadapt-capture`, `openadapt-privacy`
-
----
 
 ### Phase 2: LEARN (Policy Acquisition)
 
@@ -167,98 +374,167 @@ OpenAdapt operates in three distinct phases, each with dedicated packages and re
 
 **Three Learning Paths**:
 
-#### Path A: Retrieval-Augmented Prompting
-- Index demonstrations in vector database
-- At inference, retrieve similar demos as context
-- Condition API agent (Claude, GPT, Gemini) on retrieved examples
-- **Advantage**: Works with any VLM, no training required
-- **Package**: `openadapt-retrieval`
-
-#### Path B: Fine-Tuning
-- Train/fine-tune VLM on demonstration dataset
-- Use LoRA for parameter-efficient training
-- Deploy locally or via inference API
-- **Advantage**: Specialized performance, privacy, lower inference cost
-- **Package**: `openadapt-ml`
-
-#### Path C: Process Mining
-- Extract reusable action patterns across demonstrations
-- Build abstraction hierarchy (template, semantic, goal)
-- Enable cross-task transfer learning
-- **Status**: Research/Future
-- **Package**: `openadapt-ml` (future)
-
-**Outputs**:
-- Vector embeddings for retrieval
-- Model checkpoints for fine-tuned models
-- Process graphs for abstraction (future)
-
----
+| Path | Mechanism | Advantage | Package |
+|------|-----------|-----------|---------|
+| **A: Retrieval-Augmented** | Index demos, retrieve similar | No training needed | `openadapt-retrieval` |
+| **B: Fine-Tuning** | Train VLM on demo dataset | Specialized performance | `openadapt-ml` |
+| **C: Process Mining** | Extract reusable patterns | Cross-task transfer | `openadapt-ml` (future) |
 
 ### Phase 3: EXECUTE (Agent Deployment)
 
-**Purpose**: Run trained/conditioned agents to perform tasks autonomously.
+**Purpose**: Run trained/conditioned agents autonomously.
 
 **Execution Loop**:
-
 ```
 while not task_complete:
-    1. OBSERVE
-       - Capture current screenshot
-       - Extract accessibility tree
-       - Build observation state
-
-    2. GROUND
-       - Localize UI elements (bounding boxes)
-       - Apply Set-of-Mark (SoM) annotation
-       - Map elements to coordinates or IDs
-
-    3. PLAN
-       - Encode observation with VLM
-       - Condition on goal + history + retrieved demos
-       - Generate action prediction
-
-    4. ACT
-       - Parse action (click, type, scroll, etc.)
-       - Execute via input synthesis
-       - Record action for history
-
-    5. EVALUATE
-       - Check for success indicators
-       - Detect failure patterns
-       - Decide: continue, retry, or escalate
+    1. OBSERVE    - Capture screenshot + a11y tree
+    2. GROUND     - Localize UI elements (SoM, OmniParser)
+    3. PLAN       - VLM reasoning with demo context
+    4. ACT        - Execute via input synthesis
+    5. EVALUATE   - Check success, decide next step
 ```
 
-**Grounding Modes**:
-
-| Mode | Description | Accuracy | Use Case |
-|------|-------------|----------|----------|
-| **Direct** | VLM predicts raw (x, y) coordinates | Variable | Simple, fast |
-| **Set-of-Mark (SoM)** | UI elements labeled with IDs, VLM selects ID | High | Complex UIs |
-| **Hybrid** | SoM for elements, Direct for fine positioning | Highest | Production |
-
-**Packages**: `openadapt-grounding`, `openadapt-evals`, `openadapt-ml`
+**Packages**: `openadapt-evals`, `openadapt-grounding`, `openadapt-ml`
 
 ---
 
-## 4. Package Responsibilities
+## 5. SOTA GUI Agent Integration
 
-### Core Packages
+### Policy/Grounding Separation
 
-| Package | Phase | Responsibility | Key Exports |
-|---------|-------|----------------|-------------|
-| `openadapt-capture` | DEMONSTRATE | GUI recording, event capture, storage | `Recorder`, `CaptureSession`, `Action`, `Screenshot` |
-| `openadapt-ml` | LEARN | Model training, inference, adapters | `Trainer`, `AgentPolicy`, `VLMAdapter` |
-| `openadapt-evals` | EXECUTE | Benchmark evaluation, metrics | `BenchmarkAdapter`, `ApiAgent`, `evaluate_agent` |
-| `openadapt-viewer` | Cross-cutting | HTML visualization, replay | `PageBuilder`, `HTMLBuilder`, `TrajectoryViewer` |
+From Claude Computer Use, UFO, and SeeAct research:
 
-### Optional Packages
+```
++====================+          +====================+
+|                    |          |                    |
+|      POLICY        |    -->   |     GROUNDING      |
+|                    |          |                    |
+|   "What to do"     |          |   "Where to do"    |
+|                    |          |                    |
+| - Observation      |          | - Element          |
+|   encoding         |          |   detection        |
+| - Action           |          | - Coordinate       |
+|   selection        |          |   mapping          |
+| - History          |          | - Bounding         |
+|   context          |          |   boxes            |
+|                    |          |                    |
++====================+          +====================+
+```
 
-| Package | Phase | Responsibility | Key Exports |
-|---------|-------|----------------|-------------|
-| `openadapt-grounding` | EXECUTE | UI element localization | `OmniParser`, `Florence2`, `GeminiGrounder` |
-| `openadapt-retrieval` | LEARN | Multimodal demo search | `DemoRetriever`, `VectorIndex`, `Embedder` |
-| `openadapt-privacy` | DEMONSTRATE | PII/PHI scrubbing | `Scrubber`, `Redactor`, `PrivacyFilter` |
+**OpenAdapt Implementation**:
+- **Policy**: `openadapt-ml` adapters (Claude, GPT-4V, Qwen-VL)
+- **Grounding**: `openadapt-grounding` providers (OmniParser, Florence2, Gemini)
+
+### Set-of-Mark (SoM) Prompting
+
+From Microsoft's Set-of-Mark paper:
+
+```
+Original Screenshot              SoM-Annotated Screenshot
++---------------------+          +---------------------+
+|  [Login]   [Help]   |          |   [1]      [2]      |
+|                     |    ->    |                     |
+|  Email: [________]  |          |  Email: [3]         |
+|  Pass:  [________]  |          |  Pass:  [4]         |
+|         [Submit]    |          |         [5]         |
++---------------------+          +---------------------+
+
+Prompt: "Enter email in element [3], password in [4], click [5]"
+```
+
+**OpenAdapt Implementation**: `openadapt-grounding.SoMPrompt`
+
+### Safety Gates
+
+From responsible AI patterns:
+
+```
++------------------+     +------------------+     +------------------+
+|                  |     |                  |     |                  |
+|     OBSERVE      | --> |    VALIDATE      | --> |      ACT         |
+|                  |     |                  |     |                  |
+|  Get current     |     |  - Check bounds  |     |  Execute if      |
+|  state           |     |  - Verify perms  |     |  validated       |
+|                  |     |  - Rate limit    |     |                  |
++------------------+     +--------+---------+     +------------------+
+                                 |
+                                 v (rejected)
+                         +------------------+
+                         |    ESCALATE      |
+                         |  Human review    |
+                         +------------------+
+```
+
+**Status**: Planned in `openadapt-evals` safety module.
+
+### Research Alignment
+
+| Research Paper | Key Contribution | OpenAdapt Integration |
+|----------------|------------------|----------------------|
+| **Claude Computer Use** (Anthropic, 2024) | Production VLM agent API | API adapter in `openadapt-ml` |
+| **UFO** (Microsoft, 2024) | Windows agent architecture | Prompt patterns adopted |
+| **OSWorld** (CMU, 2024) | Cross-platform benchmark | Benchmark adapter planned |
+| **Set-of-Mark** (Microsoft, 2023) | Visual grounding via labels | Core grounding mode |
+| **OmniParser** (Microsoft, 2024) | Pure-vision UI parsing | Provider in `openadapt-grounding` |
+| **SeeAct** (OSU, 2024) | Grounded action generation | Action space design |
+| **WebArena** (CMU, 2023) | Web automation benchmark | Benchmark adapter implemented |
+| **AppAgent** (Tencent, 2024) | Mobile GUI agent | Mobile support planned |
+
+---
+
+## 6. Package Responsibilities
+
+### Package-to-Phase Mapping
+
+```
++===============================================================================+
+|                           DEMONSTRATE PHASE                                    |
++===============================================================================+
+| Package           | Responsibility             | Key Exports                  |
++-------------------+----------------------------+------------------------------+
+| openadapt-capture | GUI recording, storage     | Recorder, CaptureSession     |
+|                   |                            | Action, Screenshot, Trajectory|
++-------------------+----------------------------+------------------------------+
+| openadapt-privacy | PII/PHI scrubbing          | Scrubber, Redactor           |
+|                   | (integrates at capture)    | PrivacyFilter                |
++===============================================================================+
+
++===============================================================================+
+|                             LEARN PHASE                                        |
++===============================================================================+
+| Package             | Responsibility           | Key Exports                  |
++---------------------+--------------------------+------------------------------+
+| openadapt-ml        | Model training,          | Trainer, AgentPolicy         |
+|                     | inference, adapters      | QwenVLAdapter, ClaudeAdapter |
++---------------------+--------------------------+------------------------------+
+| openadapt-retrieval | Demo embedding,          | DemoIndex, Embedder          |
+|                     | similarity search        | SearchResult                 |
++===============================================================================+
+
++===============================================================================+
+|                            EXECUTE PHASE                                       |
++===============================================================================+
+| Package              | Responsibility          | Key Exports                  |
++----------------------+-------------------------+------------------------------+
+| openadapt-evals      | Benchmark evaluation,   | BenchmarkAdapter, ApiAgent   |
+|                      | metrics collection      | evaluate_agent_on_benchmark  |
++----------------------+-------------------------+------------------------------+
+| openadapt-grounding  | UI element detection,   | ElementDetector, SoMPrompt   |
+|                      | coordinate mapping      | OmniParser, GeminiGrounder   |
++===============================================================================+
+
++===============================================================================+
+|                           CROSS-CUTTING                                        |
++===============================================================================+
+| Package           | Responsibility             | Key Exports                  |
++-------------------+----------------------------+------------------------------+
+| openadapt-viewer  | HTML visualization,        | PageBuilder, HTMLBuilder     |
+|                   | trajectory replay          | TrajectoryViewer             |
++-------------------+----------------------------+------------------------------+
+| openadapt         | Unified CLI,               | cli.main, lazy imports       |
+| (meta-package)    | dependency coordination    |                              |
++===============================================================================+
+```
 
 ### Package Dependency Matrix
 
@@ -277,543 +553,258 @@ Legend: R = Required, O = Optional, - = None
 
 ---
 
-## 5. Feedback Loops
+## 7. Feedback Loops
 
-OpenAdapt implements continuous improvement through three feedback loops.
-
-### System Diagram
+### System-Level Feedback Architecture
 
 ```
-                          DEMONSTRATE
-                               |
-                               | Human demonstrations
-                               v
-+--------------------------> LEARN <--------------------------+
-|                              |                               |
-|                              | Trained policies              |
-|   +--------------------------|---------------------+         |
-|   |                          v                     |         |
-|   |   +----------------> EXECUTE <--------------+  |         |
-|   |   |                      |                  |  |         |
-|   |   | Retry on             | Success/Failure  |  |         |
-|   |   | recoverable          | outcomes         |  |         |
-|   |   | errors               v                  |  |         |
-|   |   |              +-------+-------+          |  |         |
-|   |   |              |               |          |  |         |
-|   |   +--------------+   EVALUATE    +----------+  |         |
-|   |                  |               |             |         |
-|   |                  +-------+-------+             |         |
-|   |                          |                     |         |
-|   |                          | Execution traces    |         |
-|   |                          v                     |         |
-|   |                  Demo library grows            |         |
-|   |                          |                     |         |
-|   +--------------------------+                     |         |
-|                                                    |         |
-|   Failure analysis identifies gaps                 |         |
-|                    |                               |         |
-|                    v                               |         |
-|           New demonstrations                       |         |
-|                    |                               |         |
-+--------------------+                               |         |
-                                                     |         |
-                     Self-improvement loop           |         |
-                     (execution traces -> training)  |         |
-                              |                      |         |
-                              +----------------------+         |
-                                                               |
-             Benchmark-driven development                      |
-             (eval results -> architecture improvements)       |
-                              |                                |
-                              +--------------------------------+
+                              DEMONSTRATE
+                                   |
+                                   | Human demonstrations
+                                   v
++-----------------------------> LEARN <----------------------------+
+|                                  |                               |
+|                                  | Trained policies              |
+|   +-----------------------------|---------------------+          |
+|   |                             v                     |          |
+|   |   +----------------->  EXECUTE  <--------------+  |          |
+|   |   |                       |                    |  |          |
+|   |   | Retry on              | Success/Failure   |  |          |
+|   |   | recoverable           | outcomes          |  |          |
+|   |   | errors                v                   |  |          |
+|   |   |               +-------+-------+           |  |          |
+|   |   |               |               |           |  |          |
+|   |   +---------------+   EVALUATE    +-----------+  |          |
+|   |   (Loop 1: Retry) |               |              |          |
+|   |                   +-------+-------+              |          |
+|   |                           |                      |          |
+|   |                           | Execution traces     |          |
+|   |                           v                      |          |
+|   |                   Demo library grows             |          |
+|   |                           |                      |          |
+|   +---------------------------+                      |          |
+|   (Loop 2: Library Growth)                           |          |
+|                                                      |          |
+|   Failure analysis identifies gaps                   |          |
+|                    |                                 |          |
+|                    v                                 |          |
+|           Human correction                           |          |
+|                    |                                 |          |
++--------------------+                                 |          |
+(Loop 3: Human-in-Loop)                                |          |
+                                                       |          |
+                     Self-improvement loop             |          |
+                     (execution traces -> training)    |          |
+                              |                        |          |
+                              +------------------------+          |
+                              (Loop 4: Self-Improvement)          |
+                                                                  |
+             Benchmark-driven development                         |
+             (eval results -> architecture improvements)          |
+                              |                                   |
+                              +-----------------------------------+
+                              (Loop 5: Benchmark-Driven)
 ```
 
-### Loop Details
+### Feedback Loop Details
 
-#### Loop 1: Demonstration Library Growth
-- Successful executions are stored as new demonstrations
-- Failed executions trigger gap analysis
-- Human reviews and corrects failures
-- Corrections become new training data
-
-#### Loop 2: Self-Improvement (Future)
-- Agent traces its own execution
-- Successful traces fine-tune the policy
-- Automatic curriculum: easy to hard tasks
-- Reduces need for human demonstrations over time
-
-#### Loop 3: Benchmark-Driven Development
-- Regular evaluation on standard benchmarks
-- Failure modes inform architecture changes
-- New capabilities tested before merge
-- Regression detection prevents quality drops
+| Loop | Name | Trigger | Outcome | Status |
+|------|------|---------|---------|--------|
+| 1 | **Retry** | Recoverable error | Re-attempt action | **Implemented** |
+| 2 | **Library Growth** | Successful execution | New demo added | **Implemented** |
+| 3 | **Human-in-Loop** | Unrecoverable failure | Human correction -> demo | **Implemented** |
+| 4 | **Self-Improvement** | Execution traces | Fine-tuning | **Research** |
+| 5 | **Benchmark-Driven** | Eval metrics | Architecture changes | **Active** |
 
 ---
 
-## 6. Model Layer
+## 8. Implementation Status
 
-OpenAdapt is model-agnostic, supporting multiple foundation models through a unified adapter interface.
-
-### Supported Models
-
-#### API Providers (Cloud)
-
-| Provider | Model | Status | Best For |
-|----------|-------|--------|----------|
-| Anthropic | Claude 3.5 Sonnet | Implemented | General GUI tasks |
-| OpenAI | GPT-4o | Implemented | Complex reasoning |
-| Google | Gemini 2.0 Flash | Implemented | Cost-efficient |
-
-#### Local Models (Self-Hosted)
-
-| Model | Parameters | Status | Best For |
-|-------|------------|--------|----------|
-| Qwen2-VL | 2B-72B | Implemented | Fine-tuning, privacy |
-| Qwen2.5-VL | 3B-72B | Planned | Next-gen local |
-| Molmo | 7B | Research | Efficiency |
-
-### Adapter Interface
-
-```python
-class VLMAdapter(Protocol):
-    """Protocol for VLM model adapters."""
-
-    def predict(
-        self,
-        screenshot: Image,
-        task: str,
-        history: list[Action],
-        context: Optional[list[Demo]] = None,
-    ) -> Action:
-        """Predict next action given observation."""
-        ...
-
-    def get_grounding(
-        self,
-        screenshot: Image,
-        element_description: str,
-    ) -> BoundingBox:
-        """Ground element description to coordinates."""
-        ...
-```
-
-### Prompt Architecture
-
-OpenAdapt uses a structured prompting approach combining SOTA patterns:
+### What's Implemented vs Future Work
 
 ```
-SYSTEM: {role_definition}
++==============================================================================+
+|                    IMPLEMENTED (Solid)                                        |
++==============================================================================+
+| Component                | Package          | Notes                          |
++--------------------------+------------------+--------------------------------+
+| Screen capture           | capture          | macOS, Windows, Linux          |
+| Event recording          | capture          | Mouse, keyboard, touch         |
+| Event aggregation        | capture          | Literal -> Symbolic            |
+| A11y tree capture        | capture          | macOS, Windows                 |
+| Demo storage             | capture          | JSON/Parquet/PNG               |
+| Privacy scrubbing        | privacy          | Presidio, AWS Comprehend       |
+| Demo embedding           | retrieval        | CLIP, SigLIP                   |
+| Vector indexing          | retrieval        | FAISS, Annoy                   |
+| Similarity search        | retrieval        | Top-k retrieval                |
+| API model adapters       | ml               | Claude, GPT-4V, Gemini         |
+| Element detection        | grounding        | OmniParser, Florence2          |
+| SoM annotation           | grounding        | Numbered element labels        |
+| WAA benchmark            | evals            | Full integration               |
+| Mock benchmark           | evals            | Testing infrastructure         |
+| HTML visualization       | viewer           | Trajectory replay              |
+| Unified CLI              | openadapt        | capture/train/eval/view        |
++==============================================================================+
 
-CONTEXT:
-- Retrieved demonstrations (if available)
-- Task description
-- Success criteria
++==============================================================================+
+|                    IN PROGRESS (Dashed)                                       |
++==============================================================================+
+| Component                | Package          | Notes                          |
++--------------------------+------------------+--------------------------------+
+| Training pipeline        | ml               | Qwen-VL fine-tuning            |
+| LoRA adapters            | ml               | Parameter-efficient training   |
+| Template extraction      | capture          | Regex-based parameterization   |
+| WebArena benchmark       | evals            | Browser automation             |
+| Training dashboard       | viewer           | Loss/metrics visualization     |
+| Audio transcription      | capture          | Whisper integration            |
++--------------------------+------------------+--------------------------------+
 
-OBSERVATION:
-- Current screenshot (base64 or URL)
-- Accessibility tree (structured)
-- Element annotations (Set-of-Mark)
-
-HISTORY:
-- Previous N actions and their outcomes
-- Current step number
-
-INSTRUCTION:
-- Action space definition
-- Output format specification
-
-USER: What action should be taken next?
++==============================================================================+
+|                    FUTURE WORK (Dotted)                                       |
++==============================================================================+
+| Component                | Package          | Notes                          |
++--------------------------+------------------+--------------------------------+
+| Process mining           | ml (future)      | Semantic action discovery      |
+| Goal composition         | ml (future)      | High-level task planning       |
+| Self-improvement         | ml (future)      | Training on execution traces   |
+| OSWorld benchmark        | evals            | Cross-platform desktop         |
+| Multi-agent collaboration| ml (future)      | Agent coordination             |
+| Active learning          | ml (future)      | Human feedback integration     |
+| Mobile platform          | capture          | iOS, Android                   |
+| Safety gates             | evals            | Action validation layer        |
++==============================================================================+
 ```
+
+### Abstraction Ladder Implementation Status
+
+| Level | Name | Status | Implementation |
+|-------|------|--------|----------------|
+| 0 | Literal | **Implemented** | Raw event recording in `capture` |
+| 1 | Symbolic | **Implemented** | Event aggregation in `capture` |
+| 2 | Template | **Partial** | Regex extraction in `capture` |
+| 3 | Semantic | **Research** | LLM intent recognition |
+| 4 | Goal | **Future** | Process mining |
 
 ---
 
-## 7. Implementation Status
+## 9. Architecture Evolution Diagrams
 
-### Status Legend
-
-| Symbol | Meaning |
-|--------|---------|
-| Solid | Implemented and tested |
-| Dashed | In progress or partial |
-| Dotted | Planned/Future |
-
-### Component Status Matrix
+### Era 1: Alpha Monolith (2023)
 
 ```
-+----------------------+------------------+------------------+
-| Component            | Status           | Package          |
-+----------------------+------------------+------------------+
-| DEMONSTRATE PHASE                                          |
-+----------------------+------------------+------------------+
-| Screen capture       | Solid            | capture          |
-| Event recording      | Solid            | capture          |
-| A11y tree capture    | Solid            | capture          |
-| Audio transcription  | Dashed           | capture          |
-| Privacy scrubbing    | Solid            | privacy          |
-| Demo library storage | Solid            | capture          |
-+----------------------+------------------+------------------+
-| LEARN PHASE                                                |
-+----------------------+------------------+------------------+
-| Demo embedding       | Solid            | retrieval        |
-| Vector indexing      | Solid            | retrieval        |
-| Similarity search    | Solid            | retrieval        |
-| API model adapters   | Solid            | ml               |
-| Training pipeline    | Dashed           | ml               |
-| LoRA fine-tuning     | Dashed           | ml               |
-| Process mining       | Dotted           | ml (future)      |
-+----------------------+------------------+------------------+
-| EXECUTE PHASE                                              |
-+----------------------+------------------+------------------+
-| Action execution     | Solid            | capture          |
-| Direct grounding     | Solid            | grounding        |
-| SoM grounding        | Solid            | grounding        |
-| OmniParser provider  | Solid            | grounding        |
-| Florence2 provider   | Solid            | grounding        |
-| Gemini grounding     | Solid            | grounding        |
-| WAA benchmark        | Solid            | evals            |
-| WebArena benchmark   | Dashed           | evals            |
-| OSWorld benchmark    | Dotted           | evals            |
-| Mock benchmark       | Solid            | evals            |
-+----------------------+------------------+------------------+
-| CROSS-CUTTING                                              |
-+----------------------+------------------+------------------+
-| Viewer HTML output   | Solid            | viewer           |
-| Trajectory replay    | Solid            | viewer           |
-| Training dashboard   | Dashed           | viewer           |
-| Benchmark viewer     | Dashed           | viewer           |
-| Telemetry            | Dotted           | telemetry (new)  |
-+----------------------+------------------+------------------+
++=========================================================================+
+|                        ALPHA ARCHITECTURE (2023)                         |
++=========================================================================+
+|                                                                          |
+|   +------------------------------------------------------------------+  |
+|   |                       openadapt (monolithic)                      |  |
+|   +------------------------------------------------------------------+  |
+|   |                                                                   |  |
+|   |   +-------------+    +-------------+    +-------------+          |  |
+|   |   |   record    | -> |  visualize  | -> |   replay    |          |  |
+|   |   +-------------+    +-------------+    +-------------+          |  |
+|   |         |                  |                  |                  |  |
+|   |         v                  v                  v                  |  |
+|   |   +-------------+    +-------------+    +------------------+     |  |
+|   |   |   models    |    |  plotting   |    |   strategies/    |     |  |
+|   |   | - Recording |    | - HTML gen  |    |   - base.py      |     |  |
+|   |   | - ActionEvt |    |             |    |   - naive.py     |     |  |
+|   |   | - Screenshot|    |             |    |   - vanilla.py   |     |  |
+|   |   | - WindowEvt |    |             |    |   - visual.py    |     |  |
+|   |   +-------------+    +-------------+    +------------------+     |  |
+|   |         |                                       |                |  |
+|   |         v                                       v                |  |
+|   |   +-------------+                       +---------------+        |  |
+|   |   |    db/      |                       |   adapters/   |        |  |
+|   |   | - SQLite    |                       | - anthropic   |        |  |
+|   |   | - CRUD ops  |                       | - openai      |        |  |
+|   |   +-------------+                       | - replicate   |        |  |
+|   |                                         +---------------+        |  |
+|   +------------------------------------------------------------------+  |
+|                                                                          |
++=========================================================================+
+
+Characteristics:
+- Single repository, single package
+- Tightly coupled components
+- Strategy pattern for replay variants
+- SQLite + Alembic migrations
+- Prompts embedded in code
 ```
 
-### Priority Roadmap
+### Era 2: Transition (2024)
 
-#### P0 - This Week
-- [x] Capture package with Recorder
-- [x] Retrieval with embedding and search
-- [x] Evals with WAA benchmark + mock
-- [x] Grounding providers (OmniParser, Florence, Gemini)
-- [x] Viewer component library
-- [x] API baselines (Claude, GPT, Gemini)
-- [ ] PyPI releases for all packages
-- [ ] WAA baseline metrics
-
-#### P1 - Next 2 Weeks
-- [ ] Fine-tuning pipeline validation
-- [ ] Demo conditioning integration in evals
-- [ ] Multi-track evaluation (Direct, ReAct, SoM)
-- [ ] docs.openadapt.ai launch
-
-#### P2 - This Month
-- [ ] Training dashboard in viewer
-- [ ] WebArena benchmark integration
-- [ ] Cloud GPU training (Lambda Labs)
-- [ ] v1.0.0 meta-package release
-
-#### P3 - Future
-- [ ] Process mining / abstraction
-- [ ] Self-improvement from execution traces
-- [ ] Multi-agent collaboration
-- [ ] Active learning with human feedback
-- [ ] OSWorld benchmark integration
-
----
-
-## 8. Architecture Diagrams
-
-### Master Architecture Diagram (Evolved)
-
-This diagram synthesizes the three-phase pipeline with all key concepts: demo-conditioned prompting, policy/grounding separation, safety gate, multi-source data ingestion, the abstraction ladder, and evaluation-driven feedback loops.
-
-```mermaid
-flowchart TB
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% USER LAYER
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph UserLayer["User Layer"]
-        CLI["openadapt CLI"]
-        UI["Desktop/Web GUI"]
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MULTI-SOURCE DATA INGESTION
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph DataSources["Multi-Source Data Ingestion"]
-        direction LR
-        HUMAN["Human<br/>Demonstrations"]
-        SYNTH["Synthetic<br/>Data"]:::future
-        BENCH_DATA["Benchmark<br/>Tasks"]
-        EXTERNAL["External<br/>Datasets"]:::future
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 1: DEMONSTRATE (Observation Collection)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Phase1["DEMONSTRATE (Observation Collection)"]
-        direction TB
-
-        subgraph CaptureLayer["Capture"]
-            REC["Recorder<br/>openadapt-capture"]
-            A11Y["A11y Tree"]
-            SCREENSHOT["Screenshots"]
-            EVENTS["Input Events"]
-
-            REC --> A11Y
-            REC --> SCREENSHOT
-            REC --> EVENTS
-        end
-
-        subgraph PrivacyLayer["Privacy"]
-            SCRUB["Scrubber<br/>openadapt-privacy"]
-            REDACT["PII/PHI Redaction"]
-            SCRUB --> REDACT
-        end
-
-        STORE[("Demo Library<br/>(JSON/Parquet)")]
-
-        A11Y --> SCRUB
-        SCREENSHOT --> SCRUB
-        EVENTS --> SCRUB
-        REDACT --> STORE
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 2: LEARN (Policy Acquisition)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Phase2["LEARN (Policy Acquisition)"]
-        direction TB
-
-        subgraph RetrievalPath["Path A: Retrieval-Augmented Prompting"]
-            EMB["Embedder<br/>openadapt-retrieval"]
-            IDX[("Vector Index")]
-            SEARCH["Similarity Search"]
-
-            EMB --> IDX
-            IDX --> SEARCH
-        end
-
-        subgraph TrainingPath["Path B: Fine-Tuning"]
-            LOADER["Data Loader"]
-            TRAINER["Model Trainer<br/>openadapt-ml"]
-            LORA["LoRA Adapters"]
-            CKPT[("Model Checkpoints")]
-
-            LOADER --> TRAINER
-            TRAINER --> LORA
-            LORA --> CKPT
-        end
-
-        subgraph MiningPath["Path C: Process Mining"]:::futureBlock
-            ABSTRACT["Abstractor"]:::future
-            PATTERNS["Pattern Library"]:::future
-
-            ABSTRACT --> PATTERNS
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 3: EXECUTE (Agent Deployment)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Phase3["EXECUTE (Agent Deployment)"]
-        direction TB
-
-        subgraph AgentLoop["Agent Execution Loop"]
-            OBS["1. OBSERVE<br/>(Screenshot + A11y)"]
-            GROUND["2. GROUND<br/>openadapt-grounding"]
-            PLAN["3. PLAN<br/>(Demo-Conditioned Policy)"]
-            ACT["4. ACT<br/>(Input Synthesis)"]
-
-            OBS --> GROUND
-            GROUND --> PLAN
-            PLAN --> ACT
-        end
-
-        subgraph SafetyGate["Safety Gate (Runtime Layer)"]
-            VALIDATE["Action Validation"]
-            RISK["Risk Assessment"]
-            CONFIRM["Human Confirm"]:::future
-
-            VALIDATE --> RISK
-            RISK --> CONFIRM
-        end
-
-        subgraph Evaluation["Evaluation"]
-            EVALS["Benchmark Runner<br/>openadapt-evals"]
-            METRICS["Metrics<br/>(Success, Steps, Time)"]
-            COMPARE["Model Comparison"]
-
-            EVALS --> METRICS
-            METRICS --> COMPARE
-        end
-
-        ACT --> VALIDATE
-        CONFIRM --> EVALS
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% THE ABSTRACTION LADDER
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph AbstractionLadder["The Abstraction Ladder"]
-        direction TB
-        L0["Level 0: LITERAL<br/>(Raw Events)<br/>{ press: 'h', press: 'i' }"]
-        L1["Level 1: SYMBOLIC<br/>(Semantic Actions)<br/>{ type: 'hi bob' }"]
-        L2["Level 2: TEMPLATE<br/>(Parameterized)<br/>{ type: 'hi &lt;name&gt;' }"]
-        L3["Level 3: SEMANTIC<br/>(Intent Recognition)<br/>{ greet: user }"]:::future
-        L4["Level 4: GOAL<br/>(Task Specification)<br/>'Greet customer'"]:::future
-
-        L0 -->|"Reduction"| L1
-        L1 -->|"Anonymization"| L2
-        L2 -.->|"Process Mining"| L3
-        L3 -.->|"Goal Composition"| L4
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MODEL LAYER (VLM Adapters)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Models["Model Layer (VLM Adapters)"]
-        direction LR
-
-        subgraph CloudModels["Cloud APIs"]
-            CLAUDE["Claude 3.5"]
-            GPT["GPT-4o"]
-            GEMINI["Gemini 2.0"]
-        end
-
-        subgraph LocalModels["Local Models"]
-            QWEN["Qwen2-VL"]
-            CUSTOM["Custom Fine-tuned"]
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% VIEWER (Cross-Cutting)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Viewer["Cross-Cutting: Viewer"]
-        VIZ["Trajectory<br/>Visualization"]
-        REPLAY["Demo<br/>Replay"]
-        DASH["Training<br/>Dashboard"]:::partialImpl
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% DATA FLOW CONNECTIONS
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% User interactions
-    CLI --> REC
-    UI --> REC
-    CLI --> TRAINER
-    CLI --> EVALS
-
-    %% Multi-source ingestion
-    HUMAN --> REC
-    SYNTH -.-> LOADER
-    BENCH_DATA --> EVALS
-    EXTERNAL -.-> LOADER
-
-    %% Demo flow to learning
-    STORE --> EMB
-    STORE --> LOADER
-    STORE -.-> ABSTRACT
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% DEMO-CONDITIONED PROMPTING (Core Innovation)
-    %% Retrieval used in BOTH training AND evaluation
-    %% ═══════════════════════════════════════════════════════════════════════
-    SEARCH -->|"demo context<br/>(training)"| PLAN
-    SEARCH -->|"demo context<br/>(evaluation)"| EVALS
-    CKPT -->|"trained policy"| PLAN
-    PATTERNS -.->|"templates"| PLAN
-
-    %% Model connections (Policy/Grounding Separation)
-    PLAN -->|"action prediction"| Models
-    GROUND -->|"element localization"| Models
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% EVALUATION-DRIVEN FEEDBACK LOOPS
-    %% ═══════════════════════════════════════════════════════════════════════
-    METRICS -->|"success traces<br/>(new demos)"| STORE
-    METRICS -.->|"training signal<br/>(self-improvement)"| TRAINER
-    COMPARE -->|"failure analysis"| UserLayer
-
-    %% Viewer connections
-    STORE -.-> VIZ
-    STORE -.-> REPLAY
-    CKPT -.-> DASH
-    METRICS -.-> DASH
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% STYLING
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% Layer colors
-    classDef userLayer fill:#E74C3C,stroke:#A93226,color:#fff
-    classDef dataSource fill:#16A085,stroke:#0E6655,color:#fff
-    classDef phase1 fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef phase2 fill:#27AE60,stroke:#1E8449,color:#fff
-    classDef phase3 fill:#9B59B6,stroke:#6C3483,color:#fff
-    classDef models fill:#F39C12,stroke:#B7950B,color:#fff
-    classDef viewer fill:#1ABC9C,stroke:#148F77,color:#fff
-    classDef safetyGate fill:#E74C3C,stroke:#922B21,color:#fff
-
-    %% Implementation status
-    classDef implemented fill:#2ECC71,stroke:#1E8449,color:#fff
-    classDef partialImpl fill:#F4D03F,stroke:#B7950B,color:#000
-    classDef future fill:#95A5A6,stroke:#707B7C,color:#fff,stroke-dasharray: 5 5
-    classDef futureBlock fill:#EAECEE,stroke:#95A5A6,stroke-dasharray: 5 5
-
-    %% Apply layer styles
-    class CLI,UI userLayer
-    class HUMAN,BENCH_DATA dataSource
-    class REC,A11Y,SCREENSHOT,EVENTS,SCRUB,REDACT,STORE phase1
-    class EMB,IDX,SEARCH,LOADER,TRAINER,LORA,CKPT phase2
-    class OBS,GROUND,PLAN,ACT,VALIDATE,RISK,EVALS,METRICS,COMPARE phase3
-    class CLAUDE,GPT,GEMINI,QWEN,CUSTOM models
-    class VIZ,REPLAY viewer
-
-    %% Apply abstraction ladder styles (implemented vs future)
-    class L0,L1,L2 implemented
+```
++=========================================================================+
+|                     TRANSITION ARCHITECTURE (2024)                       |
++=========================================================================+
+|                                                                          |
+|   Legacy codebase frozen -> /legacy/                                     |
+|                                                                          |
+|   New modular packages designed:                                         |
+|                                                                          |
+|   +-------------+  +-------------+  +-------------+  +-------------+    |
+|   |   capture   |  |     ml      |  |    evals    |  |   viewer    |    |
+|   +-------------+  +-------------+  +-------------+  +-------------+    |
+|   |   privacy   |  |  retrieval  |  |  grounding  |                     |
+|   +-------------+  +-------------+  +-------------+                     |
+|                                                                          |
+|   Key changes:                                                           |
+|   - Separate PyPI packages                                               |
+|   - Lazy imports for optional deps                                       |
+|   - Unified CLI in meta-package                                          |
+|   - Policy/grounding separation                                          |
+|   - Benchmark-first development                                          |
+|                                                                          |
++=========================================================================+
 ```
 
-### Key Architectural Insights
+### Era 3: Modern Meta-Package (2025+)
 
-#### 1. Demo-Conditioned Prompting (Core Innovation)
+```
++=========================================================================+
+|                    MODERN ARCHITECTURE (2025+)                           |
++=========================================================================+
+|                                                                          |
+|                         +------------------+                             |
+|                         |    User Layer    |                             |
+|                         |   CLI / Web UI   |                             |
+|                         +--------+---------+                             |
+|                                  |                                       |
+|                                  v                                       |
+|                         +------------------+                             |
+|                         |    openadapt     |                             |
+|                         |   (meta-package) |                             |
+|                         +--------+---------+                             |
+|                                  |                                       |
+|         +------------------------+------------------------+              |
+|         |            |           |           |            |              |
+|         v            v           v           v            v              |
+|   +---------+  +---------+  +---------+  +---------+  +--------+        |
+|   | capture |  |   ml    |  |  evals  |  | viewer  |  |optional|        |
+|   +---------+  +---------+  +---------+  +---------+  +--------+        |
+|       |            |            |            |            |              |
+|       v            v            v            v            v              |
+|   +---------------------------------------------------------------+     |
+|   |                      Shared Interfaces                         |     |
+|   |  - Trajectory format (JSON/Parquet)                           |     |
+|   |  - Action space specification                                  |     |
+|   |  - Observation schema                                          |     |
+|   |  - Benchmark protocols                                         |     |
+|   +---------------------------------------------------------------+     |
+|                                  |                                       |
+|                                  v                                       |
+|   +---------------------------------------------------------------+     |
+|   |                      Model Layer                               |     |
+|   |  +----------+  +----------+  +----------+  +----------+       |     |
+|   |  |  Claude  |  |  GPT-4V  |  |  Gemini  |  | Qwen-VL  |       |     |
+|   |  +----------+  +----------+  +----------+  +----------+       |     |
+|   +---------------------------------------------------------------+     |
+|                                                                          |
++=========================================================================+
+```
 
-The diagram shows how **retrieval** feeds into BOTH:
-- **Training path**: Similar demos condition the fine-tuning process
-- **Evaluation path**: Retrieved demos provide in-context examples for API agents
-
-This "show, don't tell" approach improves first-action accuracy from 33% to 100%.
-
-#### 2. Policy/Grounding Separation
-
-The EXECUTE phase clearly separates:
-- **Policy** (PLAN): Decides *what* action to take (uses VLM reasoning)
-- **Grounding**: Determines *where* to execute (UI element localization via SoM, OmniParser, etc.)
-
-#### 3. Safety Gate as Runtime Layer
-
-Before action execution, the Safety Gate provides:
-- Action validation (sanity checks)
-- Risk assessment (destructive action detection)
-- Human confirmation (future: for high-risk actions)
-
-#### 4. The Abstraction Ladder
-
-Progressive generalization from raw events to goals:
-- **Implemented**: Literal -> Symbolic -> Template
-- **Future**: Semantic -> Goal (requires process mining)
-
-#### 5. Evaluation-Driven Feedback Loops
-
-Three feedback mechanisms:
-1. **Demo Library Growth**: Success traces become new training data
-2. **Self-Improvement**: Training signal from execution metrics (future)
-3. **Failure Analysis**: Human review of failed executions
-
----
-
-### Legacy Master Architecture Diagram
-
-For reference, the previous architecture diagram:
+### Full System Architecture (Mermaid)
 
 ```mermaid
 flowchart TB
@@ -824,8 +815,8 @@ flowchart TB
 
     subgraph Phase1["DEMONSTRATE"]
         direction TB
-        REC[Recorder]
-        SCRUB[Privacy Scrubber]
+        REC[Recorder<br/>openadapt-capture]
+        SCRUB[Privacy Scrubber<br/>openadapt-privacy]
         STORE[(Demo Library)]
 
         REC --> SCRUB
@@ -855,11 +846,11 @@ flowchart TB
 
     subgraph Phase3["EXECUTE"]
         direction TB
-        OBS[Observer]
-        GROUND[Grounder]
-        PLAN[Planner]
-        ACT[Actuator]
-        EVAL[Evaluator]
+        OBS[1. OBSERVE]
+        GROUND[2. GROUND<br/>openadapt-grounding]
+        PLAN[3. PLAN<br/>Demo-Conditioned]
+        ACT[4. ACT]
+        EVAL[5. EVALUATE<br/>openadapt-evals]
 
         OBS --> GROUND
         GROUND --> PLAN
@@ -874,7 +865,6 @@ flowchart TB
         GPT[GPT-4o]
         GEMINI[Gemini]
         QWEN[Qwen-VL]
-        CUSTOM[Custom]
     end
 
     subgraph Viewer["Cross-Cutting: Viewer"]
@@ -900,8 +890,8 @@ flowchart TB
     TRAINER --> CKPT
     ABSTRACT --> PATTERNS
 
-    %% Execution flow
-    SEARCH -.->|context| PLAN
+    %% Execution flow (demo-conditioning)
+    SEARCH -->|demo context| PLAN
     CKPT -->|policy| PLAN
     PATTERNS -.->|templates| PLAN
 
@@ -932,8 +922,49 @@ flowchart TB
     class EMB,IDX,SEARCH,LOADER,TRAINER,CKPT phase2
     class ABSTRACT,PATTERNS future
     class OBS,GROUND,PLAN,ACT,EVAL phase3
-    class CLAUDE,GPT,GEMINI,QWEN,CUSTOM models
+    class CLAUDE,GPT,GEMINI,QWEN models
     class VIZ,REPLAY,DASH viewer
+```
+
+### Execution Loop Evolution
+
+```
+ALPHA: Strategy-Based                    MODERN: Policy/Grounding
+================================         ================================
+
++------------------+                     +------------------+
+|  BaseReplay      |                     |     OBSERVE      |
+|  Strategy        |                     |  (Screenshot +   |
+|                  |                     |   A11y tree)     |
+|  while True:     |                     +--------+---------+
+|    screenshot =  |                              |
+|      take()      |                              v
+|    action =      |                     +------------------+
+|      get_next()  |      ------>        |     GROUND       |
+|    play(action)  |                     |  (Element detect |
+|                  |                     |   + SoM annotate)|
++------------------+                     +--------+---------+
+                                                  |
+                                                  v
+                                         +------------------+
+                                         |      PLAN        |
+                                         |  (VLM reasoning  |
+                                         |   + demo context)|
+                                         +--------+---------+
+                                                  |
+                                                  v
+                                         +------------------+
+                                         |       ACT        |
+                                         |  (Input synth +  |
+                                         |   safety check)  |
+                                         +--------+---------+
+                                                  |
+                                                  v
+                                         +------------------+
+                                         |    EVALUATE      |
+                                         |  (Success check  |
+                                         |   + feedback)    |
+                                         +------------------+
 ```
 
 ### Package Responsibility Diagram
@@ -1001,57 +1032,6 @@ flowchart LR
     class OA meta
 ```
 
-### Execution Loop Diagram
-
-```mermaid
-stateDiagram-v2
-    [*] --> Observe
-
-    Observe --> Ground: screenshot + a11y
-    Ground --> Plan: elements + coordinates
-    Plan --> Act: action prediction
-    Act --> Evaluate: action result
-
-    Evaluate --> Observe: continue
-    Evaluate --> Success: task complete
-    Evaluate --> Retry: recoverable error
-    Evaluate --> Escalate: unrecoverable
-
-    Retry --> Observe
-    Escalate --> [*]
-    Success --> [*]
-
-    note right of Observe
-        Capture screenshot
-        Extract a11y tree
-        Build observation
-    end note
-
-    note right of Ground
-        Detect UI elements
-        Apply SoM labels
-        Get coordinates
-    end note
-
-    note right of Plan
-        Encode with VLM
-        Retrieve similar demos
-        Generate action
-    end note
-
-    note right of Act
-        Parse action type
-        Execute input
-        Record for history
-    end note
-
-    note right of Evaluate
-        Check success
-        Detect failures
-        Decide next step
-    end note
-```
-
 ### Feedback Loop Diagram
 
 ```mermaid
@@ -1094,151 +1074,42 @@ flowchart TB
 
 ---
 
-## 9. Key Design Principles
-
-### Principle 1: Model Agnostic
-
-OpenAdapt works with any VLM that can process images and generate text.
-
-**Implementation**:
-- Adapter pattern for model integration
-- Unified prompt format across providers
-- Switchable at runtime via configuration
-
-**Rationale**:
-- Avoid vendor lock-in
-- Enable cost optimization
-- Future-proof against model evolution
-
-### Principle 2: Demo-Conditioned
-
-Agents learn from human examples, not just prompts.
-
-**Implementation**:
-- Retrieval-augmented prompting
-- Fine-tuning on demonstration datasets
-- Context windows include similar past examples
-
-**Rationale**:
-- Captures implicit knowledge
-- Reduces ambiguity
-- Enables transfer learning
-
-### Principle 3: Abstraction-Aware
-
-Progress from literal replay to semantic understanding.
-
-**Implementation**:
-- Abstraction ladder (literal -> symbolic -> template -> semantic -> goal)
-- Incremental abstraction during processing
-- Human-readable intermediate representations
-
-**Rationale**:
-- Enables generalization
-- Supports explanation and debugging
-- Allows cross-application transfer
-
-### Principle 4: Evaluation-Driven
-
-Rigorous benchmarking on standard tasks.
-
-**Implementation**:
-- WAA, WebArena, OSWorld benchmark integrations
-- Automated regression detection
-- Public leaderboard metrics
-
-**Rationale**:
-- Objective progress measurement
-- Community comparability
-- Quality assurance
-
-### Principle 5: Privacy-First
-
-Optional PII/PHI scrubbing at every stage.
-
-**Implementation**:
-- `openadapt-privacy` package
-- Configurable scrubbing levels
-- Local-only deployment option
-
-**Rationale**:
-- Enterprise compliance (HIPAA, GDPR)
-- User trust
-- Responsible AI
-
-### Principle 6: Open Source
-
-MIT license, community-driven development.
-
-**Implementation**:
-- All packages on GitHub
-- Public roadmap and issues
-- Contribution guidelines
-
-**Rationale**:
-- Transparency
-- Community innovation
-- No vendor lock-in
-
----
-
-## 10. Research Alignment
-
-OpenAdapt's architecture aligns with and builds upon recent GUI agent research.
-
-### Key Research Papers
-
-| Paper | Contribution | OpenAdapt Integration |
-|-------|--------------|----------------------|
-| Claude Computer Use (Anthropic, 2024) | Production VLM agent API | API adapter in `openadapt-ml` |
-| UFO (Microsoft, 2024) | Windows agent architecture | Prompt patterns adopted |
-| OSWorld (CMU, 2024) | Cross-platform benchmark | Benchmark adapter planned |
-| Set-of-Mark (Microsoft, 2023) | Visual grounding via labels | Core grounding mode |
-| OmniParser (Microsoft, 2024) | Pure-vision UI parsing | Provider in `openadapt-grounding` |
-| WebArena (CMU, 2023) | Web automation benchmark | Benchmark adapter implemented |
-| Mind2Web (OSU, 2023) | Web action prediction | Dataset format compatible |
-
-### Research Contributions
-
-OpenAdapt contributes to the research community through:
-
-1. **Open Benchmark Infrastructure**: Standardized evaluation setup
-2. **Demonstration Dataset Format**: Interoperable trajectory format
-3. **Retrieval-Augmented Agents**: Demo conditioning research
-4. **Grounding Comparison**: Multi-provider benchmarks
-5. **Abstraction Research**: Process mining for GUI agents
-
----
-
-## 11. Future Directions
+## 10. Future Directions
 
 ### Near-Term (Q1 2026)
 
-- Complete fine-tuning pipeline validation
-- Achieve competitive WAA benchmark scores
-- Launch docs.openadapt.ai
-- Release v1.0.0 meta-package
+| Priority | Goal | Package | Status |
+|----------|------|---------|--------|
+| P0 | PyPI releases for all packages | all | In progress |
+| P0 | WAA baseline metrics established | evals | Pending |
+| P1 | Fine-tuning pipeline validated | ml | In progress |
+| P1 | Demo conditioning in evals | evals + retrieval | Pending |
+| P2 | docs.openadapt.ai launched | docs | Pending |
 
 ### Medium-Term (2026)
 
-- Process mining implementation
-- Self-improvement loop activation
-- Multi-benchmark evaluation suite
-- Enterprise deployment guides
+| Goal | Description |
+|------|-------------|
+| **Process Mining** | Automatic extraction of semantic actions from demos |
+| **Self-Improvement** | Training on successful execution traces |
+| **Multi-Benchmark** | WebArena + OSWorld integration |
+| **Enterprise Deployment** | Production deployment guides |
 
 ### Long-Term (2026+)
 
-- Multi-agent collaboration
-- Active learning with human feedback
-- Mobile platform support
-- Cross-platform transfer learning
+| Goal | Description |
+|------|-------------|
+| **Cross-App Transfer** | Demos from Excel help with Google Sheets |
+| **Multi-Agent** | Coordinated agents for complex workflows |
+| **Active Learning** | Agents request human help strategically |
+| **Mobile Platforms** | iOS and Android capture/replay |
 
-### Research Agenda
+### Research Questions
 
-1. **Abstraction Hierarchy**: Can we automatically extract semantic actions from demonstrations?
-2. **Transfer Learning**: How do demos from one app help in another?
-3. **Active Learning**: When should the agent ask for human help?
-4. **Explanation**: How do we make agent decisions interpretable?
+1. **Abstraction Discovery**: Can we automatically extract semantic actions from literal event sequences?
+2. **Transfer Learning**: How much does demo conditioning help across different applications?
+3. **Explanation**: How do we make agent decisions interpretable to users?
+4. **Safety**: What guardrails prevent harmful autonomous actions?
 
 ---
 
@@ -1246,12 +1117,13 @@ OpenAdapt contributes to the research community through:
 
 | Term | Definition |
 |------|------------|
-| **A11y Tree** | Accessibility tree - structured representation of UI elements |
+| **A11y Tree** | Accessibility tree - structured UI element representation |
 | **Demo** | Recorded human demonstration (trajectory) |
-| **Grounding** | Mapping text descriptions to UI coordinates |
+| **Grounding** | Mapping text/intent to specific UI coordinates |
 | **LoRA** | Low-Rank Adaptation - efficient fine-tuning method |
-| **SoM** | Set-of-Mark - visual grounding via element labels |
-| **Trajectory** | Sequence of observations and actions |
+| **Policy** | Decision function mapping observations to actions |
+| **SoM** | Set-of-Mark - visual grounding via numbered labels |
+| **Trajectory** | Sequence of (observation, action) pairs |
 | **VLM** | Vision-Language Model |
 | **WAA** | Windows Agent Arena benchmark |
 
@@ -1259,14 +1131,15 @@ OpenAdapt contributes to the research community through:
 
 - [Architecture Overview](./architecture.md) - Package structure and data flow
 - [Roadmap Priorities](./roadmap-priorities.md) - Current development priorities
-- [Telemetry Design](./design/telemetry-design.md) - Telemetry implementation
-- [Landing Page Strategy](./design/landing-page-strategy.md) - Messaging and positioning
+- [Package Documentation](./packages/index.md) - Individual package guides
+- [Legacy Freeze](./legacy/freeze.md) - Migration from monolith
 
 ## Appendix C: Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.0 | Jan 2026 | Comprehensive redesign, SOTA alignment |
+| 3.0 | Jan 2026 | Alpha vision synthesis, evolution diagrams, SOTA alignment |
+| 2.0 | Jan 2026 | Comprehensive redesign, modular architecture |
 | 1.0 | Dec 2025 | Initial modular architecture |
 | 0.x | 2023-2024 | Legacy monolithic design |
 

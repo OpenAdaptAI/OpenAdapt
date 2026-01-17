@@ -1,6 +1,6 @@
 # openadapt-grounding
 
-UI element localization for improved action accuracy.
+UI element grounding for improved action accuracy.
 
 **Repository**: [OpenAdaptAI/openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding)
 
@@ -14,7 +14,7 @@ pip install openadapt-grounding
 
 ## Overview
 
-The grounding package provides UI element detection and localization to improve:
+The grounding package provides UI element detection and grounding to improve:
 
 - Click accuracy by targeting element centers
 - Robustness to UI changes
@@ -59,7 +59,7 @@ marked_image, element_map = som.create()
 # element_map: {1: "Submit button", 2: "Email field", ...}
 ```
 
-## Integration with ML
+## Integration with Policy Execution
 
 ```python
 from openadapt_ml import AgentPolicy
@@ -71,8 +71,9 @@ policy = AgentPolicy.from_checkpoint(
     grounding=ElementDetector()
 )
 
-# Predictions will use grounded coordinates
-action = policy.predict(screenshot)
+# Actions will use grounded coordinates
+observation = load_screenshot()
+action = policy.predict(observation)
 ```
 
 ## CLI Commands
@@ -122,5 +123,5 @@ openadapt ground som screenshot.png --output marked.png
 
 ## Related Packages
 
-- [openadapt-ml](ml.md) - Use grounding in training and inference
-- [openadapt-capture](capture.md) - Ground recorded captures
+- [openadapt-ml](ml.md) - Use grounding in policy learning and execution
+- [openadapt-capture](capture.md) - Apply grounding to demonstrations

@@ -44,7 +44,7 @@ The privacy package provides:
 
 ## CLI Commands
 
-### Scrub a Capture
+### Scrub a Demonstration
 
 ```bash
 openadapt privacy scrub my-task
@@ -78,8 +78,8 @@ from openadapt_privacy import Scrubber, PIIDetector
 # Create a scrubber
 scrubber = Scrubber(mode="blur")
 
-# Scrub a capture
-scrubber.scrub_capture("my-task", output_dir="scrubbed/")
+# Scrub a demonstration
+scrubber.scrub_demonstration("my-task", output_dir="scrubbed/")
 
 # Or scrub individual images
 scrubbed_image = scrubber.scrub_image(screenshot_path)
@@ -106,10 +106,10 @@ session = CaptureSession(
 
 recorder = Recorder(session)
 recorder.start()
-# ... recording ...
+# ... demonstration collection ...
 recorder.stop()
 
-# Captures are automatically scrubbed
+# Demonstrations are automatically scrubbed
 ```
 
 ## Redaction Modes
@@ -152,5 +152,5 @@ This package helps with compliance for:
 
 ## Related Packages
 
-- [openadapt-capture](capture.md) - Record demonstrations to scrub
-- [openadapt-viewer](viewer.md) - View scrubbed captures
+- [openadapt-capture](capture.md) - Collect demonstrations to scrub
+- [openadapt-viewer](viewer.md) - View scrubbed demonstrations

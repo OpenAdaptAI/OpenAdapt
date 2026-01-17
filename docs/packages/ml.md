@@ -1,6 +1,6 @@
 # openadapt-ml
 
-ML engine, training, and inference for GUI automation agents.
+Policy learning, training, and inference for GUI automation agents.
 
 **Repository**: [OpenAdaptAI/openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml)
 
@@ -17,13 +17,13 @@ pip install openadapt-ml
 The ML package provides:
 
 - Model adapters for various LMMs (Qwen-VL, LLaVA, etc.)
-- Training infrastructure for supervised learning
+- Policy learning infrastructure from demonstration trajectories
 - Inference engine for action prediction
-- Agent policies for deployment
+- Agent policies for autonomous execution
 
 ## CLI Commands
 
-### Start Training
+### Start Policy Learning
 
 ```bash
 openadapt train start --capture my-task --model qwen3vl-2b
@@ -31,19 +31,19 @@ openadapt train start --capture my-task --model qwen3vl-2b
 
 Options:
 
-- `--capture` - Name of the capture to train on (required)
+- `--capture` - Name of the demonstration to learn from (required)
 - `--model` - Model architecture (required)
 - `--epochs` - Number of training epochs (default: 10)
 - `--batch-size` - Batch size (default: 4)
 - `--output` - Output directory (default: training_output/)
 
-### Check Training Status
+### Check Policy Learning Status
 
 ```bash
 openadapt train status
 ```
 
-### Stop Training
+### Stop Policy Learning
 
 ```bash
 openadapt train stop
@@ -72,32 +72,32 @@ from openadapt_ml import QwenVLAdapter, Trainer, AgentPolicy
 # Load a pre-trained model
 adapter = QwenVLAdapter.from_pretrained("qwen3vl-2b")
 
-# Create trainer
+# Create trainer for policy learning
 trainer = Trainer(
     model=adapter,
-    capture_name="my-task",
+    demonstration="my-task",  # demonstration name
     epochs=10
 )
 
-# Train
+# Learn policy from demonstration trajectory
 checkpoint_path = trainer.train()
 
-# Load for inference
+# Load trained policy for execution
 policy = AgentPolicy.from_checkpoint(checkpoint_path)
 
-# Predict next action
-screenshot = load_screenshot()
-action = policy.predict(screenshot)
+# Predict next action from observation
+observation = load_screenshot()
+action = policy.predict(observation)
 ```
 
-## Training Pipeline
+## Policy Learning Pipeline
 
 ```mermaid
 flowchart LR
     subgraph Input
-        CAP[Capture Data]
-        SS[Screenshots]
-        EV[Events]
+        DEMO[Demonstration]
+        OBS[Observations]
+        ACT[Actions]
     end
 
     subgraph Processing
@@ -106,20 +106,20 @@ flowchart LR
         TOK[Tokenization]
     end
 
-    subgraph Training
+    subgraph Learning
         FWD[Forward Pass]
         LOSS[Loss Calculation]
         OPT[Optimization]
     end
 
     subgraph Output
-        CKPT[Checkpoint]
+        CKPT[Trained Policy]
         LOG[Training Logs]
     end
 
-    CAP --> DL
-    SS --> DL
-    EV --> DL
+    DEMO --> DL
+    OBS --> DL
+    ACT --> DL
     DL --> AUG
     AUG --> TOK
     TOK --> FWD
@@ -135,9 +135,9 @@ flowchart LR
 |--------|-------------|
 | `QwenVLAdapter` | Qwen-VL model adapter |
 | `LLaVAAdapter` | LLaVA model adapter |
-| `Trainer` | Training infrastructure |
-| `AgentPolicy` | Inference policy |
-| `train_supervised` | Training function |
+| `Trainer` | Policy learning infrastructure |
+| `AgentPolicy` | Trained policy for execution |
+| `learn_from_demonstrations` | Policy learning function |
 
 ## Hardware Requirements
 
@@ -149,6 +149,6 @@ flowchart LR
 
 ## Related Packages
 
-- [openadapt-capture](capture.md) - Record training data
-- [openadapt-evals](evals.md) - Evaluate trained models
-- [openadapt-retrieval](retrieval.md) - Few-shot retrieval for training
+- [openadapt-capture](capture.md) - Collect demonstrations
+- [openadapt-evals](evals.md) - Evaluate trained policies
+- [openadapt-retrieval](retrieval.md) - Trajectory retrieval for few-shot policy learning

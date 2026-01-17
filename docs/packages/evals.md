@@ -26,7 +26,7 @@ The evals package provides:
 ### Run Evaluation
 
 ```bash
-# Evaluate a trained model
+# Evaluate a trained policy
 openadapt eval run --checkpoint training_output/model.pt --benchmark waa
 
 # Evaluate an API agent
@@ -35,7 +35,7 @@ openadapt eval run --agent api-claude --benchmark waa
 
 Options:
 
-- `--checkpoint` - Path to model checkpoint
+- `--checkpoint` - Path to trained policy checkpoint
 - `--agent` - Agent type (api-claude, api-gpt4v, custom)
 - `--benchmark` - Benchmark name (waa, osworld, etc.)
 - `--tasks` - Number of tasks to evaluate (default: all)
@@ -88,7 +88,7 @@ from openadapt_evals import ApiAgent, BenchmarkAdapter, evaluate_agent_on_benchm
 # Create an API agent
 agent = ApiAgent.claude()
 
-# Or load a trained model
+# Or load a trained policy
 from openadapt_ml import AgentPolicy
 agent = AgentPolicy.from_checkpoint("model.pt")
 
@@ -157,7 +157,7 @@ flowchart TB
 | `ApiAgent` | API-based agent (Claude, GPT-4V) |
 | `BenchmarkAdapter` | Benchmark interface |
 | `MockAdapter` | Mock benchmark for testing |
-| `evaluate_agent_on_benchmark` | Evaluation function |
+| `evaluate_agent_on_benchmark` | Agent evaluation function |
 | `EvalResults` | Evaluation results container |
 
 ## Metrics
@@ -171,5 +171,5 @@ flowchart TB
 
 ## Related Packages
 
-- [openadapt-ml](ml.md) - Train models to evaluate
-- [openadapt-capture](capture.md) - Record training data
+- [openadapt-ml](ml.md) - Learn policies to evaluate
+- [openadapt-capture](capture.md) - Collect demonstrations
