@@ -285,18 +285,18 @@ flowchart TB
     class L0,L1,L2 implemented
 ```
 
-### Core Innovation: Demo-Conditioned Prompting
+### Core Approach: Demo-Conditioned Prompting
 
-OpenAdapt's key differentiator is **demonstration-conditioned automation** - "show, don't tell":
+OpenAdapt explores **demonstration-conditioned automation** - "show, don't tell":
 
 | Traditional Agent | OpenAdapt Agent |
 |-------------------|-----------------|
 | User writes prompts | User records demonstration |
 | Ambiguous instructions | Grounded in actual UI |
-| Requires prompt engineering | No technical expertise needed |
+| Requires prompt engineering | Reduced prompt engineering |
 | Context-free | Context from similar demos |
 
-**Retrieval powers BOTH training AND evaluation**: Similar demonstrations are retrieved as context for the VLM, improving accuracy from 33% to 100% on first-action benchmarks.
+**Retrieval powers BOTH training AND evaluation**: Similar demonstrations are retrieved as context for the VLM. In early experiments on a controlled macOS benchmark, this improved first-action accuracy from 46.7% to 100% - though all 45 tasks in that benchmark share the same navigation entry point. See the [publication roadmap](docs/publication-roadmap.md) for methodology and limitations.
 
 ### Key Concepts
 
