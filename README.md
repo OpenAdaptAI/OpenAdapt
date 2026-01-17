@@ -151,7 +151,7 @@ flowchart TB
             LOADER --> TRAIN --> CKPT
         end
 
-        subgraph ProcessMining["Process Mining"]:::futureBlock
+        subgraph ProcessMining["Process Mining"]
             ABSTRACT["Abstract"]:::future
             PATTERNS["Patterns"]:::future
             ABSTRACT --> PATTERNS
@@ -175,7 +175,7 @@ flowchart TB
             GROUND --> ACT
         end
 
-        subgraph SafetyGate["Safety Gate"]:::safetyBlock
+        subgraph SafetyGate["Safety Gate"]
             VALIDATE["Validate"]
             CONFIRM["Confirm"]:::future
             VALIDATE --> CONFIRM
