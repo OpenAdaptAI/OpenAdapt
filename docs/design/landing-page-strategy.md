@@ -29,7 +29,7 @@
 OpenAdapt has evolved from a monolithic application (v0.46.0) to a **modular meta-package architecture** (v1.0+). This is a significant architectural maturation that should be reflected in messaging.
 
 **Core Value Proposition (Current Reality)**:
-- The **open** source software **adapt**er between Large Multimodal Models (LMMs) and desktop/web GUIs
+- The open source software adapter between Large Multimodal Models (LMMs) and desktop/web GUIs
 - Record demonstrations, train models, evaluate agents via unified CLI
 - Works with any VLM: Claude, GPT-4V, Gemini, Qwen, or custom fine-tuned models
 
