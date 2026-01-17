@@ -38,7 +38,7 @@ Input monitoring allows OpenAdapt to capture keyboard and mouse events during re
 4. Click the **+** button to add your terminal application
 5. Toggle the switch to enable access
 
-![Enabling input monitoring](../legacy/assets/macOS_input_monitoring.png)
+![Enabling input monitoring](assets/macOS_input_monitoring.png)
 
 ## Enabling Screen Recording
 
@@ -51,7 +51,7 @@ Screen recording allows OpenAdapt to capture screenshots during recording.
 5. Toggle the switch to enable access
 6. You may need to restart your terminal for changes to take effect
 
-![Enabling screen recording](../legacy/assets/macOS_screen_recording.png)
+![Enabling screen recording](assets/macOS_screen_recording.png)
 
 ## Enabling Accessibility (for Action Replay)
 
@@ -65,7 +65,7 @@ Accessibility permissions allow OpenAdapt to control the mouse and keyboard duri
 4. Click the **+** button to add your terminal application
 5. Toggle the switch to enable access
 
-![Enabling accessibility](../legacy/assets/macOS_accessibility.png)
+![Enabling accessibility](assets/macOS_accessibility.png)
 
 ## Quick Access via Terminal
 
