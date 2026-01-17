@@ -1,7 +1,10 @@
 # OpenAdapt Capture
 
+[![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/workflows/Tests/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-capture/actions)
+[![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
+[![Downloads](https://img.shields.io/pypi/dm/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
 **OpenAdapt Capture** is the data collection component of the [OpenAdapt](https://github.com/OpenAdaptAI) GUI automation ecosystem.
 
