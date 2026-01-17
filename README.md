@@ -1,6 +1,6 @@
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs)
 
-[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/workflows/Python%20CI/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions)
+[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -309,7 +309,7 @@ OpenAdapt's key differentiator is **demonstration-conditioned automation** - "sh
 
 ---
 
-## Terminology (Aligned with GUI Agent Literature)
+## Terminology
 
 | Term | Description |
 |------|-------------|
@@ -319,62 +319,6 @@ OpenAdapt's key differentiator is **demonstration-conditioned automation** - "sh
 | **Demonstration** | Human-provided example trajectory |
 | **Policy** | Decision-making component that maps observations to actions |
 | **Grounding** | Mapping intent to specific UI elements (coordinates) |
-
-## Meta-Package Structure
-
-OpenAdapt v1.0+ uses a **modular architecture** where the main `openadapt` package acts as a meta-package that coordinates focused sub-packages:
-
-- **Core Packages**: Essential for the three-phase pipeline
-  - `openadapt-capture` - DEMONSTRATE phase: Collects observations and actions
-  - `openadapt-ml` - LEARN phase: Trains policies from demonstrations
-  - `openadapt-evals` - EXECUTE phase: Evaluates agents on benchmarks
-
-- **Optional Packages**: Enhance specific workflow phases
-  - `openadapt-privacy` - DEMONSTRATE: PII/PHI scrubbing before storage
-  - `openadapt-retrieval` - LEARN + EXECUTE: Demo conditioning for both training and evaluation
-  - `openadapt-grounding` - EXECUTE: UI element localization (SoM, OmniParser)
-
-- **Cross-Cutting**:
-  - `openadapt-viewer` - Trajectory visualization at any phase
-
-### Two Paths to Automation
-
-1. **Custom Training Path**: Demonstrate -> Train policy -> Deploy agent
-   - Best for: Repetitive tasks specific to your workflow
-   - Requires: `openadapt[core]`
-
-2. **API Agent Path**: Use pre-trained VLM APIs (Claude, GPT-4V, etc.) with demo conditioning
-   - Best for: General-purpose automation, rapid prototyping
-   - Requires: `openadapt[evals]`
-
----
-
-## Installation Paths
-
-Choose your installation based on your use case:
-
-```
-What do you want to do?
-|
-+-- Just evaluate API agents on benchmarks?
-|   +-- pip install openadapt[evals]
-|
-+-- Train custom models on your demonstrations?
-|   +-- pip install openadapt[core]
-|
-+-- Full suite with all optional packages?
-|   +-- pip install openadapt[all]
-|
-+-- Minimal CLI only (add packages later)?
-    +-- pip install openadapt
-```
-
-| Installation | Included Packages | Use Case |
-|-------------|-------------------|----------|
-| `openadapt` | CLI only | Start minimal, add what you need |
-| `openadapt[evals]` | + evals | Benchmark API agents (Claude, GPT-4V) |
-| `openadapt[core]` | + capture, ml, viewer | Full training workflow |
-| `openadapt[all]` | + privacy, retrieval, grounding | Everything including optional enhancements |
 
 ---
 

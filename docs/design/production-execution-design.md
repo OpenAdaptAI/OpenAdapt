@@ -27,7 +27,7 @@ This document addresses a critical gap in the OpenAdapt architecture: the **EXEC
 
 ---
 
-## 1. Problem Statement
+## 1. Problem Statement {#1-problem-statement}
 
 ### Current Architecture
 
@@ -56,7 +56,7 @@ RECORD (capture) --> TRAIN (ml) --> EXECUTE (evals)
 
 ---
 
-## 2. Literature Review
+## 2. Literature Review {#2-literature-review}
 
 ### 2.1 Microsoft UFO (2024-2025)
 
@@ -173,7 +173,7 @@ RECORD (capture) --> TRAIN (ml) --> EXECUTE (evals)
 
 ---
 
-## 3. Gap Analysis
+## 3. Gap Analysis {#3-gap-analysis}
 
 ### 3.1 What OpenAdapt Has
 
@@ -289,7 +289,7 @@ RECORD (capture) --> TRAIN (ml) --> EXECUTE (evals)
 
 ---
 
-## 4. Architectural Options
+## 4. Architectural Options {#4-architectural-options}
 
 ### Option A: Rename/Expand openadapt-evals
 
@@ -425,7 +425,7 @@ openadapt-evals
 
 ---
 
-## 5. Recommendation
+## 5. Recommendation {#5-recommendation}
 
 ### Primary Recommendation: Option B (openadapt-agent)
 
@@ -507,7 +507,7 @@ openadapt eval run --benchmark waa                   # Benchmarking (unchanged)
 
 ---
 
-## 6. README Improvement Proposal
+## 6. README Improvement Proposal {#6-readme-improvement-proposal}
 
 ### Current Issues
 
@@ -583,7 +583,7 @@ Production automation includes:
 
 - [Documentation](https://docs.openadapt.ai)
 - [Discord](https://discord.gg/yF527cQbDG)
-- [Architecture](./docs/architecture-evolution.md)
+- [Architecture](../architecture-evolution.md)
 
 ## License
 
@@ -601,7 +601,7 @@ MIT
 
 ---
 
-## 7. Implementation Roadmap
+## 7. Implementation Roadmap {#7-implementation-roadmap}
 
 ### Q1 2026: Foundation
 
@@ -639,7 +639,7 @@ MIT
 
 ---
 
-## 8. References
+## 8. References {#8-references}
 
 ### GUI Automation Frameworks
 
