@@ -90,6 +90,22 @@ For the setup of any/all of the above dependencies, follow the steps [SETUP.md](
 
 <br/>
 
+### Quick Install (Recommended)
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
+# or: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
+
+# Install OpenAdapt
+uv tool install openadapt
+
+# Verify installation
+openadapt --help
+```
+
+### Alternative: Poetry Install
+
 Install with [Poetry](https://python-poetry.org/) :
 ```
 git clone https://github.com/OpenAdaptAI/OpenAdapt.git
