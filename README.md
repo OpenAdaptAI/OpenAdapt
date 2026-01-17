@@ -96,9 +96,33 @@ openadapt doctor                          Check system requirements
 
 ## How It Works
 
-<img width="1499" alt="OpenAdapt Architecture" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/c811654e-3450-42cd-91ee-935378e3a858">
+See the full [Architecture Documentation](docs/architecture.md) for detailed diagrams.
 
-<img width="1511" alt="OpenAdapt Flow" src="https://github.com/OpenAdaptAI/OpenAdapt/assets/774615/82814cdb-f0d5-4a6b-9d44-a4628fca1590">
+```mermaid
+flowchart LR
+    subgraph Record["1. Record"]
+        A[User Demo] --> B[Capture]
+    end
+
+    subgraph Train["2. Train"]
+        B --> C[ML Model]
+    end
+
+    subgraph Deploy["3. Deploy"]
+        C --> D[Agent Policy]
+        D --> E[Action Replay]
+    end
+
+    subgraph Evaluate["4. Evaluate"]
+        D --> F[Benchmark]
+        F --> G[Metrics]
+    end
+
+    %% Optional enhancements
+    GROUND[Grounding] -.-> E
+    RETRIEVE[Retrieval] -.-> C
+    PRIV[Privacy] -.-> B
+```
 
 OpenAdapt:
 - Records screenshots and user input events
