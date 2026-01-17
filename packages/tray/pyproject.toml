@@ -1,0 +1,69 @@
+[project]
+name = "openadapt-tray"
+version = "0.1.0"
+description = "System tray application for OpenAdapt"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "MLDSAI Inc.", email = "richard@mldsai.com"}
+]
+keywords = ["gui", "system-tray", "menu-bar", "openadapt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "pystray>=0.19.0",
+    "Pillow>=9.0.0",
+    "pynput>=1.7.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+macos-native = [
+    "rumps>=0.4.0",
+    "pyobjc-framework-Cocoa>=9.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.10.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "openadapt-tray[macos-native]",
+]
+
+[project.scripts]
+openadapt-tray = "openadapt_tray.app:main"
+
+[project.gui-scripts]
+openadapt-tray-gui = "openadapt_tray.app:main"
+
+[project.urls]
+Homepage = "https://openadapt.ai"
+Documentation = "https://docs.openadapt.ai"
+Repository = "https://github.com/OpenAdaptAI/openadapt-tray"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openadapt_tray"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
