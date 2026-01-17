@@ -374,6 +374,47 @@ def _generate_html(
             font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
         }}
 
+        .step-nav {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
+
+        .step-counter {{
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+            font-family: "SF Mono", Monaco, monospace;
+            min-width: 100px;
+            text-align: center;
+        }}
+
+        .step-nav button {{
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }}
+
+        .step-nav button:hover {{
+            background: var(--accent-dim);
+            color: var(--accent);
+            border-color: var(--accent);
+        }}
+
+        .step-nav button:disabled {{
+            opacity: 0.3;
+            cursor: not-allowed;
+        }}
+
         .main-content {{
             display: grid;
             grid-template-columns: 1fr 340px;
@@ -820,6 +861,11 @@ def _generate_html(
     <div class="container">
         <header>
             <h1>Capture Viewer</h1>
+            <div class="step-nav">
+                <button id="step-prev" title="Previous Step (←)">←</button>
+                <div class="step-counter" id="step-counter">Step 1 / {len(events_data)}</div>
+                <button id="step-next" title="Next Step (→)">→</button>
+            </div>
             <div class="meta">ID: {capture_id} | Duration: {duration_str}</div>
         </header>
 
@@ -916,6 +962,9 @@ def _generate_html(
         const btnCopyAll = document.getElementById('copy-all-btn');
         const audio = document.getElementById('audio');
         const transcriptContent = document.getElementById('transcript-content');
+        const stepCounter = document.getElementById('step-counter');
+        const stepPrev = document.getElementById('step-prev');
+        const stepNext = document.getElementById('step-next');
 
         // Current event for copying
         let currentEvent = null;
@@ -1253,10 +1302,19 @@ def _generate_html(
             // Update details
             updateDetails(event);
 
+            // Update step counter
+            updateStepCounter();
+
             // Sync audio only on manual navigation, not during playback
             if (hasAudio && audio && !skipAudioSync && !isPlaying) {{
                 audio.currentTime = event.time;
             }}
+        }}
+
+        function updateStepCounter() {{
+            stepCounter.textContent = `Step ${{currentIndex + 1}} / ${{frames.length}}`;
+            stepPrev.disabled = currentIndex === 0;
+            stepNext.disabled = currentIndex === frames.length - 1;
         }}
 
         function updateDetails(event) {{
@@ -1469,6 +1527,8 @@ def _generate_html(
         document.getElementById('btn-prev').addEventListener('click', prev);
         document.getElementById('btn-first').addEventListener('click', () => goToIndex(0));
         document.getElementById('btn-last').addEventListener('click', () => goToIndex(frames.length - 1));
+        stepPrev.addEventListener('click', prev);
+        stepNext.addEventListener('click', next);
         btnCopy.addEventListener('click', copyEventDetails);
         btnCopyAll.addEventListener('click', copyAllEvents);
         btnOverlay.addEventListener('change', () => {{

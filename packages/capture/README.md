@@ -1,8 +1,45 @@
-# openadapt-capture
+# OpenAdapt Capture
 
-GUI interaction capture - platform-agnostic event streams with time-aligned media.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+
+**OpenAdapt Capture** is the data collection component of the [OpenAdapt](https://github.com/OpenAdaptAI) GUI automation ecosystem.
+
+Capture platform-agnostic GUI interaction streams with time-aligned screenshots and audio for training ML models or replaying workflows.
 
 > **Status:** Pre-alpha. See [docs/DESIGN.md](docs/DESIGN.md) for architecture discussion.
+
+---
+
+## The OpenAdapt Ecosystem
+
+```
+                          OpenAdapt GUI Automation Pipeline
+                          =================================
+
+    +-----------------+          +------------------+          +------------------+
+    |                 |          |                  |          |                  |
+    | openadapt-      |  ------> | openadapt-ml     |  ------> |    Deploy        |
+    | capture         |  Convert | (Train & Eval)   |  Export  |    (Inference)   |
+    |                 |          |                  |          |                  |
+    +-----------------+          +------------------+          +------------------+
+          |                             |                             |
+          v                             v                             v
+    - Record GUI                  - Fine-tune VLMs              - Run trained
+      interactions                - Evaluate on                   agent on new
+    - Mouse, keyboard,              benchmarks (WAA)              tasks
+      screen, audio               - Compare models              - Real-time
+    - Privacy scrubbing           - Cloud GPU training            automation
+
+```
+
+| Component | Purpose | Repository |
+|-----------|---------|------------|
+| **openadapt-capture** | Record human demonstrations | [GitHub](https://github.com/OpenAdaptAI/openadapt-capture) |
+| **openadapt-ml** | Train and evaluate GUI automation models | [GitHub](https://github.com/OpenAdaptAI/openadapt-ml) |
+| **openadapt-privacy** | PII scrubbing for recordings | Coming soon |
+
+---
 
 ## Installation
 
@@ -171,12 +208,81 @@ uv run python scripts/generate_readme_demo.py --duration 10
 | `privacy` | PII scrubbing (openadapt-privacy) |
 | `all` | Everything |
 
+---
+
+## Training with OpenAdapt-ML
+
+Captured recordings can be used to train vision-language models with [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml).
+
+### End-to-End Workflow
+
+```bash
+# 1. Capture a workflow demonstration
+uv run python -c "
+from openadapt_capture import Recorder
+
+with Recorder('./my_capture', task_description='Turn off Night Shift') as recorder:
+    input('Perform the task, then press Enter to stop...')
+"
+
+# 2. Train a model on the capture (requires openadapt-ml)
+uv pip install openadapt-ml
+uv run python -m openadapt_ml.cloud.local train \
+  --capture ./my_capture \
+  --open  # Opens training dashboard
+
+# 3. Compare human vs model predictions
+uv run python -m openadapt_ml.scripts.compare \
+  --capture ./my_capture \
+  --checkpoint checkpoints/model \
+  --open
+```
+
+### Cloud GPU Training
+
+For faster training with cloud GPUs:
+
+```bash
+# Train on Lambda Labs A10 (~$0.75/hr)
+uv run python -m openadapt_ml.cloud.lambda_labs train \
+  --capture ./my_capture \
+  --goal "Turn off Night Shift"
+```
+
+See the [openadapt-ml documentation](https://github.com/OpenAdaptAI/openadapt-ml#6-cloud-gpu-training) for cloud setup.
+
+### Data Format
+
+OpenAdapt-ML converts captures to its Episode format automatically:
+
+```python
+from openadapt_ml.ingest.capture import capture_to_episode
+
+episode = capture_to_episode("./my_capture")
+print(f"Loaded {len(episode.steps)} steps")
+print(f"Instruction: {episode.instruction}")
+```
+
+The conversion maps capture event types to ML action types:
+- `mouse.singleclick` / `mouse.click` -> `CLICK`
+- `mouse.doubleclick` -> `DOUBLE_CLICK`
+- `mouse.drag` -> `DRAG`
+- `mouse.scroll` -> `SCROLL`
+- `key.type` -> `TYPE`
+
+---
+
 ## Development
 
 ```bash
 uv sync --dev
 uv run pytest
 ```
+
+## Related Projects
+
+- [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train and evaluate GUI automation models
+- [Windows Agent Arena](https://github.com/microsoft/WindowsAgentArena) - Benchmark for Windows GUI agents
 
 ## License
 

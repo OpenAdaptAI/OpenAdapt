@@ -75,6 +75,34 @@ from openadapt_capture.storage import (
 # Visualization
 from openadapt_capture.visualize import create_demo, create_html
 
+# Browser events and bridge (optional - requires websockets)
+try:
+    from openadapt_capture.browser_events import (
+        BoundingBox,
+        BrowserClickEvent,
+        BrowserEvent,
+        BrowserEventType,
+        BrowserFocusEvent,
+        BrowserInputEvent,
+        BrowserKeyEvent,
+        BrowserNavigationEvent,
+        BrowserScrollEvent,
+        DOMSnapshot,
+        ElementState,
+        NavigationType,
+        SemanticElementRef,
+        VisibleElement,
+    )
+    from openadapt_capture.browser_bridge import (
+        BrowserBridge,
+        BrowserEventRecord,
+        BrowserMode,
+        run_browser_bridge,
+    )
+    _BROWSER_BRIDGE_AVAILABLE = True
+except ImportError:
+    _BROWSER_BRIDGE_AVAILABLE = False
+
 __all__ = [
     # Version
     "__version__",
@@ -137,4 +165,25 @@ __all__ = [
     # Visualization
     "create_demo",
     "create_html",
+    # Browser bridge (optional)
+    "_BROWSER_BRIDGE_AVAILABLE",
+    "BrowserBridge",
+    "BrowserMode",
+    "BrowserEventRecord",
+    "run_browser_bridge",
+    # Browser events
+    "BrowserEventType",
+    "BrowserEvent",
+    "BrowserClickEvent",
+    "BrowserKeyEvent",
+    "BrowserScrollEvent",
+    "BrowserInputEvent",
+    "BrowserNavigationEvent",
+    "BrowserFocusEvent",
+    "SemanticElementRef",
+    "BoundingBox",
+    "ElementState",
+    "DOMSnapshot",
+    "VisibleElement",
+    "NavigationType",
 ]
