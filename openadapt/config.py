@@ -166,6 +166,7 @@ class OpenAdaptSettings(BaseSettings):
 
         try:
             import torch
+
             if torch.cuda.is_available():
                 return "cuda"
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
