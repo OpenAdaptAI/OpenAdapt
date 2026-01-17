@@ -291,8 +291,15 @@ class TrayApplication:
         # Platform-specific setup
         self.platform.setup()
 
-        # Try to connect to IPC server (optional)
-        self.ipc.connect()
+        # Try to connect to IPC server (optional - won't block if unavailable)
+        try:
+            connected = self.ipc.connect()
+            if connected:
+                print("IPC connected successfully")
+            else:
+                print("IPC server not available - running in standalone mode")
+        except Exception as e:
+            print(f"IPC connection failed: {e} - running in standalone mode")
 
         # Run the tray icon (blocks)
         self.icon.run()
@@ -306,6 +313,7 @@ class TrayApplication:
         # Cleanup components
         self.hotkeys.stop()
         self.ipc.close()
+        self.notifications.cleanup()
         self.platform.cleanup()
 
         # Stop tray icon

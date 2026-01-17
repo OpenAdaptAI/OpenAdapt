@@ -27,6 +27,7 @@ dependencies = [
     "Pillow>=9.0.0",
     "pynput>=1.7.0",
     "click>=8.0.0",
+    "desktop-notifier>=6.2.0",
 ]
 
 [project.optional-dependencies]

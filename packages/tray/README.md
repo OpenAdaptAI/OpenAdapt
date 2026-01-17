@@ -12,7 +12,28 @@ A cross-platform system tray application for [OpenAdapt](https://openadapt.ai), 
 
 ## Features
 
-- **System Tray Icon**: Shows in the menu bar (macOS) or system tray (Windows/Linux)
+### System Tray Icon
+
+Shows in the menu bar (macOS) or system tray (Windows/Linux) with visual state indicators.
+
+![Tray Icon Idle](docs/screenshots/tray-icon-idle.png)
+*Idle state: Blue/gray icon in menu bar*
+
+![Tray Icon Recording](docs/screenshots/tray-icon-recording.png)
+*Recording state: Red pulsing icon*
+
+### Native Notifications
+
+Modern notifications with desktop-notifier supporting callbacks and actions.
+
+![Basic Notification](docs/screenshots/notification-basic.png)
+*Example: Recording started notification*
+
+![Critical Notification](docs/screenshots/notification-critical.png)
+*Example: Error notification with critical urgency*
+
+### Other Features
+
 - **Status Indicators**: Icon changes color based on application state (idle, recording, training, error)
 - **Start/Stop Recording**: Control capture sessions via menu or global hotkeys
 - **Recent Captures**: Quick access to view or delete recent recordings
@@ -53,6 +74,9 @@ python -m openadapt_tray
 Shortcuts are configurable via the settings file or dashboard.
 
 ## Menu Structure
+
+![Menu Structure](docs/screenshots/menu-idle.png)
+*Full menu in idle state*
 
 ```
 [OpenAdapt Icon]
@@ -151,6 +175,7 @@ openadapt-tray/
 - **Pillow** (>=9.0.0): Icon handling
 - **pynput** (>=1.7.0): Global hotkeys
 - **click** (>=8.0.0): CLI integration
+- **desktop-notifier** (>=6.2.0): Modern native notifications
 
 ## Integration
 
