@@ -133,6 +133,7 @@ def transcribe(
     capture_dir: str,
     model: str = "base",
     api: bool = False,
+    backend: str = "auto",
 ) -> None:
     """Transcribe audio from a capture using Whisper.
 
@@ -141,6 +142,12 @@ def transcribe(
         model: Whisper model to use. Local: tiny, base, small, medium, large.
                API: whisper-1 (default when --api is used).
         api: Use OpenAI Whisper API instead of local model (faster, requires API key).
+             Deprecated: use --backend=api instead.
+        backend: Transcription backend to use:
+            - "auto": Auto-detect best available (faster-whisper > openai-whisper)
+            - "faster-whisper": Use faster-whisper (4x faster, recommended)
+            - "openai-whisper": Use original openai-whisper
+            - "api": Use OpenAI Whisper API (requires API key)
     """
 
     capture_dir = Path(capture_dir)
@@ -152,12 +159,26 @@ def transcribe(
         print(f"No audio file found at: {audio_path}")
         return
 
+    # Handle legacy --api flag
     if api:
-        # Use OpenAI Whisper API
+        backend = "api"
+
+    # Auto-detect backend if not specified
+    if backend == "auto":
+        from openadapt_capture.audio import _get_best_transcription_backend
+        backend = _get_best_transcription_backend()
+        print(f"Auto-detected backend: {backend}")
+
+    if backend == "api":
         _transcribe_api(audio_path, transcript_path, transcript_json_path)
-    else:
-        # Use local Whisper model
+    elif backend == "faster-whisper":
+        _transcribe_faster_whisper(audio_path, transcript_path, transcript_json_path, model)
+    elif backend == "openai-whisper":
         _transcribe_local(audio_path, transcript_path, transcript_json_path, model)
+    else:
+        print(f"Unknown backend: {backend}")
+        print("Valid options: auto, faster-whisper, openai-whisper, api")
+        return
 
 
 def _transcribe_api(
@@ -214,15 +235,16 @@ def _transcribe_local(
     transcript_json_path: Path,
     model: str,
 ) -> None:
-    """Transcribe using local Whisper model."""
+    """Transcribe using local openai-whisper model."""
 
-    print(f"Transcribing audio with local Whisper ({model} model)...")
+    print(f"Transcribing audio with openai-whisper ({model} model)...")
     print("This may take a moment...")
 
     try:
         import whisper
     except ImportError:
-        print("Whisper not installed. Install with: uv add openai-whisper")
+        print("Whisper not installed. Install with: pip install openai-whisper")
+        print("Or use faster-whisper: pip install faster-whisper")
         return
 
     # Load model and transcribe with word timestamps
@@ -239,6 +261,50 @@ def _transcribe_local(
             "end": segment["end"],
             "text": segment["text"].strip(),
         })
+
+    # Save transcripts
+    _save_transcript(transcript, segments, transcript_path, transcript_json_path)
+
+
+def _transcribe_faster_whisper(
+    audio_path: Path,
+    transcript_path: Path,
+    transcript_json_path: Path,
+    model: str,
+) -> None:
+    """Transcribe using faster-whisper (4x faster than openai-whisper)."""
+
+    print(f"Transcribing audio with faster-whisper ({model} model)...")
+    print("This is 4x faster than openai-whisper...")
+
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        print("faster-whisper not installed. Install with: pip install faster-whisper")
+        print("Or use openai-whisper: pip install openai-whisper")
+        return
+
+    # Load model with CPU and int8 for efficiency
+    whisper_model = WhisperModel(model, device="cpu", compute_type="int8")
+
+    # Transcribe with word timestamps
+    segments_iter, info = whisper_model.transcribe(
+        str(audio_path),
+        word_timestamps=True,
+    )
+
+    # Collect segments
+    segments = []
+    full_text_parts = []
+    for segment in segments_iter:
+        segments.append({
+            "start": segment.start,
+            "end": segment.end,
+            "text": segment.text.strip(),
+        })
+        full_text_parts.append(segment.text)
+
+    transcript = "".join(full_text_parts).strip()
 
     # Save transcripts
     _save_transcript(transcript, segments, transcript_path, transcript_json_path)

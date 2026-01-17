@@ -36,7 +36,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Whisper transcription (large dependency)
+# Whisper transcription - faster-whisper (recommended, 4x faster)
+transcribe-fast = [
+    "faster-whisper>=1.1.0",
+]
+
+# Legacy openai-whisper support
 transcribe = [
     "openai-whisper>=20230314",
 ]
@@ -48,11 +53,12 @@ privacy = [
 
 # Everything
 all = [
-    "openadapt-capture[transcribe,privacy]",
+    "openadapt-capture[transcribe-fast,transcribe,privacy]",
 ]
 
 dev = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
     "matplotlib>=3.5.0",
@@ -84,6 +90,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [

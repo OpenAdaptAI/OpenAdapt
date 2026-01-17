@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 _sounddevice = None
 _soundfile = None
 _whisper = None
+_faster_whisper = None
 _np = None
 
 
@@ -56,6 +57,45 @@ def _import_whisper() -> None:
                 "Whisper is required for transcription. Install with: "
                 "pip install openai-whisper"
             ) from e
+
+
+def _import_faster_whisper() -> None:
+    """Import faster-whisper lazily."""
+    global _faster_whisper
+    if _faster_whisper is None:
+        try:
+            import faster_whisper
+
+            _faster_whisper = faster_whisper
+        except ImportError as e:
+            raise ImportError(
+                "faster-whisper is required for transcription. Install with: "
+                "pip install faster-whisper"
+            ) from e
+
+
+def _get_best_transcription_backend() -> str:
+    """Auto-detect best available transcription backend.
+
+    Returns:
+        Backend name: "faster-whisper", "openai-whisper", or "api"
+    """
+    # Try faster-whisper first (recommended)
+    try:
+        import faster_whisper  # noqa: F401
+        return "faster-whisper"
+    except ImportError:
+        pass
+
+    # Fall back to openai-whisper
+    try:
+        import whisper  # noqa: F401
+        return "openai-whisper"
+    except ImportError:
+        pass
+
+    # No local backend available
+    return "api"
 
 
 def _get_timestamp() -> float:
@@ -200,21 +240,59 @@ class AudioRecorder:
         self,
         model_name: str = "base",
         word_timestamps: bool = True,
+        backend: str = "auto",
     ) -> dict[str, Any]:
         """Transcribe recorded audio using Whisper.
 
         Args:
             model_name: Whisper model to use (tiny, base, small, medium, large).
             word_timestamps: Whether to include word-level timestamps.
+            backend: Transcription backend to use:
+                - "auto": Auto-detect best available (faster-whisper > openai-whisper)
+                - "faster-whisper": Use faster-whisper (4x faster, recommended)
+                - "openai-whisper": Use original openai-whisper
+                - "api": Use OpenAI API (requires API key, not implemented here)
+
+        Returns:
+            Transcription result dict with 'text' and 'segments'.
+        """
+        audio = self.get_audio()
+        if len(audio) == 0:
+            return {"text": "", "segments": []}
+
+        # Auto-detect backend if not specified
+        if backend == "auto":
+            backend = _get_best_transcription_backend()
+
+        if backend == "faster-whisper":
+            return self._transcribe_faster_whisper(audio, model_name, word_timestamps)
+        elif backend == "openai-whisper":
+            return self._transcribe_openai_whisper(audio, model_name, word_timestamps)
+        elif backend == "api":
+            raise NotImplementedError(
+                "API transcription not supported in AudioRecorder. "
+                "Use the CLI 'capture transcribe --backend api' command instead."
+            )
+        else:
+            raise ValueError(f"Unknown backend: {backend}")
+
+    def _transcribe_openai_whisper(
+        self,
+        audio: "np.ndarray",
+        model_name: str = "base",
+        word_timestamps: bool = True,
+    ) -> dict[str, Any]:
+        """Transcribe using openai-whisper backend.
+
+        Args:
+            audio: Audio data as numpy array.
+            model_name: Whisper model to use.
+            word_timestamps: Whether to include word-level timestamps.
 
         Returns:
             Transcription result dict with 'text' and 'segments'.
         """
         _import_whisper()
-
-        audio = self.get_audio()
-        if len(audio) == 0:
-            return {"text": "", "segments": []}
 
         model = _whisper.load_model(model_name)
         result = model.transcribe(
@@ -223,6 +301,69 @@ class AudioRecorder:
             fp16=False,  # Use float32 for CPU compatibility
         )
         return result
+
+    def _transcribe_faster_whisper(
+        self,
+        audio: "np.ndarray",
+        model_name: str = "base",
+        word_timestamps: bool = True,
+    ) -> dict[str, Any]:
+        """Transcribe using faster-whisper backend (4x faster).
+
+        Args:
+            audio: Audio data as numpy array.
+            model_name: Whisper model to use.
+            word_timestamps: Whether to include word-level timestamps.
+
+        Returns:
+            Transcription result dict with 'text' and 'segments'.
+        """
+        _import_faster_whisper()
+
+        # Create faster-whisper model
+        model = _faster_whisper.WhisperModel(
+            model_name,
+            device="cpu",
+            compute_type="int8",  # Lower memory usage
+        )
+
+        # Transcribe and collect results
+        segments_iter, info = model.transcribe(
+            audio,
+            word_timestamps=word_timestamps,
+        )
+
+        # Convert to openai-whisper compatible format
+        segments = []
+        full_text_parts = []
+
+        for segment in segments_iter:
+            segment_dict = {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text,
+            }
+
+            if word_timestamps and segment.words:
+                segment_dict["words"] = [
+                    {
+                        "word": word.word,
+                        "start": word.start,
+                        "end": word.end,
+                        "probability": word.probability,
+                    }
+                    for word in segment.words
+                ]
+
+            segments.append(segment_dict)
+            full_text_parts.append(segment.text)
+
+        return {
+            "text": "".join(full_text_parts),
+            "segments": segments,
+            "language": info.language,
+            "language_probability": info.language_probability,
+        }
 
     def __enter__(self) -> "AudioRecorder":
         """Context manager entry."""
