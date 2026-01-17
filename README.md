@@ -1,5 +1,11 @@
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs)
 
+[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/workflows/Python%20CI/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions)
+[![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
+[![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
 Record GUI demonstrations, train ML models, and evaluate agents - all from a unified CLI.
