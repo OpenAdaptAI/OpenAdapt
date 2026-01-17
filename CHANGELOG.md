@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-01-17)
+
+### Bug Fixes
+
+- Add missing pages to MkDocs nav configuration
+  ([`9347117`](https://github.com/OpenAdaptAI/OpenAdapt/commit/9347117cbf56e08f266f06f6efb13e73f9bb7931))
+
+### Build System
+
+- **deps**: Bump actions/checkout from 4 to 6
+  ([#961](https://github.com/OpenAdaptAI/OpenAdapt/pull/961),
+  [`988d20c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/988d20c985a25f831bbbb1699c29c1d1577914c1))
+
+- **deps**: Bump actions/setup-python from 5 to 6
+  ([#962](https://github.com/OpenAdaptAI/OpenAdapt/pull/962),
+  [`f1eeb2f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f1eeb2f56647fa58896e66c55695068d4d0ac20b))
+
+### Chores
+
+- Update author email to richard@openadapt.ai
+  ([`71bdc10`](https://github.com/OpenAdaptAI/OpenAdapt/commit/71bdc10dec0d665dd7a0a350327fdcb95030ce8f))
+
+### Documentation
+
+- Add evolved architecture diagram to README and architecture-evolution.md
+  ([`d97f86e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/d97f86ef0de245e58980f8074ebe47e015683090))
+
+- Add open source models to architecture diagram
+  ([`41acb56`](https://github.com/OpenAdaptAI/OpenAdapt/commit/41acb564ad245d9a00eaf01ca77a3eb36420e3e3))
+
+- Add rendered architecture diagram PNG
+  ([`281f2f7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/281f2f70bf871a438df0915e134f4a5b545db44c))
+
+- Add session deliverables and update documentation
+  ([`26282a9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/26282a9ce0a5bfbab674a9211c76158f0677d746))
+
+
 ## v1.0.0 (2026-01-17)
 
 ### Bug Fixes
