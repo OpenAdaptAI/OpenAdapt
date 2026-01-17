@@ -147,8 +147,130 @@ flowchart LR
 | qwen3vl-7b | 24GB | RTX 4090 / A100 |
 | llava-1.6-7b | 24GB | RTX 4090 / A100 |
 
+## Episode Segmentation
+
+**NEW (January 2026)**: Automatically segment recordings into distinct task episodes using ML.
+
+### Overview
+
+Episode segmentation analyzes long recordings and identifies natural task boundaries, breaking them into semantic episodes. This enables:
+
+- **Better Training Data**: Train on specific tasks rather than entire recordings
+- **Task Discovery**: Understand what tasks users actually perform
+- **Demo Library**: Build searchable library of task examples
+- **Few-Shot Learning**: Find relevant examples for new tasks
+
+### CLI Commands
+
+```bash
+# Segment a recording into episodes
+openadapt ml segment --recording turn-off-nightshift --output episodes.json
+
+# Segment with custom model
+openadapt ml segment --recording my-task --model qwen3vl-7b
+
+# Batch segment all recordings
+openadapt ml segment --all --output-dir segmentation_output/
+
+# View segmentation results
+openadapt ml view-episodes --file episodes.json
+```
+
+### Python API
+
+```python
+from openadapt_ml import EpisodeSegmenter, generate_episode_library
+
+# Segment a single recording
+segmenter = EpisodeSegmenter(model="qwen3vl-2b")
+episodes = segmenter.segment_recording("turn-off-nightshift")
+
+# Generate episode library from multiple recordings
+library = generate_episode_library(
+    recordings=["recording1", "recording2"],
+    output_path="episode_library.json"
+)
+
+# Access episode data
+for episode in episodes:
+    print(f"{episode.name}: {len(episode.steps)} steps")
+    print(f"Frames: {episode.start_frame} - {episode.end_frame}")
+```
+
+### Episode Schema
+
+```python
+{
+    "episode_id": "turn-off-nightshift_001",
+    "recording_name": "turn-off-nightshift",
+    "name": "Disable Night Shift",
+    "description": "Navigate to System Settings and disable Night Shift feature",
+    "start_frame": 0,
+    "end_frame": 45,
+    "duration_seconds": 12.5,
+    "key_frames": [0, 15, 30, 45],  # Representative frames
+    "steps": [
+        "Open System Settings",
+        "Navigate to Displays section",
+        "Click Night Shift tab",
+        "Toggle Night Shift off"
+    ],
+    "metadata": {
+        "confidence": 0.92,
+        "model": "qwen3vl-2b",
+        "segmentation_date": "2026-01-17T12:00:00Z"
+    }
+}
+```
+
+### How It Works
+
+```mermaid
+flowchart LR
+    subgraph Input
+        REC[Recording Frames]
+        ACT[Actions]
+    end
+
+    subgraph Analysis
+        VLM[Vision-Language Model]
+        SCENE[Scene Change Detection]
+        TASK[Task Boundary Detection]
+    end
+
+    subgraph Output
+        EP[Episodes]
+        KF[Key Frames]
+        STEPS[Step Descriptions]
+    end
+
+    REC --> VLM
+    ACT --> VLM
+    VLM --> SCENE
+    SCENE --> TASK
+    TASK --> EP
+    EP --> KF
+    EP --> STEPS
+```
+
+### Visualization
+
+Episodes can be visualized using the segmentation viewer:
+
+```bash
+# Generate interactive viewer
+cd openadapt-viewer
+python scripts/generate_segmentation_viewer.py \
+    --episodes-file segmentation_output/episodes.json \
+    --output viewer.html \
+    --open
+```
+
+See [openadapt-viewer](viewer.md#episode-segmentation-viewer) for viewer features.
+
 ## Related Packages
 
 - [openadapt-capture](capture.md) - Collect demonstrations
 - [openadapt-evals](evals.md) - Evaluate trained policies
 - [openadapt-retrieval](retrieval.md) - Trajectory retrieval for few-shot policy learning
+- [openadapt-viewer](viewer.md) - Visualize episodes and training results
