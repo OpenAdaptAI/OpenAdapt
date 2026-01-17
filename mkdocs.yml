@@ -1,0 +1,123 @@
+site_name: OpenAdapt Documentation
+site_url: https://docs.openadapt.ai
+site_description: AI-First Process Automation with Large Multimodal Models
+site_author: OpenAdapt Team
+
+repo_name: OpenAdaptAI/OpenAdapt
+repo_url: https://github.com/OpenAdaptAI/OpenAdapt
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.action.view
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/OpenAdaptAI
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/yF527cQbDG
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/OpenAdaptAI
+  generator: false
+
+copyright: Copyright &copy; 2023-2026 OpenAdapt Team
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Permissions (macOS): getting-started/permissions.md
+  - Packages:
+      - Overview: packages/index.md
+      - openadapt-capture: packages/capture.md
+      - openadapt-ml: packages/ml.md
+      - openadapt-evals: packages/evals.md
+      - openadapt-viewer: packages/viewer.md
+      - openadapt-grounding: packages/grounding.md
+      - openadapt-retrieval: packages/retrieval.md
+      - openadapt-privacy: packages/privacy.md
+  - Architecture: architecture.md
+  - CLI Reference: cli.md
+  - Contributing: contributing.md
+  - Legacy:
+      - Legacy Freeze: legacy/freeze.md
