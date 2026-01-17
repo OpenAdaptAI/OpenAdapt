@@ -1,0 +1,135 @@
+# openadapt-viewer
+
+HTML visualization components for capture data.
+
+**Repository**: [OpenAdaptAI/openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer)
+
+## Installation
+
+```bash
+pip install openadapt[viewer]
+# or
+pip install openadapt-viewer
+```
+
+## Overview
+
+The viewer package provides:
+
+- HTML-based visualization of captures
+- Interactive replay viewer
+- Event timeline display
+- Screenshot galleries
+
+## CLI Commands
+
+### View a Capture
+
+```bash
+openadapt capture view my-task
+```
+
+This opens an HTML viewer in your default browser.
+
+Options:
+
+- `--port` - Server port (default: 8080)
+- `--no-browser` - Don't open browser automatically
+
+### Start Dashboard Server
+
+```bash
+openadapt serve --port 8080
+```
+
+Access the dashboard at `http://localhost:8080`.
+
+## Python API
+
+```python
+from openadapt_viewer import PageBuilder, HTMLBuilder
+
+# Build a viewer page for a capture
+builder = PageBuilder(capture_name="my-task")
+html = builder.build()
+
+# Save to file
+with open("viewer.html", "w") as f:
+    f.write(html)
+
+# Or use HTMLBuilder for custom visualizations
+html_builder = HTMLBuilder()
+html_builder.add_screenshot(screenshot_path, events)
+html_builder.add_timeline(events)
+html = html_builder.render()
+```
+
+## Viewer Features
+
+### Screenshot Gallery
+
+Browse all captured screenshots with navigation controls.
+
+### Event Timeline
+
+Interactive timeline showing:
+
+- Mouse events (clicks, movement)
+- Keyboard events (key presses)
+- Screenshot timestamps
+- Event metadata
+
+### Replay Controls
+
+- Play/pause replay
+- Speed controls (0.5x, 1x, 2x)
+- Step forward/backward
+- Jump to specific time
+
+### Export Options
+
+- Export as HTML (static)
+- Export as video (MP4)
+- Export event log (JSON)
+
+## Key Exports
+
+| Export | Description |
+|--------|-------------|
+| `PageBuilder` | Builds viewer pages |
+| `HTMLBuilder` | Low-level HTML construction |
+| `TimelineWidget` | Timeline visualization |
+| `ScreenshotGallery` | Screenshot browser |
+
+## Customization
+
+### Custom Themes
+
+```python
+from openadapt_viewer import PageBuilder, Theme
+
+builder = PageBuilder(
+    capture_name="my-task",
+    theme=Theme.DARK  # or Theme.LIGHT
+)
+```
+
+### Custom Event Rendering
+
+```python
+from openadapt_viewer import PageBuilder, EventRenderer
+
+class CustomRenderer(EventRenderer):
+    def render_mouse_click(self, event):
+        return f"<div class='custom-click'>{event}</div>"
+
+builder = PageBuilder(
+    capture_name="my-task",
+    renderer=CustomRenderer()
+)
+```
+
+## Related Packages
+
+- [openadapt-capture](capture.md) - Record data to visualize
+- [openadapt-privacy](privacy.md) - Scrub sensitive data before viewing
