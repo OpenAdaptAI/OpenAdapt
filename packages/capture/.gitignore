@@ -51,3 +51,6 @@ uv.lock
 
 # Demo captures (large data files)
 demo_*/
+
+# Test captures (large data files)
+turn-off-nightshift/
