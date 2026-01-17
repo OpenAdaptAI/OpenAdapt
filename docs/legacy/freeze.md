@@ -222,7 +222,7 @@ A migration script will be provided to convert legacy recordings to the new form
 ## Support
 
 - **Discord**: https://discord.gg/yF527cQbDG
-- **GitHub Issues**: https://github.com/OpenAdaptAI/OpenAdapt/issues (legacy)
+- **GitHub Issues**: https://github.com/OpenAdaptAI/OpenAdapt/issues
 - **New Packages Issues**: See individual package repositories
 
 ---
