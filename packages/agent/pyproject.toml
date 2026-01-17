@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-agent"
+version = "0.1.0"
+description = "Production execution engine for OpenAdapt GUI automation agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
+]
+maintainers = [
+    {name = "OpenAdaptAI", email = "contact@openadapt.ai"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["gui", "automation", "agent", "ai", "safety", "execution", "production"]
+
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    # Integration with openadapt-ml for safety module and trained models
+    "openadapt-ml>=0.1.0",
+]
+grounding = [
+    # UI element detection for action execution
+    "openadapt-grounding>=0.1.0",
+]
+capture = [
+    # Screen observation capture
+    "openadapt-capture>=0.1.0",
+]
+tray = [
+    # Desktop tray application for GUI confirmations
+    "openadapt-tray>=0.1.0",
+]
+evals = [
+    # Benchmark evaluation integration
+    "openadapt-evals>=0.1.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "openadapt-agent[ml,grounding,capture,tray,evals,dev]",
+]
+
+[project.scripts]
+openadapt-agent = "openadapt_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-agent"
+Repository = "https://github.com/OpenAdaptAI/openadapt-agent"
+Documentation = "https://github.com/OpenAdaptAI/openadapt-agent#readme"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt-agent/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openadapt_agent"]
+
+[tool.ruff]
+line-length = 100
