@@ -6,173 +6,8 @@ on:
       - main
 
 jobs:
-  check_last_commit_author:
+  release-and-publish:
     runs-on: ubuntu-latest
-    outputs:
-      skip_ci: ${{ steps.check_last_commit_author.outputs.skip_ci }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check last commit author
-        id: check_last_commit_author
-        run: |
-          LAST_COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
-          if [ "$LAST_COMMIT_AUTHOR" = "OpenAdapt Bot" ]; then
-            echo "skip_ci=true" >> $GITHUB_OUTPUT
-          fi
-
-  build-macos-executables:
-    name: Build macOS app
-    runs-on: macos-latest
-    needs: check_last_commit_author
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
-    steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-          with:
-              fetch-depth: 0
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-              python-version: '3.10'
-        - name: Install dependencies
-          run: |
-              pip install poetry
-              poetry install
-              brew install nvm
-              poetry run postinstall
-              brew install python-tk@3.10
-        - name: Build MacOS executable
-          run: |
-              poetry run python -m openadapt.build
-              cd dist
-              zip -r ../OpenAdapt.app.zip OpenAdapt.app
-              mv OpenAdapt.dmg ..
-              cd ..
-        - name: Upload MacOS executable
-          uses: actions/upload-artifact@v4
-          with:
-              name: OpenAdapt.app
-              path: OpenAdapt.app.zip
-        - name: Upload MacOS installer
-          uses: actions/upload-artifact@v4
-          with:
-              name: OpenAdapt.dmg
-              path: OpenAdapt.dmg
-
-  build-windows-executables:
-    name: Build Windows app
-    runs-on: windows-latest
-    needs: check_last_commit_author
-    if: ${{ needs.check_last_commit_author.outputs.skip_ci != 'true' }}
-    steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-          with:
-              fetch-depth: 0
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-              python-version: '3.10'
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
-          with:
-              node-version: 21
-        - name: Install dependencies
-          run: |
-              pip install poetry
-              poetry install
-              cd openadapt/app/dashboard
-              npm install
-              cd ../../../
-              pip install wheel
-              poetry run postinstall
-        - name: Build Windows executable
-          run: |
-              poetry run python -m openadapt.build
-              cd dist
-              7z a -tzip ../OpenAdapt.zip OpenAdapt
-              move OpenAdapt_Installer.exe ..
-              cd ..
-        - name: Upload Windows executable
-          uses: actions/upload-artifact@v4
-          with:
-              name: OpenAdapt
-              path: OpenAdapt.zip
-        - name: Upload Windows installer
-          uses: actions/upload-artifact@v4
-          with:
-              name: OpenAdapt_Installer
-              path: OpenAdapt_Installer.exe
-
-  test_on_macos:
-    name: Test on macOS
-    runs-on: macos-latest
-    needs: [build-macos-executables]
-    outputs:
-      macos_build_status: ${{ steps.test_on_macos.outputs.status }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Download macOS executable
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt.app
-          path: dist/
-      - name: Run app
-        id: test_on_macos
-        run: |
-          ./build_scripts/test_app_run_macos.sh
-          EXIT_CODE=$?
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "macos_build_status=failed" >> $GITHUB_OUTPUT
-          fi
-
-  test_on_windows:
-    name: Test on Windows
-    runs-on: windows-latest
-    needs: [build-windows-executables]
-    outputs:
-      windows_build_status: ${{ steps.test_on_windows.outputs.windows_build_status }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Download Windows executable
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt
-          path: dist/
-      - name: Run app
-        id: test_on_windows
-        shell: powershell
-        run: |
-          cmd.exe /c .\build_scripts\test_app_run_windows.bat
-          if ($LastExitCode -ne 0) {
-            "windows_build_status=failed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-
-  consolidate_tests:
-    name: Consolidate test results
-    runs-on: ubuntu-latest
-    needs: [test_on_windows, test_on_macos]
-    steps:
-      - name: Consolidate test results
-        id: consolidate_test_results
-        run: |
-          if [ "${{ needs.test_on_windows.outputs.windows_build_status }}" = "failed" ] || [ "${{ needs.test_on_macos.outputs.macos_build_status }}" = "failed" ]; then
-            echo "Error: Tests failed"
-            exit 1
-          fi
-
-  release:
-    runs-on: ubuntu-latest
-    needs: [consolidate_tests]
     concurrency: release
     permissions:
       id-token: write
@@ -182,68 +17,39 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - name: Check if should skip
+        id: check_skip
+        run: |
+          if [ "$(git log -1 --pretty=format:'%an')" = "OpenAdapt Bot" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Python
+        if: steps.check_skip.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install the latest version of the project
-        run: |
-          git pull
-          pip install poetry
-          poetry install
-      - name: Download macOS executable
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt.app
-          path: dist/
-      - name: Download Windows executable
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt
-          path: dist/
-      - name: Download macOS installer
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt.dmg
-          path: dist/
-      - name: Download Windows installer
-        uses: actions/download-artifact@v4
-        with:
-          name: OpenAdapt_Installer
-          path: dist/
+
+      - name: Install dependencies
+        if: steps.check_skip.outputs.skip != 'true'
+        run: pip install poetry
+
       - name: Python Semantic Release
-        id: semantic_release
+        if: steps.check_skip.outputs.skip != 'true'
         uses: python-semantic-release/python-semantic-release@v9.6.0
         with:
-          github_token: ${{ secrets.ADMIN_TOKEN }} # Use the new token for authentication
+          github_token: ${{ secrets.ADMIN_TOKEN }}
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./build_scripts/upload_release_artifacts.sh
 
-  publish:
-    name: Publish to PyPI
-    needs: [release]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Publish to PyPI
+      - name: Build and publish to PyPI
+        if: steps.check_skip.outputs.skip != 'true'
         env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          pip install poetry
-          poetry install
+          git pull
           poetry config pypi-token.pypi $PYPI_TOKEN
           poetry build
           poetry publish --no-interaction --skip-existing
