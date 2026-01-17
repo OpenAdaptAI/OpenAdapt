@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v1.0.4 (2026-01-17)
+
+### Bug Fixes
+
+- Resolve MkDocs broken links in production-execution-design.md
+  ([`b21c86c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b21c86c0484befcc5b7068a1edbd66c9be65c6d0))
+
+- Resolve MkDocs broken links in production-execution-design.md
+  ([`964a58b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/964a58be893277dead98d527fc64b26671c911dc))
+
+- Use filename-based GitHub Actions badge URL
+  ([`1d3efaf`](https://github.com/OpenAdaptAI/OpenAdapt/commit/1d3efafea1cef54de97f55dfb60e58a6357aebb7))
+
+### Documentation
+
+- Add production execution design (openadapt-agent proposal)
+  ([#977](https://github.com/OpenAdaptAI/OpenAdapt/pull/977),
+  [`fcef4c8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fcef4c89866b36ebef06bf8c0adaa01ab4064ca7))
+
+- Fix badge URL and simplify README
+  ([`5e04c02`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5e04c02b68dbe2fea84ba401dcb4715c359533f4))
+
+- Qualify README claims for intellectual honesty
+  ([`57c42f4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/57c42f4e1f447a82f819d9ac4b9565b5696a9b10))
+
+- Simplify roadmap and fix Python version claims
+  ([`0c0346c`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0c0346cfb211b33bcb2dd418fd2e542f7393bed1))
+
+
 ## v1.0.3 (2026-01-17)
 
 ### Bug Fixes
