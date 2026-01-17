@@ -1,6 +1,6 @@
 # OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs)
 
-[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/workflows/Python%20CI/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions)
+[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
