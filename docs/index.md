@@ -65,30 +65,84 @@ MIT licensed. Full transparency, community-driven development, and no vendor loc
 
 ## Quick Start
 
+### Installation
+
 Install OpenAdapt with the features you need:
 
 ```bash
 pip install openadapt[all]  # Everything
 ```
 
-Collect a demonstration:
+**What You'll See:**
+```
+Successfully installed openadapt-1.0.0
+Successfully installed openadapt-capture-1.0.0
+Successfully installed openadapt-ml-1.0.0
+Successfully installed openadapt-evals-1.0.0
+...
+```
+
+### Collect a Demonstration
 
 ```bash
 openadapt capture start --name my-task
 # Perform your task, then press Ctrl+C
 ```
 
-Learn a policy:
+**What You'll See:**
+```
+[INFO] Starting capture session: my-task
+[INFO] Recording started. Press Ctrl+C to stop.
+[INFO] Capturing events...
+^C
+[INFO] Capture stopped
+[INFO] Saved 127 events to database
+[SUCCESS] Capture 'my-task' completed successfully
+```
+
+### Learn a Policy
 
 ```bash
 openadapt train start --capture my-task --model qwen3vl-2b
 ```
 
-Evaluate:
+**What You'll See:**
+```
+[INFO] Loading capture: my-task
+[INFO] Found 127 events
+[INFO] Initializing model: qwen3vl-2b
+[INFO] Starting training...
+Epoch 1/10: 100%|████████████| 127/127 [00:45<00:00]
+Epoch 2/10: 100%|████████████| 127/127 [00:43<00:00]
+...
+[SUCCESS] Training complete. Model saved to: training_output/model.pt
+```
+
+### Evaluate
 
 ```bash
 openadapt eval run --checkpoint training_output/model.pt --benchmark waa
 ```
+
+**What You'll See:**
+```
+[INFO] Loading checkpoint: training_output/model.pt
+[INFO] Running benchmark: waa
+[INFO] Processing task 1/10...
+[INFO] Processing task 2/10...
+...
+[SUCCESS] Evaluation complete
+Results:
+  Success Rate: 85.0%
+  Average Steps: 12.3
+  Total Time: 5m 32s
+```
+
+**Success Indicators:**
+- Green checkmarks or `[SUCCESS]` messages indicate completion
+- No error or warning messages in the output
+- Output files created in expected locations
+- Metrics show reasonable values (success rate > 0%)
 
 See the [Installation Guide](getting-started/installation.md) for detailed setup instructions.
 
