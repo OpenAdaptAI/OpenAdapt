@@ -1,5 +1,13 @@
 # openadapt-tray
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+
+<!-- PyPI badges (uncomment once package is published)
+[![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
+[![Downloads](https://img.shields.io/pypi/dm/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
+-->
+
 A cross-platform system tray application for [OpenAdapt](https://openadapt.ai), providing a graphical interface for controlling recording, monitoring training, and accessing settings without using the command line.
 
 ## Features
