@@ -20,14 +20,14 @@ This document outlines the prioritized roadmap for OpenAdapt, focusing on ensuri
 |---------|---------|--------|--------|
 | `openadapt` | 1.0.0 (meta) | >=3.10 | Published |
 | `openadapt-capture` | 0.1.0 | >=3.10 | Published |
-| `openadapt-ml` | 0.2.0 | >=3.12 | Published |
+| `openadapt-ml` | 0.2.0 | >=3.10 | Published |
 | `openadapt-evals` | 0.1.0 | >=3.10 | Published |
 | `openadapt-viewer` | 0.1.0 | >=3.10 | Published |
 | `openadapt-grounding` | 0.1.0 | >=3.10 | Published |
 | `openadapt-retrieval` | 0.1.0 | >=3.10 | Published |
 | `openadapt-privacy` | 0.1.0 | >=3.10 | Published |
 
-**Note**: `openadapt-ml` requires Python 3.12+, which may cause compatibility issues with other packages requiring 3.10.
+**Note**: All packages now support Python 3.10+ for consistent compatibility.
 
 ### CI/Test Status
 
@@ -116,7 +116,7 @@ The `openadapt` meta-package v1.0.0 uses:
 | **Effort** | Medium (2-4 hours) |
 | **Owner** | TBD |
 
-**Description**: Critical compatibility issue - `openadapt-ml` requires Python 3.12+, but `openadapt-capture` and others require 3.10+. Need to verify `pip install openadapt[all]` works.
+**Description**: Verify `pip install openadapt[all]` works on all supported Python versions.
 
 **Test Matrix**:
 
@@ -124,16 +124,14 @@ The `openadapt` meta-package v1.0.0 uses:
 |-------------|-------------|-------------|-------------|
 | `openadapt` | Test | Test | Test |
 | `openadapt[capture]` | Test | Test | Test |
-| `openadapt[ml]` | Expected Fail | Expected Fail | Test |
-| `openadapt[core]` | Expected Fail | Expected Fail | Test |
-| `openadapt[all]` | Expected Fail | Expected Fail | Test |
+| `openadapt[ml]` | Test | Test | Test |
+| `openadapt[core]` | Test | Test | Test |
+| `openadapt[all]` | Test | Test | Test |
 
 **Next Actions**:
-- [ ] Test `pip install openadapt[all]` on Python 3.12
-- [ ] Test `pip install openadapt[core]` on Python 3.12
+- [ ] Test `pip install openadapt[all]` on Python 3.10, 3.11, 3.12
+- [ ] Test `pip install openadapt[core]` on Python 3.10, 3.11, 3.12
 - [ ] Verify imports work: `python -c "from openadapt.cli import main"`
-- [ ] Document minimum Python version clearly (3.12 if ml is needed)
-- [ ] Consider downgrading `openadapt-ml` requirements to 3.10+ if feasible
 
 ---
 
@@ -475,7 +473,6 @@ P3: Documentation Site ───────────────────
 
 | Issue | Severity | Package | Notes |
 |-------|----------|---------|-------|
-| Python version mismatch | Medium | `openadapt-ml` | Requires 3.12+, others 3.10+ |
 | `capture stop` TODO | Low | `openadapt` CLI | Uses Ctrl+C instead of signal/file |
 | `release-and-publish.yml` uses hatchling | Low | Main repo | Aligned with meta-package |
 | Legacy code | Low | `/legacy/` | Many TODOs, not blocking v1.0 |
@@ -496,7 +493,7 @@ P3: Documentation Site ───────────────────
 - [ ] CI passes on all matrix combinations (Python 3.10/3.11/3.12, macOS/Ubuntu)
 - [ ] PR #969 merged
 - [ ] Docker build succeeds for OmniParser
-- [ ] `pip install openadapt[core]` works on Python 3.12
+- [ ] `pip install openadapt[core]` works on Python 3.10, 3.11, 3.12
 - [ ] Basic capture/eval workflow demonstrated
 
 ### P1 Complete (1-2 Weeks)
