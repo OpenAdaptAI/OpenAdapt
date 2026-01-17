@@ -59,7 +59,7 @@ openadapt eval run --checkpoint model.pt
 - Add rate limit / API failure handling
 
 ### 6. Demo Conditioning in Evals
-- **Key result**: 33% -> 100% first-action accuracy with demo conditioning
+- **Key result**: 46.7% -> 100% first-action accuracy with demo conditioning (on shared-entry-point benchmark)
 - Integrate `openadapt-retrieval` with `openadapt-ml` adapters
 - Add `--demo` flag to `openadapt eval run`
 
