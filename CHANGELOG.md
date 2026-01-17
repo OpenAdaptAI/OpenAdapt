@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.0.3 (2026-01-17)
+
+### Bug Fixes
+
+- Resolve MkDocs build failures in strict mode
+  ([#976](https://github.com/OpenAdaptAI/OpenAdapt/pull/976),
+  [`acf3cc7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/acf3cc7f6ea94e885ac9186d59fd740c97861960))
+
+### Documentation
+
+- Revise publication roadmap with rigorous academic standards
+  ([#973](https://github.com/OpenAdaptAI/OpenAdapt/pull/973),
+  [`37170ee`](https://github.com/OpenAdaptAI/OpenAdapt/commit/37170ee984ead5dc67468299634e7aa8be2eff6c))
+
+- Update resource availability status in roadmap
+  ([#972](https://github.com/OpenAdaptAI/OpenAdapt/pull/972),
+  [`b86ae72`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b86ae7242c70e2c6b4f91815edcfc36cf1e4314d))
+
+
 ## v1.0.2 (2026-01-17)
 
 ### Bug Fixes
