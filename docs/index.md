@@ -2,7 +2,7 @@
 
 **AI-First Process Automation with Large Multimodal Models (LMMs)**
 
-OpenAdapt is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
+OpenAdapt is the **open** source software adapter between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
 Collect human demonstrations, learn agent policies, and evaluate autonomous execution - all from a unified CLI.
 
