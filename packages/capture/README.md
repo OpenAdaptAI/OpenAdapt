@@ -200,6 +200,8 @@ The HTML viewer includes:
 - Event list with details panel
 - Keyboard shortcuts (Space, arrows, Home/End)
 
+![Capture Viewer](docs/images/viewer_screenshot.png)
+
 ### Generate Demo from Command Line
 
 ```bash
