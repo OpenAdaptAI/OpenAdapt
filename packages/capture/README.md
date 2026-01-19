@@ -1,6 +1,6 @@
 # OpenAdapt Capture
 
-[![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/workflows/Tests/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-capture/actions)
+[![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
