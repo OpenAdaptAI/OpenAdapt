@@ -1,6 +1,6 @@
 # openadapt-privacy
 
-[![Build Status](https://github.com/OpenAdaptAI/openadapt-privacy/workflows/Tests/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-privacy/actions)
+[![Build Status](https://github.com/OpenAdaptAI/openadapt-privacy/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-privacy/actions)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
