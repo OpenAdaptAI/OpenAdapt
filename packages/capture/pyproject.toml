@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-capture"
-version = "0.1.0"
+version = "0.2.0"
 description = "GUI interaction capture - platform-agnostic event streams with time-aligned media"
 readme = "README.md"
 requires-python = ">=3.10"
