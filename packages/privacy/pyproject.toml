@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-privacy"
-version = "0.1.0"
+version = "0.1.1"
 description = "Privacy scrubbing for GUI automation data - PII/PHI detection and redaction"
 readme = "README.md"
 requires-python = ">=3.10"
