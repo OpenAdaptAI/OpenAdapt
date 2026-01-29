@@ -1,0 +1,101 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+
+jobs:
+  release:
+    name: Bump version and release
+    runs-on: ubuntu-latest
+    # Only run on merged PRs (not direct pushes or version bump commits)
+    if: |
+      github.event.head_commit.message != '' &&
+      !startsWith(github.event.head_commit.message, 'chore: bump version')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install toml
+        run: pip install toml
+
+      - name: Determine version bump type
+        id: bump-type
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          # Extract the type from conventional commit (feat, fix, etc.)
+          if [[ "$COMMIT_MSG" =~ ^feat ]]; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ ^(fix|perf) ]]; then
+            echo "type=patch" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ ^(docs|style|refactor|test|chore|ci|build) ]]; then
+            echo "type=patch" >> $GITHUB_OUTPUT
+          else
+            # Default to patch for non-conventional commits
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: bump
+        run: |
+          python << 'EOF'
+          import toml
+          import os
+
+          # Read current version
+          with open('pyproject.toml', 'r') as f:
+              data = toml.load(f)
+
+          current = data['project']['version']
+          major, minor, patch = map(int, current.split('.'))
+
+          bump_type = os.environ.get('BUMP_TYPE', 'patch')
+
+          if bump_type == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump_type == 'minor':
+              minor += 1
+              patch = 0
+          else:  # patch
+              patch += 1
+
+          new_version = f"{major}.{minor}.{patch}"
+          data['project']['version'] = new_version
+
+          with open('pyproject.toml', 'w') as f:
+              toml.dump(data, f)
+
+          print(f"Bumped {current} -> {new_version}")
+
+          # Set output
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"version={new_version}\n")
+              f.write(f"tag=v{new_version}\n")
+          EOF
+        env:
+          BUMP_TYPE: ${{ steps.bump-type.outputs.type }}
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}"
+          git tag ${{ steps.bump.outputs.tag }}
+          git push origin main --tags
