@@ -92,6 +92,17 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "chore: release {version}"
+build_command = "uv build"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
 [dependency-groups]
 dev = [
     "matplotlib>=3.10.8",
