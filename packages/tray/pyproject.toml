@@ -70,7 +70,6 @@ target-version = "py310"
 version_toml = ["pyproject.toml:project.version"]
 branch = "main"
 commit_message = "chore: release {version}"
-build_command = "uv build"
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
