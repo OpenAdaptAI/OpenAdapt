@@ -51,9 +51,14 @@ privacy = [
     "openadapt-privacy>=0.1.0",
 ]
 
+# Sharing via Magic Wormhole
+share = [
+    "magic-wormhole>=0.17.0",
+]
+
 # Everything
 all = [
-    "openadapt-capture[transcribe-fast,transcribe,privacy]",
+    "openadapt-capture[transcribe-fast,transcribe,privacy,share]",
 ]
 
 dev = [
