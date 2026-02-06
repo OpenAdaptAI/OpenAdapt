@@ -340,6 +340,29 @@ def _save_transcript(
         print(f"[{mins}:{secs:05.2f}] {seg['text']}")
 
 
+def share(action: str, path_or_code: str, output_dir: str = ".") -> None:
+    """Share recordings via Magic Wormhole.
+
+    Args:
+        action: Either "send" or "receive".
+        path_or_code: Recording path (for send) or wormhole code (for receive).
+        output_dir: Output directory for receive (default: current dir).
+
+    Examples:
+        capture share send ./my_recording
+        capture share receive 7-guitarist-revenge
+        capture share receive 7-guitarist-revenge ./recordings
+    """
+    from openadapt_capture.share import send, receive
+
+    if action == "send":
+        send(path_or_code)
+    elif action == "receive":
+        receive(path_or_code, output_dir)
+    else:
+        print(f"Unknown action: {action}. Use 'send' or 'receive'.")
+
+
 def main() -> None:
     """CLI entry point."""
     import fire
@@ -348,6 +371,7 @@ def main() -> None:
         "visualize": visualize,
         "info": info,
         "transcribe": transcribe,
+        "share": share,
     })
 
 
