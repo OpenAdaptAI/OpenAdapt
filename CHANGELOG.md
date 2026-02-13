@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v1.0.5 (2026-02-13)
+
+### Bug Fixes
+
+- **ci**: Fix release automation — add version_toml config, gate PyPI publish
+  ([#987](https://github.com/OpenAdaptAI/OpenAdapt/pull/987),
+  [`b284b34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b284b34f57ae89f06594a95bb9415e2fa597dd84))
+
+- **ci**: Fix release automation — add version_toml, gate PyPI publish
+  ([#987](https://github.com/OpenAdaptAI/OpenAdapt/pull/987),
+  [`b284b34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b284b34f57ae89f06594a95bb9415e2fa597dd84))
+
+### Documentation
+
+- Add terminal output examples and success indicators to quick start
+  ([#987](https://github.com/OpenAdaptAI/OpenAdapt/pull/987),
+  [`b284b34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b284b34f57ae89f06594a95bb9415e2fa597dd84))
+
+- Add terminal output examples and success indicators to quick start
+  ([#986](https://github.com/OpenAdaptAI/OpenAdapt/pull/986),
+  [`a3b6876`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a3b68769c5bbe64e4a112505f55f7315bf7bf3ca))
+
+- Fix stars rendering and add new feature documentation
+  ([#987](https://github.com/OpenAdaptAI/OpenAdapt/pull/987),
+  [`b284b34`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b284b34f57ae89f06594a95bb9415e2fa597dd84))
+
+- Fix stars rendering and add new feature documentation
+  ([#986](https://github.com/OpenAdaptAI/OpenAdapt/pull/986),
+  [`a3b6876`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a3b68769c5bbe64e4a112505f55f7315bf7bf3ca))
+
+
 ## v1.0.4 (2026-01-17)
 
 ### Bug Fixes
