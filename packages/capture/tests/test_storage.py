@@ -8,7 +8,6 @@ import pytest
 from openadapt_capture.events import (
     EventType,
     KeyDownEvent,
-    KeyUpEvent,
     MouseButton,
     MouseDownEvent,
     MouseMoveEvent,

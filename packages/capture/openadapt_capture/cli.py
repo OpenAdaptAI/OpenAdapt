@@ -353,7 +353,7 @@ def share(action: str, path_or_code: str, output_dir: str = ".") -> None:
         capture share receive 7-guitarist-revenge
         capture share receive 7-guitarist-revenge ./recordings
     """
-    from openadapt_capture.share import send, receive
+    from openadapt_capture.share import receive, send
 
     if action == "send":
         send(path_or_code)

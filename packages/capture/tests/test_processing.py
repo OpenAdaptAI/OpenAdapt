@@ -1,6 +1,5 @@
 """Tests for event processing pipeline."""
 
-import pytest
 
 from openadapt_capture.events import (
     KeyDownEvent,

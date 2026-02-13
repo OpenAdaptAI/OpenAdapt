@@ -87,7 +87,7 @@ def send(recording_dir: str) -> str | None:
 
         try:
             # Run wormhole send
-            result = subprocess.run(
+            subprocess.run(
                 ["wormhole", "send", str(zip_path)],
                 check=True,
             )
@@ -123,7 +123,7 @@ def receive(code: str, output_dir: str = ".") -> Path | None:
 
         try:
             # Run wormhole receive
-            result = subprocess.run(
+            subprocess.run(
                 ["wormhole", "receive", "--accept-file", "-o", str(tmpdir), code],
                 check=True,
             )

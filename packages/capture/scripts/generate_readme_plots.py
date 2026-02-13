@@ -11,10 +11,9 @@ Usage:
 
 from pathlib import Path
 
-import numpy as np
-
 # Ensure matplotlib uses non-interactive backend
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

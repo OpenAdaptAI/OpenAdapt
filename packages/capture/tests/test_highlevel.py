@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_capture import Capture, CaptureSession, Recorder
+from openadapt_capture import Capture, Recorder
 from openadapt_capture.events import MouseButton, MouseDownEvent, MouseUpEvent
 from openadapt_capture.storage import CaptureStorage
 
@@ -95,19 +95,16 @@ class TestCapture:
 
     def test_capture_actions_iterator(self, temp_capture_dir):
         """Test iterating over actions."""
-        import time
-
         capture_path = Path(temp_capture_dir) / "capture"
 
         # Create capture and add some events manually
-        with Recorder(capture_path) as recorder:
+        with Recorder(capture_path):
             pass
 
         # Get the capture's time range and add events within it
         storage = CaptureStorage(capture_path / "capture.db")
         capture_meta = storage.get_capture()
         started_at = capture_meta.started_at
-        ended_at = capture_meta.ended_at or time.time()
 
         # Write events with timestamps within the capture window
         storage.write_event(

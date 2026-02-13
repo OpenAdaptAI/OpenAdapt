@@ -1,6 +1,5 @@
 """Tests for event schemas."""
 
-import pytest
 
 from openadapt_capture.events import (
     AudioChunkEvent,

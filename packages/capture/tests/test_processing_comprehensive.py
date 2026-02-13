@@ -28,10 +28,8 @@ from openadapt_capture.processing import (
     merge_consecutive_mouse_move_events,
     merge_consecutive_mouse_scroll_events,
     process_events,
-    remove_invalid_keyboard_events,
     remove_redundant_mouse_move_events,
 )
-
 
 # =============================================================================
 # Test Fixtures and Helpers

@@ -113,8 +113,8 @@ def test_codec(
     Returns:
         CodecResult with metrics.
     """
-    from openadapt_capture.video import VideoWriter, extract_frames
     from openadapt_capture.comparison import compute_psnr
+    from openadapt_capture.video import VideoWriter, extract_frames
 
     video_path = output_dir / f"test_{codec}.mp4"
     width, height = frames[0].size
@@ -150,7 +150,7 @@ def test_codec(
     print(f"  Encode time: {encode_time:.2f}s")
 
     # Decode and compare
-    print(f"  Extracting frames for comparison...")
+    print("  Extracting frames for comparison...")
     decode_start = time.time()
 
     # Extract frames at same timestamps
@@ -168,7 +168,7 @@ def test_codec(
     print(f"  Decode time: {decode_time:.2f}s")
 
     # Compare frames
-    print(f"  Computing accuracy metrics...")
+    print("  Computing accuracy metrics...")
     diffs = []
     max_diffs = []
     psnrs = []
@@ -230,7 +230,7 @@ def print_comparison(results: list[CodecResult]) -> None:
 
         if h264 and h265:
             size_reduction = (1 - h265.file_size_bytes / h264.file_size_bytes) * 100
-            print(f"\nH.265 vs H.264:")
+            print("\nH.265 vs H.264:")
             print(f"  Size reduction: {size_reduction:.1f}%")
             print(f"  Quality difference (PSNR): {h265.psnr - h264.psnr:+.2f} dB")
             print(f"  Encode time ratio: {h265.encode_time_seconds / h264.encode_time_seconds:.2f}x")

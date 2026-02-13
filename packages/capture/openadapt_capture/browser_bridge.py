@@ -381,20 +381,14 @@ class BrowserBridge:
         self._event_count += 1
 
         # Parse into typed event if possible
-        typed_event = self._parse_typed_event(event_type, payload, data)
+        self._parse_typed_event(event_type, payload, data)
 
         # Store in CaptureStorage if available
         if self.storage is not None:
-            # Store as JSON in the events table
-            # Note: We store the raw event, not Pydantic model to match storage patterns
-            try:
-                from openadapt_capture.events import BaseEvent
-                # Create a minimal event for storage compatibility
-                # Browser events don't fit the standard EventType enum
-                # so we store them as raw JSON in a custom way
-                pass  # Storage integration would go here
-            except ImportError:
-                pass
+            # Storage integration would go here
+            # Browser events don't fit the standard EventType enum
+            # so we store them as raw JSON in a custom way
+            pass
 
         # Notify callback
         if self.on_event is not None:

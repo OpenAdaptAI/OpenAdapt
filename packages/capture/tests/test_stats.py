@@ -203,7 +203,7 @@ class TestPlotCapturePerformance:
         pytest.importorskip("matplotlib")
         from PIL import Image
 
-        from openadapt_capture.events import MouseDownEvent, MouseButton
+        from openadapt_capture.events import MouseButton, MouseDownEvent
         from openadapt_capture.stats import plot_capture_performance
         from openadapt_capture.storage import create_capture
 
@@ -234,7 +234,7 @@ class TestPlotCapturePerformance:
     def test_plot_capture_saves_to_file(self, tmp_path):
         """Test plotting a capture and saving to file."""
         pytest.importorskip("matplotlib")
-        from openadapt_capture.events import MouseDownEvent, MouseButton
+        from openadapt_capture.events import MouseButton, MouseDownEvent
         from openadapt_capture.stats import plot_capture_performance
         from openadapt_capture.storage import create_capture
 

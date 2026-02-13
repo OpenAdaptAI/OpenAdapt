@@ -14,9 +14,14 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from openadapt_capture.stats import CaptureStats
 
 # Set matplotlib backend before importing pyplot
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -60,7 +65,7 @@ def run_real_capture(duration: float = 5.0) -> "CaptureStats":
         print(f"Captured {recorder.event_count} input events, {stat_count} total stats")
         return recorder.stats, capture_dir
 
-    except Exception as e:
+    except Exception:
         # Clean up on error
         shutil.rmtree(capture_dir, ignore_errors=True)
         raise
@@ -73,7 +78,6 @@ def generate_performance_plot(stats: "CaptureStats", output_path: Path) -> None:
         stats: CaptureStats from a real capture.
         output_path: Where to save the plot.
     """
-    from openadapt_capture.stats import PerfStat
 
     if not stats.stats:
         print("No stats recorded!")

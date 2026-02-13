@@ -77,6 +77,12 @@ from openadapt_capture.visualize import create_demo, create_html
 
 # Browser events and bridge (optional - requires websockets)
 try:
+    from openadapt_capture.browser_bridge import (
+        BrowserBridge,
+        BrowserEventRecord,
+        BrowserMode,
+        run_browser_bridge,
+    )
     from openadapt_capture.browser_events import (
         BoundingBox,
         BrowserClickEvent,
@@ -92,12 +98,6 @@ try:
         NavigationType,
         SemanticElementRef,
         VisibleElement,
-    )
-    from openadapt_capture.browser_bridge import (
-        BrowserBridge,
-        BrowserEventRecord,
-        BrowserMode,
-        run_browser_bridge,
     )
     _BROWSER_BRIDGE_AVAILABLE = True
 except ImportError:

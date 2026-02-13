@@ -4,10 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
-<!-- PyPI badges (uncomment once package is published)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
--->
 
 **OpenAdapt Capture** is the data collection component of the [OpenAdapt](https://github.com/OpenAdaptAI) GUI automation ecosystem.
 
@@ -43,7 +41,7 @@ Capture platform-agnostic GUI interaction streams with time-aligned screenshots 
 |-----------|---------|------------|
 | **openadapt-capture** | Record human demonstrations | [GitHub](https://github.com/OpenAdaptAI/openadapt-capture) |
 | **openadapt-ml** | Train and evaluate GUI automation models | [GitHub](https://github.com/OpenAdaptAI/openadapt-ml) |
-| **openadapt-privacy** | PII scrubbing for recordings | Coming soon |
+| **openadapt-privacy** | PII scrubbing for recordings | [GitHub](https://github.com/OpenAdaptAI/openadapt-privacy) |
 
 ---
 
@@ -208,75 +206,29 @@ The HTML viewer includes:
 uv run python scripts/generate_readme_demo.py --duration 10
 ```
 
+## Sharing Recordings
+
+Share recordings between machines using [Magic Wormhole](https://magic-wormhole.readthedocs.io/):
+
+```bash
+# On the sending machine
+capture share send ./my_capture
+# Shows a code like: 7-guitarist-revenge
+
+# On the receiving machine
+capture share receive 7-guitarist-revenge
+```
+
+The `share` command compresses the recording, sends it via Magic Wormhole, and extracts it on the receiving end. No account or setup required - just share the code.
+
 ## Optional Extras
 
 | Extra | Features |
 |-------|----------|
 | `audio` | Audio capture + Whisper transcription |
-| `privacy` | PII scrubbing (openadapt-privacy) |
+| `privacy` | PII scrubbing ([openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy)) |
+| `share` | Recording sharing via Magic Wormhole |
 | `all` | Everything |
-
----
-
-## Training with OpenAdapt-ML
-
-Captured recordings can be used to train vision-language models with [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml).
-
-### End-to-End Workflow
-
-```bash
-# 1. Capture a workflow demonstration
-uv run python -c "
-from openadapt_capture import Recorder
-
-with Recorder('./my_capture', task_description='Turn off Night Shift') as recorder:
-    input('Perform the task, then press Enter to stop...')
-"
-
-# 2. Train a model on the capture (requires openadapt-ml)
-uv pip install openadapt-ml
-uv run python -m openadapt_ml.cloud.local train \
-  --capture ./my_capture \
-  --open  # Opens training dashboard
-
-# 3. Compare human vs model predictions
-uv run python -m openadapt_ml.scripts.compare \
-  --capture ./my_capture \
-  --checkpoint checkpoints/model \
-  --open
-```
-
-### Cloud GPU Training
-
-For faster training with cloud GPUs:
-
-```bash
-# Train on Lambda Labs A10 (~$0.75/hr)
-uv run python -m openadapt_ml.cloud.lambda_labs train \
-  --capture ./my_capture \
-  --goal "Turn off Night Shift"
-```
-
-See the [openadapt-ml documentation](https://github.com/OpenAdaptAI/openadapt-ml#6-cloud-gpu-training) for cloud setup.
-
-### Data Format
-
-OpenAdapt-ML converts captures to its Episode format automatically:
-
-```python
-from openadapt_ml.ingest.capture import capture_to_episode
-
-episode = capture_to_episode("./my_capture")
-print(f"Loaded {len(episode.steps)} steps")
-print(f"Instruction: {episode.instruction}")
-```
-
-The conversion maps capture event types to ML action types:
-- `mouse.singleclick` / `mouse.click` -> `CLICK`
-- `mouse.doubleclick` -> `DOUBLE_CLICK`
-- `mouse.drag` -> `DRAG`
-- `mouse.scroll` -> `SCROLL`
-- `key.type` -> `TYPE`
 
 ---
 
@@ -290,6 +242,8 @@ uv run pytest
 ## Related Projects
 
 - [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train and evaluate GUI automation models
+- [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) - PII detection and scrubbing for recordings
+- [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) - Benchmark evaluation for GUI agents
 - [Windows Agent Arena](https://github.com/microsoft/WindowsAgentArena) - Benchmark for Windows GUI agents
 
 ## License
