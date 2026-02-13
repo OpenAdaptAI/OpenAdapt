@@ -38,6 +38,7 @@ jobs:
 
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
+        id: release
         uses: python-semantic-release/python-semantic-release@v10.5.3
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
@@ -45,7 +46,7 @@ jobs:
           git_committer_email: "bot@openadapt.ai"
 
       - name: Build and publish to PyPI
-        if: steps.check_skip.outputs.skip != 'true'
+        if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
         env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
