@@ -24,9 +24,11 @@ from typing import Optional
 
 import click
 
+from openadapt.autoupdate import maybe_auto_update
+from openadapt.version import __version__
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="openadapt")
+@click.version_option(version=__version__, prog_name="openadapt")
 def main():
     """OpenAdapt - GUI automation with ML.
 
@@ -38,7 +40,12 @@ def main():
         openadapt train --capture my-task        # Train a model
         openadapt eval --checkpoint model.pt     # Evaluate the model
     """
-    pass
+    # Auto-update the meta-package in-place and re-exec the CLI.
+    # If anything fails, continue with the user's command.
+    try:
+        maybe_auto_update()
+    except Exception:
+        pass
 
 
 # =============================================================================
