@@ -49,6 +49,9 @@ class Settings(BaseSettings):
         list(stop_str) for stop_str in STOP_STRS
     ] + SPECIAL_CHAR_STOP_SEQUENCES
 
+    # Maximum screenshots per second (0 = unlimited / legacy behavior)
+    SCREEN_CAPTURE_FPS: float = 10.0
+
     # Performance plotting
     PLOT_PERFORMANCE: bool = True
 
@@ -89,6 +92,7 @@ _FIELD_TO_CONFIG_ATTR = {
     "stop_sequences": "STOP_SEQUENCES",
     "log_memory": "LOG_MEMORY",
     "plot_performance": "PLOT_PERFORMANCE",
+    "screen_capture_fps": "SCREEN_CAPTURE_FPS",
 }
 
 
@@ -107,6 +111,7 @@ class RecordingConfig:
     stop_sequences: list[list[str]] | None = None
     log_memory: bool | None = None
     plot_performance: bool | None = None
+    screen_capture_fps: float | None = None
 
 
 @contextmanager

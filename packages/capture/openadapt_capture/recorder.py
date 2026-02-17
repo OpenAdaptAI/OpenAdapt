@@ -719,12 +719,11 @@ def read_screen_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_event: threading.Event,
-    # TODO: throttle
-    # max_cpu_percent: float = 50.0,  # Maximum allowed CPU percent
-    # max_memory_percent: float = 50.0,  # Maximum allowed memory percent
-    # fps_warning_threshold: float = 10.0,  # FPS threshold below which to warn
 ) -> None:
     """Read screen events and add them to the event queue.
+
+    Captures at most ``config.SCREEN_CAPTURE_FPS`` frames per second.
+    Set to 0 for unlimited (legacy behaviour).
 
     Args:
         event_q: A queue for adding screen events.
@@ -734,9 +733,13 @@ def read_screen_events(
     """
     utils.set_start_time(recording.timestamp)
 
-    logger.info("Starting")
+    fps = config.SCREEN_CAPTURE_FPS
+    min_interval = 1.0 / fps if fps > 0 else 0.0
+
+    logger.info(f"Starting (fps={fps}, min_interval={min_interval:.3f}s)")
     started = False
     while not terminate_processing.is_set():
+        t_start = time.perf_counter()
         screenshot = utils.take_screenshot()
         if screenshot is None:
             logger.warning("Screenshot was None")
@@ -745,6 +748,12 @@ def read_screen_events(
             started_event.set()
             started = True
         event_q.put(Event(utils.get_timestamp(), "screen", screenshot))
+        # Throttle: sleep for the remainder of the frame interval
+        if min_interval > 0:
+            elapsed = time.perf_counter() - t_start
+            sleep_time = min_interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
     logger.info("Done")
 
 
@@ -1722,6 +1731,7 @@ class Recorder:
         stop_sequences: list[list[str]] | None = None,
         log_memory: bool | None = None,
         plot_performance: bool | None = None,
+        screen_capture_fps: float | None = None,
     ) -> None:
         from pathlib import Path
 
@@ -1743,6 +1753,7 @@ class Recorder:
             stop_sequences=stop_sequences,
             log_memory=log_memory,
             plot_performance=plot_performance,
+            screen_capture_fps=screen_capture_fps,
         )
 
         # Shared state for cross-thread communication
