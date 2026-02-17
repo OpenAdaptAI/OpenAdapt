@@ -57,7 +57,7 @@ class TestRecorder:
     def test_recorder_class_exists(self):
         """Test that Recorder class can be instantiated."""
         rec = Recorder("/tmp/test_capture_never_created", task_description="test")
-        assert rec.capture_dir == "/tmp/test_capture_never_created"
+        assert rec.capture_dir.endswith("test_capture_never_created")
         assert rec.task_description == "test"
 
     def test_recorder_has_context_manager(self):
@@ -65,6 +65,60 @@ class TestRecorder:
         assert hasattr(Recorder, "__enter__")
         assert hasattr(Recorder, "__exit__")
         assert hasattr(Recorder, "stop")
+
+    def test_recorder_accepts_capture_params(self):
+        """Test Recorder accepts capture_video, capture_audio, etc."""
+        rec = Recorder(
+            "/tmp/test_never_created",
+            task_description="test",
+            capture_video=True,
+            capture_audio=False,
+            capture_images=True,
+            capture_full_video=False,
+            plot_performance=False,
+        )
+        assert rec.task_description == "test"
+
+    def test_recorder_event_count_property(self):
+        """Test Recorder has event_count property starting at 0."""
+        rec = Recorder("/tmp/test_never_created")
+        assert rec.event_count == 0
+
+    def test_recorder_is_recording_property(self):
+        """Test Recorder has is_recording property (False before start)."""
+        rec = Recorder("/tmp/test_never_created")
+        assert rec.is_recording is False
+
+    def test_recorder_stats_property(self):
+        """Test Recorder has stats property returning dict."""
+        rec = Recorder("/tmp/test_never_created")
+        stats = rec.stats
+        assert isinstance(stats, dict)
+        assert "action_events" in stats
+        assert "screen_events" in stats
+        assert "video_frames" in stats
+        assert "is_recording" in stats
+        assert stats["action_events"] == 0
+
+    def test_recorder_wait_for_ready_method(self):
+        """Test Recorder has wait_for_ready method."""
+        rec = Recorder("/tmp/test_never_created")
+        assert callable(rec.wait_for_ready)
+
+    def test_recorder_capture_property_before_recording(self):
+        """Test Recorder.capture is None before recording."""
+        rec = Recorder("/tmp/test_never_created")
+        assert rec.capture is None
+
+    def test_recorder_screen_count_property(self):
+        """Test Recorder has screen_count property."""
+        rec = Recorder("/tmp/test_never_created")
+        assert rec.screen_count == 0
+
+    def test_recorder_video_frame_count_property(self):
+        """Test Recorder has video_frame_count property."""
+        rec = Recorder("/tmp/test_never_created")
+        assert rec.video_frame_count == 0
 
 
 class TestCapture:
@@ -374,3 +428,58 @@ class TestCaptureEdgeCases:
 
         with pytest.raises(Exception):
             Capture.load(capture_path)
+
+
+class TestRecordingConfig:
+    """Tests for RecordingConfig and config_override."""
+
+    def test_config_override_applies_and_restores(self):
+        """Test that config_override patches and restores config."""
+        from openadapt_capture.config import (
+            RecordingConfig,
+            config,
+            config_override,
+        )
+
+        original_video = config.RECORD_VIDEO
+        original_audio = config.RECORD_AUDIO
+
+        rc = RecordingConfig(capture_video=False, capture_audio=True)
+        with config_override(rc):
+            assert config.RECORD_VIDEO is False
+            assert config.RECORD_AUDIO is True
+
+        # Restored
+        assert config.RECORD_VIDEO == original_video
+        assert config.RECORD_AUDIO == original_audio
+
+    def test_config_override_none_values_unchanged(self):
+        """Test that None values in RecordingConfig don't change config."""
+        from openadapt_capture.config import (
+            RecordingConfig,
+            config,
+            config_override,
+        )
+
+        original_video = config.RECORD_VIDEO
+        rc = RecordingConfig()  # all None
+        with config_override(rc):
+            assert config.RECORD_VIDEO == original_video
+
+    def test_config_override_restores_on_exception(self):
+        """Test that config is restored even if body raises."""
+        from openadapt_capture.config import (
+            RecordingConfig,
+            config,
+            config_override,
+        )
+
+        original_video = config.RECORD_VIDEO
+        rc = RecordingConfig(capture_video=not original_video)
+
+        with pytest.raises(ValueError):
+            with config_override(rc):
+                assert config.RECORD_VIDEO != original_video
+                raise ValueError("test")
+
+        assert config.RECORD_VIDEO == original_video

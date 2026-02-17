@@ -14,14 +14,22 @@ from pathlib import Path
 def record(
     output_dir: str,
     description: str | None = None,
+    video: bool = True,
+    audio: bool = False,
+    images: bool = False,
 ) -> None:
     """Record GUI interactions.
 
     Args:
         output_dir: Directory to save capture.
         description: Optional task description.
+        video: Capture video (default: True).
+        audio: Capture audio (default: False).
+        images: Save screenshots as PNGs (default: False).
     """
-    from openadapt_capture.recorder import record as do_record
+    import time
+
+    from openadapt_capture.recorder import Recorder
 
     output_dir = str(Path(output_dir).resolve())
 
@@ -29,12 +37,22 @@ def record(
     print("Press Ctrl+C or type stop sequence to stop recording...")
     print()
 
-    do_record(
+    with Recorder(
+        output_dir,
         task_description=description or "",
-        capture_dir=output_dir,
-    )
+        capture_video=video,
+        capture_audio=audio,
+        capture_images=images,
+    ) as recorder:
+        recorder.wait_for_ready()
+        try:
+            while recorder.is_recording:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
 
     print()
+    print(f"Recorded {recorder.event_count} events")
     print(f"Saved to: {output_dir}")
 
 

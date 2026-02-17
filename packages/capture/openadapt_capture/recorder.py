@@ -69,9 +69,7 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "window": True,
     "browser": True,
 }
-PLOT_PERFORMANCE = config.PLOT_PERFORMANCE
 NUM_MEMORY_STATS_TO_LOG = 3
-STOP_SEQUENCES = config.STOP_SEQUENCES
 
 stop_sequence_detected = False
 ws_server_instance = None
@@ -963,8 +961,9 @@ def read_keyboard_events(
         None
     """
     # create list of indices for sequence detection
-    # one index for each stop sequence in STOP_SEQUENCES
-    stop_sequence_indices = [0 for _ in STOP_SEQUENCES]
+    # one index for each stop sequence in config.STOP_SEQUENCES
+    stop_sequences = config.STOP_SEQUENCES
+    stop_sequence_indices = [0 for _ in stop_sequences]
 
     def on_press(
         event_q: queue.Queue,
@@ -992,9 +991,9 @@ def read_keyboard_events(
         global stop_sequence_detected
         canonical_key_name = getattr(canonical_key, "name", None)
 
-        for i in range(0, len(STOP_SEQUENCES)):
+        for i in range(0, len(stop_sequences)):
             # check each stop sequence
-            stop_sequence = STOP_SEQUENCES[i]
+            stop_sequence = stop_sequences[i]
             # stop_sequence_indices[i] is the index for this stop sequence
             # get canonical KeyCode of current letter in this sequence
             canonical_sequence = keyboard_listener.canonical(
@@ -1304,6 +1303,13 @@ def record(
     terminate_recording: multiprocessing.Event = None,
     status_pipe: multiprocessing.connection.Connection | None = None,
     log_memory: bool = config.LOG_MEMORY,
+    # Optional shared counters — if None, record() creates its own.
+    # Pass externally-created Values to read counts from outside (e.g. Recorder).
+    num_action_events: multiprocessing.Value = None,
+    num_screen_events: multiprocessing.Value = None,
+    num_window_events: multiprocessing.Value = None,
+    num_browser_events: multiprocessing.Value = None,
+    num_video_events: multiprocessing.Value = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
@@ -1409,11 +1415,16 @@ def record(
     mouse_event_reader.start()
     task_by_name["mouse_event_reader"] = mouse_event_reader
 
-    num_action_events = multiprocessing.Value("i", 0)
-    num_screen_events = multiprocessing.Value("i", 0)
-    num_window_events = multiprocessing.Value("i", 0)
-    num_browser_events = multiprocessing.Value("i", 0)
-    num_video_events = multiprocessing.Value("i", 0)
+    if num_action_events is None:
+        num_action_events = multiprocessing.Value("i", 0)
+    if num_screen_events is None:
+        num_screen_events = multiprocessing.Value("i", 0)
+    if num_window_events is None:
+        num_window_events = multiprocessing.Value("i", 0)
+    if num_browser_events is None:
+        num_browser_events = multiprocessing.Value("i", 0)
+    if num_video_events is None:
+        num_video_events = multiprocessing.Value("i", 0)
 
     event_processor = threading.Thread(
         target=process_events,
@@ -1566,7 +1577,7 @@ def record(
     perf_stats_writer.start()
     task_by_name["perf_stats_writer"] = perf_stats_writer
 
-    if PLOT_PERFORMANCE:
+    if config.PLOT_PERFORMANCE:
         record_pid = os.getpid()
         mem_writer = multiprocessing.Process(
             target=utils.WrapStdout(memory_writer),
@@ -1658,7 +1669,7 @@ def record(
         ]
     )
 
-    if PLOT_PERFORMANCE:
+    if config.PLOT_PERFORMANCE:
         session = get_session_for_path(db_path)
         plotting.plot_performance(
             session, recording, save_dir=capture_dir,
@@ -1678,30 +1689,122 @@ def record(
 
 
 class Recorder:
-    """Context manager wrapper around the legacy record() function.
+    """High-level recording interface.
 
-    Usage:
-        with Recorder('./my_capture', task_description='Demo task') as rec:
+    Wraps the legacy ``record()`` function with a clean Python API:
+
+    - Constructor parameters override config defaults (``capture_video``, etc.)
+    - Runtime introspection (``event_count``, ``is_recording``)
+    - Post-recording access to ``CaptureSession``
+
+    Usage::
+
+        with Recorder('./my_capture', task_description='Demo task',
+                       capture_video=True, capture_audio=False) as recorder:
+            recorder.wait_for_ready()
             input('Press Enter to stop recording...')
+        print(f"Recorded {recorder.event_count} events")
     """
 
-    def __init__(self, capture_dir: str, task_description: str = "") -> None:
-        self.capture_dir = os.path.abspath(capture_dir)
+    def __init__(
+        self,
+        capture_dir: str,
+        task_description: str = "",
+        *,
+        capture_video: bool | None = None,
+        capture_audio: bool | None = None,
+        capture_images: bool | None = None,
+        capture_window_data: bool | None = None,
+        capture_browser_events: bool | None = None,
+        capture_full_video: bool | None = None,
+        video_encoding: str | None = None,
+        video_pixel_format: str | None = None,
+        stop_sequences: list[list[str]] | None = None,
+        log_memory: bool | None = None,
+        plot_performance: bool | None = None,
+    ) -> None:
+        from pathlib import Path
+
+        from openadapt_capture.config import RecordingConfig
+
+        self.capture_dir = str(Path(capture_dir).resolve())
         self.task_description = task_description
+
+        # Build recording config from constructor params
+        self._recording_config = RecordingConfig(
+            capture_video=capture_video,
+            capture_audio=capture_audio,
+            capture_images=capture_images,
+            capture_window_data=capture_window_data,
+            capture_browser_events=capture_browser_events,
+            capture_full_video=capture_full_video,
+            video_encoding=video_encoding,
+            video_pixel_format=video_pixel_format,
+            stop_sequences=stop_sequences,
+            log_memory=log_memory,
+            plot_performance=plot_performance,
+        )
+
+        # Shared state for cross-thread communication
         self._terminate_processing = multiprocessing.Event()
         self._terminate_recording = multiprocessing.Event()
-        self._record_thread = None
+        self._num_action_events = multiprocessing.Value("i", 0)
+        self._num_screen_events = multiprocessing.Value("i", 0)
+        self._num_window_events = multiprocessing.Value("i", 0)
+        self._num_browser_events = multiprocessing.Value("i", 0)
+        self._num_video_events = multiprocessing.Value("i", 0)
+
+        # Status communication
+        self._status_recv, self._status_send = multiprocessing.Pipe(duplex=False)
+        self._ready_event = threading.Event()
+        self._stopped_event = threading.Event()
+
+        # Internal
+        self._record_thread: threading.Thread | None = None
+        self._status_thread: threading.Thread | None = None
+        self._capture = None  # lazy CaptureSession
+
+    def _drain_status_pipe(self) -> None:
+        """Background thread that reads status messages from record()."""
+        try:
+            while not self._stopped_event.is_set():
+                if self._status_recv.poll(timeout=0.5):
+                    msg = self._status_recv.recv()
+                    if isinstance(msg, dict):
+                        if msg.get("type") == "record.started":
+                            self._ready_event.set()
+                        elif msg.get("type") == "record.stopped":
+                            self._stopped_event.set()
+        except (EOFError, OSError):
+            pass
+
+    def _run_record(self) -> None:
+        """Thread target: apply config overrides, then call record()."""
+        from openadapt_capture.config import config_override
+
+        with config_override(self._recording_config):
+            record(
+                task_description=self.task_description,
+                capture_dir=self.capture_dir,
+                terminate_processing=self._terminate_processing,
+                terminate_recording=self._terminate_recording,
+                status_pipe=self._status_send,
+                num_action_events=self._num_action_events,
+                num_screen_events=self._num_screen_events,
+                num_window_events=self._num_window_events,
+                num_browser_events=self._num_browser_events,
+                num_video_events=self._num_video_events,
+            )
 
     def __enter__(self) -> "Recorder":
-        self._record_thread = threading.Thread(
-            target=record,
-            kwargs={
-                "task_description": self.task_description,
-                "capture_dir": self.capture_dir,
-                "terminate_processing": self._terminate_processing,
-                "terminate_recording": self._terminate_recording,
-            },
+        # Start status drain thread
+        self._status_thread = threading.Thread(
+            target=self._drain_status_pipe, daemon=True,
         )
+        self._status_thread.start()
+
+        # Start recording thread
+        self._record_thread = threading.Thread(target=self._run_record)
         self._record_thread.start()
         return self
 
@@ -1709,10 +1812,71 @@ class Recorder:
         self._terminate_processing.set()
         if self._record_thread is not None:
             self._record_thread.join()
+        self._stopped_event.set()  # ensure status thread exits
+        if self._status_thread is not None:
+            self._status_thread.join(timeout=5)
 
     def stop(self) -> None:
         """Stop recording programmatically."""
         self._terminate_processing.set()
+
+    def wait_for_ready(self, timeout: float = 60) -> bool:
+        """Block until all recording threads/processes have started.
+
+        Returns True if ready, False if timeout expired.
+        """
+        return self._ready_event.wait(timeout=timeout)
+
+    @property
+    def is_recording(self) -> bool:
+        """Whether recording is currently active."""
+        return (
+            self._record_thread is not None
+            and self._record_thread.is_alive()
+            and not self._terminate_processing.is_set()
+        )
+
+    @property
+    def event_count(self) -> int:
+        """Number of action events recorded so far (or total after stop)."""
+        return self._num_action_events.value
+
+    @property
+    def screen_count(self) -> int:
+        """Number of screen events recorded."""
+        return self._num_screen_events.value
+
+    @property
+    def video_frame_count(self) -> int:
+        """Number of video frames written."""
+        return self._num_video_events.value
+
+    @property
+    def stats(self) -> dict:
+        """Recording statistics snapshot."""
+        return {
+            "action_events": self._num_action_events.value,
+            "screen_events": self._num_screen_events.value,
+            "window_events": self._num_window_events.value,
+            "browser_events": self._num_browser_events.value,
+            "video_frames": self._num_video_events.value,
+            "is_recording": self.is_recording,
+        }
+
+    @property
+    def capture(self):
+        """Load the CaptureSession after recording completes.
+
+        Returns None if recording has not finished yet.
+        """
+        if self._capture is None and not self.is_recording:
+            try:
+                from openadapt_capture.capture import CaptureSession
+
+                self._capture = CaptureSession.load(self.capture_dir)
+            except FileNotFoundError:
+                return None
+        return self._capture
 
 
 # Entry point

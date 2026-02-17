@@ -6,6 +6,9 @@ Includes all legacy OpenAdapt recording configuration values.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from dataclasses import dataclass, fields
+
 from pydantic_settings import BaseSettings
 
 STOP_STRS = [
@@ -67,3 +70,60 @@ class Settings(BaseSettings):
 config = Settings()
 # Keep backward-compatible alias
 settings = config
+
+
+# ---------------------------------------------------------------------------
+# RecordingConfig: user-facing overrides for Recorder constructor
+# ---------------------------------------------------------------------------
+
+# Mapping from RecordingConfig field names to Settings attribute names
+_FIELD_TO_CONFIG_ATTR = {
+    "capture_video": "RECORD_VIDEO",
+    "capture_audio": "RECORD_AUDIO",
+    "capture_images": "RECORD_IMAGES",
+    "capture_window_data": "RECORD_WINDOW_DATA",
+    "capture_browser_events": "RECORD_BROWSER_EVENTS",
+    "capture_full_video": "RECORD_FULL_VIDEO",
+    "video_encoding": "VIDEO_ENCODING",
+    "video_pixel_format": "VIDEO_PIXEL_FORMAT",
+    "stop_sequences": "STOP_SEQUENCES",
+    "log_memory": "LOG_MEMORY",
+    "plot_performance": "PLOT_PERFORMANCE",
+}
+
+
+@dataclass
+class RecordingConfig:
+    """User-facing recording options. ``None`` means 'use default from config'."""
+
+    capture_video: bool | None = None
+    capture_audio: bool | None = None
+    capture_images: bool | None = None
+    capture_window_data: bool | None = None
+    capture_browser_events: bool | None = None
+    capture_full_video: bool | None = None
+    video_encoding: str | None = None
+    video_pixel_format: str | None = None
+    stop_sequences: list[list[str]] | None = None
+    log_memory: bool | None = None
+    plot_performance: bool | None = None
+
+
+@contextmanager
+def config_override(recording_config: RecordingConfig):
+    """Temporarily override config settings from a RecordingConfig.
+
+    Saves original values, applies non-None overrides, yields, then restores.
+    """
+    originals: dict[str, object] = {}
+    for field in fields(recording_config):
+        value = getattr(recording_config, field.name)
+        if value is not None:
+            config_attr = _FIELD_TO_CONFIG_ATTR[field.name]
+            originals[config_attr] = getattr(config, config_attr)
+            object.__setattr__(config, config_attr, value)
+    try:
+        yield
+    finally:
+        for config_attr, original_value in originals.items():
+            object.__setattr__(config, config_attr, original_value)

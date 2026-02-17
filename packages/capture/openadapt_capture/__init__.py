@@ -16,6 +16,7 @@ from openadapt_capture.comparison import (
     compare_video_to_images,
     plot_comparison,
 )
+from openadapt_capture.config import RecordingConfig
 from openadapt_capture.db.models import (
     ActionEvent as DBActionEvent,
 )
@@ -117,6 +118,7 @@ __all__ = [
     "__version__",
     # High-level APIs
     "Recorder",
+    "RecordingConfig",
     "Capture",
     "CaptureSession",
     "Action",
