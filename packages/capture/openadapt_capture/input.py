@@ -441,21 +441,37 @@ class ScreenCapturer:
         self._stop_event = threading.Event()
 
     def _capture_loop(self) -> None:
-        """Main capture loop running in background thread."""
-        try:
-            from PIL import ImageGrab
-        except ImportError as e:
-            raise ImportError(
-                "Pillow is required for screen capture. Install with: pip install Pillow"
-            ) from e
+        """Main capture loop running in background thread.
+
+        Uses mss for screenshots (same as legacy OpenAdapt record.py),
+        which is 2-4x faster than PIL.ImageGrab on Windows.
+        """
+        import sys
+
+        import mss
+        import mss.base
+        from PIL import Image
+
+        if sys.platform == "win32":
+            import mss.windows
+            # Fix cursor flicker on Windows (from legacy OpenAdapt)
+            # https://github.com/BoboTiG/python-mss/issues/179#issuecomment-673292002
+            mss.windows.CAPTUREBLT = 0
+
+        sct = mss.mss()
+        monitor = sct.monitors[0]  # All monitors combined
 
         while not self._stop_event.is_set():
             timestamp = _get_timestamp()
             try:
-                screenshot = ImageGrab.grab()
+                sct_img = sct.grab(monitor)
+                screenshot = Image.frombytes(
+                    "RGB", sct_img.size, sct_img.bgra, "raw", "BGRX"
+                )
                 self.callback(screenshot, timestamp)
-            except Exception:
-                pass  # Ignore capture errors
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Screenshot capture failed: {e}")
 
             # Sleep for remaining interval
             elapsed = _get_timestamp() - timestamp

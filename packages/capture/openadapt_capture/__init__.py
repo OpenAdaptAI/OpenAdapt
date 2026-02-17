@@ -16,6 +16,18 @@ from openadapt_capture.comparison import (
     compare_video_to_images,
     plot_comparison,
 )
+from openadapt_capture.db.models import (
+    ActionEvent as DBActionEvent,
+)
+
+# Database models (low-level)
+from openadapt_capture.db.models import (
+    Recording,
+    Screenshot,
+)
+from openadapt_capture.db.models import (
+    WindowEvent as DBWindowEvent,
+)
 
 # Event types
 from openadapt_capture.events import (
@@ -54,22 +66,19 @@ from openadapt_capture.processing import (
     remove_invalid_keyboard_events,
     remove_redundant_mouse_move_events,
 )
-from openadapt_capture.recorder import Recorder
+
+# Recorder requires pynput which needs a display server (X11/Wayland/macOS/Windows).
+# Make it optional so the package is importable in headless environments (CI, servers).
+try:
+    from openadapt_capture.recorder import Recorder
+except ImportError:
+    Recorder = None  # type: ignore[assignment,misc]
 
 # Performance statistics
 from openadapt_capture.stats import (
     CaptureStats,
     PerfStat,
     plot_capture_performance,
-)
-from openadapt_capture.storage import Capture as CaptureMetadata
-
-# Storage (low-level)
-from openadapt_capture.storage import (
-    CaptureStorage,
-    Stream,
-    create_capture,
-    load_capture,
 )
 
 # Visualization
@@ -134,12 +143,11 @@ __all__ = [
     # Screen/audio events
     "ScreenFrameEvent",
     "AudioChunkEvent",
-    # Storage (low-level)
-    "CaptureMetadata",
-    "Stream",
-    "CaptureStorage",
-    "create_capture",
-    "load_capture",
+    # Database models (low-level)
+    "Recording",
+    "DBActionEvent",
+    "Screenshot",
+    "DBWindowEvent",
     # Processing
     "process_events",
     "remove_invalid_keyboard_events",

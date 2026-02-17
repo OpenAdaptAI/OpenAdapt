@@ -11,7 +11,7 @@
 
 Capture platform-agnostic GUI interaction streams with time-aligned screenshots and audio for training ML models or replaying workflows.
 
-> **Status:** Pre-alpha. See [docs/DESIGN.md](docs/DESIGN.md) for architecture discussion.
+> **Status:** Pre-alpha.
 
 ---
 
@@ -70,8 +70,6 @@ from openadapt_capture import Recorder
 with Recorder("./my_capture", task_description="Demo task") as recorder:
     # Captures mouse, keyboard, and screen until context exits
     input("Press Enter to stop recording...")
-
-print(f"Captured {recorder.event_count} events")
 ```
 
 ### Replay / Analysis
@@ -91,20 +89,36 @@ for action in capture.actions():
 ### Low-Level API
 
 ```python
-from openadapt_capture import (
-    create_capture, process_events,
-    MouseDownEvent, MouseButton,
-)
+from openadapt_capture.db import create_db, get_session_for_path
+from openadapt_capture.db import crud
+from openadapt_capture.db.models import Recording, ActionEvent
 
-# Create storage (platform and screen size auto-detected)
-capture, storage = create_capture("./my_capture")
+# Create a database
+engine, Session = create_db("/path/to/recording.db")
+session = Session()
 
-# Write raw events
-storage.write_event(MouseDownEvent(timestamp=1.0, x=100, y=200, button=MouseButton.LEFT))
+# Insert a recording
+recording = crud.insert_recording(session, {
+    "timestamp": 1700000000.0,
+    "monitor_width": 1920,
+    "monitor_height": 1080,
+    "platform": "win32",
+    "task_description": "My task",
+})
 
-# Query and process
-raw_events = storage.get_events()
-actions = process_events(raw_events)  # Merges clicks, drags, typed text
+# Insert events
+crud.insert_action_event(session, recording, 1700000001.0, {
+    "name": "click",
+    "mouse_x": 100.0,
+    "mouse_y": 200.0,
+    "mouse_button_name": "left",
+    "mouse_pressed": True,
+})
+
+# Query events back
+from openadapt_capture.capture import CaptureSession
+capture = CaptureSession.load("/path/to/capture_dir")
+actions = list(capture.actions())
 ```
 
 ## Event Types
@@ -112,62 +126,46 @@ actions = process_events(raw_events)  # Merges clicks, drags, typed text
 **Raw events** (captured):
 - `mouse.move`, `mouse.down`, `mouse.up`, `mouse.scroll`
 - `key.down`, `key.up`
-- `screen.frame`, `audio.chunk`
 
 **Actions** (processed):
 - `mouse.singleclick`, `mouse.doubleclick`, `mouse.drag`
-- `key.type` (merged keystrokes → text)
+- `key.type` (merged keystrokes into text)
 
 ## Architecture
 
+The recorder uses a multi-process architecture copied from legacy OpenAdapt:
+
+- **Reader threads**: Capture mouse, keyboard, screen, and window events into a central queue
+- **Processor thread**: Routes events to type-specific write queues
+- **Writer processes**: Persist events to SQLAlchemy DB (one process per event type)
+- **Action-gated video**: Only encodes video frames when user actions occur
+
 ```
 capture_directory/
-├── capture.db      # SQLite: events, metadata
-├── video.mp4       # Screen recording
-└── audio.flac      # Audio (optional)
+├── recording.db           # SQLite: events, screenshots, window events, perf stats
+├── oa_recording-{ts}.mp4  # Screen recording (action-gated)
+└── audio.flac             # Audio (optional)
 ```
 
-## Performance Statistics
+## Performance Testing
 
-Track event write latency and analyze capture performance:
+Run a performance test with synthetic input:
 
-```python
-from openadapt_capture import Recorder
-
-with Recorder("./my_capture") as recorder:
-    input("Press Enter to stop...")
-
-# Access performance statistics
-summary = recorder.stats.summary()
-print(f"Mean latency: {summary['mean_latency_ms']:.1f}ms")
-
-# Generate performance plot
-recorder.stats.plot(output_path="performance.png")
+```bash
+uv run python scripts/perf_test.py
 ```
 
-![Performance Statistics](docs/images/performance_stats.png)
+This records for 10 seconds using pynput Controllers, then reports:
+- Wall/CPU time and memory usage
+- Event counts and action types
+- Output file sizes
+- Memory usage plot (saved to capture directory)
 
-## Frame Extraction Verification
+Run integration tests (requires accessibility permissions):
 
-Compare extracted video frames against original images to verify lossless capture:
-
-```python
-from openadapt_capture import compare_video_to_images, plot_comparison
-
-# Compare frames
-report = compare_video_to_images(
-    "capture/video.mp4",
-    [(timestamp, image) for timestamp, image in captured_frames],
-)
-
-print(f"Mean diff: {report.mean_diff_overall:.2f}")
-print(f"Lossless: {report.is_lossless}")
-
-# Visualize comparison
-plot_comparison(report, output_path="comparison.png")
+```bash
+uv run pytest tests/test_performance.py -v -m slow
 ```
-
-![Frame Comparison](docs/images/frame_comparison.png)
 
 ## Visualization
 
@@ -189,21 +187,6 @@ from openadapt_capture import Capture, create_html
 
 capture = Capture.load("./my_capture")
 create_html(capture, output="viewer.html", include_audio=True)
-```
-
-The HTML viewer includes:
-- Timeline scrubber with event markers
-- Frame-by-frame navigation
-- Synchronized audio playback
-- Event list with details panel
-- Keyboard shortcuts (Space, arrows, Home/End)
-
-![Capture Viewer](docs/images/viewer_screenshot.png)
-
-### Generate Demo from Command Line
-
-```bash
-uv run python scripts/generate_readme_demo.py --duration 10
 ```
 
 ## Sharing Recordings
@@ -236,7 +219,10 @@ The `share` command compresses the recording, sends it via Magic Wormhole, and e
 
 ```bash
 uv sync --dev
-uv run pytest
+uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
+
+# Run slow integration tests (requires accessibility permissions)
+uv run pytest tests/ -v -m slow
 ```
 
 ## Related Projects

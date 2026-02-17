@@ -33,7 +33,8 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run tests
-        run: uv run pytest tests/ -v
+        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py --timeout=120
+        timeout-minutes: 10
 
   lint:
     runs-on: ubuntu-latest

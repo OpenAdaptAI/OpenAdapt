@@ -10,19 +10,93 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
 from openadapt_capture.events import (
-    ActionEvent,
-    EventType,
+    ActionEvent as PydanticActionEvent,
+)
+from openadapt_capture.events import (
     KeyDownEvent,
     KeyTypeEvent,
+    KeyUpEvent,
+    MouseButton,
+    MouseDownEvent,
     MouseMoveEvent,
-    ScreenFrameEvent,
+    MouseScrollEvent,
+    MouseUpEvent,
 )
 from openadapt_capture.processing import process_events
-from openadapt_capture.storage import Capture as CaptureMetadata
-from openadapt_capture.storage import CaptureStorage
 
 if TYPE_CHECKING:
     from PIL import Image
+
+
+def _convert_action_event(db_event) -> PydanticActionEvent | None:
+    """Convert a SQLAlchemy ActionEvent to a Pydantic event.
+
+    Args:
+        db_event: SQLAlchemy ActionEvent instance.
+
+    Returns:
+        Pydantic event or None if unrecognized.
+    """
+    ts = db_event.timestamp
+
+    if db_event.name == "move":
+        return MouseMoveEvent(
+            timestamp=ts,
+            x=db_event.mouse_x or 0,
+            y=db_event.mouse_y or 0,
+        )
+    elif db_event.name == "click":
+        button = db_event.mouse_button_name or "left"
+        try:
+            button = MouseButton(button)
+        except ValueError:
+            button = MouseButton.LEFT
+
+        if db_event.mouse_pressed is True:
+            return MouseDownEvent(
+                timestamp=ts,
+                x=db_event.mouse_x or 0,
+                y=db_event.mouse_y or 0,
+                button=button,
+            )
+        elif db_event.mouse_pressed is False:
+            return MouseUpEvent(
+                timestamp=ts,
+                x=db_event.mouse_x or 0,
+                y=db_event.mouse_y or 0,
+                button=button,
+            )
+        else:
+            return None
+    elif db_event.name == "scroll":
+        return MouseScrollEvent(
+            timestamp=ts,
+            x=db_event.mouse_x or 0,
+            y=db_event.mouse_y or 0,
+            dx=db_event.mouse_dx or 0,
+            dy=db_event.mouse_dy or 0,
+        )
+    elif db_event.name == "press":
+        return KeyDownEvent(
+            timestamp=ts,
+            key_name=db_event.key_name,
+            key_char=db_event.key_char,
+            key_vk=db_event.key_vk,
+            canonical_key_name=db_event.canonical_key_name,
+            canonical_key_char=db_event.canonical_key_char,
+            canonical_key_vk=db_event.canonical_key_vk,
+        )
+    elif db_event.name == "release":
+        return KeyUpEvent(
+            timestamp=ts,
+            key_name=db_event.key_name,
+            key_char=db_event.key_char,
+            key_vk=db_event.key_vk,
+            canonical_key_name=db_event.canonical_key_name,
+            canonical_key_char=db_event.canonical_key_char,
+            canonical_key_vk=db_event.canonical_key_vk,
+        )
+    return None
 
 
 @dataclass
@@ -33,7 +107,7 @@ class Action:
     the screen state at the time of the action.
     """
 
-    event: ActionEvent
+    event: PydanticActionEvent
     _capture: "CaptureSession"
 
     @property
@@ -87,6 +161,28 @@ class Action:
         return None
 
     @property
+    def dx(self) -> float | None:
+        """Horizontal displacement for scroll/drag actions."""
+        if hasattr(self.event, "dx"):
+            return self.event.dx
+        return None
+
+    @property
+    def dy(self) -> float | None:
+        """Vertical displacement for scroll/drag actions."""
+        if hasattr(self.event, "dy"):
+            return self.event.dy
+        return None
+
+    @property
+    def button(self) -> str | None:
+        """Mouse button for click/drag actions."""
+        if hasattr(self.event, "button"):
+            btn = self.event.button
+            return btn.value if hasattr(btn, "value") else str(btn)
+        return None
+
+    @property
     def screenshot(self) -> "Image" | None:
         """Get the screenshot at the time of this action.
 
@@ -100,6 +196,7 @@ class CaptureSession:
     """A loaded capture session for analysis and replay.
 
     Provides access to time-aligned events and screenshots.
+    Reads from the SQLAlchemy-based per-capture database (recording.db).
 
     Usage:
         capture = CaptureSession.load("./my_capture")
@@ -112,18 +209,16 @@ class CaptureSession:
     def __init__(
         self,
         capture_dir: str | Path,
-        storage: CaptureStorage,
-        metadata: CaptureMetadata,
+        session,
+        recording,
     ) -> None:
         """Initialize capture session.
 
         Use CaptureSession.load() instead of calling this directly.
         """
         self.capture_dir = Path(capture_dir)
-        self._storage = storage
-        self._metadata = metadata
-        self._video_container = None
-        self._screen_events: list[ScreenFrameEvent] | None = None
+        self._session = session
+        self._recording = recording
 
     @classmethod
     def load(cls, capture_dir: str | Path) -> "CaptureSession":
@@ -139,64 +234,77 @@ class CaptureSession:
             FileNotFoundError: If capture doesn't exist.
         """
         capture_dir = Path(capture_dir)
-        db_path = capture_dir / "capture.db"
+        db_path = capture_dir / "recording.db"
 
         if not db_path.exists():
             raise FileNotFoundError(f"Capture not found: {capture_dir}")
 
-        storage = CaptureStorage(db_path)
-        metadata = storage.get_capture()
+        from openadapt_capture.db import get_session_for_path
+        from openadapt_capture.db.models import Recording
 
-        if metadata is None:
-            raise FileNotFoundError(f"Invalid capture: {capture_dir}")
+        session = get_session_for_path(str(db_path))
+        try:
+            recording = session.query(Recording).first()
+        except Exception:
+            session.close()
+            raise
 
-        return cls(capture_dir, storage, metadata)
+        if recording is None:
+            session.close()
+            raise FileNotFoundError(f"Invalid capture (no recording found): {capture_dir}")
+
+        return cls(capture_dir, session, recording)
 
     @property
     def id(self) -> str:
         """Capture ID."""
-        return self._metadata.id
+        return str(self._recording.id)
 
     @property
     def started_at(self) -> float:
         """Start timestamp."""
-        return self._metadata.started_at
+        return self._recording.timestamp
 
     @property
     def ended_at(self) -> float | None:
-        """End timestamp."""
-        return self._metadata.ended_at
+        """End timestamp (from last action event)."""
+        if self._recording.action_events:
+            return self._recording.action_events[-1].timestamp
+        return None
 
     @property
     def duration(self) -> float | None:
         """Duration in seconds."""
-        if self._metadata.ended_at is not None:
-            return self._metadata.ended_at - self._metadata.started_at
+        ended = self.ended_at
+        if ended is not None:
+            return ended - self._recording.timestamp
         return None
 
     @property
     def platform(self) -> str:
         """Platform (darwin, win32, linux)."""
-        return self._metadata.platform
+        return self._recording.platform or ""
 
     @property
     def screen_size(self) -> tuple[int, int]:
         """Screen dimensions (width, height) in physical pixels."""
-        return (self._metadata.screen_width, self._metadata.screen_height)
-
-    @property
-    def pixel_ratio(self) -> float:
-        """Display pixel ratio (physical/logical), e.g., 2.0 for Retina."""
-        return self._metadata.pixel_ratio
+        return (
+            self._recording.monitor_width or 0,
+            self._recording.monitor_height or 0,
+        )
 
     @property
     def task_description(self) -> str | None:
         """Task description."""
-        return self._metadata.task_description
+        return self._recording.task_description
 
     @property
     def video_path(self) -> Path | None:
         """Path to video file if exists."""
+        # Legacy format: oa_recording-{timestamp}.mp4
+        for p in self.capture_dir.glob("oa_recording-*.mp4"):
+            return p
+        # Fallback: video.mp4
         video_path = self.capture_dir / "video.mp4"
         return video_path if video_path.exists() else None
 
@@ -206,26 +314,22 @@ class CaptureSession:
         audio_path = self.capture_dir / "audio.flac"
         return audio_path if audio_path.exists() else None
 
-    def raw_events(self) -> list[ActionEvent]:
+    def raw_events(self) -> list[PydanticActionEvent]:
         """Get all raw action events (unprocessed).
+
+        Converts SQLAlchemy ActionEvent models to Pydantic events.
 
         Returns:
             List of raw mouse and keyboard events.
         """
-        action_types = [
-            EventType.MOUSE_MOVE,
-            EventType.MOUSE_DOWN,
-            EventType.MOUSE_UP,
-            EventType.MOUSE_SCROLL,
-            EventType.KEY_DOWN,
-            EventType.KEY_UP,
-        ]
-        # Filter by capture's timestamp range to handle reused directories
-        return self._storage.get_events(
-            event_types=action_types,
-            start_time=self._metadata.started_at,
-            end_time=self._metadata.ended_at,
-        )
+        events = []
+        for db_event in self._recording.action_events:
+            if getattr(db_event, "disabled", False):
+                continue
+            pydantic_event = _convert_action_event(db_event)
+            if pydantic_event is not None:
+                events.append(pydantic_event)
+        return events
 
     def actions(self, include_moves: bool = False) -> Iterator[Action]:
         """Iterate over processed actions.
@@ -243,8 +347,8 @@ class CaptureSession:
         raw_events = self.raw_events()
         processed = process_events(
             raw_events,
-            double_click_interval=self._metadata.double_click_interval_seconds,
-            double_click_distance=self._metadata.double_click_distance_pixels,
+            double_click_interval=self._recording.double_click_interval_seconds or 0.5,
+            double_click_distance=self._recording.double_click_distance_pixels or 5,
         )
 
         # Filter out moves if not requested
@@ -271,7 +375,7 @@ class CaptureSession:
             from openadapt_capture.video import extract_frame
 
             # Convert to video-relative timestamp
-            video_start = self._metadata.video_start_time or self._metadata.started_at
+            video_start = self._recording.video_start_time or self._recording.timestamp
             video_timestamp = timestamp - video_start
 
             if video_timestamp < 0:
@@ -283,9 +387,9 @@ class CaptureSession:
 
     def close(self) -> None:
         """Close the capture and release resources."""
-        if self._storage is not None:
-            self._storage.close()
-            self._storage = None
+        if self._session is not None:
+            self._session.close()
+            self._session = None
 
     def __enter__(self) -> "CaptureSession":
         """Context manager entry."""

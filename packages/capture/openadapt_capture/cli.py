@@ -14,38 +14,27 @@ from pathlib import Path
 def record(
     output_dir: str,
     description: str | None = None,
-    video: bool = True,
-    audio: bool = False,
 ) -> None:
     """Record GUI interactions.
 
     Args:
         output_dir: Directory to save capture.
         description: Optional task description.
-        video: Whether to capture video (default: True).
-        audio: Whether to capture audio (default: False).
     """
-    from openadapt_capture import Recorder
+    from openadapt_capture.recorder import record as do_record
 
-    output_dir = Path(output_dir)
+    output_dir = str(Path(output_dir).resolve())
 
     print(f"Recording to: {output_dir}")
-    print("Press Enter to stop recording...")
+    print("Press Ctrl+C or type stop sequence to stop recording...")
     print()
 
-    with Recorder(
-        output_dir,
-        task_description=description,
-        capture_video=video,
-        capture_audio=audio,
-    ) as recorder:
-        try:
-            input()
-        except KeyboardInterrupt:
-            pass
+    do_record(
+        task_description=description or "",
+        capture_dir=output_dir,
+    )
 
     print()
-    print(f"Captured {recorder.event_count} events")
     print(f"Saved to: {output_dir}")
 
 
@@ -104,9 +93,9 @@ def info(capture_dir: str) -> None:
     Args:
         capture_dir: Path to capture directory.
     """
-    from openadapt_capture import Capture
+    from openadapt_capture.capture import CaptureSession
 
-    capture = Capture.load(capture_dir)
+    capture = CaptureSession.load(capture_dir)
 
     print(f"Capture ID: {capture.id}")
     print(f"Platform: {capture.platform}")

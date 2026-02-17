@@ -21,8 +21,11 @@ uv add openadapt-capture
 # Install with audio support (large download)
 uv add "openadapt-capture[audio]"
 
-# Run tests
-uv run pytest tests/ -v
+# Run tests (exclude browser bridge tests which need websockets fixtures)
+uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
+
+# Run slow integration tests (requires accessibility permissions)
+uv run pytest tests/ -v -m slow
 
 # Record a GUI capture
 uv run python -c "
@@ -44,41 +47,68 @@ for action in capture.actions():
 
 ```
 openadapt_capture/
-  recorder.py      # Recorder context manager for GUI event capture
-  capture.py       # Capture class for loading and iterating events/actions
-  platform/        # Platform-specific implementations (Windows, macOS, Linux)
-  storage/         # Data persistence (SQLite + media files)
-  media/           # Audio/video capture and synchronization
-  visualization/   # Demo GIF and HTML viewer generation
+  recorder.py      # Multi-process recorder (legacy OpenAdapt record.py architecture)
+  capture.py       # CaptureSession class for loading and iterating events/actions
+  events.py        # Pydantic event models (MouseMoveEvent, KeyDownEvent, etc.)
+  processing.py    # Event merging pipeline (clicks, drags, typing)
+  db/              # SQLAlchemy database layer
+    __init__.py    # Engine, session factory, Base
+    models.py      # Recording, ActionEvent, Screenshot, WindowEvent, PerformanceStat, MemoryStat
+    crud.py        # Insert functions, batch writing, post-processing
+  window/          # Platform-specific active window capture
+  extensions/      # SynchronizedQueue (multiprocessing.Queue wrapper)
+  utils.py         # Timestamps, screenshots, monitor dims
+  config.py        # Recording config (RECORD_VIDEO, RECORD_AUDIO, etc.)
+  video.py         # Video encoding (av/ffmpeg)
+  audio.py         # Audio recording + transcription
+  visualize/       # Demo GIF and HTML viewer generation
+  share.py         # Magic Wormhole sharing
+  browser_bridge.py # Browser extension integration
+  cli.py           # CLI commands (capture record, capture info, capture share)
 ```
 
 ## Key Components
 
 ### Recorder
-Main interface for capturing GUI interactions:
-- `__enter__` / `__exit__` - Context manager lifecycle
-- `record_events()` - Main capture loop
-- `event_count` - Total captured events
+Multi-process recording system (copied from legacy OpenAdapt):
+- `Recorder(capture_dir, task_description)` - Context manager
+- Internally runs `record()` which spawns reader threads + writer processes
+- Action-gated video capture (only encode frames when user acts)
+- Stop via context manager exit or stop sequences (default: `llqq`)
 
-### Capture
+### CaptureSession / Capture
 Load and query recorded captures:
-- `Capture.load(path)` - Load from directory
-- `capture.events()` - Iterator over raw events
-- `capture.actions()` - Iterator over processed actions
+- `Capture.load(path)` - Load from capture directory (reads `recording.db`)
+- `capture.raw_events()` - List of Pydantic events from SQLAlchemy DB
+- `capture.actions()` - Iterator over processed actions (clicks, drags, typing)
+- `action.screenshot` - PIL Image at time of action (extracted from video)
+- `action.x`, `action.y`, `action.dx`, `action.dy`, `action.button`, `action.text`
+
+### Storage
+SQLAlchemy-based per-capture databases:
+- Each capture gets its own `recording.db` in the capture directory
+- Models: Recording, ActionEvent, Screenshot, WindowEvent, PerformanceStat, MemoryStat
+- Writer processes get their own sessions via `get_session_for_path(db_path)`
 
 ### Event Types
-- Raw: `mouse.move`, `mouse.down`, `mouse.up`, `key.down`, `key.up`, `screen.frame`, `audio.chunk`
-- Processed: `click`, `double_click`, `drag`, `scroll`, `type`
+- Raw: `mouse.move`, `mouse.down`, `mouse.up`, `mouse.scroll`, `key.down`, `key.up`
+- Processed: `mouse.singleclick`, `mouse.doubleclick`, `mouse.drag`, `mouse.scroll`, `key.type`
 
 ## Testing
 
 ```bash
-uv run pytest tests/ -v
+# Fast tests (unit + integration, no recording)
+uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow"
+
+# Slow tests (full recording pipeline with pynput synthetic input)
+uv run pytest tests/ -v -m slow
+
+# All tests
+uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
 ```
 
 ## Related Projects
 
 - [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train models on captures
 - [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) - PII scrubbing
-- [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) - Visualization
-- [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) - Demo retrieval
+- [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) - Benchmark evaluation

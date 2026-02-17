@@ -15,13 +15,36 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
-def _check_wormhole_installed() -> bool:
-    """Check if magic-wormhole is installed."""
-    return shutil.which("wormhole") is not None
+def _find_wormhole() -> str | None:
+    """Find the wormhole executable path.
+
+    On Windows after pip install, the executable may be in Python's Scripts/
+    directory which isn't always on PATH.
+    """
+    # Check PATH first
+    path = shutil.which("wormhole")
+    if path:
+        return path
+
+    # Check in Python's Scripts directory (Windows) or bin directory (Unix)
+    python_dir = Path(sys.executable).parent
+    for candidate in [
+        python_dir / "Scripts" / "wormhole.exe",  # Windows venv/global
+        python_dir / "Scripts" / "wormhole",       # Windows without .exe
+        python_dir / "wormhole",                   # Unix bin/
+    ]:
+        if candidate.exists():
+            return str(candidate)
+
+    return None
 
 
-def _install_wormhole() -> bool:
-    """Attempt to install magic-wormhole."""
+def _install_wormhole() -> str | None:
+    """Attempt to install magic-wormhole.
+
+    Returns:
+        Path to wormhole executable if successful, None otherwise.
+    """
     print("Installing magic-wormhole...")
     try:
         subprocess.run(
@@ -29,17 +52,30 @@ def _install_wormhole() -> bool:
             check=True,
             capture_output=True,
         )
-        print("✓ magic-wormhole installed")
-        return True
+        print("magic-wormhole installed")
     except subprocess.CalledProcessError as e:
-        print(f"✗ Failed to install magic-wormhole: {e}")
-        return False
+        print(f"Failed to install magic-wormhole: {e}")
+        return None
+
+    # Find the newly installed binary
+    path = _find_wormhole()
+    if path:
+        return path
+
+    print("magic-wormhole installed but 'wormhole' command not found on PATH.")
+    print(f"Try adding {Path(sys.executable).parent / 'Scripts'} to your PATH.")
+    return None
 
 
-def _ensure_wormhole() -> bool:
-    """Ensure magic-wormhole is available, install if needed."""
-    if _check_wormhole_installed():
-        return True
+def _ensure_wormhole() -> str | None:
+    """Ensure magic-wormhole is available, install if needed.
+
+    Returns:
+        Path to wormhole executable, or None if unavailable.
+    """
+    path = _find_wormhole()
+    if path:
+        return path
     return _install_wormhole()
 
 
@@ -62,7 +98,8 @@ def send(recording_dir: str) -> str | None:
         print(f"✗ Not a directory: {recording_path}")
         return None
 
-    if not _ensure_wormhole():
+    wormhole_path = _ensure_wormhole()
+    if not wormhole_path:
         return None
 
     # Create a temporary zip file
@@ -79,24 +116,27 @@ def send(recording_dir: str) -> str | None:
                     zf.write(file, arcname)
 
         size_mb = zip_path.stat().st_size / (1024 * 1024)
-        print(f"✓ Compressed to {size_mb:.1f} MB")
+        print(f"Compressed to {size_mb:.1f} MB")
 
         print("Sending via Magic Wormhole...")
         print("(Keep this window open until transfer completes)")
         print()
 
         try:
-            # Run wormhole send
             subprocess.run(
-                ["wormhole", "send", str(zip_path)],
+                [wormhole_path, "send", str(zip_path)],
                 check=True,
             )
-            return "sent"  # Code is printed by wormhole itself
+            return "sent"
+        except FileNotFoundError:
+            print(f"'wormhole' command not found at: {wormhole_path}")
+            print(f"Try: {sys.executable} -m pip install magic-wormhole")
+            return None
         except subprocess.CalledProcessError as e:
-            print(f"✗ Wormhole send failed: {e}")
+            print(f"Wormhole send failed: {e}")
             return None
         except KeyboardInterrupt:
-            print("\n✗ Cancelled")
+            print("\nCancelled")
             return None
 
 
@@ -110,7 +150,8 @@ def receive(code: str, output_dir: str = ".") -> Path | None:
     Returns:
         Path to the received recording directory, or None on failure.
     """
-    if not _ensure_wormhole():
+    wormhole_path = _ensure_wormhole()
+    if not wormhole_path:
         return None
 
     output_path = Path(output_dir)
@@ -122,9 +163,8 @@ def receive(code: str, output_dir: str = ".") -> Path | None:
         print(f"Receiving from wormhole code: {code}")
 
         try:
-            # Run wormhole receive
             subprocess.run(
-                ["wormhole", "receive", "--accept-file", "-o", str(tmpdir), code],
+                [wormhole_path, "receive", "--accept-file", "-o", str(tmpdir), code],
                 check=True,
             )
 
