@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.0.6 (2026-02-18)
+
+### Bug Fixes
+
+- **cli**: Update capture commands to use real openadapt-capture API
+  ([#989](https://github.com/OpenAdaptAI/OpenAdapt/pull/989),
+  [`a12355a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a12355a99e7ac6977e0308769409780a406d8951))
+
+
 ## v1.0.5 (2026-02-13)
 
 ### Bug Fixes
