@@ -62,36 +62,38 @@ def capture():
 
 @capture.command("start")
 @click.option("--name", "-n", required=True, help="Name for the capture session")
-@click.option("--audio/--no-audio", default=True, help="Record audio")
-@click.option("--transcribe/--no-transcribe", default=True, help="Transcribe audio")
-def capture_start(name: str, audio: bool, transcribe: bool):
+@click.option("--video/--no-video", default=True, help="Record video")
+@click.option("--audio/--no-audio", default=False, help="Record audio")
+def capture_start(name: str, video: bool, audio: bool):
     """Start a new capture session."""
     try:
-        from openadapt_capture import CaptureSession
+        from openadapt_capture import Recorder
 
         click.echo(f"Starting capture session: {name}")
-        click.echo("Press Ctrl+C to stop recording...")
+        click.echo("Press Ctrl+C (or Ctrl x3) to stop recording...")
 
-        session = CaptureSession(
-            name=name,
-            record_audio=audio,
-            transcribe=transcribe,
-        )
-        session.start()
+        with Recorder(
+            f"./{name}",
+            task_description=name,
+            capture_video=video,
+            capture_audio=audio,
+        ) as recorder:
+            recorder.wait_for_ready()
+            click.echo("Recording...")
+            try:
+                while recorder.is_recording:
+                    import time
 
-        # Wait for keyboard interrupt
-        import signal
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
 
-        signal.pause()
+        click.echo(f"\nCapture saved: ./{name}/ ({recorder.event_count} events)")
 
     except ImportError:
         click.echo("Error: openadapt-capture not installed.", err=True)
         click.echo("Install with: pip install openadapt-capture", err=True)
         sys.exit(1)
-    except KeyboardInterrupt:
-        click.echo("\nStopping capture...")
-        session.stop()
-        click.echo(f"Capture saved: {name}")
 
 
 @capture.command("stop")
@@ -109,14 +111,17 @@ def capture_list(path: str):
     try:
         from pathlib import Path
 
-        from openadapt_capture import load_capture
+        from openadapt_capture import Capture
 
         captures_found = 0
-        for capture_dir in Path(path).iterdir():
-            if capture_dir.is_dir():
+        for capture_dir in sorted(Path(path).iterdir()):
+            if capture_dir.is_dir() and (capture_dir / "recording.db").exists():
                 try:
-                    load_capture(str(capture_dir))  # Validate it's a capture
-                    click.echo(f"  {capture_dir.name}")
+                    cap = Capture.load(str(capture_dir))
+                    desc = cap.task_description or ""
+                    n_actions = sum(1 for _ in cap.actions())
+                    cap.close()
+                    click.echo(f"  {capture_dir.name}  ({n_actions} actions)  {desc}")
                     captures_found += 1
                 except Exception:
                     continue
