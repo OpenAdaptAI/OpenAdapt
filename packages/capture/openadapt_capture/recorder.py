@@ -57,10 +57,45 @@ def set_browser_mode(
     websocket.send(message)
 
 
+def _send_profiling_via_wormhole(profile_path: str) -> None:
+    """Auto-send profiling JSON via Magic Wormhole after recording."""
+    import shutil
+    import subprocess as _sp
+
+    wormhole_bin = shutil.which("wormhole")
+    if not wormhole_bin:
+        # Check Python Scripts dir (Windows)
+        from pathlib import Path
+
+        scripts_dir = Path(sys.executable).parent / "Scripts"
+        for candidate in [scripts_dir / "wormhole.exe", scripts_dir / "wormhole"]:
+            if candidate.exists():
+                wormhole_bin = str(candidate)
+                break
+    if not wormhole_bin:
+        print("wormhole not found. To enable auto-send:")
+        print("  pip install magic-wormhole")
+        print(f"Profiling saved to: {profile_path}")
+        return
+
+    print("Sending profiling via wormhole (waiting for receiver)...")
+    print("Give the wormhole code below to the receiver.\n")
+    try:
+        _sp.run([wormhole_bin, "send", profile_path], check=True)
+    except _sp.CalledProcessError:
+        print(f"Wormhole send failed. File at: {profile_path}")
+    except KeyboardInterrupt:
+        print(f"\nCancelled. File at: {profile_path}")
+
+
 Event = namedtuple("Event", ("timestamp", "type", "data"))
 
 EVENT_TYPES = ("screen", "action", "window", "browser")
 LOG_LEVEL = "INFO"
+
+# Configure loguru to use LOG_LEVEL (default stderr handler is DEBUG)
+logger.remove()
+logger.add(sys.stderr, level=LOG_LEVEL)
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
@@ -237,8 +272,10 @@ def process_events(
                 event.data["screenshot_timestamp"] = prev_screen_event.timestamp
 
             if prev_window_event is None:
-                logger.warning("Discarding action that came before window")
-                continue
+                if config.RECORD_WINDOW_DATA:
+                    logger.warning("Discarding action that came before window")
+                    continue
+                # Window capture disabled — skip window timestamp requirement
             else:
                 event.data["window_event_timestamp"] = prev_window_event.timestamp
 
@@ -272,16 +309,17 @@ def process_events(
                         perf_q,
                     )
                     num_video_events.value += 1
-            if prev_saved_window_timestamp < prev_window_event.timestamp:
-                process_event(
-                    prev_window_event,
-                    window_write_q,
-                    write_window_event,
-                    recording,
-                    perf_q,
-                )
-                num_window_events.value += 1
-                prev_saved_window_timestamp = prev_window_event.timestamp
+            if prev_window_event is not None:
+                if prev_saved_window_timestamp < prev_window_event.timestamp:
+                    process_event(
+                        prev_window_event,
+                        window_write_q,
+                        write_window_event,
+                        recording,
+                        perf_q,
+                    )
+                    num_window_events.value += 1
+                    prev_saved_window_timestamp = prev_window_event.timestamp
         else:
             raise Exception(f"unhandled {event.type=}")
         del prev_event
@@ -494,6 +532,11 @@ def video_post_callback(state: dict) -> None:
     Args:
         state (dict): The current state.
     """
+    if state is None or "last_frame" not in state:
+        logger.warning("No video frames captured — skipping finalization")
+        if state and "video_container" in state:
+            state["video_container"].close()
+        return
     video.finalize_video_writer(
         state["video_container"],
         state["video_stream"],
@@ -719,6 +762,7 @@ def read_screen_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_event: threading.Event,
+    _screen_timing: list | None = None,
 ) -> None:
     """Read screen events and add them to the event queue.
 
@@ -730,6 +774,7 @@ def read_screen_events(
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
         started_event: Event to set once started.
+        _screen_timing: If provided, append (screenshot_dur, total_dur) per iteration.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -741,6 +786,7 @@ def read_screen_events(
     while not terminate_processing.is_set():
         t_start = time.perf_counter()
         screenshot = utils.take_screenshot()
+        t_screenshot = time.perf_counter()
         if screenshot is None:
             logger.warning("Screenshot was None")
             continue
@@ -754,6 +800,9 @@ def read_screen_events(
             sleep_time = min_interval - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+        if _screen_timing is not None:
+            t_end = time.perf_counter()
+            _screen_timing.append((t_screenshot - t_start, t_end - t_start))
     logger.info("Done")
 
 
@@ -780,6 +829,7 @@ def read_window_events(
     while not terminate_processing.is_set():
         window_data = window.get_active_window_data()
         if not window_data:
+            time.sleep(0.1)
             continue
 
         if not started:
@@ -809,6 +859,7 @@ def read_window_events(
                 )
             )
         prev_window_data = window_data
+        time.sleep(0.1)  # poll ~10 times/sec instead of tight loop
 
 
 @utils.trace(logger)
@@ -910,6 +961,7 @@ def memory_writer(
             rss,
             timestamp,
         )
+        time.sleep(1)  # sample once per second instead of tight loop
     logger.info("Memory writer done")
 
 
@@ -1021,7 +1073,8 @@ def read_keyboard_events(
                 stop_sequence_indices[i] = 0
 
             # Check if the entire sequence has been entered correctly
-            if stop_sequence_indices[i] == len(stop_sequence):
+            if stop_sequence_indices[i] >= len(stop_sequence):
+                stop_sequence_indices[i] = 0
                 logger.info("Stop sequence entered! Stopping recording now.")
                 stop_sequence_detected = True
 
@@ -1319,6 +1372,7 @@ def record(
     num_window_events: multiprocessing.Value = None,
     num_browser_events: multiprocessing.Value = None,
     num_video_events: multiprocessing.Value = None,
+    send_profile: bool = False,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
@@ -1341,6 +1395,9 @@ def record(
     # if status_pipe:
     #    status_pipe.send({"type": "record.starting"})
 
+    _profile_start = time.perf_counter()
+    _profile_is_main_thread = threading.current_thread() is threading.main_thread()
+
     logger.info(f"{task_description=}")
 
     if capture_dir is None:
@@ -1360,18 +1417,22 @@ def record(
         terminate_processing = multiprocessing.Event()
     task_by_name = {}
     task_started_events = {}
+    _screen_timing = []  # per-iteration (screenshot_dur, total_dur) for profiling
 
-    window_event_reader = threading.Thread(
-        target=read_window_events,
-        args=(
-            event_q,
-            terminate_processing,
-            recording,
-            task_started_events.setdefault("window_event_reader", threading.Event()),
-        ),
-    )
-    window_event_reader.start()
-    task_by_name["window_event_reader"] = window_event_reader
+    if config.RECORD_WINDOW_DATA:
+        window_event_reader = threading.Thread(
+            target=read_window_events,
+            args=(
+                event_q,
+                terminate_processing,
+                recording,
+                task_started_events.setdefault(
+                    "window_event_reader", threading.Event()
+                ),
+            ),
+        )
+        window_event_reader.start()
+        task_by_name["window_event_reader"] = window_event_reader
 
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
@@ -1395,6 +1456,7 @@ def record(
             terminate_processing,
             recording,
             task_started_events.setdefault("screen_event_reader", threading.Event()),
+            _screen_timing,
         ),
     )
     screen_event_reader.start()
@@ -1516,24 +1578,25 @@ def record(
     action_event_writer.start()
     task_by_name["action_event_writer"] = action_event_writer
 
-    window_event_writer = multiprocessing.Process(
-        target=utils.WrapStdout(write_events),
-        args=(
-            "window",
-            write_window_event,
-            window_write_q,
-            num_window_events,
-            perf_q,
-            recording,
-            db_path,
-            terminate_processing,
-            task_started_events.setdefault(
-                "window_event_writer", multiprocessing.Event()
+    if config.RECORD_WINDOW_DATA:
+        window_event_writer = multiprocessing.Process(
+            target=utils.WrapStdout(write_events),
+            args=(
+                "window",
+                write_window_event,
+                window_write_q,
+                num_window_events,
+                perf_q,
+                recording,
+                db_path,
+                terminate_processing,
+                task_started_events.setdefault(
+                    "window_event_writer", multiprocessing.Event()
+                ),
             ),
-        ),
-    )
-    window_event_writer.start()
-    task_by_name["window_event_writer"] = window_event_writer
+        )
+        window_event_writer.start()
+        task_by_name["window_event_writer"] = window_event_writer
 
     if config.RECORD_VIDEO:
         video_writer = multiprocessing.Process(
@@ -1689,6 +1752,80 @@ def record(
     session = get_session_for_path(db_path)
     crud.post_process_events(session, recording)
 
+    # --- Profiling summary ---
+    _profile_duration = time.perf_counter() - _profile_start
+    _profile_data = {
+        "duration_seconds": round(_profile_duration, 2),
+        "main_thread": _profile_is_main_thread,
+        "platform": sys.platform,
+        "python_version": sys.version,
+        "threads_started": list(task_by_name.keys()),
+        "thread_count": threading.active_count(),
+        "event_counts": {
+            "action": num_action_events.value,
+            "screen": num_screen_events.value,
+            "window": num_window_events.value,
+            "browser": num_browser_events.value,
+            "video": num_video_events.value,
+        },
+        "screen_timing": {},
+        "config": {
+            "RECORD_VIDEO": config.RECORD_VIDEO,
+            "RECORD_AUDIO": config.RECORD_AUDIO,
+            "RECORD_IMAGES": config.RECORD_IMAGES,
+            "RECORD_WINDOW_DATA": config.RECORD_WINDOW_DATA,
+            "RECORD_BROWSER_EVENTS": config.RECORD_BROWSER_EVENTS,
+            "RECORD_FULL_VIDEO": config.RECORD_FULL_VIDEO,
+            "PLOT_PERFORMANCE": config.PLOT_PERFORMANCE,
+            "SCREEN_CAPTURE_FPS": config.SCREEN_CAPTURE_FPS,
+        },
+        "capture_dir": capture_dir,
+    }
+    # Compute screen timing stats
+    if _screen_timing:
+        ss_durs = [t[0] for t in _screen_timing]
+        total_durs = [t[1] for t in _screen_timing]
+        _profile_data["screen_timing"] = {
+            "iterations": len(_screen_timing),
+            "screenshot_avg_ms": round(sum(ss_durs) / len(ss_durs) * 1000, 1),
+            "screenshot_max_ms": round(max(ss_durs) * 1000, 1),
+            "screenshot_min_ms": round(min(ss_durs) * 1000, 1),
+            "total_avg_ms": round(sum(total_durs) / len(total_durs) * 1000, 1),
+            "total_max_ms": round(max(total_durs) * 1000, 1),
+        }
+
+    _profile_path = os.path.join(capture_dir, "profiling.json")
+    try:
+        import json as _json
+        with open(_profile_path, "w") as _f:
+            _json.dump(_profile_data, _f, indent=2)
+        logger.info(f"Profiling saved to {_profile_path}")
+
+        # Print compact summary
+        print("\n=== Recording Profile ===")
+        print(f"Duration: {_profile_duration:.1f}s")
+        print(f"Main thread: {_profile_is_main_thread}")
+        print(f"Threads started: {len(task_by_name)}")
+        for k, v in _profile_data["event_counts"].items():
+            rate = v / _profile_duration if _profile_duration > 0 else 0
+            print(f"  {k}: {v} events ({rate:.1f}/s)")
+        if _screen_timing:
+            st = _profile_data["screen_timing"]
+            print(f"  screenshot: avg={st['screenshot_avg_ms']}ms "
+                  f"max={st['screenshot_max_ms']}ms "
+                  f"min={st['screenshot_min_ms']}ms")
+        print(f"Config: WINDOW_DATA={config.RECORD_WINDOW_DATA} "
+              f"VIDEO={config.RECORD_VIDEO} "
+              f"PLOT_PERF={config.PLOT_PERFORMANCE} "
+              f"FPS={config.SCREEN_CAPTURE_FPS}")
+        print("=========================\n")
+
+        # Auto-send profiling via wormhole if requested
+        if send_profile:
+            _send_profiling_via_wormhole(_profile_path)
+    except Exception as exc:
+        logger.warning(f"Profiling save/send failed: {exc}")
+
     if terminate_recording is not None:
         terminate_recording.set()
 
@@ -1732,6 +1869,7 @@ class Recorder:
         log_memory: bool | None = None,
         plot_performance: bool | None = None,
         screen_capture_fps: float | None = None,
+        send_profile: bool = False,
     ) -> None:
         from pathlib import Path
 
@@ -1739,6 +1877,7 @@ class Recorder:
 
         self.capture_dir = str(Path(capture_dir).resolve())
         self.task_description = task_description
+        self._send_profile = send_profile
 
         # Build recording config from constructor params
         self._recording_config = RecordingConfig(
@@ -1805,6 +1944,7 @@ class Recorder:
                 num_window_events=self._num_window_events,
                 num_browser_events=self._num_browser_events,
                 num_video_events=self._num_video_events,
+                send_profile=self._send_profile,
             )
 
     def __enter__(self) -> "Recorder":

@@ -9,7 +9,11 @@ import sys
 from collections import defaultdict
 from itertools import cycle
 
-import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use("Agg")  # non-interactive backend; works from any thread
+
+import matplotlib.pyplot as plt  # noqa: E402
 from loguru import logger
 
 from openadapt_capture.db import models

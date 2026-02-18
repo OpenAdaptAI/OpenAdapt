@@ -314,6 +314,34 @@ class CaptureSession:
         audio_path = self.capture_dir / "audio.flac"
         return audio_path if audio_path.exists() else None
 
+    @property
+    def pixel_ratio(self) -> float:
+        """Display pixel ratio (physical/logical), e.g. 2.0 for Retina.
+
+        Defaults to 1.0 if not stored in the recording.
+        """
+        # Check if the Recording model has a pixel_ratio column
+        ratio = getattr(self._recording, "pixel_ratio", None)
+        if ratio is not None:
+            return float(ratio)
+        # Check the config JSON for pixel_ratio
+        config = getattr(self._recording, "config", None)
+        if isinstance(config, dict) and "pixel_ratio" in config:
+            return float(config["pixel_ratio"])
+        return 1.0
+
+    @property
+    def audio_start_time(self) -> float | None:
+        """Start timestamp of the audio recording, or None if unavailable."""
+        # Check the AudioInfo relationship for the timestamp
+        audio_infos = getattr(self._recording, "audio_info", None)
+        if audio_infos:
+            first = audio_infos[0] if isinstance(audio_infos, list) else audio_infos
+            ts = getattr(first, "timestamp", None)
+            if ts is not None:
+                return float(ts)
+        return None
+
     def raw_events(self) -> list[PydanticActionEvent]:
         """Get all raw action events (unprocessed).
 

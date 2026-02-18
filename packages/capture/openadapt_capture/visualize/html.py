@@ -53,8 +53,8 @@ def create_html(
     capture_id = capture.id
     duration = capture.duration or 0
     screen_width, screen_height = capture.screen_size
-    pixel_ratio = capture.pixel_ratio
-    audio_start_time = capture._metadata.audio_start_time
+    pixel_ratio = getattr(capture, "pixel_ratio", 1.0)
+    audio_start_time = getattr(capture, "audio_start_time", None)
 
     # Get actions
     actions = list(capture.actions())

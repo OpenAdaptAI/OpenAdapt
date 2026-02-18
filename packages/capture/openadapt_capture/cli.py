@@ -17,6 +17,7 @@ def record(
     video: bool = True,
     audio: bool = False,
     images: bool = False,
+    send_profile: bool = False,
 ) -> None:
     """Record GUI interactions.
 
@@ -26,6 +27,7 @@ def record(
         video: Capture video (default: True).
         audio: Capture audio (default: False).
         images: Save screenshots as PNGs (default: False).
+        send_profile: Send profiling data via wormhole after recording (default: False).
     """
     import time
 
@@ -43,6 +45,7 @@ def record(
         capture_video=video,
         capture_audio=audio,
         capture_images=images,
+        send_profile=send_profile,
     ) as recorder:
         recorder.wait_for_ready()
         try:

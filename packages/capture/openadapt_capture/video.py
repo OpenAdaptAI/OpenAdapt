@@ -310,7 +310,7 @@ def write_video_frame(
     # Optionally force a key frame
     # TODO: force key frames on active window change?
     if force_key_frame:
-        av_frame.pict_type = "I"
+        av_frame.pict_type = av.video.frame.PictureType.I
 
     # Calculate the time difference in seconds
     time_diff = timestamp - video_start_timestamp
