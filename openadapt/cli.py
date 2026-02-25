@@ -114,7 +114,7 @@ def capture_list(path: str):
 
         captures_found = 0
         for capture_dir in sorted(Path(path).iterdir()):
-            if capture_dir.is_dir() and (capture_dir / "recording.db").exists():
+            if capture_dir.is_dir() and (capture_dir / "capture.db").exists():
                 try:
                     cap = Capture.load(str(capture_dir))
                     desc = cap.task_description or ""

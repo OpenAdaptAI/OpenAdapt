@@ -20,8 +20,8 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 
 | Package | Description | Repository |
 |---------|-------------|------------|
-| `openadapt` | Meta-package with unified CLI | This repo |
-| `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
+|+ `openadapt` | Meta-package with unified CLI | This repo |
+|+ `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
 | `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
 | `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |

@@ -56,3 +56,5 @@ performance/
 *.pem
 .env.backup
 deploy/.env
+
+!requirements.txt
