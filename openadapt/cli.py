@@ -78,7 +78,6 @@ def capture_start(name: str, video: bool, audio: bool):
             capture_video=video,
             capture_audio=audio,
         ) as recorder:
-            recorder.wait_for_ready()
             click.echo("Recording...")
             try:
                 while recorder.is_recording:
