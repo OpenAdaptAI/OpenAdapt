@@ -269,8 +269,8 @@ Why: Clear 3-step process, action-oriented
 | Competitor | Strengths | Weaknesses | Our Advantage |
 |------------|-----------|------------|---------------|
 | **Anthropic Computer Use** | 72.5% OSWorld (near-human), simple API | Proprietary, cloud-only, no customization, per-action cost | Open source, model-agnostic, trainable, runs locally |
-| **Agent S3 (Simular)** | 72.6% OSWorld (superhuman), open source | Zero-shot only, no demo conditioning, no fine-tuning pipeline | Demo-conditioned agents, capture-to-train pipeline |
-| **OpenCUA (XLANG Lab)** | NeurIPS Spotlight, 45% OSWorld, open models (7B-72B) | Zero-shot at inference — demos used only for training, not runtime | Runtime demo conditioning (unique); OpenCUA reused our macOS a11y code |
+| **Agent S3 (Simular)** | 72.6% OSWorld, open source | Zero-shot only, no demo conditioning, no fine-tuning pipeline | Demo-conditioned agents, capture-to-train pipeline |
+| **OpenCUA (XLANG Lab)** | NeurIPS Spotlight, 45% OSWorld, open models (7B-72B) | Zero-shot at inference — demos used only for training, not runtime | Runtime demo conditioning (unique); OpenCUA reused OpenAdapt's macOS a11y code |
 | **Browser Use** | 50k+ GitHub stars, 89% WebVoyager | Browser-only, no desktop, no training pipeline | Full desktop support, fine-tuning, demo library |
 | **UI-TARS (ByteDance)** | Local models (2B-72B), Apache 2.0 | No demo conditioning, no capture pipeline | End-to-end record→train→deploy, demo retrieval |
 | **CUA / Bytebot** | Container infra, YC-backed | Infrastructure-only, no ML training pipeline | Full pipeline: capture + train + eval + deploy |
@@ -378,7 +378,31 @@ Your choice of AI: Claude, GPT-4V, Gemini, Qwen-VL, or fine-tune your own.
 MIT licensed. Run locally, in the cloud, or hybrid.
 ```
 
-### 5.5 For Developers Section
+### 5.5 For Builders Section
+
+````
+## Built for Builders
+
+### Show it once. Done.
+Record yourself doing a task. OpenAdapt handles the rest.
+No code, no prompts, no configuration.
+
+### Three commands
+```bash
+pip install openadapt
+openadapt capture start --name my-task    # Record
+openadapt run --capture my-task           # Replay with AI
+```
+
+### Works with the AI you already use
+Claude, GPT-4V, Gemini, Qwen — pick your model.
+Or let OpenAdapt train a small one that runs on your laptop.
+
+### Your data stays yours
+Everything runs locally. Nothing leaves your machine unless you want it to.
+````
+
+### 5.6 For Developers Section
 
 ````
 ## Built for Developers
@@ -415,7 +439,7 @@ Compare your models against published baselines.
 [View Documentation] [GitHub Repository]
 ````
 
-### 5.6 For Enterprise Section
+### 5.7 For Enterprise Section
 
 ```
 ## Enterprise-Ready Automation
@@ -438,7 +462,7 @@ Custom development, training, and support packages available.
 [Contact Sales: sales@openadapt.ai]
 ```
 
-### 5.7 Use Cases Section (Refined)
+### 5.8 Use Cases Section (Refined)
 
 **Current**: Generic industry grid
 
