@@ -42,7 +42,7 @@ OpenAdapt has evolved from a monolithic application (v0.46.0) to a **modular met
 **Key Innovation**:
 - **Trajectory-conditioned disambiguation of UI affordances** — the only open-source CUA framework that conditions agents on recorded demonstrations at runtime (validated: 46.7% → 100% first-action accuracy)
 - **Specialization over scale** — fine-tuned Qwen3-VL-2B outperforms Claude Sonnet 4.5 and GPT-5.1 on action accuracy (42.9% vs 11.2% vs 23.2%) on an internal benchmark
-- **Capture-to-deployment pipeline** — record → retrieve → train → deploy, used by [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight) as foundation for their capture tooling
+- **Capture-to-deployment pipeline** — record → retrieve → train → deploy. [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight) [reused OpenAdapt's macOS accessibility capture code](https://arxiv.org/html/2508.09123v3) in their AgentNetTool
 - **Set-of-Marks (SoM) mode**: 100% accuracy on synthetic benchmarks using element IDs instead of coordinates
 
 ### 1.2 Current Landing Page Assessment
@@ -223,7 +223,7 @@ Why: Clear 3-step process, action-oriented
 1. **Capture-to-Deployment Pipeline**
    - Not: "Prompt the AI to do your task"
    - But: "Record the task once. OpenAdapt handles the rest — retrieval, training, deployment."
-   - Proof: 7 modular packages (capture, ML, evals, grounding, retrieval, privacy, viewer); OpenCUA (NeurIPS 2025) built on OpenAdapt's capture infrastructure
+   - Proof: 7 modular packages (capture, ML, evals, grounding, retrieval, privacy, viewer); OpenCUA (NeurIPS 2025) [reused OpenAdapt's macOS a11y capture code](https://arxiv.org/html/2508.09123v3)
 
 2. **Demonstration-Conditioned Agents**
    - Not: "Zero-shot reasoning about what to click"
@@ -270,7 +270,7 @@ Why: Clear 3-step process, action-oriented
 |------------|-----------|------------|---------------|
 | **Anthropic Computer Use** | 72.5% OSWorld (near-human), simple API | Proprietary, cloud-only, no customization, per-action cost | Open source, model-agnostic, trainable, runs locally |
 | **Agent S3 (Simular)** | 72.6% OSWorld (superhuman), open source | Zero-shot only, no demo conditioning, no fine-tuning pipeline | Demo-conditioned agents, capture-to-train pipeline |
-| **OpenCUA (XLANG Lab)** | NeurIPS Spotlight, 45% OSWorld, open models (7B-72B) | Zero-shot at inference — demos used only for training, not runtime | Runtime demo conditioning (unique), OpenCUA built on our capture tool |
+| **OpenCUA (XLANG Lab)** | NeurIPS Spotlight, 45% OSWorld, open models (7B-72B) | Zero-shot at inference — demos used only for training, not runtime | Runtime demo conditioning (unique); OpenCUA reused our macOS a11y code |
 | **Browser Use** | 50k+ GitHub stars, 89% WebVoyager | Browser-only, no desktop, no training pipeline | Full desktop support, fine-tuning, demo library |
 | **UI-TARS (ByteDance)** | Local models (2B-72B), Apache 2.0 | No demo conditioning, no capture pipeline | End-to-end record→train→deploy, demo retrieval |
 | **CUA / Bytebot** | Container infra, YC-backed | Infrastructure-only, no ML training pipeline | Full pipeline: capture + train + eval + deploy |
@@ -497,7 +497,7 @@ Example: Onboarding guides for complex internal tools.
 
 - "46.7% → 100% first-action accuracy with demo conditioning (n=45, same model, no training)"
 - "Fine-tuned 2B model outperforms Claude Sonnet 4.5 on action accuracy (42.9% vs 11.2%, internal benchmark)"
-- "OpenCUA (NeurIPS 2025 Spotlight) built their capture tool on OpenAdapt"
+- "OpenCUA (NeurIPS 2025 Spotlight) reused OpenAdapt's macOS accessibility capture code in AgentNetTool"
 - "Only open-source CUA framework with runtime demo-conditioned inference"
 - "[X,XXX] PyPI downloads this month" (dynamic)
 - "[XXX] GitHub stars" (dynamic)

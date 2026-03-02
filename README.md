@@ -177,7 +177,7 @@ The bottom-right cell is OpenAdapt's unique value: training models to **use** de
 
 **Validated result**: On a controlled macOS benchmark (45 System Settings tasks sharing a common navigation entry point), demo-conditioned prompting improved first-action accuracy from 46.7% to 100%. A length-matched control (+11.1 pp only) confirms the benefit is semantic, not token-length. See the [research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md) for methodology and the [publication roadmap](docs/publication-roadmap.md) for limitations.
 
-**Industry validation**: [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight, XLANG Lab) built their cross-platform capture tool on OpenAdapt, but uses demos only for training — not runtime conditioning. No open-source CUA framework currently does demo-conditioned inference, which remains OpenAdapt's architectural differentiator.
+**Industry validation**: [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight, XLANG Lab) [reused OpenAdapt's macOS accessibility capture code](https://arxiv.org/html/2508.09123v3) in their AgentNetTool, but uses demos only for model training — not runtime conditioning. No open-source CUA framework currently does demo-conditioned inference, which remains OpenAdapt's architectural differentiator.
 
 ### Key Concepts
 
