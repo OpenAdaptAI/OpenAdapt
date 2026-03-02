@@ -40,7 +40,9 @@ OpenAdapt has evolved from a monolithic application (v0.46.0) to a **modular met
 4. **Open Source (MIT License)**: Full transparency, no vendor lock-in
 
 **Key Innovation**:
-- **Trajectory-conditioned disambiguation of UI affordances** - validated experiment showing 33% -> 100% first-action accuracy with demo conditioning
+- **Trajectory-conditioned disambiguation of UI affordances** — the only open-source CUA framework that conditions agents on recorded demonstrations at runtime (validated: 46.7% → 100% first-action accuracy)
+- **Specialization over scale** — fine-tuned Qwen3-VL-2B outperforms Claude Sonnet 4.5 and GPT-5.1 on action accuracy (42.9% vs 11.2% vs 23.2%) on an internal benchmark
+- **Capture-to-deployment pipeline** — record → retrieve → train → deploy, used by [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight) as foundation for their capture tooling
 - **Set-of-Marks (SoM) mode**: 100% accuracy on synthetic benchmarks using element IDs instead of coordinates
 
 ### 1.2 Current Landing Page Assessment
@@ -218,25 +220,31 @@ Why: Clear 3-step process, action-oriented
 
 ### 3.3 Key Differentiators to Emphasize
 
-1. **Demonstration-Based Learning**
-   - Not: "Use natural language to describe tasks"
-   - But: "Just do the task and OpenAdapt learns from watching"
-   - Proof: 33% -> 100% first-action accuracy with demo conditioning
+1. **Capture-to-Deployment Pipeline**
+   - Not: "Prompt the AI to do your task"
+   - But: "Record the task once. OpenAdapt handles the rest — retrieval, training, deployment."
+   - Proof: 7 modular packages (capture, ML, evals, grounding, retrieval, privacy, viewer); OpenCUA (NeurIPS 2025) built on OpenAdapt's capture infrastructure
 
-2. **Model Agnostic**
+2. **Demonstration-Conditioned Agents**
+   - Not: "Zero-shot reasoning about what to click"
+   - But: "Agents conditioned on relevant demos — at inference AND during training"
+   - Proof: 46.7% → 100% first-action accuracy with demo conditioning (validated, n=45). No other open-source CUA framework does runtime demo conditioning.
+   - Note: This is first-action accuracy on tasks sharing a navigation entry point. Multi-step and cross-domain evaluation is ongoing on Windows Agent Arena.
+
+3. **Specialization Over Scale**
+   - Not: "Use the biggest model available"
+   - But: "A 2B model fine-tuned on your workflows outperforms frontier models"
+   - Proof: Qwen3-VL-2B (42.9%) vs Claude Sonnet 4.5 (11.2%) on action accuracy (internal benchmark, synthetic login task)
+
+4. **Model Agnostic**
    - Not: "Works with [specific AI]"
    - But: "Your choice: Claude, GPT-4V, Gemini, Qwen, or custom models"
    - Proof: Adapters for multiple VLM backends
 
-3. **Runs Anywhere**
-   - Not: "Cloud-powered automation"
-   - But: "Run locally, in the cloud, or hybrid"
-   - Proof: CLI-based, works offline
-
-4. **Open Source**
-   - Not: "Try our free tier"
-   - But: "MIT licensed, fully transparent, community-driven"
-   - Proof: GitHub, PyPI, active Discord
+5. **Runs Anywhere & Open Source**
+   - Not: "Cloud-powered automation" / "Try our free tier"
+   - But: "Run locally, in the cloud, or hybrid. MIT licensed, fully transparent."
+   - Proof: CLI-based, works offline; GitHub, PyPI, active Discord
 
 ### 3.4 Messaging Framework
 
@@ -256,14 +264,17 @@ Why: Clear 3-step process, action-oriented
 
 ## 4. Competitive Positioning
 
-### 4.1 Primary Competitors
+### 4.1 Primary Competitors (Updated March 2026)
 
 | Competitor | Strengths | Weaknesses | Our Advantage |
 |------------|-----------|------------|---------------|
-| **Anthropic Computer Use** | First-mover, Claude integration, simple API | Proprietary, cloud-only, no customization | Open source, model-agnostic, trainable |
-| **UI-TARS (ByteDance)** | Strong benchmark scores, research backing | Closed source, not productized | Open source, deployable, extensible |
-| **Traditional RPA (UiPath, etc.)** | Enterprise-proven, large ecosystems | Brittle selectors, no AI reasoning, expensive | AI-first, learns from demos, affordable |
-| **GPT-4V + Custom Code** | Powerful model, flexibility | Requires building everything, no structure | Ready-made SDK, training pipeline, benchmarks |
+| **Anthropic Computer Use** | 72.5% OSWorld (near-human), simple API | Proprietary, cloud-only, no customization, per-action cost | Open source, model-agnostic, trainable, runs locally |
+| **Agent S3 (Simular)** | 72.6% OSWorld (superhuman), open source | Zero-shot only, no demo conditioning, no fine-tuning pipeline | Demo-conditioned agents, capture-to-train pipeline |
+| **OpenCUA (XLANG Lab)** | NeurIPS Spotlight, 45% OSWorld, open models (7B-72B) | Zero-shot at inference — demos used only for training, not runtime | Runtime demo conditioning (unique), OpenCUA built on our capture tool |
+| **Browser Use** | 50k+ GitHub stars, 89% WebVoyager | Browser-only, no desktop, no training pipeline | Full desktop support, fine-tuning, demo library |
+| **UI-TARS (ByteDance)** | Local models (2B-72B), Apache 2.0 | No demo conditioning, no capture pipeline | End-to-end record→train→deploy, demo retrieval |
+| **CUA / Bytebot** | Container infra, YC-backed | Infrastructure-only, no ML training pipeline | Full pipeline: capture + train + eval + deploy |
+| **Traditional RPA (UiPath, etc.)** | Enterprise-proven, UiPath Screen Agent #1 on OSWorld | Brittle selectors, expensive ($10K+/yr), requires scripting | AI-first, learns from demos, open source |
 
 ### 4.2 Positioning Statement
 
@@ -352,21 +363,19 @@ Show it once. Let it handle the rest.
 ```
 ## Why OpenAdapt?
 
-### Demonstration-Based Learning
-No prompt engineering required. OpenAdapt learns from how you actually do tasks.
-[Stat: 33% -> 100% first-action accuracy with demo conditioning]
+### Record Once, Automate Forever
+Capture any workflow. OpenAdapt retrieves relevant demos to guide agents
+AND trains specialized models on your recordings.
+[Stat: 46.7% → 100% first-action accuracy with demo conditioning]
 
-### Model Agnostic
+### Small Models, Big Results
+A 2B model fine-tuned on your workflows outperforms frontier models.
+Specialization beats scale for GUI tasks.
+[Stat: 42.9% action accuracy (Qwen 2B FT) vs 11.2% (Claude Sonnet 4.5)]
+
+### Model Agnostic & Open Source
 Your choice of AI: Claude, GPT-4V, Gemini, Qwen-VL, or fine-tune your own.
-Not locked to any single provider.
-
-### Run Anywhere
-CLI-based, works offline. Deploy locally, in the cloud, or hybrid.
-Your data stays where you want it.
-
-### Fully Open Source
-MIT licensed. Transparent, auditable, community-driven.
-No vendor lock-in, ever.
+MIT licensed. Run locally, in the cloud, or hybrid.
 ```
 
 ### 5.5 For Developers Section
@@ -486,12 +495,21 @@ Example: Onboarding guides for complex internal tools.
 
 ### 6.3 Proof Points to Include
 
-- "33% -> 100% first-action accuracy with demonstration conditioning"
+- "46.7% → 100% first-action accuracy with demo conditioning (n=45, same model, no training)"
+- "Fine-tuned 2B model outperforms Claude Sonnet 4.5 on action accuracy (42.9% vs 11.2%, internal benchmark)"
+- "OpenCUA (NeurIPS 2025 Spotlight) built their capture tool on OpenAdapt"
+- "Only open-source CUA framework with runtime demo-conditioned inference"
 - "[X,XXX] PyPI downloads this month" (dynamic)
 - "[XXX] GitHub stars" (dynamic)
 - "7 modular packages, 1 unified CLI"
 - "Integrated with Windows Agent Arena, WebArena, OSWorld benchmarks"
 - "MIT licensed, fully open source"
+
+**Honesty notes for proof points**:
+- The 46.7%→100% result is first-action only on 45 macOS tasks sharing the same navigation entry point
+- The 42.9% vs 11.2% result is on a controlled internal synthetic login benchmark (~3 UI elements)
+- Multi-step episode success on real-world benchmarks (WAA) is under active evaluation
+- Frame these as "validated signal" not "production-proven"
 
 ---
 

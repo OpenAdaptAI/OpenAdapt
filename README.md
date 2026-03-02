@@ -164,18 +164,20 @@ OpenAdapt follows a streamlined **Demonstrate → Learn → Execute** pipeline:
 - **Act**: Execute validated actions with safety gates
 - **Evaluate**: Measure success with `openadapt-evals` and feed results back for improvement
 
-### Core Approach: Demo-Conditioned Prompting
+### Core Approach: Trajectory-Conditioned Disambiguation
 
-OpenAdapt explores **demonstration-conditioned automation** - "show, don't tell":
+Zero-shot VLMs fail on GUI tasks not due to lack of capability, but due to **ambiguity in UI affordances**. OpenAdapt resolves this by conditioning agents on human demonstrations — "show, don't tell."
 
-| Traditional Agent | OpenAdapt Agent |
-|-------------------|-----------------|
-| User writes prompts | User records demonstration |
-| Ambiguous instructions | Grounded in actual UI |
-| Requires prompt engineering | Reduced prompt engineering |
-| Context-free | Context from similar demos |
+| | No Retrieval | With Retrieval |
+|---|---|---|
+| **No Fine-tuning** | 33–47% (zero-shot baseline) | **100%** (validated, n=45) |
+| **Fine-tuning** | Standard SFT baseline | **Demo-conditioned FT** (core goal) |
 
-**Retrieval powers BOTH training AND evaluation**: Similar demonstrations are retrieved as context for the VLM. In early experiments on a controlled macOS benchmark, this improved first-action accuracy from 46.7% to 100% - though all 45 tasks in that benchmark share the same navigation entry point. See the [publication roadmap](docs/publication-roadmap.md) for methodology and limitations.
+The bottom-right cell is OpenAdapt's unique value: training models to **use** demonstrations they haven't seen before, combining retrieval with fine-tuning for maximum accuracy. Phase 2 (retrieval-only prompting) is validated; Phase 3 (demo-conditioned fine-tuning) is in progress.
+
+**Validated result**: On a controlled macOS benchmark (45 System Settings tasks sharing a common navigation entry point), demo-conditioned prompting improved first-action accuracy from 46.7% to 100%. A length-matched control (+11.1 pp only) confirms the benefit is semantic, not token-length. See the [research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md) for methodology and the [publication roadmap](docs/publication-roadmap.md) for limitations.
+
+**Industry validation**: [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight, XLANG Lab) built their cross-platform capture tool on OpenAdapt, but uses demos only for training — not runtime conditioning. No open-source CUA framework currently does demo-conditioned inference, which remains OpenAdapt's architectural differentiator.
 
 ### Key Concepts
 
