@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-03-03)
+
+### Features
+
+- Add docs sync trigger ([#995](https://github.com/OpenAdaptAI/OpenAdapt/pull/995),
+  [`7d4357e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7d4357ec367805676e3ab9aa88b99658b3f29986))
+
+
 ## v1.0.6 (2026-02-18)
 
 ### Bug Fixes
