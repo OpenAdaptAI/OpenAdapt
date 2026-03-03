@@ -51,6 +51,9 @@ Homepage = "https://openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/openadapt-desktop"
 Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
 
+[tool.hatch.build.targets.wheel]
+packages = ["engine"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

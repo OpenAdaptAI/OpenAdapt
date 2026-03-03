@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.scrubber import ScrubLevel, Scrubber
+from engine.scrubber import Scrubber, ScrubLevel
 
 
 class TestScrubber:

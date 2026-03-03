@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from engine.backends.protocol import StorageBackend
-from engine.backends.s3 import S3Backend
-from engine.backends.huggingface import HuggingFaceBackend
-from engine.backends.wormhole import WormholeBackend
 from engine.backends.federated import FederatedBackend
+from engine.backends.huggingface import HuggingFaceBackend
+from engine.backends.s3 import S3Backend
+from engine.backends.wormhole import WormholeBackend
 
 
 class TestProtocolConformance:
