@@ -5,6 +5,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/discord/1084481804896374814?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
@@ -28,6 +29,13 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 | `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
 | `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
 | `openadapt-privacy` | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+| `openadapt-wright` | Dev automation | [openadapt-wright](https://github.com/OpenAdaptAI/openadapt-wright) |
+| `openadapt-herald` | Social media from git history | [openadapt-herald](https://github.com/OpenAdaptAI/openadapt-herald) |
+| `openadapt-crier` | Telegram approval bot | [openadapt-crier](https://github.com/OpenAdaptAI/openadapt-crier) |
+| `openadapt-consilium` | Multi-model consensus | [openadapt-consilium](https://github.com/OpenAdaptAI/openadapt-consilium) |
+| `openadapt-tray` | System tray app | [openadapt-tray](https://github.com/OpenAdaptAI/openadapt-tray) |
+| `openadapt-agent` | Production execution engine | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
+| `openadapt-telemetry` | Error tracking | [openadapt-telemetry](https://github.com/OpenAdaptAI/openadapt-telemetry) |
 
 ---
 
@@ -77,6 +85,35 @@ openadapt capture view my-task
 
 ---
 
+## Ecosystem
+
+### Core Platform Components
+
+| Package | Description | Repository |
+|---------|-------------|------------|
+| `openadapt` | Meta-package with unified CLI | This repo |
+| `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
+| `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
+| `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
+| `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
+| `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
+| `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
+| `openadapt-privacy` | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+
+### Applications and Tools
+
+| Package | Description | Repository |
+|---------|-------------|------------|
+| `openadapt-tray` | System tray app | [openadapt-tray](https://github.com/OpenAdaptAI/openadapt-tray) |
+| `openadapt-agent` | Production execution engine | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
+| `openadapt-wright` | Dev automation | [openadapt-wright](https://github.com/OpenAdaptAI/openadapt-wright) |
+| `openadapt-herald` | Social media from git history | [openadapt-herald](https://github.com/OpenAdaptAI/openadapt-herald) |
+| `openadapt-crier` | Telegram approval bot | [openadapt-crier](https://github.com/OpenAdaptAI/openadapt-crier) |
+| `openadapt-consilium` | Multi-model consensus | [openadapt-consilium](https://github.com/OpenAdaptAI/openadapt-consilium) |
+| `openadapt-telemetry` | Error tracking | [openadapt-telemetry](https://github.com/OpenAdaptAI/openadapt-telemetry) |
+
+---
+
 ## CLI Reference
 
 ```
@@ -106,184 +143,24 @@ See the full [Architecture Evolution](docs/architecture-evolution.md) for detail
 
 ### Three-Phase Pipeline
 
-```mermaid
-flowchart TB
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% DATA SOURCES (Multi-Source Ingestion)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph DataSources["Data Sources"]
-        direction LR
-        HUMAN["Human Demos"]
-        SYNTH["Synthetic Data"]:::future
-        BENCH_DATA["Benchmark Tasks"]
-    end
+OpenAdapt follows a streamlined **Demonstrate → Learn → Execute** pipeline:
 
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 1: DEMONSTRATE (Observation Collection)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Demonstrate["1. DEMONSTRATE (Observation Collection)"]
-        direction TB
-        CAP["Capture<br/>openadapt-capture"]
-        PRIV["Privacy<br/>openadapt-privacy"]
-        STORE[("Demo Library")]
+**1. DEMONSTRATE (Observation Collection)**
+- **Capture**: Record user actions and screenshots with `openadapt-capture`
+- **Privacy**: Scrub PII/PHI from recordings with `openadapt-privacy`
+- **Store**: Build a searchable demonstration library
 
-        CAP --> PRIV
-        PRIV --> STORE
-    end
+**2. LEARN (Policy Acquisition)**
+- **Retrieval Path**: Embed demonstrations, index them, and enable semantic search
+- **Training Path**: Load demonstrations and fine-tune Vision-Language Models (VLMs)
+- **Abstraction**: Progress from literal replay to template-based automation
 
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 2: LEARN (Policy Acquisition)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Learn["2. LEARN (Policy Acquisition)"]
-        direction TB
-
-        subgraph RetrievalPath["Retrieval Path"]
-            EMB["Embed"]
-            IDX["Index"]
-            SEARCH["Search"]
-            EMB --> IDX --> SEARCH
-        end
-
-        subgraph TrainingPath["Training Path"]
-            LOADER["Load"]
-            TRAIN["Train"]
-            CKPT[("Checkpoint")]
-            LOADER --> TRAIN --> CKPT
-        end
-
-        subgraph ProcessMining["Process Mining"]
-            ABSTRACT["Abstract"]:::future
-            PATTERNS["Patterns"]:::future
-            ABSTRACT --> PATTERNS
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 3: EXECUTE (Agent Deployment)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Execute["3. EXECUTE (Agent Deployment)"]
-        direction TB
-
-        subgraph AgentCore["Agent Core"]
-            OBS["Observe"]
-            POLICY["Policy<br/>(Demo-Conditioned)"]
-            GROUND["Grounding<br/>openadapt-grounding"]
-            ACT["Act"]
-
-            OBS --> POLICY
-            POLICY --> GROUND
-            GROUND --> ACT
-        end
-
-        subgraph SafetyGate["Safety Gate"]
-            VALIDATE["Validate"]
-            CONFIRM["Confirm"]:::future
-            VALIDATE --> CONFIRM
-        end
-
-        subgraph Evaluation["Evaluation"]
-            EVALS["Evals<br/>openadapt-evals"]
-            METRICS["Metrics"]
-            EVALS --> METRICS
-        end
-
-        ACT --> VALIDATE
-        VALIDATE --> EVALS
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% THE ABSTRACTION LADDER (Side Panel)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph AbstractionLadder["Abstraction Ladder"]
-        direction TB
-        L0["Literal<br/>(Raw Events)"]
-        L1["Symbolic<br/>(Semantic Actions)"]
-        L2["Template<br/>(Parameterized)"]
-        L3["Semantic<br/>(Intent)"]:::future
-        L4["Goal<br/>(Task Spec)"]:::future
-
-        L0 --> L1
-        L1 --> L2
-        L2 -.-> L3
-        L3 -.-> L4
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MODEL LAYER
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Models["Model Layer (VLMs)"]
-        direction TB
-        subgraph APIModels["API Models"]
-            direction LR
-            CLAUDE["Claude"]
-            GPT["GPT-4o"]
-            GEMINI["Gemini"]
-        end
-        subgraph OpenSource["Open Source / Fine-tuned"]
-            direction LR
-            QWEN3["Qwen3-VL"]
-            UITARS["UI-TARS"]
-            OPENCUA["OpenCUA"]
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MAIN DATA FLOW
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% Data sources feed into phases
-    HUMAN --> CAP
-    SYNTH -.-> LOADER
-    BENCH_DATA --> EVALS
-
-    %% Demo library feeds learning
-    STORE --> EMB
-    STORE --> LOADER
-    STORE -.-> ABSTRACT
-
-    %% Learning outputs feed execution
-    SEARCH -->|"demo context"| POLICY
-    CKPT -->|"trained policy"| POLICY
-    PATTERNS -.->|"templates"| POLICY
-
-    %% Model connections
-    POLICY --> Models
-    GROUND --> Models
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% FEEDBACK LOOPS (Evaluation-Driven)
-    %% ═══════════════════════════════════════════════════════════════════════
-    METRICS -->|"success traces"| STORE
-    METRICS -.->|"training signal"| TRAIN
-
-    %% Retrieval in BOTH training AND evaluation
-    SEARCH -->|"eval conditioning"| EVALS
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% STYLING
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% Phase colors
-    classDef phase1 fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef phase2 fill:#27AE60,stroke:#1E8449,color:#fff
-    classDef phase3 fill:#9B59B6,stroke:#6C3483,color:#fff
-
-    %% Component states
-    classDef implemented fill:#2ECC71,stroke:#1E8449,color:#fff
-    classDef future fill:#95A5A6,stroke:#707B7C,color:#fff,stroke-dasharray: 5 5
-    classDef futureBlock fill:#f5f5f5,stroke:#95A5A6,stroke-dasharray: 5 5
-    classDef safetyBlock fill:#E74C3C,stroke:#A93226,color:#fff
-
-    %% Model layer
-    classDef models fill:#F39C12,stroke:#B7950B,color:#fff
-
-    %% Apply styles
-    class CAP,PRIV,STORE phase1
-    class EMB,IDX,SEARCH,LOADER,TRAIN,CKPT phase2
-    class OBS,POLICY,GROUND,ACT,VALIDATE,EVALS,METRICS phase3
-    class CLAUDE,GPT,GEMINI,QWEN models
-    class L0,L1,L2 implemented
-```
+**3. EXECUTE (Agent Deployment)**
+- **Observe**: Take screenshots and gather accessibility information
+- **Policy**: Use demonstration context to decide actions via VLMs (Claude, GPT-4o, Qwen3-VL)
+- **Ground**: Map intentions to specific UI coordinates with `openadapt-grounding`
+- **Act**: Execute validated actions with safety gates
+- **Evaluate**: Measure success with `openadapt-evals` and feed results back for improvement
 
 ### Core Approach: Demo-Conditioned Prompting
 
