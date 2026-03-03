@@ -6,31 +6,6 @@
 
 Cross-platform desktop app for continuous screen recording and AI training data collection, built for [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt).
 
-## Screenshots
-
-**Dashboard** -- start/stop recording, monitor storage, view recent captures:
-
-![Dashboard](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/screenshots/01_dashboard_idle.png)
-
-**Recording** -- active recording with duration and status indicator:
-
-![Recording](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/screenshots/02_dashboard_recording.png)
-
-**Upload Review** -- review pending recordings before any data leaves the machine:
-
-![Review](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/screenshots/03_review_panel.png)
-
-<details>
-<summary>Generate screenshots locally</summary>
-
-```bash
-uv sync --extra dev
-uv run playwright install chromium
-uv run python scripts/generate_screenshots.py --output screenshots/
-```
-
-</details>
-
 ## What is OpenAdapt Desktop?
 
 OpenAdapt Desktop is a system tray application (macOS, Windows, Linux) that continuously captures desktop activity -- screen recordings, mouse events, keyboard events, window metadata, and optionally audio -- for training AI agents via demonstration.
@@ -103,9 +78,8 @@ This project is in **early development** (v0.1.0). The Python engine scaffold is
 - Python engine: config, review state machine, audit logging, storage backend protocol
 - Storage backends: S3 cost estimation, Wormhole credential check, protocol conformance
 - Controller: recording state enum, idle detection
-- E2E tests: Playwright-based UI tests for all HTML pages, IPC protocol tests
-- Automated screenshot generation: `scripts/generate_screenshots.py`
-- CI: 52 tests passing on all platforms (macOS, Windows, Linux) x (Python 3.11, 3.12)
+- IPC protocol: JSON-over-stdin/stdout handler with tests
+- CI: tests passing on all platforms (macOS, Windows, Linux) x (Python 3.11, 3.12)
 
 ### What's next
 

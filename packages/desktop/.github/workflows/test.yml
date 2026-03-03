@@ -24,27 +24,14 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      # Linux: start Xvfb for integration tests that need a display
-      - name: Start Xvfb (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          Xvfb :99 -screen 0 1920x1080x24 &
-
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Install Playwright browsers
-        run: uv run playwright install chromium --with-deps
-
       - name: Lint
-        run: uv run ruff check engine/ tests/ scripts/
+        run: uv run ruff check engine/ tests/
 
       - name: Run tests
         run: uv run pytest tests/ -v
-        env:
-          DISPLAY: ":99"
 
   # TODO: Add Rust/Tauri tests when implemented
   # test-tauri:
