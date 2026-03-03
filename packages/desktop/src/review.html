@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenAdapt Desktop - Upload Review</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { font-size: 1.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Upload Review</h1>
+
+  <!-- TODO: Implement review UI from design doc Section 8.
+
+       This page is the gate between local recordings and any outbound data path.
+       It extends the existing openadapt-capture HTML viewer (create_html()) with
+       review_mode=True.
+
+       Features to implement:
+       1. Redaction highlights: Red overlay boxes on scrubbed screenshot regions,
+          yellow highlights on redacted text events.
+       2. Before/after toggle: Click any redacted region to see original vs. scrubbed.
+       3. Per-redaction controls: Accept (keep scrubbed) or Reject (restore original).
+       4. Summary panel: Capture count, total size, scrub statistics.
+       5. Consent banner with backend-specific language (see Section 8.3).
+       6. Upload button wired to window.__TAURI__.invoke('upload_capture', {...}).
+
+       Review states (Section 5):
+       - captured: Raw on disk. NOTHING can send this off-machine.
+       - scrubbed: Scrub pass completed, awaiting user review.
+       - reviewed: User reviewed scrubbed copy and approved. Cleared for egress.
+       - dismissed: User skipped scrubbing, accepted PII risks. Cleared for egress.
+       - deleted: Recording deleted from disk.
+  -->
+
+  <div id="pending-list">
+    <p>No recordings pending review.</p>
+  </div>
+
+  <div id="review-actions" style="margin-top: 20px;">
+    <button onclick="reviewAll()">Review All</button>
+    <button onclick="dismissAll()">Dismiss All</button>
+  </div>
+
+  <p><a href="index.html" style="color: #e94560;">Back</a></p>
+
+  <script>
+    async function reviewAll() {
+      // TODO: Implement batch review flow
+      console.log("Review all - not yet implemented");
+    }
+
+    async function dismissAll() {
+      // TODO: Implement batch dismiss with PII warning
+      console.log("Dismiss all - not yet implemented");
+    }
+  </script>
+</body>
+</html>

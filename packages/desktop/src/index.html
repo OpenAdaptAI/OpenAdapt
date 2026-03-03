@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenAdapt Desktop</title>
+  <style>
+    /* TODO: Extract to external stylesheet */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { font-size: 1.5rem; }
+    .status { padding: 10px; border-radius: 8px; margin: 10px 0; }
+    .status.idle { background: #333; }
+    .status.recording { background: #6b1a1a; }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-right: 8px;
+    }
+    .btn-primary { background: #e94560; color: white; }
+    .btn-secondary { background: #444; color: white; }
+  </style>
+</head>
+<body>
+  <h1>OpenAdapt Desktop</h1>
+
+  <div id="status" class="status idle">
+    <p><strong>Status:</strong> <span id="status-text">Idle</span></p>
+    <p><strong>Duration:</strong> <span id="duration">--</span></p>
+    <p><strong>Storage:</strong> <span id="storage">-- / -- GB</span></p>
+  </div>
+
+  <div>
+    <button class="btn btn-primary" id="btn-record" onclick="toggleRecording()">
+      Start Recording
+    </button>
+    <button class="btn btn-secondary" onclick="openSettings()">
+      Settings
+    </button>
+    <button class="btn btn-secondary" onclick="openReview()">
+      Review Uploads
+    </button>
+  </div>
+
+  <h2>Recent Captures</h2>
+  <div id="captures-list">
+    <p>No captures yet.</p>
+  </div>
+
+  <script>
+    // TODO: Import @tauri-apps/api for IPC
+    // const { invoke } = window.__TAURI__.core;
+
+    async function toggleRecording() {
+      // TODO: Call start_recording or stop_recording via Tauri IPC
+      console.log("Toggle recording - not yet implemented");
+    }
+
+    async function openSettings() {
+      // TODO: Open settings window via Tauri
+      window.location.href = "settings.html";
+    }
+
+    async function openReview() {
+      // TODO: Open review panel via Tauri
+      window.location.href = "review.html";
+    }
+
+    async function refreshStatus() {
+      // TODO: Call get_status and get_storage_usage via Tauri IPC
+      // TODO: Update DOM elements with current state
+    }
+
+    // Refresh status on load and every 5 seconds
+    // refreshStatus();
+    // setInterval(refreshStatus, 5000);
+  </script>
+</body>
+</html>

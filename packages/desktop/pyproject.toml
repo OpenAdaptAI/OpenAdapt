@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-desktop"
+version = "0.1.0"
+description = "Cross-platform desktop app for continuous screen recording and AI training data collection"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "OpenAdapt AI", email = "hello@openadapt.ai" },
+]
+keywords = ["desktop", "recording", "screen-capture", "AI", "training-data", "automation"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "openadapt-capture>=0.3.0",
+    "openadapt-privacy>=0.1.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "loguru",
+    "psutil",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+enterprise = ["boto3"]
+community = ["huggingface_hub"]
+federated = ["flwr", "torch"]
+full = [
+    "openadapt-desktop[enterprise,community,federated]",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://openadapt.ai"
+Repository = "https://github.com/OpenAdaptAI/openadapt-desktop"
+Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

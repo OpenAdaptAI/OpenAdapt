@@ -1,0 +1,106 @@
+# CI build + sign + release pipeline
+#
+# This workflow builds the Tauri application with bundled Python sidecar
+# for all supported platforms. On tag push, it creates a GitHub Release
+# with signed installers.
+#
+# See design doc Section 11 for the full CI/CD design.
+#
+# Build matrix:
+#   macOS Intel (x86_64)     -> DMG + .app bundle
+#   macOS Apple Silicon      -> DMG + .app bundle
+#   Windows x64              -> NSIS installer (.exe)
+#   Linux x64                -> AppImage + .deb
+#
+# TODO: This is a placeholder. Actual implementation requires:
+#   - Apple Developer certificate for macOS code signing + notarization
+#   - Windows Authenticode certificate for code signing
+#   - Tauri signing private key (Ed25519) for update verification
+#   - PyInstaller build step for the Python sidecar
+
+name: Build & Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-python-sidecar:
+    name: Build Python Sidecar
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra full
+
+      # TODO: Build Python sidecar with PyInstaller
+      # - name: Build sidecar
+      #   run: |
+      #     uv run pip install pyinstaller
+      #     uv run pyinstaller --onefile --name openadapt-engine engine/main.py
+
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: sidecar-${{ matrix.target }}
+      #     path: dist/openadapt-engine*
+
+  # TODO: Uncomment when Tauri shell is implemented
+  # build-tauri:
+  #   name: Build Tauri App
+  #   needs: build-python-sidecar
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - os: macos-13
+  #           target: x86_64-apple-darwin
+  #         - os: macos-14
+  #           target: aarch64-apple-darwin
+  #         - os: windows-latest
+  #           target: x86_64-pc-windows-msvc
+  #         - os: ubuntu-22.04
+  #           target: x86_64-unknown-linux-gnu
+  #   runs-on: ${{ matrix.os }}
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: sidecar-${{ matrix.target }}
+  #         path: src-tauri/binaries/
+  #     - uses: tauri-apps/tauri-action@v0
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  #         # macOS signing
+  #         APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+  #         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+  #         APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+  #         APPLE_ID: ${{ secrets.APPLE_ID }}
+  #         APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+  #         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  #       with:
+  #         tagName: v__VERSION__
+  #         releaseName: "OpenAdapt Desktop v__VERSION__"
+  #         releaseBody: "See the changelog for details."
+  #         releaseDraft: true

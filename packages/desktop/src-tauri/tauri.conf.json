@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/schema.json",
+  "productName": "OpenAdapt Desktop",
+  "version": "0.1.0",
+  "identifier": "ai.openadapt.desktop",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OpenAdapt Desktop",
+        "width": 800,
+        "height": 600,
+        "visible": false
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "OpenAdapt Desktop"
+    },
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/OpenAdaptAI/openadapt-desktop/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
+  }
+}

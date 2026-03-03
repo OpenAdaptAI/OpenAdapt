@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+.venv/
+venv/
+.uv/
+
+# Rust / Cargo
+src-tauri/target/
+**/*.rs.bk
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/icons/*.ico
+src-tauri/icons/*.icns
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# PyInstaller
+*.spec
+
+# Captures (user data, never committed)
+captures/
+archive/
+tombstones/
+
+# Audit logs
+audit.jsonl
+
+# OS
+Thumbs.db
+Desktop.ini
