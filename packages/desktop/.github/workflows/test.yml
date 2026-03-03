@@ -35,8 +35,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium --with-deps
+
       - name: Lint
-        run: uv run ruff check engine/ tests/
+        run: uv run ruff check engine/ tests/ scripts/
 
       - name: Run tests
         run: uv run pytest tests/ -v
