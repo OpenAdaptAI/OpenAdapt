@@ -9,7 +9,7 @@ Install specific extras to get the functionality you need:
     pip install openadapt[all]         # Everything
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.6"
 
 # Lazy imports to avoid pulling in heavy dependencies unless needed
 

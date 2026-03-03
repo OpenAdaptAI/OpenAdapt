@@ -1,22 +1,38 @@
-# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs)
+# OpenAdapt
+## AI-First Process Automation with Large Multimodal Models
 
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/discord/1031468618276167690?logo=discord&logoColor=white&label=Discord)](https://discord.gg/yF527cQbDG)
 
-**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
+**OpenAdapt** is the open-source adapter between Large Multimodal Models (LMMs) and traditional desktop and web interfaces. Transform GUI automation through demonstration-based learning rather than complex programming.
 
-Record GUI demonstrations, train ML models, and evaluate agents - all from a unified CLI.
+**🎯 Show, don't tell** → Record demonstrations, train intelligent agents, and deploy automation that adapts to any software environment.
 
-[Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
+### Quick Links
+[🚀 Get Started](#installation) | [💬 Join Discord](https://discord.gg/yF527cQbDG) | [📖 Documentation](https://docs.openadapt.ai) | [🌐 Website](https://openadapt.ai)
+
+---
+
+## ✨ What Makes OpenAdapt Different
+
+| Traditional Automation | OpenAdapt |
+|------------------------|-----------|
+| ❌ Complex scripting required | ✅ Record demonstrations visually |
+| ❌ Brittle, breaks with UI changes | ✅ AI adapts to interface variations |
+| ❌ Limited to predefined workflows | ✅ Learns from human expertise |
+| ❌ Programming knowledge needed | ✅ Anyone can create automations |
 
 ---
 
 ## Architecture
 
 OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadapt` package provides a unified CLI and depends on focused sub-packages via PyPI:
+
+### Core Platform Components
 
 | Package | Description | Repository |
 |---------|-------------|------------|
@@ -28,6 +44,17 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 | `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
 | `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
 | `openadapt-privacy` | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+| `openadapt-agent` | Production execution engine | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
+
+### Applications & Tools
+
+| Package | Description | Repository |
+|---------|-------------|------------|
+| `openadapt-tray` | System tray application | [openadapt-tray](https://github.com/OpenAdaptAI/openadapt-tray) |
+| `openadapt-wright` | AI-powered dev automation | [openadapt-wright](https://github.com/OpenAdaptAI/openadapt-wright) |
+| `openadapt-consilium` | Multi-LLM consensus system | [openadapt-consilium](https://github.com/OpenAdaptAI/openadapt-consilium) |
+| `openadapt-web` | Marketing website | [openadapt-web](https://github.com/OpenAdaptAI/openadapt-web) |
+| `openadapt-telemetry` | Error tracking and analytics | [openadapt-telemetry](https://github.com/OpenAdaptAI/openadapt-telemetry) |
 
 ---
 
@@ -102,210 +129,53 @@ openadapt doctor                          Check system requirements
 
 ## How It Works
 
-See the full [Architecture Evolution](docs/architecture-evolution.md) for detailed documentation.
+OpenAdapt transforms GUI automation through a **three-phase demo-conditioned approach** that learns from human demonstrations rather than relying solely on programmatic instructions.
 
-### Three-Phase Pipeline
+### The Three-Phase Pipeline
 
-```mermaid
-flowchart TB
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% DATA SOURCES (Multi-Source Ingestion)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph DataSources["Data Sources"]
-        direction LR
-        HUMAN["Human Demos"]
-        SYNTH["Synthetic Data"]:::future
-        BENCH_DATA["Benchmark Tasks"]
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 1: DEMONSTRATE (Observation Collection)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Demonstrate["1. DEMONSTRATE (Observation Collection)"]
-        direction TB
-        CAP["Capture<br/>openadapt-capture"]
-        PRIV["Privacy<br/>openadapt-privacy"]
-        STORE[("Demo Library")]
-
-        CAP --> PRIV
-        PRIV --> STORE
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 2: LEARN (Policy Acquisition)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Learn["2. LEARN (Policy Acquisition)"]
-        direction TB
-
-        subgraph RetrievalPath["Retrieval Path"]
-            EMB["Embed"]
-            IDX["Index"]
-            SEARCH["Search"]
-            EMB --> IDX --> SEARCH
-        end
-
-        subgraph TrainingPath["Training Path"]
-            LOADER["Load"]
-            TRAIN["Train"]
-            CKPT[("Checkpoint")]
-            LOADER --> TRAIN --> CKPT
-        end
-
-        subgraph ProcessMining["Process Mining"]
-            ABSTRACT["Abstract"]:::future
-            PATTERNS["Patterns"]:::future
-            ABSTRACT --> PATTERNS
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% PHASE 3: EXECUTE (Agent Deployment)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Execute["3. EXECUTE (Agent Deployment)"]
-        direction TB
-
-        subgraph AgentCore["Agent Core"]
-            OBS["Observe"]
-            POLICY["Policy<br/>(Demo-Conditioned)"]
-            GROUND["Grounding<br/>openadapt-grounding"]
-            ACT["Act"]
-
-            OBS --> POLICY
-            POLICY --> GROUND
-            GROUND --> ACT
-        end
-
-        subgraph SafetyGate["Safety Gate"]
-            VALIDATE["Validate"]
-            CONFIRM["Confirm"]:::future
-            VALIDATE --> CONFIRM
-        end
-
-        subgraph Evaluation["Evaluation"]
-            EVALS["Evals<br/>openadapt-evals"]
-            METRICS["Metrics"]
-            EVALS --> METRICS
-        end
-
-        ACT --> VALIDATE
-        VALIDATE --> EVALS
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% THE ABSTRACTION LADDER (Side Panel)
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph AbstractionLadder["Abstraction Ladder"]
-        direction TB
-        L0["Literal<br/>(Raw Events)"]
-        L1["Symbolic<br/>(Semantic Actions)"]
-        L2["Template<br/>(Parameterized)"]
-        L3["Semantic<br/>(Intent)"]:::future
-        L4["Goal<br/>(Task Spec)"]:::future
-
-        L0 --> L1
-        L1 --> L2
-        L2 -.-> L3
-        L3 -.-> L4
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MODEL LAYER
-    %% ═══════════════════════════════════════════════════════════════════════
-    subgraph Models["Model Layer (VLMs)"]
-        direction TB
-        subgraph APIModels["API Models"]
-            direction LR
-            CLAUDE["Claude"]
-            GPT["GPT-4o"]
-            GEMINI["Gemini"]
-        end
-        subgraph OpenSource["Open Source / Fine-tuned"]
-            direction LR
-            QWEN3["Qwen3-VL"]
-            UITARS["UI-TARS"]
-            OPENCUA["OpenCUA"]
-        end
-    end
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% MAIN DATA FLOW
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% Data sources feed into phases
-    HUMAN --> CAP
-    SYNTH -.-> LOADER
-    BENCH_DATA --> EVALS
-
-    %% Demo library feeds learning
-    STORE --> EMB
-    STORE --> LOADER
-    STORE -.-> ABSTRACT
-
-    %% Learning outputs feed execution
-    SEARCH -->|"demo context"| POLICY
-    CKPT -->|"trained policy"| POLICY
-    PATTERNS -.->|"templates"| POLICY
-
-    %% Model connections
-    POLICY --> Models
-    GROUND --> Models
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% FEEDBACK LOOPS (Evaluation-Driven)
-    %% ═══════════════════════════════════════════════════════════════════════
-    METRICS -->|"success traces"| STORE
-    METRICS -.->|"training signal"| TRAIN
-
-    %% Retrieval in BOTH training AND evaluation
-    SEARCH -->|"eval conditioning"| EVALS
-
-    %% ═══════════════════════════════════════════════════════════════════════
-    %% STYLING
-    %% ═══════════════════════════════════════════════════════════════════════
-
-    %% Phase colors
-    classDef phase1 fill:#3498DB,stroke:#1A5276,color:#fff
-    classDef phase2 fill:#27AE60,stroke:#1E8449,color:#fff
-    classDef phase3 fill:#9B59B6,stroke:#6C3483,color:#fff
-
-    %% Component states
-    classDef implemented fill:#2ECC71,stroke:#1E8449,color:#fff
-    classDef future fill:#95A5A6,stroke:#707B7C,color:#fff,stroke-dasharray: 5 5
-    classDef futureBlock fill:#f5f5f5,stroke:#95A5A6,stroke-dasharray: 5 5
-    classDef safetyBlock fill:#E74C3C,stroke:#A93226,color:#fff
-
-    %% Model layer
-    classDef models fill:#F39C12,stroke:#B7950B,color:#fff
-
-    %% Apply styles
-    class CAP,PRIV,STORE phase1
-    class EMB,IDX,SEARCH,LOADER,TRAIN,CKPT phase2
-    class OBS,POLICY,GROUND,ACT,VALIDATE,EVALS,METRICS phase3
-    class CLAUDE,GPT,GEMINI,QWEN models
-    class L0,L1,L2 implemented
+```
+1. DEMONSTRATE → 2. LEARN → 3. EXECUTE
+    ↓               ↓           ↓
+  Record         Train       Deploy
+  Actions        Models      Agents
 ```
 
-### Core Approach: Demo-Conditioned Prompting
+#### **Phase 1: Demonstrate**
+Record human demonstrations of GUI tasks using `openadapt-capture`. All recordings are processed through `openadapt-privacy` for PII/PHI scrubbing before storage.
 
-OpenAdapt explores **demonstration-conditioned automation** - "show, don't tell":
+#### **Phase 2: Learn**
+Choose your learning approach:
+- **Retrieval Path**: Index demonstrations with `openadapt-retrieval` for runtime context
+- **Training Path**: Fine-tune vision-language models using `openadapt-ml`
+- **Hybrid**: Combine both for maximum effectiveness
 
-| Traditional Agent | OpenAdapt Agent |
-|-------------------|-----------------|
-| User writes prompts | User records demonstration |
-| Ambiguous instructions | Grounded in actual UI |
-| Requires prompt engineering | Reduced prompt engineering |
-| Context-free | Context from similar demos |
+#### **Phase 3: Execute**
+Deploy intelligent agents via `openadapt-agent` that:
+- Observe the current screen state
+- Apply learned policies with demonstration context
+- Ground actions to specific UI elements via `openadapt-grounding`
+- Execute actions with built-in safety validation
 
-**Retrieval powers BOTH training AND evaluation**: Similar demonstrations are retrieved as context for the VLM. In early experiments on a controlled macOS benchmark, this improved first-action accuracy from 46.7% to 100% - though all 45 tasks in that benchmark share the same navigation entry point. See the [publication roadmap](docs/publication-roadmap.md) for methodology and limitations.
+### 🧠 Core Innovation: Demo-Conditioned Automation
 
-### Key Concepts
+Instead of complex prompts, OpenAdapt learns from **visual demonstrations**:
 
-- **Policy/Grounding Separation**: The Policy decides *what* to do; Grounding determines *where* to do it
-- **Safety Gate**: Runtime validation layer before action execution (confirm mode for high-risk actions)
-- **Abstraction Ladder**: Progressive generalization from literal replay to goal-level automation
-- **Evaluation-Driven Feedback**: Success traces become new training data
+| Traditional Approach | Demo-Conditioned |
+|---------------------|------------------|
+| Write detailed prompts | Record demonstration once |
+| Debug when things break | AI adapts to UI changes |
+| Program every edge case | Learn from human intuition |
+| Maintain complex scripts | Visual examples as documentation |
 
-**Legend:** Solid = Implemented | Dashed = Future
+**Results**: In controlled benchmarks, demonstration context improved first-action accuracy from 46.7% to 100%. Similar demonstrations provide rich context that helps Vision Language Models understand both the *what* and *how* of GUI interactions.
+
+### 🔑 Key Concepts
+
+- **Smart Decision Making**: AI decides *what* to do, precise grounding determines *where* to click
+- **Built-in Safety**: Actions are validated before execution to prevent unintended consequences
+- **Progressive Learning**: From exact replay to intelligent adaptation as the system learns
+- **Self-Improving**: Successful automations become training data for even better performance
+
 
 ---
 

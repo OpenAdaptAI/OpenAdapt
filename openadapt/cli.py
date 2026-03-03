@@ -26,7 +26,7 @@ import click
 
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="openadapt")
+@click.version_option(version="1.0.6", prog_name="openadapt")
 def main():
     """OpenAdapt - GUI automation with ML.
 
