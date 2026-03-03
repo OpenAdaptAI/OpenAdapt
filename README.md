@@ -305,7 +305,7 @@ OpenAdapt explores **demonstration-conditioned automation** - "show, don't tell"
 - **Abstraction Ladder**: Progressive generalization from literal replay to goal-level automation
 - **Evaluation-Driven Feedback**: Success traces become new training data
 
-**Legend:** Solid = Implemented | Dashed = Future
+**Legend:** Solid components = Implemented | Dashed components = Future
 
 ---
 
@@ -324,8 +324,11 @@ OpenAdapt explores **demonstration-conditioned automation** - "show, don't tell"
 
 ## Demos
 
-- https://twitter.com/abrichr/status/1784307190062342237
-- https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0
+**Legacy Version (v0.46.0) Examples:**
+- [Twitter Demo](https://twitter.com/abrichr/status/1784307190062342237) - Early OpenAdapt demonstration
+- [Loom Video](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0) - Process automation walkthrough
+
+*Note: These demos show the legacy monolithic version. For current v1.0+ modular architecture examples, see the [documentation](https://docs.openadapt.ai).*
 
 ---
 
