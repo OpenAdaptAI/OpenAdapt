@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-03-03)
+
+### Features
+
+- Add docs sync trigger ([#14](https://github.com/OpenAdaptAI/openadapt-capture/pull/14),
+  [`250ce56`](https://github.com/OpenAdaptAI/openadapt-capture/commit/250ce565ed2a2b2d60da02ab378faf8ea15a4c17))
+
+
 ## v0.3.0 (2026-02-18)
 
 ### Bug Fixes
