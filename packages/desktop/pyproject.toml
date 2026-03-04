@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Cross-platform desktop app for continuous screen recording and AI training data collection"
 requires-python = ">=3.11"
 license = "MIT"

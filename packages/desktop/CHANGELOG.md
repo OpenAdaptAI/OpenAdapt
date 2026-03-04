@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-03-04)
+
+### Features
+
+- Add `openadapt doctor` command and fix audit/wormhole bugs
+  ([#8](https://github.com/OpenAdaptAI/openadapt-desktop/pull/8),
+  [`f5cb841`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/f5cb841acd70dbc3c57ba752e8bd3f6f8763adde))
+
+Add diagnostic command that checks all dependencies and configuration: - Python version, data
+  directory writability, database connectivity - Core deps: openadapt-capture, openadapt-privacy,
+  psutil - Optional deps: boto3, huggingface_hub, magic-wormhole - Backend credentials (S3 keys, HF
+  token) when configured - Shows actionable install instructions for missing dependencies
+
+Bug fixes: - audit.py: create parent directory before writing log entries - wormhole.py: use
+  subprocess.run() instead of Popen to await completion and capture exit code properly
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.1.1 (2026-03-04)
 
 ### Bug Fixes
