@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.2 (2026-03-04)
+
+### Bug Fixes
+
+- Add inline caveat to 100% accuracy claim in README table
+  ([#997](https://github.com/OpenAdaptAI/OpenAdapt/pull/997),
+  [`96907a3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/96907a365de430e6918739d5117daff143053644))
+
+
 ## v1.2.1 (2026-03-04)
 
 ### Bug Fixes
