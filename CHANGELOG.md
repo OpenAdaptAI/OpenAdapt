@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-03-04)
+
+### Bug Fixes
+
+- Correct OpenCUA attribution to macOS a11y code reuse
+  ([#991](https://github.com/OpenAdaptAI/OpenAdapt/pull/991),
+  [`8ed98a7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8ed98a73651f3f5d0e493e2d2172e04ba8c55f67))
+
+- Review fixes — accuracy, claims, and add builders section
+  ([#991](https://github.com/OpenAdaptAI/OpenAdapt/pull/991),
+  [`8ed98a7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8ed98a73651f3f5d0e493e2d2172e04ba8c55f67))
+
+### Documentation
+
+- Reframe positioning with multi-pillar strategy
+  ([#991](https://github.com/OpenAdaptAI/OpenAdapt/pull/991),
+  [`8ed98a7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8ed98a73651f3f5d0e493e2d2172e04ba8c55f67))
+
+- Reframe positioning with multi-pillar strategy and honest scoping
+  ([#991](https://github.com/OpenAdaptAI/OpenAdapt/pull/991),
+  [`8ed98a7`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8ed98a73651f3f5d0e493e2d2172e04ba8c55f67))
+
+
 ## v1.2.0 (2026-03-04)
 
 ### Features
