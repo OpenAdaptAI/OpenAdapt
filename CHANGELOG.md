@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-03-04)
+
+### Features
+
+- Update README.md by combining the best changes from branches
+  ([#996](https://github.com/OpenAdaptAI/OpenAdapt/pull/996),
+  [`4d07359`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4d073596502224320c1e7dfa4a87dfc6e226645e))
+
+
 ## v1.1.0 (2026-03-03)
 
 ### Features
