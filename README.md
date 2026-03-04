@@ -11,7 +11,7 @@
 
 Record GUI demonstrations, train ML models, and evaluate agents - all from a unified CLI.
 
-[Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
+[Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [Blog](https://blog.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
 
 ---
 
