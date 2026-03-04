@@ -57,31 +57,30 @@ def set_browser_mode(
     websocket.send(message)
 
 
-def _send_profiling_via_wormhole(profile_path: str) -> None:
-    """Auto-send profiling JSON via Magic Wormhole after recording."""
-    import shutil
+def _send_profiling_via_wormhole(profile_path: str, timeout: int = 60) -> None:
+    """Auto-send profiling JSON via Magic Wormhole after recording.
+
+    Args:
+        profile_path: Path to the profiling JSON file.
+        timeout: Maximum seconds to wait for a receiver (default: 60).
+    """
     import subprocess as _sp
 
-    wormhole_bin = shutil.which("wormhole")
-    if not wormhole_bin:
-        # Check Python Scripts dir (Windows)
-        from pathlib import Path
+    from openadapt_capture.share import _find_wormhole
 
-        scripts_dir = Path(sys.executable).parent / "Scripts"
-        for candidate in [scripts_dir / "wormhole.exe", scripts_dir / "wormhole"]:
-            if candidate.exists():
-                wormhole_bin = str(candidate)
-                break
+    wormhole_bin = _find_wormhole()
     if not wormhole_bin:
         print("wormhole not found. To enable auto-send:")
-        print("  pip install magic-wormhole")
+        print("  pip install 'openadapt-capture[share]'")
         print(f"Profiling saved to: {profile_path}")
         return
 
-    print("Sending profiling via wormhole (waiting for receiver)...")
+    print(f"Sending profiling via wormhole (waiting up to {timeout}s for receiver)...")
     print("Give the wormhole code below to the receiver.\n")
     try:
-        _sp.run([wormhole_bin, "send", profile_path], check=True)
+        _sp.run([wormhole_bin, "send", profile_path], check=True, timeout=timeout)
+    except _sp.TimeoutExpired:
+        logger.warning(f"Wormhole send timed out after {timeout}s. File at: {profile_path}")
     except _sp.CalledProcessError:
         print(f"Wormhole send failed. File at: {profile_path}")
     except KeyboardInterrupt:
@@ -93,9 +92,43 @@ Event = namedtuple("Event", ("timestamp", "type", "data"))
 EVENT_TYPES = ("screen", "action", "window", "browser")
 LOG_LEVEL = "INFO"
 
-# Configure loguru to use LOG_LEVEL (default stderr handler is DEBUG)
-logger.remove()
-logger.add(sys.stderr, level=LOG_LEVEL)
+
+class _ScreenTimingStats:
+    """Accumulate screen timing stats without storing every data point."""
+
+    def __init__(self):
+        self.count = 0
+        self.ss_sum = 0.0
+        self.ss_max = 0.0
+        self.ss_min = float("inf")
+        self.total_sum = 0.0
+        self.total_max = 0.0
+
+    def append(self, pair):
+        ss_dur, total_dur = pair
+        self.count += 1
+        self.ss_sum += ss_dur
+        self.ss_max = max(self.ss_max, ss_dur)
+        self.ss_min = min(self.ss_min, ss_dur)
+        self.total_sum += total_dur
+        self.total_max = max(self.total_max, total_dur)
+
+    def to_dict(self):
+        if self.count == 0:
+            return {}
+        return {
+            "iterations": self.count,
+            "screenshot_avg_ms": round(self.ss_sum / self.count * 1000, 1),
+            "screenshot_max_ms": round(self.ss_max * 1000, 1),
+            "screenshot_min_ms": round(self.ss_min * 1000, 1),
+            "total_avg_ms": round(self.total_sum / self.count * 1000, 1),
+            "total_max_ms": round(self.total_max * 1000, 1),
+        }
+
+    def __bool__(self):
+        return self.count > 0
+
+
 # whether to write events of each type in a separate process
 PROC_WRITE_BY_EVENT_TYPE = {
     "screen": True,
@@ -762,7 +795,7 @@ def read_screen_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_event: threading.Event,
-    _screen_timing: list | None = None,
+    _screen_timing: _ScreenTimingStats | None = None,
 ) -> None:
     """Read screen events and add them to the event queue.
 
@@ -774,7 +807,7 @@ def read_screen_events(
         terminate_processing: An event to signal the termination of the process.
         recording: The recording object.
         started_event: Event to set once started.
-        _screen_timing: If provided, append (screenshot_dur, total_dur) per iteration.
+        _screen_timing: If provided, record (screenshot_dur, total_dur) per iteration.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -1389,6 +1422,9 @@ def record(
         config.RECORD_IMAGES,
     )
 
+    # Configure loguru level for recording (without destroying global config)
+    logger.configure(handlers=[{"sink": sys.stderr, "level": LOG_LEVEL}])
+
     # logically it makes sense to communicate from here, but when running
     # from the tray it takes too long
     # TODO: fix this
@@ -1417,7 +1453,7 @@ def record(
         terminate_processing = multiprocessing.Event()
     task_by_name = {}
     task_started_events = {}
-    _screen_timing = []  # per-iteration (screenshot_dur, total_dur) for profiling
+    _screen_timing = _ScreenTimingStats()  # running stats, no unbounded list
 
     if config.RECORD_WINDOW_DATA:
         window_event_reader = threading.Thread(
@@ -1783,16 +1819,7 @@ def record(
     }
     # Compute screen timing stats
     if _screen_timing:
-        ss_durs = [t[0] for t in _screen_timing]
-        total_durs = [t[1] for t in _screen_timing]
-        _profile_data["screen_timing"] = {
-            "iterations": len(_screen_timing),
-            "screenshot_avg_ms": round(sum(ss_durs) / len(ss_durs) * 1000, 1),
-            "screenshot_max_ms": round(max(ss_durs) * 1000, 1),
-            "screenshot_min_ms": round(min(ss_durs) * 1000, 1),
-            "total_avg_ms": round(sum(total_durs) / len(total_durs) * 1000, 1),
-            "total_max_ms": round(max(total_durs) * 1000, 1),
-        }
+        _profile_data["screen_timing"] = _screen_timing.to_dict()
 
     _profile_path = os.path.join(capture_dir, "profiling.json")
     try:
