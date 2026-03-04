@@ -1,6 +1,77 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-03-04)
+
+### Features
+
+- Conditional window capture + recording profiling with auto-wormhole
+  ([#12](https://github.com/OpenAdaptAI/openadapt-capture/pull/12),
+  [`c58e880`](https://github.com/OpenAdaptAI/openadapt-capture/commit/c58e8800ce4096316bd1af6b5b6db7ce9e9fedc9))
+
+* feat: disable window capture by default, add recording profiling with auto-wormhole
+
+- Make window reader/writer conditional on RECORD_WINDOW_DATA (defaults to False), eliminating
+  unnecessary thread + process + expensive platform API calls - Add throttle to read_window_events
+  (0.1s) and memory_writer (1s) loops - Add profiling summary at end of record() with duration,
+  event counts/rates, config flags, main thread check, and thread count - Auto-send profiling.json
+  via Magic Wormhole after recording stops
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+* fix: skip window requirement when RECORD_WINDOW_DATA=False, set log level to WARNING
+
+- When window capture is disabled, skip the window timestamp requirement in process_events instead
+  of discarding all action events - Set loguru log level to WARNING by default (was DEBUG) to reduce
+  noise during recording
+
+* fix: set log level to INFO not WARNING
+
+* fix: guard window event save when capture disabled, fix PyAV pict_type compat
+
+- Second reference to prev_window_event in process_events was unguarded, causing AttributeError when
+  RECORD_WINDOW_DATA=False - PyAV pict_type="I" raises TypeError on newer versions; fall back to
+  integer constant
+
+* fix: use PictureType.I enum for PyAV pict_type, add video tests
+
+- Use av.video.frame.PictureType.I instead of string "I" which is unsupported in current PyAV
+  versions - Add test_video.py with tests for frame writing, key frames, and PictureType enum
+  compatibility
+
+* fix: use Agg backend for matplotlib, improve wormhole-not-found message
+
+- Set matplotlib to non-interactive Agg backend so plotting works from background threads (fixes
+  RuntimeError when Recorder runs record() in a non-main thread) - Improve wormhole-not-found
+  message with install instructions
+
+* feat: add per-screenshot timing to profiling, fix stop sequence IndexError
+
+- Track screenshot duration (avg/max/min ms) and total iteration duration per screen reader loop
+  iteration in profiling.json - Reset stop sequence index after match to prevent IndexError on extra
+  keypresses
+
+* feat: make send_profile opt-in CLI flag, add magic-wormhole as regular dep
+
+Profiling data is no longer auto-sent via wormhole after every recording. Use --send_profile flag to
+  opt in. Also promotes magic-wormhole from optional [share] extra to a regular dependency since
+  sharing is core functionality.
+
+* fix: address PR #12 review feedback (5 issues)
+
+- Move magic-wormhole back to optional [share] extra (was accidentally made a required dependency;
+  recorder.py already handles ImportError) - Remove module-level logger.remove() that destroyed
+  global loguru config for all library consumers; configure inside record() instead - Replace
+  duplicate wormhole-finding logic with _find_wormhole() from share.py to eliminate code duplication
+  - Add 60s timeout to _send_profiling_via_wormhole to prevent blocking indefinitely waiting for a
+  receiver - Replace unbounded _screen_timing list with _ScreenTimingStats class that computes
+  running stats (count/sum/min/max) in constant memory
+
+---------
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.4.0 (2026-03-03)
 
 ### Features
