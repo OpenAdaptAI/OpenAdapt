@@ -8,7 +8,9 @@ Cross-platform desktop app for continuous screen recording and AI training data 
 
 ## What is OpenAdapt Desktop?
 
-OpenAdapt Desktop is a system tray application (macOS, Windows, Linux) that continuously captures desktop activity -- screen recordings, mouse events, keyboard events, window metadata, and optionally audio -- for training AI agents via demonstration.
+OpenAdapt Desktop captures desktop activity -- screen recordings, mouse events, keyboard events, window metadata, and optionally audio -- for training AI agents via demonstration.
+
+The Python engine works as a **standalone CLI** today. A Tauri-based system tray app (macOS, Windows, Linux) is planned for a future release.
 
 **Key principles:**
 
@@ -17,25 +19,72 @@ OpenAdapt Desktop is a system tray application (macOS, Windows, Linux) that cont
 - **Build-time trust guarantees** -- enterprise builds physically exclude upload code paths
 - **Multiple upload backends** -- S3, HuggingFace Hub, Cloudflare R2, MinIO, Magic Wormhole, or federated learning
 
+## Quick Start
+
+```bash
+# Install
+git clone https://github.com/OpenAdaptAI/openadapt-desktop.git
+cd openadapt-desktop
+uv sync
+
+# Record a session
+uv run openadapt record --task "Demo task"    # Ctrl+C to stop
+
+# Scrub PII, review, and upload
+uv run openadapt scrub <CAPTURE_ID> --level basic
+uv run openadapt approve <CAPTURE_ID>
+uv run openadapt upload <CAPTURE_ID> --backend s3
+
+# Other commands
+uv run openadapt list                         # List captures
+uv run openadapt review                       # Show pending reviews
+uv run openadapt storage                      # Show disk usage
+uv run openadapt health                       # Show memory/disk health
+uv run openadapt cleanup                      # Enforce storage limits
+uv run openadapt config                       # Show current configuration
+uv run openadapt backends                     # Show available backends
+```
+
 ## Architecture
 
 ```
-Tauri Shell (Rust + WebView)        Python Engine (sidecar)
+Tauri Shell (Rust + WebView)        Python Engine (sidecar / CLI)
 +----------------------------+      +---------------------------+
-|  System tray icon          |      |  controller.py            |
-|  Start/stop recording      | IPC  |    -> openadapt-capture   |
-|  Settings panel            |<---->|  scrubber.py              |
-|  Upload review UI          | JSON |    -> openadapt-privacy   |
-|  Consent dialogs           |      |  storage_manager.py       |
-+----------------------------+      |  upload_manager.py        |
-                                    |  review.py (state machine)|
+|  System tray icon          |      |  cli.py (CLI entry point) |
+|  Start/stop recording      | IPC  |  controller.py            |
+|  Settings panel            |<---->|    -> openadapt-capture   |
+|  Upload review UI          | JSON |  scrubber.py              |
+|  Consent dialogs           |      |    -> openadapt-privacy   |
++----------------------------+      |  db.py (SQLite index)     |
+                                    |  storage_manager.py       |
+                                    |  upload_manager.py        |
+                                    |  review.py (egress gate)  |
+                                    |  monitor.py (health)      |
                                     |  audit.py (network log)   |
                                     |  backends/                |
                                     |    s3, hf, wormhole, fl   |
                                     +---------------------------+
 ```
 
-The Tauri shell provides a lightweight native window (~2-10 MB) while the Python engine handles all recording, scrubbing, and upload logic. They communicate via JSON-over-stdin/stdout IPC.
+The Python engine works standalone via the CLI. When the Tauri shell is built, it communicates with the engine via JSON-over-stdin/stdout IPC.
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `openadapt record [--quality standard] [--task "..."]` | Start recording (Ctrl+C to stop) |
+| `openadapt list [--limit 10] [--status captured]` | List captures |
+| `openadapt info <ID>` | Show capture details |
+| `openadapt scrub <ID> [--level basic\|standard\|enhanced]` | Scrub PII from capture |
+| `openadapt review` | List captures pending review |
+| `openadapt approve <ID>` | Approve scrubbed capture for upload |
+| `openadapt dismiss <ID>` | Skip scrubbing, accept PII risks |
+| `openadapt upload <ID> --backend s3\|huggingface\|wormhole` | Upload capture |
+| `openadapt backends` | List available backends |
+| `openadapt storage` | Show storage usage |
+| `openadapt health` | Show memory/disk health |
+| `openadapt cleanup` | Run storage cleanup |
+| `openadapt config` | Show current configuration |
 
 ## Recording Review State Machine
 
@@ -53,14 +102,14 @@ Every recording must pass through a review gate before any data can leave the ma
      +-- delete --> DELETED
 ```
 
-**All outbound paths are gated** -- not just storage uploads, but also VLM API calls (OpenAI Vision, Anthropic Claude, Google Gemini), annotation pipelines, federated learning gradient uploads, and Magic Wormhole sharing.
+**All outbound paths are gated** -- not just storage uploads, but also VLM API calls, annotation pipelines, federated learning gradient uploads, and Magic Wormhole sharing. The single enforcement point is `review.py:check_egress_allowed()`.
 
 ## Storage Backends
 
 | Backend | Use Case | Cost | Delete? |
 |---------|----------|------|---------|
 | Local only | Air-gapped / offline | Free | Yes |
-| AWS S3 | Enterprise (Enterprise, etc.) | ~$0.023/GB/mo | Yes |
+| AWS S3 | Enterprise | ~$0.023/GB/mo | Yes |
 | Cloudflare R2 | S3-compatible, free egress | ~$0.015/GB/mo | Yes |
 | HuggingFace Hub | Community dataset sharing | Free (public) | Yes |
 | MinIO | Self-hosted S3-compatible | Free (self-hosted) | Yes |
@@ -71,26 +120,33 @@ Enterprise users can verify that unwanted backends are excluded at the binary le
 
 ## Project Status
 
-This project is in **early development** (v0.1.0). The Python engine scaffold is complete with passing tests. The Tauri shell has IPC command stubs. See [DESIGN.md](DESIGN.md) for the full design document.
+**v0.1.0** -- The Python engine is **fully functional end-to-end** as a standalone CLI. 106 tests pass, 0 skipped. See [DESIGN.md](DESIGN.md) for the full design document.
 
 ### What's working
 
-- Python engine: config, review state machine, audit logging, storage backend protocol
-- Storage backends: S3 cost estimation, Wormhole credential check, protocol conformance
-- Controller: recording state enum, idle detection
-- IPC protocol: JSON-over-stdin/stdout handler with tests
-- CI: tests passing on all platforms (macOS, Windows, Linux) x (Python 3.11, 3.12)
+- **Full recording pipeline**: record -> scrub -> review -> upload via CLI
+- **Recording controller**: wraps `openadapt-capture`, crash recovery, state tracking
+- **PII scrubbing**: regex (basic), Presidio NER (standard/enhanced), image scrubbing
+- **Review state machine**: DB-persisted egress gating with audit logging
+- **Storage management**: SQLite index DB, hot/warm/cold tiers, tar.gz archival, cleanup
+- **Upload manager**: persistent queue, egress checks, multi-backend dispatch
+- **Storage backends**: S3 (boto3), HuggingFace Hub, Magic Wormhole -- all implemented
+- **Health monitoring**: memory (psutil) and disk monitoring with daemon threads
+- **CLI**: 13 commands via argparse (`openadapt record/list/scrub/approve/upload/...`)
+- **Audit logging**: append-only JSONL log of all network activity
+- **CI**: 106 tests passing on all platforms (macOS, Windows, Linux) x (Python 3.11, 3.12)
 
 ### What's next
 
-- [ ] Wire up `openadapt-capture` recording engine to the controller
-- [ ] Implement PII scrubbing with `openadapt-privacy`
-- [ ] Build the upload review UI (extending `openadapt-viewer` components)
-- [ ] Implement S3 multipart upload
-- [ ] PyInstaller sidecar bundling
+- [ ] Pause/resume recording (requires openadapt-capture support)
+- [ ] Build the upload review UI (Tauri WebView)
 - [ ] Tauri IPC wiring (Rust <-> Python sidecar)
+- [ ] PyInstaller sidecar bundling
 - [ ] Native installers (DMG, MSI, AppImage)
 - [ ] Auto-update via Tauri updater plugin
+- [ ] Upload scheduling (cron/idle)
+- [ ] Bandwidth limiting (token bucket)
+- [ ] zstd compression for warm-tier archives
 
 ## Development
 
@@ -115,6 +171,11 @@ uv run pytest tests/ -v
 
 # Lint
 uv run ruff check engine/ tests/
+
+# CLI smoke test
+uv run python -m engine list
+uv run python -m engine storage
+uv run python -m engine health
 ```
 
 ### Optional extras
@@ -130,37 +191,37 @@ uv sync --extra full          # Everything
 
 ```
 openadapt-desktop/
-+-- engine/                  Python sidecar (the recording engine)
-|   +-- controller.py        Recording start/stop/pause lifecycle
-|   +-- ipc.py               JSON-over-stdin/stdout protocol
-|   +-- storage_manager.py   Local storage tiers + cleanup
-|   +-- upload_manager.py    Multi-backend upload queue
-|   +-- scrubber.py          PII scrubbing orchestration
-|   +-- review.py            Upload review state machine
++-- engine/                  Python engine (standalone CLI + sidecar)
+|   +-- cli.py               CLI entry point (13 commands)
+|   +-- db.py                SQLite index database (WAL mode)
+|   +-- controller.py        Recording start/stop lifecycle
+|   +-- scrubber.py          PII scrubbing (regex + Presidio)
+|   +-- review.py            Egress gate state machine
+|   +-- storage_manager.py   Hot/warm/cold tiers + cleanup
+|   +-- upload_manager.py    Persistent upload queue
+|   +-- monitor.py           Memory + disk health monitoring
 |   +-- config.py            Settings (pydantic-settings)
-|   +-- monitor.py           Health monitoring (memory, disk)
 |   +-- audit.py             Network audit logging (JSONL)
+|   +-- ipc.py               JSON-over-stdin/stdout protocol
+|   +-- main.py              Entry point (CLI or IPC mode)
 |   +-- backends/
 |       +-- protocol.py      StorageBackend protocol
-|       +-- s3.py            S3/R2/MinIO backend
+|       +-- s3.py            S3/R2/MinIO backend (boto3)
 |       +-- huggingface.py   HuggingFace Hub backend
 |       +-- wormhole.py      Magic Wormhole P2P backend
-|       +-- federated.py     Flower federated learning
-+-- src-tauri/               Tauri shell (Rust)
+|       +-- federated.py     Flower federated learning (v2.0)
++-- src-tauri/               Tauri shell (Rust, future)
 |   +-- src/main.rs          Entry point, tray, plugin init
 |   +-- src/commands.rs      IPC commands (13 endpoints)
 |   +-- src/sidecar.rs       Python process management
 |   +-- src/tray.rs          System tray setup
 |   +-- Cargo.toml           Rust dependencies + feature flags
-+-- src/                     WebView frontend (HTML/CSS/JS)
-|   +-- index.html           Main dashboard
-|   +-- review.html          Upload review panel
-|   +-- settings.html        Configuration panel
-+-- tests/                   Python engine tests
-+-- .github/workflows/       CI (test + build)
++-- src/                     WebView frontend (HTML/CSS/JS, future)
++-- tests/
+|   +-- test_engine/         Unit tests (db, controller, scrubber, ...)
+|   +-- test_e2e/            E2E pipeline + IPC tests
 +-- DESIGN.md                Comprehensive design document (v2.0)
-+-- pyproject.toml            Python package config (hatchling)
-+-- package.json             Node/Tauri config
++-- pyproject.toml           Python package config (hatchling)
 ```
 
 ## Configuration

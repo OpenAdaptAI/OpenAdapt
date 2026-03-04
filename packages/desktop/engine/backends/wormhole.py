@@ -11,6 +11,7 @@ See design doc Section 7.7 for implementation details.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from engine.backends.protocol import UploadRecord, UploadResult
@@ -34,15 +35,42 @@ class WormholeBackend:
         complete the transfer. Both parties must be online.
 
         Args:
-            archive_path: Path to the tar.zst archive.
+            archive_path: Path to the archive file.
             metadata: Capture metadata.
 
         Returns:
             UploadResult with the wormhole code in metadata.
         """
-        # TODO: Use openadapt-capture's wormhole send functionality
-        # TODO: Return wormhole code for the receiver
-        raise NotImplementedError
+        try:
+            proc = subprocess.Popen(
+                ["wormhole", "send", str(archive_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            # Read the wormhole code from output
+            code = ""
+            for line in proc.stdout or []:
+                line = line.strip()
+                if "wormhole receive" in line:
+                    # Extract the code from "wormhole receive <code>"
+                    parts = line.split()
+                    code = parts[-1] if parts else ""
+                    break
+
+            return UploadResult(
+                success=True,
+                remote_url="",
+                bytes_sent=archive_path.stat().st_size,
+                metadata={"wormhole_code": code, "pid": proc.pid},
+            )
+        except FileNotFoundError:
+            return UploadResult(
+                success=False,
+                error="wormhole CLI not found -- install with: pip install magic-wormhole",
+            )
+        except Exception as e:
+            return UploadResult(success=False, error=str(e))
 
     def delete(self, recording_id: str) -> bool:
         """Not supported for wormhole transfers (ephemeral)."""

@@ -43,21 +43,41 @@ class HuggingFaceBackend:
         self.repo = repo
         self.token = token
         self.private = private
-        # TODO: Initialize huggingface_hub API client
 
     def upload(self, archive_path: Path, metadata: dict) -> UploadResult:
         """Upload a capture archive to HuggingFace Hub.
 
         Args:
-            archive_path: Path to the tar.zst archive.
+            archive_path: Path to the archive file.
             metadata: Capture metadata.
 
         Returns:
             UploadResult with the HF Hub URL.
         """
-        # TODO: Use huggingface_hub.upload_file() or upload_folder()
-        # TODO: Include metadata as dataset card or JSON sidecar
-        raise NotImplementedError
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi(token=self.token)
+            capture_id = metadata.get("capture_id", "unknown")
+            path_in_repo = f"captures/{capture_id}/{archive_path.name}"
+
+            api.upload_file(
+                path_or_fileobj=str(archive_path),
+                path_in_repo=path_in_repo,
+                repo_id=self.repo,
+                repo_type="dataset",
+            )
+
+            url = f"https://huggingface.co/datasets/{self.repo}/blob/main/{path_in_repo}"
+            return UploadResult(
+                success=True,
+                remote_url=url,
+                bytes_sent=archive_path.stat().st_size,
+            )
+        except ImportError:
+            return UploadResult(success=False, error="huggingface_hub not installed")
+        except Exception as e:
+            return UploadResult(success=False, error=str(e))
 
     def delete(self, recording_id: str) -> bool:
         """Delete a recording from HuggingFace Hub.
@@ -68,8 +88,18 @@ class HuggingFaceBackend:
         Returns:
             True if deletion succeeded.
         """
-        # TODO: Use huggingface_hub API to delete file
-        raise NotImplementedError
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi(token=self.token)
+            api.delete_folder(
+                path_in_repo=f"captures/{recording_id}",
+                repo_id=self.repo,
+                repo_type="dataset",
+            )
+            return True
+        except Exception:
+            return False
 
     def list_uploads(self) -> list[UploadRecord]:
         """List all uploads in the HuggingFace dataset repo.
@@ -77,8 +107,26 @@ class HuggingFaceBackend:
         Returns:
             List of UploadRecord objects.
         """
-        # TODO: Use huggingface_hub.list_repo_files()
-        raise NotImplementedError
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi(token=self.token)
+            files = api.list_repo_files(repo_id=self.repo, repo_type="dataset")
+            records = []
+            for f in files:
+                if f.startswith("captures/"):
+                    parts = f.split("/")
+                    recording_id = parts[1] if len(parts) > 1 else "unknown"
+                    records.append(UploadRecord(
+                        recording_id=recording_id,
+                        backend="huggingface",
+                        remote_url=f"https://huggingface.co/datasets/{self.repo}/blob/main/{f}",
+                        uploaded_at="",
+                        size_bytes=0,
+                    ))
+            return records
+        except Exception:
+            return []
 
     def verify_credentials(self) -> bool:
         """Verify HuggingFace token by calling the whoami endpoint.
@@ -86,8 +134,14 @@ class HuggingFaceBackend:
         Returns:
             True if the token is valid.
         """
-        # TODO: huggingface_hub.whoami(token)
-        raise NotImplementedError
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi(token=self.token)
+            api.whoami()
+            return True
+        except Exception:
+            return False
 
     def estimate_cost(self, size_bytes: int) -> float | None:
         """Estimate cost for HuggingFace Hub storage.

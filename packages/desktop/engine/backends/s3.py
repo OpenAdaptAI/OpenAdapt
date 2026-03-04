@@ -1,16 +1,10 @@
 """S3-compatible storage backend -- supports AWS S3, Cloudflare R2, and MinIO.
 
-This backend handles multipart uploads to any S3-compatible storage service.
+This backend handles uploads to any S3-compatible storage service.
 The specific service is determined by the endpoint configuration:
     - AWS S3:  Default endpoint (no custom endpoint needed)
     - R2:      OPENADAPT_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
     - MinIO:   OPENADAPT_S3_ENDPOINT=https://minio.example.com:9000
-
-Upload strategy:
-    - Multipart upload (min 5 MB per part, max 10,000 parts)
-    - Each capture session uploaded as a tar.zst archive
-    - Upload queue persisted to index.db to survive app restarts
-    - Bandwidth limiter using token bucket algorithm
 
 Requires: boto3 (installed via enterprise or full extras)
 
@@ -50,24 +44,49 @@ class S3Backend:
         self.bucket = bucket
         self.region = region
         self.endpoint = endpoint
-        # TODO: Initialize boto3 S3 client
-        # TODO: Configure custom endpoint if provided (R2, MinIO)
         self._client = None
 
+        try:
+            import boto3
+
+            kwargs: dict = {
+                "service_name": "s3",
+                "region_name": region,
+                "aws_access_key_id": access_key_id or None,
+                "aws_secret_access_key": secret_access_key or None,
+            }
+            if endpoint:
+                kwargs["endpoint_url"] = endpoint
+            self._client = boto3.client(**kwargs)
+        except ImportError:
+            pass
+
     def upload(self, archive_path: Path, metadata: dict) -> UploadResult:
-        """Upload a capture archive to S3 using multipart upload.
+        """Upload a capture archive to S3.
 
         Args:
-            archive_path: Path to the tar.zst archive.
+            archive_path: Path to the archive file.
             metadata: Capture metadata.
 
         Returns:
             UploadResult with the S3 object URL.
         """
-        # TODO: Generate S3 key from capture ID and timestamp
-        # TODO: Multipart upload with progress callback
-        # TODO: Set object metadata tags
-        raise NotImplementedError
+        if self._client is None:
+            return UploadResult(success=False, error="boto3 not installed")
+
+        capture_id = metadata.get("capture_id", "unknown")
+        key = f"openadapt/{capture_id}/{archive_path.name}"
+
+        try:
+            self._client.upload_file(str(archive_path), self.bucket, key)
+            url = f"s3://{self.bucket}/{key}"
+            return UploadResult(
+                success=True,
+                remote_url=url,
+                bytes_sent=archive_path.stat().st_size,
+            )
+        except Exception as e:
+            return UploadResult(success=False, error=str(e))
 
     def delete(self, recording_id: str) -> bool:
         """Delete a recording from S3.
@@ -78,8 +97,18 @@ class S3Backend:
         Returns:
             True if deletion succeeded.
         """
-        # TODO: Delete object from S3
-        raise NotImplementedError
+        if self._client is None:
+            return False
+
+        try:
+            # List and delete all objects with this prefix
+            prefix = f"openadapt/{recording_id}/"
+            response = self._client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            for obj in response.get("Contents", []):
+                self._client.delete_object(Bucket=self.bucket, Key=obj["Key"])
+            return True
+        except Exception:
+            return False
 
     def list_uploads(self) -> list[UploadRecord]:
         """List all uploads in the S3 bucket.
@@ -87,8 +116,25 @@ class S3Backend:
         Returns:
             List of UploadRecord objects.
         """
-        # TODO: List objects with openadapt/ prefix
-        raise NotImplementedError
+        if self._client is None:
+            return []
+
+        try:
+            response = self._client.list_objects_v2(Bucket=self.bucket, Prefix="openadapt/")
+            records = []
+            for obj in response.get("Contents", []):
+                parts = obj["Key"].split("/")
+                recording_id = parts[1] if len(parts) > 1 else "unknown"
+                records.append(UploadRecord(
+                    recording_id=recording_id,
+                    backend="s3",
+                    remote_url=f"s3://{self.bucket}/{obj['Key']}",
+                    uploaded_at=obj["LastModified"].isoformat() if obj.get("LastModified") else "",
+                    size_bytes=obj.get("Size", 0),
+                ))
+            return records
+        except Exception:
+            return []
 
     def verify_credentials(self) -> bool:
         """Verify S3 credentials by performing a HEAD bucket request.
@@ -96,8 +142,14 @@ class S3Backend:
         Returns:
             True if credentials are valid and bucket is accessible.
         """
-        # TODO: boto3 head_bucket call
-        raise NotImplementedError
+        if self._client is None:
+            return False
+
+        try:
+            self._client.head_bucket(Bucket=self.bucket)
+            return True
+        except Exception:
+            return False
 
     def estimate_cost(self, size_bytes: int) -> float | None:
         """Estimate S3 storage cost.

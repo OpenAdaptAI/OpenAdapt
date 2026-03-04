@@ -43,6 +43,11 @@ any data off-machine. This is the single enforcement point.
 from __future__ import annotations
 
 import enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.audit import AuditLogger
+    from engine.db import IndexDB
 
 
 class ReviewStatus(enum.Enum):
@@ -66,6 +71,16 @@ class ReviewStatus(enum.Enum):
 # States that allow data to leave the machine.
 EGRESS_ALLOWED_STATES = frozenset({ReviewStatus.REVIEWED, ReviewStatus.DISMISSED})
 
+# Valid state transitions.
+VALID_TRANSITIONS: dict[ReviewStatus, frozenset[ReviewStatus]] = {
+    ReviewStatus.CAPTURED: frozenset(
+        {ReviewStatus.SCRUBBED, ReviewStatus.DISMISSED, ReviewStatus.DELETED}
+    ),
+    ReviewStatus.SCRUBBED: frozenset({ReviewStatus.REVIEWED, ReviewStatus.DELETED}),
+    ReviewStatus.REVIEWED: frozenset({ReviewStatus.DELETED}),
+    ReviewStatus.DISMISSED: frozenset({ReviewStatus.DELETED}),
+}
+
 
 class EgressBlockedError(Exception):
     """Raised when an outbound data path is attempted on an unreviewed capture.
@@ -83,7 +98,7 @@ class EgressBlockedError(Exception):
         )
 
 
-def check_egress_allowed(capture_id: str) -> bool:
+def check_egress_allowed(capture_id: str, db: IndexDB) -> bool:
     """Check whether a capture is cleared for egress.
 
     This is the single enforcement point that ALL outbound data paths must call
@@ -96,25 +111,30 @@ def check_egress_allowed(capture_id: str) -> bool:
 
     Args:
         capture_id: The capture session ID to check.
+        db: The index database instance.
 
     Returns:
         True if the capture is cleared for egress.
 
     Raises:
         EgressBlockedError: If the capture is in captured or scrubbed state.
+        ValueError: If the capture does not exist.
     """
-    # TODO: Look up review status from index.db
-    # status = _get_review_status(capture_id)
-    # if status not in EGRESS_ALLOWED_STATES:
-    #     raise EgressBlockedError(capture_id, status)
-    # return True
-    raise NotImplementedError
+    capture = db.get_capture(capture_id)
+    if capture is None:
+        raise ValueError(f"Unknown capture: {capture_id}")
+    status = ReviewStatus(capture["review_status"])
+    if status not in EGRESS_ALLOWED_STATES:
+        raise EgressBlockedError(capture_id, status)
+    return True
 
 
 def transition_status(
     capture_id: str,
     from_status: ReviewStatus,
     to_status: ReviewStatus,
+    db: IndexDB | None = None,
+    audit: AuditLogger | None = None,
 ) -> None:
     """Transition a capture's review status.
 
@@ -130,20 +150,13 @@ def transition_status(
         capture_id: The capture session ID.
         from_status: Expected current status.
         to_status: Target status.
+        db: The index database instance. Required for persistence.
+        audit: Optional audit logger for transition logging.
 
     Raises:
-        ValueError: If the transition is not allowed.
+        ValueError: If the transition is not allowed or current status doesn't match.
     """
-    valid_transitions: dict[ReviewStatus, frozenset[ReviewStatus]] = {
-        ReviewStatus.CAPTURED: frozenset(
-            {ReviewStatus.SCRUBBED, ReviewStatus.DISMISSED, ReviewStatus.DELETED}
-        ),
-        ReviewStatus.SCRUBBED: frozenset({ReviewStatus.REVIEWED, ReviewStatus.DELETED}),
-        ReviewStatus.REVIEWED: frozenset({ReviewStatus.DELETED}),
-        ReviewStatus.DISMISSED: frozenset({ReviewStatus.DELETED}),
-    }
-
-    allowed = valid_transitions.get(from_status, frozenset())
+    allowed = VALID_TRANSITIONS.get(from_status, frozenset())
     if to_status not in allowed:
         raise ValueError(
             f"Invalid transition: {from_status.value} -> {to_status.value}. "
@@ -151,18 +164,36 @@ def transition_status(
             f"{', '.join(s.value for s in allowed) or 'none'}"
         )
 
-    # TODO: Update review status in index.db
-    # TODO: Log transition to audit.jsonl
-    raise NotImplementedError
+    if db is not None:
+        capture = db.get_capture(capture_id)
+        if capture is None:
+            raise ValueError(f"Unknown capture: {capture_id}")
+        current = ReviewStatus(capture["review_status"])
+        if current != from_status:
+            raise ValueError(
+                f"Status mismatch for '{capture_id}': "
+                f"expected {from_status.value}, got {current.value}"
+            )
+        db.update_capture(capture_id, review_status=to_status.value)
+
+    if audit is not None:
+        audit.log(
+            "review_transition",
+            capture_id=capture_id,
+            from_status=from_status.value,
+            to_status=to_status.value,
+        )
 
 
-def get_pending_reviews() -> list[dict]:
+def get_pending_reviews(db: IndexDB) -> list[dict]:
     """Get all captures that are pending review.
 
     Returns captures in `captured` or `scrubbed` state.
 
+    Args:
+        db: The index database instance.
+
     Returns:
         List of capture metadata dicts with review status.
     """
-    # TODO: Query index.db for captures in captured/scrubbed state
-    raise NotImplementedError
+    return db.get_pending_reviews()

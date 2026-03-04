@@ -46,6 +46,9 @@ dev = [
     "ruff",
 ]
 
+[project.scripts]
+openadapt = "engine.cli:main"
+
 [project.urls]
 Homepage = "https://openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/openadapt-desktop"
