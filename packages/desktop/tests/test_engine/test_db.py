@@ -100,14 +100,18 @@ class TestIndexDB:
         assert jobs[0]["job_id"] == "job1"
         assert jobs[0]["backend_name"] == "s3"
 
-    def test_concurrent_reads(self, db: IndexDB) -> None:
-        """WAL mode allows concurrent reads."""
+    def test_concurrent_reads(self, db: IndexDB, tmp_path: Path) -> None:
+        """WAL mode allows concurrent reads from separate connections."""
         db.insert_capture("a", "/tmp/a", "2026-03-01T10:00:00Z")
+        db_path = tmp_path / "index.db"
         results = []
 
         def read_cap():
-            cap = db.get_capture("a")
+            reader = IndexDB(db_path)
+            reader.initialize()
+            cap = reader.get_capture("a")
             results.append(cap is not None)
+            reader.close()
 
         threads = [threading.Thread(target=read_cap) for _ in range(5)]
         for t in threads:
