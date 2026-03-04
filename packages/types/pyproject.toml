@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-types"
+version = "0.1.0"
+description = "Canonical Pydantic schemas for computer-use agents: ComputerState, Action, ActionResult, UINode"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenAdapt", email = "admin@openadapt.ai" },
+]
+keywords = ["computer-use", "gui-automation", "schemas", "pydantic", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-types"
+Repository = "https://github.com/OpenAdaptAI/openadapt-types"
+Issues = "https://github.com/OpenAdaptAI/openadapt-types/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_types"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
