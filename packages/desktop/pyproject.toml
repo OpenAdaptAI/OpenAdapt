@@ -44,6 +44,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    "python-semantic-release>=9.15.2",
 ]
 
 [project.scripts]
@@ -64,6 +65,20 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["engine/__init__.py:__version__"]
+commit_message = "chore: release {version}"
+major_on_zero = false
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
