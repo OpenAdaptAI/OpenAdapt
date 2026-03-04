@@ -17,11 +17,13 @@ Usage:
     openadapt health
     openadapt cleanup
     openadapt config
+    openadapt doctor
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import types
 from pathlib import Path
@@ -287,6 +289,108 @@ def cmd_config(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     print(engine.config.model_dump_json(indent=2))
 
 
+def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Check system dependencies and configuration."""
+    from engine import __version__
+
+    checks: list[tuple[str, bool, str]] = []
+
+    # Engine version
+    checks.append(("Engine version", True, f"v{__version__}"))
+
+    # Python version
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    py_ok = sys.version_info >= (3, 11)
+    checks.append(("Python", py_ok, py_ver if py_ok else f"{py_ver} (need >=3.11)"))
+
+    # Data directory
+    data_ok = engine.config.data_dir.exists() and os.access(engine.config.data_dir, os.W_OK)
+    checks.append(("Data directory", data_ok, str(engine.config.data_dir)))
+
+    # Database
+    try:
+        engine.db.conn.execute("SELECT 1").fetchone()
+        checks.append(("Database (SQLite)", True, "connected"))
+    except Exception as e:
+        checks.append(("Database (SQLite)", False, str(e)))
+
+    # openadapt-capture
+    try:
+        import openadapt_capture
+        ver = getattr(openadapt_capture, "__version__", "installed")
+        checks.append(("openadapt-capture", True, ver))
+    except ImportError:
+        checks.append(("openadapt-capture", False, "not installed (recording disabled)"))
+
+    # openadapt-privacy
+    try:
+        import openadapt_privacy
+        ver = getattr(openadapt_privacy, "__version__", "installed")
+        checks.append(("openadapt-privacy", True, ver))
+    except ImportError:
+        checks.append(("openadapt-privacy", False, "not installed (advanced scrubbing disabled)"))
+
+    # psutil
+    try:
+        import psutil
+        checks.append(("psutil", True, psutil.__version__))
+    except ImportError:
+        checks.append(("psutil", False, "not installed (health monitoring disabled)"))
+
+    # boto3 (optional)
+    try:
+        import boto3
+        checks.append(("boto3 (S3 backend)", True, boto3.__version__))
+    except ImportError:
+        checks.append(("boto3 (S3 backend)", False,
+                       "not installed (pip install openadapt-desktop[enterprise])"))
+
+    # huggingface_hub (optional)
+    try:
+        import huggingface_hub
+        checks.append(("huggingface_hub (HF backend)", True, huggingface_hub.__version__))
+    except ImportError:
+        checks.append(("huggingface_hub (HF backend)", False,
+                       "not installed (pip install openadapt-desktop[community])"))
+
+    # magic-wormhole
+    import shutil
+    wormhole_path = shutil.which("wormhole")
+    checks.append((
+        "magic-wormhole (P2P backend)",
+        wormhole_path is not None,
+        wormhole_path or "not found (pip install magic-wormhole)",
+    ))
+
+    # Storage mode
+    checks.append(("Storage mode", True, engine.config.storage_mode))
+
+    # S3 credentials (if configured)
+    if engine.config.s3_bucket:
+        has_creds = bool(engine.config.s3_access_key_id and engine.config.s3_secret_access_key)
+        detail = f"bucket={engine.config.s3_bucket}" if has_creds else "bucket set but keys missing"
+        checks.append(("S3 credentials", has_creds, detail))
+
+    # HF token (if configured)
+    if engine.config.hf_token:
+        checks.append(("HuggingFace token", True, f"repo={engine.config.hf_repo}"))
+
+    # Print results
+    print("OpenAdapt Doctor")
+    print("=" * 60)
+    ok_count = sum(1 for _, ok, _ in checks if ok)
+    for name, ok, detail in checks:
+        marker = "OK" if ok else "!!"
+        print(f"  [{marker}] {name}: {detail}")
+
+    print("=" * 60)
+    total = len(checks)
+    print(f"{ok_count}/{total} checks passed")
+
+    if ok_count < total:
+        print("\nRun 'pip install openadapt-desktop[full]' to install all optional dependencies.")
+
+
 _COMMANDS = {
     "record": cmd_record,
     "list": cmd_list,
@@ -301,6 +405,7 @@ _COMMANDS = {
     "health": cmd_health,
     "cleanup": cmd_cleanup,
     "config": cmd_config,
+    "doctor": cmd_doctor,
 }
 
 
@@ -358,6 +463,9 @@ def main(argv: list[str] | None = None) -> None:
 
     # config
     subparsers.add_parser("config", help="Show configuration")
+
+    # doctor
+    subparsers.add_parser("doctor", help="Check dependencies and configuration")
 
     args = parser.parse_args(argv)
 

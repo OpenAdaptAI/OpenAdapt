@@ -42,27 +42,26 @@ class WormholeBackend:
             UploadResult with the wormhole code in metadata.
         """
         try:
-            proc = subprocess.Popen(
+            result = subprocess.run(
                 ["wormhole", "send", str(archive_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                capture_output=True,
                 text=True,
+                timeout=3600,
             )
-            # Read the wormhole code from output
+            # Extract the wormhole code from output
             code = ""
-            for line in proc.stdout or []:
-                line = line.strip()
+            for line in (result.stdout + result.stderr).splitlines():
                 if "wormhole receive" in line:
-                    # Extract the code from "wormhole receive <code>"
                     parts = line.split()
                     code = parts[-1] if parts else ""
                     break
 
             return UploadResult(
-                success=True,
+                success=result.returncode == 0,
                 remote_url="",
                 bytes_sent=archive_path.stat().st_size,
-                metadata={"wormhole_code": code, "pid": proc.pid},
+                metadata={"wormhole_code": code},
+                error=result.stderr if result.returncode != 0 else None,
             )
         except FileNotFoundError:
             return UploadResult(

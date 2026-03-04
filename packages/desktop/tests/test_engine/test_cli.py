@@ -90,3 +90,25 @@ class TestCLI:
             main(["backends"])
         captured = capsys.readouterr()
         assert "wormhole" in captured.out
+
+    def test_doctor_runs(self, cli_config: EngineConfig, capsys) -> None:
+        """Doctor command should show checks and pass count."""
+        with patch("engine.cli.EngineConfig", return_value=cli_config):
+            main(["doctor"])
+        captured = capsys.readouterr()
+        assert "OpenAdapt Doctor" in captured.out
+        assert "checks passed" in captured.out
+
+    def test_doctor_checks_python(self, cli_config: EngineConfig, capsys) -> None:
+        """Doctor should verify Python version."""
+        with patch("engine.cli.EngineConfig", return_value=cli_config):
+            main(["doctor"])
+        captured = capsys.readouterr()
+        assert "[OK] Python" in captured.out
+
+    def test_doctor_checks_database(self, cli_config: EngineConfig, capsys) -> None:
+        """Doctor should verify database connectivity."""
+        with patch("engine.cli.EngineConfig", return_value=cli_config):
+            main(["doctor"])
+        captured = capsys.readouterr()
+        assert "[OK] Database (SQLite)" in captured.out

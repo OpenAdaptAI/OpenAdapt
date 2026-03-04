@@ -58,8 +58,7 @@ class AuditLogger:
             **data,
         }
 
-        # TODO: Ensure log_path parent directory exists
-        # TODO: Append JSONL entry atomically
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(entry)
         with open(self.log_path, "a") as f:
             f.write(line + "\n")
