@@ -1,6 +1,56 @@
 # CHANGELOG
 
 
+## v0.5.1 (2026-03-17)
+
+### Bug Fixes
+
+- Browser capture end-to-end pipeline
+  ([#15](https://github.com/OpenAdaptAI/openadapt-capture/pull/15),
+  [`505eb05`](https://github.com/OpenAdaptAI/openadapt-capture/commit/505eb05a2153a462e86ed2347ed2f41f3bc00562))
+
+* fix: browser capture end-to-end pipeline
+
+Three bugs prevented browser events from being captured and parsed:
+
+1. background.js only relayed DOM_EVENT messages but the content script sends USER_EVENT — events
+  were silently dropped.
+
+2. background.js handleSetMode only read message.payload?.mode but the recorder sends flat {mode:
+  "record"} — mode was never set to "record" so the content script never attached record listeners.
+
+3. The BrowserEventType enum used "browser.click" prefix format but the content script sends raw DOM
+  event names ("click", "keydown", etc.). This was an artificial convention introduced during the
+  port from legacy OpenAdapt that was never tested end-to-end. Legacy used raw names throughout.
+
+Changes: - background.js: add USER_EVENT relay, fix SET_MODE format handling - browser_events.py:
+  change enum values to raw DOM names matching the content script and legacy OpenAdapt, add
+  BrowserMouseMoveEvent - capture.py: add _parse_element_ref() and rewrite _convert_browser_event()
+  to handle actual content-script message format including the recorder's {"message": <raw>}
+  wrapper, add browser_events() and browser_event_count to CaptureSession - cli.py: add
+  --browser-events flag to record, show browser event breakdown in info command - tests: add 15 e2e
+  tests covering both DB roundtrip and raw content-script format parsing
+
+Verified with live recording: 84/84 events captured and parsed from Chrome extension on Hacker News.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+* fix: clean up stale docstring and unused import
+
+* fix: address review feedback
+
+- Replace bare except with debug logging in _convert_browser_event - Move lazy imports to module
+  level (BoundingBox, ElementState, etc.) - Remove unused imports (pytest, Recording) from test file
+  - Update test class names to reflect structure tested, not removed format - Fix stale docstring in
+  _parse_element_ref
+
+* fix: remove unused BrowserEventType import from tests
+
+---------
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.5.0 (2026-03-04)
 
 ### Features
