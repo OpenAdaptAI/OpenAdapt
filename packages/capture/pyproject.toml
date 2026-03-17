@@ -41,6 +41,7 @@ dependencies = [
     "pympler>=1.0.0",
     "tqdm>=4.0.0",
     "numpy>=1.20.0",
+    "oa-atomacos>=3.2.0; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
