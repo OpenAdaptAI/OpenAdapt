@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.5.2 (2026-03-17)
+
+### Bug Fixes
+
+- Add oa-atomacos dependency for macOS window capture
+  ([#16](https://github.com/OpenAdaptAI/openadapt-capture/pull/16),
+  [`50230cf`](https://github.com/OpenAdaptAI/openadapt-capture/commit/50230cf7dc195d21432e74399208c6a2be07036c))
+
+oa-atomacos is imported in window/_macos.py but was missing from pyproject.toml, causing ImportError
+  on macOS. The package (OpenAdapt's fork of atomacos) fixes pickle serialization of namedtuples
+  needed for window state capture.
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.5.1 (2026-03-17)
 
 ### Bug Fixes
