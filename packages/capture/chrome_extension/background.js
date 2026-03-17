@@ -137,7 +137,7 @@ function handleServerMessage(data) {
  * Handle SET_MODE message from server
  */
 function handleSetMode(message) {
-  const newMode = message.payload?.mode || 'idle';
+  const newMode = message.mode || message.payload?.mode || 'idle';
   currentMode = newMode;
   console.log('[OpenAdapt] Mode set to:', currentMode);
 
@@ -231,6 +231,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
 
   switch (message.type) {
+    case 'USER_EVENT':
     case 'DOM_EVENT':
       // Add tab ID and relay to server
       message.tabId = tabId;

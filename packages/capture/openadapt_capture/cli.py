@@ -17,6 +17,7 @@ def record(
     video: bool = True,
     audio: bool = False,
     images: bool = False,
+    browser_events: bool = False,
     send_profile: bool = False,
 ) -> None:
     """Record GUI interactions.
@@ -27,6 +28,9 @@ def record(
         video: Capture video (default: True).
         audio: Capture audio (default: False).
         images: Save screenshots as PNGs (default: False).
+        browser_events: Capture browser DOM events via Chrome extension (default: False).
+            Requires the openadapt-capture Chrome extension to be installed and
+            connects via WebSocket on localhost:8765.
         send_profile: Send profiling data via wormhole after recording (default: False).
     """
     import time
@@ -36,6 +40,9 @@ def record(
     output_dir = str(Path(output_dir).resolve())
 
     print(f"Recording to: {output_dir}")
+    if browser_events:
+        print("Browser event capture enabled (WebSocket on localhost:8765)")
+        print("Make sure the openadapt-capture Chrome extension is installed.")
     print("Press Ctrl+C or type stop sequence to stop recording...")
     print()
 
@@ -45,6 +52,7 @@ def record(
         capture_video=video,
         capture_audio=audio,
         capture_images=images,
+        capture_browser_events=browser_events,
         send_profile=send_profile,
     ) as recorder:
         recorder.wait_for_ready()
@@ -129,6 +137,7 @@ def info(capture_dir: str) -> None:
     # Count events
     actions = list(capture.actions())
     print(f"Actions: {len(actions)}")
+    print(f"Browser events: {capture.browser_event_count}")
 
     # Event type breakdown
     from collections import Counter
@@ -137,6 +146,14 @@ def info(capture_dir: str) -> None:
         print("Event types:")
         for event_type, count in types.most_common():
             print(f"  {event_type}: {count}")
+
+    # Browser event breakdown
+    if capture.browser_event_count > 0:
+        browser_events = capture.browser_events()
+        btypes = Counter(type(e).__name__ for e in browser_events)
+        print("Browser event types:")
+        for btype, count in btypes.most_common():
+            print(f"  {btype}: {count}")
 
 
 def transcribe(

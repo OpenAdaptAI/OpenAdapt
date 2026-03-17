@@ -18,22 +18,27 @@ from pydantic import BaseModel, Field
 
 
 class BrowserEventType(str, Enum):
-    """Browser event type identifiers."""
+    """Browser event type identifiers.
+
+    Values match the raw DOM event names sent by the Chrome extension
+    content script (e.g. "click", "keydown"), consistent with legacy OpenAdapt.
+    """
 
     # User interaction events
-    CLICK = "browser.click"
-    KEYDOWN = "browser.keydown"
-    KEYUP = "browser.keyup"
-    SCROLL = "browser.scroll"
-    INPUT = "browser.input"
-    FOCUS = "browser.focus"
-    BLUR = "browser.blur"
+    CLICK = "click"
+    KEYDOWN = "keydown"
+    KEYUP = "keyup"
+    SCROLL = "scroll"
+    INPUT = "input"
+    MOUSEMOVE = "mousemove"
+    FOCUS = "focus"
+    BLUR = "blur"
 
     # Navigation events
-    NAVIGATE = "browser.navigate"
+    NAVIGATE = "navigate"
 
     # Unknown/generic
-    UNKNOWN = "browser.unknown"
+    UNKNOWN = "unknown"
 
 
 class NavigationType(str, Enum):
@@ -242,6 +247,21 @@ class BrowserNavigationEvent(BaseBrowserEvent):
 # =============================================================================
 
 
+class BrowserMouseMoveEvent(BaseBrowserEvent):
+    """Mouse move event in browser."""
+
+    type: Literal[BrowserEventType.MOUSEMOVE] = BrowserEventType.MOUSEMOVE
+
+    # Coordinates
+    client_x: float = Field(description="Viewport X")
+    client_y: float = Field(description="Viewport Y")
+    screen_x: float = Field(default=0, description="Screen X")
+    screen_y: float = Field(default=0, description="Screen Y")
+
+    # Target element
+    element: SemanticElementRef | None = Field(default=None)
+
+
 class BrowserFocusEvent(BaseBrowserEvent):
     """Element focus/blur event in browser."""
 
@@ -292,5 +312,6 @@ BrowserEvent = (
     | BrowserScrollEvent
     | BrowserInputEvent
     | BrowserNavigationEvent
+    | BrowserMouseMoveEvent
     | BrowserFocusEvent
 )

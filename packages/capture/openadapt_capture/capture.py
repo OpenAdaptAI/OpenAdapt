@@ -9,6 +9,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
+from openadapt_capture.browser_events import (
+    BoundingBox,
+    BrowserClickEvent,
+    BrowserEventType,
+    BrowserFocusEvent,
+    BrowserInputEvent,
+    BrowserKeyEvent,
+    BrowserMouseMoveEvent,
+    BrowserNavigationEvent,
+    BrowserScrollEvent,
+    ElementState,
+    NavigationType,
+    SemanticElementRef,
+)
 from openadapt_capture.events import (
     ActionEvent as PydanticActionEvent,
 )
@@ -26,6 +40,8 @@ from openadapt_capture.processing import process_events
 
 if TYPE_CHECKING:
     from PIL import Image
+
+    from openadapt_capture.browser_events import BrowserEvent
 
 
 def _convert_action_event(db_event) -> PydanticActionEvent | None:
@@ -96,6 +112,182 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
             canonical_key_char=db_event.canonical_key_char,
             canonical_key_vk=db_event.canonical_key_vk,
         )
+    return None
+
+
+def _parse_element_ref(raw: dict | None) -> SemanticElementRef | None:
+    """Parse a raw element dict into a SemanticElementRef.
+
+    Handles field name variations between the content-script format
+    (e.g. ``dataId``, ``tagName``, ``classList``) and snake_case alternatives.
+    """
+    if not raw or not isinstance(raw, dict):
+        return None
+
+    bbox_raw = raw.get("bbox", {})
+    bbox = BoundingBox(
+        x=bbox_raw.get("x", 0),
+        y=bbox_raw.get("y", 0),
+        width=bbox_raw.get("width", 0),
+        height=bbox_raw.get("height", 0),
+    )
+
+    state_raw = raw.get("state", {})
+    state = ElementState(
+        enabled=state_raw.get("enabled", True),
+        focused=state_raw.get("focused", False),
+        visible=state_raw.get("visible", True),
+        checked=state_raw.get("checked"),
+        selected=state_raw.get("selected"),
+        expanded=state_raw.get("expanded"),
+        value=state_raw.get("value"),
+    ) if isinstance(state_raw, dict) else ElementState()
+
+    return SemanticElementRef(
+        role=raw.get("role") or "",
+        name=raw.get("name") or "",
+        bbox=bbox,
+        xpath=raw.get("xpath") or raw.get("dataId") or "",
+        css_selector=raw.get("cssSelector") or raw.get("css_selector") or "",
+        state=state,
+        tag_name=raw.get("tagName") or raw.get("tag_name") or "",
+        id=raw.get("id"),
+        class_list=raw.get("classList") or raw.get("class_list") or [],
+    )
+
+
+def _convert_browser_event(db_event) -> "BrowserEvent | None":
+    """Convert a SQLAlchemy BrowserEvent to a typed Pydantic browser event.
+
+    The DB stores browser events as JSON in the `message` field.  The recorder
+    wraps each raw WebSocket message as ``{"message": <raw_event>}``.
+
+    Handles both flat (content-script) and payload-wrapped message formats.
+
+    Args:
+        db_event: SQLAlchemy BrowserEvent instance.
+
+    Returns:
+        Typed browser event or None if parsing fails.
+    """
+    msg = db_event.message
+    if not isinstance(msg, dict):
+        return None
+
+    # Unwrap the recorder's {"message": <raw>} wrapper
+    inner = msg.get("message", msg)
+    if not isinstance(inner, dict):
+        return None
+
+    # Support both flat (content-script) and payload-wrapped (browser_bridge) formats
+    payload = inner.get("payload", inner)
+
+    raw_type = payload.get("eventType", inner.get("eventType", ""))
+    try:
+        event_type = BrowserEventType(raw_type)
+    except ValueError:
+        return None
+
+    timestamp = db_event.timestamp or 0
+    url = payload.get("url", inner.get("url", ""))
+    tab_id = inner.get("tabId", payload.get("tab_id", 0))
+
+    try:
+        if event_type == BrowserEventType.CLICK:
+            elem = _parse_element_ref(payload.get("element"))
+            if elem is None:
+                return None
+            return BrowserClickEvent(
+                timestamp=timestamp,
+                url=url,
+                tab_id=tab_id,
+                client_x=payload.get("clientX", 0),
+                client_y=payload.get("clientY", 0),
+                page_x=payload.get("pageX", payload.get("clientX", 0)),
+                page_y=payload.get("pageY", payload.get("clientY", 0)),
+                button=payload.get("button", 0),
+                click_count=payload.get("clickCount", 1),
+                element=elem,
+            )
+        elif event_type in (BrowserEventType.KEYDOWN, BrowserEventType.KEYUP):
+            element = _parse_element_ref(payload.get("element"))
+            return BrowserKeyEvent(
+                timestamp=timestamp,
+                type=event_type,
+                url=url,
+                tab_id=tab_id,
+                key=payload.get("key", ""),
+                code=payload.get("code", ""),
+                key_code=payload.get("keyCode", 0),
+                shift_key=payload.get("shiftKey", False),
+                ctrl_key=payload.get("ctrlKey", False),
+                alt_key=payload.get("altKey", False),
+                meta_key=payload.get("metaKey", False),
+                element=element,
+            )
+        elif event_type == BrowserEventType.SCROLL:
+            return BrowserScrollEvent(
+                timestamp=timestamp,
+                url=url,
+                tab_id=tab_id,
+                scroll_x=payload.get("scrollX", 0),
+                scroll_y=payload.get("scrollY", 0),
+                delta_x=payload.get("deltaX", payload.get("scrollDeltaX", 0)),
+                delta_y=payload.get("deltaY", payload.get("scrollDeltaY", 0)),
+            )
+        elif event_type == BrowserEventType.INPUT:
+            elem = _parse_element_ref(payload.get("element"))
+            if elem is None:
+                return None
+            return BrowserInputEvent(
+                timestamp=timestamp,
+                url=url,
+                tab_id=tab_id,
+                input_type=payload.get("inputType", ""),
+                data=payload.get("data"),
+                value=payload.get("value", ""),
+                element=elem,
+            )
+        elif event_type == BrowserEventType.NAVIGATE:
+            nav_type = payload.get("navigationType", "link")
+            valid = [e.value for e in NavigationType]
+            return BrowserNavigationEvent(
+                timestamp=timestamp,
+                url=url,
+                tab_id=tab_id,
+                previous_url=payload.get("previousUrl", ""),
+                navigation_type=(
+                    NavigationType(nav_type)
+                    if nav_type in valid
+                    else NavigationType.LINK
+                ),
+            )
+        elif event_type == BrowserEventType.MOUSEMOVE:
+            element = _parse_element_ref(payload.get("element"))
+            return BrowserMouseMoveEvent(
+                timestamp=timestamp,
+                url=url,
+                tab_id=tab_id,
+                client_x=payload.get("clientX", 0),
+                client_y=payload.get("clientY", 0),
+                screen_x=payload.get("screenX", 0),
+                screen_y=payload.get("screenY", 0),
+                element=element,
+            )
+        elif event_type in (BrowserEventType.FOCUS, BrowserEventType.BLUR):
+            elem = _parse_element_ref(payload.get("element"))
+            if elem is None:
+                return None
+            return BrowserFocusEvent(
+                timestamp=timestamp,
+                type=event_type,
+                url=url,
+                tab_id=tab_id,
+                element=elem,
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug("Failed to parse browser event: %s", e)
     return None
 
 
@@ -384,6 +576,27 @@ class CaptureSession:
             if not include_moves and isinstance(event, MouseMoveEvent):
                 continue
             yield Action(event=event, _capture=self)
+
+    def browser_events(self) -> list["BrowserEvent"]:
+        """Get all browser events as typed Pydantic models.
+
+        Parses the JSON message field from each stored BrowserEvent into
+        the appropriate typed event (BrowserClickEvent, BrowserKeyEvent, etc.).
+
+        Returns:
+            List of typed browser events, ordered by timestamp.
+        """
+        events: list[BrowserEvent] = []
+        for db_event in self._recording.browser_events:
+            parsed = _convert_browser_event(db_event)
+            if parsed is not None:
+                events.append(parsed)
+        return events
+
+    @property
+    def browser_event_count(self) -> int:
+        """Number of browser events in this capture."""
+        return len(self._recording.browser_events)
 
     def get_frame_at(self, timestamp: float, tolerance: float = 0.5) -> "Image" | None:
         """Get the screen frame closest to a timestamp.
