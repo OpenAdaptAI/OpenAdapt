@@ -35,6 +35,13 @@ from openadapt_types.computer_state import (
 )
 from openadapt_types.episode import Episode, Step
 from openadapt_types.failure import FailureCategory, FailureRecord
+from openadapt_types.parsing import (
+    from_benchmark_action,
+    parse_action,
+    parse_action_dsl,
+    parse_action_json,
+    to_benchmark_action_dict,
+)
 
 __version__ = "0.1.0"
 
@@ -56,4 +63,10 @@ __all__ = [
     # failure
     "FailureCategory",
     "FailureRecord",
+    # parsing
+    "from_benchmark_action",
+    "parse_action",
+    "parse_action_dsl",
+    "parse_action_json",
+    "to_benchmark_action_dict",
 ]
