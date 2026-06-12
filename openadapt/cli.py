@@ -238,9 +238,7 @@ def train_start(
 
     except ImportError as e:
         click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
-        click.echo(
-            'Install with: pip install "openadapt-ml[training]"', err=True
-        )
+        click.echo('Install with: pip install "openadapt-ml[training]"', err=True)
         sys.exit(1)
 
 
