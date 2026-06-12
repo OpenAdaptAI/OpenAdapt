@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.4 (2026-06-12)
+
+### Bug Fixes
+
+- Serve Namespace and lazy-import bugs; add CLI smoke and seam tests
+  ([#1002](https://github.com/OpenAdaptAI/OpenAdapt/pull/1002),
+  [`7e4d3ce`](https://github.com/OpenAdaptAI/OpenAdapt/commit/7e4d3ce38423ee224d303f204ef9b94025820c11))
+
+
 ## v1.2.3 (2026-06-12)
 
 ### Bug Fixes
