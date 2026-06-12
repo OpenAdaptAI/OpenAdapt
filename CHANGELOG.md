@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.2.3 (2026-06-12)
+
+### Bug Fixes
+
+- Honor --output in serve, clear error for unresolvable configs
+  ([#1001](https://github.com/OpenAdaptAI/OpenAdapt/pull/1001),
+  [`37db8d4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/37db8d4862097efaa57608bdd4972a72f0e57a7b))
+
+- Repair broken openadapt-ml imports in serve and train CLI commands
+  ([#1001](https://github.com/OpenAdaptAI/OpenAdapt/pull/1001),
+  [`37db8d4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/37db8d4862097efaa57608bdd4972a72f0e57a7b))
+
+### Code Style
+
+- Ruff format cli.py ([#1001](https://github.com/OpenAdaptAI/OpenAdapt/pull/1001),
+  [`37db8d4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/37db8d4862097efaa57608bdd4972a72f0e57a7b))
+
+
 ## v1.2.2 (2026-03-04)
 
 ### Bug Fixes
