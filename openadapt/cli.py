@@ -441,14 +441,6 @@ def serve(port: int, output: str, open: bool):
         # so --output is honored.
         oa_local.TRAINING_OUTPUT = Path(output)
 
-        if open:
-            import threading
-            import webbrowser
-
-            threading.Timer(
-                1.0, webbrowser.open, args=(f"http://localhost:{port}",)
-            ).start()
-
         sys.exit(
             oa_local.cmd_serve(
                 argparse.Namespace(
@@ -457,6 +449,7 @@ def serve(port: int, output: str, open: bool):
                     no_regenerate=False,
                     start_page=None,
                     quiet=False,
+                    open=open,
                 )
             )
         )

@@ -54,3 +54,21 @@ jobs:
           poetry config pypi-token.pypi $PYPI_TOKEN
           poetry build
           poetry publish --no-interaction --skip-existing
+
+      # Releases in openadapt-ml failed silently for 3 months (Mar-Jun
+      # 2026) while PyPI went stale; see issue #999. Fail loudly instead.
+      - name: File issue on release failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          TITLE="Release workflow failed on main"
+          BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Until this is fixed, merged fix/feat commits are NOT being published to PyPI, and users install stale versions."
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY"
+          fi
