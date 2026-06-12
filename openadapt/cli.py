@@ -216,6 +216,17 @@ def train_start(
         except ImportError:
             # Older openadapt-ml without resolve_config_path; use as-is.
             pass
+
+        from pathlib import Path
+
+        if not Path(config).exists():
+            click.echo(f"Error: config not found: {config}", err=True)
+            click.echo(
+                "Upgrade openadapt-ml so bundled configs resolve, or pass "
+                "--config with a path to a training config YAML.",
+                err=True,
+            )
+            sys.exit(1)
         click.echo(f"  Config: {config}")
 
         train_main(
@@ -423,8 +434,14 @@ def serve(port: int, output: str, open: bool):
         click.echo(f"Serving from: {output}")
 
         import argparse
+        from pathlib import Path
 
-        from openadapt_ml.cloud.local import cmd_serve
+        from openadapt_ml.cloud import local as oa_local
+
+        # cmd_serve resolves the 'current' run against the module-level
+        # TRAINING_OUTPUT constant; point it at the requested directory
+        # so --output is honored.
+        oa_local.TRAINING_OUTPUT = Path(output)
 
         if open:
             import threading
@@ -434,10 +451,8 @@ def serve(port: int, output: str, open: bool):
                 1.0, webbrowser.open, args=(f"http://localhost:{port}",)
             ).start()
 
-        # cmd_serve serves the 'current' training run from the working
-        # directory's training_output; it takes an argparse Namespace.
         sys.exit(
-            cmd_serve(
+            oa_local.cmd_serve(
                 argparse.Namespace(
                     port=port,
                     benchmark=None,
