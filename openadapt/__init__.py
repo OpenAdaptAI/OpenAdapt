@@ -59,11 +59,10 @@ def __getattr__(name: str):
         return locals()[name]
 
     # ML package (heavy - only import if explicitly requested)
-    if name in ("QwenVLAdapter", "train", "Trainer"):
-        from openadapt_ml import QwenVLAdapter  # noqa: F401
-        from openadapt_ml.training import Trainer  # noqa: F401
+    if name == "QwenVLAdapter":
+        from openadapt_ml.models.qwen_vl import QwenVLAdapter  # noqa: F401
 
-        return locals().get(name)
+        return QwenVLAdapter
 
     # Grounding package (optional)
     if name in ("Grounder", "OmniGrounder", "GeminiGrounder"):
@@ -115,7 +114,6 @@ __all__ = [
     "HTMLBuilder",
     # From ml
     "QwenVLAdapter",
-    "Trainer",
     # From grounding (optional)
     "Grounder",
     "OmniGrounder",
