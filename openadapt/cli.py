@@ -196,23 +196,40 @@ def train_start(
     try:
         click.echo("Starting training...")
         click.echo(f"  Capture: {capture}")
-        click.echo(f"  Model: {model}")
         click.echo(f"  Output: {output}")
 
-        # Import and run training
-        from openadapt_ml.scripts.train import train_main
+        # Import and run training. The model is determined by the config
+        # file; --model is kept for backward compatibility only.
+        from openadapt_ml.scripts.train import main as train_main
+
+        if not config:
+            from openadapt_ml.cloud.local import detect_device
+
+            if "cuda" in detect_device():
+                config = "configs/qwen3vl_capture.yaml"
+            else:
+                config = "configs/qwen3vl_capture_4bit.yaml"
+        try:
+            from openadapt_ml.cloud.local import resolve_config_path
+
+            config = str(resolve_config_path(config))
+        except ImportError:
+            # Older openadapt-ml without resolve_config_path; use as-is.
+            pass
+        click.echo(f"  Config: {config}")
 
         train_main(
-            capture=capture,
-            model=model,
-            config=config,
+            config_path=config,
+            capture_path=capture,
             output_dir=output,
             open_dashboard=open,
         )
 
-    except ImportError:
-        click.echo("Error: openadapt-ml not installed.", err=True)
-        click.echo("Install with: pip install openadapt-ml", err=True)
+    except ImportError as e:
+        click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
+        click.echo(
+            'Install with: pip install "openadapt-ml[training]"', err=True
+        )
         sys.exit(1)
 
 
@@ -405,16 +422,35 @@ def serve(port: int, output: str, open: bool):
         click.echo(f"Starting server on port {port}...")
         click.echo(f"Serving from: {output}")
 
-        from openadapt_ml.cloud.local import serve_dashboard
+        import argparse
 
-        serve_dashboard(
-            output_dir=output,
-            port=port,
-            open_browser=open,
+        from openadapt_ml.cloud.local import cmd_serve
+
+        if open:
+            import threading
+            import webbrowser
+
+            threading.Timer(
+                1.0, webbrowser.open, args=(f"http://localhost:{port}",)
+            ).start()
+
+        # cmd_serve serves the 'current' training run from the working
+        # directory's training_output; it takes an argparse Namespace.
+        sys.exit(
+            cmd_serve(
+                argparse.Namespace(
+                    port=port,
+                    benchmark=None,
+                    no_regenerate=False,
+                    start_page=None,
+                    quiet=False,
+                )
+            )
         )
 
-    except ImportError:
-        click.echo("Error: openadapt-ml not installed.", err=True)
+    except ImportError as e:
+        click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
+        click.echo('Install with: pip install "openadapt-ml[training]"', err=True)
         sys.exit(1)
 
 
