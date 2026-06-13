@@ -142,9 +142,6 @@ NUM_MEMORY_STATS_TO_LOG = 3
 stop_sequence_detected = False
 ws_server_instance = None
 
-# TODO XXX replace with utils.get_monitor_dims() once fixed
-monitor_width, monitor_height = utils.take_screenshot().size
-
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
     """Collects and appends performance snapshots using tracemalloc.
@@ -546,6 +543,8 @@ def video_pre_callback(
         dict[str, Any]: The updated state.
     """
     video_file_path = video.get_video_file_path(recording.timestamp, video_dir)
+    # TODO XXX replace with utils.get_monitor_dims() once fixed
+    monitor_width, monitor_height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = (
         video.initialize_video_writer(video_file_path, monitor_width, monitor_height)
     )
