@@ -468,25 +468,30 @@ def serve(port: int, output: str, open: bool):
 @main.command()
 def version():
     """Show version information for all packages."""
+    # Read distribution metadata instead of importing the packages:
+    # importing executes package code (openadapt-capture takes a
+    # screenshot at import time, which crashes in headless environments
+    # like CI), and metadata is what we actually want here.
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
     click.echo("OpenAdapt Ecosystem Versions:")
     click.echo("=" * 40)
 
     packages = [
-        ("openadapt", "openadapt"),
-        ("openadapt-capture", "openadapt_capture"),
-        ("openadapt-ml", "openadapt_ml"),
-        ("openadapt-evals", "openadapt_evals"),
-        ("openadapt-viewer", "openadapt_viewer"),
-        ("openadapt-grounding", "openadapt_grounding"),
-        ("openadapt-retrieval", "openadapt_retrieval"),
+        "openadapt",
+        "openadapt-capture",
+        "openadapt-ml",
+        "openadapt-evals",
+        "openadapt-viewer",
+        "openadapt-grounding",
+        "openadapt-retrieval",
     ]
 
-    for name, module in packages:
+    for name in packages:
         try:
-            mod = __import__(module)
-            ver = getattr(mod, "__version__", "unknown")
-            click.echo(f"  {name}: {ver}")
-        except ImportError:
+            click.echo(f"  {name}: {dist_version(name)}")
+        except PackageNotFoundError:
             click.echo(f"  {name}: not installed")
 
 
@@ -510,11 +515,15 @@ def doctor():
         "openadapt_evals",
         "openadapt_viewer",
     ]
+    from importlib.util import find_spec
+
     for pkg in required:
-        try:
-            __import__(pkg)
+        # find_spec checks installability without executing package code
+        # (importing openadapt-capture screenshots at import time, which
+        # crashes headless environments)
+        if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
-        except ImportError:
+        else:
             click.echo(f"  [MISSING] {pkg}")
 
     # Check optional packages
@@ -524,10 +533,9 @@ def doctor():
         "openadapt_retrieval",
     ]
     for pkg in optional:
-        try:
-            __import__(pkg)
+        if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
-        except ImportError:
+        else:
             click.echo(f"  [--] {pkg} (not installed)")
 
     # Check GPU

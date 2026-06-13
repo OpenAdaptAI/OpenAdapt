@@ -21,7 +21,17 @@ import pytest
 LOCAL_PACKAGE = "openadapt"
 LOCAL_ROOT = Path(__file__).resolve().parent.parent / LOCAL_PACKAGE
 
-EXTERNAL_PACKAGES = ("openadapt_ml",)
+# Every sibling package the meta-package imports from (cli.py and the
+# lazy __getattr__ in __init__.py). Cross-package checks skip gracefully
+# for any that aren't installed; CI installs all of them.
+EXTERNAL_PACKAGES = (
+    "openadapt_ml",
+    "openadapt_capture",
+    "openadapt_evals",
+    "openadapt_viewer",
+    "openadapt_grounding",
+    "openadapt_retrieval",
+)
 
 PHANTOM_IMPORT_ALLOWLIST: set[tuple[str, str]] = set()
 
