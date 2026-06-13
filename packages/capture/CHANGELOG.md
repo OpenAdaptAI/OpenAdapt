@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v0.5.3 (2026-06-13)
+
+### Bug Fixes
+
+- Don't take a screenshot at import time
+  ([#23](https://github.com/OpenAdaptAI/openadapt-capture/pull/23),
+  [`d4e2016`](https://github.com/OpenAdaptAI/openadapt-capture/commit/d4e2016680b053d257b9b1934d07ac76589ee970))
+
+recorder.py computed monitor dimensions via utils.take_screenshot() at module scope, so `import
+  openadapt_capture` crashed in any headless environment whose display reported a zero-size region.
+  This took down `openadapt version` and `openadapt doctor` (found via the new CLI smoke tests in
+  OpenAdaptAI/OpenAdapt). Move the computation into the video-setup function that is its only
+  consumer.
+
+Adds tests/test_headless_import.py: a deterministic AST guard that no package module calls a display
+  API (take_screenshot/get_monitor_dims/ grab) at import scope. A subprocess import test is
+  unreliable (only reproduces on a genuinely headless display); this fails regardless of
+  environment.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+### Testing
+
+- Add import-integrity guards and release-failure alerting
+  ([#22](https://github.com/OpenAdaptAI/openadapt-capture/pull/22),
+  [`cd7ed78`](https://github.com/OpenAdaptAI/openadapt-capture/commit/cd7ed786b3cb3b5512769787cde3ab4f62ca78c5))
+
+Ecosystem rollout of the OpenAdaptAI/OpenAdapt#999 guards (see openadapt-ml#64, OpenAdapt#1002,
+  openadapt-evals#262):
+
+- tests/test_import_integrity.py: AST-based phantom-import and phantom-kwarg detection, including
+  imports inside function bodies (40 modules scanned; this package is clean - zero findings) -
+  release.yml: file/append a GitHub issue when the release workflow fails, so PyPI cannot silently
+  go stale
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+
 ## v0.5.2 (2026-03-17)
 
 ### Bug Fixes
