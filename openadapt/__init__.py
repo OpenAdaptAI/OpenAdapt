@@ -65,12 +65,11 @@ def __getattr__(name: str):
         return QwenVLAdapter
 
     # Grounding package (optional)
-    if name in ("Grounder", "OmniGrounder", "GeminiGrounder"):
+    if name in ("ElementLocator", "OmniParserClient"):
         try:
             from openadapt_grounding import (  # noqa: F401
-                GeminiGrounder,
-                Grounder,
-                OmniGrounder,
+                ElementLocator,
+                OmniParserClient,
             )
 
             return locals()[name]
@@ -81,15 +80,27 @@ def __getattr__(name: str):
             )
 
     # Retrieval package (optional)
-    if name in ("DemoRetriever", "DemoLibrary"):
+    if name == "MultimodalDemoRetriever":
         try:
-            from openadapt_retrieval import DemoLibrary, DemoRetriever  # noqa: F401
+            from openadapt_retrieval import MultimodalDemoRetriever  # noqa: F401
 
-            return locals()[name]
+            return MultimodalDemoRetriever
         except ImportError:
             raise ImportError(
                 f"{name} requires openadapt-retrieval. "
                 "Install with: pip install openadapt[retrieval]"
+            )
+
+    # Demo library lives in openadapt-evals
+    if name == "DemoLibrary":
+        try:
+            from openadapt_evals import DemoLibrary  # noqa: F401
+
+            return DemoLibrary
+        except ImportError:
+            raise ImportError(
+                f"{name} requires openadapt-evals. "
+                "Install with: pip install openadapt[evals]"
             )
 
     raise AttributeError(f"module 'openadapt' has no attribute '{name}'")
@@ -115,10 +126,10 @@ __all__ = [
     # From ml
     "QwenVLAdapter",
     # From grounding (optional)
-    "Grounder",
-    "OmniGrounder",
-    "GeminiGrounder",
+    "ElementLocator",
+    "OmniParserClient",
     # From retrieval (optional)
-    "DemoRetriever",
+    "MultimodalDemoRetriever",
+    # From evals
     "DemoLibrary",
 ]

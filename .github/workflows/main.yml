@@ -29,11 +29,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # openadapt-ml is installed explicitly so the cross-package
-          # seam tests (tests/test_import_integrity.py and the cmd_serve
-          # contract in tests/test_cli_smoke.py) run instead of skipping.
-          # Issue #999 shipped because this seam was never tested in CI.
-          pip install -e ".[dev]" openadapt-ml
+          # Sibling packages are installed explicitly so the
+          # cross-package seam tests (tests/test_import_integrity.py and
+          # the cmd_serve contract in tests/test_cli_smoke.py) run
+          # instead of skipping. Issue #999 shipped because the
+          # openadapt-ml seam was never tested in CI; the lazy
+          # __getattr__ in openadapt/__init__.py imports from all of
+          # these.
+          pip install -e ".[dev]" openadapt-ml openadapt-capture \
+            openadapt-evals openadapt-viewer openadapt-grounding \
+            openadapt-retrieval
 
       - name: Lint with ruff
         run: |
