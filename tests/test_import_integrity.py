@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -149,11 +150,18 @@ def _local_modules() -> list[tuple[str, Path]]:
 
 
 def test_external_packages_installed_in_ci():
-    """The cross-package checks are only meaningful with openadapt-ml
-    present. Locally this may skip; CI installs it."""
-    for pkg in EXTERNAL_PACKAGES:
-        if importlib.util.find_spec(pkg) is None:
-            pytest.skip(f"{pkg} not installed; cross-package checks limited")
+    """In CI, every sibling package must be importable so the
+    cross-package seam checks actually run instead of silently
+    degrading to skips. (The #999 meta-lesson: a green check that
+    verifies nothing is worse than no check.) Locally this is allowed
+    to skip."""
+    if not os.environ.get("CI"):
+        pytest.skip("sibling install only enforced in CI")
+    missing = [p for p in EXTERNAL_PACKAGES if importlib.util.find_spec(p) is None]
+    assert not missing, (
+        f"CI must install all sibling packages so the cross-package "
+        f"seam tests run, but these are not importable: {missing}"
+    )
 
 
 def test_no_phantom_imports():
