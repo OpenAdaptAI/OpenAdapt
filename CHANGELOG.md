@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.2.5 (2026-06-13)
+
+### Bug Fixes
+
+- Phantom grounding/retrieval exports, headless version/doctor; check all sibling seams
+  ([#1003](https://github.com/OpenAdaptAI/OpenAdapt/pull/1003),
+  [`e31c3e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e31c3e9ada705752f8649eea9bc322986bc09937))
+
+- Phantom sibling exports, headless version/doctor; check all seams in CI
+  ([#1003](https://github.com/OpenAdaptAI/OpenAdapt/pull/1003),
+  [`e31c3e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e31c3e9ada705752f8649eea9bc322986bc09937))
+
+### Testing
+
+- Give the CI sibling-install check teeth
+  ([#1003](https://github.com/OpenAdaptAI/OpenAdapt/pull/1003),
+  [`e31c3e9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/e31c3e9ada705752f8649eea9bc322986bc09937))
+
+
 ## v1.2.4 (2026-06-12)
 
 ### Bug Fixes
