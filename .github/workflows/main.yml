@@ -64,3 +64,10 @@ jobs:
 
       - name: Run Flake8
         run: poetry run flake8 --exclude=alembic,.venv,venv,contrib,.cache,.git
+
+      # Guard against import-time breakage (missing/renamed imports, bad lazy
+      # imports) -- the class of error that dominates GlitchTip. See
+      # GLITCHTIP_FIX_PLAN.md. TODO: extend to a Windows matrix to cover the
+      # pywinauto import path.
+      - name: Import-smoke (core modules must import cleanly)
+        run: poetry run python -c "import openadapt, openadapt.config, openadapt.utils, openadapt.models, openadapt.db.db, openadapt.window, openadapt.error_reporting; print('imports ok')"

@@ -60,10 +60,50 @@ def show_alert() -> None:
     msg.exec()
 
 
+# Errors from environments where OpenAdapt cannot run -- headless / no display,
+# unsupported platform, or a broken/partial native dependency set -- are not
+# actionable bugs. They otherwise flood the dashboard from CI and automated
+# headless environments and bury real issues. Drop them. See GLITCHTIP_FIX_PLAN.md.
+_UNSUPPORTED_ENV_SUBSTRINGS = (
+    "failed to acquire X connection",
+    "Bad display name",
+    "DISPLAY not set",
+    "this platform is not supported",  # pynput import on headless Linux
+    "No module named 'pywinauto'",  # non-Windows / old releases (guarded on main)
+    "module 'pywinauto' has no attribute",
+    "_ARRAY_API not found",  # numpy 1.x/2.x ABI mismatch in a broken env
+    "crop_active_window should return an image",  # headless screenshot returned None
+)
+
+
+def is_unsupported_environment_error(event: Any, hint: Any) -> bool:
+    """Return True if the event is an unactionable unsupported-environment error."""
+    texts = []
+    exc_info = hint.get("exc_info") if hint else None
+    if exc_info and exc_info[1] is not None:
+        texts.append(f"{type(exc_info[1]).__name__}: {exc_info[1]}")
+    for value in (event.get("exception", {}) or {}).get("values", []) or []:
+        texts.append(f"{value.get('type')}: {value.get('value')}")
+    blob = " ".join(texts)
+    return any(substring in blob for substring in _UNSUPPORTED_ENV_SUBSTRINGS)
+
+
 def before_send_event(event: Any, hint: Any) -> Any:
-    """Handle the event before sending it to Sentry."""
+    """Filter events before sending to GlitchTip.
+
+    Drops unactionable unsupported-environment errors (headless, wrong platform,
+    broken native deps) that otherwise flood the dashboard from CI/automated
+    environments. For genuine errors, surfaces a user alert -- but only when a GUI
+    is actually running, never headless, and never for filtered noise.
+    """
+    if is_unsupported_environment_error(event, hint):
+        return None  # drop -- not an actionable bug
+
     try:
-        show_alert()
+        from PySide6.QtWidgets import QApplication
+
+        if QApplication.instance() is not None:
+            show_alert()
     except Exception:
         pass
     return event

@@ -124,9 +124,11 @@ class Config(BaseSettings):
 
     # Error reporting
     ERROR_REPORTING_ENABLED: bool = True
+    # Reports to the live GlitchTip project openadaptai/openadapt (id 3798).
+    # (Project 8771, previously set here, is not in the org and is unreachable,
+    # so its events were never visible in the dashboard.)
     ERROR_REPORTING_DSN: ClassVar = (
-        # "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
-        "https://5d24fc5a2e674ea6b42275e5702499ce@app.glitchtip.com/8771"
+        "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
     )
     ERROR_REPORTING_BRANCH: ClassVar = "main"
 
