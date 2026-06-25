@@ -41,3 +41,6 @@ build/
 
 OpenAdapt.spec
 build_scripts/OpenAdapt.iss
+
+# Private keys (never commit)
+*.pem
