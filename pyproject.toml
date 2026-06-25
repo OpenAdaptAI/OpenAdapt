@@ -25,6 +25,12 @@ classifiers = [
 # Minimal base - just the CLI
 dependencies = [
     "click>=8.0.0",
+    # Backs openadapt.config (BaseSettings) -- was a latent missing base dep:
+    # a clean install could not `import openadapt.config` without it.
+    "pydantic-settings>=2.0.0",
+    # Optional crash reporting (see openadapt/error_reporting.py). Lightweight,
+    # pure-Python; reporting is off unless running a packaged build.
+    "sentry-sdk>=2.0.0",
 ]
 
 [project.optional-dependencies]

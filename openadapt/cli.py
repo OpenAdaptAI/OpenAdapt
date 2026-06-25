@@ -38,7 +38,11 @@ def main():
         openadapt train --capture my-task        # Train a model
         openadapt eval --checkpoint model.pt     # Evaluate the model
     """
-    pass
+    # Initialize crash reporting before dispatching to any subcommand. Lazy
+    # import keeps CLI startup fast and import-safe; the call never raises.
+    from openadapt.error_reporting import configure_error_reporting
+
+    configure_error_reporting()
 
 
 # =============================================================================

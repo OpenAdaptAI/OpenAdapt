@@ -50,6 +50,20 @@ class OpenAdaptSettings(BaseSettings):
     lambda_api_key: Optional[str] = None
 
     # =========================================================================
+    # Crash reporting (see openadapt/error_reporting.py)
+    # =========================================================================
+    # Master switch (OPENADAPT_ERROR_REPORTING_ENABLED).
+    error_reporting_enabled: bool = True
+    # Report from a source run too (default: only packaged/frozen builds report).
+    error_reporting_force: bool = False
+    # Sentry-compatible DSN; defaults to the GlitchTip openadaptai/openadapt (3798)
+    # project. The DSN public key is an ingestion key, not a secret.
+    error_reporting_dsn: Optional[str] = (
+        "https://dcf5d7889a3b4b47ae12a3af9ffcbeb7@app.glitchtip.com/3798"
+    )
+    error_reporting_environment: str = "production"
+
+    # =========================================================================
     # Paths
     # =========================================================================
     # Default directory for capture recordings
