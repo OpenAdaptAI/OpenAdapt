@@ -36,9 +36,12 @@ jobs:
           # openadapt-ml seam was never tested in CI; the lazy
           # __getattr__ in openadapt/__init__.py imports from all of
           # these.
-          pip install -e ".[dev]" openadapt-ml openadapt-capture \
-            openadapt-evals openadapt-viewer openadapt-grounding \
-            openadapt-retrieval
+          # openadapt-panel lives in-repo (not on PyPI yet), so install it
+          # from the local path — otherwise its panel seam tests in
+          # tests/test_cli_smoke.py would skip in CI, the exact #999 gap.
+          pip install -e ".[dev]" -e ./openadapt-panel openadapt-ml \
+            openadapt-capture openadapt-evals openadapt-viewer \
+            openadapt-grounding openadapt-retrieval
 
       - name: Lint with ruff
         run: |

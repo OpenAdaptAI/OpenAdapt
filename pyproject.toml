@@ -50,12 +50,15 @@ retrieval = [
 privacy = [
     "openadapt-privacy>=0.1.0",
 ]
+panel = [
+    "openadapt-panel>=0.1.0",
+]
 # Bundles
 core = [
     "openadapt[capture,ml,evals,viewer]",
 ]
 all = [
-    "openadapt[core,grounding,retrieval,privacy]",
+    "openadapt[core,grounding,retrieval,privacy,panel]",
 ]
 dev = [
     "pytest>=8.0.0",

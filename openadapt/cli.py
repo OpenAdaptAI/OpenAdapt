@@ -15,6 +15,8 @@ Usage:
 
     openadapt serve --port 8080
 
+    openadapt panel --port 8080
+
     openadapt version
     openadapt doctor
 """
@@ -458,6 +460,39 @@ def serve(port: int, output: str, open: bool):
         click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
         click.echo('Install with: pip install "openadapt-ml[training]"', err=True)
         sys.exit(1)
+
+
+# =============================================================================
+# Panel Command
+# =============================================================================
+
+
+@main.command()
+@click.option("--port", "-p", default=8080, help="Port to serve the panel on")
+@click.option("--host", default="127.0.0.1", help="Host to bind (loopback only)")
+@click.option("--open/--no-open", default=True, help="Open in browser")
+def panel(port: int, host: str, open: bool):
+    """Launch the local web control panel.
+
+    \b
+    Examples:
+        openadapt panel
+        openadapt panel --port 9000 --no-open
+    """
+    # Distinguish "not installed" from "installed but broken": check presence
+    # with find_spec (no code executed), then import. A phantom/renamed symbol
+    # then surfaces as a real error instead of being masked as "not installed"
+    # (the #999 bug class).
+    from importlib.util import find_spec
+
+    if find_spec("openadapt_panel") is None:
+        click.echo("Error: openadapt-panel not installed.", err=True)
+        click.echo('Install with: pip install "openadapt[panel]"', err=True)
+        sys.exit(1)
+
+    from openadapt_panel import run_panel
+
+    sys.exit(run_panel(host=host, port=port, open_browser=open))
 
 
 # =============================================================================

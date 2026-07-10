@@ -201,6 +201,71 @@ def test_cmd_serve_reads_only_provided_args():
     )
 
 
+# ---------------------------------------------------------------------------
+# Seam contracts with openadapt-panel
+# ---------------------------------------------------------------------------
+
+
+def _require_openadapt_panel():
+    return pytest.importorskip(
+        "openadapt_panel", reason="openadapt-panel not installed"
+    )
+
+
+def test_panel_calls_run_panel_with_valid_kwargs(monkeypatch):
+    """`openadapt panel` must call run_panel with kwargs that exist in its
+    signature (the seam that broke serve/train in #999)."""
+    _require_openadapt_panel()
+    import inspect
+
+    import openadapt_panel
+
+    real_params = set(inspect.signature(openadapt_panel.run_panel).parameters)
+    calls = []
+
+    def fake_run_panel(**kwargs):
+        unknown = set(kwargs) - real_params
+        assert not unknown, (
+            f"cli.py passes kwargs {sorted(unknown)} that "
+            f"openadapt_panel.run_panel does not accept "
+            f"(it takes {sorted(real_params)})"
+        )
+        calls.append(kwargs)
+        return 0
+
+    # cli.py does `from openadapt_panel import run_panel` at call time, so
+    # patching the attribute on the package is enough.
+    monkeypatch.setattr(openadapt_panel, "run_panel", fake_run_panel)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["panel", "--port", "9000", "--no-open"])
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert calls[0]["port"] == 9000
+    assert calls[0]["open_browser"] is False
+
+
+def test_panel_system_report_imports_no_siblings():
+    """The panel's system page must inspect state without importing siblings
+    (mirrors doctor: openadapt-capture screenshots at import time)."""
+    _require_openadapt_panel()
+    from openadapt_panel.system import system_report
+
+    sibling_prefixes = (
+        "openadapt_capture",
+        "openadapt_ml",
+        "openadapt_evals",
+        "openadapt_viewer",
+        "openadapt_grounding",
+        "openadapt_retrieval",
+        "openadapt_privacy",
+    )
+    before = set(sys.modules)
+    system_report()
+    newly = [m for m in set(sys.modules) - before if m.startswith(sibling_prefixes)]
+    assert not newly, f"system_report imported sibling packages: {sorted(newly)}"
+
+
 def test_import_error_messages_not_masked(monkeypatch):
     """Internal ImportErrors must surface the real error, not claim
     openadapt-ml isn't installed."""

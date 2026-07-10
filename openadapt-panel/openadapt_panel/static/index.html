@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAdapt Control Panel</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #171a21;
+        --border: #262b36;
+        --text: #e6e9ef;
+        --muted: #8b93a3;
+        --ok: #3fb950;
+        --miss: #6e7681;
+        --accent: #4c8bf5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 24px 32px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+      }
+      header h1 { font-size: 20px; margin: 0; }
+      header .tag { color: var(--muted); font-size: 13px; }
+      main { max-width: 880px; margin: 0 auto; padding: 32px; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+      }
+      .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 14px; }
+      .row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); }
+      .row:last-child { border-bottom: none; }
+      .row .k { color: var(--muted); }
+      .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; }
+      .badge.ok { color: var(--ok); background: rgba(63,185,80,.12); }
+      .badge.miss { color: var(--miss); background: rgba(110,118,129,.15); }
+      .ver { color: var(--muted); font-size: 12px; margin-left: 8px; }
+      .err { color: #f85149; }
+      footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>OpenAdapt Control Panel</h1>
+      <span class="tag">Dashboard · System</span>
+    </header>
+    <main id="app">
+      <div class="card"><div class="k">Loading system status…</div></div>
+    </main>
+    <footer>P0 — read-only system status. Captures / Train / Eval coming next.</footer>
+
+    <script>
+      function pkgRow(p) {
+        const badge = p.installed
+          ? '<span class="badge ok">installed</span>'
+          : '<span class="badge miss">not installed</span>';
+        const ver = p.version ? '<span class="ver">' + p.version + "</span>" : "";
+        return (
+          '<div class="row"><span class="k">' +
+          p.name +
+          ver +
+          "</span>" +
+          badge +
+          "</div>"
+        );
+      }
+
+      function render(d) {
+        const gpu = d.gpu.available
+          ? (d.gpu.kind || "").toUpperCase() + (d.gpu.name ? " · " + d.gpu.name : "")
+          : d.gpu.torch === false
+          ? "PyTorch not installed"
+          : "No GPU (CPU mode)";
+
+        const keys = Object.entries(d.api_keys)
+          .map(function (e) {
+            const b = e[1]
+              ? '<span class="badge ok">set</span>'
+              : '<span class="badge miss">not set</span>';
+            return '<div class="row"><span class="k">' + e[0] + "</span>" + b + "</div>";
+          })
+          .join("");
+
+        document.getElementById("app").innerHTML =
+          '<div class="card"><h2>Environment</h2>' +
+          '<div class="row"><span class="k">Python</span><span>' + d.python + "</span></div>" +
+          '<div class="row"><span class="k">Platform</span><span>' + d.platform + "</span></div>" +
+          '<div class="row"><span class="k">GPU</span><span>' + gpu + "</span></div>" +
+          "</div>" +
+          '<div class="card"><h2>Core packages</h2>' +
+          pkgRow(d.packages.openadapt) +
+          d.packages.core.map(pkgRow).join("") +
+          "</div>" +
+          '<div class="card"><h2>Optional packages</h2>' +
+          d.packages.optional.map(pkgRow).join("") +
+          "</div>" +
+          '<div class="card"><h2>API keys</h2>' + keys + "</div>";
+      }
+
+      fetch("/api/system")
+        .then(function (r) { return r.json(); })
+        .then(render)
+        .catch(function (e) {
+          document.getElementById("app").innerHTML =
+            '<div class="card err">Failed to load /api/system: ' + e + "</div>";
+        });
+    </script>
+  </body>
+</html>

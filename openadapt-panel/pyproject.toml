@@ -1,0 +1,42 @@
+[project]
+name = "openadapt-panel"
+version = "0.1.0"
+description = "Local web control panel for OpenAdapt — a browser UI over the record/train/eval CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "OpenAdapt", email = "hello@openadapt.ai"}
+]
+keywords = ["openadapt", "gui", "automation", "control-panel", "fastapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.urls]
+Homepage = "https://openadapt.ai"
+Repository = "https://github.com/OpenAdaptAI/openadapt"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The built frontend (currently a hand-written static page; a React build
+# will be emitted here at package-build time) ships inside the wheel so the
+# end user never needs Node.
+packages = ["openadapt_panel"]
