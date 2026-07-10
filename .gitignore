@@ -27,8 +27,10 @@ __pycache__
 # Generated performance charts
 performance
 
-# Generated when adding editable dependencies in requirements.txt (-e)
-src
+# Generated when adding editable dependencies in requirements.txt (-e).
+# Scoped to the repo root only — a bare `src` ignored ANY src/ dir repo-wide
+# (it silently dropped the Miso React UI, and would drop the panel frontend).
+/src/
 
 # MacOS file
 .DS_Store
