@@ -17,23 +17,29 @@ second implementation**: each route calls the exact sibling function the
 corresponding CLI command already calls (`openadapt_ml.scripts.train.main`,
 `openadapt_capture.Recorder`, …).
 
-## Status — P0 (shell)
+## Pages
 
-This release ships the **Dashboard / System** page only: a read-only view of
-Python/platform, installed ecosystem packages + versions, GPU, and API-key
-presence. It boots with **zero siblings installed** and imports no sibling
-package (state is inspected via `importlib.metadata` / `find_spec`, mirroring
-`openadapt doctor`).
+| Page | What it does | Seam |
+|------|--------------|------|
+| **Dashboard** | Read-only system/ecosystem status (Python, GPU, installed packages, API-key presence). Imports no sibling — `importlib.metadata`/`find_spec` only, mirroring `openadapt doctor`. | — |
+| **Captures** | List recordings, generate + embed the HTML viewer, start a recording. | `openadapt_capture.Capture` / `create_html`; recording via CLI subprocess |
+| **Train** | Start a run, live log + epoch/loss progress, stop cleanly. | `openadapt train start` subprocess; `training_log.json`; `STOP_TRAINING` sentinel |
+| **Eval** | Mock or live/checkpoint benchmark, shows success rate / avg steps. | `openadapt_evals` (SmartMockAgent/ApiAgent/PolicyAgent, WAA adapters) |
+| **Models** | Browse trained checkpoints on disk. | filesystem (`model_cache_dir`) |
+| **Settings** | View effective config; edit API keys / dirs / device / ports; persisted to `.env`. | `.env` + `openadapt.config` schema |
 
-Planned: P1 Captures + Eval · P2 Train + capture long-running ops · P3 Settings,
-loopback token auth, packaging.
+Long-running ops (capture, train) run as background jobs and stream logs to the
+UI over SSE; capture/train reuse the `openadapt` CLI as a subprocess so the panel
+can't drift from the tested CLI seam. Eval runs in a worker thread (it needs
+structured metrics back).
 
 ## Rules honored (from the meta-package)
 
 - **Lazy sibling imports** — inside route handlers only, so the app boots
   headless.
 - **System page never imports siblings** — `importlib` metadata only.
-- **Loopback only** — binds `127.0.0.1`; per-session token auth lands in P3.
-- **Frontend ships built** — the wheel bundles static assets so the end user
-  never needs Node. (P0 uses a hand-written static page; a React build replaces
-  it later, emitted to `openadapt_panel/static/` at package-build time.)
+- **Loopback + token** — binds `127.0.0.1` and gates every `/api` route behind a
+  per-session token handed to the browser via the launch URL.
+- **Frontend ships in the wheel** — static assets are bundled so the end user
+  never needs Node. (Currently a hand-written vanilla-JS SPA; a React build can
+  replace it later, emitted to `openadapt_panel/static/` at package-build time.)

@@ -1,42 +1,50 @@
 """FastAPI application factory for the control panel.
 
-P0 exposes a single read-only endpoint (``/api/system``) and serves the static
-frontend. Route handlers that touch sibling packages (Captures/Train/Eval, in
-later phases) must import those siblings **inside the handler body**, never at
-module top, so the app boots cleanly headless and with zero siblings installed.
+All ``/api`` routes are gated by the per-session token (auth.require_token) and
+mounted from ``openadapt_panel.routes``. Route handlers import sibling packages
+lazily inside their bodies, so the app boots cleanly headless and with zero
+siblings installed. The static SPA is served unauthenticated (it carries no
+data; everything sensitive comes from the token-gated API).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .system import system_report
+from .auth import generate_token, require_token
+from .jobs import JobManager
+from .routes import captures, evals, jobs, models, settings, system, train
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app() -> FastAPI:
+def create_app(*, token: Optional[str] = None, enable_auth: bool = True) -> FastAPI:
     app = FastAPI(title="OpenAdapt Control Panel", version=__version__)
+    app.state.panel_token = token or generate_token()
+    app.state.enable_auth = enable_auth
+    app.state.jobs = JobManager()
 
-    @app.get("/api/system")
-    def api_system() -> dict:
-        """Read-only ecosystem/system status. Imports no sibling packages."""
-        return system_report()
+    # Token-gated API.
+    api_deps = [Depends(require_token)]
+    for module in (system, captures, evals, train, jobs, models, settings):
+        app.include_router(module.router, prefix="/api", dependencies=api_deps)
 
+    # Unauthenticated liveness check.
     @app.get("/api/health")
-    def api_health() -> dict:
+    def health() -> dict:
         return {"status": "ok", "version": __version__}
 
+    # Static SPA.
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
-    # Static assets (CSS/JS/built React output) live alongside index.html.
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app

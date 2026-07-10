@@ -1,4 +1,4 @@
-"""Launch the control panel: build the app, open the browser, run uvicorn.
+"""Launch the control panel: mint a token, open the browser, run uvicorn.
 
 Kept separate from ``app.py`` so importing the app factory (e.g. in tests) does
 not pull in uvicorn. ``run_panel`` is the seam the meta-package's
@@ -18,14 +18,17 @@ def run_panel(
     """Serve the control panel on the loopback interface.
 
     Binds ``127.0.0.1`` only — the panel triggers real system actions, so it
-    must never be exposed off-host. (Per-session token auth is added in P3.)
+    must never be exposed off-host — and gates every ``/api`` route behind a
+    per-session token embedded in the opened URL.
     """
     import uvicorn
 
     from .app import create_app
+    from .auth import generate_token
 
-    app = create_app()
-    url = f"http://{host}:{port}"
+    token = generate_token()
+    app = create_app(token=token)
+    url = f"http://{host}:{port}/?token={token}"
 
     if open_browser:
         import threading
@@ -34,7 +37,9 @@ def run_panel(
         # Defer until the server is accepting connections.
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
-    print(f"OpenAdapt Control Panel running at {url}")
-    print("Press Ctrl+C to stop.")
+    print("OpenAdapt Control Panel")
+    print(f"  Open: {url}")
+    print("  (the token gates all actions; keep this URL private)")
+    print("  Press Ctrl+C to stop.")
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0

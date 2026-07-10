@@ -160,15 +160,30 @@ wiring):
 
 ## 9. Current status & immediate next steps
 
-**Status:** direction chosen; this blueprint written. No panel code yet. Miso Replay archived on
-`feature/add-miso-replay` (unmerged, 54 files) and removed from the `main` working tree.
+**Status (updated):** built P0–P3 in-repo on `feature/control-panel-blueprint`. The
+`openadapt-panel` package ships a FastAPI backend + vanilla-JS SPA with all six pages
+(Dashboard, Captures, Train, Eval, Models, Settings), background jobs with SSE log streaming,
+and per-session loopback token auth. `openadapt panel` command wired; `panel` extra added.
+Open-question #10 resolved: **in-repo** (`openadapt-panel/`), to split out later.
 
-**Next steps (in order):**
-1. Land this blueprint (open PR from `feature/control-panel-blueprint`).
-2. Fix the root `.gitignore` `src` pattern (prerequisite for any React frontend).
-3. Scaffold `openadapt-panel` (FastAPI app + `openadapt panel` command + System page) — P0.
-4. Add seam tests for the new command, matching `tests/test_cli_smoke.py`.
-5. Build out P1 pages (Captures, Eval).
+**Done:**
+- `.gitignore` `src` → `/src/` fix (prerequisite).
+- `openadapt panel` command (find_spec distinguishes not-installed vs broken).
+- Backend seam parity with the CLI: captures/eval call the same sibling functions; train &
+  capture run as `openadapt` CLI subprocesses (train stop = `STOP_TRAINING` sentinel; capture
+  stop = interrupt signal to the child's process group — sidesteps the `capture stop` TODO for
+  the panel's purposes, though a graceful in-sibling stop is still worth adding).
+- Tests: behavior tests (auth, routes, settings round-trip) run everywhere; seam contracts
+  against sibling signatures skip locally and run in CI (which installs `./openadapt-panel[dev]`
+  + siblings). All green locally (15 passed / 9 skipped; the skips are the sibling-dependent
+  seam tests that run in CI).
+
+**Remaining before "ship":**
+1. **Push branch + open PR** (blocked: no GitHub creds/`gh` on the build box).
+2. Verify live capture/train/eval on a machine with the siblings + GPU/display installed
+   (not testable headless here).
+3. Optional: replace the vanilla-JS SPA with a React build at package-build time; add a
+   graceful `capture stop` in `openadapt-capture`; publish `openadapt-panel` to PyPI.
 
 ---
 
