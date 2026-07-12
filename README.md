@@ -25,6 +25,7 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 | `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
 | `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
+| `openadapt-flow` | Demonstration compiler (deterministic, self-healing replay) | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
 | `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
 | `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
 | `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
@@ -49,6 +50,7 @@ pip install openadapt              # Minimal CLI only
 pip install openadapt[capture]     # GUI capture/recording
 pip install openadapt[ml]          # ML training and inference
 pip install openadapt[evals]       # Benchmark evaluation
+pip install openadapt[flow]        # Demonstration compiler (record once, replay deterministically)
 pip install openadapt[privacy]     # PII/PHI scrubbing
 pip install openadapt[all]         # Everything
 ```
@@ -86,6 +88,34 @@ openadapt capture view my-task
 
 ---
 
+## Demonstration Compiler
+
+For workflows you run over and over, re-reasoning through every step with a
+large model is slow, expensive, and non-deterministic. `openadapt-flow`
+compiles a single demonstration into a script that replays **deterministically
+and locally**, with no model calls on the hot path.
+
+```bash
+pip install openadapt[flow]
+```
+
+Each compiled step carries a template crop, an OCR label, geometry landmarks,
+and postconditions derived from what the demo changed on screen. At replay time
+a resolution ladder tries them in order (local match, global match, OCR,
+landmark geometry, then optionally a grounding model), so healthy runs cost
+milliseconds. When the UI drifts, a lower rung re-resolves the target and the
+fix lands back in the bundle as a reviewable diff — self-healing without a
+human in the loop. When the screen stops matching expectations, the run halts
+with a report instead of guessing, and identity-verified steps refuse to act on
+a low-confidence match.
+
+Model-free on the hot path, deterministic, self-healing under drift, and honest
+about what it can't resolve. See
+[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) for the
+compiler, validation methodology, and known limits.
+
+---
+
 ## Ecosystem
 
 ### Core Platform Components
@@ -96,6 +126,7 @@ openadapt capture view my-task
 | `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
 | `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
+| `openadapt-flow` | Demonstration compiler (deterministic, self-healing replay) | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
 | `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
 | `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
 | `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |

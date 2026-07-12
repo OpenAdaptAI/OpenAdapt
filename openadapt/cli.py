@@ -483,6 +483,7 @@ def version():
         "openadapt-capture",
         "openadapt-ml",
         "openadapt-evals",
+        "openadapt-flow",
         "openadapt-viewer",
         "openadapt-grounding",
         "openadapt-retrieval",
