@@ -32,7 +32,7 @@ from pympler import tracker
 from pynput import keyboard, mouse
 from tqdm import tqdm
 
-from openadapt_capture import plotting, utils, video, window
+from openadapt_capture import platform, plotting, utils, video, window
 from openadapt_capture.config import config
 from openadapt_capture.db import create_db, crud, get_session_for_path
 from openadapt_capture.db.models import ActionEvent, Recording
@@ -1016,6 +1016,7 @@ def create_recording(
 
     timestamp = utils.set_start_time()
     monitor_width, monitor_height = utils.get_monitor_dims()
+    pixel_ratio = platform.get_display_pixel_ratio()
     double_click_distance_pixels = utils.get_double_click_distance_pixels()
     double_click_interval_seconds = utils.get_double_click_interval_seconds()
     recording_data = {
@@ -1023,6 +1024,7 @@ def create_recording(
         "timestamp": timestamp,
         "monitor_width": monitor_width,
         "monitor_height": monitor_height,
+        "pixel_ratio": pixel_ratio,
         "double_click_distance_pixels": double_click_distance_pixels,
         "double_click_interval_seconds": double_click_interval_seconds,
         "platform": sys.platform,

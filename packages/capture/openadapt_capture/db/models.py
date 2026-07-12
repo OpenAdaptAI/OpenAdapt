@@ -39,6 +39,10 @@ class Recording(Base):
     timestamp = sa.Column(ForceFloat)
     monitor_width = sa.Column(sa.Integer)
     monitor_height = sa.Column(sa.Integer)
+    # Physical/logical display pixel ratio (e.g. 2.0 on Retina/HiDPI).
+    # Nullable so older recording.db files (which predate this column and
+    # get NULL from the additive migration) fall back to the config JSON.
+    pixel_ratio = sa.Column(sa.Float)
     double_click_interval_seconds = sa.Column(sa.Numeric(asdecimal=False))
     double_click_distance_pixels = sa.Column(sa.Numeric(asdecimal=False))
     platform = sa.Column(sa.String)

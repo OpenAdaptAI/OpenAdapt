@@ -70,9 +70,17 @@ from openadapt_capture.processing import (
 
 # Recorder requires pynput which needs a display server (X11/Wayland/macOS/Windows).
 # Make it optional so the package is importable in headless environments (CI, servers).
+# The recorder must never take a screenshot at import time, but guard against a
+# display/screenshot failure (mss ScreenShotError) as well as a missing dependency
+# so a headless import degrades to ``Recorder = None`` instead of crashing.
+try:
+    from mss.exception import ScreenShotError as _ScreenShotError
+except ImportError:  # pragma: no cover - mss is a hard dependency
+    _ScreenShotError = ()  # type: ignore[assignment,misc]
+
 try:
     from openadapt_capture.recorder import Recorder
-except ImportError:
+except (ImportError, OSError, _ScreenShotError):
     Recorder = None  # type: ignore[assignment,misc]
 
 # Performance statistics

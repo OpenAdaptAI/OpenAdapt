@@ -4,7 +4,7 @@ Copied from legacy OpenAdapt db/db.py, adapted for per-capture databases.
 """
 
 import sqlalchemy as sa
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
@@ -73,6 +73,46 @@ def get_session_maker(engine: sa.engine) -> sessionmaker:
     return sessionmaker(bind=engine)
 
 
+def migrate_missing_columns(engine: sa.engine) -> None:
+    """Add columns present in the models but missing from an existing DB.
+
+    Per-capture SQLite databases have no migration framework: each capture
+    gets a fresh schema via ``create_all``. When the models gain a new
+    column, older ``recording.db`` files predate it, so loading them would
+    fail with ``no such column``. SQLite supports cheap
+    ``ALTER TABLE ... ADD COLUMN``, so we reconcile missing columns here.
+
+    Strictly additive: it never drops or alters existing columns, and adds
+    new columns without a DEFAULT so pre-existing rows read back as NULL
+    (letting callers fall back to legacy sources like the config JSON).
+
+    Args:
+        engine: Engine bound to the per-capture SQLite database.
+    """
+    # Import models to ensure the tables are registered with Base.
+    from openadapt_capture.db import models  # noqa: F401
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                # create_all handles brand-new tables.
+                continue
+            existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_cols:
+                    continue
+                col_type = column.type.compile(dialect=engine.dialect)
+                conn.execute(
+                    text(
+                        f'ALTER TABLE "{table.name}" '
+                        f'ADD COLUMN "{column.name}" {col_type}'
+                    )
+                )
+
+
 def create_db(db_path: str, echo: bool = False) -> tuple:
     """Create a new database at the given path, returning (engine, Session).
 
@@ -92,6 +132,8 @@ def create_db(db_path: str, echo: bool = False) -> tuple:
     from openadapt_capture.db import models  # noqa: F401
 
     Base.metadata.create_all(engine)
+    # Reconcile schemas of pre-existing DBs that predate newer columns.
+    migrate_missing_columns(engine)
     Session = get_session_maker(engine)
     return engine, Session
 
@@ -111,5 +153,9 @@ def get_session_for_path(db_path: str, echo: bool = False):
     """
     db_url = f"sqlite:///{db_path}"
     engine = get_engine(db_url, echo=echo)
+    # Older recording.db files may predate columns the models now expect;
+    # add any missing ones so loading them does not fail with 'no such
+    # column'. Safe/no-op when the schema is already current.
+    migrate_missing_columns(engine)
     Session = get_session_maker(engine)
     return Session()

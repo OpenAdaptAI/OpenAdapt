@@ -483,3 +483,116 @@ class TestRecordingConfig:
                 raise ValueError("test")
 
         assert config.RECORD_VIDEO == original_video
+
+
+class TestPixelRatio:
+    """Tests for pixel_ratio persistence on the SQLAlchemy Recording model."""
+
+    def test_pixel_ratio_round_trips_through_model(self, temp_capture_dir):
+        """A HiDPI pixel_ratio written to the model survives load."""
+        import os
+        import sqlite3
+        import sys
+
+        capture_path = str(Path(temp_capture_dir) / "capture")
+        os.makedirs(capture_path, exist_ok=True)
+        db_path = os.path.join(capture_path, "recording.db")
+        engine, Session = create_db(db_path)
+        session = Session()
+        crud.insert_recording(
+            session,
+            {
+                "timestamp": time.time(),
+                "monitor_width": 3840,
+                "monitor_height": 2160,
+                "pixel_ratio": 2.0,
+                "double_click_interval_seconds": 0.5,
+                "double_click_distance_pixels": 5,
+                "platform": sys.platform,
+                "task_description": "HiDPI",
+            },
+        )
+        session.close()
+
+        # The column is real: it is present in the on-disk schema.
+        con = sqlite3.connect(db_path)
+        cols = {row[1] for row in con.execute("PRAGMA table_info(recording)")}
+        con.close()
+        assert "pixel_ratio" in cols
+
+        capture = Capture.load(capture_path)
+        assert capture.pixel_ratio == 2.0
+        capture.close()
+
+    def test_old_recording_without_column_loads(self, temp_capture_dir):
+        """A recording.db predating the pixel_ratio column still loads.
+
+        The additive migration adds the column (NULL for existing rows) so
+        the query does not fail, and pixel_ratio falls back to the config
+        JSON, then to 1.0 when genuinely unknown.
+        """
+        import os
+        import sqlite3
+        import sys
+
+        # config-JSON fallback preserved.
+        capture_path = str(Path(temp_capture_dir) / "old_with_config")
+        os.makedirs(capture_path, exist_ok=True)
+        db_path = os.path.join(capture_path, "recording.db")
+        engine, Session = create_db(db_path)
+        session = Session()
+        crud.insert_recording(
+            session,
+            {
+                "timestamp": time.time(),
+                "monitor_width": 2560,
+                "monitor_height": 1440,
+                "double_click_interval_seconds": 0.5,
+                "double_click_distance_pixels": 5,
+                "platform": sys.platform,
+                "task_description": "old",
+                "config": {"pixel_ratio": 1.5},
+            },
+        )
+        session.close()
+        engine.dispose()
+
+        # Simulate an old DB that predates the column by dropping it.
+        con = sqlite3.connect(db_path)
+        con.execute("ALTER TABLE recording DROP COLUMN pixel_ratio")
+        con.commit()
+        con.close()
+
+        capture = Capture.load(capture_path)
+        assert capture.pixel_ratio == 1.5  # recovered from config JSON
+        capture.close()
+
+        # No column and no config -> genuinely unknown -> 1.0.
+        capture_path2 = str(Path(temp_capture_dir) / "old_no_config")
+        os.makedirs(capture_path2, exist_ok=True)
+        db_path2 = os.path.join(capture_path2, "recording.db")
+        engine2, Session2 = create_db(db_path2)
+        session2 = Session2()
+        crud.insert_recording(
+            session2,
+            {
+                "timestamp": time.time(),
+                "monitor_width": 1920,
+                "monitor_height": 1080,
+                "double_click_interval_seconds": 0.5,
+                "double_click_distance_pixels": 5,
+                "platform": sys.platform,
+                "task_description": "old2",
+            },
+        )
+        session2.close()
+        engine2.dispose()
+
+        con = sqlite3.connect(db_path2)
+        con.execute("ALTER TABLE recording DROP COLUMN pixel_ratio")
+        con.commit()
+        con.close()
+
+        capture2 = Capture.load(capture_path2)
+        assert capture2.pixel_ratio == 1.0
+        capture2.close()
