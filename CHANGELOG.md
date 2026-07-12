@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-07-12)
+
+### Features
+
+- Expose openadapt-flow as the [flow] extra (demonstration compiler under the core brand)
+  ([#1006](https://github.com/OpenAdaptAI/OpenAdapt/pull/1006),
+  [`2d85cc2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2d85cc21d05767161b10802b0d80f6eb1fb046cc))
+
+
 ## v1.2.5 (2026-06-13)
 
 ### Bug Fixes
