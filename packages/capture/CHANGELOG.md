@@ -1,6 +1,45 @@
 # CHANGELOG
 
 
+## v0.5.4 (2026-07-12)
+
+### Bug Fixes
+
+- Importable headless (no screenshot at import) + persist pixel_ratio on the recording model
+  ([#24](https://github.com/OpenAdaptAI/openadapt-capture/pull/24),
+  [`a98322a`](https://github.com/OpenAdaptAI/openadapt-capture/commit/a98322a4a422c38f85e16737495500c1f05dcf97))
+
+* fix: tolerate headless screenshot failure on import
+
+The recorder no longer takes a screenshot at module load (PR #23), but the package import guard only
+  caught ImportError. Broaden it so a display/screenshot failure (mss ScreenShotError) during
+  recorder import also degrades to `Recorder = None` instead of crashing the whole package on a
+  headless host (CI, containers, sandboxes).
+
+Add a runtime headless-import test that imports the package fresh in a subprocess where mss.grab
+  raises ScreenShotError, complementing the existing static (AST) guard.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
+
+* fix: persist pixel_ratio on the SQLAlchemy recording model
+
+CaptureSession.pixel_ratio read `pixel_ratio` off the SQLAlchemy Recording model, but that model had
+  no such column (only the legacy raw-sqlite schema did), so a HiDPI capture whose config JSON
+  lacked it silently scaled at 1.0, under-scaling downstream coordinate mapping.
+
+Add a nullable `pixel_ratio` column to the Recording model and write the captured display's ratio
+  (platform.get_display_pixel_ratio()) at record time in create_recording. Add an additive ALTER
+  TABLE ADD COLUMN migration (migrate_missing_columns) run when opening any per-capture DB, so older
+  recording.db files that predate the column still load: the column is added as NULL, and
+  CaptureSession.pixel_ratio falls back to the config JSON, then 1.0 when genuinely unknown.
+
+---------
+
+Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
+
+
 ## v0.5.3 (2026-06-13)
 
 ### Bug Fixes

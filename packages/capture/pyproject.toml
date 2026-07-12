@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-capture"
-version = "0.5.3"
+version = "0.5.4"
 description = "GUI interaction capture - platform-agnostic event streams with time-aligned media"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -88,6 +88,7 @@ Homepage = "https://github.com/OpenAdaptAI/openadapt-capture"
 Repository = "https://github.com/OpenAdaptAI/openadapt-capture"
 
 
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -122,6 +123,7 @@ match = "main"
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
+
 
 
 [dependency-groups]
