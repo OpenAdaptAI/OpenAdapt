@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-07-13)
+
+### Features
+
+- Mount 'openadapt flow demo-record' (frictionless bundled-demo recording)
+  ([#1010](https://github.com/OpenAdaptAI/OpenAdapt/pull/1010),
+  [`dd8a4f9`](https://github.com/OpenAdaptAI/OpenAdapt/commit/dd8a4f9cbb63cf4419cbab1ae5f5862510494d42))
+
+
 ## v1.4.0 (2026-07-13)
 
 ### Code Style
