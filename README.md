@@ -9,7 +9,7 @@
 
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
-Record a GUI workflow once, then compile it into a deterministic replay, condition a model on it, or train and evaluate agents against it — all from a unified CLI. OpenAdapt is a modular meta-package: the base install is just the CLI, and each capability (capture, compiler, ML, evals, privacy) is an optional extra you add as you need it.
+Record a GUI workflow once, then compile it into a deterministic, self-healing replay that runs locally at near-zero cost — all from a unified CLI. OpenAdapt is a modular meta-package: `pip install openadapt` ships the flagship demonstration compiler (`openadapt flow …`) out of the box, and the supporting capabilities (capture, ML, evals, privacy) are optional extras you add as you need them.
 
 [Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
 
@@ -46,14 +46,15 @@ OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadap
 Install what you need:
 
 ```bash
-pip install openadapt              # Minimal CLI only
-pip install openadapt[capture]     # GUI capture/recording
-pip install openadapt[ml]          # ML training and inference
-pip install openadapt[evals]       # Benchmark evaluation
-pip install openadapt[flow]        # Demonstration compiler (record once, replay deterministically)
-pip install openadapt[privacy]     # PII/PHI scrubbing
+pip install openadapt              # CLI + demonstration compiler (openadapt flow …)
+pip install openadapt[capture]     # + GUI capture/recording
+pip install openadapt[ml]          # + ML training and inference
+pip install openadapt[evals]       # + Benchmark evaluation
+pip install openadapt[privacy]     # + PII/PHI scrubbing
 pip install openadapt[all]         # Everything
 ```
+
+The flagship demonstration compiler ships in the base install, so `openadapt flow …` works right after `pip install openadapt`.
 
 **Requirements:** Python 3.10+
 
@@ -61,28 +62,34 @@ pip install openadapt[all]         # Everything
 
 ## Quick Start
 
-### 1. Record a demonstration
+Record a workflow once, compile it into a deterministic bundle, and replay it
+locally at near-zero cost:
 
 ```bash
-openadapt capture start --name my-task
-# Perform actions in your GUI, then press Ctrl+C to stop
+openadapt flow record --url <app> --out rec     # record a workflow once
+openadapt flow compile rec --out bundle          # compile it
+openadapt flow replay bundle                     # run it, local, $0
 ```
 
-### 2. Train a model
+Inspect and gate compiled bundles before you ship them:
 
 ```bash
+openadapt flow lint bundle                       # report coverage gaps
+openadapt flow certify bundle --policy clinical-write   # enforce a safety policy
+```
+
+> `openadapt flow <verb>` is the recommended path. The standalone
+> `openadapt-flow <verb>` command keeps working and behaves identically.
+
+### Supporting commands
+
+Capture, training, and evaluation are available once you install their extras
+(`pip install openadapt[capture,ml,evals]`):
+
+```bash
+openadapt capture start --name my-task           # record raw GUI events
 openadapt train start --capture my-task --model qwen3vl-2b
-```
-
-### 3. Evaluate
-
-```bash
 openadapt eval run --checkpoint training_output/model.pt --benchmark waa
-```
-
-### 4. View recordings
-
-```bash
 openadapt capture view my-task
 ```
 
@@ -93,12 +100,20 @@ openadapt capture view my-task
 For workflows you run over and over, re-reasoning through every step with a
 large model is slow, expensive, and non-deterministic. `openadapt-flow`
 compiles a single demonstration into a script that replays **deterministically
-and locally**, with no model calls on the hot path. It ships standalone on PyPI
-(`pip install openadapt-flow`, currently v0.3.x) or as an extra:
+and locally**, with no model calls on the hot path. It ships in the base
+`openadapt` install as the flagship path, so `openadapt flow …` works out of the
+box:
 
 ```bash
-pip install openadapt[flow]
+pip install openadapt
+openadapt flow record --url <app> --out rec
+openadapt flow compile rec --out bundle --name my-flow
+openadapt flow replay bundle
 ```
+
+It also ships standalone on PyPI (`pip install openadapt-flow`, currently
+v0.3.x); the standalone `openadapt-flow <verb>` command behaves identically to
+`openadapt flow <verb>`.
 
 Each compiled step carries a template crop, an OCR label, geometry landmarks,
 and postconditions derived from what the demo changed on screen. At replay time
@@ -165,6 +180,12 @@ compiler, validation methodology, and known limits.
 ## CLI Reference
 
 ```
+openadapt flow record --url <app> --out <dir>   Record a workflow once
+openadapt flow compile <rec> --out <bundle>      Compile a recording into a bundle
+openadapt flow replay <bundle>                   Replay a bundle (local, $0)
+openadapt flow lint <bundle>                      Report a bundle's coverage gaps
+openadapt flow certify <bundle> --policy <name>   Enforce a safety policy on a bundle
+
 openadapt capture start --name <name>    Start recording
 openadapt capture stop                    Stop recording
 openadapt capture list                    List captures

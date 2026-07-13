@@ -71,6 +71,129 @@ def test_version_command():
 
 
 # ---------------------------------------------------------------------------
+# Flow command (the demonstration compiler — flagship path)
+# ---------------------------------------------------------------------------
+
+FLOW_VERBS = {"record", "compile", "replay", "lint", "certify"}
+
+
+def test_top_level_help_leads_with_flow():
+    """`openadapt --help` must list flow before the other commands."""
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["--help"])
+    assert result.exit_code == 0
+    # Quick Start headline and Commands listing both lead with flow.
+    assert "openadapt flow record" in result.output
+    commands_idx = result.output.index("Commands:")
+    flow_idx = result.output.index("flow", commands_idx)
+    capture_idx = result.output.index("capture", commands_idx)
+    assert flow_idx < capture_idx, "flow should be listed before capture"
+
+
+def test_flow_help_lists_verbs():
+    """`openadapt flow --help` lists every mounted verb (no flow install
+    needed — click renders help before importing openadapt-flow)."""
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["flow", "--help"])
+    assert result.exit_code == 0, result.output
+    for verb in FLOW_VERBS:
+        assert verb in result.output, f"'{verb}' missing from `flow --help`"
+
+
+def test_flow_subcommand_help_renders():
+    """Each flow subcommand renders --help without importing flow."""
+    runner = CliRunner()
+    for verb in FLOW_VERBS:
+        result = runner.invoke(cli_main, ["flow", verb, "--help"])
+        assert result.exit_code == 0, f"`flow {verb} --help` failed: {result.output}"
+
+
+def test_flow_missing_shows_install_hint(monkeypatch):
+    """When openadapt-flow isn't installed, `openadapt flow <verb>` exits
+    nonzero with a pip install hint instead of a traceback."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def broken_import(name, *args, **kwargs):
+        if name == "openadapt_flow.__main__" or name.startswith("openadapt_flow"):
+            raise ImportError("No module named 'openadapt_flow'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", broken_import)
+    monkeypatch.delitem(sys.modules, "openadapt_flow", raising=False)
+    monkeypatch.delitem(sys.modules, "openadapt_flow.__main__", raising=False)
+
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"])
+    assert result.exit_code != 0
+    assert "openadapt[flow]" in result.output or "openadapt-flow" in result.output
+
+
+def _require_openadapt_flow():
+    return pytest.importorskip("openadapt_flow", reason="openadapt-flow not installed")
+
+
+def test_flow_delegates_to_flow_main(monkeypatch):
+    """`openadapt flow <verb>` must reconstruct argv and call
+    openadapt_flow.__main__.main so behavior matches `openadapt-flow <verb>`."""
+    _require_openadapt_flow()
+    import openadapt_flow.__main__ as flow_main_mod
+
+    calls = []
+
+    def fake_main(argv):
+        calls.append(list(argv))
+        return 0
+
+    monkeypatch.setattr(flow_main_mod, "main", fake_main)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_main,
+        [
+            "flow",
+            "compile",
+            "my-rec",
+            "--out",
+            "my-bundle",
+            "--name",
+            "my-flow",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls == [["compile", "my-rec", "--out", "my-bundle", "--name", "my-flow"]]
+
+
+def test_flow_replay_argv_reconstruction(monkeypatch):
+    """Repeatable and flag options are forwarded verbatim to flow's main."""
+    _require_openadapt_flow()
+    import openadapt_flow.__main__ as flow_main_mod
+
+    calls = []
+    monkeypatch.setattr(flow_main_mod, "main", lambda argv: calls.append(list(argv)) or 0)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_main,
+        [
+            "flow",
+            "replay",
+            "bundle",
+            "--param",
+            "note=hi",
+            "--param",
+            "id=7",
+            "--headed",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        ["replay", "bundle", "--param", "note=hi", "--param", "id=7", "--headed"]
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Seam contracts with openadapt-ml
 # ---------------------------------------------------------------------------
 

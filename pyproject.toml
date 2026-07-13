@@ -22,9 +22,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-# Minimal base - just the CLI
+# Base install: the CLI plus the flagship demonstration compiler, so
+# `pip install openadapt` yields a working `openadapt flow` out of the box.
+# All other capabilities (capture, ml, evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
+    "openadapt-flow>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +53,9 @@ retrieval = [
 privacy = [
     "openadapt-privacy>=0.1.0",
 ]
+# `flow` now ships in the base install (see `dependencies` above). This
+# extra is kept for backward compatibility so `pip install openadapt[flow]`
+# and the `all` bundle still resolve.
 flow = [
     "openadapt-flow>=0.3.0",
 ]

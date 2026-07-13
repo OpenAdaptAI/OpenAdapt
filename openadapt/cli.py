@@ -1,6 +1,12 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
+    openadapt flow record --url <app> --out rec   # record a workflow once
+    openadapt flow compile rec --out bundle        # compile it
+    openadapt flow replay bundle                    # run it, local, $0
+    openadapt flow lint bundle
+    openadapt flow certify bundle --policy clinical-write
+
     openadapt capture start --name my-task
     openadapt capture stop
     openadapt capture list
@@ -25,20 +31,203 @@ from typing import Optional
 import click
 
 
-@click.group()
+class _FlowFirstGroup(click.Group):
+    """Command group that lists ``flow`` first in ``--help``.
+
+    The demonstration compiler is the flagship, so it should lead the
+    command listing instead of sorting alphabetically behind ``capture``.
+    Everything else keeps its normal alphabetical order.
+    """
+
+    def list_commands(self, ctx):
+        commands = super().list_commands(ctx)
+        return sorted(commands, key=lambda name: (name != "flow", name))
+
+
+@click.group(cls=_FlowFirstGroup)
 @click.version_option(version="1.0.0", prog_name="openadapt")
 def main():
-    """OpenAdapt - GUI automation with ML.
+    """OpenAdapt - the demonstration compiler for GUI workflows.
 
-    Record demonstrations, train models, and evaluate agents.
+    Record a workflow once, compile it into a deterministic, self-healing
+    script, and replay it locally with no model calls on the hot path.
+    Capture, training, and evaluation remain available as supporting
+    commands.
 
     \b
     Quick Start:
-        openadapt capture start --name my-task   # Record a demonstration
-        openadapt train --capture my-task        # Train a model
-        openadapt eval --checkpoint model.pt     # Evaluate the model
+        openadapt flow record --url <app> --out rec   # record a workflow once
+        openadapt flow compile rec --out bundle        # compile it
+        openadapt flow replay bundle                    # run it, local, $0
     """
     pass
+
+
+# =============================================================================
+# Flow Commands (the demonstration compiler — flagship path)
+# =============================================================================
+
+
+def _run_flow(argv: list[str]) -> None:
+    """Delegate to the openadapt-flow CLI, preserving its exit code.
+
+    openadapt-flow exposes an argparse ``main(argv)`` entry point; each
+    ``openadapt flow <verb>`` click command reconstructs that verb's argv
+    and hands off here so behavior is identical to ``openadapt-flow <verb>``.
+    Imported lazily so ``openadapt`` (and ``openadapt flow --help``) work
+    even when openadapt-flow isn't installed.
+    """
+    try:
+        from openadapt_flow.__main__ import main as flow_main
+    except ImportError:
+        click.echo("Error: openadapt-flow not installed.", err=True)
+        click.echo(
+            'Install with: pip install "openadapt[flow]" '
+            "(or: pip install openadapt-flow)",
+            err=True,
+        )
+        sys.exit(1)
+
+    sys.exit(flow_main(argv))
+
+
+@main.group()
+def flow():
+    """Record, compile, and replay workflows (the demonstration compiler).
+
+    Record a workflow once, compile it into a deterministic vision-anchored
+    script, replay it locally at near-zero cost, and heal it on drift.
+
+    \b
+    Examples:
+        openadapt flow record --url http://localhost:8000 --out rec
+        openadapt flow compile rec --out bundle --name my-flow
+        openadapt flow replay bundle
+        openadapt flow lint bundle
+        openadapt flow certify bundle --policy clinical-write
+
+    \b
+    The standalone `openadapt-flow <verb>` command keeps working and behaves
+    identically; `openadapt flow <verb>` is the recommended path.
+    """
+    pass
+
+
+@flow.command("record")
+@click.option("--url", required=True, help="URL of the app to record against")
+@click.option("--out", required=True, help="Recording output directory")
+@click.option(
+    "--secret",
+    multiple=True,
+    metavar="FIELD",
+    help="Mark a typed field as SECRET (value never persisted). Repeatable.",
+)
+@click.option(
+    "--param",
+    multiple=True,
+    metavar="FIELD",
+    help="Record a typed field as a PARAMETER (overridable at replay). Repeatable.",
+)
+@click.option(
+    "--headless", is_flag=True, help="Run the browser headless (scripted/CI recording)"
+)
+def flow_record(url, out, secret, param, headless):
+    """Record YOUR app interactively in a headed browser."""
+    argv = ["record", "--url", url, "--out", out]
+    for value in secret:
+        argv += ["--secret", value]
+    for value in param:
+        argv += ["--param", value]
+    if headless:
+        argv.append("--headless")
+    _run_flow(argv)
+
+
+@flow.command("compile")
+@click.argument("recording")
+@click.option("--out", required=True, help="Output bundle directory")
+@click.option("--name", required=True, help="Workflow name")
+def flow_compile(recording, out, name):
+    """Compile a recording directory into a workflow bundle."""
+    _run_flow(["compile", recording, "--out", out, "--name", name])
+
+
+@flow.command("replay")
+@click.argument("bundle")
+@click.option(
+    "--url",
+    default=None,
+    help="URL of the target app (default: serve the bundled MockMed demo app)",
+)
+@click.option(
+    "--drift",
+    default=None,
+    help="Comma-separated MockMed drift modes to demo self-healing (no --url)",
+)
+@click.option("--run-dir", default=None, help="Run output directory")
+@click.option(
+    "--param",
+    multiple=True,
+    metavar="K=V",
+    help="Parameter substitution (repeatable)",
+)
+@click.option(
+    "--save-healed-to", default=None, help="Write the healed bundle to this directory"
+)
+@click.option("--headed", is_flag=True, help="Run the browser headed")
+@click.option(
+    "--record-video",
+    default=None,
+    metavar="DIR",
+    help="OPT-IN: capture a WebM video of the replay session into DIR",
+)
+def flow_replay(
+    bundle, url, drift, run_dir, param, save_healed_to, headed, record_video
+):
+    """Replay a bundle (serves the bundled MockMed demo app when no --url)."""
+    argv = ["replay", bundle]
+    if url:
+        argv += ["--url", url]
+    if drift:
+        argv += ["--drift", drift]
+    if run_dir:
+        argv += ["--run-dir", run_dir]
+    for value in param:
+        argv += ["--param", value]
+    if save_healed_to:
+        argv += ["--save-healed-to", save_healed_to]
+    if headed:
+        argv.append("--headed")
+    if record_video:
+        argv += ["--record-video", record_video]
+    _run_flow(argv)
+
+
+@flow.command("lint")
+@click.argument("bundle")
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit nonzero on warnings too (default: only on errors)",
+)
+def flow_lint(bundle, strict):
+    """Report a bundle's coverage gaps; exits nonzero by severity."""
+    argv = ["lint", bundle]
+    if strict:
+        argv.append("--strict")
+    _run_flow(argv)
+
+
+@flow.command("certify")
+@click.argument("bundle")
+@click.option(
+    "--policy",
+    required=True,
+    help="Policy YAML path, or a built-in name (permissive, clinical-write)",
+)
+def flow_certify(bundle, policy):
+    """Enforce a safety policy on a bundle (refuse it if it fails)."""
+    _run_flow(["certify", bundle, "--policy", policy])
 
 
 # =============================================================================
