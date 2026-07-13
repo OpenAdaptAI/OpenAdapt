@@ -9,7 +9,7 @@
 
 **OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
 
-Record GUI demonstrations, train ML models, and evaluate agents - all from a unified CLI.
+Record a GUI workflow once, then compile it into a deterministic replay, condition a model on it, or train and evaluate agents against it — all from a unified CLI. OpenAdapt is a modular meta-package: the base install is just the CLI, and each capability (capture, compiler, ML, evals, privacy) is an optional extra you add as you need it.
 
 [Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
 
@@ -93,7 +93,8 @@ openadapt capture view my-task
 For workflows you run over and over, re-reasoning through every step with a
 large model is slow, expensive, and non-deterministic. `openadapt-flow`
 compiles a single demonstration into a script that replays **deterministically
-and locally**, with no model calls on the hot path.
+and locally**, with no model calls on the hot path. It ships standalone on PyPI
+(`pip install openadapt-flow`, currently v0.3.x) or as an extra:
 
 ```bash
 pip install openadapt[flow]
@@ -106,8 +107,22 @@ landmark geometry, then optionally a grounding model), so healthy runs cost
 milliseconds. When the UI drifts, a lower rung re-resolves the target and the
 fix lands back in the bundle as a reviewable diff — self-healing without a
 human in the loop. When the screen stops matching expectations, the run halts
-with a report instead of guessing, and identity-verified steps refuse to act on
-a low-confidence match.
+with a report instead of guessing, and identity-verified steps (for example a
+wrong-record check) refuse to act on a low-confidence match rather than click
+the wrong target.
+
+The reference backend is a headless browser, which is why the whole loop runs
+in CI with no OS permissions; desktop and RDP backends are adapters in
+progress, not yet production paths. Compiled workflows can also be emitted as
+Agent Skills or MCP servers so other agents can invoke them.
+
+In one field test against a computer-use agent on a real third-party EMR
+(OpenEMR's public demo), compiled replay matched the agent's success (20/20
+compiled vs 10/10 agent) at roughly half the median latency and near-zero
+marginal cost — the agent cost about $0.55 per run, the compiled replay makes
+zero model calls. This is a small-sample result on a shared, daily-resetting
+public demo, so it is not CI-reproducible; a CI-reproducible control and the
+adversarial safety measurements are published alongside it.
 
 Model-free on the hot path, deterministic, self-healing under drift, and honest
 about what it can't resolve. See
