@@ -71,6 +71,23 @@ def capture_start(name: str, video: bool, audio: bool):
     try:
         from openadapt_capture import Recorder
 
+        # openadapt-capture exports Recorder = None (instead of raising) when its
+        # recorder module can't be imported — e.g. a missing dependency such as
+        # matplotlib. Surface that clearly instead of a cryptic "NoneType is not
+        # callable" when Recorder(...) is called below.
+        if Recorder is None:
+            click.echo(
+                "Error: openadapt-capture is installed but its Recorder failed "
+                "to load.",
+                err=True,
+            )
+            click.echo(
+                "A dependency needed for recording is likely missing. Try: "
+                "pip install matplotlib",
+                err=True,
+            )
+            sys.exit(1)
+
         click.echo(f"Starting capture session: {name}")
         click.echo("Press Ctrl+C (or Ctrl x3) to stop recording...")
 

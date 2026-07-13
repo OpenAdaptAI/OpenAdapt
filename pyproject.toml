@@ -31,6 +31,9 @@ dependencies = [
 # Individual packages
 capture = [
     "openadapt-capture>=0.1.0",
+    # openadapt-capture's recorder imports matplotlib but doesn't declare it;
+    # without it `Recorder` silently becomes None and recording fails.
+    "matplotlib",
 ]
 ml = [
     "openadapt-ml>=0.2.0",
