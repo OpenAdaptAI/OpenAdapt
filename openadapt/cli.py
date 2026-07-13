@@ -181,7 +181,9 @@ def flow_compile(recording, out, name):
     metavar="DIR",
     help="OPT-IN: capture a WebM video of the replay session into DIR",
 )
-def flow_replay(bundle, url, drift, run_dir, param, save_healed_to, headed, record_video):
+def flow_replay(
+    bundle, url, drift, run_dir, param, save_healed_to, headed, record_video
+):
     """Replay a bundle (serves the bundled MockMed demo app when no --url)."""
     argv = ["replay", bundle]
     if url:
