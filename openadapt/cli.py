@@ -362,7 +362,9 @@ def eval_run(
         # Create adapter
         if server:
             click.echo(f"Connecting to: {server}")
-            adapter = WAALiveAdapter(server_url=server)
+            from openadapt_evals import WAALiveConfig
+
+            adapter = WAALiveAdapter(config=WAALiveConfig(server_url=server))
         else:
             click.echo(f"Using mock adapter with {tasks} tasks")
             adapter = WAAMockAdapter(num_tasks=tasks)
@@ -376,7 +378,9 @@ def eval_run(
         click.echo("\nResults:")
         click.echo(f"  Success rate: {metrics['success_rate']:.1%}")
         click.echo(f"  Avg steps: {metrics['avg_steps']:.1f}")
-        click.echo(f"  Total tasks: {metrics['total_tasks']}")
+        # compute_metrics reports this as 'num_tasks'; tolerate either.
+        total_tasks = metrics.get("num_tasks", metrics.get("total_tasks", "?"))
+        click.echo(f"  Total tasks: {total_tasks}")
 
     except ImportError as e:
         click.echo(f"Error: Missing dependency: {e}", err=True)

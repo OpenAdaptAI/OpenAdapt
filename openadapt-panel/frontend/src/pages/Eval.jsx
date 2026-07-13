@@ -17,7 +17,7 @@ function Metrics({ m }) {
         </div>
         <div>
           <span className="k">Total tasks</span>
-          <span className="metric">{m.total_tasks ?? "—"}</span>
+          <span className="metric">{m.num_tasks ?? m.total_tasks ?? "—"}</span>
         </div>
       </div>
     </div>

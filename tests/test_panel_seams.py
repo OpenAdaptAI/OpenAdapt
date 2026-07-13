@@ -146,6 +146,7 @@ def test_eval_seam_symbols_and_kwargs():
         "PolicyAgent",
         "WAAMockAdapter",
         "WAALiveAdapter",
+        "WAALiveConfig",
         "compute_metrics",
         "evaluate_agent_on_benchmark",
     ]:
@@ -159,10 +160,32 @@ def test_eval_seam_symbols_and_kwargs():
 
     assert accepts(evals.evaluate_agent_on_benchmark, "max_steps")
     assert accepts(evals.WAAMockAdapter, "num_tasks")
-    assert accepts(evals.WAALiveAdapter, "server_url")
+    # Live adapter takes a config object; the server URL lives on the config.
+    assert accepts(evals.WAALiveAdapter, "config")
+    assert accepts(evals.WAALiveConfig, "server_url")
     assert accepts(evals.ApiAgent, "provider")
     assert accepts(evals.ApiAgent, "demo")
     assert accepts(evals.PolicyAgent, "checkpoint_path")
+
+
+def test_eval_metrics_keys_the_ui_reads():
+    """compute_metrics must return the keys the panel UI (and CLI) display.
+
+    Runs a tiny real mock eval — the same seam /api/eval/mock uses — and checks
+    the metric keys read downstream. Catches drift like `total_tasks` vs
+    `num_tasks`.
+    """
+    evals = pytest.importorskip(
+        "openadapt_evals", reason="openadapt-evals not installed"
+    )
+    results = evals.evaluate_agent_on_benchmark(
+        evals.SmartMockAgent(), evals.WAAMockAdapter(num_tasks=2), max_steps=15
+    )
+    metrics = evals.compute_metrics(results)
+    assert "success_rate" in metrics
+    assert "avg_steps" in metrics
+    # The UI shows a task count under one of these names.
+    assert "num_tasks" in metrics or "total_tasks" in metrics
 
 
 def test_capture_seam_symbols():

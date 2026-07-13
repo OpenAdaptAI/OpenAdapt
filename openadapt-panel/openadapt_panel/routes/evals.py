@@ -65,6 +65,7 @@ def run_eval(
         from openadapt_evals import (
             ApiAgent,
             WAALiveAdapter,
+            WAALiveConfig,
             WAAMockAdapter,
             compute_metrics,
             evaluate_agent_on_benchmark,
@@ -86,7 +87,7 @@ def run_eval(
 
         if server:
             job.append(f"Connecting to: {server}")
-            adapter = WAALiveAdapter(server_url=server)
+            adapter = WAALiveAdapter(config=WAALiveConfig(server_url=server))
         else:
             job.append(f"Using mock adapter with {tasks} tasks")
             adapter = WAAMockAdapter(num_tasks=tasks)
