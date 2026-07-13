@@ -13,7 +13,7 @@
   --warn: #d29922;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+html, body, #root { height: 100%; margin: 0; }
 body {
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
@@ -39,6 +39,10 @@ body {
   cursor: pointer;
   text-decoration: none;
   font-weight: 500;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 15px;
 }
 .nav:hover { background: var(--panel2); color: var(--text); }
 .nav.active { background: rgba(76, 139, 245, 0.15); color: var(--accent); }
@@ -88,7 +92,7 @@ input, select {
 label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px; }
 .field-inline { display: flex; gap: 10px; align-items: center; }
 .field-inline input[type="checkbox"] { width: auto; }
-.actions { display: flex; gap: 10px; margin-top: 18px; }
+.actions { display: flex; gap: 10px; margin-top: 18px; align-items: center; }
 
 .err { color: var(--danger); }
 .metric { font-size: 28px; font-weight: 700; }

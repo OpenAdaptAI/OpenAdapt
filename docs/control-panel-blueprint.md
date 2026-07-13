@@ -161,10 +161,13 @@ wiring):
 ## 9. Current status & immediate next steps
 
 **Status (updated):** built P0–P3 in-repo on `feature/control-panel-blueprint`. The
-`openadapt-panel` package ships a FastAPI backend + vanilla-JS SPA with all six pages
+`openadapt-panel` package ships a FastAPI backend + **React (Vite) SPA** with all six pages
 (Dashboard, Captures, Train, Eval, Models, Settings), background jobs with SSE log streaming,
 and per-session loopback token auth. `openadapt panel` command wired; `panel` extra added.
-Open-question #10 resolved: **in-repo** (`openadapt-panel/`), to split out later.
+Open-question #10 resolved: **in-repo** (`openadapt-panel/`), to split out later. The React
+source lives in `openadapt-panel/frontend/`; Vite builds into `openadapt_panel/static/`
+(committed + wheel-bundled, so pip/CI/end-users never need Node — verified the wheel contains
+`static/assets/*`).
 
 **Done:**
 - `.gitignore` `src` → `/src/` fix (prerequisite).
@@ -182,8 +185,8 @@ Open-question #10 resolved: **in-repo** (`openadapt-panel/`), to split out later
 1. **Push branch + open PR** (blocked: no GitHub creds/`gh` on the build box).
 2. Verify live capture/train/eval on a machine with the siblings + GPU/display installed
    (not testable headless here).
-3. Optional: replace the vanilla-JS SPA with a React build at package-build time; add a
-   graceful `capture stop` in `openadapt-capture`; publish `openadapt-panel` to PyPI.
+3. Optional: add a graceful `capture stop` in `openadapt-capture`; publish `openadapt-panel`
+   to PyPI. (Frontend is now React/Vite — done.)
 
 ---
 

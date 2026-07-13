@@ -40,6 +40,23 @@ structured metrics back).
 - **System page never imports siblings** — `importlib` metadata only.
 - **Loopback + token** — binds `127.0.0.1` and gates every `/api` route behind a
   per-session token handed to the browser via the launch URL.
-- **Frontend ships in the wheel** — static assets are bundled so the end user
-  never needs Node. (Currently a hand-written vanilla-JS SPA; a React build can
-  replace it later, emitted to `openadapt_panel/static/` at package-build time.)
+- **Frontend ships in the wheel** — the built React assets in
+  `openadapt_panel/static/` are committed and bundled into the wheel, so the end
+  user never needs Node.
+
+## Developing the frontend
+
+The UI is a React + Vite app under `frontend/`. Vite builds straight into
+`openadapt_panel/static/` (`base: "/static/"`, matching the FastAPI mount); the
+built `index.html` + `assets/` are committed so `pip install` / CI never touch
+Node.
+
+```bash
+cd frontend
+npm install
+npm run build      # → openadapt_panel/static/  (commit the result)
+npm run dev        # optional: Vite dev server (proxy /api to a running panel)
+```
+
+After changing anything under `frontend/src/`, run `npm run build` and commit the
+regenerated `static/` output alongside the source.
