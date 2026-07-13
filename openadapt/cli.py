@@ -143,6 +143,34 @@ def flow_record(url, out, secret, param, headless):
     _run_flow(argv)
 
 
+@flow.command("demo-record")
+@click.option("--out", required=True, help="Recording output directory")
+@click.option(
+    "--note-text",
+    default="Follow-up in 2 weeks; BP recheck.",
+    help="Note text typed during the demo (recorded as a parameter)",
+)
+@click.option("--param-name", default="note", help="Parameter name for the note")
+@click.option("--drift", default=None, help="Comma-separated MockMed drift modes")
+@click.option("--headed", is_flag=True, help="Run the browser headed")
+def flow_demo_record(out, note_text, param_name, drift, headed):
+    """Serve the bundled MockMed app and record the canonical triage demo."""
+    argv = [
+        "demo-record",
+        "--out",
+        out,
+        "--note-text",
+        note_text,
+        "--param-name",
+        param_name,
+    ]
+    if drift:
+        argv += ["--drift", drift]
+    if headed:
+        argv.append("--headed")
+    _run_flow(argv)
+
+
 @flow.command("compile")
 @click.argument("recording")
 @click.option("--out", required=True, help="Output bundle directory")
