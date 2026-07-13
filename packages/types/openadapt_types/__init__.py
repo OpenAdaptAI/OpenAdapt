@@ -26,6 +26,12 @@ from openadapt_types.action import (
     ActionTarget,
     ActionType,
 )
+from openadapt_types.benchmark import (
+    BenchmarkAction,
+    BenchmarkAgent,
+    BenchmarkObservation,
+    BenchmarkTask,
+)
 from openadapt_types.computer_state import (
     BoundingBox,
     ComputerState,
@@ -57,6 +63,11 @@ __all__ = [
     "ActionResult",
     "ActionTarget",
     "ActionType",
+    # benchmark
+    "BenchmarkAction",
+    "BenchmarkAgent",
+    "BenchmarkObservation",
+    "BenchmarkTask",
     # episode
     "Episode",
     "Step",
