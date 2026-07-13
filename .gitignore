@@ -54,6 +54,11 @@ omnimcp/
 omnimcp.bak/
 performance/
 
+# Output dirs created when running eval/train from the repo root
+benchmark_results/
+benchmark_live.json
+training_output/
+
 # Secrets (should never be committed)
 *.pem
 .env.backup
