@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-07-13)
+
+### Features
+
+- Add canonical Benchmark* types (Task/Observation/Action/Agent)
+  ([#5](https://github.com/OpenAdaptAI/openadapt-types/pull/5),
+  [`82ad485`](https://github.com/OpenAdaptAI/openadapt-types/commit/82ad48590e89e23c44cdf25ce636035195d6ea14))
+
+Move the Benchmark* vocabulary into the canonical schema package so both openadapt-ml and
+  openadapt-evals can import it without depending on each other, breaking the historical ml<->evals
+  import cycle.
+
+Definitions are dependency-free (dataclasses + abc) and faithfully match the previous
+  openadapt-evals definitions.
+
+Claude-Session: https://claude.ai/code/session_01CKrVJJy5jWVCkXAqgUqtqZ
+
+Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
+
+
 ## v0.2.0 (2026-03-29)
 
 ### Continuous Integration
