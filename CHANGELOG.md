@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-07-13)
+
+### Code Style
+
+- Ruff format cli.py (flow command integration)
+  ([#1009](https://github.com/OpenAdaptAI/OpenAdapt/pull/1009),
+  [`8916de1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8916de10121c72e8a180f9275e70eb7164a9148f))
+
+### Documentation
+
+- Refresh README (accurate positioning + demonstration compiler prominence)
+  ([#1007](https://github.com/OpenAdaptAI/OpenAdapt/pull/1007),
+  [`b524907`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b52490724ce5ab1a408acd2212ccc499ca4a59de))
+
+### Features
+
+- Mount the demonstration compiler as `openadapt flow …` and lead the CLI with it
+  ([#1009](https://github.com/OpenAdaptAI/OpenAdapt/pull/1009),
+  [`8916de1`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8916de10121c72e8a180f9275e70eb7164a9148f))
+
+
 ## v1.3.0 (2026-07-12)
 
 ### Features
