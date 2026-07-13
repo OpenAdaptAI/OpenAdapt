@@ -10,6 +10,19 @@ openadapt panel                     # opens http://127.0.0.1:8080
 openadapt panel --port 9000 --no-open
 ```
 
+## Run it like a desktop app
+
+```bash
+openadapt panel --install-shortcut  # adds an "OpenAdapt Panel" icon to your Desktop (Windows)
+openadapt panel --app               # what the shortcut runs: tray app, no console window
+```
+
+Double-clicking the Desktop icon launches the panel via `pythonw` (no console),
+opens your browser, and leaves an icon in the system tray with **Open Control
+Panel** / **Quit**. It's still the same local web app — just tray-resident and
+click-to-launch, with no native toolchain (pure Python via `pystray`/`pillow`).
+The machine still needs Python + `openadapt[panel]` installed.
+
 ## What it is
 
 A FastAPI backend serving a single-page frontend. The backend is a **seam, not a

@@ -23,7 +23,15 @@ def __getattr__(name: str):
         from .server import run_panel
 
         return run_panel
+    if name == "run_app":
+        from .desktop import run_app
+
+        return run_app
+    if name == "install_desktop_shortcut":
+        from .desktop import install_desktop_shortcut
+
+        return install_desktop_shortcut
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["run_panel", "__version__"]
+__all__ = ["run_panel", "run_app", "install_desktop_shortcut", "__version__"]

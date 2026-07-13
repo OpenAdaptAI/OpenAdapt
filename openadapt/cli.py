@@ -475,12 +475,22 @@ def serve(port: int, output: str, open: bool):
 @click.option("--port", "-p", default=8080, help="Port to serve the panel on")
 @click.option("--host", default="127.0.0.1", help="Host to bind (loopback only)")
 @click.option("--open/--no-open", default=True, help="Open in browser")
-def panel(port: int, host: str, open: bool):
+@click.option(
+    "--app", is_flag=True, help="Run as a desktop tray app (no console window)"
+)
+@click.option(
+    "--install-shortcut",
+    is_flag=True,
+    help="Create a Desktop shortcut for the tray app, then exit",
+)
+def panel(port: int, host: str, open: bool, app: bool, install_shortcut: bool):
     """Launch the local web control panel.
 
     \b
     Examples:
-        openadapt panel
+        openadapt panel                  # serve in this terminal
+        openadapt panel --app            # tray app, no console
+        openadapt panel --install-shortcut   # add a Desktop icon
         openadapt panel --port 9000 --no-open
     """
     # Distinguish "not installed" from "installed but broken": check presence
@@ -493,6 +503,18 @@ def panel(port: int, host: str, open: bool):
         click.echo("Error: openadapt-panel not installed.", err=True)
         click.echo('Install with: pip install "openadapt[panel]"', err=True)
         sys.exit(1)
+
+    if install_shortcut:
+        from openadapt_panel import install_desktop_shortcut
+
+        path = install_desktop_shortcut(port=port)
+        click.echo(f"Desktop shortcut created: {path}")
+        return
+
+    if app:
+        from openadapt_panel import run_app
+
+        sys.exit(run_app(host=host, port=port))
 
     from openadapt_panel import run_panel
 

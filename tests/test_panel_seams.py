@@ -79,6 +79,21 @@ def test_models_empty(tmp_path):
     assert r.json()["models"] == []
 
 
+def test_desktop_helpers_exposed():
+    import openadapt_panel
+
+    assert callable(openadapt_panel.run_app)
+    assert callable(openadapt_panel.install_desktop_shortcut)
+
+
+def test_render_icon():
+    pytest.importorskip("PIL", reason="pillow not installed")
+    from openadapt_panel.desktop import render_icon
+
+    img = render_icon(48)
+    assert img.size == (48, 48)
+
+
 def test_settings_roundtrip(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # settings writes ./.env
     c = _client()
