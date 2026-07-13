@@ -1,0 +1,51 @@
+name: Frontend CI
+
+# The panel's React/Vite frontend builds into openadapt_panel/static/, which is
+# committed and shipped in the wheel (so pip/CI/end-users never need Node). This
+# job builds it on every change and fails if the committed static/ is stale —
+# i.e. someone edited frontend/src/ but forgot to `npm run build` and commit the
+# regenerated assets.
+
+on:
+  pull_request:
+    paths:
+      - 'openadapt-panel/frontend/**'
+      - 'openadapt-panel/openadapt_panel/static/**'
+      - '.github/workflows/frontend.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openadapt-panel/frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: openadapt-panel/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify committed static/ is up to date
+        run: |
+          # npm run build writes into ../openadapt_panel/static (emptyOutDir),
+          # so any drift shows as modified/deleted/untracked files there.
+          # --porcelain also catches newly hashed asset filenames.
+          changes="$(git status --porcelain -- ../openadapt_panel/static)"
+          if [ -n "$changes" ]; then
+            echo "::error::Built frontend differs from committed openadapt-panel/openadapt_panel/static/. Run 'npm run build' in openadapt-panel/frontend and commit the result."
+            echo "$changes"
+            git --no-pager diff -- ../openadapt_panel/static
+            exit 1
+          fi
+          echo "Committed static/ matches a fresh build."
