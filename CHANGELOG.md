@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.5.1 (2026-07-14)
+
+### Bug Fixes
+
+- Discord badge shows 'invalid server' (use a static badge)
+  ([#1011](https://github.com/OpenAdaptAI/OpenAdapt/pull/1011),
+  [`afe9076`](https://github.com/OpenAdaptAI/OpenAdapt/commit/afe9076515a35990efd1c03e70872985de2b3c5c))
+
+
 ## v1.5.0 (2026-07-13)
 
 ### Features
