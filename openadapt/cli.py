@@ -30,6 +30,8 @@ from typing import Optional
 
 import click
 
+from openadapt.version import __version__
+
 
 class _FlowFirstGroup(click.Group):
     """Command group that lists ``flow`` first in ``--help``.
@@ -45,7 +47,7 @@ class _FlowFirstGroup(click.Group):
 
 
 @click.group(cls=_FlowFirstGroup)
-@click.version_option(version="1.0.0", prog_name="openadapt")
+@click.version_option(version=__version__, prog_name="openadapt")
 def main():
     """OpenAdapt - the demonstration compiler for GUI workflows.
 
@@ -725,36 +727,47 @@ def doctor():
     click.echo(f"\nPython: {platform.python_version()}")
     click.echo(f"Platform: {platform.system()} {platform.release()}")
 
-    # Check required packages
-    click.echo("\nCore packages:")
-    required = [
-        "openadapt_capture",
-        "openadapt_ml",
-        "openadapt_evals",
-        "openadapt_viewer",
-    ]
     from importlib.util import find_spec
 
-    for pkg in required:
+    # Core packages: installed by the base `pip install openadapt`. Only
+    # these are treated as required; a missing one is a real problem.
+    click.echo("\nCore packages (installed with `pip install openadapt`):")
+    core = [
+        "openadapt_flow",
+    ]
+    for pkg in core:
         # find_spec checks installability without executing package code
         # (importing openadapt-capture screenshots at import time, which
         # crashes headless environments)
         if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
         else:
-            click.echo(f"  [MISSING] {pkg}")
+            click.echo(
+                f"  [MISSING] {pkg} (core dependency — reinstall with "
+                f"`pip install openadapt`)"
+            )
 
-    # Check optional packages
-    click.echo("\nOptional packages:")
+    # Optional packages: opt-in extras the base install intentionally
+    # excludes. A missing extra is expected, not a failure — report how to
+    # install it rather than flagging it. Maps import name -> extra name.
+    click.echo("\nOptional packages (install with `pip install openadapt[...]`):")
     optional = [
-        "openadapt_grounding",
-        "openadapt_retrieval",
+        ("openadapt_capture", "capture"),
+        ("openadapt_ml", "ml"),
+        ("openadapt_evals", "evals"),
+        ("openadapt_viewer", "viewer"),
+        ("openadapt_grounding", "grounding"),
+        ("openadapt_retrieval", "retrieval"),
+        ("openadapt_privacy", "privacy"),
     ]
-    for pkg in optional:
+    for pkg, extra in optional:
         if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
         else:
-            click.echo(f"  [--] {pkg} (not installed)")
+            click.echo(
+                f"  [--] {pkg} (optional — install with "
+                f"`pip install openadapt[{extra}]`)"
+            )
 
     # Check GPU
     click.echo("\nGPU:")

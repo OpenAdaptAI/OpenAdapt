@@ -70,6 +70,58 @@ def test_version_command():
     assert result.exit_code == 0
 
 
+def test_version_flag_matches_installed_metadata():
+    """`openadapt --version` must print the real installed distribution
+    version (importlib.metadata), never a hardcoded string that can drift
+    from pyproject.toml. See openadapt/version.py."""
+    from importlib.metadata import version as dist_version
+
+    expected = dist_version("openadapt")
+
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert expected in result.output
+    # And it must not be the old hardcoded value unless that is genuinely
+    # the installed version.
+    from openadapt.version import __version__
+
+    assert __version__ == expected
+
+
+def test_doctor_lists_flow_as_core_not_extras():
+    """`openadapt doctor` must treat openadapt-flow as core and the opt-in
+    extras (capture/ml/evals/viewer/...) as optional, never flagging a
+    missing extra as a failure."""
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["doctor"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+
+    core_idx = out.index("Core packages")
+    optional_idx = out.index("Optional packages")
+    assert core_idx < optional_idx
+
+    core_section = out[core_idx:optional_idx]
+    optional_section = out[optional_idx:]
+
+    # flow is core.
+    assert "openadapt_flow" in core_section
+    # The excluded-by-default extras must appear only in the optional
+    # section and must not be reported as [MISSING].
+    for extra_pkg in (
+        "openadapt_capture",
+        "openadapt_ml",
+        "openadapt_evals",
+        "openadapt_viewer",
+    ):
+        assert extra_pkg in optional_section
+        assert extra_pkg not in core_section
+    assert "[MISSING]" not in optional_section
+    # Optional section tells the user how to install extras.
+    assert "pip install openadapt[" in optional_section
+
+
 # ---------------------------------------------------------------------------
 # Flow command (the demonstration compiler — flagship path)
 # ---------------------------------------------------------------------------
