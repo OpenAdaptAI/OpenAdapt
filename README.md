@@ -1,4 +1,4 @@
-# OpenAdapt: AI-First Process Automation with Large Multimodal Models (LMMs)
+# OpenAdapt: The Demonstration Compiler for Desktop and Web GUIs
 
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
@@ -7,54 +7,52 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-7289da?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-**OpenAdapt** is the **open** source software **adapt**er between Large Multimodal Models (LMMs) and traditional desktop and web GUIs.
+**Show it once. It runs forever. On your premises.**
 
-Record a GUI workflow once, then compile it into a deterministic, self-healing replay that runs locally at near-zero cost — all from a unified CLI. OpenAdapt is a modular meta-package: `pip install openadapt` ships the flagship demonstration compiler (`openadapt flow …`) out of the box, and the supporting capabilities (capture, ML, evals, privacy) are optional extras you add as you need them.
+**OpenAdapt** compiles a single recorded GUI demonstration into a deterministic,
+self-healing automation that replays locally at near-zero cost, heals when the
+UI drifts, verifies its own effects, and halts rather than guessing when the
+screen stops matching. No API required, no per-run model calls, no data leaving
+your machine on the default path.
+
+Everything installs from one package and runs from one CLI: `pip install
+openadapt` ships the compiler (`openadapt flow …`) out of the box. Recording,
+scrubbing, and the research toolkits are optional extras you add only if you
+need them.
 
 [Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
 
 ---
 
-## Architecture
+## Why a compiler
 
-OpenAdapt v1.0+ uses a **modular meta-package architecture**. The main `openadapt` package provides a unified CLI and depends on focused sub-packages via PyPI:
+Every automation tool assumes an API. The systems that actually run regulated
+work often don't: legacy EMRs, Citrix desktops, and internal apps a team still
+drives by hand. General computer-use agents can operate those GUIs, but
+re-reasoning through every step with a large model is slow, expensive, and
+non-deterministic, and a wrong click writes to the wrong record.
 
-| Package | Description | Repository |
-|---------|-------------|------------|
-| `openadapt` | Meta-package with unified CLI | This repo |
-| `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
-| `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
-| `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
-| `openadapt-flow` | Demonstration compiler (deterministic, self-healing replay) | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
-| `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
-| `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
-| `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
-| `openadapt-privacy` | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
-| `openadapt-wright` | Dev automation | [openadapt-wright](https://github.com/OpenAdaptAI/openadapt-wright) |
-| `openadapt-herald` | Social media from git history | [openadapt-herald](https://github.com/OpenAdaptAI/openadapt-herald) |
-| `openadapt-crier` | Telegram approval bot | [openadapt-crier](https://github.com/OpenAdaptAI/openadapt-crier) |
-| `openadapt-consilium` | Multi-model consensus | [openadapt-consilium](https://github.com/OpenAdaptAI/openadapt-consilium) |
-| `openadapt-desktop` | Desktop GUI application | [openadapt-desktop](https://github.com/OpenAdaptAI/openadapt-desktop) |
-| `openadapt-tray` | System tray app | [openadapt-tray](https://github.com/OpenAdaptAI/openadapt-tray) |
-| `openadapt-agent` | Production execution engine | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
-| `openadapt-telemetry` | Error tracking | [openadapt-telemetry](https://github.com/OpenAdaptAI/openadapt-telemetry) |
+OpenAdapt takes the opposite path for workflows you run over and over. You
+demonstrate the task once. OpenAdapt **compiles** that demonstration into a
+script that replays **deterministically and locally**, with no model calls on
+the hot path. When the UI changes, a lower resolution rung re-resolves the
+target and the fix lands back in the bundle as a reviewable diff. When the
+screen stops matching expectations, the run **halts with a report** instead of
+guessing.
 
 ---
 
 ## Installation
 
-Install what you need:
-
 ```bash
 pip install openadapt              # CLI + demonstration compiler (openadapt flow …)
-pip install openadapt[capture]     # + GUI capture/recording
-pip install openadapt[ml]          # + ML training and inference
-pip install openadapt[evals]       # + Benchmark evaluation
+pip install openadapt[capture]     # + native GUI capture/recording
 pip install openadapt[privacy]     # + PII/PHI scrubbing
-pip install openadapt[all]         # Everything
+pip install openadapt[all]         # Everything, including research extras
 ```
 
-The flagship demonstration compiler ships in the base install, so `openadapt flow …` works right after `pip install openadapt`.
+The flagship compiler ships in the base install, so `openadapt flow …` works
+right after `pip install openadapt`.
 
 **Requirements:** Python 3.10+
 
@@ -81,234 +79,184 @@ openadapt flow certify bundle --policy clinical-write   # enforce a safety polic
 > `openadapt flow <verb>` is the recommended path. The standalone
 > `openadapt-flow <verb>` command keeps working and behaves identically.
 
-### Supporting commands
-
-Capture, training, and evaluation are available once you install their extras
-(`pip install openadapt[capture,ml,evals]`):
-
-```bash
-openadapt capture start --name my-task           # record raw GUI events
-openadapt train start --capture my-task --model qwen3vl-2b
-openadapt eval run --checkpoint training_output/model.pt --benchmark waa
-openadapt capture view my-task
-```
-
 ---
 
-## Demonstration Compiler
-
-For workflows you run over and over, re-reasoning through every step with a
-large model is slow, expensive, and non-deterministic. `openadapt-flow`
-compiles a single demonstration into a script that replays **deterministically
-and locally**, with no model calls on the hot path. It ships in the base
-`openadapt` install as the flagship path, so `openadapt flow …` works out of the
-box:
-
-```bash
-pip install openadapt
-openadapt flow record --url <app> --out rec
-openadapt flow compile rec --out bundle --name my-flow
-openadapt flow replay bundle
-```
-
-It also ships standalone on PyPI (`pip install openadapt-flow`, currently
-v0.3.x); the standalone `openadapt-flow <verb>` command behaves identically to
-`openadapt flow <verb>`.
+## How the compiler works
 
 Each compiled step carries a template crop, an OCR label, geometry landmarks,
 and postconditions derived from what the demo changed on screen. At replay time
 a resolution ladder tries them in order (local match, global match, OCR,
 landmark geometry, then optionally a grounding model), so healthy runs cost
-milliseconds. When the UI drifts, a lower rung re-resolves the target and the
-fix lands back in the bundle as a reviewable diff — self-healing without a
-human in the loop. When the screen stops matching expectations, the run halts
-with a report instead of guessing, and identity-verified steps (for example a
-wrong-record check) refuse to act on a low-confidence match rather than click
-the wrong target.
+milliseconds and make no model calls.
 
-The reference backend is a headless browser, which is why the whole loop runs
-in CI with no OS permissions; desktop and RDP backends are adapters in
-progress, not yet production paths. Compiled workflows can also be emitted as
-Agent Skills or MCP servers so other agents can invoke them.
+- **Deterministic replay.** No large model on the hot path, so a compiled run
+  is repeatable and costs effectively nothing per run.
+- **Self-healing.** When the UI drifts, a lower rung re-resolves the target and
+  the fix lands back in the bundle as a reviewable diff, without a human in the
+  loop.
+- **Effect verification.** Steps carry postconditions derived from what the demo
+  changed on screen, so a run confirms it did the right thing rather than
+  assuming a click landed.
+- **Halt on ambiguity.** When the screen stops matching expectations the run
+  halts with a report, and identity-verified steps (for example a wrong-record
+  check) refuse to act on a low-confidence match rather than click the wrong
+  target.
+
+The reference backend is a **headless browser**, which is why the whole loop
+runs in CI with no OS permissions. Desktop, Citrix, and RDP backends are
+adapters in progress that we are validating with design partners, not yet
+production paths. Compiled workflows can also be emitted as Agent Skills or MCP
+servers so other agents can invoke them.
 
 In one field test against a computer-use agent on a real third-party EMR
 (OpenEMR's public demo), compiled replay matched the agent's success (20/20
 compiled vs 10/10 agent) at roughly half the median latency and near-zero
-marginal cost — the agent cost about $0.55 per run, the compiled replay makes
+marginal cost: the agent cost about $0.55 per run, the compiled replay makes
 zero model calls. This is a small-sample result on a shared, daily-resetting
 public demo, so it is not CI-reproducible; a CI-reproducible control and the
 adversarial safety measurements are published alongside it.
 
-Model-free on the hot path, deterministic, self-healing under drift, and honest
-about what it can't resolve. See
-[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) for the
+See [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) for the
 compiler, validation methodology, and known limits.
 
 ---
 
-## Ecosystem
+## What ships (the product)
 
-### Core Platform Components
+The product is the compiler and the governed runtime around it. These are the
+supported packages:
 
-| Package | Description | Repository |
-|---------|-------------|------------|
-| `openadapt` | Meta-package with unified CLI | This repo |
-| `openadapt-capture` | Event recording and storage | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
-| `openadapt-ml` | ML engine, training, inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
-| `openadapt-evals` | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
-| `openadapt-flow` | Demonstration compiler (deterministic, self-healing replay) | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
-| `openadapt-viewer` | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
-| `openadapt-grounding` | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
-| `openadapt-retrieval` | Multimodal demo retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
-| `openadapt-privacy` | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+| Package | Role | Maturity | Repository |
+|---------|------|----------|------------|
+| `openadapt` | Install + unified CLI (`openadapt flow …`) | Web path usable today | This repo |
+| `openadapt-flow` | Demonstration compiler + governed runtime (replay, self-heal, effect-verify, halt-on-ambiguity, policies) | Web path usable today; desktop/Citrix/RDP validating with design partners | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
+| `openadapt-capture` | Optional native recorder for desktop GUI events | Optional extra | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
+| `openadapt-privacy` | Optional PII/PHI scrubbing (Presidio-backed) | Optional extra | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
 
-### Applications and Tools
+`openadapt-flow` also ships standalone on PyPI (`pip install openadapt-flow`);
+the standalone `openadapt-flow <verb>` command behaves identically to
+`openadapt flow <verb>`.
 
-| Package | Description | Repository |
-|---------|-------------|------------|
-| `openadapt-desktop` | Desktop GUI application | [openadapt-desktop](https://github.com/OpenAdaptAI/openadapt-desktop) |
-| `openadapt-tray` | System tray app | [openadapt-tray](https://github.com/OpenAdaptAI/openadapt-tray) |
-| `openadapt-agent` | Production execution engine | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
-| `openadapt-wright` | Dev automation | [openadapt-wright](https://github.com/OpenAdaptAI/openadapt-wright) |
-| `openadapt-herald` | Social media from git history | [openadapt-herald](https://github.com/OpenAdaptAI/openadapt-herald) |
-| `openadapt-crier` | Telegram approval bot | [openadapt-crier](https://github.com/OpenAdaptAI/openadapt-crier) |
-| `openadapt-consilium` | Multi-model consensus | [openadapt-consilium](https://github.com/OpenAdaptAI/openadapt-consilium) |
-| `openadapt-telemetry` | Error tracking | [openadapt-telemetry](https://github.com/OpenAdaptAI/openadapt-telemetry) |
-
----
-
-## CLI Reference
+### CLI reference
 
 ```
-openadapt flow record --url <app> --out <dir>   Record a workflow once
-openadapt flow compile <rec> --out <bundle>      Compile a recording into a bundle
-openadapt flow replay <bundle>                   Replay a bundle (local, $0)
-openadapt flow lint <bundle>                      Report a bundle's coverage gaps
-openadapt flow certify <bundle> --policy <name>   Enforce a safety policy on a bundle
+openadapt flow record --url <app> --out <dir>    Record a workflow once
+openadapt flow compile <rec> --out <bundle>       Compile a recording into a bundle
+openadapt flow replay <bundle>                    Replay a bundle (local, $0)
+openadapt flow lint <bundle>                       Report a bundle's coverage gaps
+openadapt flow certify <bundle> --policy <name>    Enforce a safety policy on a bundle
 
-openadapt capture start --name <name>    Start recording
+openadapt capture start --name <name>    Start a native recording (requires [capture])
 openadapt capture stop                    Stop recording
 openadapt capture list                    List captures
 openadapt capture view <name>             Open capture viewer
 
-openadapt train start --capture <name>    Train model on capture
-openadapt train status                    Check training progress
-openadapt train stop                      Stop training
-
-openadapt eval run --checkpoint <path>    Evaluate trained model
-openadapt eval run --agent api-claude     Evaluate API agent
-openadapt eval mock --tasks 10            Run mock evaluation
-
-openadapt serve --port 8080               Start dashboard server
 openadapt version                         Show installed versions
 openadapt doctor                          Check system requirements
 ```
 
 ---
 
-## How It Works
+## Research (not the product)
 
-See the full [Architecture Evolution](docs/architecture-evolution.md) for detailed documentation.
+These packages are **research**, not part of the supported product. They explore
+whether human demonstrations can improve the accuracy of general computer-use
+models. They are not required to record, compile, or replay a workflow, and the
+compiler above makes no model calls on its hot path.
 
-### Three-Phase Pipeline
+| Package | Research focus | Repository |
+|---------|----------------|------------|
+| `openadapt-ml` | Training and inference for multimodal GUI-action models | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
+| `openadapt-evals` | Benchmark evaluation for GUI agents | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
+| `openadapt-retrieval` | Multimodal demonstration retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
+| `openadapt-grounding` | UI element localization / grounding models | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
 
-OpenAdapt follows a streamlined **Demonstrate → Learn → Execute** pipeline:
+Install with `pip install openadapt[ml,evals]`. The `openadapt train` and
+`openadapt eval` commands become available once those extras are installed.
 
-**1. DEMONSTRATE (Observation Collection)**
-- **Capture**: Record user actions and screenshots with `openadapt-capture`
-- **Privacy**: Scrub PII/PHI from recordings with `openadapt-privacy`
-- **Store**: Build a searchable demonstration library
+<details>
+<summary><strong>Research thesis: demonstration-conditioned agents</strong></summary>
 
-**2. LEARN (Policy Acquisition)**
-- **Retrieval Path**: Embed demonstrations, index them, and enable semantic search
-- **Training Path**: Load demonstrations and fine-tune Vision-Language Models (VLMs)
-- **Abstraction**: Progress from literal replay to template-based automation
+The research line asks a different question from the compiler: instead of
+compiling one demonstration into a deterministic script, can a model *use*
+demonstrations at inference time to disambiguate unfamiliar GUIs?
 
-**3. EXECUTE (Agent Deployment)**
-- **Observe**: Take screenshots and gather accessibility information
-- **Policy**: Use demonstration context to decide actions via VLMs (Claude, GPT-4o, Qwen3-VL)
-- **Ground**: Map intentions to specific UI coordinates with `openadapt-grounding`
-- **Act**: Execute validated actions with safety gates
-- **Evaluate**: Measure success with `openadapt-evals` and feed results back for improvement
+- **Demonstrate** — record user actions and screenshots, scrub PII/PHI, build a
+  searchable demonstration library.
+- **Learn** — embed and index demonstrations for retrieval, and/or fine-tune
+  Vision-Language Models on them.
+- **Execute** — condition a policy on retrieved demonstrations, ground intent to
+  coordinates, act behind safety gates, and evaluate to feed results back.
 
-### Core Approach: Trajectory-Conditioned Disambiguation
+**Validated result (research, not product):** on a controlled macOS benchmark
+(45 System Settings tasks sharing a common navigation entry point),
+demonstration-conditioned prompting improved first-action accuracy from 46.7% to
+100%, with a length-matched control (+11.1 pp) confirming the benefit is
+semantic, not token-length. Phase 2 (retrieval-only prompting) is validated;
+Phase 3 (demo-conditioned fine-tuning) is in progress. See the
+[research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md)
+for methodology and limits.
 
-Zero-shot VLMs fail on GUI tasks not due to lack of capability, but due to **ambiguity in UI affordances**. OpenAdapt resolves this by conditioning agents on human demonstrations — "show, don't tell."
+**Industry note:** [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025
+Spotlight, XLANG Lab)
+[reused OpenAdapt's macOS accessibility capture code](https://arxiv.org/html/2508.09123v3)
+in their AgentNetTool, but uses demonstrations only for model training, not
+runtime conditioning.
 
-| | No Retrieval | With Retrieval |
-|---|---|---|
-| **No Fine-tuning** | 46.7% (zero-shot baseline) | **100%** first-action (n=45, shared entry point) |
-| **Fine-tuning** | Standard SFT (baseline) | **Demo-conditioned FT** (planned) |
-
-The bottom-right cell is OpenAdapt's unique value: training models to **use** demonstrations they haven't seen before, combining retrieval with fine-tuning for maximum accuracy. Phase 2 (retrieval-only prompting) is validated; Phase 3 (demo-conditioned fine-tuning) is in progress.
-
-**Validated result**: On a controlled macOS benchmark (45 System Settings tasks sharing a common navigation entry point), demo-conditioned prompting improved first-action accuracy from 46.7% to 100%. A length-matched control (+11.1 pp only) confirms the benefit is semantic, not token-length. See the [research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md) for methodology and the [publication roadmap](docs/publication-roadmap.md) for limitations.
-
-**Industry validation**: [OpenCUA](https://github.com/xlang-ai/OpenCUA) (NeurIPS 2025 Spotlight, XLANG Lab) [reused OpenAdapt's macOS accessibility capture code](https://arxiv.org/html/2508.09123v3) in their AgentNetTool, but uses demos only for model training — not runtime conditioning. No open-source CUA framework currently does demo-conditioned inference, which remains OpenAdapt's architectural differentiator.
-
-### Key Concepts
-
-- **Policy/Grounding Separation**: The Policy decides *what* to do; Grounding determines *where* to do it
-- **Safety Gate**: Runtime validation layer before action execution (confirm mode for high-risk actions)
-- **Abstraction Ladder**: Progressive generalization from literal replay to goal-level automation
-- **Evaluation-Driven Feedback**: Success traces become new training data
-
----
-
-## Terminology
-
-| Term | Description |
-|------|-------------|
-| **Observation** | What the agent perceives (screenshot, accessibility tree) |
-| **Action** | What the agent does (click, type, scroll, etc.) |
-| **Trajectory** | Sequence of observation-action pairs |
-| **Demonstration** | Human-provided example trajectory |
-| **Policy** | Decision-making component that maps observations to actions |
-| **Grounding** | Mapping intent to specific UI elements (coordinates) |
+</details>
 
 ---
 
-## Demos
+## Deprecated
 
-**Legacy Version (v0.46.0) Examples:**
-- [Twitter Demo](https://twitter.com/abrichr/status/1784307190062342237) - Early OpenAdapt demonstration
-- [Loom Video](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0) - Process automation walkthrough
-
-*Note: These demos show the legacy monolithic version. For current v1.0+ modular architecture examples, see the [documentation](https://docs.openadapt.ai).*
-
----
-
-## Permissions
-
-**macOS:** Grant Accessibility, Screen Recording, and Input Monitoring permissions to your terminal. See [permissions guide](./legacy/permissions_in_macOS.md).
-
-**Windows:** Run as Administrator if needed for input capture.
+- **`openadapt-agent`** is being folded into `openadapt-flow` and should not be
+  built on. Its execution engine, safety gates, and session handling duplicate
+  the governed runtime that now lives in `openadapt-flow`. New work belongs in
+  `openadapt flow`.
 
 ---
 
 ## Legacy Version
 
-The monolithic OpenAdapt codebase (v0.46.0) is preserved in the `legacy/` directory.
+The monolithic OpenAdapt codebase (v0.46.0) is preserved in the `legacy/`
+directory.
 
-**To use the legacy version:**
 ```bash
 pip install openadapt==0.46.0
 ```
 
-See [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for migration guide and details.
+See [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) for the migration guide.
+
+Early demonstrations of the legacy version:
+[Twitter demo](https://twitter.com/abrichr/status/1784307190062342237) ·
+[Loom walkthrough](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
+For the current architecture, see the [documentation](https://docs.openadapt.ai).
+
+---
+
+## Permissions
+
+The default headless-browser path needs no OS permissions. Native desktop
+capture does:
+
+**macOS:** Grant Accessibility, Screen Recording, and Input Monitoring
+permissions to your terminal. See [permissions guide](./legacy/permissions_in_macOS.md).
+
+**Windows:** Run as Administrator if needed for input capture.
 
 ---
 
 ## Contributing
 
 1. [Join Discord](https://discord.gg/yF527cQbDG)
-2. Pick an issue from the relevant sub-package repository
+2. Pick an issue from the relevant repository
 3. Submit a PR
 
 For sub-package development:
+
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-ml  # or other sub-package
-cd openadapt-ml
+git clone https://github.com/OpenAdaptAI/openadapt-flow  # or another package
+cd openadapt-flow
 pip install -e ".[dev]"
 ```
 
@@ -316,20 +264,27 @@ pip install -e ".[dev]"
 
 ## Related Projects
 
-- [OpenAdaptAI/SoM](https://github.com/OpenAdaptAI/SoM) - Set-of-Mark prompting
-- [OpenAdaptAI/pynput](https://github.com/OpenAdaptAI/pynput) - Input monitoring fork
-- [OpenAdaptAI/atomacos](https://github.com/OpenAdaptAI/atomacos) - macOS accessibility
+- [OpenAdaptAI/SoM](https://github.com/OpenAdaptAI/SoM) — Set-of-Mark prompting
+- [OpenAdaptAI/pynput](https://github.com/OpenAdaptAI/pynput) — input monitoring fork
+- [OpenAdaptAI/atomacos](https://github.com/OpenAdaptAI/atomacos) — macOS accessibility
+
+> **Internal tooling** (not product architecture, listed for transparency):
+> `openadapt-wright` (dev automation), `openadapt-herald` (social posts from git
+> history), `openadapt-crier` (approval bot), `openadapt-consilium` (multi-model
+> consensus), `openadapt-telemetry` (error tracking), `openadapt-viewer` (HTML
+> visualization), and `openadapt-desktop` / `openadapt-tray` (GUI shells). These
+> support development and operations; they are not part of the compiler product.
 
 ---
 
 ## Support
 
 - **Discord:** https://discord.gg/yF527cQbDG
-- **Issues:** Use the relevant sub-package repository
-- **Architecture docs:** [GitHub Wiki](https://github.com/OpenAdaptAI/OpenAdapt/wiki/OpenAdapt-Architecture-(draft))
+- **Documentation:** https://docs.openadapt.ai
+- **Issues:** use the relevant repository
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
