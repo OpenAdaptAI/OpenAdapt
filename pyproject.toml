@@ -1,7 +1,7 @@
 [project]
 name = "openadapt"
 version = "1.5.1"
-description = "GUI automation with ML - record, train, deploy, evaluate"
+description = "The demonstration compiler for GUI workflows: record once, compile, and replay deterministically with self-healing, locally at near-zero cost."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["gui", "automation", "ml", "rpa", "agent", "vlm", "computer-use"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",

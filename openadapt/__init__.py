@@ -9,7 +9,9 @@ Install specific extras to get the functionality you need:
     pip install openadapt[all]         # Everything
 """
 
-__version__ = "1.0.0"
+# Single source of truth: derived from installed distribution metadata
+# (see openadapt/version.py) so it never drifts from pyproject.toml.
+from openadapt.version import __version__  # noqa: E402,F401
 
 # Lazy imports to avoid pulling in heavy dependencies unless needed
 
