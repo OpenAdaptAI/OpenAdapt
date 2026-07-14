@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v1.5.2 (2026-07-14)
+
+### Bug Fixes
+
+- Version reads from metadata + doctor core/optional sets + pyproject description
+  ([#1013](https://github.com/OpenAdaptAI/OpenAdapt/pull/1013),
+  [`97d901e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/97d901e4ae24807345dc98705f844692545b78ab))
+
+### Documentation
+
+- Refocus OpenAdapt on the demonstration compiler (remove package-zoo / old platform framing)
+  ([#1012](https://github.com/OpenAdaptAI/OpenAdapt/pull/1012),
+  [`51d8201`](https://github.com/OpenAdaptAI/OpenAdapt/commit/51d8201c1a23c2a7a3d2a90f4d872325761a7808))
+
+
 ## v1.5.1 (2026-07-14)
 
 ### Bug Fixes
