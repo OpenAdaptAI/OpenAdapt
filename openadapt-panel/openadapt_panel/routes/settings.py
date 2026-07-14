@@ -144,6 +144,18 @@ def _quote(val: str) -> str:
     return f'"{val}"' if (" " in val or val == "") else val
 
 
+def load_env_file() -> None:
+    """Load .env into os.environ without overriding already-set vars.
+
+    API clients (e.g. openadapt_evals.ApiAgent) read keys via os.getenv, so a
+    key saved to .env via this page only takes effect once it's in the
+    environment. Called at panel startup; the PUT handler also updates
+    os.environ directly so a freshly saved key works without a restart.
+    """
+    for key, val in _read_env(ENV_PATH).items():
+        os.environ.setdefault(key, val)
+
+
 @router.get("/settings")
 def get_settings() -> dict:
     env = _read_env(ENV_PATH)
@@ -177,4 +189,8 @@ def update_settings(values: dict = Body(..., embed=True)) -> dict:
         updates[key] = str(val)
     if updates:
         _write_env(ENV_PATH, updates)
+        # Take effect immediately in the running panel process (so eval/agents
+        # that read os.getenv see the new value without a restart).
+        for key, val in updates.items():
+            os.environ[key] = val
     return {"updated": sorted(updates), "env_path": str(ENV_PATH.resolve())}

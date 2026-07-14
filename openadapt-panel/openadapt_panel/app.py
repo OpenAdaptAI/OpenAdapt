@@ -30,6 +30,10 @@ def create_app(*, token: Optional[str] = None, enable_auth: bool = True) -> Fast
     app.state.enable_auth = enable_auth
     app.state.jobs = JobManager()
 
+    # Load any saved .env (API keys, etc.) into the environment so agents that
+    # read os.getenv (e.g. the eval ApiAgent) pick them up.
+    settings.load_env_file()
+
     # Token-gated API.
     api_deps = [Depends(require_token)]
     for module in (system, captures, evals, train, jobs, models, settings):
