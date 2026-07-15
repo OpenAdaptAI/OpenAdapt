@@ -2,24 +2,27 @@
 
 Thank you for your interest in contributing to OpenAdapt!
 
-## Architecture
+## Current Product Boundary
 
-OpenAdapt uses a modular meta-package architecture. The main `openadapt` package coordinates these sub-packages:
+`OpenAdaptAI/OpenAdapt` is the Beta launcher/meta-package and compatibility
+surface. The canonical compiler and governed runtime live in
+[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). New engine,
+replay, repair, policy, and backend work belongs there.
 
-| Package | Purpose | Repository |
-|---------|---------|------------|
-| openadapt-capture | GUI recording | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
-| openadapt-ml | ML training/inference | [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) |
-| openadapt-evals | Benchmark evaluation | [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) |
-| openadapt-viewer | HTML visualization | [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) |
-| openadapt-grounding | UI element localization | [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) |
-| openadapt-retrieval | Multimodal retrieval | [openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval) |
-| openadapt-privacy | PII/PHI scrubbing | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+| Lifecycle | Repositories | Contribution scope |
+|-----------|--------------|--------------------|
+| **Beta product** | `OpenAdapt`, `openadapt-flow` | Launcher here; engine in `openadapt-flow` |
+| **Experimental support** | `openadapt-capture`, `openadapt-privacy`, `openadapt-desktop` | Native capture, scrubbing, and authoring surfaces |
+| **Research** | `openadapt-ml`, `openadapt-evals`, `openadapt-grounding`, `openadapt-retrieval` | GUI-agent research and evaluation, not the product runtime |
+| **Deprecated/history** | `openadapt-agent`, `legacy/` | Migration fixes only; no new features |
 
 ## Where to Contribute
 
-- **This repository**: Meta-package, CLI, documentation, CI/CD
-- **Sub-packages**: Open issues in the relevant repository above
+- **This repository**: launcher packaging, unified CLI compatibility, and CI.
+- **`openadapt-flow`**: compiler, replay, verification, governed repair, and
+  backend implementation.
+- **Other repositories**: open issues only when their stated lifecycle and
+  contribution guide match the proposed work.
 
 ## Getting Started
 

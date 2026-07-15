@@ -1,4 +1,4 @@
-# OpenAdapt: The Demonstration Compiler for Desktop and Web GUIs
+# OpenAdapt: Launcher for the OpenAdapt Flow Compiler
 
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
@@ -7,18 +7,25 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-7289da?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-**Show it once. It runs forever. On your premises.**
+> **Lifecycle: Beta launcher/meta-package.** The active compiler and governed
+> runtime are developed in
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). This
+> repository preserves the high-visibility `openadapt` install and unified CLI;
+> it is not a second implementation of the engine. The pre-1.0 monolith is
+> historical and frozen under [`legacy/`](legacy/).
 
-**OpenAdapt** compiles a single recorded GUI demonstration into a deterministic,
-self-healing automation that replays locally at near-zero cost, heals when the
-UI drifts, verifies its own effects, and halts rather than guessing when the
-screen stops matching. No API required, no per-run model calls, no data leaving
-your machine on the default path.
+**Compile repeated GUI work into deterministic, governed workflows.**
 
-Everything installs from one package and runs from one CLI: `pip install
-openadapt` ships the compiler (`openadapt flow …`) out of the box. Recording,
-scrubbing, and the research toolkits are optional extras you add only if you
-need them.
+OpenAdapt compiles a demonstrated workflow into a locally executable program.
+Healthy runs make no model calls. When an interface drifts, the runtime first
+tries deterministic re-resolution, can optionally propose a reviewable repair,
+and halts when configured identity, postcondition, effect, or certification
+checks fail. The proven self-serve path today is browser automation; native
+desktop and remote-display backends remain experimental.
+
+`pip install openadapt` installs the launcher and the compiler, exposed as
+`openadapt flow ...`. Native capture, privacy scrubbing, and the separate ML
+research toolkits remain optional extras.
 
 [Join us on Discord](https://discord.gg/yF527cQbDG) | [Documentation](https://docs.openadapt.ai) | [OpenAdapt.ai](https://openadapt.ai)
 
@@ -33,12 +40,11 @@ re-reasoning through every step with a large model is slow, expensive, and
 non-deterministic, and a wrong click writes to the wrong record.
 
 OpenAdapt takes the opposite path for workflows you run over and over. You
-demonstrate the task once. OpenAdapt **compiles** that demonstration into a
-script that replays **deterministically and locally**, with no model calls on
-the hot path. When the UI changes, a lower resolution rung re-resolves the
-target and the fix lands back in the bundle as a reviewable diff. When the
-screen stops matching expectations, the run **halts with a report** instead of
-guessing.
+demonstrate the task once. `openadapt-flow` **compiles** that demonstration into
+a script that replays **deterministically and locally**, with no model calls on
+a healthy run. When the UI changes, the resolution ladder may re-resolve the
+target and persist a reviewable repair. When configured checks cannot establish
+identity or success, the run **halts with a report** instead of continuing.
 
 ---
 
@@ -47,12 +53,14 @@ guessing.
 ```bash
 pip install openadapt              # CLI + demonstration compiler (openadapt flow …)
 pip install openadapt[capture]     # + native GUI capture/recording
-pip install openadapt[privacy]     # + PII/PHI scrubbing
+pip install openadapt[privacy]     # + Presidio-backed PII/PHI scrubbing
 pip install openadapt[all]         # Everything, including research extras
 ```
 
 The flagship compiler ships in the base install, so `openadapt flow …` works
-right after `pip install openadapt`.
+right after `pip install openadapt`. Install `openadapt-flow[hosted]` when you
+want OS-keychain token storage; environment-based token configuration remains
+available on headless systems.
 
 **Requirements:** Python 3.10+
 
@@ -60,20 +68,73 @@ right after `pip install openadapt`.
 
 ## Quick Start
 
-Record a workflow once, compile it into a deterministic bundle, and replay it
-locally at near-zero cost:
+Run the bundled MockMed workflow first. This is the reproducible path exercised
+by `openadapt-flow` CI and requires no account or target application:
 
 ```bash
-openadapt flow record --url <app> --out rec     # record a workflow once
-openadapt flow compile rec --out bundle          # compile it
-openadapt flow replay bundle                     # run it, local, $0
+openadapt flow demo-record --out rec
+openadapt flow compile rec --out bundle --name mockmed-triage
+openadapt flow certify bundle --policy permissive
+openadapt flow replay bundle --run-dir run-baseline
+openadapt flow replay bundle --drift theme --run-dir run-drift \
+  --save-healed-to bundle-healed
 ```
 
-Inspect and gate compiled bundles before you ship them:
+Each replay writes an illustrated `REPORT.md` in its run directory. The drift
+run demonstrates bounded deterministic re-resolution; it is not a claim that
+arbitrary UI changes can be repaired.
+
+Now apply the stricter deployment gates:
 
 ```bash
-openadapt flow lint bundle                       # report coverage gaps
-openadapt flow certify bundle --policy clinical-write   # enforce a safety policy
+openadapt flow lint bundle
+openadapt flow certify bundle --policy clinical-write
+```
+
+These two commands currently exit nonzero. That is intentional: the bundled
+workflow is runnable under the permissive demo policy, but it has unarmed
+clicks, a vacuous postcondition, and no configured system-of-record effect for
+its write. The strict policy refuses to call it safe. A policy pass means only
+that the bundle satisfies that named policy.
+
+To run the workflow through OpenAdapt Cloud, create and review a sanitized
+derivative locally, approve its exact bytes, then upload that immutable
+derivative with an ingest token created in the Cloud dashboard:
+
+```bash
+openadapt flow sanitize rec --kind recording --out rec-sanitized
+openadapt flow review-sanitized rec-sanitized --original rec
+openadapt flow approve-sanitized rec-sanitized --original rec --reviewer "$USER"
+openadapt flow login --token oai_ingest_...
+openadapt flow push rec-sanitized --kind recording
+
+openadapt flow compile rec-sanitized --out bundle --name workflow
+openadapt flow lint bundle --strict
+openadapt flow certify bundle --policy permissive
+openadapt flow replay bundle --url https://app.example/login --run-dir run
+openadapt flow sanitize bundle --kind bundle --out bundle-sanitized
+openadapt flow review-sanitized bundle-sanitized --original bundle
+openadapt flow approve-sanitized bundle-sanitized --original bundle \
+  --reviewer "$USER"
+openadapt flow validate-hosted --recording rec-sanitized \
+  --bundle bundle-sanitized --run-dir run --policy permissive \
+  --risk-class low --environment staging-v1 \
+  --target-url https://app.example/login --out validation.json
+openadapt flow push bundle-sanitized --kind bundle \
+  --validation-attestation validation.json
+```
+
+The original recording remains local. Sanitization accounts for every file and
+refuses unsupported content rather than copying it. Review is local and
+approval is bound to the exact archive hash; live observations can contain PHI
+again and therefore remain inside the workflow's declared execution boundary.
+
+Then record your own browser application:
+
+```bash
+openadapt flow record --url https://your.app --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow replay bundle --url https://your.app
 ```
 
 > `openadapt flow <verb>` is the recommended path. The standalone
@@ -90,17 +151,17 @@ landmark geometry, then optionally a grounding model), so healthy runs cost
 milliseconds and make no model calls.
 
 - **Deterministic replay.** No large model on the hot path, so a compiled run
-  is repeatable and costs effectively nothing per run.
-- **Self-healing.** When the UI drifts, a lower rung re-resolves the target and
-  the fix lands back in the bundle as a reviewable diff, without a human in the
-  loop.
-- **Effect verification.** Steps carry postconditions derived from what the demo
-  changed on screen, so a run confirms it did the right thing rather than
-  assuming a click landed.
-- **Halt on ambiguity.** When the screen stops matching expectations the run
-  halts with a report, and identity-verified steps (for example a wrong-record
-  check) refuse to act on a low-confidence match rather than click the wrong
-  target.
+  is repeatable and has no model API charge on a healthy run. It still consumes
+  local or hosted compute, storage, monitoring, and exception-handling effort.
+- **Bounded re-resolution and repair.** Deterministic fallback rungs can recover
+  from supported drift. Optional model- or human-assisted repairs are governed
+  changes to the bundle, not unconstrained reasoning on every run.
+- **Explicit verification.** Compiled steps can carry postconditions. For
+  consequential writes, effect verification must also be configured against a
+  system of record; screen evidence alone cannot prove a transaction committed.
+- **Refusal where armed.** Identity-verified or policy-gated steps can refuse a
+  low-confidence match and halt with a report. Coverage is not automatic for
+  every click, so lint and certification are part of deployment.
 
 The reference backend is a **headless browser**, which is why the whole loop
 runs in CI with no OS permissions. Desktop, Citrix, and RDP backends are
@@ -110,10 +171,12 @@ servers so other agents can invoke them.
 
 In one field test against a computer-use agent on a real third-party EMR
 (OpenEMR's public demo), compiled replay matched the agent's success (20/20
-compiled vs 10/10 agent) at roughly half the median latency and near-zero
-marginal cost: the agent cost about $0.55 per run, the compiled replay makes
-zero model calls. This is a small-sample result on a shared, daily-resetting
-public demo, so it is not CI-reproducible; a CI-reproducible control and the
+compiled vs 10/10 agent) at roughly half the median latency and with zero model
+calls in the measured runs; the agent's measured model charge was about $0.55
+per run. This comparison does not include authoring, maintenance, compute,
+storage, review, or exception-handling cost. It is a small-sample result on a
+shared, daily-resetting public demo, so it is not CI-reproducible; a
+CI-reproducible control and the
 adversarial safety measurements are published alongside it.
 
 See [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) for the
@@ -121,17 +184,18 @@ compiler, validation methodology, and known limits.
 
 ---
 
-## What ships (the product)
+## Repository Role and Lifecycle
 
-The product is the compiler and the governed runtime around it. These are the
-supported packages:
+This repository is the stable URL and install route; `openadapt-flow` is the
+canonical implementation. Lifecycle labels describe support intent, not a
+blanket production-readiness claim.
 
 | Package | Role | Maturity | Repository |
 |---------|------|----------|------------|
-| `openadapt` | Install + unified CLI (`openadapt flow …`) | Web path usable today | This repo |
-| `openadapt-flow` | Demonstration compiler + governed runtime (replay, self-heal, effect-verify, halt-on-ambiguity, policies) | Web path usable today; desktop/Citrix/RDP validating with design partners | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
-| `openadapt-capture` | Optional native recorder for desktop GUI events | Optional extra | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
-| `openadapt-privacy` | Optional PII/PHI scrubbing (Presidio-backed) | Optional extra | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
+| `openadapt` | Installer + unified CLI (`openadapt flow ...`) | **Beta** | This repo |
+| `openadapt-flow` | Compiler + governed runtime | **Beta**; browser path proven, other backends experimental | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
+| `openadapt-capture` | Optional native recorder | **Experimental** | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
+| `openadapt-privacy` | Optional PII/PHI scrubbing | **Experimental** | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
 
 `openadapt-flow` also ships standalone on PyPI (`pip install openadapt-flow`);
 the standalone `openadapt-flow <verb>` command behaves identically to
@@ -145,6 +209,16 @@ openadapt flow compile <rec> --out <bundle>       Compile a recording into a bun
 openadapt flow replay <bundle>                    Replay a bundle (local, $0)
 openadapt flow lint <bundle>                       Report a bundle's coverage gaps
 openadapt flow certify <bundle> --policy <name>    Enforce a safety policy on a bundle
+openadapt flow sanitize <path> --kind <kind> --out <dir>
+openadapt flow review-sanitized <dir> --original <path>
+openadapt flow approve-sanitized <dir> --original <path> --reviewer <identity>
+openadapt flow login --token <oai_ingest_token>
+openadapt flow validate-hosted --recording <dir> --bundle <dir> --run-dir <dir> ...
+openadapt flow push <sanitized-recording-dir> --kind recording
+openadapt flow push <sanitized-bundle-dir> --kind bundle \
+  --validation-attestation <attestation.json> [--workflow-id <uuid>] \
+  [--resolves-run-id <halted-run-uuid>]
+openadapt flow report-break <run-dir> --workflow-id <id>
 
 openadapt capture start --name <name>    Start a native recording (requires [capture])
 openadapt capture stop                    Stop recording
@@ -207,12 +281,15 @@ runtime conditioning.
 
 ---
 
-## Deprecated
+## Migration and Deprecated Paths
 
-- **`openadapt-agent`** is being folded into `openadapt-flow` and should not be
-  built on. Its execution engine, safety gates, and session handling duplicate
-  the governed runtime that now lives in `openadapt-flow`. New work belongs in
-  `openadapt flow`.
+- **New automation work:** install `openadapt` and use `openadapt flow ...`; make
+  engine changes in `openadapt-flow`.
+- **`openadapt-agent`: Deprecated.** Do not build new integrations on it. Its
+  execution responsibilities have moved to the governed runtime in
+  `openadapt-flow`.
+- **Pre-1.0 monolith: Historical.** Version 0.46.0 and its source remain
+  available for existing users, but receive no feature development.
 
 ---
 
@@ -268,12 +345,13 @@ pip install -e ".[dev]"
 - [OpenAdaptAI/pynput](https://github.com/OpenAdaptAI/pynput) — input monitoring fork
 - [OpenAdaptAI/atomacos](https://github.com/OpenAdaptAI/atomacos) — macOS accessibility
 
-> **Internal tooling** (not product architecture, listed for transparency):
-> `openadapt-wright` (dev automation), `openadapt-herald` (social posts from git
-> history), `openadapt-crier` (approval bot), `openadapt-consilium` (multi-model
-> consensus), `openadapt-telemetry` (error tracking), `openadapt-viewer` (HTML
-> visualization), and `openadapt-desktop` / `openadapt-tray` (GUI shells). These
-> support development and operations; they are not part of the compiler product.
+> **Product surfaces:** OpenAdapt Cloud provides the hosted browser-workflow
+> control plane, with live execution enabled only when its production
+> dependencies pass readiness checks. `openadapt-desktop` and native/remote
+> backends remain experimental. **Internal tooling:** `openadapt-wright`, `openadapt-herald`,
+> `openadapt-crier`, `openadapt-consilium`, `openadapt-telemetry`, and
+> `openadapt-viewer` support development and operations; they are not required
+> by the compiler runtime.
 
 ---
 

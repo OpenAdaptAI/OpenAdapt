@@ -1,7 +1,7 @@
 [project]
 name = "openadapt"
 version = "1.5.2"
-description = "The demonstration compiler for GUI workflows: record once, compile, and replay deterministically with self-healing, locally at near-zero cost."
+description = "Beta launcher for openadapt-flow: compile demonstrated GUI workflows into deterministic, governed local replay"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -27,7 +27,7 @@ classifiers = [
 # All other capabilities (capture, ml, evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow>=0.3.0",
+    "openadapt-flow>=1.6.0",
 ]
 
 [project.optional-dependencies]
@@ -51,13 +51,13 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-privacy>=0.1.0",
+    "openadapt-flow[privacy]>=1.6.0",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow>=0.3.0",
+    "openadapt-flow>=1.6.0",
 ]
 # Bundles
 core = [
@@ -67,6 +67,7 @@ all = [
     "openadapt[core,grounding,retrieval,privacy,flow]",
 ]
 dev = [
+    "build>=1.2.0",
     "pytest>=8.0.0",
     "ruff>=0.1.0",
 ]
@@ -78,6 +79,7 @@ openadapt = "openadapt.cli:main"
 Homepage = "https://openadapt.ai"
 Documentation = "https://docs.openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/openadapt"
+"Canonical Engine" = "https://github.com/OpenAdaptAI/openadapt-flow"
 "Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt/issues"
 
 [build-system]
@@ -86,6 +88,30 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt"]
+
+# Keep the public source archive as narrow as the launcher package. Hatch's
+# broad default selection otherwise picks up ignored workstation artifacts
+# such as `.env`, local databases, screenshots, and model-call caches.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/openadapt",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = [
+    "/.cache",
+    "/.claude",
+    "/.env",
+    "/.worktrees",
+    "/build",
+    "/dist",
+    "/docs",
+    "/legacy",
+    "/openadapt.db",
+    "/output.png",
+]
 
 [tool.ruff]
 line-length = 88

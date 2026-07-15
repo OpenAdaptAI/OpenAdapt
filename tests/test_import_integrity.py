@@ -34,7 +34,11 @@ EXTERNAL_PACKAGES = (
     "openadapt_retrieval",
 )
 
-PHANTOM_IMPORT_ALLOWLIST: set[tuple[str, str]] = set()
+# Optional compatibility imports intentionally support multiple sibling
+# versions and are guarded by ImportError at the call site.
+PHANTOM_IMPORT_ALLOWLIST: set[tuple[str, str]] = {
+    ("openadapt_ml.cloud.local", "resolve_config_path"),
+}
 
 
 def _package_module_map(name: str, root: Path) -> dict[str, Path]:

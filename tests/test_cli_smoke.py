@@ -126,7 +126,7 @@ def test_doctor_lists_flow_as_core_not_extras():
 # Flow command (the demonstration compiler — flagship path)
 # ---------------------------------------------------------------------------
 
-FLOW_VERBS = {"record", "compile", "replay", "lint", "certify"}
+FLOW_VERBS = {"demo-record", "record", "compile", "replay", "lint", "certify"}
 
 
 def test_top_level_help_leads_with_flow():
@@ -135,7 +135,11 @@ def test_top_level_help_leads_with_flow():
     result = runner.invoke(cli_main, ["--help"])
     assert result.exit_code == 0
     # Quick Start headline and Commands listing both lead with flow.
-    assert "openadapt flow record" in result.output
+    assert "Beta launcher" in result.output
+    assert "openadapt flow demo-record" in result.output
+    assert "Experimental native GUI capture" in result.output
+    assert "Research: evaluate" in result.output
+    assert "Research: train" in result.output
     commands_idx = result.output.index("Commands:")
     flow_idx = result.output.index("flow", commands_idx)
     capture_idx = result.output.index("capture", commands_idx)
@@ -179,7 +183,8 @@ def test_flow_missing_shows_install_hint(monkeypatch):
     runner = CliRunner()
     result = runner.invoke(cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"])
     assert result.exit_code != 0
-    assert "openadapt[flow]" in result.output or "openadapt-flow" in result.output
+    assert "pip install --upgrade openadapt" in result.output
+    assert "pip install openadapt-flow" in result.output
 
 
 def _require_openadapt_flow():
@@ -215,6 +220,55 @@ def test_flow_delegates_to_flow_main(monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert calls == [["compile", "my-rec", "--out", "my-bundle", "--name", "my-flow"]]
+
+
+def test_unwrapped_flow_command_delegates_to_engine(monkeypatch):
+    captured = {}
+
+    def fake_run(argv):
+        captured["argv"] = argv
+
+    monkeypatch.setattr("openadapt.cli._run_flow", fake_run)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_main,
+        [
+            "flow",
+            "sanitize",
+            "recording",
+            "--kind",
+            "recording",
+            "--out",
+            "sanitized",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == [
+        "sanitize",
+        "recording",
+        "--kind",
+        "recording",
+        "--out",
+        "sanitized",
+    ]
+
+
+def test_flow_help_lists_delegated_launch_commands():
+    result = CliRunner().invoke(cli_main, ["flow", "--help"])
+
+    assert result.exit_code == 0, result.output
+    for command in (
+        "run",
+        "teach",
+        "login",
+        "sanitize",
+        "review-sanitized",
+        "approve-sanitized",
+        "validate-hosted",
+        "push",
+        "report-break",
+    ):
+        assert command in result.output
 
 
 def test_flow_replay_argv_reconstruction(monkeypatch):

@@ -1,69 +1,43 @@
-name: Deploy Documentation
+name: Noncanonical docs guard
 
+# docs.openadapt.ai is built and deployed by OpenAdaptAI/openadapt-ops from the
+# local openadapt-maintenance checkout. This repository only notifies that
+# pipeline through notify-docs.yml; it must never publish a competing Pages
+# artifact or claim the canonical custom domain.
 on:
-  push:
-    branches:
-      - main
+  pull_request:
     paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - '.github/workflows/docs.yml'
-  workflow_dispatch:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
 
 jobs:
-  build:
+  guard:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-mkdocs-${{ hashFiles('mkdocs.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-mkdocs-
-
-      - name: Install dependencies
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Refuse a second docs.openadapt.ai publisher
+        shell: bash
         run: |
-          pip install --upgrade pip
-          pip install mkdocs-material mkdocs-minify-plugin
+          test ! -e docs/CNAME
+          python - <<'PY'
+          from pathlib import Path
 
-      - name: Build documentation
-        run: mkdocs build --strict
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          source = Path(".github/workflows/docs.yml").read_text()
+          forbidden = (
+              "actions/" + "deploy-pages",
+              "actions/" + "upload-pages-artifact",
+          )
+          assert not any(item in source for item in forbidden)
+          PY
+          grep -qi "noncanonical" docs/index.md
+          grep -q "openadapt-maintenance" docs/index.md

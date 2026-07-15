@@ -46,21 +46,73 @@ class _FlowFirstGroup(click.Group):
         return sorted(commands, key=lambda name: (name != "flow", name))
 
 
+_FLOW_PASSTHROUGH_COMMANDS = {
+    "induce": "Induce a parameterized program from multiple recordings.",
+    "run": "Run a bundle under a fail-closed deployment configuration.",
+    "resume": "Resume a durably paused run from its verified checkpoint.",
+    "approve": "Authorize a durably paused run to resume.",
+    "bench": "Benchmark deterministic replay against the bundled fixture.",
+    "benchmark": "Compare replay with an optional computer-use agent arm.",
+    "disambiguate": "Resolve compile-time ambiguity without guessing.",
+    "emit-skill": "Emit an Agent Skills folder for a bundle.",
+    "emit-mcp": "Emit a standalone MCP server for a bundle.",
+    "teach": "Teach a governed correction after a halt.",
+    "login": "Validate and store a hosted ingest token.",
+    "sanitize": "Create a verified sanitized derivative locally.",
+    "review-sanitized": "Review original and sanitized content locally.",
+    "approve-sanitized": "Approve and freeze exact sanitized bytes.",
+    "validate-hosted": "Bind local evidence to an expiring hosted challenge.",
+    "push": "Upload an approved sanitized derivative.",
+    "report-break": "Upload a schema-minimized halt diagnostic.",
+}
+
+
+class _FlowPassthroughGroup(click.Group):
+    """Delegate engine commands not wrapped by this compatibility launcher."""
+
+    def list_commands(self, ctx):
+        commands = set(super().list_commands(ctx))
+        commands.update(_FLOW_PASSTHROUGH_COMMANDS)
+        return sorted(commands)
+
+    def get_command(self, ctx, cmd_name):
+        command = super().get_command(ctx, cmd_name)
+        if command is not None:
+            return command
+
+        @click.command(
+            name=cmd_name,
+            help=_FLOW_PASSTHROUGH_COMMANDS.get(
+                cmd_name, "Delegate this command to openadapt-flow."
+            ),
+            context_settings={
+                "ignore_unknown_options": True,
+                "allow_extra_args": True,
+                "help_option_names": [],
+            },
+        )
+        @click.pass_context
+        def passthrough(command_ctx):
+            _run_flow([cmd_name, *command_ctx.args])
+
+        return passthrough
+
+
 @click.group(cls=_FlowFirstGroup)
 @click.version_option(version=__version__, prog_name="openadapt")
 def main():
-    """OpenAdapt - the demonstration compiler for GUI workflows.
+    """OpenAdapt - Beta launcher for the openadapt-flow compiler.
 
-    Record a workflow once, compile it into a deterministic, self-healing
-    script, and replay it locally with no model calls on the hot path.
-    Capture, training, and evaluation remain available as supporting
-    commands.
+    Compile a demonstrated workflow into deterministic local replay. Healthy
+    runs make no model calls; configured checks can halt on ambiguity. Native
+    capture is experimental, and training/evaluation commands are research.
 
     \b
     Quick Start:
-        openadapt flow record --url <app> --out rec   # record a workflow once
-        openadapt flow compile rec --out bundle        # compile it
-        openadapt flow replay bundle                    # run it, local, $0
+        openadapt flow demo-record --out rec
+        openadapt flow compile rec --out bundle --name demo
+        openadapt flow lint bundle
+        openadapt flow replay bundle
     """
     pass
 
@@ -83,30 +135,32 @@ def _run_flow(argv: list[str]) -> None:
         from openadapt_flow.__main__ import main as flow_main
     except ImportError:
         click.echo("Error: openadapt-flow not installed.", err=True)
-        click.echo(
-            'Install with: pip install "openadapt[flow]" '
-            "(or: pip install openadapt-flow)",
-            err=True,
-        )
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        click.echo("Engine only: pip install openadapt-flow", err=True)
         sys.exit(1)
 
     sys.exit(flow_main(argv))
 
 
-@main.group()
+@main.group(cls=_FlowPassthroughGroup)
 def flow():
     """Record, compile, and replay workflows (the demonstration compiler).
 
-    Record a workflow once, compile it into a deterministic vision-anchored
-    script, replay it locally at near-zero cost, and heal it on drift.
+    Compile a recording into deterministic local replay. Supported drift can
+    be re-resolved; configured identity and verification gates halt on failure.
 
     \b
     Examples:
-        openadapt flow record --url http://localhost:8000 --out rec
-        openadapt flow compile rec --out bundle --name my-flow
+        openadapt flow demo-record --out rec
+        openadapt flow compile rec --out bundle --name demo
         openadapt flow replay bundle
         openadapt flow lint bundle
         openadapt flow certify bundle --policy clinical-write
+        openadapt flow sanitize rec --kind recording --out rec-sanitized
+        openadapt flow review-sanitized rec-sanitized --original rec
+        openadapt flow approve-sanitized rec-sanitized --original rec --reviewer USER
+        openadapt flow login --token oai_ingest_...
+        openadapt flow push rec-sanitized --kind recording
 
     \b
     The standalone `openadapt-flow <verb>` command keeps working and behaves
@@ -192,7 +246,7 @@ def flow_compile(recording, out, name):
 @click.option(
     "--drift",
     default=None,
-    help="Comma-separated MockMed drift modes to demo self-healing (no --url)",
+    help="MockMed drift modes to demo bounded re-resolution (no --url)",
 )
 @click.option("--run-dir", default=None, help="Run output directory")
 @click.option(
@@ -267,7 +321,7 @@ def flow_certify(bundle, policy):
 
 @main.group()
 def capture():
-    """Record GUI demonstrations.
+    """Experimental native GUI capture (optional extra).
 
     \b
     Examples:
@@ -391,7 +445,7 @@ def capture_view(name: str, open: bool):
 
 @main.group()
 def train():
-    """Train ML models on captured demonstrations.
+    """Research: train ML models on captured demonstrations.
 
     \b
     Examples:
@@ -515,7 +569,7 @@ def train_stop(output: str):
 
 @main.group()
 def eval():
-    """Evaluate models on benchmarks.
+    """Research: evaluate computer-use models on benchmarks.
 
     \b
     Examples:
@@ -639,7 +693,7 @@ def eval_mock(tasks: int, output: str):
 @click.option("--output", "-o", default="training_output", help="Output directory")
 @click.option("--open/--no-open", default=True, help="Open in browser")
 def serve(port: int, output: str, open: bool):
-    """Serve the training dashboard and viewer.
+    """Research: serve the training dashboard and viewer.
 
     \b
     Examples:
