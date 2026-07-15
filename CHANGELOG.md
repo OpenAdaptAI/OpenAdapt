@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-07-15)
+
+### Bug Fixes
+
+- Require flow 1.7 hosted contracts ([#1014](https://github.com/OpenAdaptAI/OpenAdapt/pull/1014),
+  [`b59c639`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b59c6394e703166fc284ea4dd71dd099bdd2070f))
+
+### Chores
+
+- Refresh launcher lockfile ([#1014](https://github.com/OpenAdaptAI/OpenAdapt/pull/1014),
+  [`b59c639`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b59c6394e703166fc284ea4dd71dd099bdd2070f))
+
+### Features
+
+- Finalize the canonical OpenAdapt launcher
+  ([#1014](https://github.com/OpenAdaptAI/OpenAdapt/pull/1014),
+  [`b59c639`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b59c6394e703166fc284ea4dd71dd099bdd2070f))
+
+- Make OpenAdapt the canonical openadapt-flow launcher
+  ([#1014](https://github.com/OpenAdaptAI/OpenAdapt/pull/1014),
+  [`b59c639`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b59c6394e703166fc284ea4dd71dd099bdd2070f))
+
+
 ## v1.5.2 (2026-07-14)
 
 ### Bug Fixes
