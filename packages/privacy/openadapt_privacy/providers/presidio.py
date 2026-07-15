@@ -1,7 +1,8 @@
 """Presidio-based scrubbing provider.
 
-This module implements PII/PHI scrubbing using Microsoft Presidio with
-spaCy transformer models for NER.
+This module implements PII/PHI scrubbing using Microsoft Presidio with an
+allowlisted local spaCy pipeline. It never downloads a model or loads an
+unapproved operator-selected model at runtime.
 """
 
 from __future__ import annotations
@@ -17,6 +18,29 @@ from openadapt_privacy.config import config
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_SPACY_MODELS = {"en": frozenset({"en_core_web_sm"})}
+_UI_COMMAND_PREFIXES = frozenset(
+    {
+        "cancel",
+        "choose",
+        "click",
+        "close",
+        "enter",
+        "open",
+        "press",
+        "retry",
+        "save",
+        "select",
+        "submit",
+        "type",
+    }
+)
+
+
+class PrivacyModelUnavailable(RuntimeError):
+    """The required, allowlisted local NLP model is unavailable or invalid."""
+
+
 # Lazy-loaded Presidio components
 _analyzer_engine = None
 _anonymizer_engine = None
@@ -25,24 +49,90 @@ _scrubbing_entities = None
 
 
 def _ensure_spacy_model() -> None:
-    """Ensure the spaCy model is downloaded."""
+    """Validate the configured local model without downloading any code."""
     import spacy
 
+    allowed_models = SUPPORTED_SPACY_MODELS.get(config.SCRUB_LANGUAGE)
+    if allowed_models is None:
+        raise PrivacyModelUnavailable(
+            f"Refusing unsupported scrub language {config.SCRUB_LANGUAGE!r}; "
+            f"allowed languages: {sorted(SUPPORTED_SPACY_MODELS)}"
+        )
+    expected_config = {
+        "nlp_engine_name": "spacy",
+        "models": [{"lang_code": config.SCRUB_LANGUAGE, "model_name": config.SPACY_MODEL_NAME}],
+    }
+    if config.SPACY_MODEL_NAME not in allowed_models:
+        raise PrivacyModelUnavailable(
+            f"Refusing unapproved spaCy model {config.SPACY_MODEL_NAME!r}; "
+            f"allowed models for {config.SCRUB_LANGUAGE!r}: {sorted(allowed_models)}"
+        )
+    if config.SCRUB_CONFIG_TRF != expected_config:
+        raise PrivacyModelUnavailable(
+            "Refusing inconsistent Presidio NLP configuration; model selection "
+            "must match the allowlisted local SPACY_MODEL_NAME"
+        )
     if not spacy.util.is_package(config.SPACY_MODEL_NAME):
-        logger.info(f"Downloading {config.SPACY_MODEL_NAME} model...")
-        spacy.cli.download(config.SPACY_MODEL_NAME)
+        raise PrivacyModelUnavailable(
+            f"Required spaCy model {config.SPACY_MODEL_NAME!r} is not installed. "
+            f"Install it explicitly with: python -m spacy download "
+            f"{config.SPACY_MODEL_NAME}. No scrub was attempted."
+        )
+
+
+def _register_phi_recognizers(analyzer_engine) -> None:
+    """Add context-bound identifiers absent from Presidio's generic registry."""
+    from presidio_analyzer import Pattern, PatternRecognizer
+
+    identifier = r"[A-Z0-9](?:[A-Z0-9-]{4,30}[A-Z0-9])?"
+    medical_patterns = [
+        Pattern("mrn", rf"(?i)(?<=MRN:\s){identifier}", 0.9),
+        Pattern("medical-record-number", rf"(?i)(?<=Medical record number\s){identifier}", 0.9),
+        Pattern("patient-id", rf"(?i)(?<=Patient ID:\s){identifier}", 0.9),
+        Pattern("member-id", rf"(?i)(?<=member ID\s){identifier}", 0.9),
+    ]
+    street = (
+        r"\d{1,6}\s+(?:[A-Za-z0-9.'-]+\s+){0,6}"
+        r"(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln)\b"
+        r"(?:\s+[NSEW])?"
+    )
+    address_patterns = [
+        Pattern("home-address", rf"(?i)(?<=Home address:\s){street}", 0.85),
+        Pattern("mail-address", rf"(?i)(?<=Mail to\s){street}", 0.85),
+    ]
+    analyzer_engine.registry.add_recognizer(
+        PatternRecognizer(supported_entity="MEDICAL_RECORD_NUMBER", patterns=medical_patterns)
+    )
+    analyzer_engine.registry.add_recognizer(
+        PatternRecognizer(supported_entity="STREET_ADDRESS", patterns=address_patterns)
+    )
+
+
+def _filter_automation_false_positives(text: str, analyzer_results: list) -> list:
+    """Drop NER findings that are clearly GUI imperatives, not identifiers."""
+    filtered = []
+    for result in analyzer_results:
+        candidate = text[result.start : result.end].strip().lower()
+        prefix = text[: result.start].strip().lower()
+        first_word = candidate.split(maxsplit=1)[0] if candidate else ""
+        if (
+            result.entity_type in {"PERSON", "ORGANIZATION"}
+            and prefix in {"", "please"}
+            and first_word in _UI_COMMAND_PREFIXES
+        ):
+            continue
+        filtered.append(result)
+    return filtered
 
 
 def _get_analyzer_engine():
     """Get or create the Presidio analyzer engine (lazy initialization)."""
     global _analyzer_engine, _scrubbing_entities
 
+    # Revalidate on every access so a cached analyzer cannot mask a later,
+    # operator-controlled configuration change.
+    _ensure_spacy_model()
     if _analyzer_engine is None:
-        _ensure_spacy_model()
-
-        # Import spacy_transformers to register the transformer pipeline
-        import spacy_transformers  # noqa: F401
-
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             from presidio_analyzer import AnalyzerEngine
@@ -51,8 +141,10 @@ def _get_analyzer_engine():
         nlp_provider = NlpEngineProvider(nlp_configuration=config.SCRUB_CONFIG_TRF)
         nlp_engine = nlp_provider.create_engine()
         _analyzer_engine = AnalyzerEngine(
-            nlp_engine=nlp_engine, supported_languages=["en"]
+            nlp_engine=nlp_engine,
+            supported_languages=[config.SCRUB_LANGUAGE],
         )
+        _register_phi_recognizers(_analyzer_engine)
 
         # Cache the scrubbing entities
         _scrubbing_entities = [
@@ -107,8 +199,8 @@ def _get_scrubbing_entities() -> List[str]:
 class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
     """Scrubbing provider using Microsoft Presidio.
 
-    Uses Presidio Analyzer with spaCy transformer models for named entity
-    recognition and Presidio Anonymizer/Image Redactor for scrubbing.
+    Uses Presidio Analyzer with an allowlisted local spaCy model and
+    Presidio Anonymizer/Image Redactor for scrubbing.
     """
 
     name: str = "PRESIDIO"
@@ -146,6 +238,7 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
             entities=entities,
             language=config.SCRUB_LANGUAGE,
         )
+        analyzer_results = _filter_automation_false_positives(text, analyzer_results)
 
         logger.debug(f"analyzer_results: {analyzer_results}")
 

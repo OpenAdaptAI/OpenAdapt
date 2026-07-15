@@ -4,7 +4,7 @@ These tests require the presidio optional dependencies to be installed:
     pip install openadapt-privacy[presidio]
 
 And the spaCy model to be downloaded:
-    python -m spacy download en_core_web_trf
+    python -m spacy download en_core_web_sm
 """
 
 import pytest
@@ -20,8 +20,8 @@ try:
             allow_module_level=True,
         )
 
-    from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
     from openadapt_privacy.providers import ScrubProvider
+    from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
 
     PRESIDIO_AVAILABLE = True
 except ImportError:
@@ -131,3 +131,50 @@ class TestPresidioProviderRegistry:
 
         assert Modality.TEXT in scrubber.capabilities
         assert Modality.PIL_IMAGE in scrubber.capabilities
+
+
+class TestPresidioModelBoundary:
+    """Model selection is local, allowlisted, and fail-closed."""
+
+    def test_missing_model_never_triggers_runtime_download(self, monkeypatch) -> None:
+        from openadapt_privacy.providers import presidio
+
+        monkeypatch.setattr(spacy.util, "is_package", lambda _name: False)
+        download_called = False
+
+        def download(_name):
+            nonlocal download_called
+            download_called = True
+
+        monkeypatch.setattr(spacy.cli, "download", download)
+        with pytest.raises(presidio.PrivacyModelUnavailable, match="No scrub was attempted"):
+            presidio._ensure_spacy_model()
+        assert download_called is False
+
+    def test_unapproved_model_is_refused_before_loading(self, monkeypatch) -> None:
+        from openadapt_privacy.providers import presidio
+
+        monkeypatch.setattr(config, "SPACY_MODEL_NAME", "attacker/model")
+        with pytest.raises(presidio.PrivacyModelUnavailable, match="unapproved"):
+            presidio._ensure_spacy_model()
+
+    def test_unsupported_language_is_refused_before_loading(self, monkeypatch) -> None:
+        from openadapt_privacy.providers import presidio
+
+        monkeypatch.setattr(config, "SCRUB_LANGUAGE", "de")
+        with pytest.raises(presidio.PrivacyModelUnavailable, match="unsupported scrub language"):
+            presidio._ensure_spacy_model()
+
+    def test_inconsistent_model_configuration_is_refused(self, monkeypatch) -> None:
+        from openadapt_privacy.providers import presidio
+
+        monkeypatch.setattr(
+            config,
+            "SCRUB_CONFIG_TRF",
+            {
+                "nlp_engine_name": "spacy",
+                "models": [{"lang_code": "en", "model_name": "different-model"}],
+            },
+        )
+        with pytest.raises(presidio.PrivacyModelUnavailable, match="inconsistent"):
+            presidio._ensure_spacy_model()

@@ -19,7 +19,7 @@ Key responsibilities:
 uv add "openadapt-privacy[presidio]"
 
 # Download spaCy model for NER
-python -m spacy download en_core_web_trf
+python -m spacy download en_core_web_sm
 
 # Run tests
 uv run pytest tests/ -v

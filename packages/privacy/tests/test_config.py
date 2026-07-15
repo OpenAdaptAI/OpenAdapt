@@ -20,7 +20,7 @@ class TestPrivacyConfig:
         assert cfg.ACTION_TEXT_NAME_PREFIX == "<"
         assert cfg.ACTION_TEXT_NAME_SUFFIX == ">"
         assert cfg.ACTION_TEXT_SEP == "-"
-        assert cfg.SPACY_MODEL_NAME == "en_core_web_trf"
+        assert cfg.SPACY_MODEL_NAME == "en_core_web_sm"
 
     def test_custom_values(self) -> None:
         """Test that custom configuration values can be set."""
@@ -51,7 +51,7 @@ class TestPrivacyConfig:
         assert "models" in cfg.SCRUB_CONFIG_TRF
         assert len(cfg.SCRUB_CONFIG_TRF["models"]) == 1
         assert cfg.SCRUB_CONFIG_TRF["models"][0]["lang_code"] == "en"
-        assert cfg.SCRUB_CONFIG_TRF["models"][0]["model_name"] == "en_core_web_trf"
+        assert cfg.SCRUB_CONFIG_TRF["models"][0]["model_name"] == "en_core_web_sm"
 
     def test_ignore_entities_default_empty(self) -> None:
         """Test that SCRUB_PRESIDIO_IGNORE_ENTITIES defaults to empty."""

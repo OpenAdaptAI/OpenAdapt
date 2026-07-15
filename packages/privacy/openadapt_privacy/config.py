@@ -23,7 +23,9 @@ class PrivacyConfig:
         ACTION_TEXT_NAME_PREFIX: Prefix for action text names (e.g., "<").
         ACTION_TEXT_NAME_SUFFIX: Suffix for action text names (e.g., ">").
         ACTION_TEXT_SEP: Separator for action text sequences (e.g., "-").
-        SCRUB_CONFIG_TRF: Presidio NLP engine configuration.
+        SCRUB_CONFIG_TRF: Presidio NLP engine configuration. The historical
+            attribute name is retained for compatibility; the configured model
+            is intentionally a non-transformer pipeline.
         SCRUB_PRESIDIO_IGNORE_ENTITIES: Entity types to ignore during scrubbing.
         SPACY_MODEL_NAME: Name of the spaCy model to use.
     """
@@ -59,11 +61,12 @@ class PrivacyConfig:
     ACTION_TEXT_NAME_SUFFIX: str = ">"
     ACTION_TEXT_SEP: str = "-"
 
-    # Presidio NLP engine configuration
+    # Presidio NLP engine configuration. Keep this in lockstep with
+    # SPACY_MODEL_NAME; the provider validates both before loading anything.
     SCRUB_CONFIG_TRF: dict = field(
         default_factory=lambda: {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": "en_core_web_trf"}],
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
         }
     )
 
@@ -71,7 +74,7 @@ class PrivacyConfig:
     SCRUB_PRESIDIO_IGNORE_ENTITIES: Sequence[str] = field(default_factory=list)
 
     # SpaCy model name
-    SPACY_MODEL_NAME: str = "en_core_web_trf"
+    SPACY_MODEL_NAME: str = "en_core_web_sm"
 
 
 # Global default configuration instance

@@ -18,8 +18,27 @@ For Presidio-based scrubbing (recommended):
 
 ```bash
 pip install openadapt-privacy[presidio]
-python -m spacy download en_core_web_trf
+python -m spacy download en_core_web_sm
 ```
+
+### Model security and recall
+
+The Presidio provider accepts only the preinstalled, allowlisted
+`en_core_web_sm` pipeline. It never downloads a model at runtime. A missing
+model, an unsupported language, or inconsistent model configuration raises
+`PrivacyModelUnavailable` before analysis instead of continuing with weaker or
+simulated scrubbing.
+
+`tests/test_phi_recall.py` is a quantitative regression gate covering 24
+synthetic identifiers across names, contact information, financial identifiers,
+dates of birth, addresses, network identifiers, medical record numbers, member
+IDs, and provider licenses. The current gate requires 24/24 detections and also
+checks clean operational UI text for false positives.
+
+This synthetic corpus is regression evidence, not clinical validation or a
+guarantee that an artifact is PHI-free. Production egress should scrub a copy,
+verify every output file, and bind human or policy approval to the verified
+artifact rather than treating successful model execution as sufficient.
 
 ## Quick Start
 
