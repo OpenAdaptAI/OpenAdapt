@@ -21,9 +21,19 @@ def test_public_metadata_identifies_experimental_supporting_surface() -> None:
     assert "AI training data collection" not in pyproject["project"]["description"]
     assert "AI training data collection" not in package["description"]
     assert pyproject["project"]["readme"] == "README.md"
-    assert pyproject["project"]["scripts"] == {
-        "openadapt-desktop": "engine.cli:main"
-    }
+    assert pyproject["project"]["scripts"] == {"openadapt-desktop": "engine.cli:main"}
+
+
+def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
+    readme = (ROOT / "README.md").read_text()
+    normalized = " ".join(readme.split())
+    hard_coded_version_claim = re.compile(
+        r"\b(?:Python|JavaScript|Tauri)\b.{0,120}\bversions?\b.{0,120}" r"`?v?\d+\.\d+\.\d+`?",
+        flags=re.IGNORECASE,
+    )
+
+    assert "The Python package and experimental Tauri shell are versioned independently." in readme
+    assert hard_coded_version_claim.search(normalized) is None
 
 
 def test_semantic_release_preserves_pre_one_versions() -> None:

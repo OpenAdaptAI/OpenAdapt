@@ -34,8 +34,8 @@ certification, and repair live in `openadapt-flow`, not this repository.
 | Build artifacts | Wheel/sdist, a smoke-tested PyInstaller sidecar, and an unsigned Tauri shell binary | CI artifacts only; not an integrated or signed release |
 | Native installers and updater | Bundle configuration exists; installer signing, updater signing, and release credentials are incomplete | Not release-ready |
 
-The Python and JavaScript package versions also differ (`0.2.0` and `0.1.0`).
-That is another integration gap, not evidence of two supported desktop
+The Python package and experimental Tauri shell are versioned independently.
+Those implementation versions do not represent separate supported desktop
 releases.
 
 ## Use OpenAdapt Today
