@@ -18,8 +18,7 @@ class IconManager:
         TrayState.RECORDING_STARTING: "recording.png",
         TrayState.RECORDING: "recording.png",
         TrayState.RECORDING_STOPPING: "recording.png",
-        TrayState.TRAINING: "training.png",
-        TrayState.TRAINING_PAUSED: "training.png",
+        TrayState.COMPILING: "compiling.png",
         TrayState.ERROR: "error.png",
     }
 
@@ -29,10 +28,12 @@ class IconManager:
         TrayState.RECORDING_STARTING: "#F5A623",  # Yellow/Orange
         TrayState.RECORDING: "#D0021B",  # Red
         TrayState.RECORDING_STOPPING: "#F5A623",  # Yellow/Orange
-        TrayState.TRAINING: "#7B68EE",  # Purple
-        TrayState.TRAINING_PAUSED: "#9B59B6",  # Lighter Purple
+        TrayState.COMPILING: "#7B68EE",  # Purple (transforming a recording)
         TrayState.ERROR: "#D0021B",  # Red
     }
+
+    # Colour of the break/needs-attention badge dot.
+    BADGE_COLOR = "#D0021B"  # Red
 
     def __init__(self, assets_dir: Optional[Path] = None):
         """Initialize the icon manager.
@@ -56,19 +57,23 @@ class IconManager:
             return 2
         return 1
 
-    def get(self, state: TrayState) -> Image.Image:
-        """Get the icon for a given state.
+    def get(self, state: TrayState, break_count: int = 0) -> Image.Image:
+        """Get the icon for a given state, optionally with a break badge.
 
         Args:
-            state: The application state.
+            state: The recording-lifecycle state.
+            break_count: Number of automations needing attention. When > 0 a
+                small red badge dot is overlaid on the icon.
 
         Returns:
             PIL Image for the icon.
         """
         icon_name = self.STATE_ICONS.get(state, "idle.png")
 
-        # Check cache first
-        cache_key = f"{icon_name}_{self._retina_scale}"
+        # Badge presence is part of the cache key so badged/unbadged variants
+        # don't collide.
+        badge = break_count > 0
+        cache_key = f"{icon_name}_{self._retina_scale}_badge={badge}"
         if cache_key in self._cache:
             return self._cache[cache_key]
 
@@ -78,8 +83,39 @@ class IconManager:
             # Generate fallback icon
             icon = self._generate_fallback(state)
 
+        if badge:
+            icon = self._apply_badge(icon)
+
         self._cache[cache_key] = icon
         return icon
+
+    def _apply_badge(self, icon: Image.Image) -> Image.Image:
+        """Overlay a small badge dot on the top-right of an icon.
+
+        Args:
+            icon: The base icon image.
+
+        Returns:
+            A new image with the badge composited on top.
+        """
+        from PIL import ImageDraw
+
+        base = icon.convert("RGBA").copy()
+        w, h = base.size
+        draw = ImageDraw.Draw(base)
+
+        # Badge sized relative to the icon, anchored top-right.
+        radius = max(4, w // 4)
+        cx, cy = w - radius, radius
+        color = self.BADGE_COLOR.lstrip("#")
+        r = int(color[0:2], 16)
+        g = int(color[2:4], 16)
+        b = int(color[4:6], 16)
+        draw.ellipse(
+            [cx - radius, cy - radius, cx + radius, cy + radius],
+            fill=(r, g, b, 255),
+        )
+        return base
 
     def _load_icon(self, icon_name: str) -> Optional[Image.Image]:
         """Try to load an icon from the assets directory.

@@ -1,9 +1,7 @@
 """Tests for configuration management."""
 
-import json
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from openadapt_tray.config import TrayConfig
 from openadapt_tray.shortcuts import HotkeyConfig
@@ -81,16 +79,65 @@ class TestTrayConfig:
 
         assert isinstance(path, Path)
         assert not str(path).startswith("~")
-        assert str(path).endswith("test/captures")
+        assert path.parts[-2:] == ("test", "captures")
 
-    def test_get_training_path(self):
-        """Test training path expansion."""
-        config = TrayConfig(training_output_directory="~/test/training")
-        path = config.get_training_path()
+    def test_hosted_defaults(self):
+        """Test hosted/loop config defaults."""
+        config = TrayConfig()
+        assert config.hosted_url == "https://app.openadapt.ai"
+        assert config.deployment_lane == "cloud"
+        assert config.poll_interval_s == 60
+        assert config.desktop_ipc_port is None
 
-        assert isinstance(path, Path)
-        assert not str(path).startswith("~")
-        assert str(path).endswith("test/training")
+    def test_hosted_keys_roundtrip(self):
+        """Hosted keys survive to_dict/_from_dict."""
+        config = TrayConfig(
+            hosted_url="https://example.test",
+            deployment_lane="byoc",
+            poll_interval_s=120,
+            desktop_ipc_port=54321,
+        )
+        data = config.to_dict()
+        assert data["hosted_url"] == "https://example.test"
+        assert data["deployment_lane"] == "byoc"
+        assert data["poll_interval_s"] == 120
+        assert data["desktop_ipc_port"] == 54321
+
+        loaded = TrayConfig._from_dict(data)
+        assert loaded.hosted_url == "https://example.test"
+        assert loaded.deployment_lane == "byoc"
+        assert loaded.poll_interval_s == 120
+        assert loaded.desktop_ipc_port == 54321
+
+    def test_effective_poll_interval_clamps_to_floor(self):
+        """Poll interval never drops below the safe minimum."""
+        assert TrayConfig(poll_interval_s=5).effective_poll_interval_s() == 30
+        assert TrayConfig(poll_interval_s=90).effective_poll_interval_s() == 90
+
+    def test_from_dict_ignores_stale_keys(self):
+        """Unknown/retired keys (e.g. training_output_directory) are dropped."""
+        data = {
+            "dashboard_port": 9000,
+            "training_output_directory": "~/old/training",  # retired
+            "unknown_future_key": 123,
+        }
+        config = TrayConfig._from_dict(data)
+        assert config.dashboard_port == 9000
+        assert not hasattr(config, "training_output_directory")
+
+    def test_get_ingest_token_reads_keychain(self):
+        """Token resolution delegates to the keychain helper (never the file)."""
+        config = TrayConfig(hosted_url="https://example.test")
+        with patch(
+            "openadapt_tray.keychain.get_ingest_token", return_value="oai_ingest_x"
+        ) as mock_get:
+            assert config.get_ingest_token() == "oai_ingest_x"
+            mock_get.assert_called_once_with("https://example.test")
+
+    def test_token_never_in_serialized_config(self):
+        """The serialized config must not contain any token field."""
+        data = TrayConfig().to_dict()
+        assert not any("token" in k for k in data)
 
     def test_save_and_load(self, tmp_path):
         """Test saving and loading configuration."""

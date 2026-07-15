@@ -1,44 +1,73 @@
-"""Inter-process communication for OpenAdapt Tray."""
+"""Inter-process communication for OpenAdapt Tray.
+
+The tray is an IPC *client* that connects to a loopback TCP socket server
+exposed by the desktop app. The desktop writes its bound host/port and a
+per-session shared token to a discovery file at ``~/.openadapt/desktop_ipc.json``;
+the tray reads it, connects, and includes the token on every command so the
+desktop can reject other local processes.
+
+Transport is newline-delimited JSON. Commands flow tray→desktop; events flow
+desktop→tray. The desktop app is the source of truth for all state — the tray
+only renders it.
+"""
 
 import json
 import socket
 import threading
+from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 
 
-class IPCMessageType(Enum):
-    """IPC message types."""
+# Discovery file the desktop app writes on startup (see §3d of the spec).
+DEFAULT_DISCOVERY_PATH = Path.home() / ".openadapt" / "desktop_ipc.json"
 
-    # Commands (from tray to capture process)
+
+class IPCMessageType(Enum):
+    """IPC message types exchanged with the desktop app."""
+
+    # Commands (tray → desktop)
     START_RECORDING = "start_recording"
     STOP_RECORDING = "stop_recording"
     GET_STATUS = "get_status"
+    OPEN_WORKFLOW_LIBRARY = "open_workflow_library"
+    OPEN_TEACH = "open_teach"
+    PAUSE_SYNC = "pause_sync"
+    RESUME_SYNC = "resume_sync"
 
-    # Events (from capture process to tray)
+    # Events (desktop → tray)
     RECORDING_STARTED = "recording_started"
     RECORDING_STOPPED = "recording_stopped"
     RECORDING_ERROR = "recording_error"
     STATUS_UPDATE = "status_update"
-    TRAINING_PROGRESS = "training_progress"
+    COMPILE_PROGRESS = "compile_progress"
+    SYNC_STATE = "sync_state"
+    BREAK_COUNT = "break_count"
 
 
 @dataclass
 class IPCMessage:
-    """IPC message structure."""
+    """IPC message structure (newline-delimited JSON on the wire).
+
+    Command messages (tray → desktop) carry the per-session ``token`` from the
+    discovery file so the desktop can authenticate the sender. Event messages
+    (desktop → tray) carry a ``data`` payload.
+    """
 
     type: IPCMessageType
     data: Optional[Dict[str, Any]] = None
+    token: Optional[str] = None
 
     def to_json(self) -> str:
         """Serialize to JSON string."""
-        return json.dumps(
-            {
-                "type": self.type.value,
-                "data": self.data,
-            }
-        )
+        obj: Dict[str, Any] = {
+            "type": self.type.value,
+            "data": self.data,
+        }
+        if self.token is not None:
+            obj["token"] = self.token
+        return json.dumps(obj)
 
     @classmethod
     def from_json(cls, json_str: str) -> "IPCMessage":
@@ -47,7 +76,48 @@ class IPCMessage:
         return cls(
             type=IPCMessageType(obj["type"]),
             data=obj.get("data"),
+            token=obj.get("token"),
         )
+
+
+@dataclass
+class DesktopEndpoint:
+    """Discovered desktop-app IPC endpoint."""
+
+    host: str
+    port: int
+    token: Optional[str] = None
+
+    @classmethod
+    def load(
+        cls, path: Optional[Path] = None
+    ) -> Optional["DesktopEndpoint"]:
+        """Load the desktop IPC endpoint from the discovery file.
+
+        Args:
+            path: Discovery file path. Defaults to
+                ``~/.openadapt/desktop_ipc.json``.
+
+        Returns:
+            A :class:`DesktopEndpoint` if the file exists and is valid,
+            otherwise ``None`` (desktop app not running).
+        """
+        path = path or DEFAULT_DISCOVERY_PATH
+        try:
+            if not path.exists():
+                return None
+            data = json.loads(path.read_text())
+            port = data.get("port")
+            if port is None:
+                return None
+            return cls(
+                host=data.get("host", "127.0.0.1"),
+                port=int(port),
+                token=data.get("token"),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            print(f"Could not read desktop IPC discovery file: {e}")
+            return None
 
 
 class IPCClient:
@@ -60,19 +130,62 @@ class IPCClient:
         self,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
+        token: Optional[str] = None,
     ):
         """Initialize IPC client.
 
         Args:
-            host: Host address for IPC server.
-            port: Port number for IPC server.
+            host: Host address for the desktop IPC server.
+            port: Port number for the desktop IPC server.
+            token: Per-session shared token (from the discovery file) attached
+                to every command so the desktop can authenticate the sender.
         """
         self.host = host
         self.port = port
+        self.token = token
         self._socket: Optional[socket.socket] = None
         self._listener_thread: Optional[threading.Thread] = None
         self._running = False
         self._handlers: Dict[IPCMessageType, Callable[[IPCMessage], None]] = {}
+
+    @classmethod
+    def from_discovery(
+        cls, path: Optional[Path] = None
+    ) -> Optional["IPCClient"]:
+        """Build a client from the desktop discovery file, if present.
+
+        Args:
+            path: Discovery file path. Defaults to
+                ``~/.openadapt/desktop_ipc.json``.
+
+        Returns:
+            A configured :class:`IPCClient`, or ``None`` if the desktop app is
+            not running (no discovery file).
+        """
+        endpoint = DesktopEndpoint.load(path)
+        if endpoint is None:
+            return None
+        return cls(host=endpoint.host, port=endpoint.port, token=endpoint.token)
+
+    def refresh_from_discovery(self, path: Optional[Path] = None) -> bool:
+        """Re-read the discovery file and update host/port/token in place.
+
+        Useful after launching the desktop app: the discovery file appears once
+        the desktop's socket server is bound.
+
+        Args:
+            path: Discovery file path. Defaults to the standard location.
+
+        Returns:
+            True if a valid endpoint was found and applied.
+        """
+        endpoint = DesktopEndpoint.load(path)
+        if endpoint is None:
+            return False
+        self.host = endpoint.host
+        self.port = endpoint.port
+        self.token = endpoint.token
+        return True
 
     def register_handler(
         self,
@@ -155,7 +268,10 @@ class IPCClient:
             print(f"Error handling IPC message: {e}")
 
     def send(self, message: IPCMessage) -> bool:
-        """Send a message to the IPC server.
+        """Send a message to the desktop IPC server.
+
+        The per-session token is attached automatically if not already set on
+        the message.
 
         Args:
             message: Message to send.
@@ -166,6 +282,9 @@ class IPCClient:
         if not self._socket:
             return False
 
+        if message.token is None and self.token is not None:
+            message.token = self.token
+
         try:
             data = message.to_json() + "\n"
             self._socket.sendall(data.encode("utf-8"))
@@ -173,6 +292,22 @@ class IPCClient:
         except (socket.error, OSError) as e:
             print(f"IPC send error: {e}")
             return False
+
+    def send_command(
+        self,
+        message_type: IPCMessageType,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Send a parameterless-or-simple command to the desktop.
+
+        Args:
+            message_type: The command type.
+            data: Optional payload.
+
+        Returns:
+            True if sent successfully.
+        """
+        return self.send(IPCMessage(type=message_type, data=data))
 
     def send_start_recording(self, name: str) -> bool:
         """Send start recording command.
@@ -191,20 +326,33 @@ class IPCClient:
         )
 
     def send_stop_recording(self) -> bool:
-        """Send stop recording command.
-
-        Returns:
-            True if sent successfully.
-        """
+        """Send stop recording command."""
         return self.send(IPCMessage(type=IPCMessageType.STOP_RECORDING))
 
     def send_get_status(self) -> bool:
-        """Send status request.
-
-        Returns:
-            True if sent successfully.
-        """
+        """Send status request."""
         return self.send(IPCMessage(type=IPCMessageType.GET_STATUS))
+
+    def send_open_workflow_library(self) -> bool:
+        """Ask the desktop to open its local workflow library window."""
+        return self.send(IPCMessage(type=IPCMessageType.OPEN_WORKFLOW_LIBRARY))
+
+    def send_open_teach(self, workflow_id: Optional[str] = None) -> bool:
+        """Ask the desktop to open the local teach-the-fix view.
+
+        Args:
+            workflow_id: Optional workflow to open teach for.
+        """
+        data = {"workflow_id": workflow_id} if workflow_id else None
+        return self.send(IPCMessage(type=IPCMessageType.OPEN_TEACH, data=data))
+
+    def send_pause_sync(self) -> bool:
+        """Ask the desktop to pause the upload/sync queue."""
+        return self.send(IPCMessage(type=IPCMessageType.PAUSE_SYNC))
+
+    def send_resume_sync(self) -> bool:
+        """Ask the desktop to resume the upload/sync queue."""
+        return self.send(IPCMessage(type=IPCMessageType.RESUME_SYNC))
 
     def is_connected(self) -> bool:
         """Check if connected to IPC server."""

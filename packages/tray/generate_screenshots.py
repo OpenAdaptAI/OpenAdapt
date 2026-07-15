@@ -15,11 +15,11 @@ Requirements:
 Screenshots to capture:
     1. Tray icon (idle state)
     2. Tray icon (recording state)
-    3. Tray icon (training state)
-    4. Tray icon (error state)
-    5. Basic notification popup
-    6. Critical notification popup
-    7. Notification with callback
+    3. Tray icon (compiling state)
+    4. Tray icon (break badge — automations need attention)
+    5. Tray icon (error state)
+    6. Basic notification popup
+    7. Needs-attention notification popup
     8. Menu structure
     9. Notification Center with grouped notifications
     10. Settings/configuration (if available)
@@ -98,26 +98,26 @@ def main():
             "instructions": "Capture: Notification popup (Recording Started)"
         },
         {
-            "name": "03-critical-notification",
-            "description": "Critical/error notification",
+            "name": "03-needs-attention-notification",
+            "description": "Needs-attention notification (break badge source)",
             "action": lambda: notifications.show(
-                "Error",
-                "Screen capture permission denied. Please enable in System Preferences.",
-                urgency="critical"
+                "Automations need attention",
+                "2 automations need attention",
+                urgency="critical",
+                on_clicked=lambda: print("  → Click routes to needs-attention"),
             ),
             "wait": 2,
-            "instructions": "Capture: Critical notification (Error) - should look different"
+            "instructions": "Capture: Needs-attention notification (critical urgency)"
         },
         {
-            "name": "04-callback-notification",
-            "description": "Notification with action callback",
+            "name": "04-compiling-notification",
+            "description": "Compiling notification (recording → workflow)",
             "action": lambda: notifications.show(
-                "Training Complete",
-                "Click to view results in dashboard",
-                on_clicked=lambda: print("  → Callback would open dashboard")
+                "Compiling",
+                "Building a workflow from: my-workflow",
             ),
             "wait": 2,
-            "instructions": "Capture: Notification with action (Training Complete)"
+            "instructions": "Capture: Compiling notification"
         },
         {
             "name": "05-multiple-notifications",
@@ -137,14 +137,21 @@ def main():
             "description": "Tray icon in RECORDING state",
             "action": lambda: print("  → NOTE: Recording icon requires running tray app"),
             "wait": 2,
-            "instructions": "Capture: Recording icon (red pulsing - requires running app)"
+            "instructions": "Capture: Recording icon (red - requires running app)"
         },
         {
-            "name": "07-training-icon",
-            "description": "Tray icon in TRAINING state",
-            "action": lambda: print("  → NOTE: Training icon requires running tray app"),
+            "name": "07-compiling-icon",
+            "description": "Tray icon in COMPILING state",
+            "action": lambda: print("  → NOTE: Compiling icon requires running tray app"),
             "wait": 2,
-            "instructions": "Capture: Training icon (purple gear - requires running app)"
+            "instructions": "Capture: Compiling icon (purple - requires running app)"
+        },
+        {
+            "name": "07b-break-badge-icon",
+            "description": "Tray icon with break badge (needs attention)",
+            "action": lambda: print("  → NOTE: Badge icon requires running tray app with break_count > 0"),
+            "wait": 2,
+            "instructions": "Capture: Idle/recording icon with red break badge dot"
         },
         {
             "name": "08-error-icon",
@@ -212,7 +219,7 @@ def main():
     print("  4. Create GIF animations (optional)")
     print()
     print("Recommended screenshots still needed:")
-    print("  • Tray icon states (recording, training, error) - requires running app")
+    print("  • Tray icon states (recording, compiling, break-badge, error) - requires running app")
     print("  • Menu structure - requires running app")
     print("  • Settings UI - if implemented")
     print()

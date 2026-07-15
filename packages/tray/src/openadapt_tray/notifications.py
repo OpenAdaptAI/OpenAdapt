@@ -45,7 +45,7 @@ class NotificationManager:
             )
             # Create event loop for async operations
             try:
-                self._loop = asyncio.get_event_loop()
+                self._loop = asyncio.get_running_loop()
             except RuntimeError:
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
@@ -80,7 +80,7 @@ class NotificationManager:
                 try:
                     from desktop_notifier.macos import CocoaNotificationCenter
                     # Try to initialize to see if it works
-                    test_notifier = CocoaNotificationCenter()
+                    CocoaNotificationCenter()
                     print("desktop-notifier initialized successfully")
                     return "desktop-notifier"
                 except Exception as e:

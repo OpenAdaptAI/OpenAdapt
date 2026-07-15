@@ -1,7 +1,6 @@
 """Tests for menu construction."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from openadapt_tray.state import TrayState, AppState
 from openadapt_tray.menu import MenuBuilder, CaptureInfo
@@ -41,7 +40,6 @@ class TestMenuBuilder:
 
     def test_build_returns_menu(self):
         """Test that build returns a pystray Menu."""
-        import pystray
 
         app = self.create_mock_app()
         builder = MenuBuilder(app)
@@ -80,26 +78,51 @@ class TestMenuBuilder:
 
         assert "Starting" in str(item.text)
 
-    def test_training_item_when_idle(self):
-        """Test training item when not training."""
-        app = self.create_mock_app(AppState(state=TrayState.IDLE))
+    def test_recording_item_when_compiling(self):
+        """Test recording item shows 'Compiling' when compiling."""
+        app = self.create_mock_app(AppState(state=TrayState.COMPILING))
         builder = MenuBuilder(app)
 
-        item = builder._build_training_item(app.state.current)
+        item = builder._build_recording_item(app.state.current)
 
-        assert "Training" in str(item.text)
+        assert "Compiling" in str(item.text)
 
-    def test_training_item_when_training(self):
-        """Test training item shows progress when training."""
+    def test_break_item_absent_without_breaks(self):
+        """No needs-attention item when there are no breaks."""
+        app = self.create_mock_app(AppState(state=TrayState.IDLE, break_count=0))
+        builder = MenuBuilder(app)
+
+        assert builder._build_break_item(app.state.current) is None
+
+    def test_break_item_present_with_breaks(self):
+        """Needs-attention item shows the count when breaks exist."""
+        app = self.create_mock_app(AppState(state=TrayState.IDLE, break_count=2))
+        builder = MenuBuilder(app)
+
+        item = builder._build_break_item(app.state.current)
+        assert item is not None
+        assert "2" in str(item.text)
+        assert "need attention" in str(item.text)
+
+    def test_sync_item_offline_disabled(self):
+        """Sync item is disabled and labelled offline when offline."""
+        from openadapt_tray.state import SyncState
+
         app = self.create_mock_app(
-            AppState(state=TrayState.TRAINING, training_progress=0.5)
+            AppState(state=TrayState.IDLE, sync_state=SyncState.OFFLINE)
         )
         builder = MenuBuilder(app)
 
-        item = builder._build_training_item(app.state.current)
+        item = builder._build_sync_item(app.state.current)
+        assert "offline" in str(item.text).lower()
 
-        # Should show percentage
-        assert "50%" in str(item.text) or "Training" in str(item.text)
+    def test_sync_item_pause_when_online(self):
+        """Sync item offers Pause Sync when online."""
+        app = self.create_mock_app(AppState(state=TrayState.IDLE))
+        builder = MenuBuilder(app)
+
+        item = builder._build_sync_item(app.state.current)
+        assert "Pause Sync" in str(item.text)
 
     def test_get_recent_captures_empty(self):
         """Test get_recent_captures returns empty list when no captures."""
@@ -110,15 +133,39 @@ class TestMenuBuilder:
 
         assert captures == []
 
-    @patch("webbrowser.open")
-    def test_open_dashboard(self, mock_webbrowser):
-        """Test open_dashboard opens browser."""
+    def test_open_desktop_app_delegates(self):
+        """Test the desktop-app menu action delegates to the app."""
         app = self.create_mock_app()
         builder = MenuBuilder(app)
 
-        builder._open_dashboard()
+        builder._open_desktop_app()
 
-        app._open_dashboard.assert_called_once()
+        app.open_desktop_app.assert_called_once()
+
+    def test_open_cloud_dashboard_delegates(self):
+        """Test the cloud-dashboard menu action delegates to the app."""
+        app = self.create_mock_app()
+        builder = MenuBuilder(app)
+
+        builder._open_cloud_dashboard()
+
+        app.open_cloud_dashboard.assert_called_once()
+
+    def test_login_delegates(self):
+        """Test the login menu action delegates to the app."""
+        app = self.create_mock_app()
+        builder = MenuBuilder(app)
+
+        builder._login()
+
+        app.login.assert_called_once()
+
+    def test_build_full_menu(self):
+        """The full menu builds without error in an idle state."""
+        app = self.create_mock_app(AppState(state=TrayState.IDLE, break_count=1))
+        builder = MenuBuilder(app)
+        menu = builder.build()
+        assert menu is not None
 
     def test_quit_calls_app_quit(self):
         """Test quit calls app.quit."""

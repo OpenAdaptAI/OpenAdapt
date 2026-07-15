@@ -4,12 +4,9 @@ from typing import TYPE_CHECKING, Optional, List
 from functools import partial
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 import subprocess
 import shutil
-import webbrowser
 
-import pystray
 from pystray import MenuItem as Item, Menu
 
 if TYPE_CHECKING:
@@ -50,15 +47,56 @@ class MenuBuilder:
             self._build_recording_item(state),
             Menu.SEPARATOR,
             self._build_captures_submenu(),
-            self._build_training_item(state),
+        ]
+
+        # Break/needs-attention entry (only when there are open breaks).
+        break_item = self._build_break_item(state)
+        if break_item is not None:
+            items.append(break_item)
+
+        items += [
             Menu.SEPARATOR,
-            Item("Open Dashboard", self._open_dashboard),
+            Item("Open Desktop App", self._open_desktop_app),
+            Item("Open Cloud Dashboard", self._open_cloud_dashboard),
+            self._build_sync_item(state),
+            Item("Login...", self._login),
             Item("Settings...", self._open_settings),
             Menu.SEPARATOR,
             Item("Quit", self._quit),
         ]
 
         return Menu(*items)
+
+    def _build_break_item(self, state) -> Optional[Item]:
+        """Build the needs-attention entry when breaks are present.
+
+        Args:
+            state: Current application state.
+
+        Returns:
+            A menu item, or ``None`` when there are no open breaks.
+        """
+        if not state.has_breaks():
+            return None
+        count = state.break_count
+        noun = "automation" if count == 1 else "automations"
+        return Item(
+            f"⚠ {count} {noun} need attention",
+            lambda: self.app.open_needs_attention(),
+        )
+
+    def _build_sync_item(self, state) -> Item:
+        """Build the pause/resume-sync toggle.
+
+        Args:
+            state: Current application state.
+
+        Returns:
+            Menu item toggling the upload/sync queue.
+        """
+        if state.is_offline():
+            return Item("Sync (offline)", None, enabled=False)
+        return Item("Pause Sync", lambda: self.app.pause_sync())
 
     def _build_recording_item(self, state) -> Item:
         """Build record/stop recording menu item.
@@ -76,6 +114,8 @@ class MenuBuilder:
             return Item("Starting...", None, enabled=False)
         elif state.state == TrayState.RECORDING_STOPPING:
             return Item("Stopping...", None, enabled=False)
+        elif state.state == TrayState.COMPILING:
+            return Item("Compiling...", None, enabled=False)
         else:
             hotkey = self.app.config.hotkeys.toggle_recording
             label = f"Start Recording ({hotkey})"
@@ -116,33 +156,6 @@ class MenuBuilder:
 
         return Item("Recent Captures", Menu(*capture_items))
 
-    def _build_training_item(self, state) -> Item:
-        """Build training status/control item.
-
-        Args:
-            state: Current application state.
-
-        Returns:
-            Menu item for training control.
-        """
-        if state.state == TrayState.TRAINING:
-            progress = state.training_progress or 0
-            return Item(
-                f"Training: {progress:.0%}",
-                Menu(
-                    Item("View Progress", self._open_training_dashboard),
-                    Item("Stop Training", self._stop_training),
-                ),
-            )
-        else:
-            return Item(
-                "Training",
-                Menu(
-                    Item("Start Training...", self._start_training),
-                    Item("View Last Results", self._view_training_results),
-                ),
-            )
-
     def _get_recent_captures(self) -> List[CaptureInfo]:
         """Get list of recent captures.
 
@@ -177,9 +190,17 @@ class MenuBuilder:
             print(f"Error getting captures: {e}")
             return []
 
-    def _open_dashboard(self) -> None:
-        """Open the web dashboard."""
-        self.app._open_dashboard()
+    def _open_desktop_app(self) -> None:
+        """Open (or focus) the local desktop app cockpit."""
+        self.app.open_desktop_app()
+
+    def _open_cloud_dashboard(self) -> None:
+        """Open the hosted cloud dashboard in the browser."""
+        self.app.open_cloud_dashboard()
+
+    def _login(self) -> None:
+        """Start the hosted login flow."""
+        self.app.login()
 
     def _open_settings(self) -> None:
         """Open settings dialog."""
@@ -232,55 +253,8 @@ class MenuBuilder:
                 )
 
     def _open_captures_list(self) -> None:
-        """Open captures list in dashboard."""
-        webbrowser.open(f"http://localhost:{self.app.config.dashboard_port}/captures")
-
-    def _open_training_dashboard(self) -> None:
-        """Open training dashboard."""
-        webbrowser.open(f"http://localhost:{self.app.config.dashboard_port}/training")
-
-    def _start_training(self) -> None:
-        """Open training configuration dialog."""
-        self.app.platform.open_training_dialog()
-
-    def _stop_training(self) -> None:
-        """Stop current training."""
-        try:
-            subprocess.run(
-                ["openadapt", "train", "stop"],
-                capture_output=True,
-                timeout=10,
-            )
-            self.app.state.transition(TrayState.IDLE)
-        except Exception as e:
-            print(f"Error stopping training: {e}")
-
-    def _view_training_results(self) -> None:
-        """View last training results."""
-        try:
-            result = subprocess.run(
-                ["openadapt", "train", "status"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode == 0 and result.stdout:
-                self.app.notifications.show(
-                    "Training Status",
-                    result.stdout.strip()[:200],  # Limit notification length
-                )
-            else:
-                self.app.notifications.show(
-                    "Training Status",
-                    "No training results available.",
-                )
-        except FileNotFoundError:
-            self.app.notifications.show(
-                "Training Status",
-                "openadapt CLI not found.",
-            )
-        except Exception as e:
-            print(f"Error getting training status: {e}")
+        """Open the local workflow library in the desktop app."""
+        self.app.open_desktop_app()
 
     def _open_in_file_browser(self, path: str) -> None:
         """Open a path in the system file browser.

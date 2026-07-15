@@ -116,8 +116,6 @@ class MacOSHandler(PlatformHandler):
         Returns:
             True if successful.
         """
-        import sys
-
         plist_path = Path.home() / "Library/LaunchAgents/ai.openadapt.tray.plist"
 
         try:

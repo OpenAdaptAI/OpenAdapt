@@ -1,4 +1,13 @@
-"""Main system tray application for OpenAdapt."""
+"""Main system tray application for OpenAdapt.
+
+The tray is a lightweight status mirror + launcher. It owns no business logic:
+
+* recording/compile actions are commands sent to the **desktop app** over a
+  loopback socket (discovered via ``~/.openadapt/desktop_ipc.json``);
+* the **break badge** is polled from the hosted control plane's
+  needs-attention count endpoint;
+* the desktop app is the source of truth for all state — the tray renders it.
+"""
 
 import sys
 import threading
@@ -7,16 +16,26 @@ import webbrowser
 from typing import Optional
 
 import pystray
-from PIL import Image
 
-from openadapt_tray.state import StateManager, TrayState, AppState
+from openadapt_tray.state import (
+    StateManager,
+    TrayState,
+    SyncState,
+    AppState,
+    LANE_BYOC,
+    LANE_CLOUD,
+)
 from openadapt_tray.menu import MenuBuilder
 from openadapt_tray.icons import IconManager
 from openadapt_tray.shortcuts import HotkeyManager
 from openadapt_tray.notifications import NotificationManager
 from openadapt_tray.ipc import IPCClient, IPCMessageType
 from openadapt_tray.config import TrayConfig
+from openadapt_tray.hosted import HostedPoller, CountResult, route_break_click
 from openadapt_tray.platform import get_platform_handler
+
+# How the tray launches the desktop app when the socket is unreachable.
+DESKTOP_APP_COMMAND = "openadapt-desktop"
 
 
 class TrayApplication:
@@ -32,15 +51,29 @@ class TrayApplication:
         self.state = StateManager()
         self.platform = get_platform_handler()
 
+        # Seed the deployment lane from config so break-click routing is correct
+        # before the desktop first reports it.
+        self.state.set_deployment_lane(self.config.deployment_lane)
+
         # Initialize components
         self.icons = IconManager()
         self.notifications = NotificationManager()
         self.menu_builder = MenuBuilder(self)
         self.hotkeys = HotkeyManager(self.config.hotkeys)
-        self.ipc = IPCClient()
 
-        # Process handle for capture subprocess
-        self._capture_process: Optional[subprocess.Popen] = None
+        # IPC client — configured from the desktop discovery file when present.
+        self.ipc = IPCClient.from_discovery() or IPCClient(
+            port=self.config.desktop_ipc_port or IPCClient.DEFAULT_PORT,
+        )
+
+        # Cloud needs-attention poller (started in run()).
+        self.hosted = HostedPoller(
+            config=self.config,
+            on_count=self._on_hosted_count,
+            notifier=self.notifications,
+            on_break_clicked=self.open_needs_attention,
+            set_offline=self._on_hosted_offline,
+        )
 
         # Create tray icon
         self.icon = pystray.Icon(
@@ -70,7 +103,7 @@ class TrayApplication:
         )
         self.hotkeys.register(
             self.config.hotkeys.open_dashboard,
-            self._open_dashboard,
+            self.open_desktop_app,
         )
 
         # Register triple-ctrl for stop recording (legacy compatibility)
@@ -81,7 +114,7 @@ class TrayApplication:
             )
 
     def _setup_ipc_handlers(self) -> None:
-        """Configure IPC message handlers."""
+        """Configure IPC message handlers (desktop → tray events)."""
         self.ipc.register_handler(
             IPCMessageType.RECORDING_STARTED,
             self._on_ipc_recording_started,
@@ -99,8 +132,16 @@ class TrayApplication:
             self._on_ipc_status_update,
         )
         self.ipc.register_handler(
-            IPCMessageType.TRAINING_PROGRESS,
-            self._on_ipc_training_progress,
+            IPCMessageType.COMPILE_PROGRESS,
+            self._on_ipc_compile_progress,
+        )
+        self.ipc.register_handler(
+            IPCMessageType.SYNC_STATE,
+            self._on_ipc_sync_state,
+        )
+        self.ipc.register_handler(
+            IPCMessageType.BREAK_COUNT,
+            self._on_ipc_break_count,
         )
 
     def _on_state_change(self, state: AppState) -> None:
@@ -109,8 +150,8 @@ class TrayApplication:
         Args:
             state: New application state.
         """
-        # Update icon
-        self.icon.icon = self.icons.get(state.state)
+        # Update icon (with break badge when automations need attention).
+        self.icon.icon = self.icons.get(state.state, break_count=state.break_count)
 
         # Update menu
         self.icon.menu = self.menu_builder.build()
@@ -120,7 +161,7 @@ class TrayApplication:
             self._show_state_notification(state)
 
     def _show_state_notification(self, state: AppState) -> None:
-        """Show notification for state transitions.
+        """Show notification for recording-lifecycle transitions.
 
         Args:
             state: Current application state.
@@ -130,8 +171,11 @@ class TrayApplication:
                 "Recording Started",
                 f"Capturing: {state.current_capture or 'session'}",
             ),
+            TrayState.COMPILING: (
+                "Compiling",
+                f"Building a workflow from: {state.current_capture or 'recording'}",
+            ),
             TrayState.IDLE: ("Recording Stopped", "Capture saved"),
-            TrayState.TRAINING: ("Training Started", "Model training in progress"),
             TrayState.ERROR: ("Error", state.error_message or "An error occurred"),
         }
 
@@ -155,11 +199,56 @@ class TrayApplication:
         if self.state.current.can_stop_recording():
             self.stop_recording()
 
+    # --- desktop connection -------------------------------------------------
+
+    def ensure_desktop_connection(self) -> bool:
+        """Ensure the tray is connected to the desktop loopback socket.
+
+        If the desktop app is not running (no discovery file / unreachable),
+        launch it, wait briefly for the discovery file, then connect.
+
+        Returns:
+            True if connected.
+        """
+        if self.ipc.is_connected():
+            return True
+
+        # Try discovery + connect first (desktop may already be up).
+        if self.ipc.refresh_from_discovery() and self.ipc.connect():
+            return True
+
+        # Desktop not running — launch it, then poll for the discovery file.
+        self._launch_desktop_app()
+        for _ in range(20):  # ~10s
+            if self.ipc.refresh_from_discovery() and self.ipc.connect():
+                return True
+            threading.Event().wait(0.5)
+
+        return False
+
+    def _launch_desktop_app(self) -> None:
+        """Spawn the desktop app process (best-effort)."""
+        try:
+            subprocess.Popen(
+                [DESKTOP_APP_COMMAND],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            self.notifications.show(
+                "Desktop app not found",
+                "Install the OpenAdapt desktop app to record and manage workflows.",
+            )
+        except Exception as e:
+            print(f"Failed to launch desktop app: {e}")
+
+    # --- recording actions (delegated to the desktop over IPC) --------------
+
     def start_recording(self, name: Optional[str] = None) -> None:
-        """Start a new capture session.
+        """Start a new capture session via the desktop app.
 
         Args:
-            name: Optional name for the capture. If None, prompts user.
+            name: Optional name for the capture. If None, prompts the user.
         """
         if not self.state.current.can_start_recording():
             return
@@ -181,73 +270,104 @@ class TrayApplication:
 
         self.state.transition(TrayState.RECORDING_STARTING, current_capture=name)
 
-        # Start capture in background thread
+        # Connect + dispatch on a background thread (launching the desktop app
+        # may take a few seconds).
         threading.Thread(
-            target=self._run_capture,
+            target=self._dispatch_start_recording,
             args=(name,),
             daemon=True,
         ).start()
 
-    def _run_capture(self, name: str) -> None:
-        """Run capture in background thread.
-
-        Args:
-            name: Capture session name.
-        """
-        try:
-            # Start capture via CLI subprocess
-            self._capture_process = subprocess.Popen(
-                ["openadapt", "record", name],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            self.state.transition(TrayState.RECORDING, current_capture=name)
-
-            # Wait for process to complete (when stopped externally)
-            self._capture_process.wait()
-
-            # Check if we're still in recording state (vs explicit stop)
-            if self.state.current.state == TrayState.RECORDING:
-                self.state.transition(TrayState.IDLE)
-
-        except FileNotFoundError:
+    def _dispatch_start_recording(self, name: str) -> None:
+        """Ensure the desktop is up and send the start-recording command."""
+        if not self.ensure_desktop_connection():
             self.state.transition(
                 TrayState.ERROR,
-                error_message="openadapt CLI not found. Please install openadapt.",
+                error_message="Could not reach the desktop app to start recording.",
             )
-        except Exception as e:
-            self.state.transition(TrayState.ERROR, error_message=str(e))
+            return
+        if not self.ipc.send_start_recording(name):
+            self.state.transition(
+                TrayState.ERROR,
+                error_message="Failed to send start-recording command.",
+            )
+        # The desktop confirms via a RECORDING_STARTED event.
 
     def stop_recording(self) -> None:
-        """Stop the current capture session."""
+        """Stop the current capture session via the desktop app."""
         if not self.state.current.can_stop_recording():
             return
 
         self.state.transition(TrayState.RECORDING_STOPPING)
+        self.ipc.send_stop_recording()
+        # The desktop confirms via RECORDING_STOPPED (then COMPILE_PROGRESS).
 
-        # Terminate capture process
-        if self._capture_process and self._capture_process.poll() is None:
-            try:
-                # Send SIGTERM for graceful shutdown
-                self._capture_process.terminate()
+    # --- quick actions ------------------------------------------------------
 
-                # Wait briefly for process to cleanup
-                try:
-                    self._capture_process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    # Force kill if not responding
-                    self._capture_process.kill()
-            except Exception as e:
-                print(f"Error stopping capture process: {e}")
+    def open_desktop_app(self) -> None:
+        """Open (or focus) the desktop app's workflow library."""
+        if self.ipc.is_connected():
+            self.ipc.send_open_workflow_library()
+            return
+        # Not connected — launch/connect, then ask it to open the library.
+        threading.Thread(
+            target=self._open_desktop_app_async,
+            daemon=True,
+        ).start()
 
-        self._capture_process = None
-        self.state.transition(TrayState.IDLE)
+    def _open_desktop_app_async(self) -> None:
+        """Background helper for :meth:`open_desktop_app`."""
+        if self.ensure_desktop_connection():
+            self.ipc.send_open_workflow_library()
 
-    def _open_dashboard(self) -> None:
-        """Open the web dashboard."""
-        webbrowser.open(f"http://localhost:{self.config.dashboard_port}")
+    def open_cloud_dashboard(self) -> None:
+        """Open the hosted cloud dashboard in the system browser."""
+        webbrowser.open(self.config.hosted_url)
 
-    # IPC event handlers
+    def open_needs_attention(self) -> None:
+        """Route a needs-attention click by deployment lane (§3c)."""
+        route_break_click(
+            self.config,
+            ipc_client=self.ipc if self.ipc.is_connected() else None,
+        )
+
+    def login(self) -> None:
+        """Start the hosted login flow.
+
+        The tray does not implement auth; it opens the ingest-token settings
+        page (the desktop app owns the interactive providers) so the user can
+        mint/paste a token that lands in the shared keychain.
+        """
+        webbrowser.open(
+            f"{self.config.hosted_url.rstrip('/')}/dashboard/settings/ingest"
+        )
+
+    def pause_sync(self) -> None:
+        """Ask the desktop to pause the upload/sync queue."""
+        if self.ipc.is_connected():
+            self.ipc.send_pause_sync()
+        self.state.set_sync_state(SyncState.SYNCED)
+
+    def resume_sync(self) -> None:
+        """Ask the desktop to resume the upload/sync queue."""
+        if self.ipc.is_connected():
+            self.ipc.send_resume_sync()
+
+    # --- hosted poller callbacks --------------------------------------------
+
+    def _on_hosted_count(self, result: CountResult) -> None:
+        """Apply a needs-attention count from the cloud poller."""
+        self.state.set_break_count(result.count)
+
+    def _on_hosted_offline(self, offline: bool) -> None:
+        """Reflect the cloud poller's online/offline status on the sync channel."""
+        if offline:
+            self.state.set_sync_state(SyncState.OFFLINE)
+        elif self.state.current.is_offline():
+            # Recovered connectivity — clear the offline marker.
+            self.state.set_sync_state(SyncState.SYNCED)
+
+    # --- IPC event handlers (desktop → tray) --------------------------------
 
     def _on_ipc_recording_started(self, message) -> None:
         """Handle recording started IPC event."""
@@ -270,18 +390,67 @@ class TrayApplication:
         )
 
     def _on_ipc_status_update(self, message) -> None:
-        """Handle status update IPC event."""
-        # Generic status updates - could update UI or log
-        pass
+        """Handle a full status update from the desktop (source of truth).
 
-    def _on_ipc_training_progress(self, message) -> None:
-        """Handle training progress IPC event."""
+        The payload may carry ``state``, ``deployment_lane``, ``sync_state``,
+        ``break_count`` and ``offline``.
+        """
         data = message.data or {}
-        progress = data.get("progress", 0)
-        self.state.transition(
-            TrayState.TRAINING,
-            training_progress=progress,
-        )
+
+        lane = data.get("deployment_lane")
+        if lane in (LANE_CLOUD, LANE_BYOC):
+            self.state.set_deployment_lane(lane)
+
+        sync = data.get("sync_state")
+        if sync is not None:
+            self._apply_sync_state(sync)
+
+        if "break_count" in data:
+            self.state.set_break_count(data.get("break_count") or 0)
+
+        state_name = data.get("state")
+        if state_name:
+            try:
+                self.state.transition(TrayState[state_name])
+            except KeyError:
+                pass
+
+    def _on_ipc_compile_progress(self, message) -> None:
+        """Handle a compile-progress event (recording → workflow)."""
+        data = message.data or {}
+        # Any progress signal means we are compiling; a terminal signal returns
+        # to idle.
+        if data.get("done"):
+            self.state.transition(TrayState.IDLE)
+        else:
+            self.state.transition(
+                TrayState.COMPILING,
+                current_capture=data.get("name"),
+            )
+
+    def _on_ipc_sync_state(self, message) -> None:
+        """Handle a sync-state event from the desktop."""
+        data = message.data or {}
+        self._apply_sync_state(data.get("state"))
+
+    def _on_ipc_break_count(self, message) -> None:
+        """Handle a break-count event pushed from the desktop."""
+        data = message.data or {}
+        self.state.set_break_count(data.get("count") or 0)
+
+    def _apply_sync_state(self, name: Optional[str]) -> None:
+        """Map a sync-state name from IPC onto the SyncState channel."""
+        if not name:
+            return
+        mapping = {
+            "synced": SyncState.SYNCED,
+            "syncing": SyncState.SYNCING,
+            "pushing": SyncState.SYNCING,
+            "offline": SyncState.OFFLINE,
+        }
+        sync = mapping.get(str(name).lower())
+        if sync is not None:
+            self.state.set_sync_state(sync)
 
     def run(self) -> None:
         """Run the application."""
@@ -291,15 +460,17 @@ class TrayApplication:
         # Platform-specific setup
         self.platform.setup()
 
-        # Try to connect to IPC server (optional - won't block if unavailable)
+        # Try to connect to the desktop IPC server (optional — non-blocking).
         try:
-            connected = self.ipc.connect()
-            if connected:
-                print("IPC connected successfully")
+            if self.ipc.refresh_from_discovery() and self.ipc.connect():
+                print("Connected to desktop app IPC")
             else:
-                print("IPC server not available - running in standalone mode")
+                print("Desktop app not running — will launch on first action")
         except Exception as e:
             print(f"IPC connection failed: {e} - running in standalone mode")
+
+        # Start the cloud needs-attention poller.
+        self.hosted.start()
 
         # Run the tray icon (blocks)
         self.icon.run()
@@ -311,6 +482,7 @@ class TrayApplication:
             self.stop_recording()
 
         # Cleanup components
+        self.hosted.stop()
         self.hotkeys.stop()
         self.ipc.close()
         self.notifications.cleanup()

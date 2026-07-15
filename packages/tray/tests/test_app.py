@@ -1,7 +1,6 @@
 """Tests for the main TrayApplication."""
 
-import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from openadapt_tray.state import TrayState
 from openadapt_tray.config import TrayConfig
@@ -57,8 +56,9 @@ class TestRecordingControls:
 
         app = TrayApplication()
 
-        # Start recording with a name (skip prompt)
-        with patch.object(app, "_run_capture"):
+        # Start recording with a name (skip prompt); the desktop dispatch runs
+        # on a background thread, so stub it out.
+        with patch.object(app, "_dispatch_start_recording"):
             app.start_recording("test_capture")
 
         assert app.state.current.state in (
@@ -78,14 +78,14 @@ class TestRecordingControls:
         app = TrayApplication()
         app.state.transition(TrayState.RECORDING, current_capture="existing")
 
-        with patch.object(app, "_run_capture") as mock_run:
+        with patch.object(app, "_dispatch_start_recording") as mock_dispatch:
             app.start_recording("new_capture")
-            mock_run.assert_not_called()
+            mock_dispatch.assert_not_called()
 
     @patch("openadapt_tray.app.pystray")
     @patch("openadapt_tray.app.get_platform_handler")
-    def test_stop_recording_changes_state(self, mock_platform, mock_pystray):
-        """Test that stop_recording transitions to IDLE."""
+    def test_stop_recording_signals_desktop(self, mock_platform, mock_pystray):
+        """stop_recording transitions to STOPPING and signals the desktop."""
         from openadapt_tray.app import TrayApplication
 
         mock_platform.return_value = MagicMock()
@@ -94,9 +94,12 @@ class TestRecordingControls:
         app = TrayApplication()
         app.state.transition(TrayState.RECORDING, current_capture="test")
 
-        app.stop_recording()
+        with patch.object(app.ipc, "send_stop_recording") as mock_stop:
+            app.stop_recording()
+            mock_stop.assert_called_once()
 
-        assert app.state.current.state == TrayState.IDLE
+        # The tray waits for the desktop's RECORDING_STOPPED event.
+        assert app.state.current.state == TrayState.RECORDING_STOPPING
 
     @patch("openadapt_tray.app.pystray")
     @patch("openadapt_tray.app.get_platform_handler")

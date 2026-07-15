@@ -101,7 +101,6 @@ class WindowsHandler(PlatformHandler):
         """
         try:
             import winreg
-            import sys
 
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
             app_name = "OpenAdapt"

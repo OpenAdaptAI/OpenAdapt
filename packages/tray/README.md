@@ -1,111 +1,152 @@
 # openadapt-tray
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
-<!-- PyPI badges (uncomment once package is published)
-[![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
-[![Downloads](https://img.shields.io/pypi/dm/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
--->
+> **Lifecycle: Experimental supporting surface.** The canonical workflow
+> engine is [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+> The behavior described below exists on the checked-out
+> `feat/hosted-rewire` branch and is not a generally available integrated
+> desktop release.
 
-A cross-platform system tray application for [OpenAdapt](https://openadapt.ai), providing a graphical interface for controlling recording, monitoring training, and accessing settings without using the command line.
+OpenAdapt Tray is a lightweight status mirror and launcher for the intended
+OpenAdapt desktop authoring experience. It does not record, compile, replay,
+repair, or train models itself. Local actions are delegated to a companion
+desktop process over authenticated loopback IPC; hosted status is read from a
+small needs-attention endpoint.
 
-## Features
+OpenAdapt compiles demonstrated GUI workflows into deterministic, locally
+executable programs. Healthy runs make no model calls. When an interface
+drifts, OpenAdapt re-resolves from recorded evidence or proposes a governed
+repair, and halts when verification fails. That workflow logic belongs to
+`openadapt-flow`, not the tray.
 
-### System Tray Icon
+## Release Boundary
 
-Shows in the menu bar (macOS) or system tray (Windows/Linux) with visual state indicators.
+- Package metadata is currently version `0.0.1` and marks this project
+  pre-alpha.
+- The hosted rewire is branch code. Installing an existing published package
+  must not be assumed to provide the behavior documented here.
+- Unit tests cover the client state machine, IPC framing, menus, and mocked
+  hosted HTTP behavior. They do not prove a working desktop installer, hosted
+  service, or end-to-end authoring loop.
+- The current `openadapt-desktop` main branch does not implement the discovery
+  socket and command contract this tray expects. The two repositories are not
+  integrated end to end in their checked-out state.
 
-![Tray Icon Idle](docs/screenshots/tray-icon-idle.png)
-*Idle state: Blue/gray icon in menu bar*
+## What This Branch Implements
 
-![Tray Icon Recording](docs/screenshots/tray-icon-recording.png)
-*Recording state: Red pulsing icon*
+| Surface | Behavior | Maturity |
+| --- | --- | --- |
+| Recording status | Mirrors start, stop, compiling, and error events received from desktop IPC | Client implemented; companion server unavailable |
+| Recording controls | Sends start/stop commands and can launch `openadapt-desktop` when discovery fails | Client implemented; no compatible released desktop |
+| Workflow shortcuts | Requests the desktop workflow library or teach view | Client implemented; corresponding desktop views unavailable |
+| Sync status | Mirrors synced, syncing, and offline states separately from recording state | Implemented and tested |
+| Needs-attention badge | Polls `GET /api/needs-attention/count` using an ingest token from the environment or OS keychain | Mock-tested client contract; hosted availability not established here |
+| Break routing | Cloud opens the hosted dashboard; connected BYOC opens local teach | Implemented with an important fallback described below |
+| Recent captures | Reads local capture directories; View still tries the legacy `openadapt visualize` command before a file-browser fallback | Transitional behavior |
 
-### Native Notifications
+The retired model-training controls and training states are not part of this
+branch.
 
-Modern notifications with desktop-notifier supporting callbacks and actions.
+## Expected Menu
 
-![Basic Notification](docs/screenshots/notification-basic.png)
-*Example: Recording started notification*
+The menu is built from current local and hosted state:
 
-![Critical Notification](docs/screenshots/notification-critical.png)
-*Example: Error notification with critical urgency*
+```text
+Start Recording (<configured hotkey>)
+Recent Captures
+<N automations need attention>    # only when count > 0
+Open Desktop App
+Open Cloud Dashboard
+Pause Sync / Sync (offline)
+Login...
+Settings...
+Quit
+```
 
-### Other Features
+During a local operation, the recording item changes to Starting, Stop
+Recording, Stopping, or Compiling. These labels reflect events; the tray does
+not perform the work.
 
-- **Status Indicators**: Icon changes color based on application state (idle, recording, training, error)
-- **Start/Stop Recording**: Control capture sessions via menu or global hotkeys
-- **Recent Captures**: Quick access to view or delete recent recordings
-- **Training Control**: Start, monitor, and stop model training
-- **Cross-Platform**: Works on macOS, Windows, and Linux
-- **Lightweight**: Uses pystray (~50KB) instead of heavy Qt dependencies
+## Integration Contract
 
-## Installation
+### Local desktop IPC
+
+The tray discovers a local service from `~/.openadapt/desktop_ipc.json`, then
+uses an authenticated loopback connection. It can send commands to start or
+stop recording, open the workflow library or teach surface, and pause or resume
+sync. It also consumes desktop status events.
+
+If discovery fails, the tray launches `openadapt-desktop` and waits about ten
+seconds for the service. The current desktop package exposes a capture/review
+CLI under that name but does not start the expected IPC service, so this path
+does not currently produce a working integration.
+
+### Hosted needs-attention polling
+
+The poller calls:
+
+```text
+GET <hosted_url>/api/needs-attention/count
+Authorization: Bearer <ingest token>
+```
+
+The token is resolved from `OPENADAPT_INGEST_TOKEN` or the OS keychain and is
+not written to `tray.json`. The default poll interval is 60 seconds, clamped to
+at least 30 seconds, with a slower offline retry.
+
+This is a narrow status endpoint, not hosted execution. The tray does not
+upload screenshots, workflow bundles, or capture artifacts through this
+poller.
+
+### Deployment-lane routing
+
+- `cloud`: a needs-attention click opens
+  `<hosted_url>/dashboard`, which lists open halts and uncertain dispatches.
+- `byoc`: while desktop IPC is connected, the click sends `open_teach` locally
+  so workflow data can remain in the customer environment.
+- `byoc` without desktop IPC: the current implementation falls back to the
+  hosted dashboard. Regulated deployments must not treat this fallback as a
+  validated PHI-safe path; it should be changed or policy-gated before
+  production use.
+
+## Development Quickstart
+
+Run this branch as contributor software, not as a production install:
 
 ```bash
-pip install openadapt-tray
+git clone https://github.com/OpenAdaptAI/openadapt-tray.git
+cd openadapt-tray
+git switch feat/hosted-rewire
+
+uv sync --extra dev
+uv run pytest tests -q
+uv run openadapt-tray
 ```
 
-For macOS native experience with enhanced menu bar features:
+Running the process requires a graphical desktop/session. Without a compatible
+desktop IPC server or hosted token it may correctly remain offline, fail local
+actions, or open only browser routes.
+
+For a runnable OpenAdapt workflow, use the canonical engine separately:
 
 ```bash
-pip install openadapt-tray[macos-native]
-```
-
-## Quick Start
-
-```bash
-# Run the tray application
-openadapt-tray
-
-# Or run as a Python module
-python -m openadapt_tray
-```
-
-## Keyboard Shortcuts
-
-| Action | Default Shortcut |
-|--------|------------------|
-| Toggle Recording | `Ctrl+Shift+R` |
-| Open Dashboard | `Ctrl+Shift+D` |
-| Stop Recording | `Ctrl` (triple tap) |
-
-Shortcuts are configurable via the settings file or dashboard.
-
-## Menu Structure
-
-![Menu Structure](docs/screenshots/menu-idle.png)
-*Full menu in idle state*
-
-```
-[OpenAdapt Icon]
-├── Start Recording (Ctrl+Shift+R)
-│   └── [When recording: "Stop Recording (capture-name)"]
-├── ─────────────
-├── Recent Captures
-│   ├── capture-name (2024-01-15 14:30)
-│   │   ├── View
-│   │   └── Delete
-│   └── View All...
-├── Training
-│   ├── Start Training...
-│   └── View Last Results
-├── ─────────────
-├── Open Dashboard
-├── Settings...
-├── ─────────────
-└── Quit
+pip install openadapt-flow
+openadapt-flow demo-record --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle
 ```
 
 ## Configuration
 
-Configuration is stored in:
-- **macOS**: `~/Library/Application Support/openadapt/tray.json`
-- **Windows**: `%APPDATA%/openadapt/tray.json`
-- **Linux**: `~/.config/openadapt/tray.json`
+Non-secret settings are stored at:
 
-Example configuration:
+- macOS: `~/Library/Application Support/openadapt/tray.json`
+- Windows: `%APPDATA%/openadapt/tray.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/openadapt/tray.json`
+
+Representative settings:
 
 ```json
 {
@@ -114,108 +155,54 @@ Example configuration:
     "open_dashboard": "<ctrl>+<shift>+d",
     "stop_recording": "<ctrl>+<ctrl>+<ctrl>"
   },
-  "dashboard_port": 8080,
+  "captures_directory": "~/openadapt/captures",
+  "desktop_ipc_port": null,
+  "hosted_url": "https://app.openadapt.ai",
+  "deployment_lane": "cloud",
+  "poll_interval_s": 60,
   "show_notifications": true,
-  "stop_on_triple_ctrl": true,
   "auto_start_on_login": false
 }
 ```
 
-## Development
+`deployment_lane` accepts `cloud` or `byoc`. The ingest token does not belong
+in this file.
 
-### Setup
+## Known Gaps
 
-```bash
-# Clone the repository
-git clone https://github.com/OpenAdaptAI/openadapt-tray.git
-cd openadapt-tray
+- No compatible released desktop IPC server completes the local control path.
+- No packaged installer proves tray startup, permissions, or auto-start across
+  macOS, Windows, and Linux.
+- Hosted polling is tested with mocks; repository tests do not validate a live
+  service contract or service-level commitments.
+- BYOC fallback can open the hosted dashboard when desktop IPC is absent.
+- Recent-capture View still invokes a legacy launcher command.
+- Login opens an ingest-token settings page; the tray does not implement
+  interactive authentication.
+- The tray does not certify workflow safety or verify workflow effects.
 
-# Install in development mode
-pip install -e ".[dev]"
+## Project Structure
+
+```text
+src/openadapt_tray/
+  app.py            tray lifecycle, desktop delegation, and routing
+  ipc.py            authenticated loopback IPC client
+  hosted.py         needs-attention poller and lane routing
+  state.py          recording, sync, and badge state
+  menu.py           state-dependent tray menu
+  keychain.py       ingest-token lookup
+  config.py         non-secret local preferences
+tests/               mocked/unit coverage for these client boundaries
 ```
 
-### Running Tests
+## Related Projects
 
-```bash
-pytest tests/
-```
-
-### Project Structure
-
-```
-openadapt-tray/
-├── src/openadapt_tray/
-│   ├── __init__.py           # Package exports
-│   ├── __main__.py           # Entry point
-│   ├── app.py                # Main TrayApplication class
-│   ├── menu.py               # Menu construction
-│   ├── icons.py              # Icon management
-│   ├── notifications.py      # Cross-platform notifications
-│   ├── shortcuts.py          # Global hotkey handling
-│   ├── config.py             # Configuration management
-│   ├── ipc.py                # Inter-process communication
-│   ├── state.py              # Application state machine
-│   └── platform/
-│       ├── __init__.py       # Platform detection
-│       ├── base.py           # Abstract base class
-│       ├── macos.py          # macOS-specific
-│       ├── windows.py        # Windows-specific
-│       └── linux.py          # Linux-specific
-├── assets/
-│   ├── icons/                # State icons (idle, recording, etc.)
-│   └── logo.ico              # Windows icon
-├── tests/                    # Test suite
-├── pyproject.toml
-└── README.md
-```
-
-## Dependencies
-
-- **pystray** (>=0.19.0): Cross-platform system tray
-- **Pillow** (>=9.0.0): Icon handling
-- **pynput** (>=1.7.0): Global hotkeys
-- **click** (>=8.0.0): CLI integration
-- **desktop-notifier** (>=6.2.0): Modern native notifications
-
-## Integration
-
-The tray application delegates to the `openadapt` CLI for all operations:
-
-```bash
-# Commands executed by the tray app
-openadapt record <name>          # Start recording
-openadapt visualize <path>       # View capture
-openadapt train start            # Start training
-openadapt train status           # Get training status
-```
-
-## Platform Notes
-
-### macOS
-- Hides from the Dock, appears only in the menu bar
-- Native dialogs via AppleScript
-- Auto-start via Launch Agents
-
-### Windows
-- Appears in the system tray
-- Native dialogs via ctypes/tkinter
-- Auto-start via Registry
-
-### Linux
-- Requires a desktop environment with system tray support
-- Dialogs via zenity, kdialog, or tkinter
-- Auto-start via XDG autostart
+| Project | Lifecycle and role |
+| --- | --- |
+| [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Canonical workflow compiler, runtime, certification, and governed repair engine |
+| [`openadapt-desktop`](https://github.com/OpenAdaptAI/openadapt-desktop) | Experimental authoring/teaching direction; current main is not IPC-compatible with this branch |
+| [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Flagship launcher/meta-repository |
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions are welcome! Please see our [contributing guidelines](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md).
-
-## Links
-
-- [OpenAdapt Website](https://openadapt.ai)
-- [OpenAdapt Documentation](https://docs.openadapt.ai)
-- [GitHub Repository](https://github.com/OpenAdaptAI/openadapt-tray)
+MIT. See [LICENSE](LICENSE).

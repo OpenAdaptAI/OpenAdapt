@@ -87,7 +87,7 @@ def main():
 
     ico_path = OUTPUT_DIR.parent / "logo.ico"
     create_ico_file(ico_images, ico_path)
-    print(f"  Created logo.ico")
+    print("  Created logo.ico")
 
     print("Done!")
 

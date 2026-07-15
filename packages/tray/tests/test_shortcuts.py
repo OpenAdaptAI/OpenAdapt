@@ -1,9 +1,6 @@
 """Tests for hotkey/shortcut handling."""
 
-import pytest
 from unittest.mock import patch, MagicMock
-import threading
-import time
 
 from openadapt_tray.shortcuts import HotkeyManager, HotkeyConfig
 
