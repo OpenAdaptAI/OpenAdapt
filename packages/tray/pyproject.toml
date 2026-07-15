@@ -80,10 +80,12 @@ commit_message = "chore: release {version}"
 allow_zero_version = true
 major_on_zero = false
 build_command = """
-python -m pip install --disable-pip-version-check -e '.[release]'
-uv lock --upgrade-package "$PACKAGE_NAME"
-git add uv.lock
-uv build --wheel --sdist
+python -m pip install --disable-pip-version-check "uv==0.11.26" &&
+python scripts/check_release_consistency.py --write-lock &&
+uv lock --locked --offline &&
+git add uv.lock &&
+uv build --wheel --sdist &&
+python scripts/check_release_consistency.py --require-dist
 """
 
 [tool.semantic_release.branches.main]
