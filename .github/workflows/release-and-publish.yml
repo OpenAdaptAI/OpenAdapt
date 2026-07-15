@@ -50,7 +50,10 @@ jobs:
         env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          git pull
+          # PSR's build_command updates and stages uv.lock in the generated
+          # release commit. Verify that exact commit before building it.
+          git pull --ff-only
+          python scripts/verify_release_lock.py
           poetry config pypi-token.pypi $PYPI_TOKEN
           poetry build
           poetry publish --no-interaction --skip-existing
