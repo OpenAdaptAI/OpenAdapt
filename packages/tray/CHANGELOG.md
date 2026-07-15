@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.1.0 (2026-07-15)
+
+### Bug Fixes
+
+- **ci**: Use v9 branch config for python-semantic-release
+  ([#4](https://github.com/OpenAdaptAI/openadapt-tray/pull/4),
+  [`265b7c9`](https://github.com/OpenAdaptAI/openadapt-tray/commit/265b7c992e8ed36d4d73c98d3f92d07a665c1f51))
+
+Replace `branch = "main"` (v7/v8 key) with `[tool.semantic_release.branches.main]` table (v9 key).
+  The old key is silently ignored by v9, causing releases to never trigger on the main branch.
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Features
+
+- Align tray with the hosted workflow lifecycle
+  ([`3b5ea95`](https://github.com/OpenAdaptAI/openadapt-tray/commit/3b5ea9543d6438f5d4fdbe2627c1ec8b886dafb3))
+
+Reposition the Experimental tray around record, compile, replay, and governed hosted repair, with
+  protected-main and pre-1.0 release safeguards.
+
+
 ## v0.0.1 (2026-01-29)
 
 ### Bug Fixes
