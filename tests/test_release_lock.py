@@ -1,12 +1,10 @@
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
-import pytest
-
-from scripts.verify_release_lock import (
-    release_versions,
-    synchronize_release_lock,
-    verify_release_lock,
-)
+ROOT = Path(__file__).resolve().parents[1]
+VERIFIER = ROOT / "scripts/verify_release_lock.py"
 
 
 def _write_release_files(root: Path, project_version: str, lock_version: str):
@@ -23,37 +21,54 @@ def _write_release_files(root: Path, project_version: str, lock_version: str):
     )
 
 
-def test_release_lock_matches_project_version():
-    project_version, lock_version = release_versions()
+def _run_verifier(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    script_dir = root / "scripts"
+    script_dir.mkdir(exist_ok=True)
+    script = script_dir / VERIFIER.name
+    if script.resolve() != VERIFIER.resolve():
+        shutil.copyfile(VERIFIER, script)
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
-    assert project_version == lock_version
+
+def test_release_lock_matches_project_version():
+    result = _run_verifier(ROOT)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_release_lock_rejects_version_drift(tmp_path: Path):
     _write_release_files(tmp_path, project_version="2.0.0", lock_version="1.6.0")
+    result = _run_verifier(tmp_path)
 
-    with pytest.raises(ValueError, match="pyproject.toml=2.0.0, uv.lock=1.6.0"):
-        verify_release_lock(tmp_path)
+    assert result.returncode == 1
+    assert "pyproject.toml=2.0.0, uv.lock=1.6.0" in result.stderr
 
 
 def test_release_lock_sync_changes_only_editable_root_and_is_idempotent(tmp_path: Path):
     _write_release_files(tmp_path, project_version="2.0.0", lock_version="1.6.0")
     before = (tmp_path / "uv.lock").read_text(encoding="utf-8")
 
-    assert synchronize_release_lock(tmp_path) is True
+    first = _run_verifier(tmp_path, "--write")
+    assert first.returncode == 0, first.stderr
     after = (tmp_path / "uv.lock").read_text(encoding="utf-8")
     assert after == before.replace(
         'name = "openadapt"\nversion = "1.6.0"',
         'name = "openadapt"\nversion = "2.0.0"',
     )
-    assert synchronize_release_lock(tmp_path) is False
-    assert release_versions(tmp_path) == ("2.0.0", "2.0.0")
+    second = _run_verifier(tmp_path, "--write")
+    assert second.returncode == 0, second.stderr
+    assert (tmp_path / "uv.lock").read_text(encoding="utf-8") == after
 
 
 def test_release_workflow_syncs_and_verifies_lock_before_build():
-    root = Path(__file__).resolve().parents[1]
-    metadata = (root / "pyproject.toml").read_text(encoding="utf-8")
-    workflow = (root / ".github/workflows/release-and-publish.yml").read_text(
+    metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/release-and-publish.yml").read_text(
         encoding="utf-8"
     )
 
