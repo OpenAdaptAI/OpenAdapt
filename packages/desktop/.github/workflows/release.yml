@@ -37,20 +37,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install uv
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-
+      # The semantic-release action runs in its own container. Its configured
+      # build command refreshes/stages uv.lock and builds dist/ before tagging.
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@7b3f71697ccfbaef884e1e754b6364e974b134cf # v9.15.2
+        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
-
-      - name: Build package
-        if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        run: uv build --wheel --sdist
 
       - name: Publish to PyPI
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
@@ -58,6 +52,6 @@ jobs:
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@b9c41d4b0754dee5a6c7188d42b33f66e3a8aafd # v9.15.2
+        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
