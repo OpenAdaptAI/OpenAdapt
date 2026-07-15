@@ -1,5 +1,12 @@
 # OpenAdapt Desktop: Comprehensive Design Document
 
+> **Superseded historical design (2026-03-03).** This document describes the
+> abandoned recording-for-model-training direction and is retained only as
+> product archaeology. It is not the current roadmap or a statement of shipped
+> capability. See [`README.md`](README.md) for the Experimental desktop
+> surface and [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow)
+> for the canonical record -> compile -> replay -> governed-repair product.
+
 **Version**: 2.0 (Draft)
 **Date**: 2026-03-03
 **Status**: Design Phase

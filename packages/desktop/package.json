@@ -1,7 +1,7 @@
 {
   "name": "openadapt-desktop",
   "version": "0.1.0",
-  "description": "Cross-platform desktop app for continuous screen recording and AI training data collection",
+  "description": "Experimental Tauri shell for OpenAdapt workflow authoring and human teaching",
   "private": true,
   "scripts": {
     "tauri": "tauri",

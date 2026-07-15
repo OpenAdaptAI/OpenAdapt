@@ -4,20 +4,20 @@ Provides a command-line interface for recording, scrubbing, reviewing,
 and uploading captures without requiring the Tauri shell.
 
 Usage:
-    openadapt record [--quality standard] [--task "description"]
-    openadapt list [--limit 10] [--status captured]
-    openadapt info CAPTURE_ID
-    openadapt scrub CAPTURE_ID [--level basic]
-    openadapt review
-    openadapt approve CAPTURE_ID
-    openadapt dismiss CAPTURE_ID
-    openadapt upload CAPTURE_ID --backend s3
-    openadapt backends
-    openadapt storage
-    openadapt health
-    openadapt cleanup
-    openadapt config
-    openadapt doctor
+    openadapt-desktop record [--quality standard] [--task "description"]
+    openadapt-desktop list [--limit 10] [--status captured]
+    openadapt-desktop info CAPTURE_ID
+    openadapt-desktop scrub CAPTURE_ID [--level basic]
+    openadapt-desktop review
+    openadapt-desktop approve CAPTURE_ID
+    openadapt-desktop dismiss CAPTURE_ID
+    openadapt-desktop upload CAPTURE_ID --backend s3
+    openadapt-desktop backends
+    openadapt-desktop storage
+    openadapt-desktop health
+    openadapt-desktop cleanup
+    openadapt-desktop config
+    openadapt-desktop doctor
 """
 
 from __future__ import annotations
@@ -411,7 +411,10 @@ _COMMANDS = {
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
-    parser = argparse.ArgumentParser(prog="openadapt", description="OpenAdapt Desktop Engine")
+    parser = argparse.ArgumentParser(
+        prog="openadapt-desktop",
+        description="Experimental OpenAdapt Desktop capture/review CLI",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # record

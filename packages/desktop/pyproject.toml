@@ -5,13 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-desktop"
 version = "0.2.0"
-description = "Cross-platform desktop app for continuous screen recording and AI training data collection"
+description = "Experimental desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
     { name = "OpenAdapt AI", email = "hello@openadapt.ai" },
 ]
-keywords = ["desktop", "recording", "screen-capture", "AI", "training-data", "automation"]
+keywords = ["desktop", "recording", "workflow-authoring", "human-in-the-loop", "automation"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -40,6 +41,9 @@ federated = ["flwr", "torch"]
 full = [
     "openadapt-desktop[enterprise,community,federated]",
 ]
+build = [
+    "pyinstaller>=6.16,<7",
+]
 dev = [
     "pytest",
     "pytest-asyncio",
@@ -48,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-openadapt = "engine.cli:main"
+openadapt-desktop = "engine.cli:main"
 
 [project.urls]
 Homepage = "https://openadapt.ai"
@@ -71,6 +75,7 @@ version_toml = ["pyproject.toml:project.version"]
 version_variables = ["engine/__init__.py:__version__"]
 commit_message = "chore: release {version}"
 major_on_zero = false
+allow_zero_version = true
 
 [tool.semantic_release.branches.main]
 match = "main"

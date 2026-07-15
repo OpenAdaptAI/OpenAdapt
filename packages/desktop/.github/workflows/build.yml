@@ -1,106 +1,120 @@
-# CI build + sign + release pipeline
-#
-# This workflow builds the Tauri application with bundled Python sidecar
-# for all supported platforms. On tag push, it creates a GitHub Release
-# with signed installers.
-#
-# See design doc Section 11 for the full CI/CD design.
-#
-# Build matrix:
-#   macOS Intel (x86_64)     -> DMG + .app bundle
-#   macOS Apple Silicon      -> DMG + .app bundle
-#   Windows x64              -> NSIS installer (.exe)
-#   Linux x64                -> AppImage + .deb
-#
-# TODO: This is a placeholder. Actual implementation requires:
-#   - Apple Developer certificate for macOS code signing + notarization
-#   - Windows Authenticode certificate for code signing
-#   - Tauri signing private key (Ed25519) for update verification
-#   - PyInstaller build step for the Python sidecar
-
-name: Build & Release
+name: Build artifacts
 
 on:
-  push:
-    tags: ["v*"]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: artifacts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-python-sidecar:
-    name: Build Python Sidecar
-    strategy:
-      matrix:
-        include:
-          - os: macos-14
-            target: x86_64-apple-darwin
-          - os: macos-14
-            target: aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-    runs-on: ${{ matrix.os }}
-
+  python-distribution:
+    name: Python distribution
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
 
-      - name: Set up Python 3.12
-        run: uv python install 3.12
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --extra full
+      - name: Build wheel and source distribution
+        run: uv build --wheel --sdist
 
-      # TODO: Build Python sidecar with PyInstaller
-      # - name: Build sidecar
-      #   run: |
-      #     uv run pip install pyinstaller
-      #     uv run pyinstaller --onefile --name openadapt-engine engine/main.py
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-distribution
+          path: dist/openadapt_desktop-*
+          if-no-files-found: error
 
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: sidecar-${{ matrix.target }}
-      #     path: dist/openadapt-engine*
+  python-sidecar:
+    name: Python sidecar (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-  # TODO: Uncomment when Tauri shell is implemented
-  # build-tauri:
-  #   name: Build Tauri App
-  #   needs: build-python-sidecar
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - os: macos-13
-  #           target: x86_64-apple-darwin
-  #         - os: macos-14
-  #           target: aarch64-apple-darwin
-  #         - os: windows-latest
-  #           target: x86_64-pc-windows-msvc
-  #         - os: ubuntu-22.04
-  #           target: x86_64-unknown-linux-gnu
-  #   runs-on: ${{ matrix.os }}
-  #
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/download-artifact@v4
-  #       with:
-  #         name: sidecar-${{ matrix.target }}
-  #         path: src-tauri/binaries/
-  #     - uses: tauri-apps/tauri-action@v0
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-  #         # macOS signing
-  #         APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-  #         APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-  #         APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-  #         APPLE_ID: ${{ secrets.APPLE_ID }}
-  #         APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-  #         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-  #       with:
-  #         tagName: v__VERSION__
-  #         releaseName: "OpenAdapt Desktop v__VERSION__"
-  #         releaseBody: "See the changelog for details."
-  #         releaseDraft: true
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Install locked sidecar dependencies
+        run: uv sync --locked --extra build
+
+      - name: Build platform-native sidecar
+        run: >-
+          uv run pyinstaller --clean --noconfirm --onefile
+          --name openadapt-engine engine/__main__.py
+
+      - name: Smoke-test sidecar executable
+        run: uv run python scripts/verify_build_artifact.py sidecar
+
+      - name: Upload sidecar executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-sidecar-${{ runner.os }}-${{ runner.arch }}
+          path: dist/openadapt-engine*
+          if-no-files-found: error
+
+  tauri-shell:
+    name: Unsigned Tauri shell (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          components: rustfmt
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Build release-mode Tauri shell
+        run: cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Verify Tauri shell artifact
+        run: python scripts/verify_build_artifact.py tauri
+
+      - name: Upload unsigned Tauri shell
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tauri-shell-${{ runner.os }}-${{ runner.arch }}
+          path: src-tauri/target/release/openadapt-desktop*
+          if-no-files-found: error
