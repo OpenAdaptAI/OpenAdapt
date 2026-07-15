@@ -67,6 +67,9 @@ python_files = ["test_*.py"]
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 commit_message = "chore: release {version}"
+# A patch from 0.1.x must remain pre-1.0 until the project explicitly declares
+# API stability; python-semantic-release otherwise promotes it to 1.0.0.
+major_on_zero = false
 
 [tool.semantic_release.branches.main]
 match = "main"

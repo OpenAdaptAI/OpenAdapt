@@ -1,5 +1,9 @@
 name: Release and PyPI Publish
 
+# ADMIN_TOKEN is the same organization-scoped release credential used by the
+# canonical Flow release. The default GITHUB_TOKEN cannot push the generated
+# version commit through protected main.
+
 on:
   push:
     branches:
@@ -18,6 +22,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -33,7 +38,7 @@ jobs:
         id: release
         uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.ADMIN_TOKEN }}
 
       - name: Build package
         if: steps.release.outputs.released == 'true'
@@ -47,4 +52,4 @@ jobs:
         if: steps.release.outputs.released == 'true'
         uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.ADMIN_TOKEN }}
