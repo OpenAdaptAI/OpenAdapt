@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.2.0"
+version = "0.3.0"
 description = "Experimental desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,6 +58,7 @@ openadapt-desktop = "engine.cli:main"
 Homepage = "https://openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/openadapt-desktop"
 Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["engine"]

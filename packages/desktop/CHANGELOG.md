@@ -1,13 +1,24 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-07-15)
+
+### Features
+
+- Align desktop with the hosted workflow loop
+  ([`99fee01`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/99fee010cb3422cb2118589adc4c998f0a8dfbd4))
+
+Publish the Experimental Python authoring surface and unsigned CI shells while keeping signed
+  installers, updater signing, and production distribution explicitly unsupported.
+
+
 ## v0.2.0 (2026-03-04)
 
 ### Features
 
 - Add `openadapt doctor` command and fix audit/wormhole bugs
   ([#8](https://github.com/OpenAdaptAI/openadapt-desktop/pull/8),
-  [`f5cb841`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/f5cb841acd70dbc3c57ba752e8bd3f6f8763adde))
+  [`daaf643`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/daaf6437f02ebc43b07ea5da1001ec5be9d666f3))
 
 Add diagnostic command that checks all dependencies and configuration: - Python version, data
   directory writability, database connectivity - Core deps: openadapt-capture, openadapt-privacy,
@@ -26,7 +37,7 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Replace deprecated macos-13 runner with macos-14
   ([#7](https://github.com/OpenAdaptAI/openadapt-desktop/pull/7),
-  [`bac0856`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/bac0856958dd2c6c472253f47d0a83be5453f8ba))
+  [`eeb9052`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/eeb9052db7f05452e774dea2ef26edca131602ed))
 
 * fix: replace deprecated macos-13 runner with macos-14 in build workflow
 
@@ -50,7 +61,7 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Add automated release workflow with python-semantic-release
   ([#6](https://github.com/OpenAdaptAI/openadapt-desktop/pull/6),
-  [`1a3c4b8`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/1a3c4b8c81c3a6ddad9e0f2ee1aca76c079a1c5e))
+  [`95d52d7`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/95d52d7157dbddd7afbcc5afbe1bd2100e9263c4))
 
 Add release.yml workflow triggered on push to main that: - Runs python-semantic-release v9.15.2 to
   determine version bumps from conventional commit messages (feat=minor, fix/perf=patch) - Builds
@@ -70,7 +81,7 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Add hatch build config, fix lint errors and workflow ordering
   ([#1](https://github.com/OpenAdaptAI/openadapt-desktop/pull/1),
-  [`e899e41`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/e899e412cdd0fa4f6999a10e077496b95bab6822))
+  [`01964f7`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/01964f7570fe118c75e5361474a91e32755b8504))
 
 - Add [tool.hatch.build.targets.wheel] packages = ["engine"] so hatchling can find the Python
   package - Fix ruff import sorting in test_backends.py and test_scrubber.py - Remove unused
@@ -81,7 +92,7 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Remove premature screenshot generation and Playwright UI tests
   ([#3](https://github.com/OpenAdaptAI/openadapt-desktop/pull/3),
-  [`2e6c874`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/2e6c874aea15ccbd96a42ba42cf547b06185b218))
+  [`0791216`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/07912161401b47a87d03b0867b7d501cfdc80f99))
 
 Remove: - screenshots/ (fake screenshots of non-functional placeholder HTML) -
   scripts/generate_screenshots.py (generates screenshots of stubs) - tests/test_e2e/test_ui.py
@@ -96,11 +107,11 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 ### Features
 
 - Add docs sync trigger ([#4](https://github.com/OpenAdaptAI/openadapt-desktop/pull/4),
-  [`62d3da2`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/62d3da207e7cc2c1b16c2cf0851add5eb3532547))
+  [`c52ea08`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/c52ea081f0fcc57d552f21fd808ed4d6cc493a3f))
 
 - Add README, screenshots, e2e tests, and automated screenshot generation
   ([#2](https://github.com/OpenAdaptAI/openadapt-desktop/pull/2),
-  [`fa00a22`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/fa00a22d95391dcc1f7ddaf337316e000ab28d22))
+  [`ca0f35c`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/ca0f35cb90b4c21f828d0a27686db2c8bafee8a8))
 
 * docs: add README and CLAUDE.md
 
@@ -126,7 +137,7 @@ Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Implement end-to-end engine with CLI
   ([#5](https://github.com/OpenAdaptAI/openadapt-desktop/pull/5),
-  [`400df35`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/400df3577008edc2b0fd21afe4ed98a8d8e31155))
+  [`61f575b`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/61f575bb0a18e73b37b221c9aca081555e88df86))
 
 * feat: implement end-to-end engine with CLI
 
@@ -159,7 +170,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
 
 - Initial repo scaffold
-  ([`b14c32e`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/b14c32e4fe53e8fd41fa52848236a3b646e2af74))
+  ([`629fa4e`](https://github.com/OpenAdaptAI/openadapt-desktop/commit/629fa4ed5300e0d75505c2f7c5c8a9c67d2eefdd))
 
 Tauri 2.x shell + Python sidecar architecture. See DESIGN.md for comprehensive design document.
 
