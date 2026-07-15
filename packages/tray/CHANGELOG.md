@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.1.1 (2026-07-15)
+
+### Bug Fixes
+
+- Recover tray 0.1.1 PyPI release
+  ([`53776db`](https://github.com/OpenAdaptAI/openadapt-tray/commit/53776dbcea6f225005cfb3d739906171fcaebdb1))
+
+Replace the undefined release lock variable with an offline exact-root synchronizer and preserve
+  v0.1.0 as the failed-attempt audit record.
+
+
 ## v0.1.0 (2026-07-15)
 
 ### Bug Fixes

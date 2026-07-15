@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-tray"
-version = "0.1.0"
+version = "0.1.1"
 description = "Experimental status and launcher companion for OpenAdapt workflow authoring and governed repair"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -59,6 +59,7 @@ openadapt-tray-gui = "openadapt_tray.app:main"
 Homepage = "https://openadapt.ai"
 Documentation = "https://docs.openadapt.ai"
 Repository = "https://github.com/OpenAdaptAI/openadapt-tray"
+
 
 
 [build-system]
