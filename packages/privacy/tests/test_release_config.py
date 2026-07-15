@@ -8,9 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_zero_major_patch_does_not_become_one_dot_zero() -> None:
+def test_release_stays_on_declared_one_x_version_line() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^major_on_zero\s*=\s*false\s*$", pyproject)
+    assert re.search(r"(?m)^allow_zero_version\s*=\s*false\s*$", pyproject)
+    assert re.search(r"(?m)^major_on_zero\s*=\s*true\s*$", pyproject)
 
 
 def test_release_uses_protected_branch_credential_everywhere() -> None:

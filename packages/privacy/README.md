@@ -8,6 +8,11 @@
 
 Privacy scrubbing for GUI automation data - PII/PHI detection and redaction.
 
+**Lifecycle: Experimental.** The API is published on the 1.x version line, but
+the PHI detector is backed by synthetic regression evidence rather than
+clinical validation. Scrubbing is one control in a reviewed egress process, not
+a guarantee that an artifact is PHI-free.
+
 ## Installation
 
 ```bash
