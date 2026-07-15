@@ -1,12 +1,14 @@
-"""OpenAdapt - GUI automation with ML.
+"""OpenAdapt launcher and compatibility meta-package.
 
-This is the meta-package that provides unified access to all OpenAdapt packages.
-Install specific extras to get the functionality you need:
+The active product engine is ``openadapt-flow`` and ships in the base install.
+Use ``openadapt flow ...`` for record, compile, replay, lint, and certification.
+The lazy exports below preserve compatibility with optional supporting and
+research packages:
 
-    pip install openadapt[capture]     # GUI capture only
-    pip install openadapt[ml]          # ML models
-    pip install openadapt[evals]       # Benchmarking
-    pip install openadapt[all]         # Everything
+    pip install openadapt              # launcher + openadapt-flow
+    pip install openadapt[capture]     # experimental native capture
+    pip install openadapt[privacy]     # experimental privacy scrubbing
+    pip install openadapt[ml,evals]    # research toolkits
 """
 
 # Single source of truth: derived from installed distribution metadata
