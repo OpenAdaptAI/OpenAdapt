@@ -129,6 +129,15 @@ def test_doctor_lists_flow_as_core_not_extras():
 FLOW_VERBS = {"demo-record", "record", "compile", "replay", "lint", "certify"}
 
 
+def test_launcher_requires_hosted_flow_release():
+    """The base and compatibility extras must not resolve pre-hosted engines."""
+    metadata = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+
+    assert metadata.count('"openadapt-flow>=1.7.0,<2.0.0"') == 2
+    assert metadata.count('"openadapt-flow[privacy]>=1.7.0,<2.0.0"') == 1
+    assert "openadapt-flow>=1.6.0" not in metadata
+
+
 def test_top_level_help_leads_with_flow():
     """`openadapt --help` must list flow before the other commands."""
     runner = CliRunner()

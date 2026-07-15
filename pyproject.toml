@@ -27,7 +27,7 @@ classifiers = [
 # All other capabilities (capture, ml, evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow>=1.6.0",
+    "openadapt-flow>=1.7.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,13 +51,13 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-flow[privacy]>=1.6.0",
+    "openadapt-flow[privacy]>=1.7.0,<2.0.0",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow>=1.6.0",
+    "openadapt-flow>=1.7.0,<2.0.0",
 ]
 # Bundles
 core = [

@@ -60,7 +60,9 @@ pip install openadapt[all]         # Everything, including research extras
 The flagship compiler ships in the base install, so `openadapt flow …` works
 right after `pip install openadapt`. Install `openadapt-flow[hosted]` when you
 want OS-keychain token storage; environment-based token configuration remains
-available on headless systems.
+available on headless systems. This launcher requires `openadapt-flow>=1.7.0,<2`
+so clean installs cannot resolve an older engine that lacks the governed hosted
+artifact commands documented below.
 
 **Requirements:** Python 3.10+
 

@@ -2935,9 +2935,9 @@ requires-dist = [
     { name = "openadapt", extras = ["core", "grounding", "retrieval", "privacy", "flow"], marker = "extra == 'all'" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=0.1.0" },
     { name = "openadapt-evals", marker = "extra == 'evals'", specifier = ">=0.1.0" },
-    { name = "openadapt-flow", specifier = ">=1.6.0" },
-    { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.6.0" },
-    { name = "openadapt-flow", extras = ["privacy"], marker = "extra == 'privacy'", specifier = ">=1.6.0" },
+    { name = "openadapt-flow", specifier = ">=1.7.0,<2.0.0" },
+    { name = "openadapt-flow", marker = "extra == 'flow'", specifier = ">=1.7.0,<2.0.0" },
+    { name = "openadapt-flow", extras = ["privacy"], marker = "extra == 'privacy'", specifier = ">=1.7.0,<2.0.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-ml", marker = "extra == 'ml'", specifier = ">=0.2.0" },
     { name = "openadapt-retrieval", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },
@@ -3006,11 +3006,12 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "1.6.0"
+version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "idna" },
     { name = "imagehash" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -3020,10 +3021,11 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/ea/5f2bc76a252d688216528f1aae07e93f66fe051c8caa92a22d224ff063c2/openadapt_flow-1.6.0.tar.gz", hash = "sha256:b9a5161ec285878c6ad9fe917b80ee89abf27ee344f381c9b79805d242013302", size = 15553966 }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/00/4ff2f6233cea517379549880852ee41092b1c183bd16883261e1b9088f24/openadapt_flow-1.7.0.tar.gz", hash = "sha256:095f9b3903b621375cb6d21daecde4f68264c4f20ab60c37d6ff37be5a28ddf4", size = 16045959 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/8d/61a84bb9ede4a8905bb6ba7cea658a91888ef3547f2dff7d9a538ef1faf9/openadapt_flow-1.6.0-py3-none-any.whl", hash = "sha256:881accf1f13090f303da695fc0a351d871279c2282f105b78f27ebc03e7c8013", size = 723791 },
+    { url = "https://files.pythonhosted.org/packages/73/15/d9e67ce79e6b1bbaa55d00ce4dcc24cddbf4cd55c81e6fe4f70bcc80648f/openadapt_flow-1.7.0-py3-none-any.whl", hash = "sha256:338dae0a8a4414ae887cd1edeb3bcc8ce660b3bfea7772ca850f5c42c56b04a8", size = 768733 },
 ]
 
 [package.optional-dependencies]
