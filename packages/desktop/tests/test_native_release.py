@@ -55,6 +55,9 @@ def test_native_workflows_are_pinned_and_preserve_experimental_boundary() -> Non
     assert "--draft" in release and "--prerelease" in release
     assert "ADMIN_TOKEN" not in release
     assert "Experimental" in release
+    publish_job = release.split("  publish-draft:", 1)[1]
+    assert "actions/setup-python@" in publish_job
+    assert 'python-version: "3.12"' in publish_job
     for secret in (
         "LINUX_GPG_PRIVATE_KEY",
         "LINUX_GPG_KEY_ID",
