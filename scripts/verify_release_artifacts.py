@@ -12,14 +12,32 @@ from email.message import Message
 from email.parser import BytesParser
 from pathlib import Path
 
-# Direct execution adds scripts/, rather than its parent, to ``sys.path``.
-try:
-    from scripts.verify_release_lock import _project_identity
-except ModuleNotFoundError:
-    from verify_release_lock import _project_identity
-
 ROOT = Path(__file__).resolve().parents[1]
 BETA_CLASSIFIER = "Development Status :: 4 - Beta"
+
+
+def _quoted_table_value(text: str, table: str, key: str) -> str:
+    current_table = ""
+    assignment = re.compile(rf'^{re.escape(key)}\s*=\s*"([^"]+)"\s*$')
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            current_table = line
+            continue
+        if current_table != f"[{table}]":
+            continue
+        match = assignment.match(line)
+        if match:
+            return match.group(1)
+    raise ValueError(f"missing quoted {key!r} in [{table}]")
+
+
+def _project_identity(root: Path) -> tuple[str, str]:
+    project_text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    return (
+        _quoted_table_value(project_text, "project", "name"),
+        _quoted_table_value(project_text, "project", "version"),
+    )
 
 
 def _distribution_metadata(raw: bytes, source: str) -> Message:

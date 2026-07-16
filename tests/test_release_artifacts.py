@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import io
+import runpy
 import tarfile
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.verify_release_artifacts import verify_release_artifacts
+ROOT = Path(__file__).resolve().parents[1]
+verify_release_artifacts = runpy.run_path(
+    str(ROOT / "scripts/verify_release_artifacts.py")
+)["verify_release_artifacts"]
 
 
 def _metadata(version: str) -> bytes:
