@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-07-16)
+
+### Bug Fixes
+
+- Align launcher lifecycle metadata with beta
+  ([`38231eb`](https://github.com/OpenAdaptAI/OpenAdapt/commit/38231eb6576bb69648199e493310cde9a1b32b44))
+
+### Chores
+
+- Keep release lock version synchronized
+  ([`3f245d4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/3f245d469255c95a452353e268c5f3617b755ae0))
+
+
 ## v1.6.0 (2026-07-15)
 
 ### Bug Fixes
