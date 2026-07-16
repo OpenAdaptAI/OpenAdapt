@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.3 (2026-07-16)
+
+### Bug Fixes
+
+- Publish release assets from named branch
+  ([`5df92a8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5df92a8b83031dcbb0ac966c1f9acc3052a2ba5a))
+
+
 ## v1.6.2 (2026-07-16)
 
 ### Bug Fixes
