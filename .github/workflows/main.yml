@@ -56,6 +56,7 @@ jobs:
       - name: Build release artifacts and reject workstation state
         run: |
           python -m build
+          python scripts/verify_release_artifacts.py
           tar -tzf dist/*.tar.gz > /tmp/openadapt-sdist-files.txt
           ! grep -E '/(\.env|\.cache/|[^/]+\.db$|output\.png$|\.claude/|\.worktrees/)' /tmp/openadapt-sdist-files.txt
           unzip -l dist/*.whl > /tmp/openadapt-wheel-files.txt
