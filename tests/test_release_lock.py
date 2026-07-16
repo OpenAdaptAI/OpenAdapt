@@ -139,3 +139,7 @@ def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
     assert github_steps[1]["with"]["name"] == transfer["with"]["name"]
     assert pypi_steps[1]["with"]["attestations"] is False
     assert github_steps[2]["with"]["tag"] == "${{ needs.release.outputs.tag }}"
+
+    checkout = github_steps[0]
+    assert checkout["name"] == "Checkout release branch"
+    assert checkout["with"] == {"ref": "main", "fetch-depth": 0}
