@@ -97,7 +97,19 @@ class TestRecordingController:
         assert state["status"] == "recovered"
 
     def test_pause_raises_not_implemented(self, tmp_data_dir: Path) -> None:
-        """Pause should raise NotImplementedError for v0.1.0."""
+        """Pause should explain the supported lifecycle alternative."""
         controller = RecordingController(captures_dir=tmp_data_dir / "captures")
-        with pytest.raises(NotImplementedError, match="Pause not supported"):
+        with pytest.raises(
+            NotImplementedError,
+            match="^Pause is not supported; use stop/start instead$",
+        ):
             controller.pause()
+
+    def test_resume_raises_not_implemented(self, tmp_data_dir: Path) -> None:
+        """Resume should explain the supported lifecycle alternative."""
+        controller = RecordingController(captures_dir=tmp_data_dir / "captures")
+        with pytest.raises(
+            NotImplementedError,
+            match="^Resume is not supported; use stop/start instead$",
+        ):
+            controller.resume()

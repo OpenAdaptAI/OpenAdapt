@@ -19,7 +19,10 @@ import sys
 
 from loguru import logger
 
+from engine import __version__
 from engine.config import EngineConfig
+
+ENGINE_VERSION = __version__
 
 
 def main() -> None:
@@ -41,7 +44,7 @@ def main() -> None:
         format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {name}:{function}:{line} - {message}",
     )
 
-    logger.info("OpenAdapt Desktop Engine starting (v{version})", version="0.1.0")
+    logger.info("OpenAdapt Desktop Engine starting (v{version})", version=ENGINE_VERSION)
     logger.info("Storage mode: {mode}", mode=config.storage_mode)
 
     from engine.audit import AuditLogger

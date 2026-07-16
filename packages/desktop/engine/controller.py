@@ -245,7 +245,7 @@ class RecordingController:
         Raises:
             RuntimeError: If no recording is active or already paused.
         """
-        raise NotImplementedError("Pause not supported in v0.1.0 -- use stop/start instead")
+        raise NotImplementedError("Pause is not supported; use stop/start instead")
 
     def resume(self) -> None:
         """Resume a paused recording session.
@@ -253,7 +253,7 @@ class RecordingController:
         Raises:
             RuntimeError: If not currently paused.
         """
-        raise NotImplementedError("Resume not supported in v0.1.0 -- use stop/start instead")
+        raise NotImplementedError("Resume is not supported; use stop/start instead")
 
     def recover(self) -> list[str]:
         """Recover any incomplete sessions from a previous crash.
