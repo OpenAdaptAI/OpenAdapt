@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.3.1 (2026-07-16)
+
+### Bug Fixes
+
+- Keep release lock metadata consistent
+  ([`e3c78f4`](https://github.com/OpenAdaptAI/openadapt-types/commit/e3c78f458e52aec69377c48e4ece7b77e8c88968))
+
+Pin release tooling, verify editable lock metadata, and build the reviewed lock state during
+  semantic release.
+
+
 ## v0.3.0 (2026-07-13)
 
 ### Features
