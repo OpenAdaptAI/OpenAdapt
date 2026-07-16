@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }}
@@ -28,33 +28,19 @@ jobs:
             echo "skip=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set up Python
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: astral-sh/setup-uv@v4
-
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@v9.15.2
+        uses: python-semantic-release/python-semantic-release@7b3f71697ccfbaef884e1e754b6364e974b134cf # v9.15.2
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
-      - name: Build package
-        if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        run: uv build
-
       - name: Publish to PyPI
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@v9.15.2
+        uses: python-semantic-release/publish-action@b9c41d4b0754dee5a6c7188d42b33f66e3a8aafd # v9.15.2
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
