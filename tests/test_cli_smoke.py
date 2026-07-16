@@ -89,6 +89,19 @@ def test_version_flag_matches_installed_metadata():
     assert __version__ == expected
 
 
+def test_distribution_metadata_advertises_beta_lifecycle():
+    """Published launcher metadata must match the documented Beta lifecycle."""
+    from importlib.metadata import metadata
+
+    classifiers = metadata("openadapt").get_all("Classifier") or []
+    lifecycle = [
+        classifier
+        for classifier in classifiers
+        if classifier.startswith("Development Status :: ")
+    ]
+    assert lifecycle == ["Development Status :: 4 - Beta"]
+
+
 def test_doctor_lists_flow_as_core_not_extras():
     """`openadapt doctor` must treat openadapt-flow as core and the opt-in
     extras (capture/ml/evals/viewer/...) as optional, never flagging a
