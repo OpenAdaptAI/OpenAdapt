@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_native_versions_are_synchronized() -> None:
-    assert native_version() == "0.1.0"
+    assert native_version() == "0.1.1"
 
 
 def test_node_dependencies_are_locked_for_cross_platform_tauri_builds() -> None:
@@ -77,25 +77,25 @@ def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
 
 
 def test_native_tag_is_distinct_from_python_release_channel() -> None:
-    assert validate_tag("desktop-v0.1.0") == "desktop-v0.1.0"
-    with pytest.raises(ValueError, match="desktop-v0.1.0"):
+    assert validate_tag("desktop-v0.1.1") == "desktop-v0.1.1"
+    with pytest.raises(ValueError, match="desktop-v0.1.1"):
         validate_tag("v0.3.2")
 
 
 @pytest.mark.parametrize(
     ("platform", "signing", "files", "expected_suffixes"),
     [
-        ("macos", "adhoc", ["dmg/App_0.1.0_aarch64.dmg"], [".dmg"]),
+        ("macos", "adhoc", ["dmg/App_0.1.1_aarch64.dmg"], [".dmg"]),
         (
             "windows",
             "unsigned",
-            ["msi/App_0.1.0_x64_en-US.msi", "nsis/App_0.1.0_x64-setup.exe"],
+            ["msi/App_0.1.1_x64_en-US.msi", "nsis/App_0.1.1_x64-setup.exe"],
             [".msi", "-nsis-setup.exe"],
         ),
         (
             "linux",
             "unsigned",
-            ["deb/app_0.1.0_amd64.deb", "appimage/App_0.1.0_amd64.AppImage"],
+            ["deb/app_0.1.1_amd64.deb", "appimage/App_0.1.1_amd64.AppImage"],
             [".deb", ".AppImage"],
         ),
     ],
@@ -123,7 +123,7 @@ def test_stage_artifacts_renames_and_labels_experimental(
     )
     asset_names = [path.name for path in staged if path.suffix != ".json"]
     assert len(asset_names) == len(expected_suffixes)
-    assert all("Experimental-v0.1.0" in name for name in asset_names)
+    assert all("Experimental-v0.1.1" in name for name in asset_names)
     assert all(any(name.endswith(suffix) for name in asset_names) for suffix in expected_suffixes)
 
     metadata_path = next(path for path in staged if path.suffix == ".json")
