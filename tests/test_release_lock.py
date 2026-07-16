@@ -1,7 +1,10 @@
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 VERIFIER = ROOT / "scripts/verify_release_lock.py"
@@ -76,7 +79,63 @@ def test_release_workflow_syncs_and_verifies_lock_before_build():
     stage_index = metadata.index("git add uv.lock")
     assert sync_index < stage_index
 
-    pull_index = workflow.index("git pull --ff-only")
     verify_index = workflow.index("python scripts/verify_release_lock.py")
-    build_index = workflow.index("poetry build")
-    assert pull_index < verify_index < build_index
+    build_index = workflow.index("uv build --wheel --sdist")
+    artifact_index = workflow.index("python scripts/verify_release_artifacts.py")
+    attest_index = workflow.index("- name: Attest release artifacts")
+    transfer_index = workflow.index("- name: Transfer release artifacts")
+    assert verify_index < build_index < artifact_index < attest_index < transfer_index
+
+
+def test_release_workflow_pins_actions_and_separates_permissions():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+    document = yaml.safe_load(workflow)
+    metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    action_refs = re.findall(r"(?m)^\s*uses:\s+\S+@([^\s#]+)", workflow)
+    assert action_refs
+    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
+    assert 'requires = ["hatchling==1.31.0"]' in metadata
+
+    assert document["permissions"] == {"contents": "read"}
+    jobs = document["jobs"]
+    assert jobs["release"]["permissions"] == {"contents": "write"}
+    assert jobs["build-and-attest"]["permissions"] == {
+        "contents": "read",
+        "id-token": "write",
+        "attestations": "write",
+    }
+    assert jobs["publish-pypi"]["permissions"] == {"contents": "read"}
+    assert jobs["publish-github"]["permissions"] == {"contents": "write"}
+    assert jobs["report-release-failure"]["permissions"] == {"issues": "write"}
+
+
+def test_release_workflow_publishes_the_attested_bytes_to_both_destinations():
+    workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
+    document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = document["jobs"]
+
+    build_steps = jobs["build-and-attest"]["steps"]
+    attest = next(
+        step for step in build_steps if step["name"] == "Attest release artifacts"
+    )
+    transfer = next(
+        step for step in build_steps if step["name"] == "Transfer release artifacts"
+    )
+    assert attest["with"]["subject-path"].splitlines() == [
+        "dist/*.whl",
+        "dist/*.tar.gz",
+    ]
+    assert transfer["with"]["path"].splitlines() == [
+        "dist/*.whl",
+        "dist/*.tar.gz",
+    ]
+    assert transfer["with"]["if-no-files-found"] == "error"
+
+    pypi_steps = jobs["publish-pypi"]["steps"]
+    github_steps = jobs["publish-github"]["steps"]
+    assert pypi_steps[0]["with"]["name"] == transfer["with"]["name"]
+    assert github_steps[1]["with"]["name"] == transfer["with"]["name"]
+    assert pypi_steps[1]["with"]["attestations"] is False
+    assert github_steps[2]["with"]["tag"] == "${{ needs.release.outputs.tag }}"

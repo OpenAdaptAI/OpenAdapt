@@ -1,74 +1,182 @@
 name: Release and PyPI Publish
 
+# Release credentials are deliberately separated from build and publication:
+# - release: may update protected main and create the tag/release;
+# - build-and-attest: can only read source and issue artifact attestations;
+# - publish-pypi: receives only the project-scoped PyPI token;
+# - publish-github: may only attach assets to the GitHub Release.
+#
+# Every third-party action is pinned to a full commit SHA. Dependabot should
+# propose reviewed SHA updates rather than following mutable tags.
+
 on:
   push:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release-and-publish:
+  release:
     runs-on: ubuntu-latest
-    concurrency: release
     permissions:
-      id-token: write
       contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released || 'false' }}
+      tag: ${{ steps.release.outputs.tag || '' }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }}
 
-      - name: Check if should skip
+      - name: Skip the generated release commit
         id: check_skip
         run: |
           if [ "$(git log -1 --pretty=format:'%an')" = "OpenAdapt Bot" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Set up Python
-        if: steps.check_skip.outputs.skip != 'true'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        if: steps.check_skip.outputs.skip != 'true'
-        run: pip install poetry
 
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@v10.5.3
+        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
           git_committer_name: "OpenAdapt Bot"
           git_committer_email: "bot@openadapt.ai"
 
-      - name: Build and publish to PyPI
-        if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          # PSR's build_command updates and stages uv.lock in the generated
-          # release commit. Verify that exact commit before building it.
-          git pull --ff-only
-          python scripts/verify_release_lock.py
-          poetry config pypi-token.pypi $PYPI_TOKEN
-          poetry build
-          poetry publish --no-interaction --skip-existing
+  build-and-attest:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
 
-      # Releases in openadapt-ml failed silently for 3 months (Mar-Jun
-      # 2026) while PyPI went stale; see issue #999. Fail loudly instead.
-      - name: File issue on release failure
-        if: failure()
+    steps:
+      - name: Checkout released tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+          enable-cache: false
+
+      - name: Build exact release artifacts
+        run: |
+          python scripts/verify_release_lock.py
+          uv build --wheel --sdist
+          python scripts/verify_release_artifacts.py
+
+      - name: Attest release artifacts
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+
+      - name: Transfer release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dists-${{ needs.release.outputs.tag }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-pypi:
+    needs: [release, build-and-attest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download attested release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dists-${{ needs.release.outputs.tag }}
+          path: dist/
+
+      # The launcher currently uses a project-scoped API token. GitHub's
+      # repository attestation above remains verifiable; PyPI-native PEP 740
+      # attestations require a separate Trusted Publisher settings migration.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}
+          skip-existing: true
+          attestations: false
+
+  publish-github:
+    needs: [release, build-and-attest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout released tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Download attested release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dists-${{ needs.release.outputs.tag }}
+          path: dist/
+
+      - name: Attach artifacts to GitHub Release
+        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
+        with:
+          github_token: ${{ github.token }}
+          tag: ${{ needs.release.outputs.tag }}
+
+  report-release-failure:
+    needs: [release, build-and-attest, publish-pypi, publish-github]
+    if: >-
+      ${{ always() &&
+          (needs.release.result == 'failure' ||
+           needs.build-and-attest.result == 'failure' ||
+           needs.publish-pypi.result == 'failure' ||
+           needs.publish-github.result == 'failure') }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: File or update release failure issue
         env:
-          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          BUILD_RESULT: ${{ needs.build-and-attest.result }}
+          PYPI_RESULT: ${{ needs.publish-pypi.result }}
+          GITHUB_RESULT: ${{ needs.publish-github.result }}
         run: |
           TITLE="Release workflow failed on main"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          Until this is fixed, merged fix/feat commits are NOT being published to PyPI, and users install stale versions."
+          release=${RELEASE_RESULT}, build-and-attest=${BUILD_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}.
+
+          Until this is fixed, do not assume that the Git tag, PyPI files, GitHub assets, and attestations are mutually complete."
           EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
