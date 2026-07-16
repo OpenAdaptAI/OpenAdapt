@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.6.2 (2026-07-16)
+
+### Bug Fixes
+
+- Publish attested launcher release artifacts
+  ([`906397a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/906397a2e761d6eaa58007bc0e34732a962d4120))
+
+### Testing
+
+- Load release verifier from its execution path
+  ([`906397a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/906397a2e761d6eaa58007bc0e34732a962d4120))
+
+- Make release scripts importable on python 3.10
+  ([`906397a`](https://github.com/OpenAdaptAI/OpenAdapt/commit/906397a2e761d6eaa58007bc0e34732a962d4120))
+
+
 ## v1.6.1 (2026-07-16)
 
 ### Bug Fixes
