@@ -1,0 +1,467 @@
+name: Experimental Native Release
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate immutable native tag
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Require the tag to match all native version sources
+        run: python scripts/native_release.py validate-tag "${GITHUB_REF_NAME}"
+
+  build-macos:
+    name: macOS ${{ matrix.architecture }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    environment: native-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            architecture: arm64
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            architecture: x86_64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: ${{ matrix.target }}
+
+      - name: Validate complete-or-absent Apple signing credentials
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform macos
+          --github-output "${GITHUB_OUTPUT}"
+
+      - name: Import Developer ID certificate into an ephemeral keychain
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_path="${RUNNER_TEMP}/openadapt-developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/openadapt-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode > "${certificate_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" \
+            -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychain -d user -s "${keychain_path}"
+          echo "OPENADAPT_APPLE_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
+          echo "OPENADAPT_APPLE_CERTIFICATE=${certificate_path}" >> "${GITHUB_ENV}"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build Developer ID signed and notarized DMG
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+
+      - name: Build ad-hoc signed DMG
+        if: steps.signing.outputs.mode == 'adhoc'
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+
+      - name: Smoke-test DMG install, signature policy, and uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          test "${#artifacts[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${artifacts[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --signing-mode "${{ steps.signing.outputs.mode }}"
+
+      - name: Stage exact Experimental DMG
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
+          --output dist/native
+          --platform macos
+          --architecture ${{ matrix.architecture }}
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested DMG
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-macos-${{ matrix.architecture }}
+          path: dist/native/*
+          if-no-files-found: error
+
+      - name: Remove ephemeral Apple signing material
+        if: always() && steps.signing.outputs.mode == 'developer-id-notarized'
+        shell: bash
+        run: |
+          security delete-keychain "${OPENADAPT_APPLE_KEYCHAIN}" || true
+          rm -f "${OPENADAPT_APPLE_CERTIFICATE}"
+
+  build-windows:
+    name: Windows x86_64
+    needs: validate
+    runs-on: windows-2022
+    environment: native-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Validate complete-or-absent Windows signing credentials
+        id: signing
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform windows
+          --github-output "$env:GITHUB_OUTPUT"
+
+      - name: Import Authenticode certificate and write signing config
+        if: steps.signing.outputs.mode == 'authenticode'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          $CertificatePath = Join-Path $env:RUNNER_TEMP "openadapt-code-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $CertificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          )
+          $Password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $Certificate = Import-PfxCertificate `
+            -FilePath $CertificatePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $Password | Where-Object HasPrivateKey | Select-Object -First 1
+          if ($null -eq $Certificate) { throw "PFX did not import a private code-signing key" }
+          $Expected = $env:WINDOWS_CERTIFICATE_THUMBPRINT.Replace(" ", "").ToUpperInvariant()
+          if ($Certificate.Thumbprint -ne $Expected) { throw "Imported certificate thumbprint mismatch" }
+          $ConfigPath = Join-Path $env:RUNNER_TEMP "openadapt-windows-signing.json"
+          python scripts/native_signing.py windows-config `
+            --output $ConfigPath `
+            --thumbprint $Expected
+          "OPENADAPT_WINDOWS_SIGNING_CONFIG=$ConfigPath" | Out-File $env:GITHUB_ENV -Append
+          "OPENADAPT_WINDOWS_CERTIFICATE_PATH=$CertificatePath" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build signed MSI and NSIS installers
+        if: steps.signing.outputs.mode == 'authenticode'
+        shell: pwsh
+        run: >-
+          npm run tauri build --
+          --bundles msi,nsis
+          --target x86_64-pc-windows-msvc
+          --config "$env:OPENADAPT_WINDOWS_SIGNING_CONFIG"
+
+      - name: Build unsigned MSI and NSIS installers
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: >-
+          npm run tauri build --
+          --bundles msi,nsis
+          --target x86_64-pc-windows-msvc
+
+      - name: Smoke-test MSI and NSIS install, signature policy, and uninstall
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          $Msi = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          $Signature = @("--signing-mode", "${{ steps.signing.outputs.mode }}")
+          if ("${{ steps.signing.outputs.mode }}" -eq "authenticode") {
+            $Signature += @("--signing-fingerprint", $env:WINDOWS_CERTIFICATE_THUMBPRINT)
+          }
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Msi[0].FullName `
+            --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install @Signature
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Nsis[0].FullName `
+            --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install @Signature
+
+      - name: Stage exact Experimental Windows installers
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+          --output dist/native
+          --platform windows
+          --architecture x86_64
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested Windows installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-windows-x86_64
+          path: dist/native/*
+          if-no-files-found: error
+
+      - name: Remove ephemeral Windows signing material
+        if: always() && steps.signing.outputs.mode == 'authenticode'
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\CurrentUser\My | Where-Object {
+            $_.Thumbprint -eq $env:WINDOWS_CERTIFICATE_THUMBPRINT.Replace(" ", "").ToUpperInvariant()
+          } | Remove-Item -Force
+          Remove-Item -LiteralPath $env:OPENADAPT_WINDOWS_CERTIFICATE_PATH -Force -ErrorAction SilentlyContinue
+
+  build-linux:
+    name: Linux x86_64 (unsigned + provenance)
+    needs: validate
+    runs-on: ubuntu-22.04
+    environment: native-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Linux bundle dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            xdg-utils
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Refuse unverified Linux package-signing configuration
+        env:
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+          LINUX_GPG_FINGERPRINT: ${{ secrets.LINUX_GPG_FINGERPRINT }}
+        run: python scripts/native_signing.py preflight --platform linux
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build DEB and AppImage
+        run: >-
+          npm run tauri build --
+          --bundles deb,appimage
+          --target x86_64-unknown-linux-gnu
+
+      - name: Smoke-test DEB and AppImage install and uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb)
+          appimage=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
+          test "${#deb[@]}" -eq 1
+          test "${#appimage[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${deb[0]}" \
+            --app-path /usr/bin/openadapt-desktop \
+            --expected-architecture x86_64 \
+            --allow-system-install
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${appimage[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
+            --expected-architecture x86_64
+
+      - name: Stage exact Experimental Linux packages
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          --output dist/native
+          --platform linux
+          --architecture x86_64
+          --signing unsigned
+
+      - name: Upload smoke-tested Linux packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-linux-x86_64
+          path: dist/native/*
+          if-no-files-found: error
+
+  attest:
+    name: Checksum and attest exact release bytes
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Download all smoke-tested platform artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: native-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Reject missing, duplicate, or unexpected release files
+        run: python scripts/native_release.py validate-set --directory release-assets
+
+      - name: Generate and verify final checksums
+        run: |
+          python scripts/native_release.py checksums \
+            --directory release-assets \
+            --output release-assets/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory release-assets \
+            --manifest release-assets/SHA256SUMS
+
+      - name: Attest the exact files named by SHA256SUMS
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
+        with:
+          subject-checksums: release-assets/SHA256SUMS
+
+      - name: Upload exact attested release set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-release-${{ github.ref_name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-draft:
+    name: Create or update Experimental draft prerelease
+    needs: attest
+    runs-on: ubuntu-22.04
+    environment: native-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Download exact attested release set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-release-${{ github.ref_name }}
+          path: release-assets
+
+      - name: Reverify exact bytes before upload
+        run: >-
+          python scripts/native_release.py verify-checksums
+          --directory release-assets
+          --manifest release-assets/SHA256SUMS
+
+      - name: Create or update draft prerelease and upload assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="OpenAdapt Desktop Experimental ${GITHUB_REF_NAME#desktop-v}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --draft \
+              --prerelease \
+              --title "${title}" \
+              --notes-file docs/EXPERIMENTAL_NATIVE_INSTALLERS.md
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --draft \
+              --prerelease \
+              --title "${title}" \
+              --notes-file docs/EXPERIMENTAL_NATIVE_INSTALLERS.md
+          fi
+          gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber

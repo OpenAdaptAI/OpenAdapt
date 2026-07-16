@@ -33,7 +33,7 @@ jobs:
         run: uv build --wheel --sdist
 
       - name: Upload Python distributions
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-distribution
           path: dist/openadapt_desktop-*
@@ -69,18 +69,46 @@ jobs:
         run: uv run python scripts/verify_build_artifact.py sidecar
 
       - name: Upload sidecar executable
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-sidecar-${{ runner.os }}-${{ runner.arch }}
           path: dist/openadapt-engine*
           if-no-files-found: error
 
-  tauri-shell:
-    name: Unsigned Tauri shell (${{ matrix.os }})
+  native-installers:
+    name: Experimental installer (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-latest]
+        include:
+          - label: macOS arm64
+            os: macos-15
+            platform: macos
+            architecture: arm64
+            target: aarch64-apple-darwin
+            bundles: dmg
+            signing: adhoc
+          - label: macOS Intel
+            os: macos-15-intel
+            platform: macos
+            architecture: x86_64
+            target: x86_64-apple-darwin
+            bundles: dmg
+            signing: adhoc
+          - label: Windows x86_64
+            os: windows-2022
+            platform: windows
+            architecture: x86_64
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+            signing: unsigned
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            platform: linux
+            architecture: x86_64
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+            signing: unsigned
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -91,30 +119,111 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libayatana-appindicator3-dev \
+            patchelf \
             librsvg2-dev \
+            xdg-utils \
             libwebkit2gtk-4.1-dev
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: "1.97.0"
+          targets: ${{ matrix.target }}
           components: rustfmt
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
 
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
-      - name: Build release-mode Tauri shell
-        run: cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build native installer packages
+        run: >-
+          npm run tauri build --
+          --bundles ${{ matrix.bundles }}
+          --target ${{ matrix.target }}
 
-      - name: Verify Tauri shell artifact
-        run: python scripts/verify_build_artifact.py tauri
+      - name: Smoke-test macOS DMG install and uninstall
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          test "${#artifacts[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${artifacts[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --signing-mode adhoc
 
-      - name: Upload unsigned Tauri shell
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Smoke-test Windows MSI and NSIS install and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Msi = @(Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Msi[0].FullName `
+            --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Nsis[0].FullName `
+            --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install
+
+      - name: Smoke-test Linux DEB and AppImage install and uninstall
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=(src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb)
+          appimage=(src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage)
+          test "${#deb[@]}" -eq 1
+          test "${#appimage[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${deb[0]}" \
+            --app-path /usr/bin/openadapt-desktop \
+            --expected-architecture x86_64 \
+            --allow-system-install
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${appimage[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
+            --expected-architecture x86_64
+
+      - name: Stage accurately labelled Experimental artifacts
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
+          --output dist/native
+          --platform ${{ matrix.platform }}
+          --architecture ${{ matrix.architecture }}
+          --signing ${{ matrix.signing }}
+
+      - name: Generate and verify CI artifact checksums
+        shell: bash
+        run: |
+          python scripts/native_release.py checksums \
+            --directory dist/native \
+            --output dist/native/SHA256SUMS-${{ matrix.platform }}-${{ matrix.architecture }}
+          python scripts/native_release.py verify-checksums \
+            --directory dist/native \
+            --manifest dist/native/SHA256SUMS-${{ matrix.platform }}-${{ matrix.architecture }}
+
+      - name: Upload Experimental native installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: tauri-shell-${{ runner.os }}-${{ runner.arch }}
-          path: src-tauri/target/release/openadapt-desktop*
+          name: native-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: dist/native/*
           if-no-files-found: error

@@ -27,12 +27,13 @@ certification, and repair live in `openadapt-flow`, not this repository.
 | Python capture CLI | Record, list, inspect, scrub, review, approve, local storage, health, and cleanup commands | Experimental; covered by tests |
 | Local review gate | Persisted states and egress checks for the legacy capture pipeline | Experimental; not the `openadapt-flow` certification system |
 | Legacy upload adapters | S3-compatible storage, Hugging Face Hub, Magic Wormhole, and federated-learning code paths | Experimental; not the current hosted workflow/break-report contract |
-| Tauri/WebView UI | Static prototype assets and a release-mode shell binary built on Linux, macOS, and Windows CI | Compiles unsigned; commands remain scaffold-only |
+| Tauri/WebView UI | Static prototype assets packaged for macOS, Windows, and Linux | Experimental installer shell; commands remain scaffold-only |
 | Rust commands | Command signatures return `Not implemented` | Not integrated |
 | Python sidecar IPC | Protocol skeleton with no registered handlers | Not integrated |
 | Desktop-to-flow handoff | No record -> compile -> replay -> teach connection | Not implemented |
-| Build artifacts | Wheel/sdist, a smoke-tested PyInstaller sidecar, and an unsigned Tauri shell binary | CI artifacts only; not an integrated or signed release |
-| Native installers and updater | Bundle configuration exists; installer signing, updater signing, and release credentials are incomplete | Not release-ready |
+| Build artifacts | Wheel/sdist, a PyInstaller sidecar, and Experimental DMG/MSI/NSIS/DEB/AppImage jobs | Native jobs structurally install/uninstall and label every platform, architecture, and signing state |
+| Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance | Experimental packaging evidence only; not an integrated product release |
+| Updater | Plugin code remains compiled, but the unusable empty-key feed configuration is disabled | No updater channel is published |
 
 The Python package and experimental Tauri shell are versioned independently.
 Those implementation versions do not represent separate supported desktop
@@ -115,9 +116,11 @@ workflow compiler or runtime. Those remain in `openadapt-flow`.
 - The Python IPC handler registry is empty.
 - No checked-in adapter hands a capture to `openadapt-flow` for compilation.
 - No teaching UI writes a governed repair back to a workflow bundle.
-- Native DMG, MSI, and Linux packages are not established release artifacts.
-- Apple signing/notarization, Windows Authenticode, updater signing, and
-  rollback are not configured as a supported release channel.
+- Native packages are scaffold-shell Experimental artifacts; structural
+  install/uninstall success is not evidence of an integrated workflow.
+- Apple Developer ID/notarization and Windows Authenticode are credential-gated
+  and fail closed on partial configuration. The updater and rollback remain
+  disabled pending an independent signing-key lifecycle.
 - The separately developed tray client expects a desktop IPC service that this
   branch does not provide.
 
@@ -145,6 +148,10 @@ deployment by itself.
 Prerequisites are Python 3.11+ and
 [`uv`](https://docs.astral.sh/uv/). Rust, Node.js, and the Tauri CLI are needed
 only when working on the unfinished shell.
+
+Native packaging details, verification scope, artifact names, and external
+signing requirements are documented in
+[Experimental Native Installers](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md).
 
 The main implementation areas are:
 

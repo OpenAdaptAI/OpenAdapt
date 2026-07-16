@@ -21,15 +21,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico"]
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/OpenAdaptAI/openadapt-desktop/releases/latest/download/latest.json"
-      ],
-      "pubkey": ""
+    "targets": ["dmg", "msi", "nsis", "deb", "appimage"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "macOS": {
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "tsp": true
     }
   }
 }
