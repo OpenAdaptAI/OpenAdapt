@@ -100,6 +100,18 @@ jobs:
       - name: Install locked Tauri CLI
         run: npm ci --ignore-scripts
 
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          uv sync --locked --extra build
+          uv run pyinstaller --clean --noconfirm --onefile \
+            --name openadapt-engine engine/__main__.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            "src-tauri/binaries/openadapt-engine-${{ matrix.target }}"
+
       - name: Build Developer ID signed and notarized DMG
         if: steps.signing.outputs.mode == 'developer-id-notarized'
         env:
@@ -223,6 +235,18 @@ jobs:
       - name: Install locked Tauri CLI
         run: npm ci --ignore-scripts
 
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          uv sync --locked --extra build
+          uv run pyinstaller --clean --noconfirm --onefile \
+            --name openadapt-engine engine/__main__.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine.exe \
+            src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
+
       - name: Build signed MSI and NSIS installers
         if: steps.signing.outputs.mode == 'authenticode'
         shell: pwsh
@@ -334,6 +358,18 @@ jobs:
 
       - name: Install locked Tauri CLI
         run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          uv sync --locked --extra build
+          uv run pyinstaller --clean --noconfirm --onefile \
+            --name openadapt-engine engine/__main__.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            src-tauri/binaries/openadapt-engine-x86_64-unknown-linux-gnu
 
       - name: Build DEB and AppImage
         run: >-

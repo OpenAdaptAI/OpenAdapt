@@ -1,145 +1,199 @@
 // IPC commands for Tauri <-> frontend communication.
 //
 // These commands are invoked from the WebView frontend via
-// `window.__TAURI__.invoke('command_name', { params })`.
+// `import { invoke } from '@tauri-apps/api/core'`.
 //
-// Each command delegates to the Python sidecar via JSON-over-stdin/stdout IPC.
-// See Appendix B of DESIGN.md for the full IPC protocol specification.
+// Every engine-backed command forwards to the Python sidecar over the
+// JSON-lines protocol (see `sidecar.rs` and DESIGN.md Appendix B). The frontend
+// mostly uses the generic `engine_invoke(cmd, params)` bridge (so new engine
+// verbs need no Rust change), plus the typed convenience commands below and a
+// couple of native helpers (`open_external`, `sidecar_status`).
+//
+// Command / event names are catalogued in `src/lib/engine.ts` (`CMD` / `EVT`)
+// so the engine (W1) and tray (W3) agents can align on the same wire.
 
-use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use tauri::State;
 
-/// Status response returned by most commands.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StatusResponse {
-    pub recording: bool,
-    pub paused: bool,
-    pub duration_secs: Option<f64>,
-    pub capture_id: Option<String>,
-}
+use crate::sidecar::SidecarHandle;
 
-/// Capture metadata for the captures list.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CaptureInfo {
-    pub id: String,
-    pub started_at: String,
-    pub duration_secs: f64,
-    pub size_bytes: u64,
-    pub review_status: String,
-}
-
-/// Storage usage information.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StorageUsage {
-    pub used_bytes: u64,
-    pub max_bytes: u64,
-    pub capture_count: u32,
-}
-
-/// Start a new recording session.
-#[tauri::command]
-pub async fn start_recording(quality: Option<String>) -> Result<StatusResponse, String> {
-    // TODO: Send start_recording command to Python sidecar
-    let _ = quality;
-    Err("Not implemented".into())
-}
-
-/// Stop the current recording session.
-#[tauri::command]
-pub async fn stop_recording() -> Result<StatusResponse, String> {
-    // TODO: Send stop_recording command to Python sidecar
-    Err("Not implemented".into())
-}
-
-/// Pause the current recording session.
-#[tauri::command]
-pub async fn pause_recording() -> Result<StatusResponse, String> {
-    // TODO: Send pause_recording command to Python sidecar
-    Err("Not implemented".into())
-}
-
-/// Get the current recording status.
-#[tauri::command]
-pub async fn get_status() -> Result<StatusResponse, String> {
-    // TODO: Send get_status command to Python sidecar
-    Err("Not implemented".into())
-}
-
-/// Get a list of recent captures.
-#[tauri::command]
-pub async fn get_captures(limit: Option<u32>) -> Result<Vec<CaptureInfo>, String> {
-    // TODO: Send get_captures command to Python sidecar
-    let _ = limit;
-    Err("Not implemented".into())
-}
-
-/// Get current storage usage information.
-#[tauri::command]
-pub async fn get_storage_usage() -> Result<StorageUsage, String> {
-    // TODO: Send get_storage_usage command to Python sidecar
-    Err("Not implemented".into())
-}
-
-/// Update a configuration setting.
-#[tauri::command]
-pub async fn set_config(key: String, value: String) -> Result<(), String> {
-    // TODO: Send set_config command to Python sidecar
-    let _ = (key, value);
-    Err("Not implemented".into())
-}
-
-/// Upload a capture to a configured storage backend.
+/// Generic bridge: forward an arbitrary engine command + params to the sidecar.
 ///
-/// The capture must be in `reviewed` or `dismissed` state (cleared for egress).
-/// See Section 5 of DESIGN.md for the review state machine.
+/// This is the primary path the frontend uses. It keeps the Rust shell agnostic
+/// to the evolving engine verb set (login/push/compile/replay/teach/…).
 #[tauri::command]
-pub async fn upload_capture(capture_id: String, backend: String) -> Result<(), String> {
-    // TODO: Send upload_capture command to Python sidecar
-    // TODO: Verify capture is cleared for egress before sending
-    let _ = (capture_id, backend);
-    Err("Not implemented".into())
+pub async fn engine_invoke(
+    state: State<'_, SidecarHandle>,
+    cmd: String,
+    params: Option<Value>,
+) -> Result<Value, String> {
+    let params = params.unwrap_or_else(|| json!({}));
+    state.0.send_command(&cmd, params).await
 }
 
-/// Delete a capture from local storage.
+/// Whether the engine sidecar is currently running (frontend degrades if not).
 #[tauri::command]
-pub async fn delete_capture(capture_id: String) -> Result<(), String> {
-    // TODO: Send delete_capture command to Python sidecar
-    let _ = capture_id;
-    Err("Not implemented".into())
+pub fn sidecar_status(state: State<'_, SidecarHandle>) -> bool {
+    state.0.is_running()
 }
 
-/// Run PII scrubbing on a capture.
+/// Open a URL in the user's default system browser.
 ///
-/// Creates a parallel `.scrubbed/` directory with redacted copies.
-/// See Section 5.4 of DESIGN.md for scrubbed copy format.
+/// Used for the login deep-link ("open Settings -> Ingest tokens"), "Open cloud
+/// dashboard", and the OS System Settings permission panes. Implemented with the
+/// platform opener so no extra plugin capability is required.
 #[tauri::command]
-pub async fn scrub_capture(capture_id: String, level: Option<String>) -> Result<(), String> {
-    // TODO: Send scrub_capture command to Python sidecar
-    let _ = (capture_id, level);
-    Err("Not implemented".into())
+pub fn open_external(url: String) -> Result<(), String> {
+    // Only allow http(s), the app's custom scheme, and macOS System Settings deep
+    // links — never arbitrary shell strings.
+    let allowed = url.starts_with("https://")
+        || url.starts_with("http://")
+        || url.starts_with("openadapt://")
+        || url.starts_with("x-apple.systempreferences:");
+    if !allowed {
+        return Err(format!("refusing to open non-web URL: {url}"));
+    }
+
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(&url).spawn();
+    #[cfg(target_os = "windows")]
+    let result = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(&url).spawn();
+
+    result
+        .map(|_| ())
+        .map_err(|e| format!("failed to open URL: {e}"))
 }
 
-/// Approve a scrubbed capture for egress (state: scrubbed -> reviewed).
-#[tauri::command]
-pub async fn approve_review(capture_id: String) -> Result<(), String> {
-    // TODO: Send approve_review command to Python sidecar
-    let _ = capture_id;
-    Err("Not implemented".into())
+// --------------------------------------------------------------------------
+// Typed convenience commands (forward to the sidecar).
+// These mirror DESIGN.md Appendix B and keep the originally-declared surface.
+// --------------------------------------------------------------------------
+
+async fn forward(
+    state: &State<'_, SidecarHandle>,
+    cmd: &str,
+    params: Value,
+) -> Result<Value, String> {
+    state.0.send_command(cmd, params).await
 }
 
-/// Dismiss a capture without scrubbing (state: captured -> dismissed).
-///
-/// This allows raw data to be uploaded. The user must acknowledge the
-/// PII warning before this is allowed.
 #[tauri::command]
-pub async fn dismiss_review(capture_id: String) -> Result<(), String> {
-    // TODO: Send dismiss_review command to Python sidecar
-    let _ = capture_id;
-    Err("Not implemented".into())
+pub async fn start_recording(
+    state: State<'_, SidecarHandle>,
+    quality: Option<String>,
+) -> Result<Value, String> {
+    forward(&state, "start_recording", json!({ "quality": quality })).await
 }
 
-/// Get a list of captures pending review.
 #[tauri::command]
-pub async fn get_pending_reviews() -> Result<Vec<CaptureInfo>, String> {
-    // TODO: Send get_pending_reviews command to Python sidecar
-    Err("Not implemented".into())
+pub async fn stop_recording(state: State<'_, SidecarHandle>) -> Result<Value, String> {
+    forward(&state, "stop_recording", json!({})).await
+}
+
+#[tauri::command]
+pub async fn pause_recording(state: State<'_, SidecarHandle>) -> Result<Value, String> {
+    forward(&state, "pause_recording", json!({})).await
+}
+
+#[tauri::command]
+pub async fn get_status(state: State<'_, SidecarHandle>) -> Result<Value, String> {
+    forward(&state, "get_status", json!({})).await
+}
+
+#[tauri::command]
+pub async fn get_captures(
+    state: State<'_, SidecarHandle>,
+    limit: Option<u32>,
+) -> Result<Value, String> {
+    forward(&state, "get_captures", json!({ "limit": limit })).await
+}
+
+#[tauri::command]
+pub async fn get_storage_usage(state: State<'_, SidecarHandle>) -> Result<Value, String> {
+    forward(&state, "get_storage_usage", json!({})).await
+}
+
+#[tauri::command]
+pub async fn set_config(
+    state: State<'_, SidecarHandle>,
+    key: String,
+    value: Value,
+) -> Result<Value, String> {
+    forward(&state, "set_config", json!({ "key": key, "value": value })).await
+}
+
+#[tauri::command]
+pub async fn upload_capture(
+    state: State<'_, SidecarHandle>,
+    capture_id: String,
+    backend: String,
+) -> Result<Value, String> {
+    forward(
+        &state,
+        "upload_capture",
+        json!({ "capture_id": capture_id, "backend": backend }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_capture(
+    state: State<'_, SidecarHandle>,
+    capture_id: String,
+) -> Result<Value, String> {
+    forward(
+        &state,
+        "delete_capture",
+        json!({ "capture_id": capture_id }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn scrub_capture(
+    state: State<'_, SidecarHandle>,
+    capture_id: String,
+    level: Option<String>,
+) -> Result<Value, String> {
+    forward(
+        &state,
+        "scrub_capture",
+        json!({ "capture_id": capture_id, "level": level }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn approve_review(
+    state: State<'_, SidecarHandle>,
+    capture_id: String,
+) -> Result<Value, String> {
+    forward(
+        &state,
+        "approve_review",
+        json!({ "capture_id": capture_id }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn dismiss_review(
+    state: State<'_, SidecarHandle>,
+    capture_id: String,
+) -> Result<Value, String> {
+    forward(
+        &state,
+        "dismiss_review",
+        json!({ "capture_id": capture_id }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn get_pending_reviews(state: State<'_, SidecarHandle>) -> Result<Value, String> {
+    forward(&state, "get_pending_reviews", json!({})).await
 }

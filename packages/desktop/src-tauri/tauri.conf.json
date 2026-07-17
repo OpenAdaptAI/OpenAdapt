@@ -4,25 +4,32 @@
   "version": "0.1.1",
   "identifier": "ai.openadapt.desktop",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "OpenAdapt Desktop",
-        "width": 800,
-        "height": 600,
+        "width": 1120,
+        "height": 760,
+        "minWidth": 880,
+        "minHeight": 600,
         "visible": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; img-src 'self' data: asset: https://asset.localhost; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
     "targets": ["dmg", "msi", "nsis", "deb", "appimage"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
+    "externalBin": ["binaries/openadapt-engine"],
     "macOS": {
       "signingIdentity": "-"
     },
