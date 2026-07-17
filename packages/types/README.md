@@ -1,5 +1,19 @@
 # openadapt-types
 
+> [!IMPORTANT]
+> **Status: Experimental — interoperability schemas, not the product.** This
+> package publishes shared schemas for computer-use agents as an optional
+> component, with no production support promise.
+>
+> The OpenAdapt product is the demonstration compiler,
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
+> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
+> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
+> deterministic, locally executable program. Healthy runs make no model calls,
+> and it halts instead of guessing when verification fails. Lifecycle labels for
+> every repository are in the
+> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+
 Canonical Pydantic schemas for computer-use agents.
 
 ```
