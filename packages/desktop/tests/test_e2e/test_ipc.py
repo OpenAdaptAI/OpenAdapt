@@ -86,7 +86,23 @@ class TestIPCProtocol:
 class TestIPCHandlerRegistration:
     """Tests for command handler registration."""
 
-    def test_initial_handlers_empty(self, handler) -> None:
-        """Handler registry should start empty (commands are TODO stubs)."""
-        # Currently no handlers are registered (all TODO)
+    def test_handlers_registered(self, handler) -> None:
+        """Every frontend CMD name from engine.ts must be registered."""
         assert isinstance(handler._handlers, dict)
+        for cmd in (
+            "start_recording", "stop_recording", "get_status",
+            "compile_recording", "replay_workflow", "run_workflow",
+            "teach_fix", "push_workflow", "get_workflows", "get_needs_attention",
+            "login_browser", "login_paste", "logout", "get_auth_status",
+            "get_config", "set_config", "check_permissions", "get_sync_state",
+        ):
+            assert cmd in handler._handlers, f"missing handler: {cmd}"
+
+    def test_get_status_dispatches(self, handler, capsys) -> None:
+        """A real command routes through the dispatcher and returns ok."""
+        handler._dispatch({"id": "s1", "cmd": "get_status", "params": {}})
+        lines = [line for line in capsys.readouterr().out.strip().split("\n") if line]
+        response = json.loads(lines[-1])
+        assert response["id"] == "s1"
+        assert response["status"] == "ok"
+        assert "recording" in response["data"]

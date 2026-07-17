@@ -84,12 +84,12 @@ class TestCLI:
             with pytest.raises(SystemExit):
                 main(["info", "nonexistent"])
 
-    def test_backends_shows_wormhole(self, cli_config: EngineConfig, capsys) -> None:
-        """Backends should at least show wormhole (always available)."""
+    def test_backends_shows_hosted_ingest(self, cli_config: EngineConfig, capsys) -> None:
+        """Backends should at least show hosted_ingest (always registered)."""
         with patch("engine.cli.EngineConfig", return_value=cli_config):
             main(["backends"])
         captured = capsys.readouterr()
-        assert "wormhole" in captured.out
+        assert "hosted_ingest" in captured.out
 
     def test_doctor_runs(self, cli_config: EngineConfig, capsys) -> None:
         """Doctor command should show checks and pass count."""
@@ -112,3 +112,39 @@ class TestCLI:
             main(["doctor"])
         captured = capsys.readouterr()
         assert "[OK] Database (SQLite)" in captured.out
+
+    def test_doctor_checks_flow(self, cli_config: EngineConfig, capsys) -> None:
+        """Doctor should report on the openadapt-flow loop engine."""
+        with patch("engine.cli.EngineConfig", return_value=cli_config):
+            main(["doctor"])
+        captured = capsys.readouterr()
+        assert "openadapt-flow (loop engine)" in captured.out
+
+    def test_login_success(self, cli_config: EngineConfig, capsys) -> None:
+        """login should dispatch to engine.auth.login and report the org."""
+        cred = {"kind": "ingest_token", "token": "t", "refresh_token": None,
+                "org_id": "org_5", "host": "https://app.openadapt.ai", "expires_at": None}
+        with patch("engine.cli.EngineConfig", return_value=cli_config), \
+                patch("engine.auth.login", return_value=cred):
+            main(["login"])
+        captured = capsys.readouterr()
+        assert "Logged in" in captured.out
+        assert "org_5" in captured.out
+
+    def test_push_success(self, cli_config: EngineConfig, capsys) -> None:
+        """push should print the returned workflow id + dashboard URL."""
+        result = {"success": True, "workflow_id": "wf_2",
+                  "dashboard_url": "https://app/dashboard/workflows/wf_2", "error": ""}
+        with patch("engine.cli.EngineConfig", return_value=cli_config), \
+                patch("engine.hosted.push", return_value=result):
+            main(["push", "/tmp/rec"])
+        captured = capsys.readouterr()
+        assert "wf_2" in captured.out
+
+    def test_push_failure_exits(self, cli_config: EngineConfig) -> None:
+        """push failure should exit nonzero."""
+        result = {"success": False, "workflow_id": "", "dashboard_url": "", "error": "nope"}
+        with patch("engine.cli.EngineConfig", return_value=cli_config), \
+                patch("engine.hosted.push", return_value=result):
+            with pytest.raises(SystemExit):
+                main(["push", "/tmp/rec"])

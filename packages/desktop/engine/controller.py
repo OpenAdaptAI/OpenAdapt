@@ -30,7 +30,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 if TYPE_CHECKING:
+    from engine.db import IndexDB
+    from engine.flow_bridge import FlowBridge
     from engine.storage_manager import StorageManager
 
 
@@ -70,6 +74,10 @@ class RecordingController:
         captures_dir: Path,
         quality: str = "standard",
         storage_manager: StorageManager | None = None,
+        flow_bridge: FlowBridge | None = None,
+        db: IndexDB | None = None,
+        bundles_dir: Path | None = None,
+        auto_compile: bool = False,
     ) -> None:
         self.captures_dir = captures_dir
         self.quality = quality
@@ -79,6 +87,12 @@ class RecordingController:
         self._started_at: str | None = None
         self._recorder: object | None = None
         self._storage_manager = storage_manager
+        # Loop wiring: after a recording stops, compile it into an
+        # openadapt-flow bundle and track it locally (spec W1).
+        self._flow_bridge = flow_bridge
+        self._db = db
+        self._bundles_dir = bundles_dir
+        self._auto_compile = auto_compile
 
     @property
     def is_recording(self) -> bool:
@@ -230,6 +244,14 @@ class RecordingController:
             "path": str(self._capture_dir),
         }
 
+        # Post-stop loop step: compile the recording into a flow bundle and track
+        # it. Opt-in so the pure-recording path (and existing tests) are untouched.
+        if self._auto_compile and self._flow_bridge is not None and self._capture_dir:
+            compiled = self.compile_capture(self._current_capture_id, self._capture_dir)
+            if compiled:
+                metadata["bundle_id"] = compiled.get("bundle_id")
+                metadata["bundle_path"] = compiled.get("bundle_path")
+
         # Reset state
         self._current_capture_id = None
         self._capture_dir = None
@@ -238,6 +260,44 @@ class RecordingController:
         self.state = RecordingState.IDLE
 
         return metadata
+
+    def compile_capture(self, capture_id: str, capture_dir: Path) -> dict | None:
+        """Compile a finished recording into an openadapt-flow bundle directory.
+
+        Wraps ``openadapt-flow compile`` via :class:`~engine.flow_bridge.FlowBridge`
+        and records the bundle in the ``bundles`` table when a DB is wired.
+
+        Args:
+            capture_id: The capture/recording id.
+            capture_dir: The recording directory to compile.
+
+        Returns:
+            ``{"bundle_id", "bundle_path", "ok"}`` on success, or None if flow is
+            unavailable / the compile failed.
+        """
+        if self._flow_bridge is None:
+            return None
+        bundles_dir = self._bundles_dir or (self.captures_dir.parent / "bundles")
+        bundles_dir.mkdir(parents=True, exist_ok=True)
+        bundle_id = uuid.uuid4().hex[:8]
+        bundle_path = bundles_dir / f"{capture_id}_{bundle_id}"
+        try:
+            result = self._flow_bridge.compile(Path(capture_dir), bundle_path)
+        except Exception as exc:
+            logger.warning("Compile failed for {cid}: {e}", cid=capture_id, e=exc)
+            return None
+        if not result.ok:
+            logger.warning("Compile returned nonzero for {cid}: {err}",
+                           cid=capture_id, err=result.stderr[:200])
+            return None
+        if self._db is not None:
+            try:
+                self._db.insert_bundle(
+                    bundle_id, str(bundle_path), capture_id=capture_id
+                )
+            except Exception as exc:
+                logger.warning("Could not record bundle {bid}: {e}", bid=bundle_id, e=exc)
+        return {"bundle_id": bundle_id, "bundle_path": str(bundle_path), "ok": True}
 
     def pause(self) -> None:
         """Pause the current recording session.

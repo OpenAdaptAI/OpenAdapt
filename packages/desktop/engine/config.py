@@ -14,20 +14,95 @@ See design doc Section 7.6 for the full .env specification.
 
 from __future__ import annotations
 
+import os
+import tomllib
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+
+# Non-secret on-disk config lives here (spec section 3e). Secrets (ingest token,
+# Supabase refresh token) NEVER land in this file -- they go to the OS keychain
+# via ``engine.auth.store``. Overridable for tests via OPENADAPT_CONFIG_TOML.
+DEFAULT_CONFIG_TOML = Path.home() / ".openadapt" / "config.toml"
+
+# Maps ``[hosted]`` TOML keys onto EngineConfig field names.
+_HOSTED_KEY_MAP = {
+    "host": "hosted_host",
+    "deployment_lane": "deployment_lane",
+    "phi_mode": "phi_mode",
+    "poll_interval_s": "poll_interval_s",
+}
+
+
+def _config_toml_path() -> Path:
+    override = os.environ.get("OPENADAPT_CONFIG_TOML", "").strip()
+    return Path(override) if override else DEFAULT_CONFIG_TOML
+
+
+class HostedTomlSource(PydanticBaseSettingsSource):
+    """Loads non-secret hosted config from ``~/.openadapt/config.toml``.
+
+    Reads the ``[hosted]`` table (plus any top-level keys matching fields) and
+    contributes them at LOWER priority than env/init, so environment variables
+    always win. Secrets are ignored here by construction -- they are not written
+    to the file.
+    """
+
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        path = _config_toml_path()
+        if not path.exists():
+            return {}
+        try:
+            data = tomllib.loads(path.read_text())
+        except (tomllib.TOMLDecodeError, OSError):
+            return {}
+
+        values: dict[str, Any] = {}
+        hosted = data.get("hosted", {})
+        if isinstance(hosted, dict):
+            for toml_key, field_name in _HOSTED_KEY_MAP.items():
+                if toml_key in hosted:
+                    values[field_name] = hosted[toml_key]
+        # Allow flat top-level overrides for non-hosted fields too.
+        for key, value in data.items():
+            if key != "hosted" and key in self.settings_cls.model_fields:
+                values.setdefault(key, value)
+        return values
 
 
 class EngineConfig(BaseSettings):
     """Configuration for the OpenAdapt Desktop engine.
 
     All settings can be overridden via environment variables with the
-    OPENADAPT_ prefix (e.g., OPENADAPT_STORAGE_MODE=enterprise).
+    OPENADAPT_ prefix (e.g., OPENADAPT_STORAGE_MODE=enterprise). Non-secret
+    hosted settings may also be set in ``~/.openadapt/config.toml`` under a
+    ``[hosted]`` table; environment variables take precedence over the file.
     """
 
     model_config = {"env_prefix": "OPENADAPT_"}
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # Priority: init > env > dotenv > config.toml > file secrets.
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            HostedTomlSource(settings_cls),
+            file_secret_settings,
+        )
 
     # --- General ---
     data_dir: Path = Field(
@@ -102,18 +177,26 @@ class EngineConfig(BaseSettings):
         description="Custom S3 endpoint (for MinIO, R2).",
     )
 
-    # --- HuggingFace Hub (community) ---
-    hf_repo: str = Field(
-        default="OpenAdaptAI/desktop-recordings",
-        description="HuggingFace dataset repository.",
+    # --- Hosted control plane (app.openadapt.ai) ---
+    hosted_host: str = Field(
+        default="https://app.openadapt.ai",
+        description="Base URL of the hosted control plane (ingest, needs-attention).",
     )
-    hf_token: str = Field(default="", description="HuggingFace API token.")
-
-    # --- Federated learning ---
-    fl_enabled: bool = Field(default=False, description="Enable federated learning.")
-    fl_server: str = Field(
-        default="https://fl.openadapt.ai",
-        description="Federated learning aggregation server URL.",
+    deployment_lane: str = Field(
+        default="cloud",
+        description=(
+            "Lane routing the PHI boundary: 'cloud' (non-PHI, push recordings to "
+            "the server to compile) or 'byoc' (regulated -- recordings + teach "
+            "stay local; only PHI-free descriptors sync up)."
+        ),
+    )
+    phi_mode: str = Field(
+        default="off",
+        description="PHI mode: 'off' or 'on'. When 'on', outbound egress is PHI-fenced.",
+    )
+    poll_interval_s: int = Field(
+        default=60,
+        description="Seconds between needs-attention count polls (never < 30).",
     )
 
     # --- Audit ---

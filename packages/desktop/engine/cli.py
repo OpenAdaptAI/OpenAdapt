@@ -63,8 +63,16 @@ def _init_engine(config: EngineConfig) -> types.SimpleNamespace:
 
 
 def _create_backends(config: EngineConfig) -> list:
-    """Create backend instances based on config."""
-    backends = []
+    """Create backend instances based on config.
+
+    The hosted ingest backend (POST /api/ingest, bearer token) is always
+    registered -- it is the default cloud-lane sink. S3 is optional BYOC
+    customer-owned storage.
+    """
+    from engine.backends.hosted_ingest import HostedIngestBackend
+
+    backends = [HostedIngestBackend(host=config.hosted_host)]
+
     if config.s3_bucket:
         from engine.backends.s3 import S3Backend
 
@@ -75,14 +83,6 @@ def _create_backends(config: EngineConfig) -> list:
             secret_access_key=config.s3_secret_access_key,
             endpoint=config.s3_endpoint,
         ))
-    if config.hf_token:
-        from engine.backends.huggingface import HuggingFaceBackend
-
-        backends.append(HuggingFaceBackend(repo=config.hf_repo, token=config.hf_token))
-
-    from engine.backends.wormhole import WormholeBackend
-
-    backends.append(WormholeBackend())
     return backends
 
 
@@ -240,6 +240,121 @@ def cmd_upload(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
             print(f"Upload failed: {r['error']}")
 
 
+def cmd_login(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Authenticate to the hosted control plane (browser PKCE or token paste)."""
+    from engine import auth
+
+    host = getattr(args, "host", None) or engine.config.hosted_host
+    prefer = getattr(args, "provider", None)
+    try:
+        cred = auth.login(host=host, prefer=prefer)
+    except Exception as exc:
+        print(f"Login failed: {exc}")
+        sys.exit(1)
+    print(f"Logged in to {cred['host']} (org={cred.get('org_id') or 'unknown'}).")
+    engine.audit.log("hosted_login", host=cred["host"], kind=cred["kind"])
+
+
+def cmd_push(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Zip a recording/bundle directory and push it to /api/ingest."""
+    from engine import hosted
+
+    host = getattr(args, "host", None) or engine.config.hosted_host
+    path = Path(args.path) if getattr(args, "path", None) else None
+    recordings_dir = engine.config.data_dir / "recordings"
+    try:
+        result = hosted.push(
+            path,
+            kind=args.kind,
+            name=getattr(args, "name", None),
+            host=host,
+            token=getattr(args, "token", None),
+            recordings_dir=recordings_dir,
+        )
+    except FileNotFoundError as exc:
+        print(f"Nothing to push: {exc}")
+        sys.exit(1)
+
+    if result["success"]:
+        print(f"Pushed. Workflow: {result['workflow_id']}")
+        if result["dashboard_url"]:
+            print(f"  {result['dashboard_url']}")
+        engine.audit.log("hosted_push", workflow_id=result["workflow_id"], kind=args.kind)
+    else:
+        print(f"Push failed: {result['error']}")
+        sys.exit(1)
+
+
+def cmd_compile(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Compile a flow recording directory into a bundle (delegates to openadapt-flow)."""
+    from engine.flow_bridge import FlowBridge, FlowNotAvailableError
+
+    default_out = engine.config.data_dir / "bundles" / Path(args.recording).name
+    out = Path(args.out) if getattr(args, "out", None) else default_out
+    try:
+        result = FlowBridge().compile(Path(args.recording), out)
+    except FlowNotAvailableError as exc:
+        print(str(exc))
+        sys.exit(1)
+    print("Compiled." if result.ok else f"Compile failed:\n{result.stderr}")
+    if not result.ok:
+        sys.exit(result.returncode or 1)
+    print(f"  Bundle: {out}")
+
+
+def cmd_replay(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Replay a bundle locally (delegates to openadapt-flow)."""
+    from engine.flow_bridge import FlowBridge, FlowNotAvailableError
+
+    out = Path(args.out) if getattr(args, "out", None) else None
+    try:
+        result = FlowBridge().replay(Path(args.bundle), out_dir=out, url=getattr(args, "url", None))
+    except FlowNotAvailableError as exc:
+        print(str(exc))
+        sys.exit(1)
+    print(result.stdout or ("Replay complete." if result.ok else result.stderr))
+    if not result.ok:
+        sys.exit(result.returncode or 1)
+
+
+def cmd_run(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Run a bundle under a deployment config (delegates to openadapt-flow)."""
+    from engine.flow_bridge import FlowBridge, FlowNotAvailableError
+
+    out = Path(args.out) if getattr(args, "out", None) else None
+    try:
+        result = FlowBridge().run(Path(args.bundle), Path(args.config), out_dir=out)
+    except FlowNotAvailableError as exc:
+        print(str(exc))
+        sys.exit(1)
+    print(result.stdout or ("Run complete." if result.ok else result.stderr))
+    if not result.ok:
+        sys.exit(result.returncode or 1)
+
+
+def cmd_report_break(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Emit a PHI-free break descriptor for a halted run to /api/runs/ingest-report."""
+    from engine import hosted
+
+    host = getattr(args, "host", None) or engine.config.hosted_host
+    result = hosted.report_break(
+        Path(args.run_dir),
+        workflow_id=getattr(args, "workflow_id", None),
+        host=host,
+        deployment_kind=engine.config.deployment_lane,
+        token=getattr(args, "token", None),
+    )
+    if result.get("ok"):
+        print(f"Reported break: halt {result.get('halt_id')}")
+        if result.get("teach_url"):
+            print(f"  Teach: {host}{result['teach_url']}")
+    elif result.get("local_teach"):
+        print("Break kept local (PHI boundary): teach the fix locally.")
+    else:
+        print(f"Report failed: {result.get('error')}")
+        sys.exit(1)
+
+
 def cmd_backends(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """List available backends."""
     backends = _create_backends(engine.config)
@@ -337,7 +452,30 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     except ImportError:
         checks.append(("psutil", False, "not installed (health monitoring disabled)"))
 
-    # boto3 (optional)
+    # httpx (hosted ingest / auth)
+    try:
+        import httpx
+        checks.append(("httpx (hosted ingest)", True, httpx.__version__))
+    except ImportError:
+        checks.append(("httpx (hosted ingest)", False, "not installed"))
+
+    # keyring (credential store)
+    try:
+        import keyring
+        checks.append(("keyring (credential store)", True,
+                       getattr(keyring, "__version__", "installed")))
+    except ImportError:
+        checks.append(("keyring (credential store)", False, "not installed"))
+
+    # openadapt-flow (the loop engine)
+    from engine.flow_bridge import flow_available
+    checks.append((
+        "openadapt-flow (loop engine)",
+        flow_available(),
+        "on PATH" if flow_available() else "not found (pip install openadapt-flow)",
+    ))
+
+    # boto3 (optional BYOC storage)
     try:
         import boto3
         checks.append(("boto3 (S3 backend)", True, boto3.__version__))
@@ -345,35 +483,21 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         checks.append(("boto3 (S3 backend)", False,
                        "not installed (pip install openadapt-desktop[enterprise])"))
 
-    # huggingface_hub (optional)
-    try:
-        import huggingface_hub
-        checks.append(("huggingface_hub (HF backend)", True, huggingface_hub.__version__))
-    except ImportError:
-        checks.append(("huggingface_hub (HF backend)", False,
-                       "not installed (pip install openadapt-desktop[community])"))
+    # Hosted control plane
+    checks.append(("Hosted host", True, engine.config.hosted_host))
+    checks.append(("Deployment lane", True, engine.config.deployment_lane))
 
-    # magic-wormhole
-    import shutil
-    wormhole_path = shutil.which("wormhole")
-    checks.append((
-        "magic-wormhole (P2P backend)",
-        wormhole_path is not None,
-        wormhole_path or "not found (pip install magic-wormhole)",
-    ))
-
-    # Storage mode
-    checks.append(("Storage mode", True, engine.config.storage_mode))
+    # Hosted credential
+    from engine.auth.store import auth_header
+    logged_in = "Authorization" in auth_header()
+    checks.append(("Hosted credential", logged_in,
+                   "present" if logged_in else "not logged in (run 'openadapt login')"))
 
     # S3 credentials (if configured)
     if engine.config.s3_bucket:
         has_creds = bool(engine.config.s3_access_key_id and engine.config.s3_secret_access_key)
         detail = f"bucket={engine.config.s3_bucket}" if has_creds else "bucket set but keys missing"
         checks.append(("S3 credentials", has_creds, detail))
-
-    # HF token (if configured)
-    if engine.config.hf_token:
-        checks.append(("HuggingFace token", True, f"repo={engine.config.hf_repo}"))
 
     # Print results
     print("OpenAdapt Doctor")
@@ -400,6 +524,12 @@ _COMMANDS = {
     "approve": cmd_approve,
     "dismiss": cmd_dismiss,
     "upload": cmd_upload,
+    "login": cmd_login,
+    "push": cmd_push,
+    "compile": cmd_compile,
+    "replay": cmd_replay,
+    "run": cmd_run,
+    "report-break": cmd_report_break,
     "backends": cmd_backends,
     "storage": cmd_storage,
     "health": cmd_health,
@@ -448,9 +578,47 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("capture_id")
 
     # upload
-    p = subparsers.add_parser("upload", help="Upload capture")
+    p = subparsers.add_parser("upload", help="Upload capture to a storage backend")
     p.add_argument("capture_id")
-    p.add_argument("--backend", required=True, choices=["s3", "huggingface", "wormhole"])
+    p.add_argument("--backend", required=True, choices=["hosted_ingest", "s3"])
+
+    # login
+    p = subparsers.add_parser("login", help="Authenticate to the hosted control plane")
+    p.add_argument("--host", default=None, help="Hosted base URL")
+    p.add_argument("--provider", default=None, choices=["paste", "browser_pkce"],
+                   help="Force an auth provider")
+
+    # push
+    p = subparsers.add_parser("push", help="Push a recording/bundle to /api/ingest")
+    p.add_argument("path", nargs="?", default=None, help="Recording/bundle dir (default: latest)")
+    p.add_argument("--kind", default="recording", choices=["recording", "bundle"])
+    p.add_argument("--name", default=None, help="Workflow name")
+    p.add_argument("--host", default=None, help="Hosted base URL")
+    p.add_argument("--token", default=None, help="Ingest token (else keychain/env)")
+
+    # compile
+    p = subparsers.add_parser("compile", help="Compile a recording into a flow bundle")
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--out", default=None, help="Output bundle directory")
+
+    # replay
+    p = subparsers.add_parser("replay", help="Replay a flow bundle locally")
+    p.add_argument("bundle", help="Bundle directory")
+    p.add_argument("--out", default=None, help="Run output directory")
+    p.add_argument("--url", default=None, help="Target URL override")
+
+    # run
+    p = subparsers.add_parser("run", help="Run a flow bundle under a deployment config")
+    p.add_argument("bundle", help="Bundle directory")
+    p.add_argument("--config", required=True, help="Deployment config path")
+    p.add_argument("--out", default=None, help="Run output directory")
+
+    # report-break
+    p = subparsers.add_parser("report-break", help="Report a halted run to the cloud (PHI-free)")
+    p.add_argument("run_dir", help="Run directory containing report.json")
+    p.add_argument("--workflow-id", dest="workflow_id", default=None, help="Hosted workflow id")
+    p.add_argument("--host", default=None, help="Hosted base URL")
+    p.add_argument("--token", default=None, help="Ingest token (else keychain/env)")
 
     # backends
     subparsers.add_parser("backends", help="List available backends")

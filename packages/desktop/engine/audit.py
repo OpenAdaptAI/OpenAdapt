@@ -70,7 +70,7 @@ class AuditLogger:
             storage_mode: Current storage mode (air-gapped, enterprise, community, full).
             active_backends: List of active backend names.
         """
-        all_backends = {"s3", "r2", "hf", "wormhole", "federated"}
+        all_backends = {"hosted_ingest", "s3"}
         excluded = sorted(all_backends - set(active_backends))
         self.log(
             "startup",

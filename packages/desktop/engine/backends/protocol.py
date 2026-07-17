@@ -68,7 +68,7 @@ class StorageBackend(Protocol):
     verification, and cost estimation.
 
     Attributes:
-        name: Human-readable backend name (e.g., "s3", "huggingface").
+        name: Human-readable backend name (e.g., "hosted_ingest", "s3").
         supports_delete: Whether uploaded resources can be deleted.
         supports_list: Whether uploaded resources can be listed.
     """

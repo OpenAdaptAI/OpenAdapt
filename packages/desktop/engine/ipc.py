@@ -25,6 +25,7 @@ from typing import Any
 from loguru import logger
 
 from engine.config import EngineConfig
+from engine.dispatch import EngineDispatcher, EngineServices
 
 
 class IPCHandler:
@@ -33,26 +34,35 @@ class IPCHandler:
     Reads commands from stdin, dispatches to the appropriate handler,
     and writes responses/events to stdout.
 
+    The command names are the EXACT ``CMD`` values in the app's
+    ``src/lib/engine.ts`` (``compile_recording`` etc.), routed through the
+    shared :class:`~engine.dispatch.EngineDispatcher` so the stdin/stdout wire
+    and the tray loopback socket can never drift. Events the dispatcher emits
+    are written to stdout as ``{"event", "data"}`` lines and re-emitted by the
+    Rust shell as ``engine://<event>``.
+
     Args:
         config: Engine configuration.
+        services: Injected :class:`~engine.dispatch.EngineServices` (built from
+            ``config`` otherwise). Injected in tests.
     """
 
-    def __init__(self, config: EngineConfig) -> None:
+    def __init__(
+        self, config: EngineConfig, services: EngineServices | None = None
+    ) -> None:
         self.config = config
+        self.dispatcher = EngineDispatcher(
+            config, services=services, emit=self.send_event
+        )
         self._handlers: dict[str, Any] = {}
         self._register_handlers()
 
     def _register_handlers(self) -> None:
-        """Register command handlers for all supported IPC commands."""
-        # TODO: Register handlers for each command:
-        # - start_recording, stop_recording, pause_recording, resume_recording
-        # - get_status, get_captures, get_storage_usage
-        # - set_config
-        # - scrub_capture, get_scrub_manifest
-        # - approve_review, dismiss_review, get_review_status, get_pending_reviews
-        # - upload_capture, delete_capture
-        # - get_active_backends, get_egress_destinations
-        pass
+        """Register a handler per command name from the shared dispatcher."""
+        self._handlers = {
+            cmd: (lambda _cmd=cmd, **params: self.dispatcher.dispatch(_cmd, params))
+            for cmd in self.dispatcher.commands
+        }
 
     def run(self) -> None:
         """Start the IPC message loop. Blocks until stdin is closed."""

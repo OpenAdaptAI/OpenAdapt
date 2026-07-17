@@ -22,7 +22,10 @@ See design doc Section 7 for backend details.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from loguru import logger
 
 from engine.audit import AuditLogger
 from engine.backends.protocol import StorageBackend, UploadResult
@@ -30,15 +33,32 @@ from engine.config import EngineConfig
 from engine.db import IndexDB
 from engine.review import check_egress_allowed
 
+# Durable/offline retry policy (spec section 5): jobs survive restarts (they
+# live in the DB), retry with exponential backoff, and flush when connectivity
+# returns. A permanent failure (missing capture/path) is NOT retried.
+DEFAULT_MAX_ATTEMPTS = 6
+_BACKOFF_BASE_S = 30
+_BACKOFF_CAP_S = 3600
+
+
+def _backoff_seconds(attempts: int) -> int:
+    """Exponential backoff (capped) for the given attempt count."""
+    return min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2 ** max(0, attempts - 1)))
+
 
 class UploadManager:
-    """Manages upload queue and dispatches to storage backends.
+    """Manages a durable upload queue and dispatches to storage backends.
+
+    The queue is persisted in ``index.db`` (survives restarts). Transient
+    failures (e.g. network blips) are retried with exponential backoff and the
+    manager exposes an ``offline`` signal for the tray's OFFLINE/SYNCING states.
 
     Args:
         config: Engine configuration.
         backends: List of active storage backend instances.
         db: Index database for persistent queue.
         audit: Audit logger for upload events.
+        max_attempts: Attempts before a transient failure becomes permanent.
     """
 
     def __init__(
@@ -47,11 +67,15 @@ class UploadManager:
         backends: list[StorageBackend],
         db: IndexDB,
         audit: AuditLogger,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     ) -> None:
         self.config = config
         self.backends = {b.name: b for b in backends}
         self._db = db
         self._audit = audit
+        self.max_attempts = max_attempts
+        # True after a transient (retriable) failure this cycle; feeds tray state.
+        self.offline = False
 
     def enqueue(self, capture_id: str, backend_name: str) -> str:
         """Add a capture to the upload queue.
@@ -125,15 +149,21 @@ class UploadManager:
         return list(self.backends.keys())
 
     def process_queue(self) -> list[dict]:
-        """Process pending uploads in the queue.
+        """Process due uploads in the durable queue, retrying transient failures.
+
+        Jobs whose retry backoff has not yet elapsed are skipped. A missing
+        capture/path is a permanent failure (no retry); a backend/network error
+        is transient -- the job returns to ``pending`` with exponential backoff
+        until ``max_attempts`` is exhausted, then becomes ``failed``.
 
         Returns:
-            List of result dicts for each processed job.
+            List of result dicts for each job attempted this cycle.
         """
-        pending = self._db.get_pending_jobs()
+        due = self._db.get_due_jobs()
         results = []
+        self.offline = False
 
-        for job in pending:
+        for job in due:
             job_id = job["job_id"]
             capture_id = job["capture_id"]
             backend_name = job["backend_name"]
@@ -145,6 +175,8 @@ class UploadManager:
                 self._db.update_upload_job(
                     job_id, status="failed", error=f"Capture {capture_id} not found"
                 )
+                results.append(self._result(job_id, capture_id, backend_name, False,
+                                            "", f"Capture {capture_id} not found"))
                 continue
 
             capture_path = Path(capture["capture_path"])
@@ -152,6 +184,8 @@ class UploadManager:
                 self._db.update_upload_job(
                     job_id, status="failed", error=f"Path not found: {capture_path}"
                 )
+                results.append(self._result(job_id, capture_id, backend_name, False,
+                                            "", f"Path not found: {capture_path}"))
                 continue
 
             metadata = {
@@ -171,17 +205,54 @@ class UploadManager:
                     bytes_sent=result.bytes_sent,
                 )
             else:
-                self._db.update_upload_job(
-                    job_id, status="failed", error=result.error
-                )
+                self._schedule_retry(job, result.error)
 
-            results.append({
-                "job_id": job_id,
-                "capture_id": capture_id,
-                "backend": backend_name,
-                "success": result.success,
-                "remote_url": result.remote_url if result.success else "",
-                "error": result.error if not result.success else "",
-            })
+            results.append(self._result(
+                job_id, capture_id, backend_name, result.success,
+                result.remote_url if result.success else "",
+                result.error if not result.success else "",
+            ))
 
         return results
+
+    def _schedule_retry(self, job: dict, error: str) -> None:
+        """Requeue a transiently-failed job with backoff, or fail it permanently."""
+        attempts = (job.get("attempts") or 0) + 1
+        self.offline = True
+        if attempts >= self.max_attempts:
+            self._db.update_upload_job(
+                job["job_id"], status="failed", attempts=attempts, error=error
+            )
+            logger.warning(
+                "Upload job {jid} permanently failed after {n} attempts",
+                jid=job["job_id"], n=attempts,
+            )
+            return
+        next_retry = datetime.now(timezone.utc) + timedelta(
+            seconds=_backoff_seconds(attempts)
+        )
+        self._db.update_upload_job(
+            job["job_id"],
+            status="pending",
+            attempts=attempts,
+            next_retry_at=next_retry.isoformat(),
+            error=error,
+        )
+        logger.info(
+            "Upload job {jid} deferred (attempt {n}); retry at {t}",
+            jid=job["job_id"], n=attempts, t=next_retry.isoformat(),
+        )
+
+    @staticmethod
+    def _result(
+        job_id: str, capture_id: str, backend: str, success: bool,
+        remote_url: str, error: str,
+    ) -> dict:
+        return {
+            "job_id": job_id,
+            "capture_id": capture_id,
+            "backend": backend,
+            "success": success,
+            "remote_url": remote_url,
+            "error": error,
+        }

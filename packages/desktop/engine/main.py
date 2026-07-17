@@ -49,8 +49,10 @@ def main() -> None:
 
     from engine.audit import AuditLogger
     from engine.db import IndexDB
+    from engine.dispatch import EngineServices
     from engine.ipc import IPCHandler
     from engine.monitor import HealthMonitor
+    from engine.socket_server import DesktopSocketServer
     from engine.storage_manager import StorageManager
 
     audit = AuditLogger(config.audit_log_path, enabled=config.network_audit_log)
@@ -66,7 +68,18 @@ def main() -> None:
 
     audit.log_startup(storage_mode=config.storage_mode, active_backends=[])
 
-    handler = IPCHandler(config=config)
+    # One shared services container so BOTH local wires (the Tauri stdin/stdout
+    # sidecar and the tray loopback socket) see the same recording/DB state.
+    services = EngineServices(config, db=db, storage=storage, audit=audit)
+
+    # The tray's loopback socket server + discovery file (spec 3d, P0-1).
+    socket_server = DesktopSocketServer(config, services=services)
+    try:
+        socket_server.start()
+    except OSError:
+        logger.exception("Could not start desktop IPC socket server (tray inert)")
+
+    handler = IPCHandler(config=config, services=services)
 
     try:
         handler.run()
@@ -76,6 +89,7 @@ def main() -> None:
         logger.exception("Engine crashed")
         sys.exit(1)
     finally:
+        socket_server.stop()
         monitor.stop()
         db.close()
         logger.info("Engine stopped")

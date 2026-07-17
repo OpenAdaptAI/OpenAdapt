@@ -119,3 +119,59 @@ class TestUploadManager:
         """Active backends should return configured backend names."""
         manager = UploadManager(EngineConfig(), [mock_backend], db, audit)
         assert "test_backend" in manager.get_active_backends()
+
+
+class TestDurableRetry:
+    """Durable/offline queue behavior (spec section 5)."""
+
+    def _prepare(self, db: IndexDB, tmp_path: Path):
+        cap_dir = tmp_path / "captures" / "cap"
+        cap_dir.mkdir(parents=True)
+        (cap_dir / "data.bin").write_bytes(b"x")
+        db.insert_capture("cap1", str(cap_dir), "2026-03-01T10:00:00Z")
+        db.update_capture("cap1", review_status="reviewed")
+
+    def test_transient_failure_requeues_with_backoff(
+        self, db: IndexDB, audit: AuditLogger, tmp_path: Path,
+    ) -> None:
+        self._prepare(db, tmp_path)
+        backend = MagicMock()
+        backend.name = "hosted_ingest"
+        backend.upload.return_value = UploadResult(success=False, error="network down")
+
+        manager = UploadManager(EngineConfig(), [backend], db, audit)
+        manager.enqueue("cap1", "hosted_ingest")
+        manager.process_queue()
+
+        # Job is offline-deferred, not permanently failed.
+        assert manager.offline is True
+        job = db.get_jobs_for_capture("cap1")[0]
+        assert job["status"] == "pending"
+        assert job["attempts"] == 1
+        assert job["next_retry_at"] is not None
+
+    def test_permanent_failure_after_max_attempts(
+        self, db: IndexDB, audit: AuditLogger, tmp_path: Path,
+    ) -> None:
+        self._prepare(db, tmp_path)
+        backend = MagicMock()
+        backend.name = "hosted_ingest"
+        backend.upload.return_value = UploadResult(success=False, error="network down")
+
+        manager = UploadManager(EngineConfig(), [backend], db, audit, max_attempts=1)
+        manager.enqueue("cap1", "hosted_ingest")
+        manager.process_queue()
+
+        job = db.get_jobs_for_capture("cap1")[0]
+        assert job["status"] == "failed"
+
+    def test_missing_path_is_permanent(
+        self, db: IndexDB, audit: AuditLogger, mock_backend: MagicMock,
+    ) -> None:
+        db.insert_capture("cap1", "/no/such/path", "2026-03-01T10:00:00Z")
+        db.update_capture("cap1", review_status="reviewed")
+        manager = UploadManager(EngineConfig(), [mock_backend], db, audit)
+        manager.enqueue("cap1", "test_backend")
+        manager.process_queue()
+        job = db.get_jobs_for_capture("cap1")[0]
+        assert job["status"] == "failed"

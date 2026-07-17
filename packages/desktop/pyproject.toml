@@ -29,6 +29,8 @@ dependencies = [
     "openadapt-privacy>=0.1.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
+    "httpx>=0.27",
+    "keyring>=24",
     "loguru",
     "psutil",
     "tqdm",
@@ -36,10 +38,8 @@ dependencies = [
 
 [project.optional-dependencies]
 enterprise = ["boto3"]
-community = ["huggingface_hub"]
-federated = ["flwr", "torch"]
 full = [
-    "openadapt-desktop[enterprise,community,federated]",
+    "openadapt-desktop[enterprise]",
 ]
 build = [
     "pyinstaller>=6.16,<7",

@@ -113,3 +113,48 @@ class TestRecordingController:
             match="^Resume is not supported; use stop/start instead$",
         ):
             controller.resume()
+
+
+class TestPostStopCompile:
+    """The post-stop loop step: compile the recording into a flow bundle."""
+
+    def test_auto_compile_records_bundle(self, tmp_data_dir: Path) -> None:
+        from unittest.mock import MagicMock
+
+        from engine.db import IndexDB
+        from engine.flow_bridge import FlowResult
+
+        db = IndexDB(tmp_data_dir / "index.db")
+        db.initialize()
+
+        bridge = MagicMock()
+        bridge.compile.return_value = FlowResult(ok=True, returncode=0)
+
+        controller = RecordingController(
+            captures_dir=tmp_data_dir / "captures",
+            flow_bridge=bridge,
+            db=db,
+            bundles_dir=tmp_data_dir / "bundles",
+            auto_compile=True,
+        )
+        controller.start()
+        metadata = controller.stop()
+
+        assert "bundle_id" in metadata
+        bridge.compile.assert_called_once()
+        assert db.get_bundle(metadata["bundle_id"]) is not None
+        db.close()
+
+    def test_no_compile_without_flag(self, tmp_data_dir: Path) -> None:
+        from unittest.mock import MagicMock
+
+        bridge = MagicMock()
+        controller = RecordingController(
+            captures_dir=tmp_data_dir / "captures",
+            flow_bridge=bridge,
+            auto_compile=False,
+        )
+        controller.start()
+        metadata = controller.stop()
+        assert "bundle_id" not in metadata
+        bridge.compile.assert_not_called()

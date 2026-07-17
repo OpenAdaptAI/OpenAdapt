@@ -72,8 +72,25 @@ uv run pytest tests/ -v              # all tests
 uv run ruff check engine/ tests/     # lint
 ```
 
+## Hosted loop modules (engine rewire)
+
+| File | Purpose |
+|------|---------|
+| `engine/auth/provider.py` | `AuthProvider` Protocol + `Credential` TypedDict (shared contract) |
+| `engine/auth/store.py` | Keychain store (`keyring`, service `ai.openadapt.desktop`) + `auth_header()` |
+| `engine/auth/paste.py` | `PasteTokenProvider` (token paste / headless env) |
+| `engine/auth/browser_pkce.py` | `BrowserPkceProvider` (system browser + loopback PKCE) |
+| `engine/backends/hosted_ingest.py` | `HostedIngestBackend` -> `POST /api/ingest` (bearer) |
+| `engine/hosted.py` | `push` (zip -> ingest) + `report_break` (`/api/runs/ingest-report`) |
+| `engine/flow_bridge.py` | Wraps the `openadapt-flow` CLI (record/compile/replay/run/teach) |
+| `engine/dispatch.py` | Shared command dispatcher (frontend `engine.ts` CMD names -> engine actions) used by BOTH local wires |
+| `engine/ipc.py` | Tauri stdin/stdout JSON-lines wire -> `EngineDispatcher` |
+| `engine/socket_server.py` | Tray loopback TCP server + `~/.openadapt/desktop_ipc.json` discovery file (spec 3d) |
+
 ## Dependencies
 
-- Python: `openadapt-capture` (recording), `openadapt-privacy` (scrubbing), `pydantic-settings`
+- Python: `openadapt-capture` (recording), `openadapt-privacy` (scrubbing),
+  `pydantic-settings`, `httpx` (hosted ingest), `keyring` (credential store)
 - Rust: `tauri`, `tauri-plugin-shell`, `tauri-plugin-notification`, `tauri-plugin-updater`
-- Optional: `boto3` (S3), `huggingface_hub`, `flwr` + `torch` (federated)
+- Optional: `boto3` (S3, BYOC customer-owned storage)
+- Loop engine: `openadapt-flow` (wrapped, not vendored)

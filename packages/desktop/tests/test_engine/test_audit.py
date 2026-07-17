@@ -53,7 +53,7 @@ class TestAuditLogger:
         assert entry["event"] == "startup"
         assert entry["storage_mode"] == "enterprise"
         assert "s3" in entry["backends"]
-        assert "hf" in entry["excluded"]
+        assert "hosted_ingest" in entry["excluded"]
 
     def test_disabled_logger_writes_nothing(self, tmp_path: Path) -> None:
         """A disabled logger should not create any files."""
