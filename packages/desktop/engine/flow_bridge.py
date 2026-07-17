@@ -67,6 +67,7 @@ class FlowBridge:
     def __init__(self, flow_bin: str = FLOW_BIN, runner=subprocess.run) -> None:
         self.flow_bin = flow_bin
         self._runner = runner
+        self._run_auth_support: bool | None = None
 
     # --- low-level ---
 
@@ -117,12 +118,31 @@ class FlowBridge:
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
     def run(self, bundle_dir: Path, config: Path, out_dir: Path | None = None,
-            timeout: float | None = None) -> FlowResult:
-        """Run a bundle under a deployment config."""
+            timeout: float | None = None,
+            authorization_file: Path | None = None) -> FlowResult:
+        """Run a bundle under a deployment config.
+
+        ``authorization_file`` forwards a cloud-minted GovernedRunAuthorization
+        JSON to ``openadapt-flow run --authorization-file`` -- pass it only when
+        :meth:`run_supports_authorization` is True (the flag is a PROPOSED flow
+        follow-up in the 2026-07-17 runner-platform spec).
+        """
         args = ["run", str(bundle_dir), "--config", str(config)]
         if out_dir:
             args += ["--out", str(out_dir)]
+        if authorization_file:
+            args += ["--authorization-file", str(authorization_file)]
         return self._run(args, out_dir=out_dir, timeout=timeout)
+
+    def run_supports_authorization(self) -> bool:
+        """Probe (once) whether the installed flow CLI accepts ``--authorization-file``."""
+        if self._run_auth_support is None:
+            try:
+                result = self._run(["run", "--help"])
+                self._run_auth_support = "--authorization-file" in (result.stdout or "")
+            except Exception:
+                self._run_auth_support = False
+        return self._run_auth_support
 
     def teach(self, run_dir: Path, bundle_dir: Path, out_dir: Path, fix: Path | None = None,
               timeout: float | None = None) -> FlowResult:

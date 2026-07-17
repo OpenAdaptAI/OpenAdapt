@@ -65,6 +65,7 @@ class EngineServices:
         audit: Any = None,
         controller: Any = None,
         flow_bridge: Any = None,
+        runner: Any = None,
     ) -> None:
         self.config = config
         self._db = db
@@ -72,6 +73,10 @@ class EngineServices:
         self._audit = audit
         self._controller = controller
         self._flow_bridge = flow_bridge
+        # The runner-loop service is shared across wires like everything else,
+        # but it needs the dispatcher's emit callback, so the dispatcher builds
+        # it lazily (tests inject a fake here).
+        self.runner = runner
 
     @property
     def db(self) -> Any:
@@ -207,6 +212,10 @@ class EngineDispatcher:
             # tray-only UI navigation (relayed to the desktop frontend)
             "open_workflow_library": self.open_workflow_library,
             "open_teach": self.open_teach,
+            # runner lane (EXPERIMENTAL -- outbound /api/runners/* long-poll)
+            "runner_status": self.runner_status,
+            "runner_enable": self.runner_enable,
+            "runner_disable": self.runner_disable,
         }
 
     @property
@@ -690,6 +699,34 @@ class EngineDispatcher:
         from engine.review import get_pending_reviews
 
         return {"pending": get_pending_reviews(self.services.db)}
+
+    # ------------------------------------------------------- runner lane
+
+    def _runner_service(self) -> Any:
+        """Lazily build the shared runner-loop service (EXPERIMENTAL lane)."""
+        if self.services.runner is None:
+            from engine.runner_loop import RunnerService
+
+            self.services.runner = RunnerService(
+                self.config, self.services, emit=self.emit
+            )
+        return self.services.runner
+
+    def runner_status(self, **params: Any) -> dict:
+        """Return the ``RunnerStatus``-shaped dict for the Runner screen."""
+        return self._runner_service().status()
+
+    def runner_enable(self, **params: Any) -> dict:
+        """Enable the runner lane, start its loop, and persist the flag."""
+        status = self._runner_service().enable()
+        self._persist_config_key("runner_enabled", True)
+        return status
+
+    def runner_disable(self, **params: Any) -> dict:
+        """Disable the runner lane, stop its loop, and persist the flag."""
+        status = self._runner_service().disable()
+        self._persist_config_key("runner_enabled", False)
+        return status
 
     # ------------------------------------------------------- tray UI nav
 

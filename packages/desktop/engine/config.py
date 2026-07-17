@@ -33,6 +33,7 @@ _HOSTED_KEY_MAP = {
     "deployment_lane": "deployment_lane",
     "phi_mode": "phi_mode",
     "poll_interval_s": "poll_interval_s",
+    "runner_enabled": "runner_enabled",
 }
 
 
@@ -197,6 +198,13 @@ class EngineConfig(BaseSettings):
     poll_interval_s: int = Field(
         default=60,
         description="Seconds between needs-attention count polls (never < 30).",
+    )
+    runner_enabled: bool = Field(
+        default=False,
+        description=(
+            "EXPERIMENTAL: enable the outbound runner loop (long-poll "
+            "/api/runners/* for governed dispatches). Off by default."
+        ),
     )
 
     # --- Audit ---

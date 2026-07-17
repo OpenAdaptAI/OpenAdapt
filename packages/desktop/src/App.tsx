@@ -22,6 +22,7 @@ import { WorkflowLibrary } from "./screens/WorkflowLibrary";
 import { RecordReview } from "./screens/RecordReview";
 import { WatchRun } from "./screens/WatchRun";
 import { Teach } from "./screens/Teach";
+import { Runner } from "./screens/Runner";
 import { Settings } from "./screens/Settings";
 
 type Route =
@@ -29,11 +30,13 @@ type Route =
   | { name: "record" }
   | { name: "watch"; id: string }
   | { name: "teach"; id: string }
+  | { name: "runner" }
   | { name: "settings" };
 
 const NAV: { route: Route["name"]; label: string; glyph: string }[] = [
   { route: "library", label: "Workflows", glyph: "▤" },
   { route: "record", label: "Record", glyph: "●" },
+  { route: "runner", label: "Runner", glyph: "⇅" },
   { route: "settings", label: "Settings", glyph: "⚙" },
 ];
 
@@ -194,6 +197,7 @@ export default function App() {
             onDone={() => setRoute({ name: "library" })}
           />
         )}
+        {route.name === "runner" && <Runner />}
         {route.name === "settings" && (
           <Settings
             auth={auth}

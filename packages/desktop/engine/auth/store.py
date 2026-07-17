@@ -52,6 +52,12 @@ _ACTIVE_HOST_ACCOUNT = "__active_host__"
 # ``host`` account holds the RAW bearer token (what the tray reads).
 _CRED_SUFFIX = "|cred"
 
+# Suffix for the runner-lane credential (EXPERIMENTAL, spec 2.1): the per-runner
+# id + bearer token minted by POST /api/runners/register. Kept separate from the
+# user session credential -- deleting one never clobbers the other, and the raw
+# ``host`` account keeps holding the session token the tray reads.
+_RUNNER_SUFFIX = "|runner"
+
 # Default hosted control-plane base URL. Overridable per-call and via config.
 DEFAULT_HOST = "https://app.openadapt.ai"
 
@@ -186,6 +192,41 @@ def active_credential() -> Credential | None:
     if not host:
         return None
     return load_credential(host)
+
+
+def store_runner_credential(host: str, runner_id: str, runner_token: str) -> None:
+    """Persist the per-runner id + token minted by ``POST /api/runners/register``.
+
+    Same keychain discipline as the session credential (service
+    ``ai.openadapt.desktop``); nothing token-shaped ever lands in
+    ``config.toml``. Degrades to a warning when no keyring backend exists.
+    """
+    kr = _keyring()
+    payload = json.dumps({"runner_id": runner_id, "runner_token": runner_token})
+    if not _kr_set(kr, host + _RUNNER_SUFFIX, payload):
+        logger.warning(
+            "No keyring backend; runner credential for {host} not persisted", host=host
+        )
+
+
+def load_runner_credential(host: str) -> dict | None:
+    """Load the runner credential for ``host`` (``{runner_id, runner_token}``), or None."""
+    raw = _kr_get(_keyring(), host + _RUNNER_SUFFIX)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("stored runner credential for {host} is corrupt; ignoring", host=host)
+        return None
+    if not isinstance(data, dict) or not data.get("runner_token"):
+        return None
+    return data
+
+
+def clear_runner_credential(host: str) -> None:
+    """Delete the stored runner credential for ``host`` (deregister / purge)."""
+    _kr_delete(_keyring(), host + _RUNNER_SUFFIX)
 
 
 def auth_header() -> dict[str, str]:

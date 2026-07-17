@@ -81,6 +81,15 @@ def main() -> None:
 
     handler = IPCHandler(config=config, services=services)
 
+    # EXPERIMENTAL runner lane: resume the outbound dispatch loop only when the
+    # operator explicitly enabled it (off by default; toggled on the Runner screen).
+    if config.runner_enabled:
+        try:
+            handler.dispatcher.runner_status()  # builds the shared service
+            services.runner.start()
+        except Exception:
+            logger.exception("Runner loop failed to start (lane stays off)")
+
     try:
         handler.run()
     except KeyboardInterrupt:
@@ -89,6 +98,8 @@ def main() -> None:
         logger.exception("Engine crashed")
         sys.exit(1)
     finally:
+        if services.runner is not None:
+            services.runner.stop()
         socket_server.stop()
         monitor.stop()
         db.close()

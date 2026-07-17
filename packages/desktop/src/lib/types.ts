@@ -73,3 +73,33 @@ export interface PermissionStatus {
   screen_recording: boolean;
   accessibility: boolean;
 }
+
+// Runner lane (EXPERIMENTAL — outbound dispatch loop, spec §2).
+
+export type RunnerState =
+  | "disabled"
+  | "offline"
+  | "polling"
+  | "running"
+  | "reauth_required"
+  | "error";
+
+export interface RunnerRun {
+  run_id: string;
+  phase?: string;
+  outcome?: string | null;
+  reason?: string | null;
+  updated_at?: string;
+  workflow_id?: string | null;
+}
+
+export interface RunnerStatus {
+  enabled: boolean;
+  state: RunnerState;
+  runner_id?: string | null;
+  registered?: boolean;
+  host?: string;
+  last_error?: string | null;
+  last_seen_at?: string | null;
+  last_runs: RunnerRun[];
+}
