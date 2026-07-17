@@ -21,7 +21,8 @@ Healthy runs make no model calls. When an interface drifts, the runtime first
 tries deterministic re-resolution, can optionally propose a reviewable repair,
 and halts when configured identity, postcondition, effect, or certification
 checks fail. The proven self-serve path today is browser automation; native
-desktop and remote-display backends remain experimental.
+desktop backends remain experimental and remote-display (RDP/Citrix-style)
+automation remains research-stage.
 
 `pip install openadapt` installs the launcher and the compiler, exposed as
 `openadapt flow ...`. Native capture, privacy scrubbing, and the separate ML
@@ -167,8 +168,10 @@ milliseconds and make no model calls.
 
 The reference backend is a **headless browser**, which is why the whole loop
 runs in CI with no OS permissions. Desktop, Citrix, and RDP backends are
-adapters in progress that we are validating with design partners, not yet
-production paths. Compiled workflows can also be emitted as Agent Skills or MCP
+adapters in progress, not yet production paths: Windows UI Automation is
+Experimental, and RDP/Citrix-style pixel-only automation is Research — we are
+seeking design partners to validate them on real deployments.
+Compiled workflows can also be emitted as Agent Skills or MCP
 servers so other agents can invoke them.
 
 In one field test against a computer-use agent on a real third-party EMR
@@ -195,7 +198,7 @@ blanket production-readiness claim.
 | Package | Role | Maturity | Repository |
 |---------|------|----------|------------|
 | `openadapt` | Installer + unified CLI (`openadapt flow ...`) | **Beta** | This repo |
-| `openadapt-flow` | Compiler + governed runtime | **Beta**; browser path proven, other backends experimental | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
+| `openadapt-flow` | Compiler + governed runtime | **Beta**; browser path proven, Windows UI Automation experimental, remote-display (RDP/Citrix) research | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
 | `openadapt-capture` | Optional native recorder | **Experimental** | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-privacy` | Optional PII/PHI scrubbing | **Experimental** | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
 
@@ -349,8 +352,9 @@ pip install -e ".[dev]"
 
 > **Product surfaces:** OpenAdapt Cloud provides the hosted browser-workflow
 > control plane, with live execution enabled only when its production
-> dependencies pass readiness checks. `openadapt-desktop` and native/remote
-> backends remain experimental. **Internal tooling:** `openadapt-wright`, `openadapt-herald`,
+> dependencies pass readiness checks. `openadapt-desktop` and native desktop
+> backends remain experimental; remote-display (RDP/Citrix-style) automation
+> remains research-stage. **Internal tooling:** `openadapt-wright`, `openadapt-herald`,
 > `openadapt-crier`, `openadapt-consilium`, `openadapt-telemetry`, and
 > `openadapt-viewer` support development and operations; they are not required
 > by the compiler runtime.
