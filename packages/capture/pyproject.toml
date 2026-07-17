@@ -22,9 +22,9 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0.0",
-    "pynput>=1.7.0",
-    "av>=10.0.0",
-    "Pillow>=9.0.0",
+    "pynput>=1.7.6",
+    "av>=12.0.0",
+    "Pillow>=10.1.0",
     "fire>=0.7.1",
     "mss>=6.0.0",
     "sounddevice>=0.5.3",
@@ -33,14 +33,14 @@ dependencies = [
     "pydantic-settings>=2.12.0",
     "openai>=2.11.0",
     "websockets>=12.0",
-    # Legacy recording dependencies (matching OpenAdapt record.py)
+    # Recording-pipeline dependencies (carried forward from OpenAdapt record.py)
     "sqlalchemy>=2.0.0",
     "alembic>=1.0.0",
     "loguru>=0.7.0",
     "psutil>=5.0.0",
     "pympler>=1.0.0",
     "tqdm>=4.0.0",
-    "numpy>=1.20.0",
+    "numpy>=1.26.0",
     "oa-atomacos>=3.2.0; sys_platform == 'darwin'",
 ]
 

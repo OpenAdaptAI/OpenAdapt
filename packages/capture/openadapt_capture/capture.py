@@ -435,14 +435,24 @@ class CaptureSession:
         from openadapt_capture.db.models import Recording
 
         session = get_session_for_path(str(db_path))
+
+        def _discard_session() -> None:
+            # Close the session AND dispose its engine: the pool otherwise
+            # keeps the SQLite file handle open, which on Windows leaves
+            # recording.db locked (WinError 32 when deleting the directory).
+            bind = session.get_bind()
+            session.close()
+            if bind is not None:
+                bind.dispose()
+
         try:
             recording = session.query(Recording).first()
         except Exception:
-            session.close()
+            _discard_session()
             raise
 
         if recording is None:
-            session.close()
+            _discard_session()
             raise FileNotFoundError(f"Invalid capture (no recording found): {capture_dir}")
 
         return cls(capture_dir, session, recording)
@@ -627,9 +637,18 @@ class CaptureSession:
             return None
 
     def close(self) -> None:
-        """Close the capture and release resources."""
+        """Close the capture and release resources.
+
+        Disposes the session's engine as well: SQLAlchemy's connection pool
+        keeps the SQLite file handle open after ``Session.close()``, which on
+        Windows leaves ``recording.db`` locked — deleting the capture
+        directory would fail with WinError 32 (sharing violation).
+        """
         if self._session is not None:
+            bind = self._session.get_bind()
             self._session.close()
+            if bind is not None:
+                bind.dispose()
             self._session = None
 
     def __enter__(self) -> "CaptureSession":

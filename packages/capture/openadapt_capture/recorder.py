@@ -1,7 +1,18 @@
-"""Script for creating Recordings.
+"""OpenAdapt's original, hand-built recorder — the live recording engine.
 
-Copied from legacy OpenAdapt record.py. Only import paths changed +
-adaptation for per-capture databases.
+This is the production recorder carried forward from OpenAdapt's record.py:
+the most battle-tested recording code in the org, refined against years of
+real desktop workflows. It is the recorder behind OpenAdapt's desktop path
+(openadapt-flow ``record --backend windows|rdp`` wraps ``Recorder``).
+
+Architecture: a multiprocessing pipeline. pynput listeners feed raw
+mouse/keyboard events into synchronized queues; dedicated writer processes
+persist action events, screenshots, video frames, and (optionally) audio and
+window state into a per-capture SQLite database plus time-aligned media files.
+Adapted from the original for per-capture databases. Importing this module
+must never touch the display (no screenshot at module scope — enforced by
+tests/test_headless_import.py); pynput itself may be unavailable headless, in
+which case the package ``__init__`` degrades ``Recorder`` to ``None``.
 
 Usage:
 
@@ -252,7 +263,14 @@ def process_events(
     prev_saved_window_timestamp = 0
     started = False
     while not terminate_processing.is_set() or not event_q.empty():
-        event = event_q.get()
+        # Bounded get: a bare event_q.get() deadlocks shutdown when terminate
+        # is set while the queue is empty and the readers have already exited
+        # (nobody left to feed an event, so the loop condition is never
+        # re-checked and join_tasks() hangs forever on this thread).
+        try:
+            event = event_q.get(timeout=1)
+        except queue.Empty:
+            continue
         if not started:
             started_event.set()
             started = True

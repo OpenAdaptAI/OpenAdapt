@@ -7,12 +7,12 @@ performance characteristics.
 Marked as 'slow' — skip with:  pytest -m "not slow"
 Run only these:                pytest -m slow -v
 
-NOTE: The legacy recorder uses multiprocessing.Process for writer tasks.
-On macOS (Python "spawn" start method), writer processes may fail to start
-because each child re-imports modules and triggers side effects like
-take_screenshot(). These tests are designed for Windows (the primary
-recording platform) and will skip on macOS/Linux if the recorder
-cannot start all processes within a timeout.
+NOTE: The recorder uses multiprocessing.Process for writer tasks. On macOS
+(Python "spawn" start method) writer processes historically failed to start
+because each child re-imported modules with display side effects; imports are
+side-effect free since 0.5.4, but the spawn path on macOS/Linux is not yet
+validated end to end. These tests target Windows (the primary recording
+platform) and are exercised in CI on windows-latest.
 """
 
 import os
@@ -33,13 +33,29 @@ try:
 except ImportError:
     Recorder = None
 
-# Skip on non-Windows platforms where the legacy recorder has known issues
+# Skip on non-Windows platforms where the live pipeline is not yet validated
 _SKIP_REASON = (
-    "Legacy recorder uses multiprocessing.Process which requires Windows "
-    "or fork-safe environment. On macOS/Linux with 'spawn' start method, "
-    "writer processes may fail to start."
+    "Live recorder integration tests target Windows (the primary recording "
+    "platform, exercised in CI on windows-latest). The multiprocessing "
+    "'spawn' writer path on macOS/Linux is not yet validated end to end; "
+    "on GitHub macOS runners pynput input injection also needs Accessibility "
+    "permissions that cannot be granted."
 )
 _ON_WINDOWS = sys.platform == "win32"
+
+# GitHub-hosted Windows runners execute jobs in a non-interactive session:
+# SendInput-injected events never reach the low-level hooks pynput uses, so
+# listener-dependent tests capture zero events there. The CI workflow sets
+# this flag; the live-pipeline tests that do not depend on captured input
+# (startup/shutdown, db creation, bounded memory) still run for real. Run the
+# full set on an interactive Windows desktop (developer machine or an
+# interactive self-hosted runner).
+_NO_INPUT_INJECTION = os.environ.get("OPENADAPT_CI_NO_INPUT_INJECTION") == "1"
+_INJECTION_SKIP_REASON = (
+    "OPENADAPT_CI_NO_INPUT_INJECTION=1: injected input does not reach pynput "
+    "hooks in a non-interactive session, so event-capture assertions cannot "
+    "hold (hosted CI runner limitation, not a recorder bug)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +138,7 @@ def capture_dir(tmp_path):
 class TestRecorderIntegration:
     """Integration tests that run the full recording pipeline."""
 
+    @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_INJECTION_SKIP_REASON)
     def test_record_and_load_roundtrip(self, capture_dir):
         """Record synthetic input, stop, reload, and verify events round-trip."""
         duration = 3  # seconds
@@ -129,9 +146,10 @@ class TestRecorderIntegration:
         input_stop = threading.Event()
         cycles = [0]
 
-        with Recorder(capture_dir, task_description="Integration test"):
-            # Give recorder a moment to start listeners
-            time.sleep(1)
+        with Recorder(capture_dir, task_description="Integration test") as rec:
+            # Wait until listeners + writers are actually up (cold CI runners
+            # can take several seconds; a fixed sleep races the startup).
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
             # Generate synthetic input in background thread
             def run_input():
@@ -170,6 +188,7 @@ class TestRecorderIntegration:
 
         capture.close()
 
+    @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_INJECTION_SKIP_REASON)
     def test_recorder_reuse(self, tmp_path):
         """Test that Recorder can be used twice in the same process.
 
@@ -179,8 +198,8 @@ class TestRecorderIntegration:
             d = str(tmp_path / f"capture_{i}")
             input_stop = threading.Event()
 
-            with Recorder(d, task_description=f"Reuse test {i}"):
-                time.sleep(1)
+            with Recorder(d, task_description=f"Reuse test {i}") as rec:
+                assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
                 def run_input():
                     _generate_synthetic_input(1, input_stop)
@@ -203,8 +222,8 @@ class TestRecorderIntegration:
         duration = 2
         input_stop = threading.Event()
 
-        with Recorder(capture_dir, task_description="Shutdown test"):
-            time.sleep(0.5)
+        with Recorder(capture_dir, task_description="Shutdown test") as rec:
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
             def run_input():
                 _generate_synthetic_input(duration, input_stop)
@@ -239,8 +258,8 @@ class TestRecorderIntegration:
         )
         mem_thread.start()
 
-        with Recorder(capture_dir, task_description="Memory test"):
-            time.sleep(0.5)
+        with Recorder(capture_dir, task_description="Memory test") as rec:
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
             def run_input():
                 _generate_synthetic_input(duration, input_stop)
@@ -269,8 +288,8 @@ class TestRecorderIntegration:
         """Test that recording.db is created in the capture directory."""
         input_stop = threading.Event()
 
-        with Recorder(capture_dir, task_description="DB test"):
-            time.sleep(0.5)
+        with Recorder(capture_dir, task_description="DB test") as rec:
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
             def run_input():
                 _generate_synthetic_input(1, input_stop)
@@ -285,14 +304,15 @@ class TestRecorderIntegration:
         assert db_path.exists(), f"recording.db not found in {capture_dir}"
         assert db_path.stat().st_size > 0, "recording.db is empty"
 
+    @pytest.mark.skipif(_NO_INPUT_INJECTION, reason=_INJECTION_SKIP_REASON)
     def test_event_throughput(self, capture_dir):
         """Test that event capture rate is reasonable."""
         duration = 3
         input_stop = threading.Event()
         cycles = [0]
 
-        with Recorder(capture_dir, task_description="Throughput test"):
-            time.sleep(0.5)
+        with Recorder(capture_dir, task_description="Throughput test") as rec:
+            assert rec.wait_for_ready(timeout=120), "recorder failed to start"
 
             def run_input():
                 cycles[0] = _generate_synthetic_input(duration, input_stop)

@@ -19,11 +19,25 @@ except ImportError:
     Recorder = None
 
 
+# Sessions/engines created by _create_test_recording, released by the
+# temp_capture_dir teardown BEFORE the TemporaryDirectory is removed. Both
+# must be released: crud.insert_recording ends with session.refresh(), which
+# leaves the connection checked out until the session closes, and the engine
+# pool keeps the SQLite file handle open until dispose(). On Windows an open
+# recording.db makes the rmtree fail with WinError 32 (sharing violation).
+_HELPER_SESSIONS = []
+_HELPER_ENGINES = []
+
+
 @pytest.fixture
 def temp_capture_dir():
     """Create a temporary directory for captures."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield tmpdir
+        while _HELPER_SESSIONS:
+            _HELPER_SESSIONS.pop().close()
+        while _HELPER_ENGINES:
+            _HELPER_ENGINES.pop().dispose()
 
 
 def _create_test_recording(capture_dir, task_description="Test task"):
@@ -34,7 +48,9 @@ def _create_test_recording(capture_dir, task_description="Test task"):
     os.makedirs(capture_dir, exist_ok=True)
     db_path = os.path.join(capture_dir, "recording.db")
     engine, Session = create_db(db_path)
+    _HELPER_ENGINES.append(engine)
     session = Session()
+    _HELPER_SESSIONS.append(session)
 
     timestamp = time.time()
     recording_data = {
@@ -355,8 +371,10 @@ class TestCaptureEdgeCases:
         capture_path = str(Path(temp_capture_dir) / "capture")
         os.makedirs(capture_path, exist_ok=True)
         db_path = os.path.join(capture_path, "recording.db")
-        # Create DB with tables but no recording row
-        create_db(db_path)
+        # Create DB with tables but no recording row (dispose the setup
+        # engine so only Capture.load's own handle is under test)
+        engine, _ = create_db(db_path)
+        engine.dispose()
 
         with pytest.raises(FileNotFoundError, match="no recording found"):
             Capture.load(capture_path)
@@ -513,6 +531,7 @@ class TestPixelRatio:
             },
         )
         session.close()
+        engine.dispose()
 
         # The column is real: it is present in the on-disk schema.
         con = sqlite3.connect(db_path)

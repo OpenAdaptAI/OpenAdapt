@@ -36,6 +36,73 @@ jobs:
         run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py --timeout=120
         timeout-minutes: 10
 
+  # Windows is the primary live-recording platform: this job runs the full
+  # unit suite AND the live Recorder integration tests (tests/test_performance.py,
+  # marked 'slow'), which start the real multiprocessing pipeline (pynput
+  # listeners -> writer processes -> per-capture SQLite + video) and verify
+  # clean startup, bounded shutdown/memory, and db creation. The three
+  # listener-dependent tests (roundtrip/reuse/throughput) skip here via
+  # OPENADAPT_CI_NO_INPUT_INJECTION: hosted runners execute jobs in a
+  # non-interactive session, so injected input never reaches pynput's hooks;
+  # run those on an interactive Windows desktop. These tests skip everywhere
+  # except Windows, so this job is the org's live-recording CI proof.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow" --timeout=120
+        timeout-minutes: 10
+
+      - name: Run live recorder integration tests
+        env:
+          # Non-interactive session: SendInput never reaches pynput's
+          # low-level hooks, so the event-capture tests skip (see
+          # tests/test_performance.py); pipeline start/stop/db/memory
+          # tests still run the live recorder for real.
+          OPENADAPT_CI_NO_INPUT_INJECTION: "1"
+        run: uv run pytest tests/test_performance.py -v -m slow --timeout=300
+        timeout-minutes: 20
+
+  # macOS coverage: runs the unit suite (event processing, storage, video
+  # encode/decode via PyAV, headless-import invariant, Recorder API surface —
+  # CGWindowList-backed screen capture works on GitHub macOS runners). The
+  # 'slow' live-recording tests stay skipped here: pynput input injection
+  # requires Accessibility permissions a hosted runner cannot grant, and the
+  # multiprocessing 'spawn' writer path is not yet validated on macOS (see
+  # tests/test_performance.py).
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow" --timeout=120
+        timeout-minutes: 10
+
   lint:
     runs-on: ubuntu-latest
     steps:
