@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v1.6.4 (2026-07-17)
+
+### Bug Fixes
+
+- Remove dead config module with undeclared pydantic_settings import
+  ([#1021](https://github.com/OpenAdaptAI/OpenAdapt/pull/1021),
+  [`a390e63`](https://github.com/OpenAdaptAI/OpenAdapt/commit/a390e63e67ca6c54f2c958c964cccd20162d1bf4))
+
+### Documentation
+
+- Remove design-partner claim; align backend labels with LIMITS.md
+  ([#1020](https://github.com/OpenAdaptAI/OpenAdapt/pull/1020),
+  [`4c91141`](https://github.com/OpenAdaptAI/OpenAdapt/commit/4c91141c4127bbdd31cdfe849f95c61b5629ebd5))
+
+
 ## v1.6.3 (2026-07-16)
 
 ### Bug Fixes
