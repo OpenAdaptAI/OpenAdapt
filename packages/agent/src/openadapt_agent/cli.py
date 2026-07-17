@@ -1,283 +1,192 @@
-"""
-Command-line interface for OpenAdapt Agent.
+"""``openadapt-agent`` CLI: serve bundles over MCP, emit Agent Skills.
 
-Provides commands for starting, managing, and monitoring agent sessions.
+Subcommands:
+
+- ``serve`` — expose a directory of compiled openadapt-flow bundles as an
+  MCP server over stdio. Read-only tools are always on; ``run_*`` tools
+  require the explicit ``--allow-run`` flag.
+- ``emit-skill`` — emit a Claude Agent Skill folder for one bundle
+  (wraps ``openadapt-flow emit-skill`` and appends MCP + halt guidance).
+
+EXPERIMENTAL: see the README's honest-limits section before deploying.
 """
 
-import click
-import logging
+from __future__ import annotations
+
+import argparse
+import shlex
+import sys
+from pathlib import Path
+from typing import Optional, Sequence
 
 from openadapt_agent import __version__
-from openadapt_agent.config import AgentConfig, SafetyMode
-from openadapt_agent.session import SessionManager, SessionState
+from openadapt_agent.runner import RunnerConfig
+
+__all__ = ["build_parser", "main"]
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="openadapt-agent",
+        description=(
+            "EXPERIMENTAL agent-facing bridge for openadapt-flow: expose "
+            "compiled workflow bundles as MCP tools and Agent Skills. "
+            "Execution always shells out to the governed `openadapt-flow "
+            "run` CLI."
+        ),
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser(
+        "serve",
+        help="Serve a directory of workflow bundles as an MCP server (stdio)",
+    )
+    p.add_argument(
+        "--bundles",
+        required=True,
+        help=(
+            "Bundle directory: either one compiled bundle, or a directory "
+            "whose immediate subdirectories are bundles"
+        ),
+    )
+    p.add_argument(
+        "--allow-run",
+        action="store_true",
+        help=(
+            "Register run_* tools (default: read-only tools only). Without "
+            "this flag no MCP client can execute anything."
+        ),
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help="Target app URL passed to every `openadapt-flow run` (operator-fixed)",
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="YAML",
+        help="Deployment config YAML forwarded to `openadapt-flow run --config`",
+    )
+    p.add_argument(
+        "--policy",
+        default=None,
+        metavar="NAME-OR-PATH",
+        help=(
+            "Certifying policy forwarded to `openadapt-flow run --policy` "
+            "and used by get_workflow's certification check"
+        ),
+    )
+    p.add_argument(
+        "--runs-dir",
+        default="runs",
+        help="Directory for per-run output directories (default: ./runs)",
+    )
+    p.add_argument(
+        "--timeout",
+        type=float,
+        default=600.0,
+        metavar="SECONDS",
+        help="Per-call timeout for each governed run (default: 600)",
+    )
+    p.add_argument(
+        "--allow-url-override",
+        action="store_true",
+        help=(
+            "Permit MCP callers to pass a per-call `url` argument (default: "
+            "the target URL is fixed by --url/--config at server start)"
+        ),
+    )
+    p.add_argument(
+        "--flow-cli",
+        default=None,
+        help=(
+            "Command used to invoke the flow CLI (default: this "
+            "interpreter's `python -m openadapt_flow`, so the flow "
+            "installed alongside this server is always the one that runs); "
+            "may contain spaces, e.g. 'openadapt-flow'"
+        ),
+    )
+    p.add_argument(
+        "--extra-run-arg",
+        action="append",
+        default=[],
+        metavar="ARG",
+        help=(
+            "Extra argument appended to every `openadapt-flow run` "
+            "invocation (repeatable; operator-fixed, e.g. "
+            "--extra-run-arg=--allow-unencrypted for a demo bundle)"
+        ),
+    )
+    p.set_defaults(func=_cmd_serve)
+
+    p = sub.add_parser(
+        "emit-skill",
+        help=(
+            "Emit a Claude Agent Skill folder for a bundle (wraps "
+            "`openadapt-flow emit-skill`, appends MCP + halt guidance)"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--out", required=True, help="Parent directory for the skill folder"
+    )
+    p.set_defaults(func=_cmd_emit_skill)
+
+    return parser
 
 
-@click.group()
-@click.version_option(version=__version__)
-@click.option(
-    "--config", "-c",
-    type=click.Path(exists=True),
-    help="Path to configuration file",
-)
-@click.pass_context
-def main(ctx, config):
-    """OpenAdapt Agent - Production execution engine for GUI automation."""
-    ctx.ensure_object(dict)
+def _cmd_serve(args: argparse.Namespace) -> int:
+    from openadapt_agent.bridge import AgentBridge
+    from openadapt_agent.mcp import serve
 
-    if config:
-        from pathlib import Path
-        ctx.obj["config"] = AgentConfig.from_file(Path(config))
-    else:
-        ctx.obj["config"] = AgentConfig()
+    from openadapt_agent.runner import default_flow_cli
 
-
-@main.command()
-@click.argument("goal")
-@click.option(
-    "--safety-mode", "-s",
-    type=click.Choice(["disabled", "permissive", "standard", "strict", "paranoid"]),
-    default="standard",
-    help="Safety enforcement mode",
-)
-@click.option(
-    "--max-steps", "-n",
-    type=int,
-    default=100,
-    help="Maximum steps before automatic stop",
-)
-@click.pass_context
-def start(ctx, goal, safety_mode, max_steps):
-    """Start a new agent session with the specified goal.
-
-    Example:
-        openadapt-agent start "Open Notepad and type hello world"
-    """
-    config = ctx.obj["config"]
-    config.safety_mode = SafetyMode(safety_mode)
-    config.execution.max_steps = max_steps
-
-    click.echo(f"Starting agent session...")
-    click.echo(f"  Goal: {goal}")
-    click.echo(f"  Safety mode: {safety_mode}")
-    click.echo(f"  Max steps: {max_steps}")
-
-    # TODO: Initialize policy and executor
-    click.echo("\nNote: Full execution requires a trained policy from openadapt-ml")
-    click.echo("Install with: pip install openadapt-agent[ml]")
-
-
-@main.command()
-@click.pass_context
-def status(ctx):
-    """Check the status of running agent sessions."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
-    active = manager.get_active_sessions()
-
-    if not active:
-        click.echo("No active sessions")
-        return
-
-    click.echo(f"Active sessions: {len(active)}")
-    for session in active:
-        click.echo(f"\n  Session: {session.session_id[:8]}...")
-        click.echo(f"  State: {session.state.value}")
-        click.echo(f"  Goal: {session.goal[:50]}...")
-        click.echo(f"  Steps: {session.step_count}")
-        if session.duration_seconds:
-            click.echo(f"  Duration: {session.duration_seconds:.1f}s")
-
-
-@main.command()
-@click.argument("session_id")
-@click.pass_context
-def pause(ctx, session_id):
-    """Pause a running session."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
+    runner_config = RunnerConfig(
+        flow_cli=(
+            tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()
+        ),
+        runs_dir=Path(args.runs_dir),
+        url=args.url,
+        deployment_config=args.config,
+        policy=args.policy,
+        timeout_s=args.timeout,
+        allow_url_override=args.allow_url_override,
+        extra_run_args=tuple(args.extra_run_arg),
+    )
     try:
-        session = manager.load_session(session_id)
-        session.pause()
-        manager.save_session(session)
-        click.echo(f"Paused session {session_id}")
-    except FileNotFoundError:
-        click.echo(f"Session not found: {session_id}", err=True)
+        bridge = AgentBridge(
+            Path(args.bundles), runner_config, allow_run=args.allow_run
+        )
+    except FileNotFoundError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    n = len(bridge.workflows)
+    print(
+        f"openadapt-agent {__version__} (EXPERIMENTAL): serving {n} "
+        f"workflow(s) over stdio; run tools "
+        f"{'ENABLED' if args.allow_run else 'disabled (read-only)'}",
+        file=sys.stderr,
+    )
+    serve(bridge)
+    return 0
 
 
-@main.command()
-@click.argument("session_id")
-@click.pass_context
-def resume(ctx, session_id):
-    """Resume a paused session."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
+def _cmd_emit_skill(args: argparse.Namespace) -> int:
+    from openadapt_agent.skill import emit_agent_skill
 
-    try:
-        session = manager.load_session(session_id)
-        session.resume()
-        manager.save_session(session)
-        click.echo(f"Resumed session {session_id}")
-    except FileNotFoundError:
-        click.echo(f"Session not found: {session_id}", err=True)
+    skill_dir = emit_agent_skill(Path(args.bundle), Path(args.out))
+    print(f"Wrote Agent Skill folder: {skill_dir}")
+    return 0
 
 
-@main.command()
-@click.argument("session_id", required=False)
-@click.pass_context
-def stop(ctx, session_id):
-    """Stop a running or paused session."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
-    if not session_id:
-        # Stop all active sessions
-        active = manager.get_active_sessions()
-        if not active:
-            click.echo("No active sessions to stop")
-            return
-
-        for session in active:
-            session.stop(reason="CLI stop command")
-            manager.save_session(session)
-            click.echo(f"Stopped session {session.session_id}")
-    else:
-        try:
-            session = manager.load_session(session_id)
-            session.stop(reason="CLI stop command")
-            manager.save_session(session)
-            click.echo(f"Stopped session {session_id}")
-        except FileNotFoundError:
-            click.echo(f"Session not found: {session_id}", err=True)
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
 
 
-@main.group()
-def session():
-    """Session management commands."""
-    pass
-
-
-@session.command("list")
-@click.option(
-    "--state", "-s",
-    type=click.Choice(["created", "running", "paused", "completed", "failed", "stopped"]),
-    help="Filter by session state",
-)
-@click.option("--limit", "-n", type=int, default=20, help="Maximum sessions to show")
-@click.pass_context
-def session_list(ctx, state, limit):
-    """List sessions."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
-    state_filter = SessionState(state) if state else None
-    sessions = manager.list_sessions(state=state_filter, limit=limit)
-
-    if not sessions:
-        click.echo("No sessions found")
-        return
-
-    click.echo(f"Sessions ({len(sessions)} shown):\n")
-
-    for s in sessions:
-        status_icon = {
-            SessionState.RUNNING: "->",
-            SessionState.PAUSED: "||",
-            SessionState.COMPLETED: "OK",
-            SessionState.FAILED: "XX",
-            SessionState.STOPPED: "--",
-            SessionState.CREATED: "..",
-        }.get(s.state, "??")
-
-        duration = f"{s.duration_seconds:.0f}s" if s.duration_seconds else "-"
-        click.echo(f"  [{status_icon}] {s.session_id[:8]} | {s.step_count:3d} steps | {duration:>6} | {s.goal[:40]}...")
-
-
-@session.command("show")
-@click.argument("session_id")
-@click.pass_context
-def session_show(ctx, session_id):
-    """Show details of a specific session."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
-    try:
-        session = manager.load_session(session_id)
-    except FileNotFoundError:
-        click.echo(f"Session not found: {session_id}", err=True)
-        return
-
-    click.echo(f"Session: {session.session_id}")
-    click.echo(f"  State: {session.state.value}")
-    click.echo(f"  Goal: {session.goal}")
-    click.echo(f"  Created: {session.created_at}")
-    if session.started_at:
-        click.echo(f"  Started: {session.started_at}")
-    if session.completed_at:
-        click.echo(f"  Completed: {session.completed_at}")
-    click.echo(f"  Steps: {session.step_count}")
-    if session.duration_seconds:
-        click.echo(f"  Duration: {session.duration_seconds:.1f}s")
-    if session.completion_reason:
-        click.echo(f"  Reason: {session.completion_reason}")
-    if session.metadata:
-        click.echo(f"  Metadata: {session.metadata}")
-
-
-@session.command("delete")
-@click.argument("session_id")
-@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
-@click.pass_context
-def session_delete(ctx, session_id, force):
-    """Delete a session."""
-    config = ctx.obj["config"]
-    manager = SessionManager(session_dir=config.session_dir)
-
-    if not force:
-        click.confirm(f"Delete session {session_id}?", abort=True)
-
-    try:
-        manager.delete_session(session_id)
-        click.echo(f"Deleted session {session_id}")
-    except FileNotFoundError:
-        click.echo(f"Session not found: {session_id}", err=True)
-
-
-@main.command()
-def info():
-    """Show agent configuration and status."""
-    from openadapt_agent import has_safety_module
-
-    click.echo("OpenAdapt Agent Info")
-    click.echo(f"  Version: {__version__}")
-    click.echo(f"  Safety module available: {has_safety_module()}")
-
-    # Check for optional dependencies
-    deps = {
-        "openadapt-ml": "openadapt_ml",
-        "openadapt-grounding": "openadapt_grounding",
-        "openadapt-capture": "openadapt_capture",
-        "openadapt-tray": "openadapt_tray",
-        "openadapt-evals": "openadapt_evals",
-    }
-
-    click.echo("\nOptional dependencies:")
-    for name, module in deps.items():
-        try:
-            __import__(module)
-            status = "installed"
-        except ImportError:
-            status = "not installed"
-        click.echo(f"  {name}: {status}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

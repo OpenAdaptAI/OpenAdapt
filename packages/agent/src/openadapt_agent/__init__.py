@@ -1,45 +1,26 @@
+"""openadapt-agent — the agent-facing bridge for openadapt-flow workflows.
+
+**Status: Experimental (v2).** This package exposes compiled
+`openadapt-flow <https://github.com/OpenAdaptAI/openadapt-flow>`_ workflow
+bundles to other agents:
+
+- an **MCP server** (``openadapt-agent serve`` / ``python -m
+  openadapt_agent.mcp``) that presents each bundle as a tool whose
+  execution shells out to the governed ``openadapt-flow run`` CLI — the
+  server never reimplements or bypasses flow's policy / identity / effect
+  gates; and
+- an **Agent Skills emitter** (``openadapt-agent emit-skill``) that wraps
+  flow's own ``emit-skill`` and appends agent-facing MCP invocation and
+  halt-semantics guidance.
+
+A halted or refused run is always surfaced as a structured halt/refusal
+with an evidence pointer (the run's ``report.json``), never as success.
+
+Version 1.x of this package (a legacy execution wrapper for model-driven
+GUI agents) is deprecated; see the README for the pointer to the last
+v0.1.x release.
 """
-OpenAdapt Agent - Production execution engine for GUI automation agents.
 
-This package provides the runtime infrastructure for executing trained OpenAdapt
-models in production environments with safety gates, human-in-the-loop confirmation,
-session management, and audit logging.
-"""
+__version__ = "2.0.0.dev0"
 
-__version__ = "0.1.0"
-
-from openadapt_agent.executor import AgentExecutor
-from openadapt_agent.session import Session, SessionManager, SessionState
-from openadapt_agent.config import AgentConfig, SafetyMode
-
-__all__ = [
-    "AgentExecutor",
-    "Session",
-    "SessionManager",
-    "SessionState",
-    "AgentConfig",
-    "SafetyMode",
-]
-
-# Optional imports from openadapt-ml safety module
-try:
-    from openadapt_ml.safety import (
-        SafetyValidator,
-        SafetyConfig,
-        ValidationDecision,
-        PatternCategory,
-    )
-    __all__.extend([
-        "SafetyValidator",
-        "SafetyConfig",
-        "ValidationDecision",
-        "PatternCategory",
-    ])
-    _HAS_SAFETY = True
-except ImportError:
-    _HAS_SAFETY = False
-
-
-def has_safety_module() -> bool:
-    """Check if the openadapt-ml safety module is available."""
-    return _HAS_SAFETY
+__all__ = ["__version__"]

@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-agent"
-version = "0.1.0"
-description = "Production execution engine for OpenAdapt GUI automation agents"
+version = "2.0.0.dev0"
+description = "Agent-facing bridge for openadapt-flow: expose compiled workflow bundles as MCP servers and Agent Skills (Experimental)"
 readme = "README.md"
-requires-python = ">=3.10"
+# openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
+requires-python = ">=3.10,<3.13"
 license = "MIT"
 authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}
@@ -18,9 +19,7 @@ maintainers = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -28,41 +27,23 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["gui", "automation", "agent", "ai", "safety", "execution", "production"]
+keywords = ["mcp", "agent-skills", "gui", "automation", "workflow", "openadapt", "governed"]
 
 dependencies = [
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-    "click>=8.1.0",
+    # Governed workflow compiler/runtime this package bridges. Execution
+    # shells out to its CLI; bundle metadata loads via its IR.
+    "openadapt-flow>=1.9,<2",
+    # Official Model Context Protocol SDK (stdio server transport).
+    "mcp>=1.2",
+    # Structured concurrency runtime the mcp SDK already uses; we call
+    # anyio.run / to_thread directly.
+    "anyio>=4.0",
 ]
 
 [project.optional-dependencies]
-ml = [
-    # Integration with openadapt-ml for safety module and trained models
-    "openadapt-ml>=0.1.0",
-]
-grounding = [
-    # UI element detection for action execution
-    "openadapt-grounding>=0.1.0",
-]
-capture = [
-    # Screen observation capture
-    "openadapt-capture>=0.1.0",
-]
-tray = [
-    # Desktop tray application for GUI confirmations
-    "openadapt-tray>=0.1.0",
-]
-evals = [
-    # Benchmark evaluation integration
-    "openadapt-evals>=0.1.0",
-]
 dev = [
     "pytest>=8.0.0",
-    "ruff>=0.1.0",
-]
-all = [
-    "openadapt-agent[ml,grounding,capture,tray,evals,dev]",
+    "ruff>=0.4.0",
 ]
 
 [project.scripts]
@@ -79,3 +60,7 @@ packages = ["src/openadapt_agent"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

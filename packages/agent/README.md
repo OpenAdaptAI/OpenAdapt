@@ -1,245 +1,133 @@
 # OpenAdapt Agent
 
 > [!IMPORTANT]
-> **Status: Deprecated.** Do not build new integrations on this package. Its
-> execution responsibilities have moved to the governed runtime in
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow); this
-> repository accepts migration fixes only.
+> **Status: Repurposed (v2, Experimental).** This package is now the
+> **agent-facing bridge** for
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow): it
+> exposes compiled workflow bundles as **MCP servers** and **Agent
+> Skills**, so other agents (Claude Code, Claude Desktop, any MCP client)
+> can invoke governed workflows as tools. It is new, unproven code — do
+> not treat it as production-ready.
 >
-> The OpenAdapt product is the demonstration compiler,
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
-> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
-> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
-> deterministic, locally executable program. Healthy runs make no model calls,
-> and it halts instead of guessing when verification fails. Lifecycle labels for
-> every repository are in the
-> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+> **Legacy v1 users:** the pre-pivot package (execution wrapper for
+> model-driven GUI agents: safety gates, HITL confirmation, session
+> management, audit logging) is deprecated and its modules were removed
+> in v2. Pin the last v1-line release,
+> [`openadapt-agent==0.1.0` on PyPI](https://pypi.org/project/openadapt-agent/0.1.0/),
+> or browse the pre-pivot source at the last v1 commit on the `main`
+> history. Execution responsibilities moved to the governed runtime in
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
 
-[![Build Status](https://github.com/OpenAdaptAI/openadapt-agent/workflows/Publish%20to%20PyPI/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-agent/actions)
-[![PyPI version](https://img.shields.io/pypi/v/openadapt-agent.svg)](https://pypi.org/project/openadapt-agent/)
-[![Downloads](https://img.shields.io/pypi/dm/openadapt-agent.svg)](https://pypi.org/project/openadapt-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 
-Legacy execution wrapper for model-driven GUI automation agents: safety gates, human-in-the-loop confirmation, session management, and audit logging. Superseded by the governed runtime in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+The bridge that makes the OpenAdapt README's promise — *"compiled
+workflows can also be emitted as Agent Skills or MCP servers"* — real:
 
-## Overview
+- **`openadapt-agent serve`** — an MCP server (stdio) over a directory of
+  compiled workflow bundles. Each bundle becomes a `run_<slug>` tool with
+  a JSON schema derived from its declared parameters; every call shells
+  out to the governed `openadapt-flow run` CLI (fail-closed admission
+  gates), and returns success **or a structured halt/refusal with an
+  evidence pointer — never a fabricated success**. Read-only tools
+  (`list_workflows`, `get_workflow`, `get_run_report`) are always on;
+  run tools require the explicit `--allow-run` flag.
+- **`openadapt-agent emit-skill`** — a Claude Agent Skill folder for one
+  bundle. Wraps flow's own `emit-skill` and appends MCP-invocation and
+  halt-semantics guidance for the consuming agent.
 
-`openadapt-agent` bridges the gap between benchmark evaluation and real-world automation. While `openadapt-evals` focuses on measuring agent performance in controlled environments, `openadapt-agent` provides the runtime infrastructure needed to safely execute agents on real user systems.
+Design, security model, and what v2.0 deliberately does **not** do:
+[`docs/DESIGN.md`](docs/DESIGN.md).
 
-**Key capabilities:**
-
-- **Safety Gates**: Pre-action validation using pattern-based rules and ML-powered safety checks
-- **Human-in-the-Loop**: Configurable confirmation for high-risk actions (CLI, GUI, or custom callbacks)
-- **Session Management**: Pause, resume, and persist execution sessions
-- **Audit Logging**: Comprehensive logging for compliance and debugging
-- **Error Recovery**: Retry policies and graceful degradation
-
-## Installation
-
-```bash
-pip install openadapt-agent
-```
-
-Or with uv:
-```bash
-uv add openadapt-agent
-```
-
-### Optional Dependencies
+## Install
 
 ```bash
-# With ML safety module (recommended)
-pip install openadapt-agent[ml]
-
-# With all integrations
-pip install openadapt-agent[all]
+pip install "openadapt-agent>=2.0.0.dev0"   # not yet published; from source:
+pip install git+https://github.com/OpenAdaptAI/openadapt-agent@feat/mcp-agent-bridge
 ```
 
-## Quick Start
+Requires Python 3.10–3.12 (inherited from `openadapt-flow`). Installing
+pulls in `openadapt-flow` (the governed runtime this package drives) and
+the official `mcp` SDK.
 
-### Command Line
+## Quickstart: compile flow's bundled demo, serve it, call it
 
 ```bash
-# Start an agent session
-openadapt-agent start "Open Notepad and type hello world"
+# 1. Record + compile flow's canonical demo (MockMed, ships with flow)
+openadapt-flow demo-record --out /tmp/rec
+openadapt-flow compile /tmp/rec --out /tmp/bundles/triage --name "Demo Triage"
 
-# Check session status
-openadapt-agent status
-
-# Pause/resume execution
-openadapt-agent pause <session_id>
-openadapt-agent resume <session_id>
-
-# List all sessions
-openadapt-agent session list
-
-# Show agent info
-openadapt-agent info
+# 2. Serve the bundle directory over MCP (stdio)
+openadapt-agent serve --bundles /tmp/bundles --allow-run
 ```
 
-### Python API
-
-```python
-from openadapt_agent import AgentExecutor, AgentConfig, SafetyMode
-
-# Configure the agent
-config = AgentConfig(
-    safety_mode=SafetyMode.STANDARD,  # Block dangerous, confirm irreversible
-    confirmation_mode="cli",           # CLI prompts for confirmation
-)
-
-# Create executor (policy loaded from openadapt-ml)
-executor = AgentExecutor(policy=my_trained_policy, config=config)
-
-# Start a session
-session = executor.start_session(goal="Open Notepad and type hello")
-
-# Execute steps
-while not session.is_complete:
-    result = executor.step()
-    if not result.success:
-        print(f"Step failed: {result.error}")
-        break
-
-print(f"Session completed: {session.state}")
-```
-
-## Safety Modes
-
-| Mode | Description |
-|------|-------------|
-| `DISABLED` | No safety checks (testing only) |
-| `PERMISSIVE` | Log warnings but allow most actions |
-| `STANDARD` | Block dangerous, confirm irreversible (default) |
-| `STRICT` | Block suspicious, confirm most actions |
-| `PARANOID` | Block everything not explicitly allowed |
-
-## Architecture
-
-```
-openadapt-agent/
-  src/openadapt_agent/
-    __init__.py       # Package exports
-    executor.py       # AgentExecutor - main execution engine
-    session.py        # Session management and persistence
-    config.py         # Configuration classes
-    cli.py            # Command-line interface
-```
-
-### Integration with OpenAdapt Ecosystem
-
-```
-openadapt-agent
-  |-- openadapt-ml (optional)      # Safety module, trained policies
-  |-- openadapt-grounding (optional) # UI element detection
-  |-- openadapt-capture (optional)   # Screen observation
-  |-- openadapt-tray (optional)      # GUI confirmation dialogs
-  |-- openadapt-evals (optional)     # Benchmark testing
-```
-
-## Session Management
-
-Sessions can be paused, resumed, and persisted across process restarts:
-
-```python
-from openadapt_agent import SessionManager, SessionState
-
-manager = SessionManager()
-
-# List recent sessions
-sessions = manager.list_sessions(limit=10)
-for s in sessions:
-    print(f"{s.session_id}: {s.state} - {s.goal}")
-
-# Resume a paused session
-session = manager.load_session("abc123...")
-if session.state == SessionState.PAUSED:
-    executor.resume_session(session.session_id)
-```
-
-## Configuration
-
-Configuration can be set via environment variables (prefixed with `OPENADAPT_AGENT_`), config files, or the API:
+Register it with Claude Code:
 
 ```bash
-# Environment variables
-export OPENADAPT_AGENT_SAFETY_MODE=strict
-export OPENADAPT_AGENT_CONFIRMATION_MODE=cli
+claude mcp add openadapt-workflows -- \
+  openadapt-agent serve --bundles /tmp/bundles --allow-run
 ```
 
-```yaml
-# config.yaml
-safety_mode: strict
-confirmation_mode: gui
-execution:
-  max_steps: 50
-  step_timeout_seconds: 30
-audit:
-  enabled: true
-  include_screenshots: true
+Claude Code then sees `list_workflows`, `get_workflow`,
+`get_run_report`, and `run_demo_triage` (with a `note` parameter
+defaulting to the recorded value). Omit `--allow-run` to expose the
+read-only tools only.
+
+> **Expect the demo run to be `refused` — that is the demo.** Run tools
+> execute through flow's fail-closed `run` verb, and the freshly compiled
+> demo bundle does not satisfy its admission gates (identity arming,
+> effect contracts, encryption at rest), so `run_demo_triage` returns a
+> structured `refused` outcome carrying the gate coverage report —
+> nothing executes. That is the governed behavior this bridge exists to
+> preserve. A bundle prepared for a real deployment (armed identity,
+> effect contracts, `--config deployment.yaml` / `--policy`) runs to
+> `success` or `halt`. To watch the demo actually execute without the
+> gates, use flow's permissive demo verb directly:
+> `openadapt-flow replay /tmp/bundles/triage`.
+
+Emit an Agent Skill instead of (or as well as) serving MCP:
+
+```bash
+openadapt-agent emit-skill /tmp/bundles/triage --out ~/.claude/skills
 ```
 
-```python
-# Python API
-from openadapt_agent import AgentConfig
+## How results come back
 
-config = AgentConfig.from_file("config.yaml")
-# or
-config = AgentConfig(safety_mode="strict")
-```
+Every `run_<slug>` call returns a structured outcome:
 
-## Custom Confirmation Handlers
+| `status` | meaning |
+| --- | --- |
+| `success` | exit 0 **and** the persisted `report.json` marks the run successful |
+| `halt` | the run executed and stopped at an unhandled state — includes flow's structured halt observation (where, why, what was observed on screen, what completed first) and pointers to `report.json`/`REPORT.md`. **Not a success.** |
+| `refused` | an `openadapt-flow run` admission gate refused the bundle (exit 2); **nothing was executed** |
+| `timeout` | the run exceeded the operator-set deadline and was killed; the target may be partially executed |
+| `error` | infrastructure problem (CLI missing, evidence inconsistent) |
 
-```python
-def my_confirmation_handler(action, reason):
-    """Custom logic to approve/deny actions."""
-    if "delete" in str(action).lower():
-        return False  # Never allow delete
-    # Show custom dialog, send webhook, etc.
-    return True
+`get_run_report` returns the full `report.json` for any run this server
+made, so the consuming agent can show the evidence rather than summarize
+around it.
 
-executor = AgentExecutor(
-    policy=my_policy,
-    config=AgentConfig(confirmation_mode="callback"),
-    confirmation_callback=my_confirmation_handler,
-)
-```
+## Honest limits (v2.0, Experimental)
 
-## Comparison: openadapt-agent vs openadapt-evals
-
-| Aspect | openadapt-evals | openadapt-agent |
-|--------|-----------------|-----------------|
-| **Purpose** | Benchmark evaluation | Production automation |
-| **Environment** | Controlled VMs, sandboxes | Real user machines |
-| **Stakes** | Low (test data) | High (real data, actions) |
-| **Human Oversight** | Optional, for debugging | Required, for safety |
-| **Error Recovery** | Restart from checkpoint | Graceful degradation |
-| **Logging** | Metrics collection | Audit trail, compliance |
+- **No auth story beyond local stdio.** The server trusts whoever spawned
+  it; the MCP client's user is the operator of record. No remote
+  transport, no TLS, no multi-tenancy — do not expose this across a
+  network boundary.
+- **Unproven in production.** Unit tests mock the flow CLI; one local
+  end-to-end smoke exists. No pilot has run through this bridge.
+- **No halt-resolution bridging.** Halts are surfaced with evidence;
+  fixing them (`openadapt-flow teach` / `approve` / `resume`) is still a
+  human CLI workflow.
+- **Timeout ≠ rollback.** A killed run may leave the target mid-workflow;
+  the outcome says so, but nothing undoes partial work.
 
 ## Development
 
 ```bash
-# Clone and install for development
-git clone https://github.com/OpenAdaptAI/openadapt-agent.git
-cd openadapt-agent
-uv sync
-
-# Run tests
-uv run pytest
-
-# Type checking
-uv run mypy src/
+pip install -e ".[dev]"
+ruff check src tests && pytest
 ```
 
 ## License
 
-MIT
-
-## Related Projects
-
-- [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Training and policy runtime
-- [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) - Benchmark evaluation
-- [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) - Screen recording
-- [openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) - UI element localization
-- [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt) - Main project and CLI
+MIT — see [LICENSE](LICENSE).
