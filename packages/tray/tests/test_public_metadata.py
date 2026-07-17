@@ -1,4 +1,4 @@
-"""Keep public package metadata aligned with the hosted-rewire boundary."""
+"""Keep public package metadata aligned with the shipped release boundary."""
 
 import re
 from pathlib import Path
@@ -12,7 +12,11 @@ def test_public_metadata_identifies_unreleased_supporting_surface() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text()
 
     assert "Lifecycle: Experimental supporting surface" in readme
-    assert "feat/hosted-rewire" in readme
+    # The hosted lifecycle shipped (0.1.1 on PyPI), but no released
+    # openadapt-desktop build provides the companion IPC service yet -- the
+    # README must keep saying so rather than implying an integrated product.
+    assert "Release Boundary" in readme
+    assert "No released `openadapt-desktop` build implements" in readme
     assert "openadapt-flow" in readme
     assert "Development Status :: 2 - Pre-Alpha" in pyproject
     assert "Experimental status and launcher companion" in pyproject

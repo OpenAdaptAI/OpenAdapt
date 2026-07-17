@@ -2,12 +2,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
 
 > **Lifecycle: Experimental supporting surface.** The canonical workflow
 > engine is [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
-> The behavior described below exists on the checked-out
-> `feat/hosted-rewire` branch and is not a generally available integrated
-> desktop release.
+> The tray behavior described below is released on PyPI as
+> `openadapt-tray`, but it is not yet part of a generally available
+> integrated desktop experience: no released `openadapt-desktop` build
+> provides the companion IPC service the tray delegates to.
 
 OpenAdapt Tray is a lightweight status mirror and launcher for the intended
 OpenAdapt desktop authoring experience. It does not record, compile, replay,
@@ -23,18 +25,17 @@ repair, and halts when verification fails. That workflow logic belongs to
 
 ## Release Boundary
 
-- Package metadata is currently version `0.0.1` and marks this project
+- The hosted-lifecycle behavior documented here is merged on `main` and
+  published to PyPI (latest release: `0.1.1`). The package classifier is
   pre-alpha.
-- The hosted rewire is branch code. Installing an existing published package
-  must not be assumed to provide the behavior documented here.
 - Unit tests cover the client state machine, IPC framing, menus, and mocked
   hosted HTTP behavior. They do not prove a working desktop installer, hosted
   service, or end-to-end authoring loop.
-- The current `openadapt-desktop` main branch does not implement the discovery
-  socket and command contract this tray expects. The two repositories are not
-  integrated end to end in their checked-out state.
+- No released `openadapt-desktop` build implements the discovery socket and
+  command contract this tray expects (that engine rewire is in review). Until
+  it ships, the two surfaces are not integrated end to end.
 
-## What This Branch Implements
+## What This Release Implements
 
 | Surface | Behavior | Maturity |
 | --- | --- | --- |
@@ -47,7 +48,7 @@ repair, and halts when verification fails. That workflow logic belongs to
 | Recent captures | Reads local capture directories; View still tries the legacy `openadapt visualize` command before a file-browser fallback | Transitional behavior |
 
 The retired model-training controls and training states are not part of this
-branch.
+release.
 
 ## Expected Menu
 
@@ -111,14 +112,21 @@ poller.
   validated PHI-safe path; it should be changed or policy-gated before
   production use.
 
-## Development Quickstart
+## Installation
 
-Run this branch as contributor software, not as a production install:
+```bash
+pip install openadapt-tray
+openadapt-tray            # run the tray application
+```
+
+Treat the install as an experimental status surface, not a production
+desktop product (see the release boundary above).
+
+## Development Quickstart
 
 ```bash
 git clone https://github.com/OpenAdaptAI/openadapt-tray.git
 cd openadapt-tray
-git switch feat/hosted-rewire
 
 uv sync --extra dev
 uv run pytest tests -q
@@ -200,7 +208,7 @@ tests/               mocked/unit coverage for these client boundaries
 | Project | Lifecycle and role |
 | --- | --- |
 | [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Canonical workflow compiler, runtime, certification, and governed repair engine |
-| [`openadapt-desktop`](https://github.com/OpenAdaptAI/openadapt-desktop) | Experimental authoring/teaching direction; current main is not IPC-compatible with this branch |
+| [`openadapt-desktop`](https://github.com/OpenAdaptAI/openadapt-desktop) | Experimental authoring/teaching direction; no released build yet provides the IPC service this tray expects |
 | [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Flagship launcher/meta-repository |
 
 ## License
