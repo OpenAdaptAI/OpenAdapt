@@ -6,6 +6,16 @@
 > research direction, not the current product flow; the compiler does not
 > require this package.
 >
+> This package does have one current product role: it is the **desktop
+> demonstration recorder** behind `openadapt-flow record --backend windows|rdp`,
+> installed via the optional `capture` extra
+> (`pip install 'openadapt-flow[capture]'`). The operator's native
+> mouse/keyboard/screen capture session is converted into the compiler's
+> recording format by `openadapt_flow.adapters.capture.convert_capture` (see
+> openadapt-flow's `docs/desktop/RECORDING.md`). The web recording path does not
+> use this package. Requires `openadapt-capture >= 0.5.3` for headless-safe
+> import.
+>
 > The OpenAdapt product is the demonstration compiler,
 > [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
 > via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
