@@ -1,12 +1,27 @@
 # OpenAdapt Agent
 
+> [!IMPORTANT]
+> **Status: Deprecated.** Do not build new integrations on this package. Its
+> execution responsibilities have moved to the governed runtime in
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow); this
+> repository accepts migration fixes only.
+>
+> The OpenAdapt product is the demonstration compiler,
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
+> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
+> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
+> deterministic, locally executable program. Healthy runs make no model calls,
+> and it halts instead of guessing when verification fails. Lifecycle labels for
+> every repository are in the
+> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+
 [![Build Status](https://github.com/OpenAdaptAI/openadapt-agent/workflows/Publish%20to%20PyPI/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-agent/actions)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-agent.svg)](https://pypi.org/project/openadapt-agent/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt-agent.svg)](https://pypi.org/project/openadapt-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
-Production execution engine for OpenAdapt GUI automation agents. Wraps trained models with safety gates, human-in-the-loop confirmation, session management, and audit logging.
+Legacy execution wrapper for model-driven GUI automation agents: safety gates, human-in-the-loop confirmation, session management, and audit logging. Superseded by the governed runtime in [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
 
 ## Overview
 
