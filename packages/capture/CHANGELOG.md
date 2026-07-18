@@ -1,6 +1,173 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-07-18)
+
+### Chores
+
+- Add MIT LICENSE file ([#26](https://github.com/OpenAdaptAI/openadapt-capture/pull/26),
+  [`287aec2`](https://github.com/OpenAdaptAI/openadapt-capture/commit/287aec2591022d93e7d40a6cc0e9fc9b297bf770))
+
+pyproject.toml declares license = "MIT" and the README carries an MIT badge, but the repository had
+  no LICENSE file, so GitHub license detection reported none. Adds the standard MIT license text
+  (copyright OpenAdapt.AI, 2025-2026 per first-commit year).
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+- Modernize Recorder framing, CI coverage, and dependency floors
+  ([#28](https://github.com/OpenAdaptAI/openadapt-capture/pull/28),
+  [`6382974`](https://github.com/OpenAdaptAI/openadapt-capture/commit/63829745e0c192578b363dcd6deb438bb0a69a11))
+
+* chore: modernize Recorder framing, CI coverage, and dependency floors
+
+- Reframe the Recorder docstring: it is OpenAdapt's original, hand-built, battle-tested recorder
+  (the engine behind openadapt-flow's desktop record backends), not "legacy" code. Documents the
+  multiprocessing listener/writer architecture and the headless-import invariant. - CI: add a
+  windows-latest job that runs the unit suite plus the live Recorder integration tests
+  (tests/test_performance.py, marked slow) -- the live recording path previously ran in NO CI
+  anywhere because those tests skip off-Windows and CI was ubuntu-only. Add a macos-latest job
+  running the unit suite for platform coverage. - Dependency floors: pynput>=1.7.6, av>=12.0.0,
+  Pillow>=10.1.0, numpy>=1.26.0 (previous floors predate cp312 wheels, so they were unsatisfiable on
+  the newest supported Python). Full suite verified green against current stable resolutions (av 18,
+  Pillow 12, numpy 2.5, SQLAlchemy 2.0.51).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+* fix: release SQLite file handles on close (Windows sharing violation)
+
+The new windows-latest CI leg surfaced a real bug invisible on POSIX: CaptureSession.close() closed
+  the SQLAlchemy Session but never disposed the engine, so the pool kept the recording.db file
+  handle open. On Windows that leaves the capture directory undeletable (WinError 32) -- teardown of
+  every test using a TemporaryDirectory failed, and any consumer deleting a capture dir after
+  close() would hit the same lock.
+
+- CaptureSession.close() now disposes the session's bind engine. - tests/test_highlevel.py: dispose
+  the helper-created engines in the temp_capture_dir fixture teardown (before the tmpdir is
+  removed), and dispose the engine leaked in test_pixel_ratio_round_trips_through_model.
+
+* fix: release SQLite handles on load() error paths and refresh-held sessions
+
+Second round of Windows CI findings (all invisible on POSIX, all WinError 32 file locks on
+  recording.db):
+
+- CaptureSession.load() error paths (corrupt query, no recording row) closed the session but never
+  disposed its engine -- the pool kept the file handle open. Both paths now dispose the bind as
+  well. - get_session_for_path() leaked its engine when migrate_missing_columns raised on a
+  corrupt/unreadable db (the sqlite connection to the bad file stayed pooled). Now disposed before
+  re-raising. - tests/test_highlevel.py: crud.insert_recording ends with session.refresh(), which
+  leaves the helper session's connection checked out until close -- engine.dispose() alone cannot
+  reclaim it. The temp_capture_dir fixture now closes helper sessions before disposing helper
+  engines, and test_session_leak_on_no_recording no longer discards the setup engine it creates.
+
+* fix: recorder shutdown deadlock on empty event queue
+
+Third Windows CI finding: the live roundtrip test hung for the full 300s pytest timeout inside
+  Recorder.__exit__. process_events() used a bare blocking event_q.get(): when terminate_processing
+  is set while the queue is empty and the reader threads have already exited, no event ever arrives,
+  the loop condition is never re-checked, and join_tasks() waits on the event_processor thread
+  forever. The get is now bounded (timeout=1) so the loop re-checks terminate and drains cleanly.
+
+Also make the integration tests wait on the recorder's own readiness signal (rec.wait_for_ready())
+  instead of a fixed 0.5-1s sleep: on a cold CI runner startup takes ~3.5s, so the synthetic input
+  was being injected before the listeners were up.
+
+* test: gate listener-dependent live tests behind input-injection flag
+
+Hosted Windows runners execute jobs in a non-interactive session, so SendInput-injected events never
+  reach the low-level hooks pynput uses: the three event-capture assertions (roundtrip, reuse,
+  throughput) can never hold there -- a runner-environment limitation, not a recorder bug. The CI
+  step now sets OPENADAPT_CI_NO_INPUT_INJECTION=1 and those three tests skip with a precise reason,
+  while the live pipeline tests that do not depend on captured input (recorder startup + clean
+  bounded shutdown, per-capture db creation, bounded memory) keep running the real recorder on
+  windows-latest. Run the full set on an interactive Windows desktop.
+
+---------
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+### Documentation
+
+- Add lifecycle status banner pointing to openadapt-flow
+  ([#25](https://github.com/OpenAdaptAI/openadapt-capture/pull/25),
+  [`82c7151`](https://github.com/OpenAdaptAI/openadapt-capture/commit/82c715145f50b3f8e7a07dd2d5c53d5a1649a3db))
+
+Aligns this repository's front door with the org-wide product narrative: the demonstration compiler
+  (openadapt-flow) installed via the OpenAdapt launcher. Status label matches the public repository
+  lifecycle registry in OpenAdaptAI/.github.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+- Banner — note the openadapt-flow desktop record on-ramp role
+  ([#27](https://github.com/OpenAdaptAI/openadapt-capture/pull/27),
+  [`399cd28`](https://github.com/OpenAdaptAI/openadapt-capture/commit/399cd28987f81b229f58ac53893e5274daee5aaf))
+
+The status banner said this package is 'not the product' and 'the compiler does not require this
+  package', which is accurate for the compiler core and the web path, but omitted the one documented
+  product role capture DOES have: openadapt-flow's `record --backend windows|rdp` uses
+  openadapt_capture.Recorder (via the optional `capture` extra) as its desktop demonstration
+  recorder, and openadapt_flow.adapters.capture.convert_capture converts the session into the
+  compile-ready recording format (openadapt-flow docs/desktop/RECORDING.md).
+
+Add one paragraph stating that role precisely so readers do not conclude the package is unused by
+  the product.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+- Focus capture on its current product role
+  ([#29](https://github.com/OpenAdaptAI/openadapt-capture/pull/29),
+  [`19de075`](https://github.com/OpenAdaptAI/openadapt-capture/commit/19de075a001c50bff7228527c100b664f32a661a))
+
+Rewrite the README around the current optional desktop-recorder role, the Flow-owned web recording
+  path, the experimental extension boundary, concise usage, sensitive-data handling, and current
+  limitations.
+
+### Features
+
+- Window-scoped recording (capture one window in its own pixel space)
+  ([#30](https://github.com/OpenAdaptAI/openadapt-capture/pull/30),
+  [`26a8836`](https://github.com/OpenAdaptAI/openadapt-capture/commit/26a88367dc22f30f9b1c7ad72fabbc0ee77ea373))
+
+The missing recording half of the Citrix/remote-display wedge: the recorder captured the FULL SCREEN
+  while openadapt-flow's RemoteDisplayBackend (rdp_window) replays in the client WINDOW's pixel
+  space, forcing workarounds (record inside the session or full-screen the client). This adds a
+  window capture mode that removes the mismatch at the source:
+
+- Recorder(window={"owner": "Parallels", "title": None}): resolve the target window by
+  case-insensitive owner/title substrings (macOS: CGWindowList, same selection semantics as flow's
+  MacWindowClient; Windows: Win32 EnumWindows + DWM extended frame, no new deps), also
+
+configurable via RECORD_WINDOW_OWNER/RECORD_WINDOW_TITLE and `capture record --window-owner ...`. -
+  Frames are the window's own pixels (macOS: CGWindowListCreateImage with
+  kCGWindowImageBoundsIgnoreFraming — the identical call flow's replay capture uses; Windows: mss
+  region grab of the resolved bounds), re-resolved every frame so a moved window stays scoped. -
+  Global input coordinates are translated at capture time into the captured frame's pixel space
+  (pixel = (global - origin) * scale, the exact inverse of flow's _to_screen replay mapping);
+  out-of-window input records out-of-range coordinates instead of being clamped. - Persistence for
+  exact conversion: the window scoping (target, resolved window, initial bounds, scale, viewport,
+  coordinate_space="window_pixels") is stored in the recording's config JSON (exposed as
+  CaptureSession.window_capture), and a bounds timeline is recorded as window events whenever the
+  resolved bounds/title change, linked to actions by the existing post-processing. - Fail-loud:
+  recording refuses to start if the window cannot be resolved AND captured; input before the first
+  frame is discarded with a warning rather than recorded in the wrong space; video frames whose size
+  no longer matches the stream (mid-recording resize) are skipped loudly while screenshots and the
+  bounds timeline stay exact.
+
+Tests: 38 new tests — coordinate translation (including a round-trip
+
+against flow's replay formula), bounds tracking/change detection via injected fakes (no display),
+  config plumbing, recorder action-path translation, and persistence round-trip; plus a live smoke
+  test gated like the input-injection tests (slow marker, platform gate,
+  OPENADAPT_CI_NO_INPUT_INJECTION skip with precise reasons, OPENADAPT_WINDOW_SMOKE_OWNER override
+  for the Parallels rig).
+
+Live-validated end to end on macOS against a real window (Finder, 2x Retina): 8s window-mode
+  Recorder run captured 49 actions with window-pixel coordinates, a bounds-timeline window event
+  linked to all actions, window-sized video frames (1512x1888), and the persisted capture_window
+  config.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+
 ## v0.5.4 (2026-07-12)
 
 ### Bug Fixes
