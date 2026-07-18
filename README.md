@@ -171,8 +171,11 @@ runs in CI with no OS permissions. Desktop, Citrix, and RDP backends are
 adapters in progress, not yet production paths: Windows UI Automation is
 Experimental, and RDP/Citrix-style pixel-only automation is Research — we are
 seeking design partners to validate them on real deployments.
-Compiled workflows can also be emitted as Agent Skills or MCP
-servers so other agents can invoke them.
+Compiled workflows can also be emitted as Agent Skills or MCP servers so other
+agents can invoke them. The
+[`openadapt-agent`](https://github.com/OpenAdaptAI/openadapt-agent) v2 bridge
+serves governed Flow bundles over MCP and emits Agent Skills without becoming
+a second execution runtime.
 
 In one field test against a computer-use agent on a real third-party EMR
 (OpenEMR's public demo), compiled replay matched the agent's success (20/20
@@ -199,6 +202,7 @@ blanket production-readiness claim.
 |---------|------|----------|------------|
 | `openadapt` | Installer + unified CLI (`openadapt flow ...`) | **Beta** | This repo |
 | `openadapt-flow` | Compiler + governed runtime | **Beta**; browser path proven, Windows UI Automation experimental, remote-display (RDP/Citrix) research | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
+| `openadapt-agent` | MCP + Agent Skills bridge over governed Flow bundles | Active v2 integration surface | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
 | `openadapt-capture` | Optional native recorder | **Experimental** | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-privacy` | Optional PII/PHI scrubbing | **Experimental** | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
 
@@ -290,9 +294,10 @@ runtime conditioning.
 
 - **New automation work:** install `openadapt` and use `openadapt flow ...`; make
   engine changes in `openadapt-flow`.
-- **`openadapt-agent`: Deprecated.** Do not build new integrations on it. Its
-  execution responsibilities have moved to the governed runtime in
-  `openadapt-flow`.
+- **`openadapt-agent` v2: Active bridge.** Build agent-facing integrations on
+  its MCP and Agent Skills surface. Governed execution remains in
+  `openadapt-flow`; the pre-v2 model-driven execution wrapper is the deprecated
+  component.
 - **Pre-1.0 monolith: Historical.** Version 0.46.0 and its source remain
   available for existing users, but receive no feature development.
 
