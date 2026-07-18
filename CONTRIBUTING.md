@@ -13,14 +13,17 @@ replay, repair, policy, and backend work belongs there.
 |-----------|--------------|--------------------|
 | **Beta product** | `OpenAdapt`, `openadapt-flow` | Launcher here; engine in `openadapt-flow` |
 | **Experimental support** | `openadapt-capture`, `openadapt-privacy`, `openadapt-desktop` | Native capture, scrubbing, and authoring surfaces |
+| **Agent integration** | `openadapt-agent` | MCP and Agent Skills bridge over governed Flow bundles |
 | **Research** | `openadapt-ml`, `openadapt-evals`, `openadapt-grounding`, `openadapt-retrieval` | GUI-agent research and evaluation, not the product runtime |
-| **Deprecated/history** | `openadapt-agent`, `legacy/` | Migration fixes only; no new features |
+| **Deprecated/history** | `legacy/`, pre-v2 `openadapt-agent` | Migration fixes only; no new features |
 
 ## Where to Contribute
 
 - **This repository**: launcher packaging, unified CLI compatibility, and CI.
 - **`openadapt-flow`**: compiler, replay, verification, governed repair, and
   backend implementation.
+- **`openadapt-agent`**: agent-facing MCP and Agent Skills integration over
+  governed Flow bundles.
 - **Other repositories**: open issues only when their stated lifecycle and
   contribution guide match the proposed work.
 
