@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/schema.json",
   "productName": "OpenAdapt Desktop",
-  "version": "0.1.1",
+  "version": "0.5.1",
   "identifier": "ai.openadapt.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -27,9 +27,20 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "msi", "nsis", "deb", "appimage"],
-    "icon": ["icons/icon.png", "icons/icon.ico"],
-    "externalBin": ["binaries/openadapt-engine"],
+    "targets": [
+      "dmg",
+      "msi",
+      "nsis",
+      "deb",
+      "appimage"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/openadapt-engine"
+    ],
     "macOS": {
       "signingIdentity": "-"
     },
