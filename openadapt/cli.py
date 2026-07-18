@@ -57,6 +57,7 @@ _FLOW_PASSTHROUGH_COMMANDS = {
     "emit-skill": "Emit an Agent Skills folder for a bundle.",
     "emit-mcp": "Emit a standalone MCP server for a bundle.",
     "teach": "Teach a governed correction after a halt.",
+    "connect": "Connect this computer to an authenticated Cloud workspace.",
     "login": "Validate and store a hosted ingest token.",
     "sanitize": "Create a verified sanitized derivative locally.",
     "review-sanitized": "Review original and sanitized content locally.",
@@ -167,6 +168,60 @@ def flow():
     identically; `openadapt flow <verb>` is the recommended path.
     """
     pass
+
+
+@main.command("connect")
+@click.option(
+    "--pairing", default=None, help="Five-minute pairing code from Cloud settings"
+)
+@click.option("--uri", default=None, help="Exact openadapt://connect desktop deep link")
+@click.option(
+    "--host", default=None, help="Cloud origin (default: https://app.openadapt.ai)"
+)
+@click.option("--device-name", default=None, help="Name shown for this computer")
+@click.option(
+    "--destination-kind",
+    type=click.Choice(["openadapt-managed", "customer-managed", "local"]),
+    default=None,
+    help="Trust class for the pairing destination",
+)
+@click.option(
+    "--trusted-host",
+    multiple=True,
+    help="Exact allowed customer-managed origin (repeatable)",
+)
+def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
+    """Connect this computer to the signed-in OpenAdapt Cloud workspace.
+
+    The browser creates a five-minute, one-use pairing. This command claims it
+    and saves the resulting workspace credential in the OS keychain. It cannot
+    execute arbitrary terminal commands or grant browser access to the shell.
+    """
+    if bool(pairing) == bool(uri):
+        raise click.UsageError("Pass exactly one of --pairing or --uri.")
+    try:
+        from openadapt_flow import hosted
+
+        if not hasattr(hosted, "connect"):
+            raise ImportError
+    except ImportError:
+        click.echo(
+            "Error: this connection flow needs a newer openadapt-flow. "
+            "Run: pip install --upgrade openadapt",
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
+
+    argv = ["connect", "--pairing", pairing] if pairing else ["connect", "--uri", uri]
+    if host:
+        argv += ["--host", host]
+    if device_name:
+        argv += ["--device-name", device_name]
+    if destination_kind:
+        argv += ["--destination-kind", destination_kind]
+    for value in trusted_host:
+        argv += ["--trusted-host", value]
+    _run_flow(argv)
 
 
 @flow.command("record")

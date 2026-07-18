@@ -27,7 +27,7 @@ classifiers = [
 # All other capabilities (capture, ml, evals, ...) remain opt-in extras.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow>=1.7.0,<2.0.0",
+    "openadapt-flow[hosted]>=1.7.0,<2.0.0",
 ]
 
 [project.optional-dependencies]

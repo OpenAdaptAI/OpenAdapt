@@ -146,7 +146,8 @@ def test_launcher_requires_hosted_flow_release():
     """The base and compatibility extras must not resolve pre-hosted engines."""
     metadata = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
 
-    assert metadata.count('"openadapt-flow>=1.7.0,<2.0.0"') == 2
+    assert metadata.count('"openadapt-flow[hosted]>=1.7.0,<2.0.0"') == 1
+    assert metadata.count('"openadapt-flow>=1.7.0,<2.0.0"') == 1
     assert metadata.count('"openadapt-flow[privacy]>=1.7.0,<2.0.0"') == 1
     assert "openadapt-flow>=1.6.0" not in metadata
 
@@ -203,7 +204,9 @@ def test_flow_missing_shows_install_hint(monkeypatch):
     monkeypatch.delitem(sys.modules, "openadapt_flow.__main__", raising=False)
 
     runner = CliRunner()
-    result = runner.invoke(cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"])
+    result = runner.invoke(
+        cli_main, ["flow", "compile", "rec", "--out", "b", "--name", "x"]
+    )
     assert result.exit_code != 0
     assert "pip install --upgrade openadapt" in result.output
     assert "pip install openadapt-flow" in result.output
@@ -282,6 +285,7 @@ def test_flow_help_lists_delegated_launch_commands():
     for command in (
         "run",
         "teach",
+        "connect",
         "login",
         "sanitize",
         "review-sanitized",
@@ -293,13 +297,65 @@ def test_flow_help_lists_delegated_launch_commands():
         assert command in result.output
 
 
+def test_top_level_connect_is_one_command_and_delegates_narrow_pairing(monkeypatch):
+    import openadapt_flow.hosted as hosted
+
+    captured = {}
+    monkeypatch.setattr(hosted, "connect", object(), raising=False)
+    monkeypatch.setattr(
+        "openadapt.cli._run_flow",
+        lambda argv: captured.update(argv=list(argv)),
+    )
+    result = CliRunner().invoke(
+        cli_main,
+        [
+            "connect",
+            "--pairing",
+            "oap_" + "A" * 43,
+            "--host",
+            "https://app.openadapt.ai",
+            "--device-name",
+            "Reception PC",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == [
+        "connect",
+        "--pairing",
+        "oap_" + "A" * 43,
+        "--host",
+        "https://app.openadapt.ai",
+        "--device-name",
+        "Reception PC",
+    ]
+
+
+def test_top_level_connect_requires_exactly_one_fixed_pairing_source():
+    runner = CliRunner()
+    assert runner.invoke(cli_main, ["connect"]).exit_code != 0
+    both = runner.invoke(
+        cli_main,
+        [
+            "connect",
+            "--pairing",
+            "oap_" + "A" * 43,
+            "--uri",
+            "openadapt://connect?pairing=x&host=https://app.openadapt.ai",
+        ],
+    )
+    assert both.exit_code != 0
+    assert "exactly one" in both.output
+
+
 def test_flow_replay_argv_reconstruction(monkeypatch):
     """Repeatable and flag options are forwarded verbatim to flow's main."""
     _require_openadapt_flow()
     import openadapt_flow.__main__ as flow_main_mod
 
     calls = []
-    monkeypatch.setattr(flow_main_mod, "main", lambda argv: calls.append(list(argv)) or 0)
+    monkeypatch.setattr(
+        flow_main_mod, "main", lambda argv: calls.append(list(argv)) or 0
+    )
 
     runner = CliRunner()
     result = runner.invoke(

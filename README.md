@@ -61,9 +61,10 @@ pip install openadapt[all]         # Everything, including research extras
 ```
 
 The flagship compiler ships in the base install, so `openadapt flow …` works
-right after `pip install openadapt`. Install `openadapt-flow[hosted]` when you
-want OS-keychain token storage; environment-based token configuration remains
-available on headless systems. This launcher requires `openadapt-flow>=1.7.0,<2`
+right after `pip install openadapt`. The base install includes OS-keychain
+credential storage for secure Cloud pairing; environment-based token
+configuration remains available on headless systems. This launcher requires
+`openadapt-flow>=1.7.0,<2`
 so clean installs cannot resolve an older engine that lacks the governed hosted
 artifact commands documented below.
 
@@ -72,6 +73,19 @@ artifact commands documented below.
 ---
 
 ## Quick Start
+
+To connect this computer to the workspace you already opened in Cloud, click
+**Connect local OpenAdapt** there. The desktop app opens when its protocol
+handler is installed; otherwise Cloud gives you one command:
+
+```bash
+openadapt connect --pairing oap_... --host https://app.openadapt.ai
+```
+
+The one-time pairing expires after five minutes. The resulting workspace
+credential is saved in the operating system keychain and can be revoked in
+Cloud settings. Pairing grants the existing governed ingest capability; it
+does not let a web page run terminal commands or browse local files.
 
 Run the bundled MockMed workflow first. This is the reproducible path exercised
 by `openadapt-flow` CI and requires no account or target application:
