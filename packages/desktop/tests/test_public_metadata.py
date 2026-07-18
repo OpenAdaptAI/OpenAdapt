@@ -32,7 +32,8 @@ def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
         flags=re.IGNORECASE,
     )
 
-    assert "The Python package and experimental Tauri shell are versioned independently." in readme
+    assert "synchronized to each engine release" in readme
+    assert "not a separate supported desktop release" in readme
     assert hard_coded_version_claim.search(normalized) is None
 
 

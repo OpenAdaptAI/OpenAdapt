@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -15,6 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LIFECYCLE = "Experimental"
 SURFACE = "scaffold-only Tauri shell"
+NATIVE_TAG_PREFIX = "desktop-v"
+VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+SUPERSEDED_MARKER_PREFIX = "<!-- openadapt-superseded-by: "
+SUPERSEDED_SEPARATOR = "\n---\n\n"
 
 ARTIFACT_RULES = {
     "macos": (("dmg", "*.dmg", ".dmg"),),
@@ -60,10 +65,99 @@ def native_version(root: Path = ROOT) -> str:
 
 
 def validate_tag(tag: str, root: Path = ROOT) -> str:
-    expected = f"desktop-v{native_version(root)}"
+    expected = f"{NATIVE_TAG_PREFIX}{native_version(root)}"
     if tag != expected:
         raise ValueError(f"native release tag must be exactly {expected!r}, got {tag!r}")
     return expected
+
+
+def native_tag_tuple(tag: str) -> tuple[int, int, int]:
+    if not tag.startswith(NATIVE_TAG_PREFIX):
+        raise ValueError(f"not a native release tag: {tag!r}")
+    version = tag[len(NATIVE_TAG_PREFIX) :]
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"native release tag must be {NATIVE_TAG_PREFIX}X.Y.Z, got {tag!r}")
+    major, minor, patch = version.split(".")
+    return (int(major), int(minor), int(patch))
+
+
+def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
+    """Synchronize every native version source (and lockfiles) to ``version``."""
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"native version must be X.Y.Z, got {version!r}")
+
+    def rewrite_json(path: Path, mutate) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        mutate(data)
+        path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
+    def set_lock_versions(lock: dict) -> None:
+        lock["version"] = version
+        lock["packages"][""]["version"] = version
+
+    rewrite_json(root / "package.json", lambda data: data.__setitem__("version", version))
+    rewrite_json(root / "package-lock.json", set_lock_versions)
+    rewrite_json(
+        root / "src-tauri" / "tauri.conf.json",
+        lambda data: data.__setitem__("version", version),
+    )
+
+    cargo_toml = root / "src-tauri" / "Cargo.toml"
+    text, replaced = re.subn(
+        r'(?m)^version = "[^"]+"$', f'version = "{version}"', cargo_toml.read_text(), count=1
+    )
+    if replaced != 1:
+        raise ValueError(f"could not rewrite package version in {cargo_toml}")
+    cargo_toml.write_text(text, encoding="utf-8")
+
+    cargo_lock = root / "src-tauri" / "Cargo.lock"
+    text, replaced = re.subn(
+        r'(name = "openadapt-desktop"\nversion = ")[^"]+(")',
+        rf"\g<1>{version}\g<2>",
+        cargo_lock.read_text(),
+        count=1,
+    )
+    if replaced != 1:
+        raise ValueError(f"could not rewrite package version in {cargo_lock}")
+    cargo_lock.write_text(text, encoding="utf-8")
+
+    synchronized = native_version(root)
+    if synchronized != version:
+        raise ValueError(f"native version sources disagree after sync: {native_versions(root)}")
+    return native_versions(root)
+
+
+def superseded_notes(body: str, newer_tag: str, repo: str) -> str | None:
+    """Return release notes marking ``body`` superseded by ``newer_tag``.
+
+    Returns ``None`` when no edit is needed (already marked as superseded by
+    the same or a newer native release). Never removes original notes: an
+    existing supersession header is replaced, everything else is preserved.
+    """
+    newer = native_tag_tuple(newer_tag)
+    normalized = body.replace("\r\n", "\n")
+    if normalized.startswith(SUPERSEDED_MARKER_PREFIX):
+        first_line, _, remainder = normalized.partition("\n")
+        existing_tag = first_line[len(SUPERSEDED_MARKER_PREFIX) :].removesuffix(" -->")
+        if native_tag_tuple(existing_tag) >= newer:
+            return None
+        separator_index = remainder.find(SUPERSEDED_SEPARATOR)
+        if separator_index < 0:
+            raise ValueError("existing supersession header is missing its separator")
+        normalized = remainder[separator_index + len(SUPERSEDED_SEPARATOR) :]
+    header = (
+        f"{SUPERSEDED_MARKER_PREFIX}{newer_tag} -->\n"
+        "> [!CAUTION]\n"
+        f"> **Superseded by [{newer_tag}](https://github.com/{repo}/releases/tag/{newer_tag})"
+        " — do not use.**\n"
+        "> Newer Experimental native installers replace these assets. The assets below are\n"
+        "> retained for provenance only; deleting releases or assets is a maintainer\n"
+        "> decision made outside CI."
+        f"{SUPERSEDED_SEPARATOR}"
+    )
+    return header + normalized
 
 
 def _single_match(directory: Path, pattern: str, label: str) -> Path:
@@ -238,6 +332,16 @@ def _parser() -> argparse.ArgumentParser:
     tag_parser = subparsers.add_parser("validate-tag")
     tag_parser.add_argument("tag")
 
+    set_version_parser = subparsers.add_parser("set-version")
+    set_version_parser.add_argument("version")
+
+    supersede_parser = subparsers.add_parser("supersede-notes")
+    supersede_parser.add_argument("--newer-tag", required=True)
+    supersede_parser.add_argument("--candidate-tag", required=True)
+    supersede_parser.add_argument("--notes-file", type=Path, required=True)
+    supersede_parser.add_argument("--output", type=Path, required=True)
+    supersede_parser.add_argument("--repo", default="OpenAdaptAI/openadapt-desktop")
+
     stage_parser = subparsers.add_parser("stage")
     stage_parser.add_argument("--bundle-root", type=Path, required=True)
     stage_parser.add_argument("--output", type=Path, required=True)
@@ -265,6 +369,26 @@ def main() -> int:
             print(native_version())
         elif args.command == "validate-tag":
             print(validate_tag(args.tag))
+        elif args.command == "set-version":
+            versions = set_native_version(args.version)
+            for source, value in sorted(versions.items()):
+                print(f"{source}: {value}")
+        elif args.command == "supersede-notes":
+            try:
+                candidate = native_tag_tuple(args.candidate_tag)
+            except ValueError:
+                candidate = None
+            if candidate is None or candidate >= native_tag_tuple(args.newer_tag):
+                print("skip")
+            else:
+                notes = superseded_notes(
+                    args.notes_file.read_text(encoding="utf-8"), args.newer_tag, args.repo
+                )
+                if notes is None:
+                    print("skip")
+                else:
+                    args.output.write_text(notes, encoding="utf-8")
+                    print("update")
         elif args.command == "stage":
             staged = stage_artifacts(
                 bundle_root=args.bundle_root,

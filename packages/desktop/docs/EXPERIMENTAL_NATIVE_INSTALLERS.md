@@ -1,3 +1,5 @@
+<!-- installer-release -->
+
 # Experimental Native Installers
 
 OpenAdapt Desktop native packages are **Experimental scaffold-shell artifacts**.
@@ -8,8 +10,15 @@ supported record, compile, certify, replay, and governed-repair path.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
-`src-tauri/tauri.conf.json`; it is intentionally separate from the Python
-package's semantic-release version.
+`src-tauri/tauri.conf.json`; the Native Installer Freshness workflow
+synchronizes those sources to each published engine release and pushes the
+matching `desktop-vX.Y.Z` tag, so the native prerelease number mirrors the
+engine release it was built from. When a newer native prerelease is published,
+older native prereleases receive a prominent "Superseded — do not use" notice;
+their assets are retained for provenance, and any deletion is a maintainer
+decision made outside CI. The full two-lane release policy and its planned
+convergence into a single release after code signing lands are documented in
+[RELEASES.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md).
 
 ## Artifact labels
 

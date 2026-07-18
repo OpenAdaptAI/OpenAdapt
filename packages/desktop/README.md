@@ -35,12 +35,15 @@ certification, and repair live in `openadapt-flow`, not this repository.
 | Tray IPC socket server | Token-authenticated loopback TCP server plus discovery file for `openadapt-tray` | Experimental; not yet validated end to end against the shipped tray |
 | Desktop-to-flow handoff | `FlowBridge` shells out to the `openadapt-flow` CLI for compile, replay, run, and teach | Experimental; requires a separately installed `openadapt-flow` on `PATH` (not bundled); loop verbs fail with a clear error without it |
 | Build artifacts | Wheel/sdist, a PyInstaller sidecar, and Experimental DMG/MSI/NSIS/DEB/AppImage jobs | Native jobs structurally install/uninstall and label every platform, architecture, and signing state |
-| Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance | Experimental packaging evidence only; not an integrated product release |
+| Native installers | Distinct `desktop-v*` draft-prerelease workflow with final-byte checksums and GitHub provenance; auto-triggered at each engine release version, with older prereleases marked superseded | Experimental packaging evidence only; not an integrated product release |
 | Updater | Plugin code remains compiled, but the unusable empty-key feed configuration is disabled | No updater channel is published |
 
-The Python package and experimental Tauri shell are versioned independently.
-Those implementation versions do not represent separate supported desktop
-releases.
+The Python package releases through semantic-release; the experimental Tauri
+shell's native version is synchronized to each engine release by CI so its
+`desktop-v*` prerelease mirrors the engine version it was built from. A native
+prerelease is packaging evidence, not a separate supported desktop release.
+The two-lane release policy, supersession rules, and post-signing convergence
+plan are documented in [RELEASES.md](RELEASES.md).
 
 ## Use OpenAdapt Today
 
@@ -165,7 +168,8 @@ only when working on the shell and frontend.
 
 Native packaging details, verification scope, artifact names, and external
 signing requirements are documented in
-[Experimental Native Installers](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md).
+[Experimental Native Installers](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md); the
+release-channel policy lives in [RELEASES.md](RELEASES.md).
 
 The main implementation areas are:
 
