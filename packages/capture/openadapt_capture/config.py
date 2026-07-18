@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # if false, only write video events corresponding to screenshots
     RECORD_FULL_VIDEO: bool = False
     RECORD_IMAGES: bool = False
+    # Window-scoped capture: when an owner and/or title substring is set,
+    # frames are captured from THAT window in its own pixel space and input
+    # coordinates are translated into the same space (see window_capture.py).
+    # Both None (the default) = record the full screen.
+    RECORD_WINDOW_OWNER: str | None = None
+    RECORD_WINDOW_TITLE: str | None = None
     # useful for debugging but expensive computationally
     LOG_MEMORY: bool = False
     VIDEO_ENCODING: str = "libx264"
@@ -86,6 +92,8 @@ _FIELD_TO_CONFIG_ATTR = {
     "capture_images": "RECORD_IMAGES",
     "capture_window_data": "RECORD_WINDOW_DATA",
     "capture_browser_events": "RECORD_BROWSER_EVENTS",
+    "window_owner": "RECORD_WINDOW_OWNER",
+    "window_title": "RECORD_WINDOW_TITLE",
     "capture_full_video": "RECORD_FULL_VIDEO",
     "video_encoding": "VIDEO_ENCODING",
     "video_pixel_format": "VIDEO_PIXEL_FORMAT",
@@ -105,6 +113,9 @@ class RecordingConfig:
     capture_images: bool | None = None
     capture_window_data: bool | None = None
     capture_browser_events: bool | None = None
+    # Window-scoped capture selectors (see window_capture.WindowTarget).
+    window_owner: str | None = None
+    window_title: str | None = None
     capture_full_video: bool | None = None
     video_encoding: str | None = None
     video_pixel_format: str | None = None

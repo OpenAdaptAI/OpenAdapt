@@ -48,6 +48,11 @@ from openadapt_capture.config import config
 from openadapt_capture.db import create_db, crud, get_session_for_path
 from openadapt_capture.db.models import ActionEvent, Recording
 from openadapt_capture.extensions import synchronized_queue as sq
+from openadapt_capture.window_capture import (
+    WindowCaptureError,
+    WindowCaptureScope,
+    build_window_scope,
+)
 
 try:
     import soundfile
@@ -548,7 +553,10 @@ def write_events(
 
 
 def video_pre_callback(
-    db: crud.SaSession, recording: Recording, video_dir: str = None,
+    db: crud.SaSession,
+    recording: Recording,
+    video_dir: str = None,
+    frame_size: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     """Function to call before main loop.
 
@@ -556,13 +564,19 @@ def video_pre_callback(
         db: The database session.
         recording: The recording object.
         video_dir: Directory for video files.
+        frame_size: Explicit (width, height) for the video stream. Used by
+            window-scoped capture, whose frames are the target window's pixels
+            rather than the monitor's. Defaults to the full-screen size.
 
     Returns:
         dict[str, Any]: The updated state.
     """
     video_file_path = video.get_video_file_path(recording.timestamp, video_dir)
-    # TODO XXX replace with utils.get_monitor_dims() once fixed
-    monitor_width, monitor_height = utils.take_screenshot().size
+    if frame_size is not None:
+        monitor_width, monitor_height = frame_size
+    else:
+        # TODO XXX replace with utils.get_monitor_dims() once fixed
+        monitor_width, monitor_height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = (
         video.initialize_video_writer(video_file_path, monitor_width, monitor_height)
     )
@@ -631,6 +645,26 @@ def write_video_event(
     assert event.type == "screen/video"
     screenshot_image = event.data
     screenshot_timestamp = event.timestamp
+    stream_size = (video_stream.width, video_stream.height)
+    if (screenshot_image.width, screenshot_image.height) != stream_size:
+        # A frame whose size differs from the stream (e.g. the target window
+        # of a window-scoped recording was resized mid-recording) cannot be
+        # encoded into this stream. Skip it LOUDLY: screenshots and the
+        # bounds timeline still record the change exactly.
+        logger.warning(
+            f"Skipping video frame {screenshot_image.size} != stream "
+            f"{stream_size} (window resized mid-recording?)"
+        )
+        perf_q.put((event.type, event.timestamp, utils.get_timestamp()))
+        return {
+            **kwargs,
+            **{
+                "video_container": video_container,
+                "video_stream": video_stream,
+                "video_start_timestamp": video_start_timestamp,
+                "last_pts": last_pts,
+            },
+        }
     force_key_frame = last_pts == 0
     # ensure that the first frame is available (otherwise occasionally it is not)
     # TODO: why isn't force_key_frame sufficient?
@@ -661,13 +695,19 @@ def write_video_event(
 
 
 def trigger_action_event(
-    event_q: queue.Queue, action_event_args: dict[str, Any]
+    event_q: queue.Queue,
+    action_event_args: dict[str, Any],
+    window_scope: WindowCaptureScope | None = None,
 ) -> None:
     """Triggers an action event and adds it to the event queue.
 
     Args:
         event_q: The event queue to add the action event to.
         action_event_args: A dictionary containing the arguments for the action event.
+        window_scope: When set (window-scoped capture), global mouse
+            coordinates are translated into the target window's pixel space
+            before being recorded, so recorded coordinates match the captured
+            frames directly.
 
     Returns:
         None
@@ -676,18 +716,36 @@ def trigger_action_event(
     y = action_event_args.get("mouse_y")
     if x is not None and y is not None:
         if config.RECORD_READ_ACTIVE_ELEMENT_STATE:
+            # element lookup needs GLOBAL coordinates: translate afterwards.
             element_state = window.get_active_element_state(x, y)
         else:
             element_state = {}
         action_event_args["element_state"] = element_state
+        if window_scope is not None:
+            try:
+                wx, wy = window_scope.translate(x, y)
+            except WindowCaptureError as exc:
+                # No frame captured yet: recording a global coordinate in a
+                # window-scoped session would silently mix coordinate spaces.
+                logger.warning(f"Discarding input before first window frame: {exc}")
+                return
+            action_event_args["mouse_x"] = wx
+            action_event_args["mouse_y"] = wy
     event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
 
 
-def on_move(event_q: queue.Queue, x: int, y: int, injected: bool = False) -> None:
+def on_move(
+    event_q: queue.Queue,
+    window_scope: WindowCaptureScope | None,
+    x: int,
+    y: int,
+    injected: bool = False,
+) -> None:
     """Handles the 'move' event.
 
     Args:
         event_q: The event queue to add the 'move' event to.
+        window_scope: Optional window scope for coordinate translation.
         x: The x-coordinate of the mouse.
         y: The y-coordinate of the mouse.
         injected: Whether the event was injected or not.
@@ -700,11 +758,13 @@ def on_move(event_q: queue.Queue, x: int, y: int, injected: bool = False) -> Non
         trigger_action_event(
             event_q,
             {"name": "move", "mouse_x": x, "mouse_y": y},
+            window_scope,
         )
 
 
 def on_click(
     event_q: queue.Queue,
+    window_scope: WindowCaptureScope | None,
     x: int,
     y: int,
     button: mouse.Button,
@@ -715,6 +775,7 @@ def on_click(
 
     Args:
         event_q: The event queue to add the 'click' event to.
+        window_scope: Optional window scope for coordinate translation.
         x: The x-coordinate of the mouse.
         y: The y-coordinate of the mouse.
         button: The mouse button.
@@ -735,11 +796,13 @@ def on_click(
                 "mouse_button_name": button.name,
                 "mouse_pressed": pressed,
             },
+            window_scope,
         )
 
 
 def on_scroll(
     event_q: queue.Queue,
+    window_scope: WindowCaptureScope | None,
     x: int,
     y: int,
     dx: int,
@@ -750,6 +813,7 @@ def on_scroll(
 
     Args:
         event_q: The event queue to add the 'scroll' event to.
+        window_scope: Optional window scope for coordinate translation.
         x: The x-coordinate of the mouse.
         y: The y-coordinate of the mouse.
         dx: The horizontal scroll amount.
@@ -770,6 +834,7 @@ def on_scroll(
                 "mouse_dx": dx,
                 "mouse_dy": dy,
             },
+            window_scope,
         )
 
 
@@ -813,11 +878,18 @@ def read_screen_events(
     recording: Recording,
     started_event: threading.Event,
     _screen_timing: _ScreenTimingStats | None = None,
+    window_scope: WindowCaptureScope | None = None,
 ) -> None:
     """Read screen events and add them to the event queue.
 
     Captures at most ``config.SCREEN_CAPTURE_FPS`` frames per second.
     Set to 0 for unlimited (legacy behaviour).
+
+    In window-scoped mode (``window_scope`` set) each frame captures the
+    TARGET WINDOW's pixels instead of the full screen; the window is
+    re-resolved every frame (windows move/resize) and a bounds-timeline
+    "window" event is queued whenever the resolved bounds change, so
+    converters can reconstruct the exact window position for every action.
 
     Args:
         event_q: A queue for adding screen events.
@@ -825,6 +897,7 @@ def read_screen_events(
         recording: The recording object.
         started_event: Event to set once started.
         _screen_timing: If provided, record (screenshot_dur, total_dur) per iteration.
+        window_scope: Optional window scope for window-pixel-space capture.
     """
     utils.set_start_time(recording.timestamp)
 
@@ -833,9 +906,30 @@ def read_screen_events(
 
     logger.info(f"Starting (fps={fps}, min_interval={min_interval:.3f}s)")
     started = False
+    announced_window = False
     while not terminate_processing.is_set():
         t_start = time.perf_counter()
-        screenshot = utils.take_screenshot()
+        if window_scope is not None:
+            try:
+                screenshot, window_changed = window_scope.capture_frame()
+            except WindowCaptureError as exc:
+                # Loud + recoverable: the window may be mid-move/minimized.
+                # No frame is queued (never fall back to full-screen pixels
+                # in a window-scoped recording), and we retry.
+                logger.warning(f"Window capture failed (retrying): {exc}")
+                time.sleep(0.5)
+                continue
+            if window_changed or not announced_window:
+                event_q.put(
+                    Event(
+                        utils.get_timestamp(),
+                        "window",
+                        window_scope.window_event_data(),
+                    )
+                )
+                announced_window = True
+        else:
+            screenshot = utils.take_screenshot()
         t_screenshot = time.perf_counter()
         if screenshot is None:
             logger.warning("Screenshot was None")
@@ -1019,12 +1113,17 @@ def memory_writer(
 def create_recording(
     task_description: str,
     capture_dir: str,
+    window_capture_info: dict | None = None,
 ) -> tuple[Recording, str]:
     """Create a new recording entry in the per-capture database.
 
     Args:
         task_description: A text description of the task being recorded.
         capture_dir: Path to the capture directory.
+        window_capture_info: Window-scoping metadata
+            (``WindowCaptureScope.snapshot()``) persisted in the recording's
+            config JSON under ``capture_window`` so converters know the
+            session's coordinates are in window-pixel space.
 
     Returns:
         tuple of (Recording object, db_path).
@@ -1048,6 +1147,8 @@ def create_recording(
         "platform": sys.platform,
         "task_description": task_description,
     }
+    if window_capture_info is not None:
+        recording_data["config"] = {"capture_window": window_capture_info}
     engine, Session = create_db(db_path)
     session = Session()
     recording = crud.insert_recording(session, recording_data)
@@ -1172,6 +1273,7 @@ def read_mouse_events(
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_event: threading.Event,
+    window_scope: WindowCaptureScope | None = None,
 ) -> None:
     """Reads mouse events and adds them to the event queue.
 
@@ -1180,6 +1282,8 @@ def read_mouse_events(
         terminate_processing: The event to signal termination of event reading.
         recording: The recording object.
         started_event: Event to set once started.
+        window_scope: Optional window scope; when set, mouse coordinates are
+            translated into the target window's pixel space.
 
     Returns:
         None
@@ -1187,9 +1291,9 @@ def read_mouse_events(
     utils.set_start_time(recording.timestamp)
 
     mouse_listener = mouse.Listener(
-        on_move=partial(on_move, event_q),
-        on_click=partial(on_click, event_q),
-        on_scroll=partial(on_scroll, event_q),
+        on_move=partial(on_move, event_q, window_scope),
+        on_click=partial(on_click, event_q, window_scope),
+        on_scroll=partial(on_scroll, event_q, window_scope),
     )
     mouse_listener.start()
 
@@ -1425,6 +1529,8 @@ def record(
     num_browser_events: multiprocessing.Value = None,
     num_video_events: multiprocessing.Value = None,
     send_profile: bool = False,
+    window_owner: str | None = None,
+    window_title: str | None = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
@@ -1435,6 +1541,11 @@ def record(
         terminate_recording: An event to signal the termination of the recording.
         status_pipe: A connection to communicate recording status.
         log_memory: Whether to log memory usage.
+        window_owner: Owner-app substring for window-scoped capture (record ONE
+            window in its own pixel space). Falls back to
+            ``config.RECORD_WINDOW_OWNER``.
+        window_title: Title substring for window-scoped capture. Falls back to
+            ``config.RECORD_WINDOW_TITLE``.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
@@ -1455,9 +1566,31 @@ def record(
 
     logger.info(f"{task_description=}")
 
+    # Window-scoped capture: resolve + capture the target window ONCE, up
+    # front, before any pipeline task starts. Fails loud if the window is
+    # missing or capture is not permitted (a recording that silently fell
+    # back to full-screen would be in the wrong coordinate space).
+    window_scope = build_window_scope(
+        window_owner or config.RECORD_WINDOW_OWNER,
+        window_title or config.RECORD_WINDOW_TITLE,
+    )
+    initial_window_frame = None
+    if window_scope is not None:
+        initial_window_frame, _ = window_scope.capture_frame()
+        logger.info(
+            f"window-scoped capture resolved: {window_scope.snapshot()} "
+            f"initial frame {initial_window_frame.size}"
+        )
+
     if capture_dir is None:
         capture_dir = os.path.join(os.getcwd(), "capture")
-    recording, db_path = create_recording(task_description, capture_dir)
+    recording, db_path = create_recording(
+        task_description,
+        capture_dir,
+        window_capture_info=(
+            window_scope.snapshot() if window_scope is not None else None
+        ),
+    )
     recording_timestamp = recording.timestamp
 
     event_q = queue.Queue()
@@ -1474,7 +1607,10 @@ def record(
     task_started_events = {}
     _screen_timing = _ScreenTimingStats()  # running stats, no unbounded list
 
-    if config.RECORD_WINDOW_DATA:
+    # In window-scoped mode the screen reader emits the target window's
+    # bounds timeline itself; the active-window poller would record a
+    # DIFFERENT window (whichever is focused), so it stays off.
+    if config.RECORD_WINDOW_DATA and window_scope is None:
         window_event_reader = threading.Thread(
             target=read_window_events,
             args=(
@@ -1512,6 +1648,7 @@ def record(
             recording,
             task_started_events.setdefault("screen_event_reader", threading.Event()),
             _screen_timing,
+            window_scope,
         ),
     )
     screen_event_reader.start()
@@ -1536,6 +1673,7 @@ def record(
             terminate_processing,
             recording,
             task_started_events.setdefault("mouse_event_reader", threading.Event()),
+            window_scope,
         ),
     )
     mouse_event_reader.start()
@@ -1633,7 +1771,7 @@ def record(
     action_event_writer.start()
     task_by_name["action_event_writer"] = action_event_writer
 
-    if config.RECORD_WINDOW_DATA:
+    if config.RECORD_WINDOW_DATA or window_scope is not None:
         window_event_writer = multiprocessing.Process(
             target=utils.WrapStdout(write_events),
             args=(
@@ -1666,7 +1804,17 @@ def record(
                 db_path,
                 terminate_processing,
                 task_started_events.setdefault("video_writer", multiprocessing.Event()),
-                partial(video_pre_callback, video_dir=capture_dir),
+                partial(
+                    video_pre_callback,
+                    video_dir=capture_dir,
+                    # Window-scoped frames are the window's pixels, not the
+                    # monitor's: size the stream from the initial frame.
+                    frame_size=(
+                        initial_window_frame.size
+                        if initial_window_frame is not None
+                        else None
+                    ),
+                ),
                 video_post_callback,
             ),
         )
@@ -1829,6 +1977,8 @@ def record(
             "RECORD_AUDIO": config.RECORD_AUDIO,
             "RECORD_IMAGES": config.RECORD_IMAGES,
             "RECORD_WINDOW_DATA": config.RECORD_WINDOW_DATA,
+            "RECORD_WINDOW_OWNER": window_owner or config.RECORD_WINDOW_OWNER,
+            "RECORD_WINDOW_TITLE": window_title or config.RECORD_WINDOW_TITLE,
             "RECORD_BROWSER_EVENTS": config.RECORD_BROWSER_EVENTS,
             "RECORD_FULL_VIDEO": config.RECORD_FULL_VIDEO,
             "PLOT_PERFORMANCE": config.PLOT_PERFORMANCE,
@@ -1896,6 +2046,14 @@ class Recorder:
             recorder.wait_for_ready()
             input('Press Enter to stop recording...')
         print(f"Recorded {recorder.event_count} events")
+
+    Window-scoped recording (record ONE window in its own pixel space —
+    frames captured from that window, input coordinates translated into the
+    captured frame's pixels; see ``window_capture.py``)::
+
+        with Recorder('./my_capture', task_description='Citrix demo',
+                       window={'owner': 'Parallels', 'title': None}) as recorder:
+            ...
     """
 
     def __init__(
@@ -1916,14 +2074,19 @@ class Recorder:
         plot_performance: bool | None = None,
         screen_capture_fps: float | None = None,
         send_profile: bool = False,
+        window: dict | None = None,
     ) -> None:
         from pathlib import Path
 
         from openadapt_capture.config import RecordingConfig
+        from openadapt_capture.window_capture import WindowTarget
 
         self.capture_dir = str(Path(capture_dir).resolve())
         self.task_description = task_description
         self._send_profile = send_profile
+
+        # Validate the window spec up front (loud, before any thread starts).
+        window_target = WindowTarget.from_spec(window)
 
         # Build recording config from constructor params
         self._recording_config = RecordingConfig(
@@ -1939,6 +2102,8 @@ class Recorder:
             log_memory=log_memory,
             plot_performance=plot_performance,
             screen_capture_fps=screen_capture_fps,
+            window_owner=window_target.owner if window_target else None,
+            window_title=window_target.title if window_target else None,
         )
 
         # Shared state for cross-thread communication

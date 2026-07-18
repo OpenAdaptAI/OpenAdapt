@@ -87,6 +87,65 @@ my-capture/
 
 Audio and individual images are optional.
 
+## Window-scoped recording
+
+**Status: implemented and unit-proven on all CI platforms; live-validated
+end to end on macOS (frames, translated coordinates, bounds timeline, and
+video verified against a real window on a real display). Windows uses a
+Win32 + `mss` region grab and is exercised by the same unit suite; its live
+smoke test awaits an interactive Windows desktop. Not yet validated against
+a Parallels/Citrix client window specifically.**
+
+By default the recorder captures the full screen. Window-scoped mode records
+ONE window in that window's own pixel space — the mode built for
+remote-display demonstrations (Parallels, Citrix Workspace, Microsoft Remote
+Desktop), where `openadapt-flow`'s `rdp_window` replay drives the client
+window's pixels directly. Recording scoped to the same window removes the
+full-screen-vs-window coordinate mismatch at the source:
+
+```python
+from openadapt_capture import Recorder
+
+with Recorder(
+    "./my-capture",
+    task_description="Demonstrate the workflow",
+    window={"owner": "Parallels", "title": None},  # substring match
+) as recorder:
+    input("Perform the task, then press Enter...")
+```
+
+`owner` matches the application (macOS: window owner name; Windows: process
+executable name) and `title` optionally disambiguates among its windows; both
+are case-insensitive substrings, mirroring how `openadapt-flow`'s
+remote-display backend identifies the same window at replay time. The
+selectors can also be set via config/environment
+(`RECORD_WINDOW_OWNER` / `RECORD_WINDOW_TITLE`).
+
+In this mode:
+
+- **Frames are the target window's pixels.** macOS captures the window's own
+  buffer (`CGWindowListCreateImage`, the identical call flow's replay uses);
+  Windows grabs the window's screen region, so keep the window unoccluded.
+- **Input coordinates are translated at capture time** into the captured
+  frame's pixel space (`pixel = (global_point - window_origin) * scale`, the
+  exact inverse of the replay mapping). Input outside the window records
+  out-of-range coordinates rather than being silently clamped.
+- **The window scoping is persisted**: the recording's config JSON carries the
+  target, resolved window, initial bounds, scale, and viewport
+  (`CaptureSession.window_capture`), and the window is re-resolved every
+  frame with bounds changes recorded as window events — a bounds timeline
+  converters can use to be exact even when the window moves.
+- **Fail-loud guarantees:** recording refuses to start if the window cannot be
+  resolved and captured; input arriving before the first frame is discarded
+  with a warning instead of being recorded in the wrong coordinate space; a
+  mid-recording window *resize* skips unencodable video frames loudly
+  (screenshots and the bounds timeline stay exact) — avoid resizing the
+  target during a demonstration.
+
+Note for converters: window-mode coordinates are already in captured-frame
+pixels (`coordinate_space == "window_pixels"`); do not rescale them by
+`pixel_ratio`.
+
 ## Data and privacy boundary
 
 A raw capture can contain everything visible on screen and everything typed,

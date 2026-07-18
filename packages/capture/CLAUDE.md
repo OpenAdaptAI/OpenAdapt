@@ -56,6 +56,7 @@ openadapt_capture/
     models.py      # Recording, ActionEvent, Screenshot, WindowEvent, PerformanceStat, MemoryStat
     crud.py        # Insert functions, batch writing, post-processing
   window/          # Platform-specific active window capture
+  window_capture.py # Window-scoped recording (one window, its own pixel space)
   extensions/      # SynchronizedQueue (multiprocessing.Queue wrapper)
   utils.py         # Timestamps, screenshots, monitor dims
   config.py        # Recording config (RECORD_VIDEO, RECORD_AUDIO, etc.)

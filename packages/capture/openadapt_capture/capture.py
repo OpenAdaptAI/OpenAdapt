@@ -533,6 +533,23 @@ class CaptureSession:
         return 1.0
 
     @property
+    def window_capture(self) -> dict | None:
+        """Window-scoping metadata for a window-scoped recording, else None.
+
+        When not None, the session was recorded scoped to ONE window (see
+        ``window_capture.py``): frames are that window's pixels and action
+        coordinates are ALREADY in the captured frame's pixel space
+        (``coordinate_space == "window_pixels"`` — do NOT rescale them by
+        ``pixel_ratio``). Includes the target owner/title, resolved window id,
+        initial bounds, capture scale, and viewport; the per-frame bounds
+        timeline is in the recording's window events.
+        """
+        config = getattr(self._recording, "config", None)
+        if isinstance(config, dict):
+            return config.get("capture_window")
+        return None
+
+    @property
     def audio_start_time(self) -> float | None:
         """Start timestamp of the audio recording, or None if unavailable."""
         # Check the AudioInfo relationship for the timestamp

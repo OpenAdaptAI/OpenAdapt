@@ -93,6 +93,15 @@ from openadapt_capture.stats import (
 # Visualization
 from openadapt_capture.visualize import create_demo, create_html
 
+# Window-scoped capture (record ONE window in its own pixel space)
+from openadapt_capture.window_capture import (
+    TargetWindow,
+    WindowCaptureError,
+    WindowCaptureScope,
+    WindowTarget,
+    translate_point,
+)
+
 # Browser events and bridge (optional - requires websockets)
 try:
     from openadapt_capture.browser_bridge import (
@@ -130,6 +139,12 @@ __all__ = [
     "Capture",
     "CaptureSession",
     "Action",
+    # Window-scoped capture
+    "WindowTarget",
+    "TargetWindow",
+    "WindowCaptureScope",
+    "WindowCaptureError",
+    "translate_point",
     # Event types
     "EventType",
     "MouseButton",

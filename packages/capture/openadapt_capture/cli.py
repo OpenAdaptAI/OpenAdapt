@@ -19,6 +19,8 @@ def record(
     images: bool = False,
     browser_events: bool = False,
     send_profile: bool = False,
+    window_owner: str | None = None,
+    window_title: str | None = None,
 ) -> None:
     """Record GUI interactions.
 
@@ -32,6 +34,9 @@ def record(
             Requires the openadapt-capture Chrome extension to be installed and
             connects via WebSocket on localhost:8765.
         send_profile: Send profiling data via wormhole after recording (default: False).
+        window_owner: Owner-app substring for window-scoped recording — capture
+            ONE window in its own pixel space (e.g. --window-owner Parallels).
+        window_title: Title substring to disambiguate the target window.
     """
     import time
 
@@ -39,7 +44,13 @@ def record(
 
     output_dir = str(Path(output_dir).resolve())
 
+    window = None
+    if window_owner or window_title:
+        window = {"owner": window_owner, "title": window_title}
+
     print(f"Recording to: {output_dir}")
+    if window:
+        print(f"Window-scoped: owner={window_owner!r} title={window_title!r}")
     if browser_events:
         print("Browser event capture enabled (WebSocket on localhost:8765)")
         print("Make sure the openadapt-capture Chrome extension is installed.")
@@ -54,6 +65,7 @@ def record(
         capture_images=images,
         capture_browser_events=browser_events,
         send_profile=send_profile,
+        window=window,
     ) as recorder:
         recorder.wait_for_ready()
         try:
