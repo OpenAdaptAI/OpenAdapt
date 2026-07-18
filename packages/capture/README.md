@@ -1,262 +1,153 @@
 # OpenAdapt Capture
 
-> [!IMPORTANT]
-> **Status: Experimental — optional native recorder, not the product.** The
-> Capture → Train → Deploy pipeline described below is the historical ML
-> research direction, not the current product flow; the compiler does not
-> require this package.
->
-> This package does have one current product role: it is the **desktop
-> demonstration recorder** behind `openadapt-flow record --backend windows|rdp`,
-> installed via the optional `capture` extra
-> (`pip install 'openadapt-flow[capture]'`). The operator's native
-> mouse/keyboard/screen capture session is converted into the compiler's
-> recording format by `openadapt_flow.adapters.capture.convert_capture` (see
-> openadapt-flow's `docs/desktop/RECORDING.md`). The web recording path does not
-> use this package. Requires `openadapt-capture >= 0.5.3` for headless-safe
-> import.
->
-> The OpenAdapt product is the demonstration compiler,
-> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
-> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
-> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
-> deterministic, locally executable program. Healthy runs make no model calls,
-> and it halts instead of guessing when verification fails. Lifecycle labels for
-> every repository are in the
-> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
-
 [![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
-[![Downloads](https://img.shields.io/pypi/dm/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**OpenAdapt Capture** is the data collection component of the [OpenAdapt](https://github.com/OpenAdaptAI) GUI automation ecosystem.
+**Lifecycle: Experimental.** OpenAdapt Capture records native mouse, keyboard,
+and screen activity into a time-aligned local capture session. Its current
+product role is the optional desktop recorder used by
+[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), OpenAdapt's
+workflow compiler and governed runtime.
 
-Capture platform-agnostic GUI interaction streams with time-aligned screenshots and audio for training ML models or replaying workflows.
+Start with the [OpenAdapt documentation](https://docs.openadapt.ai/) if you want
+to record, compile, verify, and replay a workflow.
 
-> **Status:** Pre-alpha.
+## Where it fits
 
----
+| Recording path | Current implementation |
+| --- | --- |
+| Windows and RDP demonstrations | `openadapt-capture` records native input and screen video; `openadapt-flow` converts the session into compiler input. |
+| Browser demonstrations | `openadapt-flow` records its Playwright browser directly. It does not require this package. |
+| Chrome extension in this repository | Experimental DOM-capture code for development; it is not the supported web recorder or governed replay path. |
 
-## The OpenAdapt Ecosystem
+The browser path stays inside `openadapt-flow` because the compiler needs
+ordered before/after frames, page state, secret-field redaction, and events in
+its own recording format. The extension captures useful DOM context, but it
+does not provide that end-to-end contract.
 
-```
-                          OpenAdapt GUI Automation Pipeline
-                          =================================
+## Use it with OpenAdapt
 
-    +-----------------+          +------------------+          +------------------+
-    |                 |          |                  |          |                  |
-    | openadapt-      |  ------> | openadapt-ml     |  ------> |    Deploy        |
-    | capture         |  Convert | (Train & Eval)   |  Export  |    (Inference)   |
-    |                 |          |                  |          |                  |
-    +-----------------+          +------------------+          +------------------+
-          |                             |                             |
-          v                             v                             v
-    - Record GUI                  - Fine-tune VLMs              - Run trained
-      interactions                - Evaluate on                   agent on new
-    - Mouse, keyboard,              benchmarks (WAA)              tasks
-      screen, audio               - Compare models              - Real-time
-    - Privacy scrubbing           - Cloud GPU training            automation
-
-```
-
-| Component | Purpose | Repository |
-|-----------|---------|------------|
-| **openadapt-capture** | Record human demonstrations | [GitHub](https://github.com/OpenAdaptAI/openadapt-capture) |
-| **openadapt-ml** | Train and evaluate GUI automation models | [GitHub](https://github.com/OpenAdaptAI/openadapt-ml) |
-| **openadapt-privacy** | PII scrubbing for recordings | [GitHub](https://github.com/OpenAdaptAI/openadapt-privacy) |
-
----
-
-## Installation
+Install the compiler with the optional native recorder:
 
 ```bash
-uv add openadapt-capture
+pip install "openadapt-flow[capture]"
 ```
 
-This includes everything needed to capture and replay GUI interactions (mouse, keyboard, screen recording).
-
-For audio capture with Whisper transcription (large download):
+Record a desktop demonstration, then compile it:
 
 ```bash
-uv add "openadapt-capture[audio]"
+openadapt-flow record --backend windows --out recording --task "Describe the workflow"
+# Perform the workflow, then press Ctrl-C.
+
+openadapt-flow compile recording --out bundle --name my-workflow
 ```
 
-## Quick Start
+Use `--backend rdp` when recording inside the RDP client pixel space. Replay
+setup and substrate-specific requirements are documented in the
+[`openadapt-flow` desktop recording guide](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/desktop/RECORDING.md).
 
-### Capture
+## Use it as a library
 
-```python
-from openadapt_capture import Recorder
-
-# Record GUI interactions
-with Recorder("./my_capture", task_description="Demo task") as recorder:
-    # Captures mouse, keyboard, and screen until context exits
-    input("Press Enter to stop recording...")
-```
-
-### Replay / Analysis
-
-```python
-from openadapt_capture import Capture
-
-# Load and iterate over time-aligned events
-capture = Capture.load("./my_capture")
-
-for action in capture.actions():
-    # Each action has an associated screenshot
-    print(f"{action.timestamp}: {action.type} at ({action.x}, {action.y})")
-    screenshot = action.screenshot  # PIL Image at time of action
-```
-
-### Low-Level API
-
-```python
-from openadapt_capture.db import create_db, get_session_for_path
-from openadapt_capture.db import crud
-from openadapt_capture.db.models import Recording, ActionEvent
-
-# Create a database
-engine, Session = create_db("/path/to/recording.db")
-session = Session()
-
-# Insert a recording
-recording = crud.insert_recording(session, {
-    "timestamp": 1700000000.0,
-    "monitor_width": 1920,
-    "monitor_height": 1080,
-    "platform": "win32",
-    "task_description": "My task",
-})
-
-# Insert events
-crud.insert_action_event(session, recording, 1700000001.0, {
-    "name": "click",
-    "mouse_x": 100.0,
-    "mouse_y": 200.0,
-    "mouse_button_name": "left",
-    "mouse_pressed": True,
-})
-
-# Query events back
-from openadapt_capture.capture import CaptureSession
-capture = CaptureSession.load("/path/to/capture_dir")
-actions = list(capture.actions())
-```
-
-## Event Types
-
-**Raw events** (captured):
-- `mouse.move`, `mouse.down`, `mouse.up`, `mouse.scroll`
-- `key.down`, `key.up`
-
-**Actions** (processed):
-- `mouse.singleclick`, `mouse.doubleclick`, `mouse.drag`
-- `key.type` (merged keystrokes into text)
-
-## Architecture
-
-The recorder uses a multi-process architecture copied from legacy OpenAdapt:
-
-- **Reader threads**: Capture mouse, keyboard, screen, and window events into a central queue
-- **Processor thread**: Routes events to type-specific write queues
-- **Writer processes**: Persist events to SQLAlchemy DB (one process per event type)
-- **Action-gated video**: Only encodes video frames when user actions occur
-
-```
-capture_directory/
-├── recording.db           # SQLite: events, screenshots, window events, perf stats
-├── oa_recording-{ts}.mp4  # Screen recording (action-gated)
-└── audio.flac             # Audio (optional)
-```
-
-## Performance Testing
-
-Run a performance test with synthetic input:
+Install the capture package directly:
 
 ```bash
-uv run python scripts/perf_test.py
+pip install openadapt-capture
 ```
 
-This records for 10 seconds using pynput Controllers, then reports:
-- Wall/CPU time and memory usage
-- Event counts and action types
-- Output file sizes
-- Memory usage plot (saved to capture directory)
-
-Run integration tests (requires accessibility permissions):
+Record from the command line:
 
 ```bash
-uv run pytest tests/test_performance.py -v -m slow
+capture record ./my-capture --description "Describe the workflow"
+# Press Ctrl-C to stop.
+
+capture info ./my-capture
 ```
 
-## Visualization
-
-Generate animated demos and interactive viewers from recordings:
-
-### Animated GIF Demo
+Or inspect processed actions in Python:
 
 ```python
-from openadapt_capture import Capture, create_demo
+from openadapt_capture import CaptureSession
 
-capture = Capture.load("./my_capture")
-create_demo(capture, output="demo.gif", fps=10, max_duration=15)
+with CaptureSession.load("./my-capture") as capture:
+    for action in capture.actions():
+        print(action.timestamp, action.type, action.x, action.y)
+        frame = action.screenshot
 ```
 
-### Interactive HTML Viewer
+A capture normally contains:
 
-```python
-from openadapt_capture import Capture, create_html
-
-capture = Capture.load("./my_capture")
-create_html(capture, output="viewer.html", include_audio=True)
+```text
+my-capture/
+├── recording.db
+├── oa_recording-*.mp4
+└── profiling.json
 ```
 
-## Sharing Recordings
+Audio and individual images are optional.
 
-Share recordings between machines using [Magic Wormhole](https://magic-wormhole.readthedocs.io/):
+## Data and privacy boundary
 
-```bash
-# On the sending machine
-capture share send ./my_capture
-# Shows a code like: 7-guitarist-revenge
+A raw capture can contain everything visible on screen and everything typed,
+including credentials, personal data, or protected health information. Keep the
+entire capture directory inside its approved local boundary and apply an
+appropriate retention policy.
 
-# On the receiving machine
-capture share receive 7-guitarist-revenge
-```
+Capture does not upload a session by default. The sharing command, remote
+transcription, and profiling transfer are explicit opt-in operations. Installing
+the `privacy` extra alone does not automatically scrub a recording.
 
-The `share` command compresses the recording, sends it via Magic Wormhole, and extracts it on the receiving end. No account or setup required - just share the code.
+The current desktop-to-Flow conversion has no field geometry for reliable
+secret redaction and no live UIA locator. `openadapt-flow` therefore refuses its
+desktop `--secret` option, and converted desktop workflows rely on retained
+visual evidence unless a separate structural recording path arms them. Review
+the desktop guide before recording sensitive workflows.
 
-## Optional Extras
+The experimental Chrome extension can observe pages across its configured host
+permissions and can emit DOM text and keyboard events to a local WebSocket.
+Treat it as development code; do not deploy it in a sensitive browser profile.
 
-| Extra | Features |
-|-------|----------|
-| `audio` | Audio capture + Whisper transcription |
-| `privacy` | PII scrubbing ([openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy)) |
-| `share` | Recording sharing via Magic Wormhole |
-| `all` | Everything |
+## Current limitations
 
----
+- Native recording requires a visible user session plus the operating system's
+  screen-recording and input-monitoring permissions.
+- Desktop capture records pixels and coordinates, not a structural accessibility
+  locator for each demonstrated target.
+- The Flow adapter rejects unsupported input such as drag, non-left-click, and
+  modifier-chord actions instead of silently compiling an incomplete workflow.
+- Browser-extension installation, security hardening, and compiler integration
+  are not part of the current product path.
+
+See the organization-wide
+[repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md)
+and [`openadapt-flow` product status](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/PRODUCT_STATUS.md)
+for the evidence behind current maturity labels.
+
+## Optional extras
+
+| Extra | Adds |
+| --- | --- |
+| `transcribe-fast` | Local faster-whisper transcription |
+| `transcribe` | Local openai-whisper transcription |
+| `privacy` | `openadapt-privacy` dependency for explicit integrations; no automatic scrubbing |
+| `share` | Explicit Magic Wormhole transfer |
+| `all` | All optional dependencies |
 
 ## Development
 
 ```bash
 uv sync --dev
-uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
-
-# Run slow integration tests (requires accessibility permissions)
-uv run pytest tests/ -v -m slow
+uv run pytest -m "not slow"
 ```
 
-## Related Projects
+Slow native-capture tests require a visible session and operating-system
+permissions:
 
-- [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train and evaluate GUI automation models
-- [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) - PII detection and scrubbing for recordings
-- [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) - Benchmark evaluation for GUI agents
-- [Windows Agent Arena](https://github.com/microsoft/WindowsAgentArena) - Benchmark for Windows GUI agents
+```bash
+uv run pytest -m slow
+```
 
 ## License
 
-MIT
+[MIT](LICENSE)
