@@ -1,85 +1,142 @@
 {
   "schema_version": 1,
-  "published_for": {
-    "service": "OpenAdapt reference sandbox",
-    "cloud_release_sha256": "f3c24132c396b398433fca544da2b13bd46386d771558e3274d3e9744ce8a045",
-    "target_manifest_sha256": "032e05a5364beddce58c4752d9889fa7a2d2c41f0555285d4e416bae75d96c88"
+  "service": "OpenAdapt reference sandbox",
+  "target_manifest_sha256": "0e93454ba17112a1d694368bdd6def25e2c91585697808a2e583d7f4f63af63d",
+  "vm_base": {
+    "image": "ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf",
+    "runtime_dependencies": [
+      {
+        "repository": "https://packages.ubuntu.com/noble/",
+        "ref": "24.04",
+        "commit": null,
+        "license": "LicenseRef-Ubuntu-Mixed",
+        "license_url": "https://ubuntu.com/legal/intellectual-property-policy",
+        "image_keys": [
+          "image"
+        ],
+        "relationship": "distribution-source-index; no single source or image-build commit is asserted"
+      }
+    ]
   },
-  "scope": "Source identities and required notices for the unmodified third-party applications served in isolated synthetic reference sandboxes.",
-  "upstream_modifications": "None. OpenAdapt does not copy or patch the listed application source in its permissively licensed packages. Baselines use the exact upstream releases, commits, and container-image digests below.",
   "applications": [
     {
       "id": "openemr-healthcare",
-      "name": "OpenEMR",
-      "version": "8.0.0.3",
-      "license": "GPL-3.0-only",
-      "modifications": "none",
-      "source": {
-        "repository": "https://github.com/openemr/openemr",
-        "ref": "v8_0_0_3",
-        "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
-        "corresponding_source": "https://github.com/openemr/openemr/tree/7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
-        "license_notice": "https://github.com/openemr/openemr/blob/7c96c8eefe460d6fadbccbe93d0fa6bf819acd69/LICENSE"
-      },
       "images": {
         "application": "openemr/openemr:8.0.0.3@sha256:8f6f409752ab56a6ee26f24ae79eee01273430e461c05ef691541881a0b6bd1f",
         "database": "mariadb:11.8@sha256:09336a8c0cff9f363e133d8a245cca5ad3eeb326e0ffaedf74d49214c4571486"
-      }
+      },
+      "source": [
+        {
+          "repository": "https://github.com/openemr/openemr",
+          "ref": "v8_0_0_3",
+          "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
+          "license": "GPL-3.0-only",
+          "license_url": "https://github.com/openemr/openemr/blob/v8_0_0_3/LICENSE",
+          "image_keys": [
+            "application"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ],
+      "runtime_dependencies": [
+        {
+          "repository": "https://github.com/MariaDB/server",
+          "ref": "mariadb-11.8.8",
+          "commit": "46a8eb42a520193686d9a16d4cea4b3e002917e4",
+          "license": "GPL-2.0-only",
+          "license_url": "https://github.com/MariaDB/server/blob/mariadb-11.8.8/COPYING",
+          "image_keys": [
+            "database"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ]
     },
     {
       "id": "frappe-lending",
-      "name": "Frappe Lending with ERPNext",
-      "version": "Lending 16.2.0 / ERPNext 16.28.0",
-      "license": "GPL-3.0-only",
-      "modifications": "none; the pinned upstream Lending application is installed onto the pinned upstream ERPNext base",
-      "source": [
-        {
-          "project": "Frappe Lending",
-          "repository": "https://github.com/frappe/lending",
-          "ref": "v16.2.0",
-          "commit": "caed066b6636075634418f4f0382798b60c0e188",
-          "corresponding_source": "https://github.com/frappe/lending/tree/caed066b6636075634418f4f0382798b60c0e188",
-          "license": "GPL-3.0-only",
-          "license_notice": "https://github.com/frappe/lending/blob/caed066b6636075634418f4f0382798b60c0e188/license.txt"
-        },
-        {
-          "project": "ERPNext",
-          "repository": "https://github.com/frappe/erpnext",
-          "ref": "v16.28.0",
-          "commit": "de591661b9ba0bd3f62ac25b99b5c85c723515f6",
-          "corresponding_source": "https://github.com/frappe/erpnext/tree/de591661b9ba0bd3f62ac25b99b5c85c723515f6",
-          "license": "GPL-3.0-only",
-          "license_notice": "https://github.com/frappe/erpnext/blob/de591661b9ba0bd3f62ac25b99b5c85c723515f6/license.txt"
-        },
-        {
-          "project": "Frappe Docker",
-          "repository": "https://github.com/frappe/frappe_docker",
-          "ref": "main",
-          "commit": "c004361e790125ed13aaa933d11f7838711a8960",
-          "corresponding_source": "https://github.com/frappe/frappe_docker/tree/c004361e790125ed13aaa933d11f7838711a8960",
-          "license": "MIT",
-          "license_notice": "https://github.com/frappe/frappe_docker/blob/c004361e790125ed13aaa933d11f7838711a8960/LICENSE"
-        }
-      ],
       "images": {
         "application_base": "frappe/erpnext:v16.28.0@sha256:05ca22f06687d31eae8b3f5fd2829f3c881d31ec3c9c376feb28c257612ec8d9",
         "database": "mariadb:11.8@sha256:09336a8c0cff9f363e133d8a245cca5ad3eeb326e0ffaedf74d49214c4571486",
         "redis": "redis:6.2-alpine@sha256:e8773aa976bf0e4ca3e7707b759110c893be504da1f25a61bb4000d1d56b7bd3"
-      }
+      },
+      "source": [
+        {
+          "repository": "https://github.com/frappe/lending",
+          "ref": "v16.2.0",
+          "commit": "caed066b6636075634418f4f0382798b60c0e188",
+          "license": "GPL-3.0-only",
+          "license_url": "https://github.com/frappe/lending/blob/v16.2.0/license.txt",
+          "image_keys": [],
+          "artifact_keys": [
+            "derived_application"
+          ],
+          "relationship": "provider-local-derived-image-input; qualification records the resulting image ID"
+        },
+        {
+          "repository": "https://github.com/frappe/frappe_docker",
+          "ref": "main",
+          "commit": "e10324b2e4280a5a437c78bf0f5d369f54bb9b3b",
+          "license": "MIT",
+          "license_url": "https://github.com/frappe/frappe_docker/blob/e10324b2e4280a5a437c78bf0f5d369f54bb9b3b/LICENSE",
+          "image_keys": [
+            "application_base"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/frappe/erpnext",
+          "ref": "v16.28.0",
+          "commit": "de591661b9ba0bd3f62ac25b99b5c85c723515f6",
+          "license": "GPL-3.0-only",
+          "license_url": "https://github.com/frappe/erpnext/blob/v16.28.0/license.txt",
+          "image_keys": [
+            "application_base"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/frappe/frappe",
+          "ref": "v16.27.0",
+          "commit": "73decbb00106a12c4e854c98dce8c0e3f42f514e",
+          "license": "MIT",
+          "license_url": "https://github.com/frappe/frappe/blob/v16.27.0/LICENSE",
+          "image_keys": [
+            "application_base"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ],
+      "runtime_dependencies": [
+        {
+          "repository": "https://github.com/MariaDB/server",
+          "ref": "mariadb-11.8.8",
+          "commit": "46a8eb42a520193686d9a16d4cea4b3e002917e4",
+          "license": "GPL-2.0-only",
+          "license_url": "https://github.com/MariaDB/server/blob/mariadb-11.8.8/COPYING",
+          "image_keys": [
+            "database"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/redis/redis",
+          "ref": "6.2.22",
+          "commit": "b0f7a7f4d9716b45327d34b296113d2a7fa21b2d",
+          "license": "BSD-3-Clause",
+          "license_url": "https://github.com/redis/redis/blob/6.2.22/COPYING",
+          "image_keys": [
+            "redis"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ]
     },
     {
       "id": "openimis-insurance",
-      "name": "openIMIS",
-      "version": "25.10",
-      "license": "AGPL-3.0-only",
-      "modifications": "none",
-      "source": {
-        "repository": "https://github.com/openimis/openimis-dist_dkr",
-        "ref": "25.10",
-        "commit": "a1165072955296d913ace1093f09617fc25d922b",
-        "corresponding_source": "https://github.com/openimis/openimis-dist_dkr/tree/a1165072955296d913ace1093f09617fc25d922b",
-        "license_notice": "https://github.com/openimis/openimis-dist_dkr/blob/a1165072955296d913ace1093f09617fc25d922b/GNU%20AFFERO%20GENERAL%20PUBLIC%20LICENSE.md"
-      },
       "images": {
         "backend": "ghcr.io/openimis/openimis-be:25.10@sha256:a77228c7469fab5f3523d3f7b9877d62aa116b303fd87a6d55aa3a46c1892592",
         "frontend": "ghcr.io/openimis/openimis-fe:25.10@sha256:ed0e0b1dbe91308d4df3322a1aee40176b42d47bbf72fea79a59fa84ef63db4a",
@@ -88,13 +145,115 @@
         "redis": "redis:8.8.0@sha256:5d2c689b4b55fc3fab4b0cc8aaa950f85b508c76c1e0f35a90d8f411d55a8b2b",
         "opensearch": "opensearchproject/opensearch:2.9.0@sha256:7490e4c148dceb1ffbfa71f65e2e30f7c16c0049464d5a804596a20cfee51f11",
         "opensearch_dashboards": "opensearchproject/opensearch-dashboards:2.9.0@sha256:8f6c87a1e6f6b45b810798b690cbfd9f37f66ed54e14702b4f7d1b2762fc5ef0"
-      }
+      },
+      "source": [
+        {
+          "repository": "https://github.com/openimis/openimis-dist_dkr",
+          "ref": "25.10",
+          "commit": "a1165072955296d913ace1093f09617fc25d922b",
+          "license": "AGPL-3.0-only",
+          "license_url": "https://github.com/openimis/openimis-dist_dkr/blob/25.10/GNU%20AFFERO%20GENERAL%20PUBLIC%20LICENSE.md",
+          "image_keys": [],
+          "artifact_keys": [
+            "deployment_config"
+          ],
+          "relationship": "provider-baseline-deployment-config; qualification records the exact retained commit"
+        },
+        {
+          "repository": "https://github.com/openimis/openimis-be_py",
+          "ref": "25.10",
+          "commit": "9de2c7aa8058454515b440bfade78ad3143c7ff2",
+          "license": "AGPL-3.0-only",
+          "license_url": "https://github.com/openimis/openimis-be_py/blob/25.10/GNU%20AFFERO%20GENERAL%20PUBLIC%20LICENSE.md",
+          "image_keys": [
+            "backend"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/openimis/openimis-fe_js",
+          "ref": "25.10",
+          "commit": "eb2b06cbd06e0b86856c4ca67eee1dfa25f4b21a",
+          "license": "AGPL-3.0-only",
+          "license_url": "https://github.com/openimis/openimis-fe_js/blob/25.10/LICENSE.md",
+          "image_keys": [
+            "frontend"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/openimis/database_postgresql",
+          "ref": "25.10",
+          "commit": "e099833a38ad776d39e20ddeb04ddb43ccdc6dad",
+          "license": "AGPL-3.0-only",
+          "license_url": "https://github.com/openimis/database_postgresql/blob/25.10/LICENSE",
+          "image_keys": [
+            "database"
+          ],
+          "artifact_keys": [],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ],
+      "runtime_dependencies": [
+        {
+          "repository": "https://github.com/rabbitmq/rabbitmq-server",
+          "ref": "v3.13.7",
+          "commit": "52b38439e5175ba6dc4c722c88fa43860638f559",
+          "license": "MPL-2.0",
+          "license_url": "https://github.com/rabbitmq/rabbitmq-server/blob/v3.13.7/LICENSE-MPL-RabbitMQ",
+          "image_keys": [
+            "rabbitmq"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/redis/redis",
+          "ref": "8.8.0",
+          "commit": "5a693aaed0842c4eef21c706b79fa49938ca9f6c",
+          "license": "AGPL-3.0-only OR SSPL-1.0 OR LicenseRef-RSALv2",
+          "license_url": "https://github.com/redis/redis/blob/8.8.0/LICENSE.txt",
+          "image_keys": [
+            "redis"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/opensearch-project/OpenSearch",
+          "ref": "2.9.0",
+          "commit": "1164221ee2b8ba3560f0ff492309867beea28433",
+          "license": "Apache-2.0",
+          "license_url": "https://github.com/opensearch-project/OpenSearch/blob/2.9.0/LICENSE.txt",
+          "image_keys": [
+            "opensearch"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        },
+        {
+          "repository": "https://github.com/opensearch-project/OpenSearch-Dashboards",
+          "ref": "2.9.0",
+          "commit": "1f82eda3935dc5b648cb31587662c84cb43f3801",
+          "license": "Apache-2.0",
+          "license_url": "https://github.com/opensearch-project/OpenSearch-Dashboards/blob/2.9.0/LICENSE.txt",
+          "image_keys": [
+            "opensearch_dashboards"
+          ],
+          "relationship": "upstream-source-reference; no image-to-source build attestation is asserted"
+        }
+      ]
     }
   ],
-  "openadapt_wrapper": {
-    "relationship": "OpenAdapt Cloud's capability, isolation, reset, cleanup, and browser-input wrapper is independently authored orchestration. It contains no copied third-party application source and is not represented as corresponding source for those applications.",
-    "source_availability": "The wrapper is commercial OpenAdapt Cloud implementation code. Source access for customer security or licensing review is available under an appropriate written agreement.",
-    "contact": "support@openadapt.ai"
-  },
-  "notice": "This machine-readable publication identifies exact upstream source and notices for the deployed reference applications. It is not legal advice or a certification of license compliance."
+  "openadapt_authored": [
+    {
+      "path": "runner/reference_frappe_seed.py",
+      "sha256": "4a92babdf5da8029a0302416141352ce1faa0bf963478c47339457bbf67d5996",
+      "role": "Synthetic Frappe fixture and effect oracle"
+    },
+    {
+      "path": "runner/reference_sandbox_vm.py",
+      "sha256": "a32c5e34a06e226aed4c7fe8ed918fe2674606e5d917bf54d676de58a273a3b2",
+      "role": "Pinned reference-stack assembly and qualification"
+    }
+  ]
 }
