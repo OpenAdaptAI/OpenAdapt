@@ -64,7 +64,7 @@ The flagship compiler ships in the base install, so `openadapt flow …` works
 right after `pip install openadapt`. The base install includes OS-keychain
 credential storage for secure Cloud pairing; environment-based token
 configuration remains available on headless systems. This launcher requires
-`openadapt-flow>=1.7.0,<2`
+`openadapt-flow>=1.17.0,<2`
 so clean installs cannot resolve an older engine that lacks the governed hosted
 artifact commands documented below.
 
