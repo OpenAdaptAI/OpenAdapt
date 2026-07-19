@@ -44,7 +44,7 @@ were pushed by hand. Two workflows now keep it fresh:
    with an older version.
 2. **Experimental Native Release** (`.github/workflows/native-release.yml`):
    unchanged build semantics — the tag push triggers the fail-closed signing
-   preflight, the platform build matrix, install/uninstall smoke tests,
+   preflight, the platform build matrix, install/launch/uninstall smoke tests,
    final-byte checksums, attestation, and a **draft** prerelease that a
    maintainer reviews and publishes. The build matrix runs only on `desktop-v*`
    tags, not on ordinary pushes.

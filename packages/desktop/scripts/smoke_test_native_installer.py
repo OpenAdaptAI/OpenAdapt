@@ -7,8 +7,14 @@ existing application, never invokes a shell, and always attempts native uninstal
 after an install attempt.
 
 The default ``unsigned`` mode does not launch the GUI or make a signing claim.
-Credential-aware modes add native signature, policy, and notarization checks; they
-still do not prove that the GUI can launch in a headless CI session.
+Credential-aware modes add native signature, policy, and notarization checks.
+
+Passing ``--launch-seconds N`` additionally launches the installed application
+and requires the process to still be alive N seconds later, then terminates the
+whole process tree before uninstalling.  This catches startup panics that the
+structural checks cannot see (for example a Tauri plugin whose required config
+is absent, which aborts every launch on every platform -- issue #26).  The
+probe retries once to absorb slow cold starts on shared CI runners.
 """
 
 from __future__ import annotations
@@ -369,6 +375,107 @@ def _verify_authenticode(path: Path, *, fingerprint: str | None, timeout: float)
     ]
     if len(valid_lines) != 1 or not valid_lines[0].removeprefix("VALIDSIGNER="):
         raise SmokeTestError(f"PowerShell did not report a valid Authenticode signer: {path}")
+
+
+def _terminate_process_tree(process: subprocess.Popen[bytes], timeout: float) -> None:
+    """Stop the launched application and every child it spawned (sidecars)."""
+
+    if process.poll() is None:
+        if sys.platform == "win32":
+            # taskkill /T is the only stdlib-adjacent way to reap the WebView2
+            # and sidecar children before the uninstaller runs.
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+                check=False,
+                capture_output=True,
+                timeout=timeout,
+            )
+        else:
+            import signal
+
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=min(timeout, 10.0))
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+    try:
+        process.wait(timeout=min(timeout, 10.0))
+    except subprocess.TimeoutExpired as exc:
+        raise SmokeTestError(
+            f"launched application did not terminate after kill: pid {process.pid}"
+        ) from exc
+
+
+def _launch_probe(
+    executable: Path,
+    *,
+    run_seconds: float,
+    timeout: float,
+    attempts: int = 2,
+) -> None:
+    """Launch the installed application and require it to stay alive.
+
+    A startup panic (for example a plugin whose required configuration cannot
+    deserialize) exits within roughly a second, so surviving ``run_seconds``
+    is a meaningful "the app actually starts" gate.  One retry absorbs slow
+    cold starts on shared CI runners without hiding deterministic crashes.
+    """
+
+    env = dict(os.environ)
+    # Lets the AppImage runtime self-extract on runners without FUSE; the
+    # variable is ignored by every other launcher.
+    env.setdefault("APPIMAGE_EXTRACT_AND_RUN", "1")
+
+    last_failure = ""
+    for attempt in range(1, attempts + 1):
+        try:
+            process = subprocess.Popen(
+                [os.fspath(executable)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                start_new_session=(sys.platform != "win32"),
+            )
+        except OSError as exc:
+            raise SmokeTestError(
+                f"could not launch installed application {executable}: {exc}"
+            ) from exc
+
+        deadline = time.monotonic() + run_seconds
+        returncode: int | None = None
+        while time.monotonic() < deadline:
+            returncode = process.poll()
+            if returncode is not None:
+                break
+            time.sleep(0.25)
+
+        if returncode is None:
+            _terminate_process_tree(process, timeout)
+            return
+
+        try:
+            stdout, stderr = process.communicate(timeout=min(timeout, 10.0))
+        except subprocess.TimeoutExpired:
+            stdout, stderr = b"", b""
+        output = "\n".join(
+            stream.decode("utf-8", errors="replace") for stream in (stdout, stderr) if stream
+        )
+        last_failure = (
+            f"launched application exited with status {returncode} within "
+            f"{run_seconds:.0f}s: {executable}"
+        )
+        if output.strip():
+            last_failure += f"; output: {_tail(output)}"
+        if attempt < attempts:
+            time.sleep(2.0)
+
+    raise SmokeTestError(last_failure)
 
 
 def _wait_for_absence(path: Path, timeout: float) -> None:
@@ -759,11 +866,14 @@ def smoke_test_installer(
     expected_architecture: str | None = None,
     timeout: float = 300.0,
     platform_value: str | None = None,
+    launch_seconds: float = 0.0,
 ) -> SmokeTestResult:
     """Exercise a native artifact's complete install/uninstall lifecycle."""
 
     if timeout <= 0:
         raise SmokeTestError("timeout must be greater than zero")
+    if launch_seconds < 0:
+        raise SmokeTestError("launch seconds may not be negative")
     if expected_architecture not in {None, "arm64", "x86_64"}:
         raise SmokeTestError("expected architecture must be either 'arm64' or 'x86_64'")
     platform = _native_platform(platform_value)
@@ -798,6 +908,9 @@ def smoke_test_installer(
             timeout=timeout,
         )
         verify_signature(path)
+        if launch_seconds > 0:
+            executable = _validate_macos_app(path) if platform == "macos" else path
+            _launch_probe(executable, run_seconds=launch_seconds, timeout=timeout)
 
     if platform == "macos":
         _macos_smoke(artifact, kind, app_path, timeout, verify_installed)
@@ -865,6 +978,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout", type=float, default=300.0, help="Per-command timeout in seconds"
     )
+    parser.add_argument(
+        "--launch-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Launch the installed application and require the process to stay "
+            "alive this many seconds before uninstalling (0 disables the probe)"
+        ),
+    )
     return parser
 
 
@@ -881,6 +1003,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             signing_fingerprint=args.signing_fingerprint,
             expected_architecture=args.expected_architecture,
             timeout=args.timeout,
+            launch_seconds=args.launch_seconds,
         )
     except SmokeTestError as exc:
         parser.exit(1, f"native installer smoke test failed: {exc}\n")

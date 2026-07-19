@@ -5,6 +5,7 @@ import plistlib
 import shutil
 import struct
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -481,3 +482,101 @@ def test_app_path_must_be_absolute(tmp_path: Path) -> None:
 
     with pytest.raises(smoke.SmokeTestError, match="must be an absolute path"):
         smoke.smoke_test_installer(artifact, Path("OpenAdapt.AppImage"), platform_value="linux")
+
+
+def _fake_launcher(tmp_path: Path, name: str, python_body: str) -> Path:
+    """A tiny executable whose behavior stands in for the installed GUI app."""
+
+    script = tmp_path / f"{name}_body.py"
+    script.write_text(python_body)
+    if os.name == "nt":
+        launcher = tmp_path / f"{name}.cmd"
+        launcher.write_text(
+            f'@echo off\r\n"{sys.executable}" "{script}"\r\nexit /b %errorlevel%\r\n'
+        )
+    else:
+        launcher = tmp_path / name
+        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}"\n')
+        launcher.chmod(0o755)
+    return launcher
+
+
+def test_launch_probe_accepts_a_process_that_stays_alive(tmp_path: Path) -> None:
+    launcher = _fake_launcher(tmp_path, "healthy", "import time\ntime.sleep(60)\n")
+
+    smoke._launch_probe(launcher, run_seconds=1.0, timeout=30.0)
+
+
+def test_launch_probe_rejects_a_startup_crash_and_retries_once(tmp_path: Path) -> None:
+    attempts = tmp_path / "attempts.log"
+    body = (
+        "import pathlib, sys\n"
+        f"path = pathlib.Path({os.fspath(attempts)!r})\n"
+        "with path.open('a') as stream:\n"
+        "    stream.write('attempt\\n')\n"
+        "sys.stderr.write('PluginInitialization updater invalid type: null')\n"
+        "sys.exit(101)\n"
+    )
+    launcher = _fake_launcher(tmp_path, "crashing", body)
+
+    with pytest.raises(smoke.SmokeTestError) as excinfo:
+        smoke._launch_probe(launcher, run_seconds=1.0, timeout=30.0)
+
+    message = str(excinfo.value)
+    assert "exited with status 101" in message
+    assert "PluginInitialization" in message
+    assert attempts.read_text().count("attempt") == 2
+
+
+def test_launch_probe_reports_an_unlaunchable_executable(tmp_path: Path) -> None:
+    with pytest.raises(smoke.SmokeTestError, match="could not launch"):
+        smoke._launch_probe(tmp_path / "absent", run_seconds=1.0, timeout=5.0)
+
+
+def test_launch_seconds_probe_targets_the_installed_bundle_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = _dmg(tmp_path / "OpenAdapt.dmg")
+    installed_app = tmp_path / "installed" / "OpenAdapt Desktop.app"
+    launched: list[Path] = []
+
+    def fake_run(
+        args: object, *, timeout: float, ok_returncodes: object = (0,)
+    ) -> subprocess.CompletedProcess[str]:
+        command = [os.fspath(item) for item in args]  # type: ignore[union-attr]
+        if command[:2] == ["hdiutil", "attach"]:
+            _macos_app(Path(command[-1]) / installed_app.name)
+        elif command[0] == "ditto":
+            shutil.copytree(command[1], command[2])
+        return _completed(command)
+
+    def fake_probe(
+        executable: Path, *, run_seconds: float, timeout: float, attempts: int = 2
+    ) -> None:
+        assert run_seconds == 15.0
+        launched.append(executable)
+
+    monkeypatch.setattr(smoke, "run_command", fake_run)
+    monkeypatch.setattr(smoke, "_launch_probe", fake_probe)
+
+    smoke.smoke_test_installer(
+        artifact,
+        installed_app,
+        platform_value="darwin",
+        timeout=1,
+        launch_seconds=15.0,
+    )
+
+    assert launched == [installed_app / "Contents" / "MacOS" / "openadapt-desktop"]
+
+
+def test_negative_launch_seconds_is_rejected(tmp_path: Path) -> None:
+    artifact = _dmg(tmp_path / "OpenAdapt.dmg")
+
+    with pytest.raises(smoke.SmokeTestError, match="launch seconds"):
+        smoke.smoke_test_installer(
+            artifact,
+            tmp_path / "installed" / "OpenAdapt Desktop.app",
+            platform_value="darwin",
+            launch_seconds=-1.0,
+        )

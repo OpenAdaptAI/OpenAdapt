@@ -24,7 +24,26 @@ fn main() {
     let engine_for_exit = engine.clone();
     let pairing_links = Arc::new(pairing::PairingLinkState::default());
 
-    tauri::Builder::default()
+    let context = tauri::generate_context!();
+
+    // The updater plugin's config (`plugins.updater`: pubkey + endpoints) is a
+    // required struct: when the key is absent, Tauri hands the plugin JSON
+    // `null` and config deserialization fails, aborting every launch with
+    // `PluginInitialization("updater", ... invalid type: null ...)` (#26).
+    // Our release guard test deliberately forbids an updater feed until a
+    // signing-key lifecycle exists
+    // (tests/test_native_release.py::test_updater_feed_is_disabled_until_signing_key_lifecycle_exists),
+    // so register the plugin only when a valid config is present. The day the
+    // config lands, the updater turns on with no Rust change; until then the
+    // frontend's update check reports "unavailable" instead of the app dying.
+    let updater_configured = context
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .is_some_and(|config| !config.is_null());
+
+    let mut builder = tauri::Builder::default()
         // Must be first: on Windows/Linux it forwards a second process's
         // statically configured deep link into the deep-link plugin event.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -34,8 +53,11 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init());
+    if updater_configured {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    builder
         .manage(SidecarHandle(engine.clone()))
         .setup(move |app| {
             tray::setup_tray(app)?;
@@ -73,7 +95,7 @@ fn main() {
             commands::dismiss_review,
             commands::get_pending_reviews,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building openadapt-desktop")
         .run(move |_app, event| {
             if let tauri::RunEvent::Exit = event {

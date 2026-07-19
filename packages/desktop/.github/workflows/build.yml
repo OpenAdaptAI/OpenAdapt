@@ -122,7 +122,9 @@ jobs:
             patchelf \
             librsvg2-dev \
             xdg-utils \
-            libwebkit2gtk-4.1-dev
+            libwebkit2gtk-4.1-dev \
+            dbus \
+            xvfb
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -165,7 +167,7 @@ jobs:
           --bundles ${{ matrix.bundles }}
           --target ${{ matrix.target }}
 
-      - name: Smoke-test macOS DMG install and uninstall
+      - name: Smoke-test macOS DMG install, launch, and uninstall
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -176,9 +178,10 @@ jobs:
             --artifact "${artifacts[0]}" \
             --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
             --expected-architecture "${{ matrix.architecture }}" \
-            --signing-mode adhoc
+            --signing-mode adhoc \
+            --launch-seconds 20
 
-      - name: Smoke-test Windows MSI and NSIS install and uninstall
+      - name: Smoke-test Windows MSI and NSIS install, launch, and uninstall
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -189,32 +192,41 @@ jobs:
             --artifact $Msi[0].FullName `
             --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
             --expected-architecture x86_64 `
-            --allow-system-install
+            --allow-system-install `
+            --launch-seconds 20
           python scripts/smoke_test_native_installer.py `
             --artifact $Nsis[0].FullName `
             --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
             --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
             --expected-architecture x86_64 `
-            --allow-system-install
+            --allow-system-install `
+            --launch-seconds 20
 
-      - name: Smoke-test Linux DEB and AppImage install and uninstall
+      - name: Smoke-test Linux DEB and AppImage install, launch, and uninstall
         if: runner.os == 'Linux'
         shell: bash
+        env:
+          # WebKitGTK's DMA-BUF renderer is unreliable under Xvfb on CI.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
         run: |
           set -euo pipefail
           deb=(src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb)
           appimage=(src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage)
           test "${#deb[@]}" -eq 1
           test "${#appimage[@]}" -eq 1
-          python scripts/smoke_test_native_installer.py \
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
             --artifact "${deb[0]}" \
             --app-path /usr/bin/openadapt-desktop \
             --expected-architecture x86_64 \
-            --allow-system-install
-          python scripts/smoke_test_native_installer.py \
+            --allow-system-install \
+            --launch-seconds 20
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
             --artifact "${appimage[0]}" \
             --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
-            --expected-architecture x86_64
+            --expected-architecture x86_64 \
+            --launch-seconds 20
 
       - name: Stage accurately labelled Experimental artifacts
         run: >-

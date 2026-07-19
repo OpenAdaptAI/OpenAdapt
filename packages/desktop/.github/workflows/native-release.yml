@@ -133,7 +133,7 @@ jobs:
           --bundles dmg
           --target ${{ matrix.target }}
 
-      - name: Smoke-test DMG install, signature policy, and uninstall
+      - name: Smoke-test DMG install, signature policy, launch, and uninstall
         shell: bash
         run: |
           set -euo pipefail
@@ -143,7 +143,8 @@ jobs:
             --artifact "${artifacts[0]}" \
             --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
             --expected-architecture "${{ matrix.architecture }}" \
-            --signing-mode "${{ steps.signing.outputs.mode }}"
+            --signing-mode "${{ steps.signing.outputs.mode }}" \
+            --launch-seconds 20
 
       - name: Stage exact Experimental DMG
         run: >-
@@ -263,7 +264,7 @@ jobs:
           --bundles msi,nsis
           --target x86_64-pc-windows-msvc
 
-      - name: Smoke-test MSI and NSIS install, signature policy, and uninstall
+      - name: Smoke-test MSI and NSIS install, signature policy, launch, and uninstall
         env:
           WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
         shell: pwsh
@@ -279,13 +280,15 @@ jobs:
             --artifact $Msi[0].FullName `
             --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
             --expected-architecture x86_64 `
-            --allow-system-install @Signature
+            --allow-system-install `
+            --launch-seconds 20 @Signature
           python scripts/smoke_test_native_installer.py `
             --artifact $Nsis[0].FullName `
             --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
             --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
             --expected-architecture x86_64 `
-            --allow-system-install @Signature
+            --allow-system-install `
+            --launch-seconds 20 @Signature
 
       - name: Stage exact Experimental Windows installers
         run: >-
@@ -328,11 +331,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            dbus \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libwebkit2gtk-4.1-dev \
             patchelf \
-            xdg-utils
+            xdg-utils \
+            xvfb
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -377,23 +382,30 @@ jobs:
           --bundles deb,appimage
           --target x86_64-unknown-linux-gnu
 
-      - name: Smoke-test DEB and AppImage install and uninstall
+      - name: Smoke-test DEB and AppImage install, launch, and uninstall
         shell: bash
+        env:
+          # WebKitGTK's DMA-BUF renderer is unreliable under Xvfb on CI.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
         run: |
           set -euo pipefail
           deb=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb)
           appimage=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
           test "${#deb[@]}" -eq 1
           test "${#appimage[@]}" -eq 1
-          python scripts/smoke_test_native_installer.py \
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
             --artifact "${deb[0]}" \
             --app-path /usr/bin/openadapt-desktop \
             --expected-architecture x86_64 \
-            --allow-system-install
-          python scripts/smoke_test_native_installer.py \
+            --allow-system-install \
+            --launch-seconds 20
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
             --artifact "${appimage[0]}" \
             --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
-            --expected-architecture x86_64
+            --expected-architecture x86_64 \
+            --launch-seconds 20
 
       - name: Stage exact Experimental Linux packages
         run: >-

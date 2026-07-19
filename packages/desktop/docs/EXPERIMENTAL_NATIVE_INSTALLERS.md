@@ -37,7 +37,9 @@ architecture, and signing state. The initial matrix is:
 | Linux | `x86_64` | DEB and AppImage | `unsigned` plus GitHub provenance |
 
 The build workflow installs and uninstalls every package on clean hosted
-runners, verifies executable architecture and the declared signing policy, and
+runners, verifies executable architecture and the declared signing policy,
+launches every installed application and requires the process to survive a
+20-second startup window (catching launch panics before they ship), and
 stages the exact tested bytes. The repository test matrix also checks that only
 the `openadapt` scheme is registered and that its handoff is fixed to
 `connect_uri` without a shell or general navigation escape hatch. These checks

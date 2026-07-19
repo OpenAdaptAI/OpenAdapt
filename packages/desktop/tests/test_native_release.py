@@ -155,6 +155,38 @@ def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
     assert config["bundle"]["macOS"]["signingIdentity"] == "-"
     assert config["bundle"]["windows"]["tsp"] is True
 
+    # With no `plugins.updater` config, Tauri hands the updater plugin JSON
+    # `null`, its required Config fails to deserialize, and every launch on
+    # every platform aborts with PluginInitialization("updater", ...) -- the
+    # shipped v0.6.1 DMG bug (issue #26).  While the key above stays forbidden,
+    # the plugin registration must stay behind the config-presence gate.
+    main_rs = (ROOT / "src-tauri/src/main.rs").read_text()
+    assert main_rs.count("tauri_plugin_updater::Builder::new().build()") == 1
+    assert 'get("updater")' in main_rs
+    guarded = main_rs.split("if updater_configured", 1)
+    assert len(guarded) == 2
+    assert "tauri_plugin_updater::Builder::new().build()" in guarded[1]
+
+
+def test_installer_smoke_gates_on_a_real_launch() -> None:
+    """Every installer smoke invocation must also prove the app launches.
+
+    The structural install/uninstall lifecycle cannot see startup panics, so
+    each smoke_test_native_installer.py call in the CI and release lanes must
+    pass --launch-seconds (issue #26).
+    """
+
+    for workflow in ("build.yml", "native-release.yml"):
+        text = (ROOT / ".github/workflows" / workflow).read_text()
+        invocations = text.count("smoke_test_native_installer.py")
+        assert invocations >= 3, workflow
+        assert text.count("--launch-seconds") == invocations, workflow
+        # Headless Linux launches need a display server and a session bus for
+        # WebKitGTK and the ayatana tray indicator.
+        assert "xvfb-run" in text, workflow
+        assert "dbus-run-session" in text, workflow
+        assert "WEBKIT_DISABLE_COMPOSITING_MODE" in text, workflow
+
 
 def test_native_tag_is_distinct_from_python_release_channel() -> None:
     tag = f"desktop-v{native_version()}"
