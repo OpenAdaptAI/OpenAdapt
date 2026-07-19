@@ -1,6 +1,6 @@
 [package]
 name = "openadapt-desktop"
-version = "0.6.1"
+version = "0.6.2"
 description = "Experimental installed companion for OpenAdapt authoring, teaching, and local pairing"
 authors = ["OpenAdapt AI"]
 license = "MIT"
