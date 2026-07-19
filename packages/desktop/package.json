@@ -1,6 +1,6 @@
 {
   "name": "openadapt-desktop",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Experimental Tauri shell for OpenAdapt workflow authoring and human teaching",
   "private": true,
   "type": "module",
