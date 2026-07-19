@@ -310,8 +310,17 @@ def test_stage_artifacts_renames_and_labels_experimental(
     metadata = json.loads(metadata_path.read_text())
     assert metadata["native_version"] == current_version
     assert metadata["lifecycle"] == "Experimental"
-    assert metadata["surface"] == "scaffold-only Tauri shell"
-    assert metadata["verification_scope"] == "structural install/uninstall packaging lifecycle"
+    assert metadata["surface"] == "installed desktop pairing and authoring companion"
+    assert metadata["verification_scope"] == (
+        "cross-platform install/uninstall, bundled sidecar, and protocol-handler packaging"
+    )
+    assert metadata["limitations"] == [
+        (
+            "openadapt-flow is not bundled; compile, replay, run, and teach require "
+            "a separately installed openadapt-flow on PATH."
+        ),
+        "Installer verification does not replace qualification of a complete real workflow.",
+    ]
     assert metadata["artifacts"] == asset_names
 
 

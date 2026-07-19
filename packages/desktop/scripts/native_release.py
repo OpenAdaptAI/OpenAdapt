@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LIFECYCLE = "Experimental"
-SURFACE = "scaffold-only Tauri shell"
+SURFACE = "installed desktop pairing and authoring companion"
 NATIVE_TAG_PREFIX = "desktop-v"
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 SUPERSEDED_MARKER_PREFIX = "<!-- openadapt-superseded-by: "
@@ -207,11 +207,15 @@ def stage_artifacts(
         "signing": signing,
         "source_commit": os.environ.get("GITHUB_SHA", "local"),
         "artifacts": artifact_names,
-        "verification_scope": "structural install/uninstall packaging lifecycle",
+        "verification_scope": (
+            "cross-platform install/uninstall, bundled sidecar, and protocol-handler packaging"
+        ),
         "limitations": [
-            "The installed Tauri shell is not integrated with openadapt-flow.",
-            "The Rust commands, tray controls, and Python sidecar lifecycle remain scaffolds.",
-            "Packaging verification is not evidence of a working recording or replay workflow.",
+            (
+                "openadapt-flow is not bundled; compile, replay, run, and teach require "
+                "a separately installed openadapt-flow on PATH."
+            ),
+            "Installer verification does not replace qualification of a complete real workflow.",
         ],
     }
     metadata_path = output / f"{prefix}-metadata.json"

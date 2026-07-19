@@ -2,11 +2,16 @@
 
 # Experimental Native Installers
 
-OpenAdapt Desktop native packages are **Experimental scaffold-shell artifacts**.
-They verify platform packaging and removal, not an integrated OpenAdapt workflow.
-The window is hidden by default, the tray and Rust commands remain scaffolds, and
-the Python sidecar is not started or bundled. Use `openadapt-flow` for the
-supported record, compile, certify, replay, and governed-repair path.
+OpenAdapt Desktop native packages are the **Experimental installed authoring,
+teaching, and local-pairing companion** for OpenAdapt. They bundle and start the
+Python sidecar, connect the Tauri/React cockpit to it over local JSON-lines IPC,
+and register the `openadapt://` operating-system handler. The handler accepts
+only the fixed `openadapt://connect` action and forwards it to the sidecar's
+strict, transactional pairing flow.
+
+The canonical compiler and governed runtime remain in `openadapt-flow`.
+Compile, replay, run, and teach operations currently require a separately
+installed `openadapt-flow` on `PATH`; it is not frozen into these installers.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
@@ -31,9 +36,12 @@ architecture, and signing state. The initial matrix is:
 | Windows | `x86_64` | MSI and NSIS setup executable | `unsigned` or `authenticode` |
 | Linux | `x86_64` | DEB and AppImage | `unsigned` plus GitHub provenance |
 
-The build workflow runs structural install/uninstall smoke tests on clean hosted
-runners. These tests do not certify recording, replay, the updater, Gatekeeper,
-SmartScreen reputation, distribution-repository metadata, or production use.
+The build workflow installs and uninstalls every package on clean hosted
+runners, verifies executable architecture and the declared signing policy, and
+stages the exact tested bytes. The repository test matrix also checks that only
+the `openadapt` scheme is registered and that its handoff is fixed to
+`connect_uri` without a shell or general navigation escape hatch. These checks
+do not replace qualification of a complete real workflow.
 
 ## Integrity and provenance
 
