@@ -19,7 +19,7 @@ small needs-attention endpoint.
 
 OpenAdapt compiles demonstrated GUI workflows into deterministic, locally
 executable programs. Healthy runs make no model calls. When an interface
-drifts, OpenAdapt re-resolves from recorded evidence or proposes a governed
+drifts, OpenAdapt re-resolves from retained evidence or proposes a governed
 repair, and halts when verification fails. That workflow logic belongs to
 `openadapt-flow`, not the tray.
 
