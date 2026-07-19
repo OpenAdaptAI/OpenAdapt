@@ -32,11 +32,12 @@ def _quoted_table_value(text: str, table: str, key: str) -> str:
     raise ValueError(f"missing quoted {key!r} in [{table}]")
 
 
-def _project_identity(root: Path) -> tuple[str, str]:
+def _project_identity(root: Path) -> tuple[str, str, str]:
     project_text = (root / "pyproject.toml").read_text(encoding="utf-8")
     return (
         _quoted_table_value(project_text, "project", "name"),
         _quoted_table_value(project_text, "project", "version"),
+        _quoted_table_value(project_text, "project", "requires-python"),
     )
 
 
@@ -81,12 +82,16 @@ def _lifecycle(metadata: Message) -> list[str]:
     ]
 
 
+def _specifier_terms(value: str) -> set[str]:
+    return {term.strip() for term in value.split(",") if term.strip()}
+
+
 def verify_release_artifacts(
     dist_dir: Path,
     root: Path = ROOT,
 ) -> tuple[Path, Path]:
     """Return the verified ``(wheel, sdist)`` paths or raise ``ValueError``."""
-    package_name, project_version = _project_identity(root)
+    package_name, project_version, project_requires_python = _project_identity(root)
     wheel_name = re.sub(r"[-_.]+", "_", package_name)
     sdist_name = re.sub(r"[-_.]+", "-", package_name)
 
@@ -122,6 +127,12 @@ def verify_release_artifacts(
             raise ValueError(f"{source} package name does not match {package_name}")
         if metadata["Version"] != project_version:
             raise ValueError(f"{source} version does not match {project_version}")
+        if _specifier_terms(metadata["Requires-Python"]) != _specifier_terms(
+            project_requires_python
+        ):
+            raise ValueError(
+                f"{source} Requires-Python does not match {project_requires_python}"
+            )
         if _lifecycle(metadata) != [BETA_CLASSIFIER]:
             raise ValueError(f"{source} does not declare the Beta launcher lifecycle")
 

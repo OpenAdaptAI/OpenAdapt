@@ -4,7 +4,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-7289da?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 > **Lifecycle: Beta launcher/meta-package.** The active compiler and governed
@@ -68,7 +68,7 @@ configuration remains available on headless systems. This launcher requires
 so clean installs cannot resolve an older engine that lacks the governed hosted
 artifact commands documented below.
 
-**Requirements:** Python 3.10+
+**Requirements:** Python 3.10–3.12
 
 ---
 

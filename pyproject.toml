@@ -3,7 +3,7 @@ name = "openadapt"
 version = "1.6.4"
 description = "Beta launcher for openadapt-flow: compile demonstrated GUI workflows into deterministic, governed local replay"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = "MIT"
 authors = [
     {name = "Richard Abrich", email = "richard@openadapt.ai"}

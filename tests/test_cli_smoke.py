@@ -102,6 +102,14 @@ def test_distribution_metadata_advertises_beta_lifecycle():
     assert lifecycle == ["Development Status :: 4 - Beta"]
 
 
+def test_distribution_metadata_matches_engine_python_range():
+    """The launcher must fail before resolution on unsupported Python versions."""
+    from importlib.metadata import metadata
+
+    actual = metadata("openadapt")["Requires-Python"]
+    assert {term.strip() for term in actual.split(",")} == {">=3.10", "<3.13"}
+
+
 def test_doctor_lists_flow_as_core_not_extras():
     """`openadapt doctor` must treat openadapt-flow as core and the opt-in
     extras (capture/ml/evals/viewer/...) as optional, never flagging a

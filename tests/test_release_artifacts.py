@@ -14,20 +14,27 @@ verify_release_artifacts = runpy.run_path(
 )["verify_release_artifacts"]
 
 
-def _metadata(version: str) -> bytes:
+def _metadata(version: str, requires_python: str = ">=3.10,<3.13") -> bytes:
     return (
         "Metadata-Version: 2.4\n"
         "Name: openadapt\n"
         f"Version: {version}\n"
         "Summary: Beta launcher\n"
-        "Requires-Python: >=3.10\n"
+        f"Requires-Python: {requires_python}\n"
         "Classifier: Development Status :: 4 - Beta\n\n"
     ).encode()
 
 
-def _release_tree(tmp_path: Path, artifact_version: str = "2.0.0") -> tuple[Path, Path]:
+def _release_tree(
+    tmp_path: Path,
+    artifact_version: str = "2.0.0",
+    artifact_requires_python: str = ">=3.10,<3.13",
+) -> tuple[Path, Path]:
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "openadapt"\nversion = "2.0.0"\n',
+        "[project]\n"
+        'name = "openadapt"\n'
+        'version = "2.0.0"\n'
+        'requires-python = ">=3.10,<3.13"\n',
         encoding="utf-8",
     )
     dist = tmp_path / "dist"
@@ -36,11 +43,12 @@ def _release_tree(tmp_path: Path, artifact_version: str = "2.0.0") -> tuple[Path
     wheel = dist / "openadapt-2.0.0-py3-none-any.whl"
     with zipfile.ZipFile(wheel, mode="w") as archive:
         archive.writestr(
-            "openadapt-2.0.0.dist-info/METADATA", _metadata(artifact_version)
+            "openadapt-2.0.0.dist-info/METADATA",
+            _metadata(artifact_version, artifact_requires_python),
         )
 
     sdist = dist / "openadapt-2.0.0.tar.gz"
-    raw = _metadata(artifact_version)
+    raw = _metadata(artifact_version, artifact_requires_python)
     info = tarfile.TarInfo("openadapt-2.0.0/PKG-INFO")
     info.size = len(raw)
     with tarfile.open(sdist, mode="w:gz") as archive:
@@ -76,4 +84,11 @@ def test_release_artifacts_reject_metadata_version_drift(tmp_path: Path):
     dist, _ = _release_tree(tmp_path, artifact_version="1.9.9")
 
     with pytest.raises(ValueError, match="version does not match 2.0.0"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+
+def test_release_artifacts_reject_python_range_drift(tmp_path: Path):
+    dist, _ = _release_tree(tmp_path, artifact_requires_python=">=3.10")
+
+    with pytest.raises(ValueError, match="Requires-Python does not match"):
         verify_release_artifacts(dist, root=tmp_path)
