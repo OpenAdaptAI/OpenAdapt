@@ -149,6 +149,12 @@ def test_doctor_lists_flow_as_core_not_extras():
 
 FLOW_VERBS = {"demo-record", "record", "compile", "replay", "lint", "certify"}
 
+# Verbs wrapped with explicit click options (local --help, no engine import).
+# `record` is intentionally absent: it delegates through the passthrough
+# group so every engine option (--backend, --agent-url, ...) forwards
+# verbatim — its --help comes from the engine itself.
+FLOW_WRAPPED_VERBS = FLOW_VERBS - {"record"}
+
 
 def test_launcher_requires_pairing_enabled_flow_release():
     """Every install route must resolve an engine with transactional pairing."""
@@ -188,11 +194,100 @@ def test_flow_help_lists_verbs():
 
 
 def test_flow_subcommand_help_renders():
-    """Each flow subcommand renders --help without importing flow."""
+    """Each explicitly wrapped flow subcommand renders --help without
+    importing flow."""
     runner = CliRunner()
-    for verb in FLOW_VERBS:
+    for verb in FLOW_WRAPPED_VERBS:
         result = runner.invoke(cli_main, ["flow", verb, "--help"])
         assert result.exit_code == 0, f"`flow {verb} --help` failed: {result.output}"
+
+
+def test_flow_record_help_is_engine_help():
+    """`openadapt flow record --help` must render the ENGINE's help (with
+    --backend and the desktop-backend options), not a launcher wrapper
+    that hides them."""
+    _require_openadapt_flow()
+    result = CliRunner().invoke(cli_main, ["flow", "record", "--help"])
+    assert result.exit_code == 0, result.output
+    for option in ("--backend", "--agent-url", "--task"):
+        assert option in result.output, (
+            f"{option} missing from `flow record --help`; the launcher is "
+            "hiding engine options again"
+        )
+
+
+def test_flow_record_forwards_backend_options(monkeypatch):
+    """Regression (launcher <=1.7.0): the explicit record wrapper rejected
+    `--backend windows` with "No such option". record must forward every
+    engine option verbatim, like run/push."""
+    captured = {}
+    monkeypatch.setattr(
+        "openadapt.cli._run_flow", lambda argv: captured.update(argv=list(argv))
+    )
+    result = CliRunner().invoke(
+        cli_main,
+        [
+            "flow",
+            "record",
+            "--backend",
+            "windows",
+            "--agent-url",
+            "http://localhost:5001",
+            "--out",
+            "rec",
+            "--task",
+            "triage note",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == [
+        "record",
+        "--backend",
+        "windows",
+        "--agent-url",
+        "http://localhost:5001",
+        "--out",
+        "rec",
+        "--task",
+        "triage note",
+    ]
+
+
+def test_flow_record_web_invocation_forwards_verbatim(monkeypatch):
+    """The pre-existing web invocation shape keeps working unchanged."""
+    captured = {}
+    monkeypatch.setattr(
+        "openadapt.cli._run_flow", lambda argv: captured.update(argv=list(argv))
+    )
+    result = CliRunner().invoke(
+        cli_main,
+        [
+            "flow",
+            "record",
+            "--url",
+            "http://localhost:3000",
+            "--out",
+            "rec",
+            "--secret",
+            "password",
+            "--param",
+            "note",
+            "--headless",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == [
+        "record",
+        "--url",
+        "http://localhost:3000",
+        "--out",
+        "rec",
+        "--secret",
+        "password",
+        "--param",
+        "note",
+        "--headless",
+    ]
 
 
 def test_flow_missing_shows_install_hint(monkeypatch):
