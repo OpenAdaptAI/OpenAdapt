@@ -2090,7 +2090,7 @@ wheels = [
 
 [[package]]
 name = "openadapt"
-version = "1.7.0"
+version = "1.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v1.7.1 (2026-07-19)
+
+### Bug Fixes
+
+- Forward all engine options through openadapt flow record
+  ([#1028](https://github.com/OpenAdaptAI/OpenAdapt/pull/1028),
+  [`40d37a0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/40d37a0fe1b5ea4d1e32345fede03afa37707541))
+
+### Documentation
+
+- Bind sandbox notice to final release ([#1026](https://github.com/OpenAdaptAI/OpenAdapt/pull/1026),
+  [`bc5f79b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bc5f79b52e89d2ca8d1dfe8699bc8a3128615975))
+
+- Bind sandbox notices to packaging fix
+  ([#1026](https://github.com/OpenAdaptAI/OpenAdapt/pull/1026),
+  [`bc5f79b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bc5f79b52e89d2ca8d1dfe8699bc8a3128615975))
+
+- Publish reference sandbox source notices
+  ([#1025](https://github.com/OpenAdaptAI/OpenAdapt/pull/1025),
+  [`45fc1d8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/45fc1d8a63195cc1e4c9123450aa4c93756d3113))
+
+- Publish stable sandbox source inventory
+  ([#1027](https://github.com/OpenAdaptAI/OpenAdapt/pull/1027),
+  [`33882b0`](https://github.com/OpenAdaptAI/OpenAdapt/commit/33882b056d866f037ad4fcb53ed986453783a4a9))
+
+
 ## v1.7.0 (2026-07-19)
 
 ### Bug Fixes
