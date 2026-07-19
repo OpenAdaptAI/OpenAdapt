@@ -18,7 +18,7 @@ mock the capture and flow boundaries, and no supported product release exists.
 
 OpenAdapt compiles demonstrated GUI workflows into deterministic, locally
 executable programs. Healthy runs make no model calls. When an interface
-drifts, OpenAdapt re-resolves from recorded evidence or proposes a governed
+drifts, OpenAdapt re-resolves from retained evidence or proposes a governed
 repair, and halts when verification fails. Workflow compilation, replay,
 certification, and repair live in `openadapt-flow`, not this repository.
 
@@ -44,6 +44,14 @@ shell's native version is synchronized to each engine release by CI so its
 prerelease is packaging evidence, not a separate supported desktop release.
 The two-lane release policy, supersession rules, and post-signing convergence
 plan are documented in [RELEASES.md](RELEASES.md).
+
+The current release line gates the updater plugin on configuration presence so
+packaged installers launch cleanly instead of failing on an empty updater feed.
+For the authoritative current version, the matching engine wheel, and its native
+installer prerelease, see the
+[releases page](https://github.com/OpenAdaptAI/openadapt-desktop/releases): the
+newest `vX.Y.Z` engine release is marked "Latest", and its Experimental native
+installers ship under the matching `desktop-vX.Y.Z` prerelease tag.
 
 ## Use OpenAdapt Today
 
