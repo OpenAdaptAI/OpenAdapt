@@ -247,12 +247,12 @@
   "openadapt_authored": [
     {
       "path": "runner/reference_frappe_seed.py",
-      "sha256": "4a92babdf5da8029a0302416141352ce1faa0bf963478c47339457bbf67d5996",
+      "sha256": "d5fa46019c01a68de959bdd7ea348791c95ae459f8fb3e752f2f640b682ffc2d",
       "role": "Synthetic Frappe fixture and effect oracle"
     },
     {
       "path": "runner/reference_sandbox_vm.py",
-      "sha256": "a32c5e34a06e226aed4c7fe8ed918fe2674606e5d917bf54d676de58a273a3b2",
+      "sha256": "c0b42f309d837a16ca79ffac2b097bdf82719842d3db9981b6aeb089ee3eb7bc",
       "role": "Pinned reference-stack assembly and qualification"
     }
   ]
