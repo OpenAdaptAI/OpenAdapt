@@ -69,6 +69,7 @@ export const EVT = {
   SYNC_STATE: "sync_state",
   BREAK_COUNT: "break_count",
   SIDECAR_STATE: "sidecar_state",
+  PAIRING_STATE: "pairing_state",
   RUNNER_STATE: "runner_state",
 } as const;
 

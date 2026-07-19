@@ -706,3 +706,39 @@ select.input:focus {
     animation: none;
   }
 }
+.pairing-notice {
+  position: fixed;
+  z-index: 1000;
+  top: 16px;
+  left: 50%;
+  display: flex;
+  width: min(680px, calc(100vw - 32px));
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.pairing-notice.connected {
+  border-color: var(--ok);
+}
+
+.pairing-notice.error {
+  border-color: var(--danger);
+}
+
+.pairing-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 20px;
+}

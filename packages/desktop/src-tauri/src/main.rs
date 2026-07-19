@@ -10,6 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod pairing;
 mod sidecar;
 mod tray;
 
@@ -21,8 +22,17 @@ use tauri::Manager;
 fn main() {
     let engine = Arc::new(SidecarInner::default());
     let engine_for_exit = engine.clone();
+    let pairing_links = Arc::new(pairing::PairingLinkState::default());
 
     tauri::Builder::default()
+        // Must be first: on Windows/Linux it forwards a second process's
+        // statically configured deep link into the deep-link plugin event.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -40,6 +50,7 @@ fn main() {
             // absent (frontend-only dev) the app still runs; the UI shows an
             // "engine offline" state.
             sidecar::spawn(&app.handle().clone(), engine.clone());
+            pairing::setup(app, engine.clone(), pairing_links.clone())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

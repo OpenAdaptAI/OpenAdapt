@@ -197,6 +197,7 @@ class EngineDispatcher:
             # auth (both providers live in engine.auth -- spec 3a)
             "login_browser": self.login_browser,
             "login_paste": self.login_paste,
+            "connect_uri": self.connect_uri,
             "logout": self.logout,
             "get_auth_status": self.get_auth_status,
             # config / settings
@@ -552,6 +553,22 @@ class EngineDispatcher:
         except Exception as exc:
             return {"authenticated": False, "error": str(exc)}
         return self._auth_status(cred)
+
+    def connect_uri(self, **params: Any) -> dict:
+        """Handle only a validated ``openadapt://connect`` pairing URI."""
+        from engine.auth.pairing import connect_uri
+
+        uri = params.get("uri")
+        if not isinstance(uri, str):
+            raise ValueError("uri is required")
+        result = connect_uri(uri)
+        self.config.hosted_host = result["host"]
+        self._persist_config_key("hosted_host", result["host"])
+        self.emit(
+            "pairing_state",
+            {"status": "connected", "host": result["host"]},
+        )
+        return result
 
     def logout(self, **params: Any) -> dict:
         """Clear the active credential."""

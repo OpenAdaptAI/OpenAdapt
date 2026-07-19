@@ -64,6 +64,42 @@ class TestCredentialStore:
         assert loaded["token"] == "oai_ingest_bare"
         assert loaded["kind"] == "ingest_token"
 
+    def test_secure_store_writes_and_verifies_every_entry(self, fake_keyring) -> None:
+        class _Backend:
+            priority = 1
+
+        fake_keyring.get_keyring = lambda: _Backend()
+        assert store.secure_store_available() is True
+        assert store.store_credential_secure(_cred()) is True
+        assert store.load_credential("https://app.openadapt.ai") == _cred()
+
+    def test_secure_store_cleans_partial_writes(self, fake_keyring) -> None:
+        original = fake_keyring.set_password
+
+        def _fail_companion(service, account, value):
+            if account.endswith(store._CRED_SUFFIX):
+                raise RuntimeError("locked")
+            return original(service, account, value)
+
+        fake_keyring.set_password = _fail_companion
+        assert store.store_credential_secure(_cred()) is False
+        assert fake_keyring.get_password(store.SERVICE_NAME, "https://app.openadapt.ai") is None
+        assert fake_keyring.get_password(store.SERVICE_NAME, store._ACTIVE_HOST_ACCOUNT) is None
+
+    def test_secure_store_restores_existing_credential_on_failure(self, fake_keyring) -> None:
+        old = _cred(token="oai_ingest_old")
+        store.store_credential(old)
+        original = fake_keyring.set_password
+
+        def _fail_new_companion(service, account, value):
+            if account.endswith(store._CRED_SUFFIX) and "oai_ingest_new" in value:
+                raise RuntimeError("locked")
+            return original(service, account, value)
+
+        fake_keyring.set_password = _fail_new_companion
+        assert store.store_credential_secure(_cred(token="oai_ingest_new")) is False
+        assert store.load_credential("https://app.openadapt.ai") == old
+
 
 class TestAuthHeader:
     def test_env_token_takes_precedence(self, fake_keyring, monkeypatch) -> None:

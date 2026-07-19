@@ -147,7 +147,10 @@ def test_supersession_edits_notes_only_and_never_deletes() -> None:
 def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
     config = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text())
 
-    assert "plugins" not in config
+    assert config["plugins"] == {
+        "deep-link": {"desktop": {"schemes": ["openadapt"]}}
+    }
+    assert "updater" not in config["plugins"]
     assert config["bundle"]["targets"] == ["dmg", "msi", "nsis", "deb", "appimage"]
     assert config["bundle"]["macOS"]["signingIdentity"] == "-"
     assert config["bundle"]["windows"]["tsp"] is True
@@ -299,11 +302,13 @@ def test_stage_artifacts_renames_and_labels_experimental(
     )
     asset_names = [path.name for path in staged if path.suffix != ".json"]
     assert len(asset_names) == len(expected_suffixes)
-    assert all("Experimental-v0.1.1" in name for name in asset_names)
+    current_version = native_version()
+    assert all(f"Experimental-v{current_version}" in name for name in asset_names)
     assert all(any(name.endswith(suffix) for name in asset_names) for suffix in expected_suffixes)
 
     metadata_path = next(path for path in staged if path.suffix == ".json")
     metadata = json.loads(metadata_path.read_text())
+    assert metadata["native_version"] == current_version
     assert metadata["lifecycle"] == "Experimental"
     assert metadata["surface"] == "scaffold-only Tauri shell"
     assert metadata["verification_scope"] == "structural install/uninstall packaging lifecycle"

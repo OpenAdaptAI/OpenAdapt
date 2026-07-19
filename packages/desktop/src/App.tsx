@@ -33,6 +33,11 @@ type Route =
   | { name: "runner" }
   | { name: "settings" };
 
+type PairingState = {
+  status: "connecting" | "connected" | "error";
+  error?: string;
+};
+
 const NAV: { route: Route["name"]; label: string; glyph: string }[] = [
   { route: "library", label: "Workflows", glyph: "▤" },
   { route: "record", label: "Record", glyph: "●" },
@@ -50,6 +55,7 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [sync, setSync] = useState<SyncState>({ state: "synced", queued: 0 });
   const [breaks, setBreaks] = useState(0);
+  const [pairing, setPairing] = useState<PairingState | null>(null);
 
   // Bootstrap: auth status, sidecar liveness, and the status channels.
   useEffect(() => {
@@ -87,33 +93,82 @@ export default function App() {
       onEngineEvent(EVT.BREAK_COUNT, (d: { count: number }) =>
         setBreaks(d?.count ?? 0),
       ),
+      onEngineEvent(EVT.PAIRING_STATE, (state: PairingState) => {
+        setPairing(state);
+        if (state.status === "connected") {
+          void engineTry<AuthStatus>(
+            CMD.GET_AUTH_STATUS,
+            {},
+            { authenticated: false },
+          ).then((next) => {
+            setAuth(next);
+            setCheckedAuth(true);
+          });
+        }
+      }),
     ];
     return () => unsubs.forEach((p) => p.then((u) => u()).catch(() => {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const pairingNotice = pairing ? (
+    <div
+      className={`pairing-notice ${pairing.status}`}
+      role={pairing.status === "error" ? "alert" : "status"}
+    >
+      <span>
+        {pairing.status === "connecting" &&
+          "Connecting this computer to your OpenAdapt Cloud workspace…"}
+        {pairing.status === "connected" &&
+          "Connected securely. The access credential is saved in this computer’s protected password storage."}
+        {pairing.status === "error" &&
+          (pairing.error || "The secure connection could not be completed.")}
+      </span>
+      {pairing.status !== "connecting" && (
+        <button
+          type="button"
+          aria-label="Dismiss connection notice"
+          onClick={() => setPairing(null)}
+        >
+          ×
+        </button>
+      )}
+    </div>
+  ) : null;
+
   if (!checkedAuth) {
-    return <div className="center-stage"><span className="page-sub">Loading…</span></div>;
+    return (
+      <>
+        {pairingNotice}
+        <div className="center-stage"><span className="page-sub">Loading…</span></div>
+      </>
+    );
   }
 
   if (!auth?.authenticated) {
     return (
-      <Login
-        onAuthed={(s) => {
-          setAuth(s);
-        }}
-      />
+      <>
+        {pairingNotice}
+        <Login
+          onAuthed={(s) => {
+            setAuth(s);
+          }}
+        />
+      </>
     );
   }
 
   if (!onboarded) {
     return (
-      <Onboarding
-        onStart={() => {
-          setOnboarded(true);
-          setRoute({ name: "record" });
-        }}
-      />
+      <>
+        {pairingNotice}
+        <Onboarding
+          onStart={() => {
+            setOnboarded(true);
+            setRoute({ name: "record" });
+          }}
+        />
+      </>
     );
   }
 
@@ -127,8 +182,10 @@ export default function App() {
           : "ok";
 
   return (
-    <div className="app">
-      <nav className="rail">
+    <>
+      {pairingNotice}
+      <div className="app">
+        <nav className="rail">
         <div className="wordmark">
           <span className="open">Open</span>
           <span className="adapt">Adapt</span>
@@ -170,9 +227,9 @@ export default function App() {
             </span>
           </div>
         </div>
-      </nav>
+        </nav>
 
-      <main>
+        <main>
         {route.name === "library" && (
           <WorkflowLibrary
             onWatch={(id) => setRoute({ name: "watch", id })}
@@ -204,7 +261,8 @@ export default function App() {
             onSignedOut={() => setAuth({ authenticated: false })}
           />
         )}
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   );
 }

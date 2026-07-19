@@ -47,6 +47,8 @@ from engine.auth.provider import Credential
 
 SERVICE_NAME = "ai.openadapt.desktop"
 _ACTIVE_HOST_ACCOUNT = "__active_host__"
+_PAIRING_STAGE_ACCOUNT = "__pairing_stage__"
+_PAIRING_STAGE_VERSION = 1
 
 # Suffix for the companion account that holds the full Credential JSON. The bare
 # ``host`` account holds the RAW bearer token (what the tray reads).
@@ -140,6 +142,287 @@ def store_credential(c: Credential) -> None:
             "(use OPENADAPT_INGEST_TOKEN on headless boxes)",
             host=host,
         )
+
+
+def secure_store_available() -> bool:
+    """Return whether a real, unlocked OS credential backend is available.
+
+    Browser pairing consumes a one-use server secret.  Unlike the ordinary
+    headless auth path, it must refuse *before* claiming that secret when the
+    resulting credential cannot be persisted securely.
+    """
+    kr = _keyring()
+    if kr is None:
+        return False
+    try:
+        backend = kr.get_keyring()
+        priority = getattr(backend, "priority", 0)
+        return bool(priority and priority > 0)
+    except Exception:
+        return False
+
+
+def store_credential_secure(c: Credential) -> bool:
+    """Atomically persist ``c`` for one-click pairing, or clean up and fail.
+
+    All three entries must be writable and readable: the raw token consumed by
+    the tray, the companion credential metadata, and the active-host pointer.
+    No plaintext fallback is permitted.
+    """
+    kr = _keyring()
+    if kr is None:
+        return False
+
+    host = c["host"]
+    accounts = (host, host + _CRED_SUFFIX, _ACTIVE_HOST_ACCOUNT)
+    values = (c["token"], json.dumps(c), host)
+    previous = tuple(_kr_get(kr, account) for account in accounts)
+
+    def rollback() -> None:
+        for account, value in zip(accounts, previous):
+            if value is None:
+                _kr_delete(kr, account)
+            else:
+                _kr_set(kr, account, value)
+
+    if not all(_kr_set(kr, account, value) for account, value in zip(accounts, values)):
+        rollback()
+        return False
+
+    if any(_kr_get(kr, account) != value for account, value in zip(accounts, values)):
+        rollback()
+        return False
+    return True
+
+
+def _strict_get(kr, account: str) -> tuple[bool, str | None]:
+    """Read while distinguishing an absent entry from a keychain failure."""
+    if kr is None:
+        return False, None
+    try:
+        return True, kr.get_password(SERVICE_NAME, account)
+    except Exception:
+        return False, None
+
+
+def _apply_exact(kr, account: str, value: str | None) -> bool:
+    """Set or remove one entry and verify its exact resulting value."""
+    try:
+        if value is None:
+            try:
+                kr.delete_password(SERVICE_NAME, account)
+            except Exception:
+                # Missing entries and deletion failures are distinguished by
+                # the strict read-back below.
+                pass
+        else:
+            kr.set_password(SERVICE_NAME, account, value)
+    except Exception:
+        return False
+    readable, current = _strict_get(kr, account)
+    return readable and current == value
+
+
+def snapshot_pairing_canonical(host: str) -> dict[str, str | None] | None:
+    """Strictly snapshot the exact canonical entries before consuming a claim."""
+    kr = _keyring()
+    accounts = (host, host + _CRED_SUFFIX, _ACTIVE_HOST_ACCOUNT)
+    values: list[str | None] = []
+    for account in accounts:
+        readable, value = _strict_get(kr, account)
+        if not readable:
+            return None
+        values.append(value)
+    return {
+        "host": host,
+        "token": values[0],
+        "credential": values[1],
+        "active_host": values[2],
+    }
+
+
+def stage_pairing_credential(
+    pairing_id: str,
+    credential: Credential,
+    previous: dict[str, str | None],
+    device_name: str,
+) -> bool:
+    """Durably stage one claimed token plus its exact rollback snapshot."""
+    kr = _keyring()
+    readable, current = _strict_get(kr, _PAIRING_STAGE_ACCOUNT)
+    if not readable or current is not None or previous.get("host") != credential["host"]:
+        return False
+    payload = json.dumps(
+        {
+            "version": _PAIRING_STAGE_VERSION,
+            "pairing_id": pairing_id,
+            "credential": credential,
+            "previous": previous,
+            "device_name": device_name,
+            "state": "claimed",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if not _apply_exact(kr, _PAIRING_STAGE_ACCOUNT, payload):
+        return False
+    readable, stored = _strict_get(kr, _PAIRING_STAGE_ACCOUNT)
+    return readable and stored == payload
+
+
+def load_pairing_stage() -> dict | None:
+    """Load the single crash-recovery record, failing closed if it is unreadable."""
+    readable, raw = _strict_get(_keyring(), _PAIRING_STAGE_ACCOUNT)
+    if not readable:
+        raise RuntimeError("pairing recovery keychain entry is unreadable")
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("pairing recovery keychain entry is invalid") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("pairing recovery keychain entry is invalid")
+    return value
+
+
+def _pairing_stage_values(
+    stage: dict,
+) -> tuple[str, tuple[str | None, ...], tuple[str, ...]] | None:
+    credential = stage.get("credential")
+    previous = stage.get("previous")
+    if (
+        stage.get("version") != _PAIRING_STAGE_VERSION
+        or not isinstance(credential, dict)
+        or not isinstance(previous, dict)
+        or not isinstance(credential.get("host"), str)
+        or previous.get("host") != credential["host"]
+        or not isinstance(credential.get("token"), str)
+    ):
+        return None
+    if any(
+        previous.get(key) is not None and not isinstance(previous.get(key), str)
+        for key in ("token", "credential", "active_host")
+    ):
+        return None
+    host = credential["host"]
+    prior = (
+        previous.get("token"),
+        previous.get("credential"),
+        previous.get("active_host"),
+    )
+    current = (credential["token"], json.dumps(credential), host)
+    return host, prior, current
+
+
+def mark_pairing_stage(pairing_id: str, state: str) -> bool:
+    """Persist a bounded recovery state without ever changing its identity."""
+    if state not in {
+        "claimed",
+        "canonical_written",
+        "confirm_ambiguous",
+        "abort_acknowledged",
+    }:
+        return False
+    try:
+        stage = load_pairing_stage()
+    except RuntimeError:
+        return False
+    if stage is None or stage.get("pairing_id") != pairing_id:
+        return False
+    stage["state"] = state
+    payload = json.dumps(stage, sort_keys=True, separators=(",", ":"))
+    return _apply_exact(_keyring(), _PAIRING_STAGE_ACCOUNT, payload)
+
+
+def commit_pairing_stage(pairing_id: str) -> bool:
+    """CAS-promote the staged credential into the three canonical entries."""
+    try:
+        stage = load_pairing_stage()
+    except RuntimeError:
+        return False
+    if stage is None or stage.get("pairing_id") != pairing_id:
+        return False
+    values = _pairing_stage_values(stage)
+    if values is None:
+        return False
+    host, previous, replacement = values
+    kr = _keyring()
+    accounts = (host, host + _CRED_SUFFIX, _ACTIVE_HOST_ACCOUNT)
+    observed: list[str | None] = []
+    for account in accounts:
+        readable, value = _strict_get(kr, account)
+        if not readable:
+            return False
+        observed.append(value)
+    if tuple(observed) == replacement:
+        mark_pairing_stage(pairing_id, "canonical_written")
+        return True
+    if any(
+        value not in {prior, new}
+        for value, prior, new in zip(observed, previous, replacement)
+    ):
+        # A concurrent login changed canonical state after the snapshot. Never
+        # overwrite it or later "restore" stale values over it.
+        return False
+
+    committed = [
+        _apply_exact(kr, account, value)
+        for account, value in zip(accounts, replacement)
+    ]
+    if not all(committed):
+        for rollback_account, rollback_value in zip(accounts, previous):
+            _apply_exact(kr, rollback_account, rollback_value)
+        return False
+    mark_pairing_stage(pairing_id, "canonical_written")
+    return True
+
+
+def restore_pairing_stage(pairing_id: str) -> bool:
+    """Restore the exact snapshot, but only over this stage's own replacement."""
+    try:
+        stage = load_pairing_stage()
+    except RuntimeError:
+        return False
+    if stage is None or stage.get("pairing_id") != pairing_id:
+        return False
+    values = _pairing_stage_values(stage)
+    if values is None:
+        return False
+    host, previous, replacement = values
+    kr = _keyring()
+    accounts = (host, host + _CRED_SUFFIX, _ACTIVE_HOST_ACCOUNT)
+    observed: list[str | None] = []
+    for account in accounts:
+        readable, value = _strict_get(kr, account)
+        if not readable:
+            return False
+        observed.append(value)
+    if tuple(observed) == previous:
+        return True
+    if any(
+        value not in {prior, new}
+        for value, prior, new in zip(observed, previous, replacement)
+    ):
+        return False
+    restored = [
+        _apply_exact(kr, account, value)
+        for account, value in zip(accounts, previous)
+    ]
+    return all(restored)
+
+
+def clear_pairing_stage(pairing_id: str) -> bool:
+    """Delete only the exact staged transaction after resolution."""
+    try:
+        stage = load_pairing_stage()
+    except RuntimeError:
+        return False
+    if stage is None:
+        return True
+    if stage.get("pairing_id") != pairing_id:
+        return False
+    return _apply_exact(_keyring(), _PAIRING_STAGE_ACCOUNT, None)
 
 
 def load_credential(host: str) -> Credential | None:

@@ -162,6 +162,41 @@ class TestAuthCommands:
         disp, _db, _e = deps
         assert disp.dispatch("get_auth_status", {})["authenticated"] is False
 
+    def test_connect_uri_forwards_one_exact_string_and_emits_safe_state(
+        self, deps, monkeypatch, tmp_path
+    ) -> None:
+        disp, _db, events = deps
+        uri = (
+            "openadapt://connect?pairing=oap_"
+            + "A" * 43
+            + "&host=https%3A%2F%2Fapp.openadapt.ai"
+        )
+        received: list[str] = []
+        monkeypatch.setenv("OPENADAPT_CONFIG_TOML", str(tmp_path / "config.toml"))
+
+        def _connect(exact_uri: str) -> dict:
+            received.append(exact_uri)
+            return {
+                "authenticated": True,
+                "host": "https://app.openadapt.ai",
+                "paired": True,
+            }
+
+        monkeypatch.setattr("engine.auth.pairing.connect_uri", _connect)
+        result = disp.dispatch("connect_uri", {"uri": uri})
+        assert result["paired"] is True
+        assert received == [uri]
+        assert ("pairing_state", {
+            "status": "connected",
+            "host": "https://app.openadapt.ai",
+        }) in events
+
+    def test_connect_uri_requires_a_single_string_parameter(self, deps) -> None:
+        disp, _db, _events = deps
+        for params in ({}, {"uri": ["openadapt://connect"]}, {"argv": ["--uri", "x"]}):
+            with pytest.raises(ValueError, match="uri is required"):
+                disp.dispatch("connect_uri", params)
+
 
 class TestConfigCommands:
     def test_get_config(self, deps) -> None:
