@@ -2,7 +2,7 @@
   "schema_version": 1,
   "published_for": {
     "service": "OpenAdapt reference sandbox",
-    "cloud_release_sha256": "44b023311abd1808247c361e32f8901a42b73516268c6f0f21797b97cf61c564",
+    "cloud_release_sha256": "2a8a1dfb3b468ea99a02379d7f0a0db0f33c4df0127de71f3d012d3a21167f55",
     "target_manifest_sha256": "032e05a5364beddce58c4752d9889fa7a2d2c41f0555285d4e416bae75d96c88"
   },
   "scope": "Source identities and required notices for the unmodified third-party applications served in isolated synthetic reference sandboxes.",
