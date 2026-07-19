@@ -1,7 +1,7 @@
 [package]
 name = "openadapt-desktop"
 version = "0.6.0"
-description = "Experimental Tauri shell for OpenAdapt workflow authoring and human teaching"
+description = "Experimental installed companion for OpenAdapt authoring, teaching, and local pairing"
 authors = ["OpenAdapt AI"]
 license = "MIT"
 edition = "2021"

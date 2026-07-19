@@ -14,12 +14,19 @@ def test_public_metadata_identifies_experimental_supporting_surface() -> None:
     readme = (ROOT / "README.md").read_text()
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package = json.loads((ROOT / "package.json").read_text())
+    cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text())
 
     assert "Lifecycle: Experimental supporting surface" in readme
     assert "openadapt-flow" in readme
     assert "AI training data collection" not in readme
     assert "AI training data collection" not in pyproject["project"]["description"]
     assert "AI training data collection" not in package["description"]
+    expected_native_description = (
+        "Experimental installed companion for OpenAdapt authoring, "
+        "teaching, and local pairing"
+    )
+    assert package["description"] == expected_native_description
+    assert cargo["package"]["description"] == expected_native_description
     assert pyproject["project"]["readme"] == "README.md"
     assert pyproject["project"]["scripts"] == {"openadapt-desktop": "engine.cli:main"}
 
