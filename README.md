@@ -20,9 +20,11 @@ OpenAdapt compiles a demonstrated workflow into a locally executable program.
 Healthy runs make no model calls. When an interface drifts, the runtime first
 tries deterministic re-resolution, can optionally propose a reviewable repair,
 and halts when configured identity, postcondition, effect, or certification
-checks fail. The proven self-serve path today is browser automation; native
-desktop backends remain experimental and remote-display (RDP/Citrix-style)
-automation remains research-stage.
+checks fail. The same governed contract spans browser structure, Windows UI
+Automation, native macOS and Linux accessibility, and remote-display
+(RDP/Citrix) sessions. Each deployed workflow qualifies its exact application,
+environment, target identity, and independent effect oracle before writes are
+enabled.
 
 `pip install openadapt` installs the launcher and the compiler, exposed as
 `openadapt flow ...`. Native capture, privacy scrubbing, and the separate ML
@@ -166,11 +168,13 @@ milliseconds and make no model calls.
   low-confidence match and halt with a report. Coverage is not automatic for
   every click, so lint and certification are part of deployment.
 
-The reference backend is a **headless browser**, which is why the whole loop
-runs in CI with no OS permissions. Desktop, Citrix, and RDP backends are
-adapters in progress, not yet production paths: Windows UI Automation is
-Experimental, and RDP/Citrix-style pixel-only automation is Research — we are
-seeking design partners to validate them on real deployments.
+The canonical CI path uses a **headless browser**, so the complete compiler
+lifecycle can run without OS permissions. Execution adapters provide browser
+structure, Windows UI Automation, native macOS/Linux accessibility, and
+remote-display (RDP/Citrix) observation and actuation. Every adapter returns
+candidate evidence to the same uniqueness, identity, policy, postcondition,
+effect-verification, and halt semantics; native operations are preferred when
+available and visual evidence supplies the remote-display fallback.
 Compiled workflows can also be emitted as Agent Skills or MCP servers so other
 agents can invoke them. The
 [`openadapt-agent`](https://github.com/OpenAdaptAI/openadapt-agent) v2 bridge
@@ -201,7 +205,7 @@ blanket production-readiness claim.
 | Package | Role | Maturity | Repository |
 |---------|------|----------|------------|
 | `openadapt` | Installer + unified CLI (`openadapt flow ...`) | **Beta** | This repo |
-| `openadapt-flow` | Compiler + governed runtime | **Beta**; browser path proven, Windows UI Automation experimental, remote-display (RDP/Citrix) research | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
+| `openadapt-flow` | Compiler + governed runtime across browser, native accessibility, and remote-display adapters | **Beta**; deployment qualification is workflow- and environment-specific | [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) |
 | `openadapt-agent` | MCP + Agent Skills bridge over governed Flow bundles | Active v2 integration surface | [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) |
 | `openadapt-capture` | Optional native recorder | **Experimental** | [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) |
 | `openadapt-privacy` | Optional PII/PHI scrubbing | **Experimental** | [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) |
@@ -355,11 +359,11 @@ pip install -e ".[dev]"
 - [OpenAdaptAI/pynput](https://github.com/OpenAdaptAI/pynput) — input monitoring fork
 - [OpenAdaptAI/atomacos](https://github.com/OpenAdaptAI/atomacos) — macOS accessibility
 
-> **Product surfaces:** OpenAdapt Cloud provides the hosted browser-workflow
-> control plane, with live execution enabled only when its production
-> dependencies pass readiness checks. `openadapt-desktop` and native desktop
-> backends remain experimental; remote-display (RDP/Citrix-style) automation
-> remains research-stage. **Internal tooling:** `openadapt-wright`, `openadapt-herald`,
+> **Product surfaces:** OpenAdapt Cloud provides approvals, policy, audit,
+> scheduling, billing, and results. Managed browser execution, local native
+> execution, and customer-controlled remote-display execution use the same
+> compiler/runtime contract, with the execution and data boundary bound before
+> a workflow is activated. **Internal tooling:** `openadapt-wright`, `openadapt-herald`,
 > `openadapt-crier`, `openadapt-consilium`, `openadapt-telemetry`, and
 > `openadapt-viewer` support development and operations; they are not required
 > by the compiler runtime.
