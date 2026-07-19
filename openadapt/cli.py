@@ -47,6 +47,10 @@ class _FlowFirstGroup(click.Group):
 
 
 _FLOW_PASSTHROUGH_COMMANDS = {
+    "record": (
+        "Record YOUR app (web browser by default; --backend "
+        "windows/macos/linux/rdp for native desktop capture)."
+    ),
     "induce": "Induce a parameterized program from multiple recordings.",
     "run": "Run a bundle under a fail-closed deployment configuration.",
     "resume": "Resume a durably paused run from its verified checkpoint.",
@@ -224,34 +228,13 @@ def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
     _run_flow(argv)
 
 
-@flow.command("record")
-@click.option("--url", required=True, help="URL of the app to record against")
-@click.option("--out", required=True, help="Recording output directory")
-@click.option(
-    "--secret",
-    multiple=True,
-    metavar="FIELD",
-    help="Mark a typed field as SECRET (value never persisted). Repeatable.",
-)
-@click.option(
-    "--param",
-    multiple=True,
-    metavar="FIELD",
-    help="Record a typed field as a PARAMETER (overridable at replay). Repeatable.",
-)
-@click.option(
-    "--headless", is_flag=True, help="Run the browser headless (scripted/CI recording)"
-)
-def flow_record(url, out, secret, param, headless):
-    """Record YOUR app interactively in a headed browser."""
-    argv = ["record", "--url", url, "--out", out]
-    for value in secret:
-        argv += ["--secret", value]
-    for value in param:
-        argv += ["--param", value]
-    if headless:
-        argv.append("--headless")
-    _run_flow(argv)
+# NOTE: `record` is intentionally NOT wrapped with explicit click options.
+# It delegates through _FlowPassthroughGroup so every engine option
+# (--backend web/windows/macos/linux/rdp, --agent-url, --macos-app,
+# --linux-app, --rdp-host, --task, ...) forwards verbatim and new engine
+# options never need a launcher release. An earlier explicit wrapper here
+# hid --backend (and required --url, which the engine only requires for
+# --backend web).
 
 
 @flow.command("demo-record")
