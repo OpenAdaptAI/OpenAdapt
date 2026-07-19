@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-07-19)
+
+### Bug Fixes
+
+- Align launcher Python support with engine
+  ([#1023](https://github.com/OpenAdaptAI/OpenAdapt/pull/1023),
+  [`be9693b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be9693b1b0605ccbb41fd38a73a6e83d20e67d7e))
+
+- Require pairing-enabled Flow release ([#1023](https://github.com/OpenAdaptAI/OpenAdapt/pull/1023),
+  [`be9693b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be9693b1b0605ccbb41fd38a73a6e83d20e67d7e))
+
+### Documentation
+
+- Describe governed multi-surface target
+  ([#1024](https://github.com/OpenAdaptAI/OpenAdapt/pull/1024),
+  [`14f475e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/14f475e24f742f150a980ae784805f9098f37a9e))
+
+- Recognize active openadapt-agent v2 bridge
+  ([#1022](https://github.com/OpenAdaptAI/OpenAdapt/pull/1022),
+  [`2c5e9ff`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2c5e9ff92da8692068c0269f24b1942dd9010126))
+
+### Features
+
+- Add one-command Cloud pairing ([#1023](https://github.com/OpenAdaptAI/OpenAdapt/pull/1023),
+  [`be9693b`](https://github.com/OpenAdaptAI/OpenAdapt/commit/be9693b1b0605ccbb41fd38a73a6e83d20e67d7e))
+
+
 ## v1.6.4 (2026-07-17)
 
 ### Bug Fixes
