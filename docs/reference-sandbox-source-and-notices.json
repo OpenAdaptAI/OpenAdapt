@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "published_for": {
+    "service": "OpenAdapt reference sandbox",
+    "cloud_release_sha256": "44b023311abd1808247c361e32f8901a42b73516268c6f0f21797b97cf61c564",
+    "target_manifest_sha256": "032e05a5364beddce58c4752d9889fa7a2d2c41f0555285d4e416bae75d96c88"
+  },
+  "scope": "Source identities and required notices for the unmodified third-party applications served in isolated synthetic reference sandboxes.",
+  "upstream_modifications": "None. OpenAdapt does not copy or patch the listed application source in its permissively licensed packages. Baselines use the exact upstream releases, commits, and container-image digests below.",
+  "applications": [
+    {
+      "id": "openemr-healthcare",
+      "name": "OpenEMR",
+      "version": "8.0.0.3",
+      "license": "GPL-3.0-only",
+      "modifications": "none",
+      "source": {
+        "repository": "https://github.com/openemr/openemr",
+        "ref": "v8_0_0_3",
+        "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
+        "corresponding_source": "https://github.com/openemr/openemr/tree/7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
+        "license_notice": "https://github.com/openemr/openemr/blob/7c96c8eefe460d6fadbccbe93d0fa6bf819acd69/LICENSE"
+      },
+      "images": {
+        "application": "openemr/openemr:8.0.0.3@sha256:8f6f409752ab56a6ee26f24ae79eee01273430e461c05ef691541881a0b6bd1f",
+        "database": "mariadb:11.8@sha256:09336a8c0cff9f363e133d8a245cca5ad3eeb326e0ffaedf74d49214c4571486"
+      }
+    },
+    {
+      "id": "frappe-lending",
+      "name": "Frappe Lending with ERPNext",
+      "version": "Lending 16.2.0 / ERPNext 16.28.0",
+      "license": "GPL-3.0-only",
+      "modifications": "none; the pinned upstream Lending application is installed onto the pinned upstream ERPNext base",
+      "source": [
+        {
+          "project": "Frappe Lending",
+          "repository": "https://github.com/frappe/lending",
+          "ref": "v16.2.0",
+          "commit": "caed066b6636075634418f4f0382798b60c0e188",
+          "corresponding_source": "https://github.com/frappe/lending/tree/caed066b6636075634418f4f0382798b60c0e188",
+          "license": "GPL-3.0-only",
+          "license_notice": "https://github.com/frappe/lending/blob/caed066b6636075634418f4f0382798b60c0e188/license.txt"
+        },
+        {
+          "project": "ERPNext",
+          "repository": "https://github.com/frappe/erpnext",
+          "ref": "v16.28.0",
+          "commit": "de591661b9ba0bd3f62ac25b99b5c85c723515f6",
+          "corresponding_source": "https://github.com/frappe/erpnext/tree/de591661b9ba0bd3f62ac25b99b5c85c723515f6",
+          "license": "GPL-3.0-only",
+          "license_notice": "https://github.com/frappe/erpnext/blob/de591661b9ba0bd3f62ac25b99b5c85c723515f6/license.txt"
+        },
+        {
+          "project": "Frappe Docker",
+          "repository": "https://github.com/frappe/frappe_docker",
+          "ref": "main",
+          "commit": "c004361e790125ed13aaa933d11f7838711a8960",
+          "corresponding_source": "https://github.com/frappe/frappe_docker/tree/c004361e790125ed13aaa933d11f7838711a8960",
+          "license": "MIT",
+          "license_notice": "https://github.com/frappe/frappe_docker/blob/c004361e790125ed13aaa933d11f7838711a8960/LICENSE"
+        }
+      ],
+      "images": {
+        "application_base": "frappe/erpnext:v16.28.0@sha256:05ca22f06687d31eae8b3f5fd2829f3c881d31ec3c9c376feb28c257612ec8d9",
+        "database": "mariadb:11.8@sha256:09336a8c0cff9f363e133d8a245cca5ad3eeb326e0ffaedf74d49214c4571486",
+        "redis": "redis:6.2-alpine@sha256:e8773aa976bf0e4ca3e7707b759110c893be504da1f25a61bb4000d1d56b7bd3"
+      }
+    },
+    {
+      "id": "openimis-insurance",
+      "name": "openIMIS",
+      "version": "25.10",
+      "license": "AGPL-3.0-only",
+      "modifications": "none",
+      "source": {
+        "repository": "https://github.com/openimis/openimis-dist_dkr",
+        "ref": "25.10",
+        "commit": "a1165072955296d913ace1093f09617fc25d922b",
+        "corresponding_source": "https://github.com/openimis/openimis-dist_dkr/tree/a1165072955296d913ace1093f09617fc25d922b",
+        "license_notice": "https://github.com/openimis/openimis-dist_dkr/blob/a1165072955296d913ace1093f09617fc25d922b/GNU%20AFFERO%20GENERAL%20PUBLIC%20LICENSE.md"
+      },
+      "images": {
+        "backend": "ghcr.io/openimis/openimis-be:25.10@sha256:a77228c7469fab5f3523d3f7b9877d62aa116b303fd87a6d55aa3a46c1892592",
+        "frontend": "ghcr.io/openimis/openimis-fe:25.10@sha256:ed0e0b1dbe91308d4df3322a1aee40176b42d47bbf72fea79a59fa84ef63db4a",
+        "database": "ghcr.io/openimis/openimis-pgsql:25.10@sha256:d4bc881e408b74b4cf47fb718534fe0f10940bb951b6cb7ee9a1a30048adf29d",
+        "rabbitmq": "rabbitmq:3.13.7-management@sha256:9cfb7e92ae7d296aec4d1ae799e431209f7ed57d55f9c929d95667d0ccf1c920",
+        "redis": "redis:8.8.0@sha256:5d2c689b4b55fc3fab4b0cc8aaa950f85b508c76c1e0f35a90d8f411d55a8b2b",
+        "opensearch": "opensearchproject/opensearch:2.9.0@sha256:7490e4c148dceb1ffbfa71f65e2e30f7c16c0049464d5a804596a20cfee51f11",
+        "opensearch_dashboards": "opensearchproject/opensearch-dashboards:2.9.0@sha256:8f6c87a1e6f6b45b810798b690cbfd9f37f66ed54e14702b4f7d1b2762fc5ef0"
+      }
+    }
+  ],
+  "openadapt_wrapper": {
+    "relationship": "OpenAdapt Cloud's capability, isolation, reset, cleanup, and browser-input wrapper is independently authored orchestration. It contains no copied third-party application source and is not represented as corresponding source for those applications.",
+    "source_availability": "The wrapper is commercial OpenAdapt Cloud implementation code. Source access for customer security or licensing review is available under an appropriate written agreement.",
+    "contact": "support@openadapt.ai"
+  },
+  "notice": "This machine-readable publication identifies exact upstream source and notices for the deployed reference applications. It is not legal advice or a certification of license compliance."
+}
