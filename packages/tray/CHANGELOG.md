@@ -1,6 +1,76 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-07-20)
+
+### Chores
+
+- Add security CI (CodeQL, gitleaks, dependency-review, Dependabot)
+  ([#9](https://github.com/OpenAdaptAI/openadapt-tray/pull/9),
+  [`43ef343`](https://github.com/OpenAdaptAI/openadapt-tray/commit/43ef343579311674451dfe81d5864dc55e3d5097))
+
+Adds CodeQL SAST, gitleaks secret scanning, dependency review, Dependabot, and a
+  vulnerability-disclosure policy as part of SOC 2 readiness. Additive and non-breaking.
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+### Documentation
+
+- Refresh README release boundary to the shipped 0.1.1 reality
+  ([#6](https://github.com/OpenAdaptAI/openadapt-tray/pull/6),
+  [`12af131`](https://github.com/OpenAdaptAI/openadapt-tray/commit/12af13199b75de049a792dd495ed5c7178ba3ec5))
+
+Supersedes the original whole-file rewrite: main's README (from #5) already covers the loop
+  status/launcher role, so this PR now only fixes the claims that went stale when the hosted
+  lifecycle merged and 0.1.1 shipped to PyPI:
+
+- hosted behavior is on main and released, not 'feat/hosted-rewire branch code' - version is 0.1.1
+  (pre-alpha classifier), not 0.0.1 - add the PyPI badge and a real pip install quickstart - keep
+  the honest boundary: no released openadapt-desktop build provides the companion IPC service yet
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+- Use canonical 'retained evidence' wording in README
+  ([#8](https://github.com/OpenAdaptAI/openadapt-tray/pull/8),
+  [`b7a81c5`](https://github.com/OpenAdaptAI/openadapt-tray/commit/b7a81c53086dff01c8b5ebf7c7e31e862101dce4))
+
+Match the AGENTS.md / org-profile / LIMITS.md canonical one-liner ('retained evidence'); the tray
+  README said 'recorded evidence'.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
+
+### Features
+
+- Use OpenAdapt mark, tinted per state, for the tray icon
+  ([#16](https://github.com/OpenAdaptAI/openadapt-tray/pull/16),
+  [`c2a8a48`](https://github.com/OpenAdaptAI/openadapt-tray/commit/c2a8a48bd34d1fd48bc721895bef9b2096be473d))
+
+Replace the plain solid colored circle with the OpenAdapt brand mark (the chat/robot face from the
+  openadapt.ai favicon), color-stylized per recording-lifecycle state so the state stays readable at
+  a glance while the brand is finally shown in the menu bar / system tray.
+
+- Add the vector mark (assets/mark.svg) and a high-res transparent raster master
+  (assets/mark-master.png), plus a 512px copy packaged inside the wheel
+  (src/openadapt_tray/assets/mark-master.png) so the installed app can render the mark. The wheel
+  previously shipped no assets, so it always fell back to a generated circle. - IconManager now
+  tints the mark's alpha silhouette per state (idle=brand blue, recording=red,
+  starting/stopping=amber, compiling=purple, error=red). One tint implementation is shared by the
+  runtime and the generator, so committed PNGs and runtime icons never diverge. The needs-attention
+  badge is preserved. - Give every TrayState its own icon file. This fixes a latent bug where
+  COMPILING referenced a nonexistent compiling.png (fell back to a circle) and starting/stopping
+  showed red instead of amber. - Rewrite scripts/generate_icons.py to re-render the master from the
+  SVG (rsvg-convert/cairosvg/inkscape) and tint per-state 1x + @2x PNGs and a multi-size logo.ico.
+  Remove the stale training.png icons.
+
+Icons verified valid at menu-bar sizes (22px + 44px, light and dark); 137 tests pass, ruff clean.
+
+Claude-Session: https://claude.ai/code/session_01NyCHrzA1psrKMFfroYbzaM
+
+Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
+
+
 ## v0.1.1 (2026-07-15)
 
 ### Bug Fixes

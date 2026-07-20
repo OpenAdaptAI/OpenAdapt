@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-tray"
-version = "0.1.1"
+version = "0.2.0"
 description = "Experimental status and launcher companion for OpenAdapt workflow authoring and governed repair"
 readme = "README.md"
 requires-python = ">=3.10"
