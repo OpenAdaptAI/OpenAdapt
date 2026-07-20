@@ -1,33 +1,65 @@
-"""Icon management for OpenAdapt Tray."""
+"""Icon management for OpenAdapt Tray.
+
+The tray icon is the OpenAdapt mark (the chat/robot face), color-stylized per
+recording-lifecycle state so the state stays readable at a glance in the menu
+bar / system tray:
+
+* idle            -> brand blue
+* recording start -> amber (spinning up)
+* recording       -> red
+* recording stop  -> amber (winding down)
+* compiling       -> purple (transforming a recording into a workflow)
+* error           -> red
+
+The mark is stored once as a high-resolution transparent master
+(``assets/mark-master.png``, shipped inside the package). Every state icon is
+produced by tinting that master's alpha silhouette with the state colour, so all
+states render as the same recognizable mark and never drift apart. Pre-rendered
+PNGs committed under the repo ``assets/icons`` directory are used when present
+(dev/website), and are the same tinted marks produced at runtime.
+"""
 
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 import sys
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from openadapt_tray.state import TrayState
 
 
-class IconManager:
-    """Manages loading and caching of tray icons."""
+def _hex_to_rgb(color: str) -> Tuple[int, int, int]:
+    """Parse a ``#RRGGBB`` (or ``RRGGBB``) hex string into an RGB tuple."""
+    color = color.lstrip("#")
+    return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
 
-    # State to icon filename mapping
+
+class IconManager:
+    """Manages loading, tinting and caching of tray icons.
+
+    Every icon is the OpenAdapt mark tinted with the state colour. The mark
+    silhouette comes from a packaged high-res master so the icon ships in the
+    wheel and renders identically whether or not pre-rendered PNGs are present.
+    """
+
+    # State to icon filename mapping (one file per state; produced by
+    # ``scripts/generate_icons.py`` from the same master + colours used at
+    # runtime, so file-backed and runtime-tinted icons are identical).
     STATE_ICONS: Dict[TrayState, str] = {
         TrayState.IDLE: "idle.png",
-        TrayState.RECORDING_STARTING: "recording.png",
+        TrayState.RECORDING_STARTING: "recording_starting.png",
         TrayState.RECORDING: "recording.png",
-        TrayState.RECORDING_STOPPING: "recording.png",
+        TrayState.RECORDING_STOPPING: "recording_stopping.png",
         TrayState.COMPILING: "compiling.png",
         TrayState.ERROR: "error.png",
     }
 
-    # Icon colors for fallback generation
+    # Per-state mark tint. Keeps the historical state->colour signalling.
     STATE_COLORS: Dict[TrayState, str] = {
-        TrayState.IDLE: "#4A90D9",  # Blue
-        TrayState.RECORDING_STARTING: "#F5A623",  # Yellow/Orange
+        TrayState.IDLE: "#4A90D9",  # Brand blue
+        TrayState.RECORDING_STARTING: "#F5A623",  # Amber (spinning up)
         TrayState.RECORDING: "#D0021B",  # Red
-        TrayState.RECORDING_STOPPING: "#F5A623",  # Yellow/Orange
+        TrayState.RECORDING_STOPPING: "#F5A623",  # Amber (winding down)
         TrayState.COMPILING: "#7B68EE",  # Purple (transforming a recording)
         TrayState.ERROR: "#D0021B",  # Red
     }
@@ -35,19 +67,25 @@ class IconManager:
     # Colour of the break/needs-attention badge dot.
     BADGE_COLOR = "#D0021B"  # Red
 
+    # Packaged mark master (transparent silhouette). Ships in the wheel.
+    MASTER_PATH = Path(__file__).parent / "assets" / "mark-master.png"
+
     def __init__(self, assets_dir: Optional[Path] = None):
         """Initialize the icon manager.
 
         Args:
-            assets_dir: Path to the assets directory. If None, uses package assets.
+            assets_dir: Path to the pre-rendered icons directory. If None, uses
+                the repo ``assets/icons`` directory when present (dev). Runtime
+                tinting of the packaged master is the source of truth whenever a
+                file is missing, so a bare wheel still shows the mark.
         """
         if assets_dir is None:
-            # Find assets directory relative to this module
             module_dir = Path(__file__).parent
             assets_dir = module_dir.parent.parent / "assets" / "icons"
 
         self.assets_dir = assets_dir
         self._cache: Dict[str, Image.Image] = {}
+        self._master: Optional[Image.Image] = None
         self._retina_scale = self._detect_retina()
 
     def _detect_retina(self) -> int:
@@ -56,6 +94,17 @@ class IconManager:
             # On macOS, assume retina by default for newer systems
             return 2
         return 1
+
+    def _load_master(self) -> Optional[Image.Image]:
+        """Load (and cache) the transparent mark master, if available."""
+        if self._master is not None:
+            return self._master
+        if self.MASTER_PATH.exists():
+            try:
+                self._master = Image.open(self.MASTER_PATH).convert("RGBA")
+            except Exception:
+                self._master = None
+        return self._master
 
     def get(self, state: TrayState, break_count: int = 0) -> Image.Image:
         """Get the icon for a given state, optionally with a break badge.
@@ -77,10 +126,9 @@ class IconManager:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        # Try to load icon file
+        # Prefer a pre-rendered file (dev/website); otherwise tint the mark.
         icon = self._load_icon(icon_name)
         if icon is None:
-            # Generate fallback icon
             icon = self._generate_fallback(state)
 
         if badge:
@@ -98,8 +146,6 @@ class IconManager:
         Returns:
             A new image with the badge composited on top.
         """
-        from PIL import ImageDraw
-
         base = icon.convert("RGBA").copy()
         w, h = base.size
         draw = ImageDraw.Draw(base)
@@ -107,10 +153,14 @@ class IconManager:
         # Badge sized relative to the icon, anchored top-right.
         radius = max(4, w // 4)
         cx, cy = w - radius, radius
-        color = self.BADGE_COLOR.lstrip("#")
-        r = int(color[0:2], 16)
-        g = int(color[2:4], 16)
-        b = int(color[4:6], 16)
+        r, g, b = _hex_to_rgb(self.BADGE_COLOR)
+        # Punch a small transparent ring so the dot reads against the mark.
+        ring = max(1, radius // 3)
+        draw.ellipse(
+            [cx - radius - ring, cy - radius - ring,
+             cx + radius + ring, cy + radius + ring],
+            fill=(0, 0, 0, 0),
+        )
         draw.ellipse(
             [cx - radius, cy - radius, cx + radius, cy + radius],
             fill=(r, g, b, 255),
@@ -118,7 +168,7 @@ class IconManager:
         return base
 
     def _load_icon(self, icon_name: str) -> Optional[Image.Image]:
-        """Try to load an icon from the assets directory.
+        """Try to load a pre-rendered icon from the assets directory.
 
         Args:
             icon_name: The icon filename.
@@ -150,7 +200,7 @@ class IconManager:
         return None
 
     def _generate_fallback(self, state: TrayState, size: int = 64) -> Image.Image:
-        """Generate a simple colored square icon as fallback.
+        """Render the mark tinted for a state (used when no PNG file exists).
 
         Args:
             state: The application state.
@@ -159,12 +209,48 @@ class IconManager:
         Returns:
             Generated PIL Image.
         """
-        color = self.STATE_COLORS.get(state, "#4A90D9")
-        return self.create_colored_icon(color, size)
+        return self.render_state_icon(state, size)
+
+    def render_state_icon(self, state: TrayState, size: int = 64) -> Image.Image:
+        """Render the tinted mark for a state at an explicit size.
+
+        Public helper shared by ``scripts/generate_icons.py`` so committed PNGs
+        and runtime icons come from one implementation.
+        """
+        color = self.STATE_COLORS.get(state, self.STATE_COLORS[TrayState.IDLE])
+        master = self._load_master()
+        if master is None:
+            # Last-resort fallback if the packaged master is somehow missing.
+            return self.create_colored_icon(color, size)
+        return self.tint_mark(master, color, size)
+
+    @staticmethod
+    def tint_mark(master: Image.Image, color: str, size: int) -> Image.Image:
+        """Tint the mark master's silhouette with ``color`` at ``size`` px.
+
+        The master is a transparent image whose alpha encodes the mark (eyes and
+        smile are negative space). We keep that alpha and replace the colour, so
+        every state is the same recognizable mark in its own colour.
+
+        Args:
+            master: The transparent mark master image (RGBA).
+            color: Hex colour string, e.g. ``"#4A90D9"``.
+            size: Output width/height in pixels.
+
+        Returns:
+            A square RGBA image of the tinted mark.
+        """
+        r, g, b = _hex_to_rgb(color)
+        scaled = master.convert("RGBA").resize((size, size), Image.LANCZOS)
+        alpha = scaled.split()[3]
+        solid = Image.new("RGBA", (size, size), (r, g, b, 255))
+        out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        out.paste(solid, (0, 0), alpha)
+        return out
 
     @staticmethod
     def create_colored_icon(color: str, size: int = 64) -> Image.Image:
-        """Create a simple colored square icon.
+        """Create a simple colored circle icon (legacy last-resort fallback).
 
         Args:
             color: Hex color string (e.g., "#FF0000").
@@ -173,28 +259,14 @@ class IconManager:
         Returns:
             PIL Image with the specified color.
         """
-        # Create RGBA image with rounded corners effect
         image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-
-        # Parse hex color
-        if color.startswith("#"):
-            color = color[1:]
-        r = int(color[0:2], 16)
-        g = int(color[2:4], 16)
-        b = int(color[4:6], 16)
-
-        # Draw a filled circle for a cleaner look
-        from PIL import ImageDraw
-
+        r, g, b = _hex_to_rgb(color)
         draw = ImageDraw.Draw(image)
-
-        # Draw circle with slight padding
         padding = size // 8
         draw.ellipse(
             [padding, padding, size - padding, size - padding],
             fill=(r, g, b, 255),
         )
-
         return image
 
     def clear_cache(self) -> None:

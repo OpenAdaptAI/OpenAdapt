@@ -1,94 +1,172 @@
 #!/usr/bin/env python3
-"""Generate placeholder icons for OpenAdapt Tray."""
+"""Generate OpenAdapt Tray state icons from the OpenAdapt mark.
 
+Every tray icon is the OpenAdapt mark (the chat/robot face) tinted with a
+per-state colour, so the state stays readable at a glance while the brand mark
+replaces the old plain coloured circle.
+
+Source of truth
+---------------
+* ``assets/mark.svg``        -- the vector mark (from openadapt.ai favicon).
+* ``assets/mark-master.png`` -- a 1024px transparent raster master rendered from
+  the SVG. This is the canonical silhouette used for tinting.
+* ``src/openadapt_tray/assets/mark-master.png`` -- a 512px copy packaged inside
+  the wheel so the installed app can tint the mark at runtime.
+
+This script re-renders ``mark-master.png`` from ``mark.svg`` when a rasterizer
+(``rsvg-convert``, ``cairosvg`` or ``inkscape``) is available, then tints it
+into per-state PNGs (1x + @2x) and a Windows ``logo.ico``. Tinting itself is
+pure Pillow and uses the exact same implementation as the runtime
+(``IconManager.tint_mark``), so committed and runtime icons never diverge.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
 from pathlib import Path
-from PIL import Image, ImageDraw
 
-# Icon definitions: (name, color)
-ICONS = [
-    ("idle", "#4A90D9"),       # Blue
-    ("recording", "#D0021B"),  # Red
-    ("training", "#7B68EE"),   # Purple
-    ("error", "#D0021B"),      # Red
-]
+from PIL import Image
 
-# Output directory
-OUTPUT_DIR = Path(__file__).parent.parent / "assets" / "icons"
+# Make the package importable so we reuse the runtime tinting implementation.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from openadapt_tray.icons import IconManager  # noqa: E402
+from openadapt_tray.state import TrayState  # noqa: E402
+
+ASSETS = REPO_ROOT / "assets"
+ICONS_DIR = ASSETS / "icons"
+MARK_SVG = ASSETS / "mark.svg"
+MARK_MASTER = ASSETS / "mark-master.png"
+PACKAGED_MASTER = REPO_ROOT / "src" / "openadapt_tray" / "assets" / "mark-master.png"
+
+MASTER_SIZE = 1024
+PACKAGED_MASTER_SIZE = 512
+BASE_SIZE = 64  # 1x tray icon; @2x is doubled.
+ICO_SIZES = [16, 32, 48, 64, 128, 256]
+
+# Filename stem per state (matches IconManager.STATE_ICONS).
+STATE_STEMS = {
+    TrayState.IDLE: "idle",
+    TrayState.RECORDING_STARTING: "recording_starting",
+    TrayState.RECORDING: "recording",
+    TrayState.RECORDING_STOPPING: "recording_stopping",
+    TrayState.COMPILING: "compiling",
+    TrayState.ERROR: "error",
+}
 
 
-def create_icon(name: str, color: str, size: int = 64) -> Image.Image:
-    """Create a simple circular icon.
+def _render_svg_to_png(svg: Path, out: Path, size: int) -> bool:
+    """Render ``svg`` to a transparent ``size`` x ``size`` PNG.
 
-    Args:
-        name: Icon name (unused but useful for logging).
-        color: Hex color string.
-        size: Icon size in pixels.
-
-    Returns:
-        PIL Image.
+    Tries rsvg-convert, then cairosvg, then inkscape. Returns True on success.
     """
-    # Create transparent image
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
+    if shutil.which("rsvg-convert"):
+        subprocess.run(
+            ["rsvg-convert", "-w", str(size), "-h", str(size),
+             str(svg), "-o", str(out)],
+            check=True,
+        )
+        return True
+    try:
+        import cairosvg  # type: ignore
 
-    # Parse hex color
-    if color.startswith("#"):
-        color = color[1:]
-    r = int(color[0:2], 16)
-    g = int(color[2:4], 16)
-    b = int(color[4:6], 16)
+        cairosvg.svg2png(
+            url=str(svg), write_to=str(out), output_width=size, output_height=size
+        )
+        return True
+    except Exception:
+        pass
+    if shutil.which("inkscape"):
+        subprocess.run(
+            ["inkscape", str(svg), "-w", str(size), "-h", str(size),
+             "--export-filename", str(out)],
+            check=True,
+        )
+        return True
+    return False
 
-    # Draw filled circle with slight padding
-    padding = size // 8
-    draw.ellipse(
-        [padding, padding, size - padding, size - padding],
-        fill=(r, g, b, 255),
+
+def _trim_square(img: Image.Image, margin_frac: float = 0.08) -> Image.Image:
+    """Trim to the mark bbox and pad to a centred square with a small margin."""
+    img = img.convert("RGBA")
+    bbox = img.split()[3].getbbox()
+    if bbox:
+        img = img.crop(bbox)
+    w, h = img.size
+    side = max(w, h)
+    margin = int(side * margin_frac)
+    canvas = side + margin * 2
+    out = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    out.paste(img, ((canvas - w) // 2, (canvas - h) // 2), img)
+    return out
+
+
+def regenerate_master() -> None:
+    """Re-render the mark master from the SVG when a rasterizer is available."""
+    if not MARK_SVG.exists():
+        print(f"  mark.svg not found at {MARK_SVG}; keeping committed master.")
+        return
+    tmp = MARK_MASTER.with_suffix(".raw.png")
+    if not _render_svg_to_png(MARK_SVG, tmp, MASTER_SIZE):
+        print("  No SVG rasterizer found; keeping committed mark-master.png.")
+        return
+    master = _trim_square(Image.open(tmp)).resize(
+        (MASTER_SIZE, MASTER_SIZE), Image.LANCZOS
     )
+    master.save(MARK_MASTER)
+    tmp.unlink(missing_ok=True)
+    print(f"  Re-rendered {MARK_MASTER.name} from {MARK_SVG.name}")
 
-    return image
+
+def sync_packaged_master() -> None:
+    """Copy a downscaled master into the package so it ships in the wheel."""
+    PACKAGED_MASTER.parent.mkdir(parents=True, exist_ok=True)
+    master = Image.open(MARK_MASTER).convert("RGBA")
+    master.resize(
+        (PACKAGED_MASTER_SIZE, PACKAGED_MASTER_SIZE), Image.LANCZOS
+    ).save(PACKAGED_MASTER)
+    print(f"  Synced packaged master -> {PACKAGED_MASTER.relative_to(REPO_ROOT)}")
 
 
-def create_ico_file(images: list, output_path: Path) -> None:
-    """Create a Windows .ico file with multiple sizes.
+def generate_state_icons() -> None:
+    """Tint the mark per state into 1x + @2x PNGs under assets/icons."""
+    ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    manager = IconManager()
+    for state, stem in STATE_STEMS.items():
+        manager.render_state_icon(state, BASE_SIZE).save(ICONS_DIR / f"{stem}.png")
+        manager.render_state_icon(state, BASE_SIZE * 2).save(
+            ICONS_DIR / f"{stem}@2x.png"
+        )
+        print(f"  Created {stem}.png + {stem}@2x.png")
 
-    Args:
-        images: List of PIL Images at different sizes.
-        output_path: Path to save the .ico file.
+
+def generate_ico() -> None:
+    """Write a multi-size Windows .ico using the brand-blue idle mark.
+
+    Pillow resamples the single base image down to every size in ``sizes``, so
+    the base must be rendered at the largest size for a crisp multi-res .ico.
     """
-    # ico format expects the images in the list
-    images[0].save(
-        output_path,
+    manager = IconManager()
+    base = manager.render_state_icon(TrayState.IDLE, max(ICO_SIZES))
+    ico_path = ASSETS / "logo.ico"
+    base.save(
+        ico_path,
         format="ICO",
-        sizes=[(img.width, img.height) for img in images],
-        append_images=images[1:] if len(images) > 1 else None,
+        sizes=[(s, s) for s in ICO_SIZES],
     )
+    print(f"  Created {ico_path.name}")
 
 
-def main():
-    """Generate all placeholder icons."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    print(f"Generating icons in {OUTPUT_DIR}")
-
-    for name, color in ICONS:
-        # Generate standard size (64x64)
-        icon = create_icon(name, color, 64)
-        icon.save(OUTPUT_DIR / f"{name}.png")
-        print(f"  Created {name}.png")
-
-        # Generate retina size (128x128 for @2x)
-        icon_2x = create_icon(name, color, 128)
-        icon_2x.save(OUTPUT_DIR / f"{name}@2x.png")
-        print(f"  Created {name}@2x.png")
-
-    # Generate Windows .ico file (using idle icon)
-    ico_sizes = [16, 32, 48, 64, 128, 256]
-    ico_images = [create_icon("idle", "#4A90D9", size) for size in ico_sizes]
-
-    ico_path = OUTPUT_DIR.parent / "logo.ico"
-    create_ico_file(ico_images, ico_path)
-    print("  Created logo.ico")
-
+def main() -> None:
+    """Regenerate the master, packaged master, state icons and .ico."""
+    print(f"Generating OpenAdapt mark icons in {ICONS_DIR}")
+    regenerate_master()
+    sync_packaged_master()
+    generate_state_icons()
+    generate_ico()
     print("Done!")
 
 
