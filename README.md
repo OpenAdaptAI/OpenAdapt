@@ -159,6 +159,19 @@ openadapt flow replay bundle --url https://your.app
 > `openadapt flow <verb>` is the recommended path. The standalone
 > `openadapt-flow <verb>` command keeps working and behaves identically.
 
+One recording does more than replay a single path. `openadapt flow for-each`
+wraps a compiled bundle's body in a governed loop that runs once per record of
+a worklist (CSV or JSON), bounded, identity-checked and effect-verified per
+record, and halting on ambiguity instead of skipping a record. And before a
+bundle ever runs, `openadapt flow visualize` renders its program graph: the
+ordered steps, the resolution ladder, the armed identity gates, the effect
+checks, and every point the run can halt, as offline HTML, Mermaid, or JSON.
+
+```bash
+openadapt flow for-each bundle --records worklist.csv --out queue-bundle
+openadapt flow visualize bundle -o graph.html
+```
+
 ---
 
 ## How the compiler works
