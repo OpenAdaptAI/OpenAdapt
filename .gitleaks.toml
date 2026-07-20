@@ -1,20 +1,7 @@
 # gitleaks configuration for OpenAdapt.
-# Extends the default gitleaks ruleset; adds a narrowly-scoped baseline for a
-# single KNOWN, PRE-EXISTING finding so that new commits are still fully scanned.
-
+# Extends the default gitleaks ruleset. No finding-specific allowlists: the one
+# historical finding (Noun Project keys on the stale branch contrib/logogenerator)
+# was remediated by deleting that branch (2026-07-20), so the credentials are no
+# longer reachable in this repository. Rotate the upstream key regardless.
 [extend]
 useDefault = true
-
-# --- Baseline: known pre-existing finding (surfaced, not silenced) ------------
-# gitleaks flagged two 32-hex values in `contrib/wordlyworks/.env.example` on the
-# STALE branch `contrib/logogenerator` (commit c9f0a5d, 2023-07-07, external
-# contributor). They are NOT present on `main`. They resemble live Noun Project
-# API credentials and are TRACKED FOR ROTATION / history purge (see SOC 2
-# readiness report / security advisory). This allowlist is scoped by BOTH the
-# exact commit AND the exact path (condition = AND) so it suppresses ONLY this
-# historical finding and nothing else — any new secret is still caught.
-[[allowlists]]
-description = "Known pre-existing Noun Project keys in contrib/wordlyworks/.env.example on stale branch contrib/logogenerator (2023); tracked for rotation."
-condition = "AND"
-commits = ["c9f0a5d6df9275e57d656f5da2230f695f3a2f06"]
-paths = ['''contrib/wordlyworks/\.env\.example''']
