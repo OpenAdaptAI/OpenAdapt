@@ -1,0 +1,7 @@
+# gitleaks configuration for OpenAdapt.
+# Extends the default gitleaks ruleset. No finding-specific allowlists: the one
+# historical finding (Noun Project keys on the stale branch contrib/logogenerator)
+# was remediated by deleting that branch (2026-07-20), so the credentials are no
+# longer reachable in this repository. Rotate the upstream key regardless.
+[extend]
+useDefault = true
