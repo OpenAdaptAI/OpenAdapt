@@ -228,6 +228,23 @@ blanket production-readiness claim.
 the standalone `openadapt-flow <verb>` command behaves identically to
 `openadapt flow <verb>`.
 
+### Substrate maturity
+
+Package maturity above is separate from how far each execution **surface** is
+qualified. These labels come from one canonical, machine-readable
+[status manifest](https://openadapt.ai/status.json) that the website, docs, and
+this README all reconcile to, so no surface can drift ahead of the evidence.
+
+| Surface | Public label | What it means |
+|---------|--------------|---------------|
+| Browser | **Beta** | Reference record → compile → replay path; runs in CI with no OS permissions and backs the public managed subscription. |
+| Windows / macOS / RDP | **Scoped acceptance — design partners only** | Each passed a real, counted scoped qualification (0 silent incorrect successes, 0 over-halts, 0 model calls) for an exact task and environment. Not arbitrary-application or clean-machine support; design-partner only until a customer runs it in production. |
+| Citrix / VDI | **Research / design-partner qualification** | No validated ICA/HDX integration yet; qualification can only begin inside a design partner's real Citrix/VDI environment. RDP evidence does not transfer. |
+| Hosted Cloud | **Beta / public offer** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Non-browser hosted substrates are separately scoped design-partner deployments. |
+
+Current components (see the manifest for the source of truth): launcher
+`openadapt` 1.7.1 · `openadapt-flow` 1.19.0 · desktop 0.6.2.
+
 ### CLI reference
 
 ```
