@@ -69,10 +69,14 @@ credential sets. Partial sets fail the build instead of falling back silently.
 - macOS Developer ID and notarization: `APPLE_CERTIFICATE`,
   `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
   `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
-- Windows Authenticode: `WINDOWS_CERTIFICATE`,
-  `WINDOWS_CERTIFICATE_PASSWORD`, and `WINDOWS_CERTIFICATE_THUMBPRINT`. The
-  certificate must support code signing; Tauri uses SHA-256 and an RFC 3161
-  timestamp service.
+- Windows Authenticode, either an importable certificate (`WINDOWS_CERTIFICATE`,
+  `WINDOWS_CERTIFICATE_PASSWORD`, `WINDOWS_CERTIFICATE_THUMBPRINT`; Tauri uses
+  SHA-256 and an RFC 3161 timestamp) **or** Azure Trusted Signing
+  (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+  `TRUSTED_SIGNING_ENDPOINT`, `TRUSTED_SIGNING_ACCOUNT`,
+  `TRUSTED_SIGNING_CERTIFICATE_PROFILE`) — the cheaper, token-free option for a
+  startup. Configure one set, not both. Both produce a publicly trusted,
+  timestamped `authenticode` artifact.
 - Linux AppImage GPG is intentionally disabled until the workflow pins an
   external AppImage signature validator and publishes the corresponding public
   key fingerprint through an authenticated channel. AppImage does not
@@ -81,3 +85,7 @@ credential sets. Partial sets fail the build instead of falling back silently.
 When no complete credential set is configured, the prerelease remains explicit
 about ad-hoc or unsigned status. The updater stays disabled until its independent
 public/private signing-key lifecycle and recovery procedure are established.
+
+The founder activation runbook — exactly which certificates to buy, their costs,
+how to add each secret, and what each public surface may then truthfully claim —
+is in [CODE_SIGNING.md](CODE_SIGNING.md).

@@ -206,7 +206,7 @@ jobs:
           --github-output "$env:GITHUB_OUTPUT"
 
       - name: Import Authenticode certificate and write signing config
-        if: steps.signing.outputs.mode == 'authenticode'
+        if: steps.signing.outputs.mode == 'authenticode' && steps.signing.outputs.method == 'pfx'
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -233,6 +233,27 @@ jobs:
           "OPENADAPT_WINDOWS_SIGNING_CONFIG=$ConfigPath" | Out-File $env:GITHUB_ENV -Append
           "OPENADAPT_WINDOWS_CERTIFICATE_PATH=$CertificatePath" | Out-File $env:GITHUB_ENV -Append
 
+      - name: Install Trusted Signing CLI and write signing config
+        if: steps.signing.outputs.method == 'trusted-signing'
+        env:
+          TRUSTED_SIGNING_ENDPOINT: ${{ secrets.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ secrets.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+        shell: pwsh
+        run: |
+          # Azure Trusted Signing mints a short-lived, publicly trusted
+          # certificate per signature and timestamps it (RFC 3161), so no
+          # thumbprint is pinned. trusted-signing-cli authenticates from the
+          # AZURE_* service-principal environment via DefaultAzureCredential.
+          cargo install trusted-signing-cli --version 0.5.3 --locked
+          $ConfigPath = Join-Path $env:RUNNER_TEMP "openadapt-windows-signing.json"
+          python scripts/native_signing.py windows-trusted-signing-config `
+            --output $ConfigPath `
+            --endpoint $env:TRUSTED_SIGNING_ENDPOINT `
+            --account $env:TRUSTED_SIGNING_ACCOUNT `
+            --certificate-profile $env:TRUSTED_SIGNING_CERTIFICATE_PROFILE
+          "OPENADAPT_WINDOWS_SIGNING_CONFIG=$ConfigPath" | Out-File $env:GITHUB_ENV -Append
+
       - name: Install locked Tauri CLI
         run: npm ci --ignore-scripts
 
@@ -250,6 +271,12 @@ jobs:
 
       - name: Build signed MSI and NSIS installers
         if: steps.signing.outputs.mode == 'authenticode'
+        env:
+          # Consumed only by the Trusted Signing method (empty otherwise);
+          # trusted-signing-cli reads these during `tauri build`.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         shell: pwsh
         run: >-
           npm run tauri build --
@@ -273,7 +300,10 @@ jobs:
           $Nsis = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe")
           if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
           $Signature = @("--signing-mode", "${{ steps.signing.outputs.mode }}")
-          if ("${{ steps.signing.outputs.mode }}" -eq "authenticode") {
+          # Trusted Signing rotates short-lived certificates per signature, so
+          # only the importable pfx method has a stable thumbprint to pin. Both
+          # methods still require a Valid, publicly trusted Authenticode chain.
+          if ("${{ steps.signing.outputs.method }}" -eq "pfx") {
             $Signature += @("--signing-fingerprint", $env:WINDOWS_CERTIFICATE_THUMBPRINT)
           }
           python scripts/smoke_test_native_installer.py `
@@ -307,7 +337,7 @@ jobs:
           if-no-files-found: error
 
       - name: Remove ephemeral Windows signing material
-        if: always() && steps.signing.outputs.mode == 'authenticode'
+        if: always() && steps.signing.outputs.mode == 'authenticode' && steps.signing.outputs.method == 'pfx'
         env:
           WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
         shell: pwsh

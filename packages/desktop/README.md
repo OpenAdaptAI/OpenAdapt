@@ -141,7 +141,9 @@ workflow compiler or runtime. Those remain in `openadapt-flow`.
   install/uninstall success is not evidence of a validated end-to-end
   workflow.
 - Apple Developer ID/notarization and Windows Authenticode are credential-gated
-  and fail closed on partial configuration. The updater and rollback remain
+  and fail closed on partial configuration. Activation (what to buy, which
+  secrets to add, and what each surface may then claim) is documented in
+  [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md). The updater and rollback remain
   disabled pending an independent signing-key lifecycle.
 - This repository now serves the tray's loopback IPC contract, but the desktop
   and the separately developed tray client have not been validated together
