@@ -31,6 +31,9 @@ class TestFlowBridgeInvocation:
         assert result.ok
         assert calls[0][1] == "compile"
         assert "--out" in calls[0]
+        # openadapt-flow compile requires --name; default it to the bundle name.
+        assert "--name" in calls[0]
+        assert calls[0][calls[0].index("--name") + 1] == "bundle"
 
     def test_run_builds_args(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
@@ -39,6 +42,17 @@ class TestFlowBridgeInvocation:
         bridge.run(tmp_path / "bundle", tmp_path / "cfg.yaml", out_dir=tmp_path / "run")
         assert calls[0][1] == "run"
         assert "--config" in calls[0]
+        # The run directory is passed via --run-dir (not --out).
+        assert "--run-dir" in calls[0]
+
+    def test_replay_uses_run_dir(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls))
+        bridge.replay(tmp_path / "bundle", out_dir=tmp_path / "run")
+        assert calls[0][1] == "replay"
+        assert "--run-dir" in calls[0]
+        assert "--out" not in calls[0]
 
     def test_nonzero_returncode(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")

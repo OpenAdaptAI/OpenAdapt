@@ -101,10 +101,25 @@ class FlowBridge:
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
     def compile(
-        self, recording_dir: Path, out_dir: Path, timeout: float | None = None
+        self,
+        recording_dir: Path,
+        out_dir: Path,
+        name: str | None = None,
+        timeout: float | None = None,
     ) -> FlowResult:
-        """Compile a recording directory into a bundle directory."""
-        args = ["compile", str(recording_dir), "--out", str(out_dir)]
+        """Compile a recording directory into a bundle directory.
+
+        ``openadapt-flow compile`` requires ``--name``; default it to the bundle
+        directory name so a caller that only knows the output path still works.
+        """
+        args = [
+            "compile",
+            str(recording_dir),
+            "--out",
+            str(out_dir),
+            "--name",
+            name or out_dir.name,
+        ]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
     def replay(self, bundle_dir: Path, out_dir: Path | None = None, url: str | None = None,
@@ -112,7 +127,7 @@ class FlowBridge:
         """Replay a bundle; returns the run directory in ``out_dir`` if given."""
         args = ["replay", str(bundle_dir)]
         if out_dir:
-            args += ["--out", str(out_dir)]
+            args += ["--run-dir", str(out_dir)]
         if url:
             args += ["--url", url]
         return self._run(args, out_dir=out_dir, timeout=timeout)
@@ -129,7 +144,7 @@ class FlowBridge:
         """
         args = ["run", str(bundle_dir), "--config", str(config)]
         if out_dir:
-            args += ["--out", str(out_dir)]
+            args += ["--run-dir", str(out_dir)]
         if authorization_file:
             args += ["--authorization-file", str(authorization_file)]
         return self._run(args, out_dir=out_dir, timeout=timeout)

@@ -28,6 +28,7 @@ use, so constructing a dispatcher is cheap and side-effect-free.
 
 from __future__ import annotations
 
+import json
 import sys
 import uuid
 from pathlib import Path
@@ -203,6 +204,9 @@ class EngineDispatcher:
             # config / settings
             "get_config": self.get_config,
             "set_config": self.set_config,
+            # effective policy (fail-closed; Tier-1 user / Tier-2 org / Tier-3 safety)
+            "get_effective_policy": self.get_effective_policy,
+            "refresh_policy": self.refresh_policy,
             # OS permissions
             "check_permissions": self.check_permissions,
             # review / egress gate
@@ -304,18 +308,41 @@ class EngineDispatcher:
 
     # ------------------------------------------------------- library
 
-    def get_workflows(self, **params: Any) -> dict:
-        """Return the local workflow library as a list of ``Workflow`` dicts."""
+    def get_workflows(self, **params: Any) -> list:
+        """Return the local workflow library as a list of ``Workflow`` dicts.
+
+        The frontend (``src/lib/engine.ts`` / ``App.tsx`` / ``WorkflowLibrary``)
+        consumes a bare ``Workflow[]``; return the list directly so the two
+        parallel wires share one shape.
+        """
         bundles = self.services.db.list_bundles(limit=int(params.get("limit", 100)))
-        workflows = [self._bundle_to_workflow(b) for b in bundles]
-        return {"workflows": workflows}
+        return [self._bundle_to_workflow(b) for b in bundles]
 
     def _bundle_to_workflow(self, b: dict) -> dict:
+        bid = b.get("bundle_id")
+        open_halts = sum(
+            1 for h in self.services.db.list_open_halts() if h.get("workflow_id") == bid
+        )
+        last_run_state = None
+        try:
+            rep = self.get_run_report(workflow_id=bid)
+        except Exception:
+            rep = None
+        if rep:
+            states = {s.get("state") for s in (rep.get("steps") or [])}
+            if rep.get("halt") or "halted" in states:
+                last_run_state = "halted"
+            elif "failed" in states:
+                last_run_state = "failed"
+            elif states:
+                last_run_state = "verified"
         return {
-            "id": b.get("bundle_id"),
-            "name": b.get("workflow_name") or b.get("capture_id") or b.get("bundle_id"),
+            "id": bid,
+            "name": b.get("workflow_name") or b.get("capture_id") or bid,
             "steps": b.get("steps") or 0,
             "updated_at": b.get("compiled_at") or b.get("created_at"),
+            "last_run_state": last_run_state,
+            "open_halts": open_halts,
             "synced": bool(b.get("workflow_id")),
             "workflow_id": b.get("workflow_id"),
         }
@@ -419,30 +446,107 @@ class EngineDispatcher:
 
         report = FlowBridge.read_report(run_dir)
         halt = FlowBridge.read_halt(run_dir)
-        raw_steps = report.get("steps")
-        steps: list = raw_steps if isinstance(raw_steps, list) else []
+        halt_state = (halt or {}).get("state_id") if isinstance(halt, dict) else None
+
+        # openadapt-flow writes per-step outcomes under ``results`` (each with
+        # step_id / intent / ok / resolution / effect_verified / elapsed_ms). Map
+        # them onto the frontend ``RunStep`` shape; fall back to a pre-shaped
+        # ``steps`` list for older reports.
+        results = report.get("results")
+        if isinstance(results, list) and results:
+            steps = [self._map_step(r, halt_state) for r in results]
+        else:
+            raw_steps = report.get("steps")
+            steps = raw_steps if isinstance(raw_steps, list) else []
+
         halt_block = None
-        if halt:
+        if isinstance(halt, dict) and halt:
+            rung = None
+            for r in results or []:
+                if r.get("step_id") == halt_state:
+                    rung = (r.get("resolution") or {}).get("rung")
             halt_block = {
-                "step_index": halt.get("step_index", 0),
-                "step_intent": halt.get("step_intent", ""),
+                "step_index": self._step_index(halt.get("state_id") or halt.get("step_index")),
+                "step_intent": halt.get("intent") or halt.get("step_intent") or "",
                 "reason": halt.get("reason", ""),
-                "resolver_rung": halt.get("resolver_rung"),
+                "resolver_rung": halt.get("resolver_rung") or rung,
             }
+
+        total_steps = (
+            self._workflow_step_count(workflow_id)
+            or report.get("total_steps")
+            or len(steps)
+        )
+        total_ms = report.get("total_ms")
         metrics = report.get("metrics") or {}
+        duration_s = metrics.get("duration_s")
+        if duration_s is None and isinstance(total_ms, (int, float)):
+            duration_s = round(total_ms / 1000.0, 1)
+        cost = metrics.get("cost_usd")
+        if cost is None:
+            cost = report.get("est_model_cost_usd")
+
         return {
             "ok": True,
             "run_id": report.get("run_id") or run_id,
             "workflow_id": workflow_id or report.get("workflow_id") or "",
             "workflow_name": report.get("workflow_name", ""),
-            "total_steps": report.get("total_steps") or len(steps),
+            "total_steps": total_steps,
             "steps": steps,
             "halt": halt_block,
-            "metrics": {
-                "duration_s": metrics.get("duration_s"),
-                "cost_usd": metrics.get("cost_usd"),
-            },
+            "metrics": {"duration_s": duration_s, "cost_usd": cost},
         }
+
+    @staticmethod
+    def _step_index(step_id: Any) -> int:
+        """Parse a ``step_009`` id (or int) into a 0-based index."""
+        if isinstance(step_id, int):
+            return step_id
+        try:
+            return int(str(step_id).rsplit("_", 1)[-1])
+        except (ValueError, TypeError):
+            return 0
+
+    def _map_step(self, r: dict, halt_state: str | None) -> dict:
+        """Map one flow ``results`` entry onto a frontend ``RunStep`` dict."""
+        intent = str(r.get("intent") or "")
+        action, _, rest = intent.partition(" ")
+        target = rest.strip().strip("'\"") or "-"
+        sid = r.get("step_id")
+        if sid is not None and sid == halt_state:
+            state = "halted"
+        elif r.get("ok"):
+            state = "verified"
+        elif r.get("skipped"):
+            state = "pending"
+        else:
+            state = "failed"
+        ev = r.get("effect_verified")
+        effect = "verified" if ev is True else ("not_verified" if ev is False else None)
+        elapsed = r.get("elapsed_ms")
+        return {
+            "index": self._step_index(sid),
+            "action": action or intent or "step",
+            "target": target,
+            "state": state,
+            "latency_ms": round(elapsed) if isinstance(elapsed, (int, float)) else None,
+            "effect": effect,
+        }
+
+    def _workflow_step_count(self, workflow_id: str | None) -> int | None:
+        """Best-effort total step count from the bundle's ``workflow.json``."""
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return None
+        wf = bundle / "workflow.json"
+        if not wf.exists():
+            return None
+        try:
+            data = json.loads(wf.read_text())
+        except (OSError, ValueError):
+            return None
+        steps = data.get("steps") or data.get("program") or []
+        return len(steps) if hasattr(steps, "__len__") else None
 
     def teach_fix(self, **params: Any) -> dict:
         """Teach a fix for a halted workflow via ``openadapt-flow teach``."""
@@ -601,6 +705,9 @@ class EngineDispatcher:
     def get_config(self, **params: Any) -> dict:
         """Return the user-facing (non-secret) config the settings screen reads."""
         return {
+            # ``host`` is the key the Settings screen reads; keep ``hosted_host``
+            # too for any consumer keyed on the engine field name.
+            "host": self.config.hosted_host,
             "hosted_host": self.config.hosted_host,
             "deployment_lane": self.config.deployment_lane,
             "phi_mode": self.config.phi_mode,
@@ -650,6 +757,56 @@ class EngineDispatcher:
             path.write_text(_dumps_toml(data))
         except Exception as exc:
             logger.warning("Could not persist config key {k}: {e}", k=key, e=exc)
+
+    # ------------------------------------------------------- effective policy
+
+    def get_effective_policy(self, **params: Any) -> dict:
+        """Return the org's effective policy, always fail-closed on safety.
+
+        Resolves via :func:`engine.policy.resolve_effective_policy` (network ->
+        cache -> fully-safe default). NEVER raises to the caller: any unexpected
+        error still yields the fail-closed default so the settings screen and any
+        run gate can rely on a fully-populated, safest-value ``safety`` block.
+
+        The result carries ``is_admin``/``role`` (the cloud is the only source of
+        admin status -- the engine has ``org_id`` but no role concept) so the
+        frontend can decide which Tier-2/Tier-3 cards are read-only.
+        """
+        from engine import policy as policy_mod
+
+        try:
+            return policy_mod.resolve_effective_policy(self.config.hosted_host)
+        except Exception as exc:  # defensive: resolver shouldn't raise, but never crash
+            logger.warning("get_effective_policy fell back to fail-closed: {e}", e=exc)
+            return policy_mod.harden_safety(
+                {
+                    "user": {},
+                    "org": {},
+                    "is_admin": False,
+                    "role": "member",
+                    "policy_version": None,
+                    "source": "fail-closed-default",
+                }
+            )
+
+    def refresh_policy(self, **params: Any) -> dict:
+        """Force a network fetch of the effective policy, refreshing the cache.
+
+        On network failure this still returns a usable, hardened policy (cache or
+        the fail-closed default) via :func:`get_effective_policy` -- ``refresh``
+        is a hint to skip any staleness, not a promise the network is up.
+        """
+        from engine import policy as policy_mod
+
+        try:
+            hardened = policy_mod.harden_safety(
+                policy_mod.fetch_effective_policy(self.config.hosted_host)
+            )
+            hardened["source"] = "network"
+            return hardened
+        except policy_mod.PolicyFetchError as exc:
+            logger.warning("refresh_policy fetch failed ({e}); resolving fail-closed", e=exc)
+            return self.get_effective_policy()
 
     # ------------------------------------------------------- permissions
 

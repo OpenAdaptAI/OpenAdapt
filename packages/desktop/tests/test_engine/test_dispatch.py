@@ -95,7 +95,10 @@ class TestLibraryCommands:
         db.insert_bundle("bnd1", "/tmp/b", capture_id="cap1")
         db.update_bundle("bnd1", workflow_name="My WF", steps=4, workflow_id="wf_9")
         out = disp.dispatch("get_workflows", {})
-        wf = out["workflows"][0]
+        # The frontend (src/lib/engine.ts / WorkflowLibrary) consumes a bare
+        # Workflow[]; the handler returns the list directly, not {"workflows": ...}.
+        assert isinstance(out, list)
+        wf = out[0]
         assert wf["id"] == "bnd1"
         assert wf["name"] == "My WF"
         assert wf["synced"] is True
@@ -202,7 +205,16 @@ class TestConfigCommands:
     def test_get_config(self, deps) -> None:
         disp, _db, _e = deps
         cfg = disp.dispatch("get_config", {})
-        assert set(cfg) == {"hosted_host", "deployment_lane", "phi_mode", "poll_interval_s"}
+        # The Settings screen reads ``host``; the engine keeps ``hosted_host`` too
+        # for consumers keyed on the engine field name.
+        assert set(cfg) == {
+            "host",
+            "hosted_host",
+            "deployment_lane",
+            "phi_mode",
+            "poll_interval_s",
+        }
+        assert cfg["host"] == cfg["hosted_host"]
 
     def test_set_config_persists(self, deps, monkeypatch, tmp_path) -> None:
         disp, _db, _e = deps
@@ -217,6 +229,100 @@ class TestConfigCommands:
         disp, _db, _e = deps
         r = disp.dispatch("set_config", {"key": "s3_secret_access_key", "value": "x"})
         assert r["ok"] is False
+
+
+class TestRunReportMapping:
+    """_run_report must map openadapt-flow's real report.json onto RunReport."""
+
+    def _write_report(self, run_dir: Path, report: dict) -> None:
+        import json
+
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "report.json").write_text(json.dumps(report))
+
+    def test_maps_flow_results_schema(self, deps, tmp_path: Path) -> None:
+        disp, _db, _e = deps
+        run_dir = tmp_path / "run"
+        # openadapt-flow 1.x report.json shape: results[] of StepResult, plus
+        # total_ms and est_model_cost_usd at the top level.
+        self._write_report(
+            run_dir,
+            {
+                "results": [
+                    {
+                        "step_id": "step_000",
+                        "intent": "click 'Patients'",
+                        "ok": True,
+                        "resolution": {"rung": "structural", "confidence": 0.99},
+                        "effect_verified": True,
+                        "elapsed_ms": 812.4,
+                    },
+                    {
+                        "step_id": "step_001",
+                        "intent": "type 'Jane Doe'",
+                        "ok": False,
+                        "skipped": False,
+                        "resolution": {"rung": "template", "confidence": 0.4},
+                        "effect_verified": False,
+                        "elapsed_ms": 1500.0,
+                    },
+                ],
+                "total_ms": 2312.4,
+                "est_model_cost_usd": 0.0134,
+            },
+        )
+        rep = disp._run_report(run_dir, "wf_1", "run_1")
+        assert rep["workflow_id"] == "wf_1"
+        assert rep["total_steps"] == 2
+        s0, s1 = rep["steps"]
+        assert s0 == {
+            "index": 0,
+            "action": "click",
+            "target": "Patients",
+            "state": "verified",
+            "latency_ms": 812,
+            "effect": "verified",
+        }
+        assert s1["state"] == "failed"
+        assert s1["effect"] == "not_verified"
+        # total_ms -> duration_s, est_model_cost_usd -> cost_usd.
+        assert rep["metrics"] == {"duration_s": 2.3, "cost_usd": 0.0134}
+        assert rep["halt"] is None
+
+    def test_maps_flow_halt(self, deps, tmp_path: Path) -> None:
+        disp, _db, _e = deps
+        run_dir = tmp_path / "run"
+        self._write_report(
+            run_dir,
+            {
+                "results": [
+                    {
+                        "step_id": "step_003",
+                        "intent": "click 'Submit'",
+                        "ok": False,
+                        "resolution": {"rung": "ocr", "confidence": 0.2},
+                        "effect_verified": False,
+                        "elapsed_ms": 640.0,
+                    }
+                ],
+                "halt": {
+                    "state_id": "step_003",
+                    "intent": "click 'Submit'",
+                    "reason": "ambiguous target",
+                    "outcome": "halt",
+                },
+                "total_ms": 640.0,
+                "est_model_cost_usd": 0.002,
+            },
+        )
+        rep = disp._run_report(run_dir, "wf_1", "run_1")
+        assert rep["halt"] is not None
+        assert rep["halt"]["step_index"] == 3
+        assert rep["halt"]["step_intent"] == "click 'Submit'"
+        assert rep["halt"]["reason"] == "ambiguous target"
+        # resolver_rung falls back to the halted step's resolution rung.
+        assert rep["halt"]["resolver_rung"] == "ocr"
+        assert rep["steps"][0]["state"] == "halted"
 
 
 class TestMisc:

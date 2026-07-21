@@ -103,3 +103,29 @@ export interface RunnerStatus {
   last_seen_at?: string | null;
   last_runs: RunnerRun[];
 }
+
+// The grounding-model config (engine runtime.grounding_model), resolved from the
+// cloud effective policy. Admin-scoped Tier-3 egress capability: OFF by default,
+// fail-closed. The desktop renders it READ-ONLY (the canonical write path is the
+// cloud dashboard) — the raw API key is never here, only the env-var NAME.
+export type GroundingProvider = "anthropic" | "openai_compatible";
+export interface GroundingModelConfig {
+  enabled: boolean;
+  provider: GroundingProvider;
+  base_url: string;
+  model: string;
+  api_key_env: string;
+  phi_grounding_allowlist: string[];
+  phi_egress_attested: boolean;
+}
+
+// A minimal view of GET /api/policy/effective (resolved by the cloud control
+// plane, fetched + cached fail-closed by the engine — see engine/policy.py /
+// docs/POLICY_SYNC.md). Only the fields the grounding-model section needs are
+// typed here.
+export interface EffectivePolicy {
+  is_admin: boolean;
+  grounding_model: GroundingModelConfig;
+  resolved_at?: string;
+  offline?: boolean;
+}

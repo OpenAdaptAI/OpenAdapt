@@ -44,6 +44,10 @@ export const CMD = {
   // config / settings (lane, phi_mode, hosted host)
   GET_CONFIG: "get_config",
   SET_CONFIG: "set_config",
+  // governed policy (Tier-2/3) resolved by the cloud control plane and fetched +
+  // cached fail-closed by the engine (engine/policy.py, docs/POLICY_SYNC.md).
+  // The desktop consumes it read-only; the canonical write path is the cloud API.
+  GET_EFFECTIVE_POLICY: "get_effective_policy",
   // OS permissions (screen recording / accessibility)
   CHECK_PERMISSIONS: "check_permissions",
   // review / egress gate (existing engine surface)
