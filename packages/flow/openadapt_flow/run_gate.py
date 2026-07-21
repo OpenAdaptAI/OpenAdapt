@@ -26,11 +26,14 @@ structured reason naming the failing gate) unless ALL of the following hold:
    Where independent verification is impossible (no verifier wired), the write
    is admitted ONLY under EXPLICIT operator approval; absent approval, the run
    halts.
-5. **Encryption at rest** -- the bundle's ``workflow.json`` and template crops
+5. **Interstitial admission** -- every bundle/runtime interstitial declaration
+   is schema-valid, every explicit asset is sealed in the bundle manifest, and
+   the exact declaration digest is recorded for authorization binding.
+6. **Encryption at rest** -- the bundle's ``workflow.json`` and template crops
    are sealed with AES-256-GCM. A plaintext bundle is refused. Any additional
    plaintext template / screenshot asset is a loud WARNING by default and a
    REFUSAL under ``strict_templates``.
-6. **Sealed manifest + version pin** -- the bundle carries an integrity-sealed
+7. **Sealed manifest + version pin** -- the bundle carries an integrity-sealed
    manifest whose digest re-verifies (no post-seal tampering), and any supplied
    version pin (content digest / compiler version) matches. A mismatch refuses.
 
@@ -55,7 +58,7 @@ from pydantic import BaseModel, Field
 
 from openadapt_flow import crypto
 from openadapt_flow.deployment import DeploymentConfig
-from openadapt_flow.ir import Step, Workflow
+from openadapt_flow.ir import Interstitial, Step, Workflow
 from openadapt_flow.policy import (
     has_screen_postcondition,
     has_system_effect,
@@ -68,6 +71,7 @@ from openadapt_flow.risk import classify_step_risk
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     UnverifiedWriteApproval,
+    interstitial_declarations_digest,
     runtime_inputs_digest,
 )
 from openadapt_flow.traversal import iter_workflow_steps
@@ -80,6 +84,7 @@ GATE_CERTIFICATION = "certification"
 GATE_IDENTITY = "identity_coverage"
 GATE_EFFECT = "effect_coverage"
 GATE_APPROVAL = "approval_fallback"
+GATE_INTERSTITIALS = "interstitial_admission"
 GATE_ENCRYPTION = "encryption"
 GATE_MANIFEST = "manifest_integrity"
 
@@ -89,6 +94,7 @@ GATE_ORDER = (
     GATE_IDENTITY,
     GATE_EFFECT,
     GATE_APPROVAL,
+    GATE_INTERSTITIALS,
     GATE_ENCRYPTION,
     GATE_MANIFEST,
 )
@@ -98,6 +104,7 @@ _GATE_TITLES = {
     GATE_IDENTITY: "Identity coverage",
     GATE_EFFECT: "Effect coverage",
     GATE_APPROVAL: "Approval fallback",
+    GATE_INTERSTITIALS: "Interstitial admission",
     GATE_ENCRYPTION: "Encrypted bundle",
     GATE_MANIFEST: "Sealed manifest + version pin",
 }
@@ -187,6 +194,9 @@ class RunGateReport(BaseModel):
     effect_verifier_configured: bool = False
     api_actuator_configured: bool = False
     unverified_write_approval_granted: bool = False
+    admitted_interstitials_digest: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
 
     @property
     def passed(self) -> bool:
@@ -232,6 +242,7 @@ def evaluate_run_gate(
     deployment: DeploymentConfig,
     effect_verifier: object | None,
     api_actuator: object | None = None,
+    interstitials: Optional[list[Interstitial]] = None,
     policy_source: Optional[str] = None,
     approval_available: bool = False,
     strict_templates: bool = False,
@@ -252,18 +263,21 @@ def evaluate_run_gate(
         deployment: The deployment wiring (policy, effects substrate, ...).
         effect_verifier: The verifier constructed for this deployment (None when
             ``effects.kind`` is ``none`` -- i.e. no independent write verifier).
+        interstitials: Additional runtime interstitial declarations. The gate
+            evaluates and records their exact digest before authorization; a
+            caller cannot add a pre-step key/click action after admission.
         policy_source: Certifying policy name / path. Defaults to the
             deployment's ``policy.policy``, then to :data:`DEFAULT_POLICY`.
         approval_available: The operator has EXPLICITLY approved executing writes
             whose effects cannot be independently verified in this deployment
             (gate 4 fallback). Default False (fail closed).
         strict_templates: Treat any genuinely unsealed template / screenshot
-            asset as a REFUSAL rather than a warning (gate 5). Ciphertexts
+            asset as a REFUSAL rather than a warning (gate 6). Ciphertexts
             produced by ``Workflow.save(encrypt=True)`` satisfy this gate.
         require_encryption: Require the bundle be AES-GCM encrypted at rest
-            (gate 5). Default True (fail closed).
+            (gate 6). Default True (fail closed).
         pinned_content_digest / pinned_compiler_version: Optional version pins
-            (gate 6); a supplied pin that does not match the sealed manifest
+            (gate 7); a supplied pin that does not match the sealed manifest
             refuses the run.
     """
     bundle = Path(bundle_dir)
@@ -273,11 +287,13 @@ def evaluate_run_gate(
     approval_gate = _gate_approval(
         steps, effect_verifier, api_actuator, approval_available
     )
+    interstitial_gate = _gate_interstitials(workflow, interstitials)
     gates = [
         _gate_certification(workflow, policy_name),
         _gate_identity(steps),
         _gate_effect(steps),
         approval_gate,
+        interstitial_gate,
         _gate_encryption(workflow, bundle, require_encryption, strict_templates),
         _gate_manifest(
             workflow, bundle, pinned_content_digest, pinned_compiler_version
@@ -302,6 +318,11 @@ def evaluate_run_gate(
             and any(
                 is_consequential(step) and has_system_effect(step) for step in steps
             )
+        ),
+        admitted_interstitials_digest=(
+            interstitial_declarations_digest(workflow, interstitials)
+            if interstitial_gate.passed
+            else None
         ),
     )
 
@@ -484,6 +505,71 @@ def _gate_approval(
     )
 
 
+def _gate_interstitials(
+    workflow: Workflow,
+    runtime_interstitials: Optional[list[Interstitial]],
+) -> GateResult:
+    """Admit the exact declarative pre-step action surface.
+
+    Schema validation enforces affirmative visual detection, Escape-only or a
+    structurally/template-anchored click, explicit reversible/non-consequential
+    risk, and visual clearance. Any explicitly referenced asset must already be
+    present in the workflow's sealed manifest; runtime declarations may reuse a
+    sealed bundle asset but cannot smuggle in an unreviewed file after the gate.
+    """
+
+    declarations = [*workflow.interstitials, *(runtime_interstitials or [])]
+    validated: list[Interstitial] = []
+    for declaration in declarations:
+        try:
+            validated.append(
+                Interstitial.model_validate(declaration.model_dump(mode="python"))
+            )
+        except Exception as exc:
+            return _result(
+                GATE_INTERSTITIALS,
+                False,
+                "interstitial declaration is invalid and cannot be admitted "
+                f"({type(exc).__name__})",
+                [getattr(declaration, "name", "<invalid>")],
+            )
+
+    if not validated:
+        return _result(
+            GATE_INTERSTITIALS,
+            True,
+            "no automatic interstitial actions declared",
+        )
+
+    from openadapt_flow.bundle_validation import interstitial_asset_paths
+
+    sealed_assets = (
+        set(workflow.manifest.file_hashes) if workflow.manifest is not None else set()
+    )
+    missing = sorted(interstitial_asset_paths(validated) - sealed_assets)
+    if missing:
+        return _result(
+            GATE_INTERSTITIALS,
+            False,
+            f"{len(missing)} interstitial asset(s) are not sealed in the bundle "
+            "manifest",
+            missing,
+        )
+
+    digest = interstitial_declarations_digest(workflow, runtime_interstitials)
+    automatic = sum(
+        declaration.dismiss_key is not None or declaration.dismiss_anchor is not None
+        for declaration in validated
+    )
+    blocking = len(validated) - automatic
+    return _result(
+        GATE_INTERSTITIALS,
+        True,
+        f"admitted {automatic} automatic and {blocking} blocking declaration(s) "
+        f"under digest {digest[:16]}...",
+    )
+
+
 def build_runtime_authorization(
     workflow: Workflow,
     report: RunGateReport,
@@ -491,6 +577,7 @@ def build_runtime_authorization(
     approval_source: str = "local-cli-explicit-flag",
     params: Optional[dict[str, str]] = None,
     worklists: Optional[dict[str, list[dict[str, str]]]] = None,
+    interstitials: Optional[list[Interstitial]] = None,
 ) -> GovernedRunAuthorization:
     """Bind a successful admission decision to the exact sealed workflow.
 
@@ -512,6 +599,17 @@ def build_runtime_authorization(
     if recomputed != report.bundle_content_digest:
         raise ValueError("workflow changed after the run gate evaluated it")
 
+    declarations_digest = interstitial_declarations_digest(workflow, interstitials)
+    if report.admitted_interstitials_digest is None:
+        if workflow.interstitials or interstitials:
+            raise ValueError(
+                "run gate report did not admit the interstitial declarations"
+            )
+    elif report.admitted_interstitials_digest != declarations_digest:
+        raise ValueError(
+            "interstitial declarations changed after the run gate evaluated them"
+        )
+
     steps = list(iter_workflow_steps(workflow))
     approvals: list[UnverifiedWriteApproval] = []
     if report.unverified_write_approval_granted:
@@ -528,7 +626,12 @@ def build_runtime_authorization(
 
     return GovernedRunAuthorization(
         bundle_content_digest=workflow.manifest.content_digest,
-        runtime_inputs_digest=runtime_inputs_digest(workflow, params, worklists),
+        runtime_inputs_digest=runtime_inputs_digest(
+            workflow,
+            params,
+            worklists,
+            interstitials=interstitials,
+        ),
         admitted_policy_name=report.policy_name,
         required_identity_step_ids=tuple(report.required_identity_step_ids),
         unverified_write_approvals=tuple(approvals),
@@ -581,7 +684,7 @@ def _gate_encryption(
     require_encryption: bool,
     strict_templates: bool,
 ) -> GateResult:
-    """Gate 5: the bundle is AES-GCM encrypted at rest (+ template coverage)."""
+    """Gate 6: the bundle is AES-GCM encrypted at rest (+ template coverage)."""
     if require_encryption and not workflow.encrypted:
         return _result(
             GATE_ENCRYPTION,
@@ -647,7 +750,7 @@ def _gate_manifest(
     pinned_content_digest: Optional[str],
     pinned_compiler_version: Optional[str],
 ) -> GateResult:
-    """Gate 6: sealed integrity manifest re-verifies + version pins match."""
+    """Gate 7: sealed integrity manifest re-verifies + version pins match."""
     from openadapt_flow.bundle_validation import (
         BundleIntegrityError,
         verify_integrity,

@@ -34,13 +34,14 @@ healed bundle is written.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 from openadapt_flow.backend import Backend, StructuralResolutionRefused
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
@@ -49,6 +50,8 @@ from openadapt_flow.ir import (
     Anchor,
     HaltObservation,
     IdentityCheck,
+    Interstitial,
+    InterstitialActionResult,
     LoopSpec,
     Point,
     PostconditionKind,
@@ -283,6 +286,19 @@ class Replayer:
             verifier while keeping them visibly unverified. Ordinary ``replay``
             leaves it unset.
         poll_interval_s: Postcondition polling interval in seconds.
+        require_settled: When True, the step-entry readiness gate HALTs
+            gracefully if the screen never settles (a still-loading /
+            mid-transition frame) instead of acting on a stale frame. OFF by
+            default (behavior unchanged; animated UIs are not over-halted).
+            Recommended ON for slow-loading / state-sensitive targets. Fails
+            closed when the injected vision cannot report settledness.
+        settle_readiness_timeout_s: Single bounded settle window for the
+            readiness gate (seconds) before it HALTs.
+        interstitials: Operator-supplied KNOWN reversible, non-consequential
+            interstitials detected model-free at each step's entry. Each
+            dismissal is audited and must pass its declared visual clearance;
+            otherwise replay halts. Merged with the bundle's own
+            ``Workflow.interstitials``. None (default) => no handling.
     """
 
     def __init__(
@@ -304,6 +320,9 @@ class Replayer:
         allow_model_grounding: bool = False,
         governed_authorization: Optional[GovernedRunAuthorization] = None,
         governed_continuation: bool = False,
+        require_settled: bool = False,
+        settle_readiness_timeout_s: float = 10.0,
+        interstitials: Optional[list[Interstitial]] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -408,6 +427,10 @@ class Replayer:
         # and it never touches structural or text_absent postconditions.
         self.state_verifier = state_verifier
         self.poll_interval_s = poll_interval_s
+        if not math.isfinite(settle_readiness_timeout_s) or (
+            settle_readiness_timeout_s <= 0
+        ):
+            raise ValueError("settle_readiness_timeout_s must be finite and > 0")
         # Point of the most recent successful click (the focusing click for
         # a following TYPE step); reset per run.
         self._last_click_point: Optional[Point] = None
@@ -416,6 +439,45 @@ class Replayer:
         # an empty default so a direct _execute_step call (tests) still resolves
         # effect contracts (a literal effect ignores it).
         self._run_id: str = ""
+        # -- state-dependency robustness (docs/LIMITS.md "state dependency") ----
+        # ``require_settled``: when True the step-entry readiness gate REFUSES to
+        # act on a frame that never settled -- a still-loading / mid-transition
+        # screen HALTs gracefully instead of proceeding-anyway on a stale frame
+        # (the wait_settled proceed-anyway path). OFF by default so behavior is
+        # byte-for-byte unchanged (and inherently-animated UIs are not over-
+        # halted); recommended ON for slow-loading / state-sensitive targets.
+        # The real vision module exposes ``wait_settled_result``. An opt-in
+        # caller that injects a facade without that readiness signal HALTs
+        # before action rather than silently degrading to proceed-anyway.
+        self.require_settled = require_settled
+        # One settle poll owns this complete bound. The replayer does not wrap
+        # it in an outer retry loop, avoiding unaccounted blind retries.
+        self.settle_readiness_timeout_s = settle_readiness_timeout_s
+        # Operator-supplied KNOWN interstitials, merged with the bundle's own at
+        # each step's entry.  Keep both the caller-owned source and a deep,
+        # canonical private snapshot: governed authorization validates and
+        # execution consumes the snapshot, while the source is re-fingerprinted
+        # immediately before any dismissal so a callback/concurrent mutation is
+        # detected rather than changing the admitted action surface.
+        self._runtime_interstitial_source = (
+            interstitials if interstitials is not None else []
+        )
+        self._runtime_interstitial_snapshot_error: Optional[str] = None
+        try:
+            (
+                self._interstitials,
+                self._runtime_interstitial_snapshot,
+            ) = self._canonical_interstitial_snapshot(self._runtime_interstitial_source)
+        except Exception as exc:
+            self._interstitials = ()
+            self._runtime_interstitial_snapshot = ()
+            self._runtime_interstitial_snapshot_error = (
+                "runtime interstitial declarations could not be snapshotted "
+                f"({type(exc).__name__})"
+            )
+        self._workflow_interstitials: tuple[Interstitial, ...] = ()
+        self._workflow_interstitial_snapshot: tuple[str, ...] = ()
+        self._workflow_interstitial_snapshot_error: Optional[str] = None
 
     # -- public API ----------------------------------------------------------
 
@@ -494,6 +556,23 @@ class Replayer:
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
         (run_dir / "steps").mkdir(parents=True, exist_ok=True)
+        # Snapshot bundle declarations before authorization validation and
+        # before the first backend/vision callback.  Execution uses only this
+        # deep copy; the caller-owned workflow remains available solely for a
+        # mutation comparison immediately before an interstitial action.
+        self._workflow_interstitial_snapshot_error = None
+        try:
+            (
+                self._workflow_interstitials,
+                self._workflow_interstitial_snapshot,
+            ) = self._canonical_interstitial_snapshot(workflow.interstitials)
+        except Exception as exc:
+            self._workflow_interstitials = ()
+            self._workflow_interstitial_snapshot = ()
+            self._workflow_interstitial_snapshot_error = (
+                "workflow interstitial declarations could not be snapshotted "
+                f"({type(exc).__name__})"
+            )
         # Stable-per-run identity (P0-3): distinct across runs, constant within
         # one. Exposed to effect-contract resolution under the reserved
         # ``__run_id__`` param so an idempotency key can be bound PER-RUN (via
@@ -539,6 +618,7 @@ class Replayer:
                 bundle_dir=bundle_dir,
                 params=params,
                 worklists=worklists,
+                interstitials=list(self._interstitials),
                 continuation=self.governed_continuation,
             )
             self._governed_asset_snapshot = assets
@@ -2292,14 +2372,17 @@ class Replayer:
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
 
-        # Settle before the pre-action screenshot.
-        before_png = self.vision.wait_settled(self.backend)
+        # Default behavior settles exactly as before. The opt-in readiness gate
+        # owns its own single bounded settle call inside ``_apply_step_gates``;
+        # capture only a raw diagnostic frame here so it is not preceded by an
+        # unobservable proceed-anyway settle attempt.
+        before_png = (
+            self.backend.screenshot()
+            if self.require_settled
+            else self.vision.wait_settled(self.backend)
+        )
         result.before_png = self._save_step_png(run_dir, step.id, "before", before_png)
         last_frame = before_png
-        # Structural start state (URL/title/page count, when the backend
-        # can observe them): structural postconditions compare the step's
-        # END state against this — never against a recorded literal.
-        start_state = self._structural_state()
         # System-of-record pre-state, snapshotted just before the action when
         # the step declares effects (see the block guarding self._act below).
         effect_pre_state: Optional[EffectState] = None
@@ -2320,7 +2403,12 @@ class Replayer:
             # acting. Both are model-free. A SCROLL step's wait_until is
             # consumed by its own closed loop (see _act_scroll), not here.
             proceed, gate_error, before_png = self._apply_step_gates(
-                step, before_png, bundle_dir, params
+                step,
+                before_png,
+                bundle_dir,
+                params,
+                result,
+                workflow,
             )
             if before_png is not last_frame:
                 result.before_png = self._save_step_png(
@@ -2514,6 +2602,14 @@ class Replayer:
                 result.safety_halt = True
 
             if error is None:
+                # Structural postconditions compare against the final observed
+                # state immediately before action delivery.  Readiness gates,
+                # interstitial dismissal, target resolution, identity checks,
+                # and effect pre-state capture can all cross backend or time
+                # boundaries; none of their state changes may be credited to
+                # the workflow action as URL_CHANGED, TITLE_CHANGED, or
+                # NEW_TAB_OPENED.
+                start_state = self._structural_state()
                 error = self._act(
                     step,
                     resolution,
@@ -3184,6 +3280,435 @@ class Replayer:
             ActionKind.DOUBLE_CLICK,
         )
 
+    # -- state-dependency robustness: readiness + interstitials -----------------
+
+    @staticmethod
+    def _canonical_interstitial_snapshot(
+        declarations: Any,
+    ) -> tuple[tuple[Interstitial, ...], tuple[str, ...]]:
+        """Deep-validate declarations and return an immutable fingerprint.
+
+        Pydantic models are mutable.  A shallow list copy therefore does not
+        bind a governed run: a backend/vision callback could edit a nested
+        detection, clearance, or dismissal field after authorization validation
+        but before delivery.  The returned models share no nested objects with
+        the caller, and the canonical strings let the runtime detect any such
+        edit immediately before an interstitial action.
+        """
+
+        validated = tuple(
+            Interstitial.model_validate(declaration.model_dump(mode="python"))
+            for declaration in declarations
+        )
+        canonical = tuple(
+            json.dumps(
+                declaration.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            for declaration in validated
+        )
+        return validated, canonical
+
+    def _interstitial_declaration_mutation(
+        self, workflow: Optional[Workflow]
+    ) -> Optional[str]:
+        """Return a refusal when caller-owned declarations changed mid-run."""
+
+        snapshot_error = (
+            self._runtime_interstitial_snapshot_error
+            or self._workflow_interstitial_snapshot_error
+        )
+        if snapshot_error is not None:
+            return f"{snapshot_error} - refusing to emit an action; run aborted."
+        try:
+            _runtime, runtime_snapshot = self._canonical_interstitial_snapshot(
+                self._runtime_interstitial_source
+            )
+            workflow_snapshot: tuple[str, ...] = ()
+            if workflow is not None:
+                _workflow, workflow_snapshot = self._canonical_interstitial_snapshot(
+                    workflow.interstitials
+                )
+        except Exception as exc:
+            return (
+                "Interstitial declarations changed after admission and are no "
+                f"longer valid ({type(exc).__name__}) - refusing to emit an "
+                "action; run aborted."
+            )
+        if (
+            runtime_snapshot != self._runtime_interstitial_snapshot
+            or workflow_snapshot != self._workflow_interstitial_snapshot
+        ):
+            return (
+                "Interstitial declarations changed after admission - refusing "
+                "to emit an action under a stale authorization; run aborted."
+            )
+        return None
+
+    def _wait_starting_state_settled(
+        self, before_png: bytes
+    ) -> tuple[bytes, Optional[str]]:
+        """Readiness gate: refuse to act on a frame that never settled.
+
+        When ``require_settled`` is on, invoke exactly ONE readiness-aware settle
+        operation bounded by ``settle_readiness_timeout_s``. A screen that never
+        settles (slow load, perpetual spinner), a facade that cannot report
+        settledness, or an invalid/erroring settle result HALTs gracefully rather
+        than acting on an arbitrary mid-transition frame.
+
+        Returns ``(frame, None)`` when ready (or when the gate is off), else
+        ``(frame, halt_reason)``.
+        """
+        if not self.require_settled:
+            return before_png, None
+        fn = getattr(self.vision, "wait_settled_result", None)
+        if not callable(fn):
+            return before_png, (
+                "The configured vision facade cannot report whether the screen "
+                "settled (wait_settled_result is unavailable) - refusing to "
+                "act while require_settled=True; run aborted (starting state "
+                "not ready)."
+            )
+        try:
+            result = fn(
+                self.backend,
+                interval_s=self.poll_interval_s,
+                timeout_s=self.settle_readiness_timeout_s,
+            )
+            frame = result.png
+            settled = result.settled
+            if not isinstance(frame, bytes) or not isinstance(settled, bool):
+                raise TypeError("invalid settle result")
+        except Exception as exc:
+            return before_png, (
+                "The screen readiness check failed "
+                f"({type(exc).__name__}) - refusing to act while "
+                "require_settled=True; run aborted (starting state not ready)."
+            )
+        if not settled:
+            return frame, (
+                "The screen never stopped changing (still loading or animating) "
+                f"within {self.settle_readiness_timeout_s:.1f}s - refusing to act "
+                "on a mid-transition frame; run aborted (starting state not "
+                "ready). If this UI animates continuously, qualify the workflow "
+                "with a bounded per-step wait_until readiness predicate over a "
+                "stable observation region before retrying; otherwise keep the "
+                "readiness gate enabled and halt."
+            )
+        return frame, None
+
+    def _resettle_after_interstitial(
+        self, before_png: bytes
+    ) -> tuple[bytes, Optional[str]]:
+        """Require a settled frame after every automatic dismissal.
+
+        Interstitial handling is itself opt-in, so unlike the legacy entry-frame
+        behavior there is no backwards-compatibility reason to accept a
+        proceed-anyway settle timeout here. A transient blank frame could make a
+        ``TEXT_ABSENT`` clearance pass immediately before the overlay returned.
+        """
+        fn = getattr(self.vision, "wait_settled_result", None)
+        if not callable(fn):
+            return before_png, (
+                "The configured vision facade cannot verify that the screen "
+                "settled after an interstitial dismissal - refusing to act; "
+                "run aborted."
+            )
+        try:
+            result = fn(
+                self.backend,
+                interval_s=self.poll_interval_s,
+                timeout_s=self.settle_readiness_timeout_s,
+            )
+            frame = result.png
+            settled = result.settled
+            if not isinstance(frame, bytes) or not isinstance(settled, bool):
+                raise TypeError("invalid settle result")
+        except Exception as exc:
+            return before_png, (
+                "The screen readiness check failed after dismissing an "
+                f"interstitial ({type(exc).__name__}) - refusing to act; run "
+                "aborted."
+            )
+        if not settled:
+            return frame, (
+                "The screen did not settle after the interstitial dismissal "
+                f"within {self.settle_readiness_timeout_s:.1f}s - refusing to "
+                "verify clearance on a mid-transition frame or act beneath it; "
+                "run aborted."
+            )
+        return frame, None
+
+    def _handle_interstitials(
+        self,
+        before_png: bytes,
+        bundle_dir: Path,
+        params: dict[str, str],
+        audit_events: list[InterstitialActionResult],
+        workflow: Optional[Workflow],
+    ) -> tuple[bytes, Optional[str]]:
+        """Detect + handle KNOWN interstitials on the entry frame (model-free).
+
+        A detected interstitial with an explicitly reversible,
+        non-consequential dismissal (``dismiss_key`` / ``dismiss_anchor``) gets
+        one audited action followed by its declared visual clearance check. A
+        delivery/clearance failure, persistent detection, or a detected
+        interstitial with NO dismissal HALTs the run GRACEFULLY naming it. Returns
+        ``(frame, None)`` when the screen is clear, else ``(frame, halt_reason)``.
+
+        Unknown / undeclared overlays are NOT guessed at here: one that covers
+        the step's target still HALTs safely downstream (the anchor does not
+        resolve). This method only automates the RECURRING, declared ones so
+        they do not force a babysit-the-queue halt every time they appear.
+        """
+        mutation_error = self._interstitial_declaration_mutation(workflow)
+        if mutation_error is not None:
+            return before_png, mutation_error
+        interstitials = [*self._workflow_interstitials, *self._interstitials]
+        if not interstitials:
+            return before_png, None
+
+        # Revalidate serialized values at the point of use. Pydantic validates
+        # construction/load, but models are intentionally mutable; an in-memory
+        # edit or model_construct must not bypass affirmative detection, visual
+        # clearance, Escape-only, or reversible/non-consequential policy.
+        validated: list[Interstitial] = []
+        for candidate in interstitials:
+            try:
+                validated.append(
+                    Interstitial.model_validate(candidate.model_dump(mode="python"))
+                )
+            except Exception as exc:
+                return before_png, (
+                    f"Interstitial '{candidate.name}' has an invalid automatic "
+                    f"dismissal declaration ({type(exc).__name__}) - refusing "
+                    "to emit an action; run aborted."
+                )
+        interstitials = validated
+
+        handled_indices: set[int] = set()
+        while True:
+            mutation_error = self._interstitial_declaration_mutation(workflow)
+            if mutation_error is not None:
+                return before_png, mutation_error
+            active_index = next(
+                (
+                    index
+                    for index, candidate in enumerate(interstitials)
+                    if self._predicate_holds(
+                        candidate.detect,
+                        before_png,
+                        bundle_dir,
+                        params,
+                        workflow=workflow,
+                    )
+                ),
+                None,
+            )
+            # Detection invokes vision and can therefore cross a callback
+            # boundary. Recheck the caller-owned declarations before trusting
+            # its result or preparing an action.
+            mutation_error = self._interstitial_declaration_mutation(workflow)
+            if mutation_error is not None:
+                return before_png, mutation_error
+            if active_index is None:
+                return before_png, None
+            it = interstitials[active_index]
+            if active_index in handled_indices:
+                return before_png, (
+                    f"Interstitial '{it.name}' reappeared after a verified "
+                    "dismissal in the same step - refusing an automatic retry; "
+                    "run aborted."
+                )
+            if len(handled_indices) >= len(interstitials):
+                return before_png, (
+                    "The interstitial dismissal bound was exhausted before the "
+                    "step entry state became clear - refusing further automatic "
+                    "actions; run aborted."
+                )
+            if it.dismiss_key is None and it.dismiss_anchor is None:
+                # A known BLOCKING interstitial with no safe auto-dismissal.
+                return before_png, (
+                    f"Known blocking interstitial '{it.name}' is on screen "
+                    f"({self._describe_predicate(it.detect)}) and declares no "
+                    "automatic dismissal - refusing to act beneath it; run "
+                    "aborted (handle it, then re-run)."
+                )
+            if (
+                it.risk != "reversible"
+                or it.consequential is not False
+                or it.clearance is None
+                or (it.dismiss_key is not None and it.dismiss_key != "Escape")
+            ):
+                # Defensive runtime check in addition to Pydantic validation:
+                # model_construct/in-memory mutation must never turn this into
+                # an ungoverned consequential or unverifiable action.
+                return before_png, (
+                    f"Interstitial '{it.name}' does not declare an automatic "
+                    "dismissal that is reversible, non-consequential, and "
+                    "visually verifiable - refusing to emit an action; run "
+                    "aborted."
+                )
+
+            resolution: Optional[Resolution] = None
+            action: Literal["key", "click"]
+            if it.dismiss_key is not None:
+                action = "key"
+            else:
+                assert it.dismiss_anchor is not None
+                structural_only = (
+                    not it.dismiss_anchor.template.strip()
+                    and it.dismiss_anchor.structural is not None
+                )
+                structural = (
+                    self.backend
+                    if self.use_structural
+                    and hasattr(self.backend, "locate_structural")
+                    else None
+                )
+                if structural_only and structural is None:
+                    return before_png, (
+                        f"Interstitial '{it.name}' requires a structural-only "
+                        "dismissal, but this backend cannot perform structural "
+                        "resolution - refusing an OCR/geometry/coordinate "
+                        "downgrade; run aborted."
+                    )
+                template_png = self._asset_bytes(
+                    bundle_dir,
+                    it.dismiss_anchor.template,
+                    workflow=workflow,
+                )
+                if self._governed_asset_mutation is not None:
+                    return before_png, self._governed_asset_mutation
+                res = resolve(
+                    it.dismiss_anchor,
+                    before_png,
+                    self.vision,
+                    None,  # NEVER ground a dismissal: stay model-free
+                    it.name,
+                    template_png=template_png,
+                    viewport=self.backend.viewport,
+                    structural=structural,
+                )
+                if res is None:
+                    return before_png, (
+                        f"Interstitial '{it.name}' detected "
+                        f"({self._describe_predicate(it.detect)}) but its dismiss "
+                        "control did not resolve on screen - refusing to act; run "
+                        "aborted."
+                    )
+                resolution, _region = res
+                if structural_only and resolution.rung != "structural":
+                    return before_png, (
+                        f"Interstitial '{it.name}' structural dismissal did not "
+                        "resolve uniquely - refusing an OCR/geometry/coordinate "
+                        "downgrade; run aborted."
+                    )
+                action = "click"
+
+            # Resolution can invoke vision or a structural backend.  A callback
+            # must not be able to replace the declaration between authorization
+            # and the audit-before-delivery boundary.
+            mutation_error = self._interstitial_declaration_mutation(workflow)
+            if mutation_error is not None:
+                return before_png, mutation_error
+
+            # Append BEFORE delivery: a backend exception can never create an
+            # unreported key/click attempt. The event carries the exact admitted
+            # policy and expected visual outcome.
+            event = InterstitialActionResult(
+                interstitial=it.name,
+                action=action,
+                key=it.dismiss_key,
+                expected_clearance=it.clearance,
+                resolution=resolution,
+                before_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+            )
+            audit_events.append(event)
+            handled_indices.add(active_index)
+            try:
+                if it.dismiss_key is not None:
+                    self.backend.press(it.dismiss_key)
+                else:
+                    assert resolution is not None
+                    assert it.dismiss_anchor is not None
+                    if resolution.rung == "structural":
+                        native_act = getattr(self.backend, "act_structural", None)
+                        if (
+                            not callable(native_act)
+                            or resolution.structural_handle is None
+                            or it.dismiss_anchor.structural is None
+                        ):
+                            raise StructuralResolutionRefused(
+                                "structural dismissal cannot be delivered "
+                                "natively without a stable element handle"
+                            )
+                        native_act(
+                            it.dismiss_anchor.structural,
+                            resolution.structural_handle,
+                        )
+                    else:
+                        self.backend.click(
+                            int(resolution.point[0]), int(resolution.point[1])
+                        )
+                event.delivered = True
+            except Exception as exc:
+                event.error = (
+                    "dismissal delivery failed "
+                    f"({type(exc).__name__}); outcome is unknown"
+                )
+                return before_png, (
+                    f"Interstitial '{it.name}' dismissal delivery failed "
+                    f"({type(exc).__name__}) - refusing to act beneath it; run "
+                    "aborted."
+                )
+
+            before_png, settle_error = self._resettle_after_interstitial(before_png)
+            event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
+            if settle_error is not None:
+                event.error = settle_error
+                return before_png, settle_error
+
+            clearance_holds = self._predicate_holds(
+                it.clearance,
+                before_png,
+                bundle_dir,
+                params,
+                workflow=workflow,
+            )
+            if self._governed_asset_mutation is not None:
+                event.clearance_ok = False
+                event.error = self._governed_asset_mutation
+                return before_png, self._governed_asset_mutation
+            still_detected = False
+            if clearance_holds:
+                still_detected = self._predicate_holds(
+                    it.detect,
+                    before_png,
+                    bundle_dir,
+                    params,
+                    workflow=workflow,
+                )
+                if self._governed_asset_mutation is not None:
+                    event.clearance_ok = False
+                    event.error = self._governed_asset_mutation
+                    return before_png, self._governed_asset_mutation
+            event.clearance_ok = clearance_holds and not still_detected
+            event.ok = event.delivered and event.clearance_ok
+            if not event.ok:
+                event.error = (
+                    "declared visual clearance did not hold"
+                    if not clearance_holds
+                    else "interstitial remained detected after dismissal"
+                )
+                return before_png, (
+                    f"Interstitial '{it.name}' did not satisfy its declared "
+                    "visual clearance after one dismissal - refusing a blind "
+                    "retry or action beneath it; run aborted."
+                )
+
     # -- Workflow-program IR gates: guard + wait_until --------------------------
 
     def _apply_step_gates(
@@ -3192,24 +3717,63 @@ class Replayer:
         before_png: bytes,
         bundle_dir: Path,
         params: dict[str, str],
+        result: StepResult,
+        workflow: Optional[Workflow] = None,
     ) -> tuple[bool, Optional[str], bytes]:
-        """Evaluate the step's guard then its wait_until before acting.
+        """Evaluate readiness, interstitials, guard, then wait_until before acting.
+
+        Runs in state-dependency order, all model-free:
+
+        1. **readiness** (``require_settled``) - refuse to act on a frame that
+           never settled (still-loading / mid-transition); HALT gracefully.
+        2. **interstitials** - a KNOWN reversible, non-consequential overlay on
+           the entry frame gets one audited dismissal plus declared clearance
+           verification, or HALTs before the workflow action.
+        3. **guard** (precondition) on the entry frame - unmet HALTs (default)
+           or SKIPs (``on_unmet="skip"``).
+        4. **wait_until** (readiness predicate) - polled, bounded, HALT on
+           timeout (never proceed-anyway).
 
         Returns ``(proceed, error, before_png)``:
 
-        - ``(True, None, frame)`` — proceed to resolve/act (frame may have been
+        - ``(True, None, frame)`` - proceed to resolve/act (frame may have been
           re-settled while polling a wait_until predicate).
-        - ``(False, None, frame)`` — the guard was unmet with ``on_unmet="skip"``:
+        - ``(False, None, frame)`` - the guard was unmet with ``on_unmet="skip"``:
           the step is a no-op success (caller marks it ``skipped``).
-        - ``(False, error, frame)`` — HALT: an unmet ``halt`` guard, or a
+        - ``(False, error, frame)`` - HALT: an un-ready screen, a blocking /
+          undismissable interstitial, an unmet ``halt`` guard, or a
           ``wait_until`` predicate that never held within its bound (fail-safe;
           the run NEVER proceeds-anyway on an unmet readiness predicate).
 
         Model-free: predicates are evaluated by :meth:`_predicate_holds`.
         """
+        # (1) Readiness: never act on a frame that never settled.
+        before_png, readiness_error = self._wait_starting_state_settled(before_png)
+        if readiness_error is not None:
+            # Like an interstitial refusal, a not-ready starting state is a
+            # safety halt. A program on_exception edge must not convert the
+            # explicit refusal into a successful terminal outcome.
+            result.safety_halt = True
+            return False, readiness_error, before_png
+
+        # (2) Interstitials: dismiss a KNOWN overlay, or HALT gracefully.
+        before_png, interstitial_error = self._handle_interstitials(
+            before_png, bundle_dir, params, result.interstitial_actions, workflow
+        )
+        if interstitial_error is not None:
+            # An interstitial refusal is a state-safety halt, not an ordinary
+            # workflow exception a program on_exception edge may turn into a
+            # successful outcome after an uncertain/blocked pre-action state.
+            result.safety_halt = True
+            return False, interstitial_error, before_png
+
         # Guard (precondition) on the entry frame.
         guard_holds = step.guard is None or self._predicate_holds(
-            step.guard.predicate, before_png, bundle_dir, params
+            step.guard.predicate,
+            before_png,
+            bundle_dir,
+            params,
+            workflow=workflow,
         )
         if self._governed_asset_mutation is not None:
             return False, self._governed_asset_mutation, before_png
@@ -3234,7 +3798,13 @@ class Replayer:
             pred = step.wait_until
             deadline = time.monotonic() + pred.timeout_s
             while True:
-                if self._predicate_holds(pred, before_png, bundle_dir, params):
+                if self._predicate_holds(
+                    pred,
+                    before_png,
+                    bundle_dir,
+                    params,
+                    workflow=workflow,
+                ):
                     return True, None, before_png
                 if time.monotonic() >= deadline:
                     return (
@@ -3259,6 +3829,8 @@ class Replayer:
         frame_png: bytes,
         bundle_dir: Path,
         params: dict[str, str],
+        *,
+        workflow: Optional[Workflow] = None,
     ) -> bool:
         """Evaluate a Predicate against the current frame / run params.
 
@@ -3272,7 +3844,11 @@ class Replayer:
         if kind is PredicateKind.ANCHOR_RESOLVES:
             if pred.anchor is None:
                 return False
-            template_png = self._asset_bytes(bundle_dir, pred.anchor.template)
+            template_png = self._asset_bytes(
+                bundle_dir,
+                pred.anchor.template,
+                workflow=workflow,
+            )
             return (
                 resolve(
                     pred.anchor,
@@ -3295,17 +3871,33 @@ class Replayer:
             )
         if kind is PredicateKind.AND:
             return all(
-                self._predicate_holds(op, frame_png, bundle_dir, params)
+                self._predicate_holds(
+                    op,
+                    frame_png,
+                    bundle_dir,
+                    params,
+                    workflow=workflow,
+                )
                 for op in pred.operands
             )
         if kind is PredicateKind.OR:
             return any(
-                self._predicate_holds(op, frame_png, bundle_dir, params)
+                self._predicate_holds(
+                    op,
+                    frame_png,
+                    bundle_dir,
+                    params,
+                    workflow=workflow,
+                )
                 for op in pred.operands
             )
         if kind is PredicateKind.NOT:
             return bool(pred.operands) and not self._predicate_holds(
-                pred.operands[0], frame_png, bundle_dir, params
+                pred.operands[0],
+                frame_png,
+                bundle_dir,
+                params,
+                workflow=workflow,
             )
         return False
 
@@ -3988,7 +4580,13 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     params=params,
                 )
-            return self._predicate_holds(stop_pred, frame_png, bundle_dir, params)
+            return self._predicate_holds(
+                stop_pred,
+                frame_png,
+                bundle_dir,
+                params,
+                workflow=workflow,
+            )
 
         holds = readiness_holds(before_png)
         if self._governed_asset_mutation is not None:

@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.ir import Step, Workflow
+from openadapt_flow.ir import Interstitial, Step, Workflow
 from openadapt_flow.traversal import iter_workflow_steps
 
 _CONSUMED_IDS: set[str] = set()
@@ -40,11 +40,50 @@ def runtime_inputs_digest(
     workflow: Workflow,
     params: dict[str, str] | None,
     worklists: dict[str, list[dict[str, str]]] | None,
+    *,
+    interstitials: list[Interstitial] | None = None,
 ) -> str:
     """Hash the exact effective runtime inputs without persisting their values."""
-    payload = {
+    payload: dict[str, object] = {
         "params": effective_runtime_params(workflow, params),
         "worklists": worklists or {},
+    }
+    if interstitials:
+        # Runtime-supplied interstitials can issue pre-step key/click actions.
+        # Bind their complete declarative shape into governed authorization so
+        # a caller cannot add or change one after admission. Keep the empty case
+        # byte-compatible with authorizations created before this input existed.
+        payload["interstitials"] = [
+            interstitial.model_dump(mode="json") for interstitial in interstitials
+        ]
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def interstitial_declarations_digest(
+    workflow: Workflow,
+    interstitials: list[Interstitial] | None,
+) -> str:
+    """Hash the exact bundle and runtime interstitial declarations.
+
+    The workflow declarations are already covered by the bundle digest, while
+    runtime declarations are also covered by :func:`runtime_inputs_digest`.
+    This dedicated digest closes a different boundary: it proves that the run
+    gate evaluated the same complete action surface later carried by the
+    authorization factory.
+    """
+
+    payload = {
+        "workflow": [
+            interstitial.model_dump(mode="json")
+            for interstitial in workflow.interstitials
+        ],
+        "runtime": [
+            interstitial.model_dump(mode="json")
+            for interstitial in (interstitials or [])
+        ],
     }
     canonical = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -147,6 +186,7 @@ class GovernedRunAuthorization(BaseModel):
         bundle_dir: Path | str,
         params: dict[str, str] | None,
         worklists: dict[str, list[dict[str, str]]] | None,
+        interstitials: list[Interstitial] | None = None,
         continuation: bool = False,
     ) -> str | None:
         """Validate semantics, sealed assets, inputs, and single-use status."""
@@ -155,6 +195,7 @@ class GovernedRunAuthorization(BaseModel):
             bundle_dir=bundle_dir,
             params=params,
             worklists=worklists,
+            interstitials=interstitials,
             continuation=continuation,
         )
         return refusal
@@ -166,6 +207,7 @@ class GovernedRunAuthorization(BaseModel):
         bundle_dir: Path | str,
         params: dict[str, str] | None,
         worklists: dict[str, list[dict[str, str]]] | None,
+        interstitials: list[Interstitial] | None = None,
         continuation: bool = False,
     ) -> tuple[str | None, dict[str, bytes]]:
         """Validate once and return the exact sealed bytes execution may use."""
@@ -173,6 +215,34 @@ class GovernedRunAuthorization(BaseModel):
         if refusal is not None:
             return refusal, {}
         assert workflow.manifest is not None
+
+        declarations = [*workflow.interstitials, *(interstitials or [])]
+        validated_interstitials: list[Interstitial] = []
+        try:
+            for declaration in declarations:
+                validated_interstitials.append(
+                    Interstitial.model_validate(declaration.model_dump(mode="python"))
+                )
+        except Exception as exc:
+            return (
+                "governed run authorization contains an invalid interstitial "
+                f"declaration ({type(exc).__name__})",
+                {},
+            )
+
+        from openadapt_flow.bundle_validation import interstitial_asset_paths
+
+        unsealed_interstitial_assets = sorted(
+            interstitial_asset_paths(validated_interstitials)
+            - set(workflow.manifest.file_hashes)
+        )
+        if unsealed_interstitial_assets:
+            return (
+                "governed run authorization interstitial declaration references "
+                "asset(s) that are not sealed in the bundle manifest: "
+                + ", ".join(unsealed_interstitial_assets),
+                {},
+            )
 
         from openadapt_flow.bundle_validation import (
             BundleIntegrityError,
@@ -210,11 +280,16 @@ class GovernedRunAuthorization(BaseModel):
         except OSError as exc:
             return f"governed run authorization could not snapshot assets: {exc}", {}
 
-        actual_inputs = runtime_inputs_digest(workflow, params, worklists)
+        actual_inputs = runtime_inputs_digest(
+            workflow,
+            params,
+            worklists,
+            interstitials=interstitials,
+        )
         if actual_inputs != self.runtime_inputs_digest:
             return (
                 "governed run authorization is bound to different runtime "
-                "parameters or worklists",
+                "parameters or worklists, or interstitial declarations",
                 {},
             )
 

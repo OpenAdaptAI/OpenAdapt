@@ -49,6 +49,8 @@ from pydantic import BaseModel, Field
 from openadapt_flow.ir import (
     BundleManifest,
     BundleProvenance,
+    Interstitial,
+    Predicate,
     ProgramGraph,
     State,
     StateKind,
@@ -95,6 +97,7 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
         for pc in step.expect:
             if pc.template:
                 refs.add(pc.template)
+    refs.update(interstitial_asset_paths(workflow.interstitials))
     return refs
 
 
@@ -106,11 +109,36 @@ def _predicate_anchor_templates(step: "Step") -> Iterator[str]:
         preds.append(step.wait_until)
     if step.guard is not None:
         preds.append(step.guard.predicate)
+    yield from _predicate_templates(*preds)
+
+
+def _predicate_templates(*predicates: Optional[Predicate]) -> Iterator[str]:
+    """Template paths recursively referenced by predicate anchors."""
+    preds = [predicate for predicate in predicates if predicate is not None]
     while preds:
         p = preds.pop()
         if p.anchor is not None and p.anchor.template:
             yield p.anchor.template
         preds.extend(p.operands)
+
+
+def interstitial_asset_paths(interstitials: Iterable[Interstitial]) -> set[str]:
+    """Return every explicit asset path used by interstitial declarations.
+
+    A structural-only dismissal legitimately carries no template path.  Once a
+    declaration names an asset, however, governed admission requires that exact
+    path to be present in the bundle's sealed file-hash manifest; silently
+    falling through to another resolution rung would defeat the declaration's
+    integrity boundary.
+    """
+
+    refs: set[str] = set()
+    for interstitial in interstitials:
+        anchor = interstitial.dismiss_anchor
+        if anchor is not None and anchor.template.strip():
+            refs.add(anchor.template)
+        refs.update(_predicate_templates(interstitial.detect, interstitial.clearance))
+    return refs
 
 
 def compute_file_hashes(workflow: "Workflow", bundle_dir: Path | str) -> dict[str, str]:
@@ -145,7 +173,16 @@ def _workflow_content(workflow: "Workflow") -> dict:
     Excludes the ``manifest`` field itself (the digest lives INSIDE the
     manifest, so it must be computed over everything else) so the digest is a
     pure function of the semantic bundle content."""
-    return workflow.model_dump(mode="json", exclude={"manifest"})
+    content = workflow.model_dump(mode="json", exclude={"manifest"})
+    # ``interstitials`` was added additively while schema v2 bundles were
+    # already in circulation.  An empty list has no runtime semantics, so keep
+    # its canonical representation identical to the pre-field representation.
+    # This preserves every existing sealed v2 digest without weakening the
+    # seal: a non-empty declaration remains in the digest, and removing or
+    # changing one still fails integrity verification.
+    if not content.get("interstitials"):
+        content.pop("interstitials", None)
+    return content
 
 
 def compute_content_digest(workflow: "Workflow", file_hashes: dict[str, str]) -> str:

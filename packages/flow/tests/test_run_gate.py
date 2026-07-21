@@ -23,9 +23,13 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ApiBinding,
+    Interstitial,
     Postcondition,
     PostconditionKind,
+    Predicate,
+    PredicateKind,
     Step,
+    StructuralLocator,
     Workflow,
 )
 from openadapt_flow.run_gate import (
@@ -34,6 +38,7 @@ from openadapt_flow.run_gate import (
     GATE_EFFECT,
     GATE_ENCRYPTION,
     GATE_IDENTITY,
+    GATE_INTERSTITIALS,
     GATE_MANIFEST,
     build_runtime_authorization,
     evaluate_run_gate,
@@ -155,6 +160,92 @@ def test_fully_covered_bundle_is_admitted(tmp_path):
     assert report.refusals == []
     # Every gate individually passed.
     assert all(g.passed for g in report.gates)
+
+
+def _runtime_interstitial(name: str = "survey") -> Interstitial:
+    return Interstitial(
+        name=name,
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text=name),
+        dismiss_key="Escape",
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text=name),
+    )
+
+
+def test_runtime_interstitial_is_admitted_and_bound_to_gate_report(tmp_path):
+    wf, bundle = _seal(_good_workflow("runtime_interstitial"), tmp_path)
+    declaration = _runtime_interstitial()
+    report = _run(wf, bundle, interstitials=[declaration])
+
+    gate = report.gate(GATE_INTERSTITIALS)
+    assert gate is not None and gate.passed
+    assert report.admitted_interstitials_digest is not None
+    authorization = build_runtime_authorization(wf, report, interstitials=[declaration])
+    assert (
+        authorization.validate_execution(
+            wf,
+            bundle_dir=bundle,
+            params=None,
+            worklists=None,
+            interstitials=[declaration],
+        )
+        is None
+    )
+
+    changed = declaration.model_copy(deep=True)
+    changed.detect.text = "different overlay"
+    with pytest.raises(ValueError, match="changed after the run gate"):
+        build_runtime_authorization(wf, report, interstitials=[changed])
+
+
+def test_interstitial_explicit_missing_asset_is_refused_by_gate(tmp_path):
+    wf, bundle = _seal(_good_workflow("missing_interstitial_asset"), tmp_path)
+    declaration = Interstitial(
+        name="release notice",
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="release notice"),
+        dismiss_anchor=Anchor(
+            template="templates/not-in-bundle.png",
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+            ocr_text="Close",
+        ),
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text="release notice"),
+    )
+
+    report = _run(wf, bundle, interstitials=[declaration])
+
+    gate = report.gate(GATE_INTERSTITIALS)
+    assert gate is not None and not gate.passed
+    assert gate.offenders == ["templates/not-in-bundle.png"]
+    assert report.admitted_interstitials_digest is None
+    with pytest.raises(ValueError, match="failed the run gate"):
+        build_runtime_authorization(wf, report, interstitials=[declaration])
+
+
+def test_structural_only_interstitial_dismissal_needs_no_asset(tmp_path):
+    wf, bundle = _seal(_good_workflow("structural_interstitial"), tmp_path)
+    declaration = Interstitial(
+        name="release notice",
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="release notice"),
+        dismiss_anchor=Anchor(
+            template="",
+            structural=StructuralLocator(role="button", name="Close release note"),
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+        ),
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text="release notice"),
+    )
+
+    report = _run(wf, bundle, interstitials=[declaration])
+
+    gate = report.gate(GATE_INTERSTITIALS)
+    assert gate is not None and gate.passed
+    build_runtime_authorization(wf, report, interstitials=[declaration])
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +436,7 @@ def test_direct_api_write_cannot_use_unverified_approval(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Gate 5: encryption
+# Gate 6: encryption
 # ---------------------------------------------------------------------------
 
 
@@ -442,7 +533,7 @@ def test_encrypted_bundle_missing_declared_ciphertext_is_refused(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Gate 6: sealed manifest + version pin
+# Gate 7: sealed manifest + version pin
 # ---------------------------------------------------------------------------
 
 
@@ -727,7 +818,7 @@ def test_cli_run_encryption_key_required_for_encrypted_bundle(
             "rest",
             "--effects-base-url",
             "http://sor.local",
-            "--allow-unencrypted",  # isolate the KEY-at-load behavior from gate 5
+            "--allow-unencrypted",  # isolate the KEY-at-load behavior from gate 6
             "--dry-run",
         ]
     )

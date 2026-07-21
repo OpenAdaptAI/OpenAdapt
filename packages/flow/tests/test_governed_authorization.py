@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from openadapt_flow.ir import (
     ActionKind,
+    Anchor,
     Guard,
+    Interstitial,
     Postcondition,
     PostconditionKind,
     Predicate,
@@ -34,6 +38,7 @@ from tests.test_replayer import (
     FakeVision,
     Match,
     OcrLine,
+    click_step,
     context_click_step,
     make_png,
     resolving_vision,
@@ -70,12 +75,18 @@ def _authorization(
     *,
     params: dict[str, str] | None = None,
     worklists: dict[str, list[dict[str, str]]] | None = None,
+    interstitials: list[Interstitial] | None = None,
     required: tuple[str, ...] = (),
 ) -> GovernedRunAuthorization:
     assert workflow.manifest is not None
     return GovernedRunAuthorization(
         bundle_content_digest=workflow.manifest.content_digest,
-        runtime_inputs_digest=runtime_inputs_digest(workflow, params, worklists),
+        runtime_inputs_digest=runtime_inputs_digest(
+            workflow,
+            params,
+            worklists,
+            interstitials=interstitials,
+        ),
         admitted_policy_name="test-governed",
         required_identity_step_ids=required,
     )
@@ -114,6 +125,128 @@ def test_bundle_asset_mismatch_halts_before_action(tmp_path):
     assert report.success is False
     assert backend.actions == []
     assert "bundle integrity failed" in (report.results[0].error or "")
+
+
+def test_runtime_interstitial_change_halts_before_action(tmp_path):
+    step = context_click_step("Jane Sample 1980-01-15 MRN 123")
+    workflow, bundle = _seal(tmp_path, Workflow(name="interstitials", steps=[step]))
+    authorization = _authorization(workflow)
+    runtime_interstitial = Interstitial(
+        name="survey",
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="rate us"),
+        dismiss_key="Escape",
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text="rate us"),
+    )
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=resolving_vision(),
+        governed_authorization=authorization,
+        interstitials=[runtime_interstitial],
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].step_id == "<authorization>"
+    assert "interstitial declarations" in (report.results[0].error or "")
+
+
+def test_runtime_interstitial_missing_asset_halts_authorization(tmp_path):
+    step = context_click_step("Jane Sample 1980-01-15 MRN 123")
+    workflow, bundle = _seal(
+        tmp_path, Workflow(name="interstitial_missing_asset", steps=[step])
+    )
+    declaration = Interstitial(
+        name="release note",
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="release note"),
+        dismiss_anchor=Anchor(
+            template="templates/not-sealed.png",
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+            ocr_text="Close",
+        ),
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text="release note"),
+    )
+    authorization = _authorization(workflow, interstitials=[declaration])
+    backend = FakeBackend()
+
+    report = Replayer(
+        backend,
+        vision=resolving_vision(),
+        governed_authorization=authorization,
+        interstitials=[declaration],
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].step_id == "<authorization>"
+    assert "not sealed in the bundle manifest" in (report.results[0].error or "")
+
+
+@pytest.mark.parametrize("source", ["runtime", "workflow"])
+@pytest.mark.parametrize("field", ["detect", "clearance", "dismissal"])
+def test_interstitial_callback_mutation_refuses_before_action(tmp_path, source, field):
+    declaration = Interstitial(
+        name="release note",
+        detect=Predicate(kind=PredicateKind.TEXT_PRESENT, text="release note"),
+        dismiss_key="Escape",
+        risk="reversible",
+        consequential=False,
+        clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text="release note"),
+    )
+    workflow, bundle = _seal(
+        tmp_path,
+        Workflow(
+            name=f"interstitial_{source}_{field}",
+            steps=[click_step()],
+            interstitials=[declaration] if source == "workflow" else [],
+        ),
+    )
+    runtime_interstitials = [declaration] if source == "runtime" else None
+    if source == "workflow":
+        declaration = workflow.interstitials[0]
+    authorization = _authorization(
+        workflow,
+        interstitials=runtime_interstitials,
+    )
+
+    class MutatingBackend(FakeBackend):
+        mutated = False
+
+        def screenshot(self):
+            if not self.mutated:
+                self.mutated = True
+                if field == "detect":
+                    declaration.detect.text = "changed after admission"
+                elif field == "clearance":
+                    assert declaration.clearance is not None
+                    declaration.clearance.text = "changed after admission"
+                else:
+                    declaration.dismiss_key = "Enter"
+            return super().screenshot()
+
+    backend = MutatingBackend()
+    vision = resolving_vision()
+    vision.text_results = {
+        "release note": Match((10, 10), (0, 0, 5, 5)),
+    }
+    report = Replayer(
+        backend,
+        vision=vision,
+        governed_authorization=authorization,
+        interstitials=runtime_interstitials,
+    ).run(workflow, bundle_dir=bundle, run_dir=tmp_path / "run")
+
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].step_id != "<authorization>"
+    assert report.results[0].safety_halt is True
+    assert "changed after admission" in (report.results[0].error or "")
 
 
 def test_target_asset_mutation_after_validation_halts_before_action(tmp_path):
