@@ -1,8 +1,8 @@
 <!-- installer-release -->
 
-# Experimental Native Installers
+# Beta Native Installers
 
-OpenAdapt Desktop native packages are the **Experimental installed authoring,
+OpenAdapt Desktop native packages are the **Beta installed authoring,
 teaching, and local-pairing companion** for OpenAdapt. They bundle and start the
 Python sidecar, connect the Tauri/React cockpit to it over local JSON-lines IPC,
 and register the `openadapt://` operating-system handler. The handler accepts
@@ -27,7 +27,7 @@ convergence into a single release after code signing lands are documented in
 
 ## Artifact labels
 
-Every filename includes `Experimental`, the native version, operating system,
+Every filename includes `Beta`, the native version, operating system,
 architecture, and signing state. The initial matrix is:
 
 | Platform | Architectures | Packages | Signing labels |
@@ -53,7 +53,7 @@ over that manifest. Consumers can verify downloaded assets with:
 
 ```bash
 sha256sum -c SHA256SUMS
-for artifact in OpenAdapt-Desktop-Experimental-*; do
+for artifact in OpenAdapt-Desktop-Beta-*; do
   gh attestation verify "$artifact" --repo OpenAdaptAI/openadapt-desktop
 done
 ```

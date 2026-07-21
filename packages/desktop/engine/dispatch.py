@@ -411,6 +411,18 @@ class EngineDispatcher:
                 config_path = self.config.data_dir / "deployment.json"
                 result = self.services.flow_bridge.run(bundle, config_path, out_dir=run_dir)
             else:
+                ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
+                if ensure_browser is not None:
+                    ensure_browser(
+                        lambda state, detail: self.emit(
+                            "browser_runtime",
+                            {
+                                "workflow_id": workflow_id,
+                                "state": state,
+                                "detail": detail,
+                            },
+                        )
+                    )
                 result = self.services.flow_bridge.replay(bundle, out_dir=run_dir)
         except Exception as exc:
             self.emit("replay_progress", {"workflow_id": workflow_id, "state": "error"})

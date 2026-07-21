@@ -15,7 +15,10 @@ Usage (IPC sidecar):
 
 from __future__ import annotations
 
+import os
 import sys
+from importlib.util import find_spec
+from pathlib import Path
 
 from loguru import logger
 
@@ -24,9 +27,86 @@ from engine.config import EngineConfig
 
 ENGINE_VERSION = __version__
 
+# Private process modes used only by the frozen native executable.  Flow still
+# runs out-of-process; using the same signed binary avoids a second sidecar path
+# and guarantees that the installed cockpit invokes the version it shipped.
+EMBEDDED_FLOW_MODE = "__openadapt_flow__"
+
+
+def _configure_frozen_browser_cache() -> None:
+    """Keep Playwright downloads outside PyInstaller's ephemeral extraction.
+
+    A one-file executable expands into a temporary ``_MEI*`` directory on each
+    process start.  Playwright otherwise treats that directory as its bundled
+    package root, downloads Chromium there, and loses it when the installer
+    subprocess exits.  This stable per-user location is uninstall-neutral user
+    data and remains overrideable for an offline enterprise prebundle.
+    """
+
+    if getattr(sys, "frozen", False):
+        os.environ.setdefault(
+            "PLAYWRIGHT_BROWSERS_PATH",
+            str(Path.home() / ".openadapt" / "browser-runtime"),
+        )
+
+
+def _normalize_flow_auto_scrub_capability() -> None:
+    """Restore Flow's documented ``auto`` semantics in the combined freeze.
+
+    Desktop includes ``openadapt-privacy`` for its local review pipeline, but
+    its heavyweight Presidio/spaCy extra is intentionally optional.  Merely
+    importing the provider makes Flow 1.19 think the capability is ready; the
+    first scrub then crashes.  In ``auto`` mode only, treat an incomplete extra
+    exactly like an absent extra (local plaintext, as Flow documents).  Explicit
+    ``SCRUB=on`` is never changed and therefore still fails closed.
+    """
+
+    mode = os.environ.get("OPENADAPT_FLOW_SCRUB", "auto").strip().lower()
+    if mode not in {"", "auto"}:
+        return
+    required = ("presidio_analyzer", "presidio_anonymizer", "spacy")
+    if any(find_spec(module) is None for module in required):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+
+
+def _run_embedded_flow() -> None:
+    """Run the bundled Flow CLI in this process image."""
+
+    _configure_frozen_browser_cache()
+    _normalize_flow_auto_scrub_capability()
+    from openadapt_flow.__main__ import main as flow_main
+
+    sys.argv = [sys.argv[0], *sys.argv[2:]]
+    flow_main()
+
+
+def _run_embedded_playwright() -> None:
+    """Support Flow's one-time ``python -m playwright install`` in a freeze.
+
+    PyInstaller replaces ``sys.executable`` with this executable, so Flow's
+    normal first-use browser provisioner cannot invoke ``-m playwright``
+    directly.  This process mode preserves that upstream contract without a
+    system Python installation.
+    """
+
+    _configure_frozen_browser_cache()
+    from playwright.__main__ import main as playwright_main
+
+    # Match ``python -m playwright <args>``: strip both ``-m`` and the module.
+    sys.argv = [sys.argv[0], *sys.argv[3:]]
+    playwright_main()
+
 
 def main() -> None:
     """Initialize the engine and start the appropriate mode."""
+    _configure_frozen_browser_cache()
+    if sys.argv[1:2] == [EMBEDDED_FLOW_MODE]:
+        _run_embedded_flow()
+        return
+    if sys.argv[1:3] == ["-m", "playwright"]:
+        _run_embedded_playwright()
+        return
+
     # CLI mode: if run with subcommands or from a terminal
     if len(sys.argv) > 1 or sys.stdin.isatty():
         from engine.cli import main as cli_main

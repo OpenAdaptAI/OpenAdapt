@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare and verify honest Experimental native release assets."""
+"""Prepare and verify honest Beta native release assets."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIFECYCLE = "Experimental"
+LIFECYCLE = "Beta"
 SURFACE = "installed desktop pairing and authoring companion"
 NATIVE_TAG_PREFIX = "desktop-v"
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
@@ -152,7 +152,7 @@ def superseded_notes(body: str, newer_tag: str, repo: str) -> str | None:
         "> [!CAUTION]\n"
         f"> **Superseded by [{newer_tag}](https://github.com/{repo}/releases/tag/{newer_tag})"
         " — do not use.**\n"
-        "> Newer Experimental native installers replace these assets. The assets below are\n"
+        "> Newer Beta native installers replace these assets. The assets below are\n"
         "> retained for provenance only; deleting releases or assets is a maintainer\n"
         "> decision made outside CI."
         f"{SUPERSEDED_SEPARATOR}"
@@ -187,7 +187,7 @@ def stage_artifacts(
     output.mkdir(parents=True, exist_ok=True)
 
     version = native_version(root)
-    prefix = f"OpenAdapt-Desktop-Experimental-v{version}-{platform}-{architecture}-{signing}"
+    prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
     staged: list[Path] = []
     artifact_names: list[str] = []
     for kind, pattern, suffix in ARTIFACT_RULES[platform]:
@@ -208,12 +208,14 @@ def stage_artifacts(
         "source_commit": os.environ.get("GITHUB_SHA", "local"),
         "artifacts": artifact_names,
         "verification_scope": (
-            "cross-platform install/uninstall, bundled sidecar, and protocol-handler packaging"
+            "cross-platform install/uninstall, self-contained Flow runtime, "
+            "browser provision, and protocol-handler packaging"
         ),
         "limitations": [
             (
-                "openadapt-flow is not bundled; compile, replay, run, and teach require "
-                "a separately installed openadapt-flow on PATH."
+                "The first browser workflow downloads the Chromium revision pinned by the "
+                "bundled Playwright runtime unless PLAYWRIGHT_BROWSERS_PATH points at an "
+                "approved offline prebundle."
             ),
             "Installer verification does not replace qualification of a complete real workflow.",
         ],
@@ -291,7 +293,7 @@ def validate_release_set(directory: Path) -> int:
         signing = metadata["signing"]
         if metadata.get("native_version") != version:
             raise ValueError(f"wrong native version in {metadata_path}")
-        prefix = f"OpenAdapt-Desktop-Experimental-v{version}-{platform}-{architecture}-{signing}"
+        prefix = f"OpenAdapt-Desktop-Beta-v{version}-{platform}-{architecture}-{signing}"
         if metadata_path.name != f"{prefix}-metadata.json":
             raise ValueError(f"metadata filename does not match its labels: {metadata_path.name}")
         expected_artifacts = {f"{prefix}{suffix}" for _, _, suffix in ARTIFACT_RULES[platform]}

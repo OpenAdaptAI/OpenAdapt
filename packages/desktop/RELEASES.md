@@ -9,11 +9,11 @@ download, and how the lanes converge.
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
 | Engine (Python package) | `vX.Y.Z` | `python-semantic-release` on every releasable push to `main` | Regular release ("Latest") | Wheel, sdist, and PyPI publish attestations |
-| Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Experimental DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, and one `SHA256SUMS` manifest with GitHub artifact attestations |
+| Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, and one `SHA256SUMS` manifest with GitHub artifact attestations |
 
 The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
 the canonical engine release. The native lane stays prerelease because its
-installers are Experimental scaffold-shell artifacts and are ad-hoc signed or
+installers are Beta scaffold-shell artifacts and are ad-hoc signed or
 unsigned until external signing credentials are configured; see
 [docs/EXPERIMENTAL_NATIVE_INSTALLERS.md](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md)
 for the verification scope and signing states.
@@ -23,7 +23,7 @@ for the verification scope and signing states.
 - **Python package / CLI**: install from PyPI (`pip install openadapt-desktop`)
   or take the wheel from the newest `vX.Y.Z` release. Engine releases carry no
   installers.
-- **Native installers (Experimental)**: use the newest published `desktop-vX.Y.Z`
+- **Native installers (Beta)**: use the newest published `desktop-vX.Y.Z`
   prerelease whose notes do not carry a "Superseded" notice. Verify assets with
   `sha256sum -c SHA256SUMS` and `gh attestation verify`.
 
@@ -42,7 +42,7 @@ were pushed by hand. Two workflows now keep it fresh:
    pushes the matching `desktop-vX.Y.Z` tag. It never builds anything itself
    and refuses a historical backfill that would label newer application code
    with an older version.
-2. **Experimental Native Release** (`.github/workflows/native-release.yml`):
+2. **Native Installer Release** (`.github/workflows/native-release.yml`):
    unchanged build semantics — the tag push triggers the fail-closed signing
    preflight, the platform build matrix, install/launch/uninstall smoke tests,
    final-byte checksums, attestation, and a **draft** prerelease that a

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-desktop"
 version = "0.8.0"
-description = "Experimental desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
+description = "Beta desktop authoring surface and local capture/review tooling for OpenAdapt workflows"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -43,6 +43,15 @@ full = [
 ]
 build = [
     "pyinstaller>=6.16,<7",
+    # The native installer freezes this exact canonical runtime into the
+    # engine sidecar.  Keep it exact: Desktop and Flow can release
+    # independently, while each installer remains reproducible and rollbackable.
+    "openadapt-flow==1.19.0",
+    # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
+    # accepts this universal2 release, which retains Python 3.12 Intel support.
+    "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    # Keep the current runtime everywhere it publishes a compatible wheel.
+    "onnxruntime==1.27.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
 ]
 dev = [
     "pytest",

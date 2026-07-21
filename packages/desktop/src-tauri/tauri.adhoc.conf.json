@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
+  }
+}

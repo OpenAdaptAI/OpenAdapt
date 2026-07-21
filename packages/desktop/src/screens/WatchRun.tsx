@@ -2,7 +2,7 @@
 // Consumes replay_progress / log_line events; falls back to get_run_report.
 import { useEffect, useRef, useState } from "react";
 import { CMD, engineInvoke, engineTry, onEngineEvent, EVT } from "../lib/engine";
-import type { RunReport, RunStep } from "../lib/types";
+import type { BrowserRuntimeStatus, RunReport, RunStep } from "../lib/types";
 import { Button, Card, CardHead, Callout } from "../ui/primitives";
 import { ReplayMonitor } from "../ui/ReplayMonitor";
 
@@ -15,6 +15,8 @@ export function WatchRun({
 }) {
   const [report, setReport] = useState<RunReport | null>(null);
   const [running, setRunning] = useState(false);
+  const [runtime, setRuntime] = useState<BrowserRuntimeStatus | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const stepsRef = useRef<RunStep[]>([]);
 
   async function load() {
@@ -43,6 +45,9 @@ export function WatchRun({
         stepsRef.current = r.steps ?? [];
         if (r.halt || (r.steps?.length ?? 0) >= r.total_steps) setRunning(false);
       }),
+      onEngineEvent(EVT.BROWSER_RUNTIME, (status: BrowserRuntimeStatus) => {
+        if (status.workflow_id === workflowId) setRuntime(status);
+      }),
     ];
     return () => unsubs.forEach((p) => p.then((u) => u()).catch(() => {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -50,18 +55,22 @@ export function WatchRun({
 
   async function replay() {
     setRunning(true);
+    setRunError(null);
     stepsRef.current = [];
     setReport((r) => (r ? { ...r, steps: [] } : r));
     try {
       const r = await engineInvoke<RunReport>(CMD.REPLAY_WORKFLOW, {
         workflow_id: workflowId,
       });
+      if (r.ok === false) {
+        throw new Error(r.error || "Replay could not start.");
+      }
       if (r) {
         setReport(r);
         stepsRef.current = r.steps ?? [];
       }
-    } catch {
-      /* offline — monitor stays in place */
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : String(error));
     } finally {
       setRunning(false);
     }
@@ -83,6 +92,25 @@ export function WatchRun({
       </div>
 
       <Card>
+        {runtime && runtime.state !== "ready" && (
+          <Callout
+            tone={runtime.state === "error" ? "warn" : "info"}
+            title={
+              runtime.state === "installing"
+                ? "Preparing the browser"
+                : runtime.state === "error"
+                  ? "Browser setup needs attention"
+                  : "Checking the browser"
+            }
+          >
+            {runtime.detail}
+          </Callout>
+        )}
+        {runError && (
+          <Callout tone="warn" title="Replay did not start">
+            {runError} Select Replay to retry; no workflow action was sent.
+          </Callout>
+        )}
         <ReplayMonitor
           workflowName={report?.workflow_name ?? workflowId}
           steps={steps}

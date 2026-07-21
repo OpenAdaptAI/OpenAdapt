@@ -44,6 +44,8 @@ export interface RunStep {
 }
 
 export interface RunReport {
+  ok?: boolean;
+  error?: string;
   run_id: string;
   workflow_id: string;
   workflow_name: string;
@@ -56,6 +58,12 @@ export interface RunReport {
     resolver_rung?: string;
   } | null;
   metrics?: { duration_s?: number; cost_usd?: number } | null;
+}
+
+export interface BrowserRuntimeStatus {
+  workflow_id: string;
+  state: "checking" | "installing" | "ready" | "error";
+  detail: string;
 }
 
 export interface SyncState {

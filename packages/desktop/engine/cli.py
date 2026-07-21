@@ -468,11 +468,12 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         checks.append(("keyring (credential store)", False, "not installed"))
 
     # openadapt-flow (the loop engine)
-    from engine.flow_bridge import flow_available
+    from engine.flow_bridge import flow_available, flow_runtime_source
+    flow_ready = flow_available()
     checks.append((
         "openadapt-flow (loop engine)",
-        flow_available(),
-        "on PATH" if flow_available() else "not found (pip install openadapt-flow)",
+        flow_ready,
+        flow_runtime_source() if flow_ready else "not found (pip install openadapt-flow)",
     ))
 
     # boto3 (optional BYOC storage)

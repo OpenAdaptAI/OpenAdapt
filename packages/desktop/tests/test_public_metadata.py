@@ -10,19 +10,19 @@ from scripts.check_release_consistency import release_versions, sync_lock_versio
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_public_metadata_identifies_experimental_supporting_surface() -> None:
+def test_public_metadata_identifies_beta_supporting_surface() -> None:
     readme = (ROOT / "README.md").read_text()
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package = json.loads((ROOT / "package.json").read_text())
     cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text())
 
-    assert "Lifecycle: Experimental supporting surface" in readme
+    assert "Lifecycle: Beta supporting surface" in readme
     assert "openadapt-flow" in readme
     assert "AI training data collection" not in readme
     assert "AI training data collection" not in pyproject["project"]["description"]
     assert "AI training data collection" not in package["description"]
     expected_native_description = (
-        "Experimental installed companion for OpenAdapt authoring, "
+        "Beta installed companion for OpenAdapt authoring, "
         "teaching, and local pairing"
     )
     assert package["description"] == expected_native_description

@@ -160,45 +160,27 @@ def push(
 
 def _flow_supports_push(flow_bin: str = "openadapt-flow") -> bool:
     """Best-effort check whether the flow CLI exposes a ``push`` subcommand."""
-    import shutil
-    import subprocess
-
-    if shutil.which(flow_bin) is None:
-        return False
-    try:
-        proc = subprocess.run(
-            [flow_bin, "push", "--help"], capture_output=True, text=True, timeout=15
-        )
-    except Exception:
-        return False
-    return proc.returncode == 0
+    return FlowBridge(flow_bin=flow_bin).supports_command("push")
 
 
 def _push_via_flow(
     path: Path, *, kind: str, name: str | None, host: str, token: str | None = None
 ) -> dict[str, Any]:
     """Delegate to ``openadapt-flow push`` (flow PR #119); parse its workflow id."""
-    import subprocess
-
-    args = ["push", str(path), "--kind", kind, "--host", host]
-    if name:
-        args += ["--name", name]
-    if token:
-        args += ["--token", token]
     logger.info("Delegating push to openadapt-flow")
-    proc = subprocess.run(["openadapt-flow", *args], capture_output=True, text=True)
+    result = FlowBridge().push(path, kind=kind, name=name, host=host, token=token)
     workflow_id = ""
-    for token in (proc.stdout or "").split():
+    for token in (result.stdout or "").split():
         if token.startswith("wf_") or token.startswith("workflow_"):
             workflow_id = token
             break
     return {
-        "success": proc.returncode == 0,
+        "success": result.ok,
         "workflow_id": workflow_id,
         "dashboard_url": f"{host.rstrip('/')}/dashboard/workflows/{workflow_id}"
         if workflow_id
         else "",
-        "error": proc.stderr if proc.returncode != 0 else "",
+        "error": result.stderr if not result.ok else "",
     }
 
 

@@ -69,6 +69,7 @@ export const EVT = {
   STATUS_UPDATE: "status_update",
   COMPILE_PROGRESS: "compile_progress",
   REPLAY_PROGRESS: "replay_progress",
+  BROWSER_RUNTIME: "browser_runtime",
   LOG_LINE: "log_line",
   SYNC_STATE: "sync_state",
   BREAK_COUNT: "break_count",

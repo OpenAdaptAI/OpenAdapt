@@ -198,6 +198,27 @@ def _validate_macos_app(app_path: Path) -> Path:
     return executable
 
 
+def _verify_macos_embedded_flow_runtime(app_path: Path, *, timeout: float) -> None:
+    """Execute the packaged sidecar after Tauri's final signing pass.
+
+    A structural signature check is insufficient for a PyInstaller one-file
+    sidecar: re-signing only its launcher with hardened runtime can leave the
+    embedded Python libraries unloadable. This subprocess crosses that exact
+    extraction and library-validation boundary without launching the GUI.
+    """
+
+    sidecar = app_path / "Contents" / "MacOS" / "openadapt-engine"
+    if not sidecar.is_file() or not os.access(sidecar, os.X_OK):
+        raise SmokeTestError(f"installed app has no executable engine sidecar: {sidecar}")
+    result = run_command(
+        [sidecar, "__openadapt_flow__", "--version"],
+        timeout=max(timeout, 60.0),
+    )
+    output = _combined_output(result)
+    if "openadapt-flow 1.19.0" not in output:
+        raise SmokeTestError(f"installed engine has the wrong Flow runtime: {_tail(output)}")
+
+
 def _validate_installed_executable(app_path: Path, platform: str) -> None:
     if not app_path.is_file() or app_path.stat().st_size == 0:
         raise SmokeTestError(f"installed application is missing or empty: {app_path}")
@@ -908,6 +929,8 @@ def smoke_test_installer(
             timeout=timeout,
         )
         verify_signature(path)
+        if platform == "macos":
+            _verify_macos_embedded_flow_runtime(path, timeout=timeout)
         if launch_seconds > 0:
             executable = _validate_macos_app(path) if platform == "macos" else path
             _launch_probe(executable, run_seconds=launch_seconds, timeout=timeout)

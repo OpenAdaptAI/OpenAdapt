@@ -1,9 +1,9 @@
 name: Native Installer Freshness
 
-# Keeps the Experimental native-installer lane in lockstep with the engine
+# Keeps the Beta native-installer lane in lockstep with the engine
 # release lane. When semantic-release publishes an engine release (v*), this
 # workflow synchronizes the native version sources to the same X.Y.Z and pushes
-# the matching desktop-vX.Y.Z tag. The existing Experimental Native Release
+# the matching desktop-vX.Y.Z tag. The existing Native Installer Release
 # workflow then builds, smoke-tests, checksums, attests, and drafts the
 # prerelease exactly as before — no signing, checksum, or provenance gate is
 # bypassed here.
@@ -162,7 +162,7 @@ jobs:
           fi
 
   supersede-published-native:
-    name: Mark older Experimental prereleases superseded
+    name: Mark older native prereleases superseded
     # Keep the last published installer valid while its replacement is still a
     # draft. This job runs only after a marked native prerelease is published
     # and therefore publicly available.

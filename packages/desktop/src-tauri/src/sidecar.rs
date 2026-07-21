@@ -33,8 +33,10 @@ use tokio::sync::oneshot;
 
 /// The frozen sidecar binary base name (see `tauri.conf.json` externalBin).
 const SIDECAR_NAME: &str = "openadapt-engine";
-/// Per-command response timeout.
+/// Fast IPC queries should fail quickly; workflow operations may include a
+/// first-use browser download and legitimate long-running local execution.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const WORKFLOW_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// Max automatic respawns before giving up (avoids a crash loop).
 const MAX_RESTARTS: u32 = 3;
 
@@ -117,7 +119,13 @@ impl SidecarInner {
             }
         }
 
-        match tokio::time::timeout(COMMAND_TIMEOUT, rx).await {
+        let timeout = match cmd {
+            "compile_recording" | "replay_workflow" | "run_workflow" | "teach_fix" => {
+                WORKFLOW_COMMAND_TIMEOUT
+            }
+            _ => COMMAND_TIMEOUT,
+        };
+        match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(resp)) => match resp.status.as_deref() {
                 Some("ok") => Ok(resp.data.unwrap_or(Value::Null)),
                 _ => Err(resp.error.unwrap_or_else(|| "unknown engine error".into())),

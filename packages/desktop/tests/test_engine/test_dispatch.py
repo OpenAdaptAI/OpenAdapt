@@ -116,6 +116,65 @@ class TestLibraryCommands:
         r = disp.dispatch("compile_recording", {"capture_id": "nope"})
         assert r["ok"] is False
 
+    def test_replay_reports_browser_setup_before_acting(self, deps, tmp_path: Path) -> None:
+        disp, db, events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+        order: list[str] = []
+
+        class Bridge:
+            def ensure_browser_runtime(self, progress) -> None:
+                order.append("ensure")
+                progress("checking", "Checking")
+                progress("ready", "Ready")
+
+            def replay(self, _bundle, out_dir):
+                from engine.flow_bridge import FlowResult
+
+                order.append("replay")
+                return FlowResult(ok=True, returncode=0, out_dir=out_dir)
+
+        disp.services._flow_bridge = Bridge()
+        result = disp.dispatch("replay_workflow", {"workflow_id": "bnd1"})
+
+        assert order == ["ensure", "replay"]
+        assert result["workflow_id"] == "bnd1"
+        assert [data["state"] for event, data in events if event == "browser_runtime"] == [
+            "checking",
+            "ready",
+        ]
+
+    def test_browser_setup_failure_never_sends_a_workflow_action(
+        self, deps, tmp_path: Path
+    ) -> None:
+        disp, db, events = deps
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        db.insert_bundle("bnd1", str(bundle), capture_id="cap1")
+
+        class Bridge:
+            replay_called = False
+
+            def ensure_browser_runtime(self, progress) -> None:
+                progress("error", "Retry")
+                raise RuntimeError("browser setup failed")
+
+            def replay(self, _bundle, out_dir):
+                self.replay_called = True
+                raise AssertionError("replay must not start")
+
+        bridge = Bridge()
+        disp.services._flow_bridge = bridge
+        result = disp.dispatch("replay_workflow", {"workflow_id": "bnd1"})
+
+        assert result == {"ok": False, "error": "browser setup failed"}
+        assert bridge.replay_called is False
+        assert any(
+            event == "replay_progress" and data["state"] == "error"
+            for event, data in events
+        )
+
 
 class TestSyncCommands:
     def test_pause_resume_sync(self, deps) -> None:

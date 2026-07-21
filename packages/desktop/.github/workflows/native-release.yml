@@ -1,4 +1,4 @@
-name: Experimental Native Release
+name: Native Installer Release
 
 on:
   push:
@@ -109,13 +109,16 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build engine sidecar for Tauri externalBin
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode == 'developer-id-notarized' && secrets.APPLE_SIGNING_IDENTITY || '' }}
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           uv sync --locked --extra build
-          uv run pyinstaller --clean --noconfirm --onefile \
-            --name openadapt-engine engine/__main__.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine \
             "src-tauri/binaries/openadapt-engine-${{ matrix.target }}"
@@ -140,6 +143,7 @@ jobs:
           npm run tauri build --
           --bundles dmg
           --target ${{ matrix.target }}
+          --config src-tauri/tauri.adhoc.conf.json
 
       - name: Smoke-test DMG install, signature policy, launch, and uninstall
         shell: bash
@@ -154,7 +158,7 @@ jobs:
             --signing-mode "${{ steps.signing.outputs.mode }}" \
             --launch-seconds 20
 
-      - name: Stage exact Experimental DMG
+      - name: Stage exact native DMG
         run: >-
           python scripts/native_release.py stage
           --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
@@ -274,8 +278,9 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           uv sync --locked --extra build
-          uv run pyinstaller --clean --noconfirm --onefile \
-            --name openadapt-engine engine/__main__.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine.exe \
             src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
@@ -331,7 +336,7 @@ jobs:
             --allow-system-install `
             --launch-seconds 20 @Signature
 
-      - name: Stage exact Experimental Windows installers
+      - name: Stage exact native Windows installers
         run: >-
           python scripts/native_release.py stage
           --bundle-root src-tauri/target/x86_64-pc-windows-msvc/release/bundle
@@ -412,8 +417,9 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           uv sync --locked --extra build
-          uv run pyinstaller --clean --noconfirm --onefile \
-            --name openadapt-engine engine/__main__.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine \
             src-tauri/binaries/openadapt-engine-x86_64-unknown-linux-gnu
@@ -449,7 +455,7 @@ jobs:
             --expected-architecture x86_64 \
             --launch-seconds 20
 
-      - name: Stage exact Experimental Linux packages
+      - name: Stage exact native Linux packages
         run: >-
           python scripts/native_release.py stage
           --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
@@ -512,7 +518,7 @@ jobs:
           if-no-files-found: error
 
   publish-draft:
-    name: Create or update Experimental draft prerelease
+    name: Create or update Beta draft prerelease
     needs: attest
     runs-on: ubuntu-22.04
     # RETAINED human gate: this is the only job with an external effect (it writes
@@ -549,7 +555,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          title="OpenAdapt Desktop Experimental ${GITHUB_REF_NAME#desktop-v}"
+          title="OpenAdapt Desktop Beta ${GITHUB_REF_NAME#desktop-v}"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release edit "${GITHUB_REF_NAME}" \
               --draft \
