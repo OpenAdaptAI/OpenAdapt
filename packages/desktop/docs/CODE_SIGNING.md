@@ -190,7 +190,7 @@ release has actually built. The artifact filename token is the source of truth.
 | Trust center | "Ad-hoc/unsigned; verify via `SHA256SUMS` + GitHub attestation." | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages carry a detached GPG signature; fingerprint published." |
 | README honesty note | "Native packages remain Beta and unsigned." | Update the note per platform as each lands. |  |  |
 
-The README honesty note and `docs/EXPERIMENTAL_NATIVE_INSTALLERS.md` both point
+The README signing note and `docs/BETA_NATIVE_INSTALLERS.md` both point
 here; update their per-platform wording when each platform's first **signed**
 release ships (not when the secrets are merely added). The download page needs no
 code change to detect signing — it reads the `-<signing>-` token in the asset

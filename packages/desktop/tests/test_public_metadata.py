@@ -102,6 +102,63 @@ def test_release_workflow_uses_matching_pinned_actions() -> None:
     assert "- name: Build package" not in workflow
 
 
+def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
+    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
+    semantic = workflow[workflow.index("\n  semantic-release:") :]
+    wait_index = semantic.index("- name: Wait for exact-head Test and Build workflows")
+    head_index = semantic.index("- name: Require dispatched head to remain current protected main")
+    release_index = semantic.index("- name: Python Semantic Release")
+
+    assert "  push:" not in triggers
+    assert "  workflow_dispatch:" in triggers
+    assert "operation:" in triggers
+    assert "- semantic-release" in triggers
+    assert "- publish-existing-ref" in triggers
+    assert "github.ref == 'refs/heads/main'" in semantic
+    assert wait_index < head_index < release_index
+    for workflow_name in ("test.yml", "build.yml"):
+        assert workflow_name in semantic
+    assert '--raw-field head_sha="${GITHUB_SHA}"' in semantic
+    assert "refs/remotes/origin/main" in semantic
+    assert "Refusing stale release dispatch" in semantic
+
+
+def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
+    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    recovery = workflow[workflow.index("\n  publish-existing-ref:") :]
+    build_index = recovery.index("- name: Build and validate exact recovery artifacts")
+    publish_index = recovery.index("- name: Publish to PyPI")
+
+    assert "inputs.operation == 'publish-existing-ref'" in recovery
+    assert "github.ref == 'refs/heads/main'" in recovery
+    assert "git merge-base --is-ancestor" in recovery
+    assert 'head_sha="${TARGET_SHA}"' in recovery
+    for workflow_name in ("test.yml", "build.yml"):
+        assert workflow_name in recovery
+    assert "guard/scripts/verify_build_artifact.py python-distribution --root target" in recovery
+    assert "packages-dir: target/dist/" in recovery
+    assert build_index < publish_index
+
+
+def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
+    notes = (ROOT / "docs/BETA_NATIVE_INSTALLERS.md").read_text()
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    lock = (ROOT / "uv.lock").read_text()
+    native_release = (ROOT / ".github/workflows/native-release.yml").read_text()
+    build_dependencies = pyproject["project"]["optional-dependencies"]["build"]
+
+    assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
+    assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 2
+    assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
+    assert "openadapt-flow==1.19.0" in build_dependencies
+    assert 'name = "playwright"\nversion = "1.61.0"' in lock
+    assert "openadapt-flow==1.19.0" in notes
+    assert "playwright==1.61.0" in notes
+    assert "without a separate Python" in notes
+    assert "not frozen into these installers" not in notes
+
+
 def test_readme_local_links_exist() -> None:
     readme = (ROOT / "README.md").read_text()
     links = re.findall(r"\[[^]]*\]\(([^)]+)\)", readme)

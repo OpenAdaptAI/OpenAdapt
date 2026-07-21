@@ -169,7 +169,7 @@ pinned sources, hashes, and modification status are recorded in
 - Which release to download, and the two-lane policy, are in
   [RELEASES.md](RELEASES.md).
 - Artifact names, verification scope, and provenance are in
-  [Beta Native Installers](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md).
+  [Beta Native Installers](docs/BETA_NATIVE_INSTALLERS.md).
 - The signing activation runbook (what to buy, which secrets to add, and what
   each surface may then truthfully claim) is in
   [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md).

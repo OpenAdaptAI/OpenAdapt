@@ -8,14 +8,14 @@ download, and how the lanes converge.
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
-| Engine (Python package) | `vX.Y.Z` | `python-semantic-release` on every releasable push to `main` | Regular release ("Latest") | Wheel, sdist, and PyPI publish attestations |
+| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from green protected `main` | Regular release ("Latest") | Wheel, sdist, and PyPI publish attestations |
 | Native installers | `desktop-vX.Y.Z` | `desktop-v*` tag push (automated, see below) | Draft, then published **prerelease** | Beta DMG (macOS arm64/x86_64), MSI + NSIS (Windows x86_64), DEB + AppImage (Linux x86_64), per-platform metadata JSON, and one `SHA256SUMS` manifest with GitHub artifact attestations |
 
 The engine lane stays non-prerelease so GitHub's "Latest" pointer always names
 the canonical engine release. The native lane stays prerelease because its
 installers are Beta scaffold-shell artifacts and are ad-hoc signed or
 unsigned until external signing credentials are configured; see
-[docs/EXPERIMENTAL_NATIVE_INSTALLERS.md](docs/EXPERIMENTAL_NATIVE_INSTALLERS.md)
+[docs/BETA_NATIVE_INSTALLERS.md](docs/BETA_NATIVE_INSTALLERS.md)
 for the verification scope and signing states.
 
 ## Which release should I download?
@@ -30,11 +30,17 @@ for the verification scope and signing states.
 ## Freshness automation
 
 The native lane previously lagged the engine lane because `desktop-v*` tags
-were pushed by hand. Two workflows now keep it fresh:
+were pushed by hand. Three workflows now keep it fresh:
 
-1. **Native Installer Freshness** (`.github/workflows/native-freshness.yml`):
-   when an engine release is published (or on manual `workflow_dispatch` with a
-   current engine version), it first verifies that the matching engine tag is
+1. **Release and PyPI Publish** (`.github/workflows/release.yml`): a maintainer
+   explicitly dispatches one semantic release after the intended release train
+   has landed. It refuses to publish until the exact protected-main commit has
+   successful `Test` and `Build artifacts` push workflows. The recovery operation
+   can rebuild and publish a pre-existing, main-contained ref after checking that
+   ref's exact CI; ordinary merges never publish packages.
+2. **Native Installer Freshness** (`.github/workflows/native-freshness.yml`):
+   when that engine release is published (or on manual `workflow_dispatch` with
+   a current engine version), it first verifies that the matching engine tag is
    an ancestor of `main` and that the application sources have not advanced.
    It then synchronizes the native version sources (`package.json`,
    `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`,
@@ -42,7 +48,7 @@ were pushed by hand. Two workflows now keep it fresh:
    pushes the matching `desktop-vX.Y.Z` tag. It never builds anything itself
    and refuses a historical backfill that would label newer application code
    with an older version.
-2. **Native Installer Release** (`.github/workflows/native-release.yml`):
+3. **Native Installer Release** (`.github/workflows/native-release.yml`):
    unchanged build semantics — the tag push triggers the fail-closed signing
    preflight, the platform build matrix, install/launch/uninstall smoke tests,
    final-byte checksums, attestation, and a **draft** prerelease that a

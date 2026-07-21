@@ -70,6 +70,20 @@ def test_native_workflows_are_pinned_and_preserve_beta_boundary() -> None:
         assert f"{secret}: ${{{{ secrets.{secret} }}}}" in release
 
 
+def test_windows_installer_lifecycle_has_an_overall_fail_closed_timeout() -> None:
+    build = (ROOT / ".github/workflows/build.yml").read_text()
+    release = (ROOT / ".github/workflows/native-release.yml").read_text()
+
+    build_smoke = build.split(
+        "- name: Smoke-test Windows MSI and NSIS install, launch, and uninstall", 1
+    )[1].split("\n      - name:", 1)[0]
+    release_smoke = release.split(
+        "- name: Smoke-test MSI and NSIS install, signature policy, launch, and uninstall", 1
+    )[1].split("\n      - name:", 1)[0]
+    assert "timeout-minutes: 15" in build_smoke
+    assert "timeout-minutes: 15" in release_smoke
+
+
 def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None:
     freshness = (ROOT / ".github/workflows/native-freshness.yml").read_text()
     uses = re.findall(r"^\s*(?:-\s+)?uses:\s+\S+@([^\s#]+)", freshness, flags=re.MULTILINE)

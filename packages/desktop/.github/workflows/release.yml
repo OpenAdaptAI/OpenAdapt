@@ -1,44 +1,137 @@
 name: Release and PyPI Publish
 
-# Requires ADMIN_TOKEN secret (GitHub PAT with repo scope) to push release
-# commits to protected branches. Without it, the tag gets created but the
-# version bump commit is rejected by branch protection, orphaning the tag.
+# Two explicit paths, both dispatched from protected main:
+#   semantic-release     -> coalesce reviewed commits into one version, tag,
+#                           PyPI package, and GitHub Release.
+#   publish-existing-ref -> rebuild and publish an existing main-contained ref
+#                           to PyPI (recovery when its tag exists but publish
+#                           failed).
+#
+# Ordinary merges run Test and Build artifacts only. Publication is a separate,
+# deliberate operation after the release train's exact main commit is green.
+#
+# Requires ADMIN_TOKEN (GitHub PAT with repo scope) to push the release commit
+# and tag through branch protection. PyPI publication uses Trusted Publishing.
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Release operation"
+        type: choice
+        required: true
+        default: semantic-release
+        options:
+          - semantic-release
+          - publish-existing-ref
+      ref:
+        description: "Existing tag or ref to rebuild and publish to PyPI (for example v0.9.0)"
+        required: false
+        default: main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release:
+  semantic-release:
+    name: Version, tag, and publish the green main release train
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'semantic-release' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    concurrency: release
     permissions:
+      actions: read
       id-token: write
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout protected main at the dispatched commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }}
 
-      - name: Check if should skip
+      - name: Refuse a release commit replay
         id: check_skip
+        shell: bash
         run: |
-          if [ "$(git log -1 --pretty=format:'%an')" = "semantic-release" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          author="$(git log -1 --pretty=format:'%an')"
+          subject="$(git log -1 --pretty=format:'%s')"
+          if [ "${author}" = "semantic-release" ] || printf '%s' "${subject}" | grep -q '^chore: release'; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Wait for exact-head Test and Build workflows
+        if: steps.check_skip.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 2700))
+          workflows=(test.yml build.yml)
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            all_green=true
+            for workflow in "${workflows[@]}"; do
+              response="$(
+                gh api --method GET \
+                  "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
+                  --raw-field head_sha="${GITHUB_SHA}" \
+                  --raw-field event=push \
+                  --raw-field per_page=20
+              )"
+              status="$(
+                printf '%s' "${response}" |
+                  jq -r --arg sha "${GITHUB_SHA}" \
+                    '[.workflow_runs[] | select(.head_sha == $sha)]
+                     | sort_by(.created_at) | last | .status // "missing"'
+              )"
+              conclusion="$(
+                printf '%s' "${response}" |
+                  jq -r --arg sha "${GITHUB_SHA}" \
+                    '[.workflow_runs[] | select(.head_sha == $sha)]
+                     | sort_by(.created_at) | last | .conclusion // "pending"'
+              )"
+              echo "${workflow} for ${GITHUB_SHA}: ${status}/${conclusion}"
+              if [ "${status}" = "completed" ] && [ "${conclusion}" != "success" ]; then
+                echo "Refusing to publish because ${workflow} concluded ${conclusion}."
+                exit 1
+              fi
+              if [ "${status}" != "completed" ] || [ "${conclusion}" != "success" ]; then
+                all_green=false
+              fi
+            done
+            if [ "${all_green}" = true ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Refusing to publish: exact-head Test and Build did not both succeed within 45 minutes."
+          exit 1
+
+      - name: Require dispatched head to remain current protected main
+        if: steps.check_skip.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${current_main}" != "${GITHUB_SHA}" ]; then
+            echo "Refusing stale release dispatch: main is ${current_main}, dispatched head is ${GITHUB_SHA}."
+            exit 1
           fi
 
       - name: Set up Python
         if: steps.check_skip.outputs.skip != 'true'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      # The semantic-release action runs in its own container. Its configured
-      # build command refreshes/stages uv.lock and builds dist/ before tagging.
+      # Semantic Release synchronizes the editable-root lock entry and builds
+      # the wheel/sdist before it creates the release commit and tag.
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
@@ -55,3 +148,99 @@ jobs:
         uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
+
+  publish-existing-ref:
+    name: Recover PyPI publication for an existing green ref
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'publish-existing-ref' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout requested publication ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          path: target
+
+      - name: Checkout current protected-main release guard
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          path: guard
+
+      - name: Resolve and authorize requested ref
+        id: target
+        working-directory: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_sha="$(git rev-parse HEAD)"
+          git fetch origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${target_sha}" origin/main; then
+            echo "Refusing to publish a ref that is not contained in protected main."
+            exit 1
+          fi
+          echo "sha=${target_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Require successful exact-target Test and Build workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in test.yml build.yml; do
+            response="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
+                --raw-field head_sha="${TARGET_SHA}" \
+                --raw-field event=push \
+                --raw-field per_page=20
+            )"
+            status="$(
+              printf '%s' "${response}" |
+                jq -r --arg sha "${TARGET_SHA}" \
+                  '[.workflow_runs[] | select(.head_sha == $sha)]
+                   | sort_by(.created_at) | last | .status // "missing"'
+            )"
+            conclusion="$(
+              printf '%s' "${response}" |
+                jq -r --arg sha "${TARGET_SHA}" \
+                  '[.workflow_runs[] | select(.head_sha == $sha)]
+                   | sort_by(.created_at) | last | .conclusion // "pending"'
+            )"
+            if [ "${status}" != "completed" ] || [ "${conclusion}" != "success" ]; then
+              echo "Refusing to publish ${TARGET_SHA}: ${workflow} is ${status}/${conclusion}."
+              exit 1
+            fi
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Build and validate exact recovery artifacts
+        working-directory: target
+        run: |
+          rm -rf dist
+          uv build --wheel --sdist
+          python scripts/check_release_consistency.py --require-dist
+
+      - name: Independently validate recovery artifacts with the current main guard
+        run: python guard/scripts/verify_build_artifact.py python-distribution --root target
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          packages-dir: target/dist/

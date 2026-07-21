@@ -36,18 +36,18 @@ def normalized_inventory(value: str) -> str:
     return re.sub(r"[\\/]+", "/", value)
 
 
-def artifact_path(kind: str) -> Path:
+def artifact_path(kind: str, root: Path = ROOT) -> Path:
     suffix = ".exe" if sys.platform == "win32" else ""
     if kind == "sidecar":
-        return ROOT / "dist" / f"openadapt-engine{suffix}"
-    return ROOT / "src-tauri" / "target" / "release" / f"openadapt-desktop{suffix}"
+        return root / "dist" / f"openadapt-engine{suffix}"
+    return root / "src-tauri" / "target" / "release" / f"openadapt-desktop{suffix}"
 
 
-def verify_python_distributions(parser: argparse.ArgumentParser) -> None:
+def verify_python_distributions(parser: argparse.ArgumentParser, root: Path = ROOT) -> None:
     """Inspect the archives users actually install, not only the source tree."""
 
-    archives = sorted((ROOT / "dist").glob("openadapt_desktop-*.whl"))
-    archives += sorted((ROOT / "dist").glob("openadapt_desktop-*.tar.gz"))
+    archives = sorted((root / "dist").glob("openadapt_desktop-*.whl"))
+    archives += sorted((root / "dist").glob("openadapt_desktop-*.tar.gz"))
     if len(archives) != 2:
         parser.error(f"expected one wheel and one sdist, found: {archives}")
 
@@ -70,13 +70,19 @@ def verify_python_distributions(parser: argparse.ArgumentParser) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("kind", choices=("python-distribution", "sidecar", "tauri"))
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="repository root containing the artifact (used by guarded recovery publication)",
+    )
     args = parser.parse_args()
 
     if args.kind == "python-distribution":
-        verify_python_distributions(parser)
+        verify_python_distributions(parser, args.root)
         return 0
 
-    artifact = artifact_path(args.kind)
+    artifact = artifact_path(args.kind, args.root)
     if not artifact.is_file() or artifact.stat().st_size == 0:
         parser.error(f"missing or empty {args.kind} artifact: {artifact}")
 

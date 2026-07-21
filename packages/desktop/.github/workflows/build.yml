@@ -188,6 +188,7 @@ jobs:
 
       - name: Smoke-test Windows MSI and NSIS install, launch, and uninstall
         if: runner.os == 'Windows'
+        timeout-minutes: 15
         shell: pwsh
         run: |
           $Msi = @(Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi")

@@ -9,9 +9,13 @@ and register the `openadapt://` operating-system handler. The handler accepts
 only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
-The canonical compiler and governed runtime remain in `openadapt-flow`.
-Compile, replay, run, and teach operations currently require a separately
-installed `openadapt-flow` on `PATH`; it is not frozen into these installers.
+The canonical compiler and governed runtime remain in `openadapt-flow`. Each
+native installer freezes the exact `openadapt-flow==1.19.0` runtime and its
+`playwright==1.61.0` browser automation dependency into the Desktop sidecar.
+Compile, replay, run, and teach therefore work without a separate Python,
+`openadapt-flow`, or `playwright` installation on `PATH`. The first browser
+workflow downloads the Chromium revision pinned by the bundled Playwright
+runtime unless an approved browser cache is pre-provisioned.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and

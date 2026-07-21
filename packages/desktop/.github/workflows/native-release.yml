@@ -308,6 +308,7 @@ jobs:
           --target x86_64-pc-windows-msvc
 
       - name: Smoke-test MSI and NSIS install, signature policy, launch, and uninstall
+        timeout-minutes: 15
         env:
           WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
         shell: pwsh
@@ -561,13 +562,13 @@ jobs:
               --draft \
               --prerelease \
               --title "${title}" \
-              --notes-file docs/EXPERIMENTAL_NATIVE_INSTALLERS.md
+              --notes-file docs/BETA_NATIVE_INSTALLERS.md
           else
             gh release create "${GITHUB_REF_NAME}" \
               --verify-tag \
               --draft \
               --prerelease \
               --title "${title}" \
-              --notes-file docs/EXPERIMENTAL_NATIVE_INSTALLERS.md
+              --notes-file docs/BETA_NATIVE_INSTALLERS.md
           fi
           gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber
