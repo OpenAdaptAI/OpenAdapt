@@ -1,7 +1,7 @@
 # openadapt-types
 
 > [!IMPORTANT]
-> **Status: Experimental — interoperability schemas, not the product.** This
+> **Status: Experimental. Interoperability schemas, not the product.** This
 > package publishes shared schemas for computer-use agents as an optional
 > component, with no production support promise.
 >
@@ -19,6 +19,33 @@ Canonical Pydantic schemas for computer-use agents.
 ```
 pip install openadapt-types
 ```
+
+These are the shared `Action` and UI-state types used across the OpenAdapt
+stack: recorders emit them, the compiler stores and replays them, the grounding
+package resolves their targets, and the privacy package scrubs them. Defining the
+schema once keeps every substrate (web, Windows, macOS, Linux, RDP, Citrix/VDI)
+on the same contract.
+
+## The OpenAdapt stack
+
+OpenAdapt is a governed demonstration compiler: record a workflow once, compile
+the recording into a deterministic program, and replay that program with zero
+model calls on the healthy path. When the live screen does not match what was
+demonstrated it halts instead of guessing, using identity gates and independent
+effect verification. Every substrate is first-class: web and desktop recording
+are validated, RDP and Windows replay are early, and Citrix is exploratory.
+
+| Package | Role |
+| --- | --- |
+| [`openadapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Launcher and installer (`pip install openadapt`) |
+| [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Records, compiles, verifies, and replays workflows |
+| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Cross-platform local desktop recording |
+| **`openadapt-types`** | Canonical action and UI-state schema (this package) |
+| [`openadapt-grounding`](https://github.com/OpenAdaptAI/openadapt-grounding) | Local OCR text-anchoring plus optional model grounding |
+| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | PHI/PII detection and redaction |
+
+Documentation for the whole stack lives at
+[docs.openadapt.ai](https://docs.openadapt.ai).
 
 ## What's in the box
 
@@ -68,7 +95,7 @@ print(state.to_text_tree())
 `ActionTarget` supports three grounding strategies (in priority order):
 
 ```python
-# 1. Element-based (preferred — most robust)
+# 1. Element-based (preferred, most robust)
 ActionTarget(node_id="n1")
 
 # 2. Description-based (resolved by grounding module)
@@ -115,12 +142,12 @@ print(json.dumps(schema, indent=2))
 
 ## Design principles
 
-- **Pydantic v2** — runtime validation, JSON Schema export, fast serialization
-- **Pixels + structure** — always capture both visual and semantic UI state
-- **Node graph** — full element tree, not just focused element
-- **Platform-agnostic** — same schema for Windows, macOS, Linux, web
-- **Extension-friendly** — `raw`, `attributes`, `metadata` fields everywhere
-- **Backward compatible** — `_compat` converters for gradual migration
+- **Pydantic v2**: runtime validation, JSON Schema export, fast serialization
+- **Pixels and structure**: always capture both visual and semantic UI state
+- **Node graph**: full element tree, not just the focused element
+- **Platform-agnostic**: same schema for web, Windows, macOS, Linux, RDP, Citrix/VDI
+- **Extension-friendly**: `raw`, `attributes`, `metadata` fields everywhere
+- **Backward compatible**: `_compat` converters for gradual migration
 
 ## Dependencies
 
