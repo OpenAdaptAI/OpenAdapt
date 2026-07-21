@@ -1,22 +1,32 @@
 # openadapt-agent
 
-> The agent-facing bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflow bundles to other agents (Claude Code, Claude Desktop, any MCP client) as an **MCP server** and as **Agent Skills**. Every execution shells out to the governed `openadapt-flow run` CLI, so flow's fail-closed admission gates (certification, identity arming, effect contracts, encryption at rest, integrity pinning) cannot be bypassed. A halted or refused run is always returned as a structured halt/refusal with an evidence pointer, never as a fabricated success. Status: Experimental (v2).
+> The local agent bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflows and PHI-safe Needs Attention items to MCP clients and emits Agent Skills without becoming a second automation runtime. Healthy execution uses Flow's governed `run` command; a halted or refused run is returned as that exact non-success outcome. Flow remains the authority for policy, identity, verification, durable pauses, attended decisions, repair, and audit. Status: Beta (v2).
 
 ## What it provides
 
-- `openadapt-agent serve --bundles <dir> [--allow-run]`: an MCP server (stdio) over a directory of compiled bundles. Tools: `list_workflows`, `get_workflow`, `get_run_report` (always on, read-only) and `run_<slug>` (only when the operator passes `--allow-run`), whose JSON input schema is derived from the bundle's declared parameters.
-- `openadapt-agent emit-skill <bundle> --out <dir>`: a Claude Agent Skill folder for one bundle. Wraps flow's own `emit-skill` and appends MCP-invocation and halt-semantics guidance.
+- `openadapt-agent serve --bundles <dir> [--allow-run]`: a local MCP stdio server. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`.
+- `--allow-attended-actions` adds exact Teach and Escalate tools for signed durable pauses. With a qualified Flow `--config`, the same server also exposes Continue and Skip through Flow's deployment-bound live verifier and deterministic resume path.
+- `openadapt-agent emit-skill <bundle> --out <dir>` wraps Flow's skill emitter and appends MCP, halt, and attended-action guidance.
+
+## Attended actions
+
+- `continue_attention`: after the local operator completes the paused task, Flow verifies the exact outcome and resumes without actuating that task again.
+- `skip_attention`: applies only a compiled, non-consequential skip that Flow revalidates at decision time.
+- `teach_attention`: records an audited corrective-demonstration request; Flow's revision and regression gates still decide promotion.
+- `escalate_attention`: records escalation and preserves the exact durable pause.
+
+All mutations require an exact capability digest, a stable idempotency key, action-specific confirmation, and MCP form elicitation. Clients without form elicitation use Flow's attended console/CLI; the capabilities are not removed or converted to read-only.
 
 ## Run outcomes (honesty invariant)
 
 - `success`: exit 0 AND the persisted `report.json` marks the run successful. Only then did the workflow complete.
-- `halt`: the run executed and stopped at an unhandled state (halt instead of guessing). NOT a success; evidence in `report.json`/`REPORT.md`.
+- `halt`: execution stopped instead of guessing. It is not a success; protected evidence remains in the local operator experience.
 - `refused`: a governed admission gate refused the bundle before execution; nothing ran.
 - `timeout` / `error`: killed at the deadline / infrastructure problem.
 
 ## Public capability vs private artifact
 
-- The **package/MCP server is the public, official OpenAdapt capability**: inspect and (opt-in) run a compiled bundle under governance. It is what gets published to PyPI and listed in MCP registries.
+- The **package/MCP server is the public OpenAdapt capability**: inspect and, with explicit operator flags, run or attend a compiled workflow under governance. The v2 package is not yet published.
 - A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing.
 
 ## Key documents

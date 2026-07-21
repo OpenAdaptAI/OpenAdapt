@@ -21,6 +21,14 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests scripts
       - name: Test
         run: pytest -q
+      - name: Build release artifacts
+        if: matrix.python-version == '3.12'
+        run: python -m build
+      - name: Verify MIT package boundary
+        if: matrix.python-version == '3.12'
+        run: |
+          python scripts/check_release_artifacts.py dist
+          python scripts/check_dist.py dist/*

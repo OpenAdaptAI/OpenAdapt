@@ -4,9 +4,9 @@ Not run in CI (it spawns the real server process). Usage:
 
     python scripts/smoke_client.py --bundles /path/to/bundles [--allow-run]
 
-Performs tools/list plus the read-only ``list_workflows`` and
-``get_workflow`` calls over the stdio transport and prints the results.
-It never invokes a run tool — executing a workflow is an operator action.
+Performs tools/list plus ``list_workflows``, ``get_workflow``, and the
+PHI-safe ``list_needs_attention`` call over stdio. It never invokes a
+run or attended-action tool.
 """
 
 from __future__ import annotations
@@ -50,11 +50,18 @@ async def main() -> int:
             print("\nlist_workflows:")
             print(json.dumps(payload, indent=2))
 
-            workflows = [w for w in payload["workflows"] if not w["load_error"]]
+            attention = await session.call_tool("list_needs_attention", {})
+            print("\nlist_needs_attention:")
+            print(attention.content[0].text)
+
+            workflows = [w for w in payload["workflows"] if w["available"]]
             if workflows:
-                slug = workflows[0]["slug"]
-                detail = await session.call_tool("get_workflow", {"workflow": slug})
-                print(f"\nget_workflow({slug!r}):")
+                workflow_id = workflows[0]["id"]
+                detail = await session.call_tool(
+                    "get_workflow",
+                    {"workflow": workflow_id},
+                )
+                print(f"\nget_workflow({workflow_id!r}):")
                 print(detail.content[0].text)
     return 0
 

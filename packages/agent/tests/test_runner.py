@@ -9,6 +9,7 @@ from conftest import FlowCliStub
 
 import openadapt_agent.runner as runner_mod
 from openadapt_agent.runner import FlowRunner, RunnerConfig, classify_outcome
+from openadapt_agent.runner import RunOutcome
 
 
 def _run(monkeypatch, runner_config, stub, **kwargs):
@@ -106,9 +107,7 @@ def test_url_override_refused_without_flag(monkeypatch, runner_config, bundle_di
     assert stub.calls == []  # nothing executed
 
 
-def test_url_override_honoured_with_flag(
-    monkeypatch, tmp_path, bundle_dir, success_report
-):
+def test_url_override_honoured_with_flag(monkeypatch, tmp_path, bundle_dir, success_report):
     config = RunnerConfig(
         flow_cli=("openadapt-flow-stub",),
         runs_dir=tmp_path / "runs",
@@ -151,3 +150,35 @@ def test_other_nonzero_exit_is_halt_with_evidence_pointer(exit_code):
     outcome = classify_outcome("w", exit_code, None, stdout="boom", stderr="")
     assert outcome.status == "halt"
     assert outcome.to_dict()["success"] is False
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["success", "halt", "refused", "timeout", "error"],
+)
+def test_public_outcome_projection_never_exports_protected_cli_or_report_text(
+    status,
+):
+    secret = "Jane Roe MRN-9911 sk_live_secret /private/protected/path"
+    outcome = RunOutcome(
+        status=status,
+        workflow="workflow_" + "a" * 24,
+        run_id="run-" + "b" * 24,
+        run_dir=secret,
+        report_path=secret,
+        exit_code=1,
+        detail=secret,
+        halt={"reason": secret, "observed_texts": [secret]},
+        summary={"steps_total": 2, "steps_ok": 1, "diagnostic": secret},
+        stdout_tail=secret,
+        stderr_tail=secret,
+    )
+
+    public = outcome.to_dict()
+    assert secret not in str(public)
+    assert "protected" not in public
+    assert public["status"] == status
+    assert public["success"] is (status == "success")
+
+    opted_in = outcome.to_dict(include_protected=True)
+    assert secret in str(opted_in["protected"])

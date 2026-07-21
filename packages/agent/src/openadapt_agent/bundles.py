@@ -11,9 +11,11 @@ behave exactly as they do for the flow CLI; this module never parses
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 __all__ = [
     "WorkflowInfo",
@@ -22,6 +24,7 @@ __all__ = [
     "load_workflow_info",
     "slugify",
     "tool_input_schema",
+    "workflow_public_id",
 ]
 
 _BUNDLE_MARKERS = ("workflow.json", "workflow.json.enc")
@@ -35,8 +38,9 @@ def is_bundle_dir(path: Path) -> bool:
 def slugify(name: str) -> str:
     """Lowercase, underscore-separated identifier for tool names.
 
-    Mirrors flow's skill-slug convention but uses underscores so the
-    result is also a valid ``run_<slug>`` MCP tool-name fragment.
+    Mirrors flow's skill-slug convention. The slug remains local metadata
+    unless protected export is explicitly enabled; default MCP tool names
+    use :func:`workflow_public_id`.
     """
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     return slug or "workflow"
@@ -47,6 +51,7 @@ class WorkflowInfo:
     """Metadata for one discovered bundle (or the error loading it)."""
 
     slug: str
+    public_id: str
     bundle_dir: Path
     name: str = ""
     params: dict[str, str] = field(default_factory=dict)
@@ -77,12 +82,14 @@ def load_workflow_info(bundle_dir: Path, slug: str | None = None) -> WorkflowInf
     except Exception as exc:  # fail-soft per bundle, loud in the listing
         return WorkflowInfo(
             slug=slug or slugify(bundle_dir.name),
+            public_id=workflow_public_id(bundle_dir),
             bundle_dir=bundle_dir,
             encrypted=encrypted,
             load_error=f"{type(exc).__name__}: {exc}",
         )
     return WorkflowInfo(
         slug=slug or slugify(wf.name),
+        public_id=workflow_public_id(bundle_dir, workflow=wf),
         bundle_dir=bundle_dir,
         name=wf.name,
         params=dict(wf.params),
@@ -123,23 +130,54 @@ def discover_bundles(root: Path) -> list[WorkflowInfo]:
     return infos
 
 
-def tool_input_schema(info: WorkflowInfo, *, allow_url_override: bool = False) -> dict:
+def workflow_public_id(
+    bundle_dir: Path,
+    *,
+    workflow: Any = None,
+) -> str:
+    """Stable opaque MCP identifier without exporting bundle labels or paths."""
+    digest = None
+    manifest = getattr(workflow, "manifest", None)
+    if manifest is not None:
+        digest = getattr(manifest, "content_digest", None)
+    if isinstance(digest, str) and digest:
+        material = digest.encode("utf-8")
+    elif workflow is not None:
+        material = workflow.model_dump_json().encode("utf-8")
+    else:
+        hasher = hashlib.sha256()
+        for marker in _BUNDLE_MARKERS:
+            path = Path(bundle_dir) / marker
+            if not path.is_file() or path.is_symlink():
+                continue
+            hasher.update(marker.encode("ascii"))
+            try:
+                hasher.update(path.read_bytes())
+            except OSError:
+                continue
+        material = hasher.digest()
+    opaque = hashlib.sha256(b"openadapt-agent-workflow-id-v1\0" + material).hexdigest()[:24]
+    return f"workflow_{opaque}"
+
+
+def tool_input_schema(
+    info: WorkflowInfo,
+    *,
+    allow_url_override: bool = False,
+    allow_recorded_defaults: bool = False,
+) -> dict:
     """JSON schema for a workflow's run tool, derived from declared params.
 
-    Every workflow parameter becomes an optional string property whose
-    default is the recorded example value (the same fallback the flow CLI
-    applies when a ``--param`` is omitted). ``url`` is only present when
-    the operator started the server with ``--allow-url-override``.
+    Recorded demonstration values never enter the schema. Parameters are
+    required unless the operator explicitly enabled synthetic recorded-default
+    reuse when starting the server. ``url`` is present only under the separate
+    URL-override opt-in.
     """
     properties: dict[str, dict] = {}
-    for name, example in info.params.items():
+    for name in info.params:
         properties[name] = {
             "type": "string",
-            "description": (
-                f"Value for the {name!r} workflow parameter "
-                f"(default: the recorded example value {example!r})."
-            ),
-            "default": example,
+            "description": f"Value for the declared {name!r} workflow parameter.",
         }
     if allow_url_override:
         properties["url"] = {
@@ -152,6 +190,6 @@ def tool_input_schema(info: WorkflowInfo, *, allow_url_override: bool = False) -
     return {
         "type": "object",
         "properties": properties,
-        "required": [],
+        "required": [] if allow_recorded_defaults else sorted(info.params),
         "additionalProperties": False,
     }

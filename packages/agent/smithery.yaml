@@ -1,4 +1,4 @@
-# Smithery configuration for openadapt-agent (Experimental v2).
+# Smithery configuration for openadapt-agent (Beta v2).
 #
 # Exposes compiled openadapt-flow workflow bundles as governed MCP tools
 # over stdio. The bundle directory is the operator's OWN private artifact:
@@ -22,15 +22,43 @@ startCommand:
           bundles). This is your own private artifact.
       allowRun:
         type: boolean
-        title: Allow execution (run_* tools)
+        title: Allow governed workflow execution
         default: false
         description: >-
           When false (default), only the read-only tools (list_workflows,
-          get_workflow, get_run_report) are registered. When true, each
-          loadable bundle also gets a run_<slug> tool that executes through
-          the governed `openadapt-flow run` CLI (fail-closed admission
-          gates). A halt or refusal is always surfaced as such, never as a
-          fabricated success.
+          get_workflow, get_run_report, list_needs_attention, and
+          get_attention_item) are registered. When true, each loadable bundle
+          also gets a run_workflow_<opaque-id> tool that executes through the
+          governed `openadapt-flow run` CLI. A halt or refusal is never
+          presented as success.
+      runsDir:
+        type: string
+        title: Local runs directory
+        default: runs
+        description: >-
+          Local directory containing governed run reports, durable pauses,
+          and Needs Attention state. Protected evidence remains here.
+      allowAttendedActions:
+        type: boolean
+        title: Allow attended decisions
+        default: false
+        description: >-
+          Register governed Teach and Escalate actions for signed pauses.
+          When deploymentConfig is also set, register Continue and Skip
+          through Flow's live verifier and deterministic resume path.
+      deploymentConfig:
+        type: string
+        title: Flow deployment config
+        description: >-
+          Optional path to a qualified openadapt-flow deployment YAML. It is
+          required for Continue and Skip and is fixed when the server starts.
+      headed:
+        type: boolean
+        title: Keep attended browser visible
+        default: false
+        description: >-
+          Keep a deployment-configured browser session visible to the local
+          operator. Required for browser Continue and Skip.
       bundleKey:
         type: string
         title: Bundle decryption key
@@ -43,10 +71,17 @@ startCommand:
       args: [
         'serve',
         '--bundles', config.bundlesDir,
-        ...(config.allowRun ? ['--allow-run'] : [])
+        '--runs-dir', config.runsDir || 'runs',
+        ...(config.allowRun ? ['--allow-run'] : []),
+        ...(config.allowAttendedActions ? ['--allow-attended-actions'] : []),
+        ...(config.deploymentConfig ? ['--config', config.deploymentConfig] : []),
+        ...(config.headed ? ['--headed'] : [])
       ],
       env: config.bundleKey ? { OPENADAPT_BUNDLE_KEY: config.bundleKey } : {}
     })
   exampleConfig:
     bundlesDir: /path/to/compiled/bundles
     allowRun: false
+    runsDir: runs
+    allowAttendedActions: false
+    headed: false

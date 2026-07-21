@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.OpenAdaptAI/openadapt-agent",
   "title": "OpenAdapt Agent (openadapt-flow bridge)",
-  "description": "Expose compiled openadapt-flow workflow bundles as governed MCP tools (Experimental).",
+  "description": "Local Beta bridge for governed openadapt-flow workflows and attended actions.",
   "websiteUrl": "https://docs.openadapt.ai",
   "repository": {
     "url": "https://github.com/OpenAdaptAI/openadapt-agent",
@@ -47,7 +47,7 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "notes": "Read-only by default. The server registers execution (run_*) tools only when the operator adds the --allow-run flag; a registry-launched install stays inspection-only unless that flag is appended. See docs/DISTRIBUTION.md."
+      "notes": "PHI-safe inspection and Needs Attention tools are available by default. Run tools require --allow-run. Continue, Skip, Teach, and Escalate require --allow-attended-actions; Continue and Skip additionally require a qualified deployment --config. See docs/DISTRIBUTION.md."
     }
   }
 }

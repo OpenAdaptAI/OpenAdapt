@@ -3,8 +3,9 @@
 These files are how the package is listed in MCP registries. The tests
 pin them to the package's real identity so a version bump or a rename
 cannot silently desync the registry manifests, and they encode the
-security-relevant invariant that a registry-launched server is read-only
-by default (execution requires the operator to add --allow-run).
+security-relevant invariant that a registry-launched server is PHI-safe and
+read-only by default. Workflow execution and attended decisions require
+separate operator opt-ins.
 """
 
 from __future__ import annotations
@@ -74,8 +75,8 @@ def test_serve_is_the_subcommand_and_bundles_is_required() -> None:
 def test_registry_launch_is_read_only_by_default() -> None:
     """A one-click registry install must NOT auto-enable execution.
 
-    --allow-run is deliberately absent from server.json/smithery defaults;
-    the operator opts into run_* tools explicitly.
+    --allow-run is deliberately absent from server.json defaults and false in
+    Smithery. Attended decisions have their own false-by-default switch.
     """
     args = _server_json()["packages"][0]["packageArguments"]
     assert not any(
@@ -85,6 +86,7 @@ def test_registry_launch_is_read_only_by_default() -> None:
     smithery = yaml.safe_load(SMITHERY_YAML.read_text(encoding="utf-8"))
     props = smithery["startCommand"]["configSchema"]["properties"]
     assert props["allowRun"]["default"] is False
+    assert props["allowAttendedActions"]["default"] is False
     # --allow-run is not forced into the required config.
     assert "allowRun" not in smithery["startCommand"]["configSchema"].get(
         "required", []
@@ -107,6 +109,10 @@ def test_smithery_stdio_command_wires_bundles_and_allow_run() -> None:
     assert "openadapt-agent" in command_fn
     assert "--bundles" in command_fn
     assert "--allow-run" in command_fn
+    assert "--allow-attended-actions" in command_fn
+    assert "--runs-dir" in command_fn
+    assert "--config" in command_fn
+    assert "--headed" in command_fn
     assert "OPENADAPT_BUNDLE_KEY" in command_fn
 
 
@@ -116,7 +122,13 @@ def test_llms_txt_lists_the_tool_surface() -> None:
         "list_workflows",
         "get_workflow",
         "get_run_report",
-        "run_<slug>",
+        "list_needs_attention",
+        "get_attention_item",
+        "run_workflow_<opaque-id>",
+        "continue_attention",
+        "skip_attention",
+        "teach_attention",
+        "escalate_attention",
         "docs.openadapt.ai",
     ):
         assert token in text

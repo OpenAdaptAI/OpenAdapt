@@ -1,12 +1,12 @@
 """Shell out to the governed ``openadapt-flow run`` CLI and map the outcome.
 
-This module is the only execution path in openadapt-agent. It NEVER
-reimplements replay: every run is a subprocess invocation of
+This module is the only new-run path in openadapt-agent. It NEVER
+reimplements replay: every ``run_*`` call is a subprocess invocation of
 ``openadapt-flow run`` (the fail-closed deployment verb), so flow's
 admission gates (certification, identity arming, effect contracts,
 encryption, integrity pinning) apply exactly as they would from a terminal.
 
-Exit-code contract of ``openadapt-flow run`` (v1.9/v1.10):
+Exit-code contract of ``openadapt-flow run``:
 
 - ``0``  — run executed and every step verified: **success**.
 - ``1``  — run executed and stopped: **halt** (evidence in the run
@@ -22,12 +22,12 @@ exit code of 0 is cross-checked against the persisted ``report.json``.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 import tempfile
-import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,10 +40,28 @@ __all__ = [
     "classify_outcome",
     "default_flow_cli",
     "is_safe_run_id",
+    "public_report_summary",
 ]
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _TAIL_CHARS = 4000
+_LOG = logging.getLogger(__name__)
+_PUBLIC_MESSAGES = {
+    "success": ("The governed run completed and its persisted report confirms success."),
+    "halt": (
+        "The governed run stopped safely instead of guessing. Review the local "
+        "Needs Attention experience for protected evidence."
+    ),
+    "refused": ("A governed admission check refused the run. The target workflow did not start."),
+    "timeout": (
+        "The run exceeded its deadline. Its live effect is uncertain; inspect "
+        "the protected local run before retrying."
+    ),
+    "error": (
+        "The run could not produce a trustworthy terminal result. Inspect the "
+        "protected local logs and run evidence."
+    ),
+}
 
 
 def default_flow_cli() -> tuple[str, ...]:
@@ -88,38 +106,88 @@ class RunOutcome:
     stdout_tail: str = ""
     stderr_tail: str = ""
 
-    def to_dict(self) -> dict:
-        return {
+    def to_dict(self, *, include_protected: bool = False) -> dict:
+        """Project an MCP-safe result; raw local evidence is explicit opt-in."""
+        result = {
+            "schema_version": 1,
             "status": self.status,
             "success": self.status == "success",
-            "workflow": self.workflow,
+            "workflow_id": self.workflow,
             "run_id": self.run_id,
-            "run_dir": self.run_dir,
-            "report_path": self.report_path,
-            "exit_code": self.exit_code,
-            "detail": self.detail,
-            "halt": self.halt,
-            "summary": self.summary,
-            "stdout_tail": self.stdout_tail,
-            "stderr_tail": self.stderr_tail,
+            "message": _PUBLIC_MESSAGES.get(
+                self.status,
+                _PUBLIC_MESSAGES["error"],
+            ),
+            "summary": _sanitize_public_summary(self.summary),
         }
+        if include_protected:
+            result["protected"] = {
+                "workflow": self.workflow,
+                "run_dir": self.run_dir,
+                "report_path": self.report_path,
+                "exit_code": self.exit_code,
+                "detail": self.detail,
+                "halt": self.halt,
+                "stdout_tail": self.stdout_tail,
+                "stderr_tail": self.stderr_tail,
+            }
+        return result
 
 
 def _tail(text: str) -> str:
     return text[-_TAIL_CHARS:] if text else ""
 
 
+def _sanitize_public_summary(values: dict) -> dict:
+    summary: dict[str, int | float | bool] = {}
+    for key in (
+        "steps_total",
+        "steps_ok",
+        "steps_skipped",
+        "heal_count",
+        "model_calls",
+    ):
+        value = values.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            summary[key] = value
+    total_ms = values.get("total_ms")
+    if isinstance(total_ms, (int, float)) and not isinstance(total_ms, bool) and total_ms >= 0:
+        summary["total_ms"] = total_ms
+    screenshots_egress = values.get("screenshots_may_leave_box")
+    if isinstance(screenshots_egress, bool):
+        summary["screenshots_may_leave_box"] = screenshots_egress
+    return summary
+
+
+def public_report_summary(report: dict) -> dict:
+    """Return count/boolean metrics only; never report labels or text."""
+    results = report.get("results")
+    results = results if isinstance(results, list) else []
+    summary: dict[str, int | float | bool] = {
+        "steps_total": len(results),
+        "steps_ok": sum(
+            1 for result in results if isinstance(result, dict) and result.get("ok") is True
+        ),
+        "steps_skipped": sum(
+            1 for result in results if isinstance(result, dict) and result.get("skipped") is True
+        ),
+    }
+    for key in ("heal_count", "model_calls"):
+        value = report.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            summary[key] = value
+    total_ms = report.get("total_ms")
+    if isinstance(total_ms, (int, float)) and not isinstance(total_ms, bool) and total_ms >= 0:
+        summary["total_ms"] = total_ms
+    screenshots_egress = report.get("screenshots_may_leave_box")
+    if isinstance(screenshots_egress, bool):
+        summary["screenshots_may_leave_box"] = screenshots_egress
+    return _sanitize_public_summary(summary)
+
+
 def _report_summary(report: dict) -> dict:
     return {
-        "workflow_name": report.get("workflow_name"),
-        "steps_total": len(report.get("results") or []),
-        "steps_ok": sum(1 for r in (report.get("results") or []) if r.get("ok")),
-        "heal_count": report.get("heal_count"),
-        "model_calls": report.get("model_calls"),
-        "total_ms": report.get("total_ms"),
-        "terminal_outcome": report.get("terminal_outcome"),
-        "screenshots_may_leave_box": report.get("screenshots_may_leave_box"),
-        "governed_authorization_id": report.get("governed_authorization_id"),
+        **public_report_summary(report),
     }
 
 
@@ -151,7 +219,7 @@ def classify_outcome(
     Pure function (no I/O) so the mapping is unit-testable. The invariant:
     ``status == "success"`` requires BOTH exit code 0 AND a persisted
     report whose ``success`` flag is true — anything else surfaces as a
-    halt, refusal, or error with evidence pointers.
+    halt, refusal, or error while protected evidence remains local.
     """
     outcome = RunOutcome(
         status="error",
@@ -225,8 +293,7 @@ def classify_outcome(
             )
     else:
         outcome.detail = (
-            "Run exited nonzero before a report.json was written; see "
-            "stdout_tail / stderr_tail."
+            "Run exited nonzero before a report.json was written; see stdout_tail / stderr_tail."
         )
     return outcome
 
@@ -283,13 +350,11 @@ class FlowRunner:
 
         runs_root = Path(self.config.runs_dir)
         runs_root.mkdir(parents=True, exist_ok=True)
-        run_id = f"{workflow}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+        run_id = f"run-{uuid.uuid4().hex[:24]}"
         run_dir = runs_root / run_id
         report_path = run_dir / "report.json"
 
-        params_fd, params_name = tempfile.mkstemp(
-            prefix="openadapt_agent_params_", suffix=".json"
-        )
+        params_fd, params_name = tempfile.mkstemp(prefix="openadapt_agent_params_", suffix=".json")
         params_file = Path(params_name)
         try:
             with os.fdopen(params_fd, "w") as fh:
@@ -330,6 +395,16 @@ class FlowRunner:
                         f"openadapt-flow CLI not found ({self.config.flow_cli[0]!r}); "
                         "install openadapt-flow in the server's environment."
                     ),
+                )
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                _LOG.exception("governed Flow subprocess failed locally")
+                return RunOutcome(
+                    status="error",
+                    workflow=workflow,
+                    run_id=run_id,
+                    run_dir=str(run_dir),
+                    report_path=(str(report_path) if report_path.exists() else None),
+                    detail=f"{type(exc).__name__}: {exc}",
                 )
         finally:
             try:
@@ -384,6 +459,12 @@ class FlowRunner:
             return {"certified": None, "detail": "certify timed out"}
         except FileNotFoundError:
             return {"certified": None, "detail": "openadapt-flow CLI not found"}
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            _LOG.exception("Flow certification subprocess failed locally")
+            return {
+                "certified": None,
+                "detail": f"{type(exc).__name__}: {exc}",
+            }
         return {
             "certified": proc.returncode == 0,
             "exit_code": proc.returncode,

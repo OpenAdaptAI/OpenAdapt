@@ -1,6 +1,6 @@
 # Distribution & discoverability — openadapt-agent
 
-**Status: Experimental (v2).** This document describes how the package is
+**Status: Beta (v2).** This document describes how the package is
 made installable and discoverable as an MCP server, the security-relevant
 distinction between the *public capability* and a *user's private
 bundle*, and the exact founder-owned steps to publish and list it. The
@@ -15,7 +15,7 @@ server". Keep them separate.
 | | Public / official | Private / per-user |
 | --- | --- | --- |
 | **What it is** | the `openadapt-agent` package and its MCP server *program* | a user's compiled `openadapt-flow` workflow *bundle* |
-| **What it exposes** | the OpenAdapt capability: inspect a compiled bundle, and (opt-in) run it under governance | one customer's specific recorded workflow (its steps, parameters, recorded example values) |
+| **What it exposes** | PHI-safe workflow and Needs Attention projections plus opt-in governed run and attended-action tools | one customer's specific recorded workflow (its steps, parameters, recorded example values) |
 | **Where it lives** | PyPI + MCP registries (official, Smithery, mcp.so, Glama, PulseMCP) | the operator's own disk, passed at launch via `--bundles` |
 | **Ships in the package?** | yes — code only | **never** — no bundle is embedded in the wheel, `server.json`, or any registry listing |
 
@@ -29,12 +29,15 @@ inside their trust boundary. The registry listing advertises the
 
 **Read-only by default when registry-launched.** The `server.json` and
 `smithery.yaml` launch the server WITHOUT `--allow-run`, so a one-click
-install from a directory yields the inspection tools only
-(`list_workflows`, `get_workflow`, `get_run_report`). Executing a
-workflow (`run_<slug>`) is a deliberate operator act: they add
-`--allow-run` (and typically `--policy`/`--config`) when they run the
-server against their own bundles. This matches the security model in
-[`DESIGN.md`](DESIGN.md).
+install from a directory yields PHI-safe inspection and Needs Attention
+tools only (`list_workflows`, `get_workflow`, `get_run_report`,
+`list_needs_attention`, and `get_attention_item`). Executing a workflow
+(`run_workflow_<opaque-id>`) is a deliberate operator act: they add
+`--allow-run` (and typically `--policy`/`--config`). Teach and Escalate
+require `--allow-attended-actions`; Continue and Skip additionally require
+a qualified deployment `--config`. Clients without MCP form elicitation use
+Flow's attended console/CLI, where all four capabilities remain available.
+This matches the security model in [`DESIGN.md`](DESIGN.md).
 
 > There is intentionally **no** hosted, multi-tenant "official OpenAdapt
 > workflow server" that exposes OpenAdapt-operated workflows to the
@@ -52,19 +55,20 @@ and [`../smithery.yaml`](../smithery.yaml).
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.0.dev0` (Experimental; pick the final release version at publish — see step 3.1)
-- **Description:** Expose compiled openadapt-flow workflow bundles as governed MCP tools (Experimental).
+- **Version:** `2.0.0.dev0` (Beta development release; pick the final release version at publish — see step 3.1)
+- **Description:** Local Beta bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
 - **License:** MIT
 - **Transport:** stdio
-- **Run command (uvx):** `uvx openadapt-agent serve --bundles <BUNDLES_DIR> [--allow-run]`
-- **Config:** `--bundles` (required, dir), `--allow-run` (opt-in execution), `OPENADAPT_BUNDLE_KEY` (optional secret, for encrypted bundles)
+- **Run command (uvx):** `uvx openadapt-agent serve --bundles <BUNDLES_DIR> [--allow-run] [--allow-attended-actions]`
+- **Config:** `--bundles` (required), `--runs-dir`, `--allow-run`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
 - **Tools:**
-  - `list_workflows` — list exposed bundles (slug, name, params, step count, load errors).
-  - `get_workflow` — inspect one workflow (step intents, declared params with recorded example values, certification status).
-  - `get_run_report` — fetch the persisted `report.json` for a prior run (halt/success evidence).
-  - `run_<slug>` — execute a bundle via the governed `openadapt-flow run` CLI (only when `--allow-run`). Returns `success` | `halt` | `refused` | `timeout` | `error`.
+  - `list_workflows` / `get_workflow` — PHI-safe structural bundle projections with opaque IDs.
+  - `get_run_report` — PHI-safe status and count summary; raw evidence stays local unless protected export was explicitly enabled.
+  - `list_needs_attention` / `get_attention_item` — PHI-safe durable-pause cards and current signed-capability metadata.
+  - `run_workflow_<opaque-id>` — execute through the governed `openadapt-flow run` CLI when `--allow-run`; returns `success` | `halt` | `refused` | `timeout` | `error`.
+  - `continue_attention` / `skip_attention` / `teach_attention` / `escalate_attention` — exact, elicited attended decisions under Flow's capability, idempotency, verification, and audit contract.
 - **Categories/tags:** mcp, agent-skills, automation, workflow, gui, governed, healthcare, rpa
 
 ## 3. Release automation vs. founder one-time actions
@@ -138,7 +142,7 @@ No secret is ever committed; these live only in repo Settings -> Secrets.
 `2.0.0.dev0` is a dev pre-release; `pip install openadapt-agent` will not
 select it without `--pre`. For a real launch choose one of:
 - `2.0.0rc1` (recommended first public: pre-release, opt-in via `--pre`), or
-- `2.0.0` (final; drop the Experimental-only caveats only when honest to).
+- `2.0.0` (final; remove development-release caveats only when the evidence supports it).
 
 Whatever you choose, set it in **three places that a CI test pins
 together**: `pyproject.toml` `version`, `src/openadapt_agent/__init__.py`
@@ -182,7 +186,9 @@ add the ownership marker it names to the package metadata and re-run.
 - "Add Server" -> point at `github.com/OpenAdaptAI/openadapt-agent`.
 - Smithery reads `smithery.yaml` (stdio `startCommand`, `configSchema`,
   `commandFunction`). Confirm the generated config form shows
-  `bundlesDir` (required), `allowRun` (default off), `bundleKey` (secret).
+  `bundlesDir` (required), `runsDir`, `allowRun` (default off),
+  `allowAttendedActions` (default off), optional `deploymentConfig`,
+  `headed`, and `bundleKey` (secret).
 - Publish. Smithery hosts the connection config; it does not host bundles.
 
 > **Why manual:** Smithery has no public "create listing" API keyed to an
