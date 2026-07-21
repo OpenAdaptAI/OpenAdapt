@@ -30,7 +30,15 @@ jobs:
     name: macOS ${{ matrix.architecture }}
     needs: validate
     runs-on: ${{ matrix.os }}
-    environment: native-release
+    # No `environment:` gate: this job is sandboxed build-and-smoke-test compute
+    # on an ephemeral runner. It produces artifacts only and performs no
+    # irreversible external effect, so it runs without manual approval. The human
+    # `native-release` reviewer gate is retained on `publish-draft`, the single
+    # point where installer bytes are written to a GitHub Release.
+    # SIGNING CAVEAT: if Apple signing secrets are later activated they must be
+    # stored as REPOSITORY secrets (they are read directly from `secrets.*` here).
+    # If instead signing material must be gated behind manual approval before it
+    # is exercised, re-add `environment: native-release` to this job.
     permissions:
       contents: read
     strategy:
@@ -173,7 +181,10 @@ jobs:
     name: Windows x86_64
     needs: validate
     runs-on: windows-2022
-    environment: native-release
+    # No `environment:` gate: sandboxed build-and-smoke-test compute only (see the
+    # macOS job note). Windows Authenticode / Azure Trusted Signing secrets, when
+    # activated, must be REPOSITORY secrets, or re-add `environment: native-release`
+    # here to gate signing-material use behind manual approval.
     permissions:
       contents: read
     steps:
@@ -351,7 +362,8 @@ jobs:
     name: Linux x86_64 (unsigned + provenance)
     needs: validate
     runs-on: ubuntu-22.04
-    environment: native-release
+    # No `environment:` gate: sandboxed unsigned build-and-smoke-test compute only
+    # (see the macOS job note). Linux package signing is deferred by design.
     permissions:
       contents: read
     steps:
@@ -503,6 +515,12 @@ jobs:
     name: Create or update Experimental draft prerelease
     needs: attest
     runs-on: ubuntu-22.04
+    # RETAINED human gate: this is the only job with an external effect (it writes
+    # installer bytes to a GitHub Release). Requiring the `native-release` reviewer
+    # here keeps a single manual approval at the publish boundary while the build,
+    # smoke-test, and attest jobs above now run automatically. The release is still
+    # created as a DRAFT, so a maintainer must additionally un-draft it before it
+    # becomes public -- do not remove this gate without a deliberate decision.
     environment: native-release
     permissions:
       contents: write

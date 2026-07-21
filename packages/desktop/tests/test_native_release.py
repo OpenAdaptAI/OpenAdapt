@@ -135,7 +135,11 @@ def test_supersession_edits_notes_only_and_never_deletes() -> None:
     assert "github.event.release.prerelease" in supersede_job
     assert "!github.event.release.draft" in supersede_job
     assert "contains(github.event.release.body, '<!-- installer-release -->')" in supersede_job
-    assert "environment: native-release" in supersede_job
+    # The supersede job carries no `environment:` gate: it runs only after a
+    # maintainer has already published (un-drafted) a native prerelease, so the
+    # publish decision is already made. Only the publish step keeps the
+    # `environment: native-release` approval gate.
+    assert "environment: native-release" not in supersede_job
     assert "permissions:\n      contents: write" in supersede_job
     assert "native_release.py supersede-notes" in supersede_job
     assert "gh release edit" in supersede_job

@@ -173,7 +173,12 @@ jobs:
       !github.event.release.draft &&
       contains(github.event.release.body, '<!-- installer-release -->')
     runs-on: ubuntu-22.04
-    environment: native-release
+    # No `environment:` gate: this job only runs AFTER a maintainer has already
+    # published (un-drafted) a native prerelease -- the publish decision is made.
+    # It just prepends a reversible "superseded" notice to OLDER prereleases, so a
+    # second manual approval added no protection and stalled the freshness pipeline
+    # (a pending approval held the `native-freshness` concurrency lock, blocking
+    # later native releases). Running it automatically resolves that.
     permissions:
       contents: write
     env:
