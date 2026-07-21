@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 648" width="100%" role="img" aria-label="OpenAdapt: the governed demonstration compiler. Record a demo once, compile it to a deterministic program, replay locally with no model calls, and halt with a report instead of guessing. Runs across browser, Windows, macOS, Linux, RDP and Citrix/VDI, surfaced via CLI, desktop, tray, Cloud, MCP servers and Agent Skills.">
+<defs>
+<marker id="ar-rail-themed" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0.5,1 L9,5 L0.5,9 Z" fill="var(--rail)"/></marker>
+<marker id="ar-accent-themed" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0.5,1 L9,5 L0.5,9 Z" fill="var(--accent)"/></marker>
+<marker id="ar-halt-themed" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0.5,1 L9,5 L0.5,9 Z" fill="var(--halt)"/></marker>
+<marker id="ar-ink2-themed" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0.5,1 L9,5 L0.5,9 Z" fill="var(--ink2)"/></marker>
+<style>
+:root{--bg:#F2F1EC;--chip:#FDFCF9;--edge:#D9D8CD;--edge2:#E5E4DB;--ink:#23281F;--ink2:#4C523F;--ink3:#727868;--accent:#3E6B4F;--accentfill:#E6EFE7;--accentink:#2F5340;--halt:#B21F2D;--haltfill:#F7E8E9;--haltink:#8E1822;--warn:#A7641A;--warnfill:#F3EAD9;--warnink:#7A4A12;--mutefill:#EDECE4;--muteink:#6A6F60;--rail:#AFB4A4}
+@media (prefers-color-scheme: dark){:root{--bg:#14171A;--chip:#1B2025;--edge:#2C3339;--edge2:#232a30;--ink:#E8ECE3;--ink2:#B4BBAD;--ink3:#8B9285;--accent:#86D9A8;--accentfill:#182620;--accentink:#A7E6C0;--halt:#F2626F;--haltfill:#291619;--haltink:#F58A93;--warn:#E3B34F;--warnfill:#282112;--warnink:#EBC873;--mutefill:#20262B;--muteink:#9AA194;--rail:#3B434B}}
+</style>
+</defs>
+<rect x="8" y="8" width="1224" height="632" rx="22" fill="var(--bg)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="8" y="8" width="1224" height="5" rx="2.5" fill="var(--accent)"/>
+<rect x="48" y="42" width="54" height="54" rx="15" fill="var(--accent)"/>
+<circle cx="64" cy="69" r="6.5" fill="var(--bg)"/>
+<path d="M73,69 L82,69" stroke="var(--bg)" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M79,65.5 L83,69 L79,72.5" fill="none" stroke="var(--bg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="87.0" y="64.0" width="2.6" height="10" rx="1.3" fill="var(--bg)"/>
+<rect x="91.5" y="60.0" width="2.6" height="18" rx="1.3" fill="var(--bg)"/>
+<rect x="96.0" y="62.0" width="2.6" height="14" rx="1.3" fill="var(--bg)"/>
+<text x="120" y="70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="38" font-weight="800" letter-spacing="-0.5" fill="var(--ink)">OpenAdapt</text>
+<text x="122" y="96" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" fill="var(--ink2)">The governed demonstration compiler for GUI workflows</text>
+<rect x="898.4" y="52" width="293.6" height="34" rx="17" fill="var(--accentfill)" stroke="var(--accent)" stroke-width="1.2"/>
+<circle cx="918.4" cy="69" r="4.5" fill="var(--accent)"/>
+<text x="930.4" y="74" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--accentink)">Healthy runs make no model calls</text>
+<line x1="48" y1="126" x2="1192" y2="126" stroke="var(--edge2)" stroke-width="1"/>
+<rect x="48" y="158" width="250" height="82" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="49" y="169" width="4" height="60" rx="2" fill="var(--accent)"/>
+<text x="68" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Record a demo</text>
+<text x="68" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--ink3)">once, on the real UI</text>
+<rect x="346" y="158" width="250" height="82" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="347" y="169" width="4" height="60" rx="2" fill="var(--accent)"/>
+<text x="366" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Compile to a program</text>
+<text x="366" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--ink3)">deterministic IR bundle</text>
+<rect x="644" y="158" width="250" height="82" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="645" y="169" width="4" height="60" rx="2" fill="var(--accent)"/>
+<text x="664" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Deterministic replay</text>
+<text x="664" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--ink3)">0 model calls, local, ms</text>
+<rect x="942" y="158" width="250" height="82" rx="13" fill="var(--accentfill)" stroke="var(--accent)" stroke-width="1.25"/>
+<rect x="943" y="169" width="4" height="60" rx="2" fill="var(--accent)"/>
+<text x="962" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--accentink)">Verified write</text>
+<text x="962" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--accentink)">postconditions pass</text>
+<rect x="48" y="296" width="250" height="92" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="49" y="307" width="4" height="70" rx="2" fill="var(--ink3)"/>
+<text x="68" y="326" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Resolution ladder</text>
+<text x="68" y="364" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace" font-size="10.5" fill="var(--ink2)">structural / template</text>
+<text x="68" y="379" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace" font-size="10.5" fill="var(--ink2)">OCR / geometry</text>
+<text x="68" y="394" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace" font-size="10.5" fill="var(--ink2)">grounding model optional</text>
+<rect x="346" y="296" width="250" height="92" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="347" y="307" width="4" height="70" rx="2" fill="var(--warn)"/>
+<text x="366" y="326" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Armed identity gate</text>
+<text x="366" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--ink3)">refuse a low-confidence match</text>
+<rect x="644" y="296" width="250" height="92" rx="13" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.25"/>
+<rect x="645" y="307" width="4" height="70" rx="2" fill="var(--warn)"/>
+<text x="664" y="326" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--ink)">Effect verification</text>
+<text x="664" y="346" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--ink3)">out-of-band record oracle</text>
+<rect x="942" y="300" width="250" height="84" rx="13" fill="var(--haltfill)" stroke="var(--halt)" stroke-width="1.25"/>
+<rect x="943" y="311" width="4" height="62" rx="2" fill="var(--halt)"/>
+<text x="962" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="var(--haltink)">Halt, don&#x27;t guess</text>
+<text x="962" y="350" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="var(--haltink)">report for a human or an AI</text>
+<path d="M298,199.0 L340,199.0" fill="none" stroke="var(--rail)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-rail-themed)"/>
+<path d="M596,199.0 L638,199.0" fill="none" stroke="var(--rail)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-rail-themed)"/>
+<path d="M894,199.0 L936,199.0" fill="none" stroke="var(--accent)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-accent-themed)"/>
+<path d="M769.0,240 L769.0,268 L173.0,268 L173.0,290" fill="none" stroke="var(--ink2)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-ink2-themed)"/>
+<rect x="386.2" y="257.0" width="87.6" height="22" rx="11" fill="var(--bg)" stroke="var(--edge)" stroke-width="1"/>
+<text x="430.0" y="272.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600" text-anchor="middle" fill="var(--ink2)">on UI drift</text>
+<path d="M298,342.0 L340,342.0" fill="none" stroke="var(--rail)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-rail-themed)"/>
+<path d="M596,342.0 L638,342.0" fill="none" stroke="var(--rail)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-rail-themed)"/>
+<path d="M894,342.0 L936,342.0" fill="none" stroke="var(--halt)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ar-halt-themed)"/>
+<path d="M854,296 C854,250 872,248 936,226" fill="none" stroke="var(--accent)" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#ar-accent-themed)"/>
+<rect x="874.2" y="247.0" width="87.6" height="22" rx="11" fill="var(--bg)" stroke="var(--edge)" stroke-width="1"/>
+<text x="918.0" y="262.0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600" text-anchor="middle" fill="var(--accentink)">re-resolved</text>
+<text x="620.0" y="418" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" text-anchor="middle" fill="var(--ink3)">Deterministic on the healthy path  ·  a grounding model is optional and never on the hot path  ·  halt when identity or effect cannot be verified</text>
+<line x1="48" y1="440" x2="1192" y2="440" stroke="var(--edge2)" stroke-width="1"/>
+<text x="48" y="470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.4" fill="var(--ink3)">RUNS ACROSS</text>
+<rect x="180.0" y="456" width="127.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="194.0" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Browser</text>
+<rect x="256.6" y="463" width="36.8" height="16" rx="8" fill="var(--accentfill)"/>
+<text x="275.0" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--accentink)">BETA</text>
+<rect x="319.4" y="456" width="138.8" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="333.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Windows</text>
+<rect x="396.0" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="420.1" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
+<rect x="470.2" y="456" width="123.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="484.2" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">macOS</text>
+<rect x="531.2" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="555.3" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
+<rect x="605.4" y="456" width="134.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="619.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Linux</text>
+<rect x="666.4" y="463" width="59.6" height="16" rx="8" fill="var(--mutefill)"/>
+<text x="696.2" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">RESEARCH</text>
+<rect x="752.0" y="456" width="107.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="766.0" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">RDP</text>
+<rect x="797.4" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="821.5" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
+<rect x="871.6" y="456" width="206.3" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="885.6" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Citrix / VDI</text>
+<rect x="987.2" y="463" width="76.7" height="16" rx="8" fill="var(--mutefill)"/>
+<text x="1025.5" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">EXPLORATORY</text>
+<text x="48" y="534" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.4" fill="var(--ink3)">SURFACED VIA</text>
+<rect x="180.0" y="520" width="51.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="194.0" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">CLI</text>
+<rect x="243.4" y="520" width="204.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="257.4" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Desktop app</text>
+<rect x="351.2" y="527" width="82.4" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="392.4" y="538.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">EXPERIMENTAL</text>
+<rect x="459.6" y="520" width="59.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="473.6" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Tray</text>
+<rect x="530.8" y="520" width="157.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="544.8" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Cloud</text>
+<rect x="591.8" y="527" width="82.4" height="16" rx="8" fill="var(--accentfill)"/>
+<text x="633.0" y="538.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--accentink)">BETA BROWSER</text>
+<rect x="700.2" y="520" width="113.8" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="714.2" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">MCP servers</text>
+<rect x="826.0" y="520" width="121.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="840.0" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Agent Skills</text>
+</svg>
