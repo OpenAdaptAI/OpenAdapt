@@ -74,23 +74,27 @@ artifact commands documented below.
 
 ## Quick Start
 
-To connect this computer to the workspace you already opened in Cloud, click
-**Connect local OpenAdapt** there. The desktop app opens when its protocol
-handler is installed; otherwise Cloud gives you one command:
+OpenAdapt runs two ways:
+
+- **Local (recommended).** Record, compile, and replay entirely on your own
+  machine. No account, no upload, no cloud: the recording, the compiled bundle,
+  and every replay stay local. This is the privacy-preserving default and works
+  today.
+- **Cloud (optional, managed).** A hosted service that adds managed execution, a
+  dashboard, approvals, policy, audit, scheduling, and billing for teams. It is
+  not required for the local loop.
+
+Start local.
+
+### Path 1: Local (recommended)
+
+Everything in this path runs on your own machine and nothing leaves it. First
+try the bundled MockMed workflow. It needs no account and no target application,
+and it is the same reproducible path `openadapt-flow` exercises in CI:
 
 ```bash
-openadapt connect --pairing oap_... --host https://app.openadapt.ai
-```
+pip install openadapt
 
-The one-time pairing expires after five minutes. The resulting workspace
-credential is saved in the operating system keychain and can be revoked in
-Cloud settings. Pairing grants the existing governed ingest capability; it
-does not let a web page run terminal commands or browse local files.
-
-Run the bundled MockMed workflow first. This is the reproducible path exercised
-by `openadapt-flow` CI and requires no account or target application:
-
-```bash
 openadapt flow demo-record --out rec
 openadapt flow compile rec --out bundle --name mockmed-triage
 openadapt flow certify bundle --policy permissive
@@ -103,22 +107,86 @@ Each replay writes an illustrated `REPORT.md` in its run directory. The drift
 run demonstrates bounded deterministic re-resolution; it is not a claim that
 arbitrary UI changes can be repaired.
 
-Now apply the stricter deployment gates:
+Now record your own workflow. Recording is substrate-aware: `--backend` selects
+what you drive, and the browser backend is the default. The full loop stays
+local: record, compile, replay.
+
+```bash
+# Browser (default backend; --url is the app to record)
+openadapt flow record --backend web --url https://your.app --out rec
+openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow replay bundle --url https://your.app
+```
+
+Native desktop and remote-display substrates record with the same command and a
+different `--backend`, then replay locally with `openadapt flow run` under a
+deployment config:
+
+```bash
+openadapt flow record --backend windows --agent-url http://localhost:5001 --out rec
+openadapt flow record --backend macos --macos-app TextEdit --out rec
+openadapt flow record --backend rdp --rdp-host 10.0.0.5 --out rec
+```
+
+The browser path is the Beta reference loop and runs in CI with no OS
+permissions. Windows, macOS, and RDP are scoped, design-partner qualifications
+for specific tasks and environments, not arbitrary-application support, and
+Citrix is research-stage; see [Substrate maturity](#substrate-maturity).
+
+Before you deploy, apply the stricter gates:
 
 ```bash
 openadapt flow lint bundle
 openadapt flow certify bundle --policy clinical-write
 ```
 
-These two commands currently exit nonzero. That is intentional: the bundled
-workflow is runnable under the permissive demo policy, but it has unarmed
+These two commands currently exit nonzero on the bundled workflow. That is
+intentional: it is runnable under the permissive demo policy, but it has unarmed
 clicks, a vacuous postcondition, and no configured system-of-record effect for
-its write. The strict policy refuses to call it safe. A policy pass means only
-that the bundle satisfies that named policy.
+its write, so the strict policy refuses to call it safe. A policy pass means
+only that the bundle satisfies that named policy.
 
-To run the workflow through OpenAdapt Cloud, create and review a sanitized
-derivative locally, approve its exact bytes, then upload that immutable
-derivative with an ingest token created in the Cloud dashboard:
+One recording does more than replay a single path. `openadapt flow for-each`
+wraps a compiled bundle's body in a governed loop that runs once per record of
+a worklist (CSV or JSON), bounded, identity-checked and effect-verified per
+record, and halting on ambiguity instead of skipping a record. And before a
+bundle ever runs, `openadapt flow visualize` renders its program graph: the
+ordered steps, the resolution ladder, the armed identity gates, the effect
+checks, and every point the run can halt, as offline HTML, Mermaid, or JSON.
+
+```bash
+openadapt flow for-each bundle --records worklist.csv --out queue-bundle
+openadapt flow visualize bundle -o graph.html
+```
+
+> `openadapt flow <verb>` is the recommended path. The standalone
+> `openadapt-flow <verb>` command keeps working and behaves identically.
+
+### Path 2: Cloud (optional, managed)
+
+OpenAdapt Cloud is the optional hosted path for teams that want managed
+execution, a dashboard, approvals, policy, audit, scheduling, and billing. It is
+not required for the local loop above. The public managed subscription runs
+**browser** workflows today; desktop, RDP, and Citrix substrates run
+self-hosted or on-prem under the same governed contract, as separately scoped
+design-partner deployments.
+
+First connect this computer to the workspace you already opened in Cloud. Click
+**Connect local OpenAdapt** there. The desktop app opens when its protocol
+handler is installed; otherwise Cloud gives you one command:
+
+```bash
+openadapt connect --pairing oap_... --host https://app.openadapt.ai
+```
+
+The one-time pairing expires after five minutes. The resulting workspace
+credential is saved in the operating system keychain and can be revoked in
+Cloud settings. Pairing grants the existing governed ingest capability; it
+does not let a web page run terminal commands or browse local files.
+
+Cloud never ingests a raw recording. Create and review a sanitized derivative
+locally, approve its exact bytes, then upload that immutable derivative with an
+ingest token created in the Cloud dashboard:
 
 ```bash
 openadapt flow sanitize rec --kind recording --out rec-sanitized
@@ -147,30 +215,6 @@ The original recording remains local. Sanitization accounts for every file and
 refuses unsupported content rather than copying it. Review is local and
 approval is bound to the exact archive hash; live observations can contain PHI
 again and therefore remain inside the workflow's declared execution boundary.
-
-Then record your own browser application:
-
-```bash
-openadapt flow record --url https://your.app --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your.app
-```
-
-> `openadapt flow <verb>` is the recommended path. The standalone
-> `openadapt-flow <verb>` command keeps working and behaves identically.
-
-One recording does more than replay a single path. `openadapt flow for-each`
-wraps a compiled bundle's body in a governed loop that runs once per record of
-a worklist (CSV or JSON), bounded, identity-checked and effect-verified per
-record, and halting on ambiguity instead of skipping a record. And before a
-bundle ever runs, `openadapt flow visualize` renders its program graph: the
-ordered steps, the resolution ladder, the armed identity gates, the effect
-checks, and every point the run can halt, as offline HTML, Mermaid, or JSON.
-
-```bash
-openadapt flow for-each bundle --records worklist.csv --out queue-bundle
-openadapt flow visualize bundle -o graph.html
-```
 
 ---
 
@@ -261,7 +305,8 @@ Current components (see the manifest for the source of truth): launcher
 ### CLI reference
 
 ```
-openadapt flow record --url <app> --out <dir>    Record a workflow once
+openadapt flow record --backend web|windows|macos|linux|rdp --out <dir>
+                                                  Record a workflow once (web uses --url)
 openadapt flow compile <rec> --out <bundle>       Compile a recording into a bundle
 openadapt flow replay <bundle>                    Replay a bundle (local, $0)
 openadapt flow lint <bundle>                       Report a bundle's coverage gaps
