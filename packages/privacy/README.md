@@ -1,17 +1,57 @@
 # openadapt-privacy
 
+> [!IMPORTANT]
+> **Status: Experimental.** The API is published on the 1.x version line, but
+> the PHI/PII detector is backed by synthetic regression evidence rather than
+> clinical validation. Scrubbing is one control in a reviewed egress process,
+> not a guarantee that an artifact is free of protected data.
+>
+> The OpenAdapt product is the demonstration compiler,
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
+> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
+> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
+> deterministic, locally executable program. Healthy runs make no model calls,
+> and it halts instead of guessing when verification fails. Lifecycle labels for
+> every repository are in the
+> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+
 [![Build Status](https://github.com/OpenAdaptAI/openadapt-privacy/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-privacy/actions)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 
-Privacy scrubbing for GUI automation data - PII/PHI detection and redaction.
+PHI/PII detection and redaction for GUI automation data. Presidio-backed
+scrubbing of the text, structured element trees, and screenshots that a
+recording captures.
 
-**Lifecycle: Experimental.** The API is published on the 1.x version line, but
-the PHI detector is backed by synthetic regression evidence rather than
-clinical validation. Scrubbing is one control in a reviewed egress process, not
-a guarantee that an artifact is PHI-free.
+This is the trust and auditability asset of the OpenAdapt stack. A demonstration
+recording can contain everything visible on screen and everything typed, so
+`openadapt-privacy` gives the compiler and its operators a reviewable control for
+removing protected data before an artifact is stored, shared, or exported. It
+detects a fixed set of entity types, replaces them with typed placeholders, and
+fails loud when its model is unavailable rather than scrubbing silently weaker.
+
+## The OpenAdapt stack
+
+OpenAdapt is a governed demonstration compiler: record a workflow once, compile
+the recording into a deterministic program, and replay that program with zero
+model calls on the healthy path. When the live screen does not match what was
+demonstrated it halts instead of guessing, using identity gates and independent
+effect verification. Every substrate is first-class: web and desktop recording
+are validated, RDP and Windows replay are early, and Citrix is exploratory.
+
+| Package | Role |
+| --- | --- |
+| [`openadapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Launcher and installer (`pip install openadapt`) |
+| [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Records, compiles, verifies, and replays workflows |
+| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | Cross-platform local desktop recording |
+| [`openadapt-types`](https://github.com/OpenAdaptAI/openadapt-types) | Canonical action and UI-state schema |
+| [`openadapt-grounding`](https://github.com/OpenAdaptAI/openadapt-grounding) | Local OCR text-anchoring plus optional model grounding |
+| **`openadapt-privacy`** | PHI/PII detection and redaction (this package) |
+
+Documentation for the whole stack lives at
+[docs.openadapt.ai](https://docs.openadapt.ai).
 
 ## Installation
 
@@ -81,7 +121,7 @@ Contact <PERSON> at <EMAIL_ADDRESS> or <PHONE_NUMBER>
 
 ## Dict Scrubbing
 
-Scrub PII from nested dictionaries (e.g., GUI element trees):
+Scrub PHI/PII from nested dictionaries (e.g., GUI element trees):
 
 ```python
 from openadapt_privacy import scrub_dict
@@ -168,7 +208,7 @@ actions:
 
 ## Image Scrubbing
 
-Redact PII from screenshots using OCR + NER:
+Redact PHI/PII from screenshots using OCR + NER:
 
 ```python
 from PIL import Image
