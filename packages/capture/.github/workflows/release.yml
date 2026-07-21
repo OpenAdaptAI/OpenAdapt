@@ -35,7 +35,7 @@ jobs:
 
       - name: Install uv
         if: steps.check_skip.outputs.skip != 'true'
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
