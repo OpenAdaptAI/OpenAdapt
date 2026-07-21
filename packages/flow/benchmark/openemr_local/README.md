@@ -4,9 +4,37 @@ Status: **local model-free initial engineering matrix complete; not publication
 evidence**. On 2026-07-16, the compiled and direct-API arms each completed three
 trials under the pinned baseline and three under `ui_cosmetic_v1`: 12/12 rows
 were `correct`, with zero silent incorrect successes, zero over-halts, zero
-model calls, and $0 model cost. The agent arm was intentionally omitted, so the
-result records `full_matrix_complete: false` and `publication_ready: false`.
-Publication still requires the paid agent arm and 10 fresh trials per cell.
+model calls, and $0 model cost.
+
+On 2026-07-21 the **paid computer-use agent arm was run** (it is no longer
+omitted). On a separately provisioned synthetic baseline, the
+`claude-sonnet-5` agent drove the same patient-registration task and was scored
+by the same arm-independent effect contract:
+
+| metric | value |
+|---|---|
+| trials | 6 (2 conditions x 3) |
+| primary outcome | 0/6 `correct`; 6/6 `missing_write` |
+| behaviour | every run exhausted its 35-action budget without saving a patient; the agent never got past OpenEMR's duplicate-search / confirm-create step |
+| over-halt | 0/6 (all failures were classified `missing_write`) |
+| silent incorrect success | 0/6 (it wrote no wrong or duplicate patient) |
+| model cost / run | $0.8901 (list price) |
+| total model cost | $5.3408 |
+| latency (wall) mean | 113.3 s |
+| model | `claude-sonnet-5`, `computer_20251124`, <=35 actions/run, <=$1.50/run cap |
+
+This is an honest negative result: on this heavily framed local OpenEMR task,
+the bounded-budget computer-use agent failed to complete the write. The earlier
+model-free subset recorded deterministic compiled completion at $0, but the
+agent arm used a separately provisioned baseline, so this is not a matched
+comparison and no compiled result is claimed on the agent baseline. A fully
+matched single-baseline three-arm matrix at 10 trials per cell remains the
+publication bar. Raw per-run rows, environment fingerprints,
+application-specific adapter/oracle wiring, and the detailed cost ledger are
+retained in the private `OpenAdaptAI/openadapt-corpus` repository. The public
+generic cost-capped agent mechanism remains in
+`openadapt_flow/benchmark/agent_baseline.py`. See the
+[aggregate report](../agent_arm_verticals/README.md).
 
 The accepted run used baseline SHA-256
 `8d2901490a0a6a6044e94b6a8a1663436b7dacedda4f2fe1fb8c48405165011d`.

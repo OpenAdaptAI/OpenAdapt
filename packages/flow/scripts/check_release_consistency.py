@@ -31,13 +31,14 @@ AGPL_CONTENT_SIGNATURES = (
 )
 # Private, deployment-derived hardening artifacts -- the GROWN failure corpus
 # from real deployments, the TUNED metamorphic-adversary parameters/weights,
-# deployment-derived THRESHOLDS, effect-verification oracle RECIPES, and
-# customer/deployment-derived real-EMR datasets -- live ONLY in the private
+# deployment-derived THRESHOLDS, effect-verification oracle RECIPES,
+# customer/deployment-derived real-EMR datasets, and raw paid-agent evidence or
+# per-system driver/oracle recipes -- live ONLY in the private
 # OpenAdaptAI/openadapt-corpus repo and must never ride inside an MIT wheel or
-# sdist. Reproducible synthetic fixtures and fake-patient public-demo evidence
-# remain public; they are mechanisms/samples, not customer-derived data. This
-# mirrors the AGPL boundary above: both a path-token check and a content-signature
-# check, so a rename cannot smuggle a private artifact in.
+# sdist. Reproducible synthetic fixtures, generic harnesses, fake-patient
+# public-demo evidence, and bounded aggregates remain public. This mirrors the
+# AGPL boundary above: both a path-token check and a content-signature check, so
+# a rename cannot smuggle a private artifact in.
 PRIVATE_DISTRIBUTION_PATH_TOKENS = (
     "openadapt-corpus",
     "adversary_corpus",
@@ -53,6 +54,13 @@ PRIVATE_DISTRIBUTION_PATH_TOKENS = (
     "real_emr",
     "enterprise_productionized",
     "control_plane",
+    "paid_agent_evidence",
+    "agent-arm/",
+    "rows.jsonl",
+    "cost_ledger",
+    "frappe_agent_arm.py",
+    "openemr_agent_arm.py",
+    "openimis_agent_arm.py",
 )
 PRIVATE_DISTRIBUTION_PATH_SEGMENTS = frozenset({"private", ".private"})
 PRIVATE_DISTRIBUTION_EXACT_PATHS = frozenset(
@@ -301,7 +309,7 @@ def _has_private_path_segment(path: str) -> bool:
 
 
 def _private_distribution_hits(members: set[str], signature_hits: set[str]) -> set[str]:
-    """Members that are private deployment-derived hardening artifacts."""
+    """Members that cross the private source-availability boundary."""
     hits = {
         member
         for member in members
@@ -812,7 +820,51 @@ FORBIDDEN_SDIST_PATHS = frozenset(
         "tests/test_openimis_claims_fixture.py",
     }
 )
-FORBIDDEN_SDIST_PREFIXES = ("benchmark/openimis_claims/",)
+FORBIDDEN_SDIST_PREFIXES = (
+    "benchmark/openimis_claims/",
+    "benchmark/frappe_lending/agent-arm/",
+    "benchmark/openemr_local/agent-arm/",
+)
+
+FORBIDDEN_PUBLIC_SOURCE_PATHS = frozenset(
+    {
+        "scripts/frappe_agent_arm.py",
+        "scripts/openemr_agent_arm.py",
+        "scripts/openimis_agent_arm.py",
+        "benchmark/agent_arm_verticals/COST_LEDGER.md",
+    }
+)
+
+
+def validate_public_source_policy(root: Path = ROOT) -> None:
+    """Refuse private paid-agent evidence and per-system recipes in source.
+
+    Archive inspection remains mandatory, but this earlier guard prevents a
+    sensitive path from being committed to the public repository even when a
+    packaging exclusion would otherwise hide it from the wheel or sdist.
+    """
+    hits = {
+        relative
+        for relative in FORBIDDEN_PUBLIC_SOURCE_PATHS
+        if (root / relative).is_file()
+    }
+    hits.update(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("rows.jsonl")
+        if ".git" not in path.parts
+    )
+    hits.update(
+        path.relative_to(root).as_posix()
+        for path in root.glob("benchmark/**/agent-arm/**/*")
+        if path.is_file()
+    )
+    if hits:
+        raise ValueError(
+            "public source contains private paid-agent per-run evidence, "
+            "environment-linked result rows, detailed cost ledgers, or "
+            "per-system driver recipes that belong only in the private "
+            f"OpenAdaptAI/openadapt-corpus repo: {sorted(hits)}"
+        )
 
 
 def _expected_license_bytes(license_file: Path | None = None) -> bytes:
@@ -1005,9 +1057,10 @@ def validate_sdist_license_boundary(
     private = _private_distribution_hits(members, private_signature_hits)
     if private:
         raise ValueError(
-            "source distribution contains private, deployment-derived hardening "
+            "source distribution contains private source-policy "
             "material (grown corpus / tuned adversary / thresholds / oracle "
-            "recipes / real-EMR datasets) that belongs only in the private "
+            "recipes / real-EMR datasets / paid-agent raw evidence) that "
+            "belongs only in the private "
             f"OpenAdaptAI/openadapt-corpus repo: {sorted(private)}"
         )
     repository_only = _repository_only_evaluation_hits(members)
@@ -1111,9 +1164,10 @@ def validate_wheel_license_boundary(
     private = _private_distribution_hits(members, private_signature_hits)
     if private:
         raise ValueError(
-            "wheel contains private, deployment-derived hardening material "
+            "wheel contains private source-policy material "
             "(grown corpus / tuned adversary / thresholds / oracle recipes / "
-            "real-EMR datasets) that belongs only in the private "
+            "real-EMR datasets / paid-agent raw evidence) that belongs only "
+            "in the private "
             f"OpenAdaptAI/openadapt-corpus repo: {sorted(private)}"
         )
     repository_only = _repository_only_evaluation_hits(members)
@@ -1254,6 +1308,11 @@ def main() -> int:
         return 0
     if args.license_file is not None:
         parser.error("--license-file requires --validate-dist-dir")
+
+    try:
+        validate_public_source_policy()
+    except ValueError as error:
+        parser.error(str(error))
 
     if args.sync:
         sync_lock_version()

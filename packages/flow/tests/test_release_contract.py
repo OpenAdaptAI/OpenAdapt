@@ -37,6 +37,7 @@ from scripts.check_release_consistency import (
     release_versions,
     sync_lock_version,
     validate_distribution_directory,
+    validate_public_source_policy,
     validate_public_source_tree,
     validate_sdist_license_boundary,
     validate_wheel_license_boundary,
@@ -72,6 +73,27 @@ EPHEMERAL_BUILD_EXCLUDES = {"/.hypothesis"}
 def test_release_versions_are_synchronized() -> None:
     versions = release_versions()
     assert len(set(versions.values())) == 1, versions
+
+
+def test_public_source_refuses_paid_agent_raw_evidence_and_recipes(
+    tmp_path: Path,
+) -> None:
+    validate_public_source_policy(tmp_path)
+
+    forbidden = (
+        "scripts/openemr_agent_arm.py",
+        "benchmark/openemr_local/agent-arm/official/results.json",
+        "benchmark/openemr_local/agent-arm/official/evidence/final.png",
+        "benchmark/frappe_lending/agent-arm/official/rows.jsonl",
+        "benchmark/agent_arm_verticals/COST_LEDGER.md",
+    )
+    for relative in forbidden:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("private evidence\n")
+        with pytest.raises(ValueError, match="private paid-agent"):
+            validate_public_source_policy(tmp_path)
+        path.unlink()
 
 
 def test_semantic_release_stamps_lock_and_validates_artifacts() -> None:
@@ -524,7 +546,7 @@ def test_sdist_requires_mit_license_and_excludes_openimis_surface(
 
 
 def test_wheel_refuses_private_corpus_material(tmp_path: Path) -> None:
-    """The wheel must reject private, deployment-derived hardening artifacts.
+    """The wheel must reject private source-policy material.
 
     The public synthetic baseline (benchmark/vision_hardening/) is allowed; only
     the private grown-corpus / tuned-adversary / real-EMR class -- detected by
@@ -556,6 +578,9 @@ def test_wheel_refuses_private_corpus_material(tmp_path: Path) -> None:
             "openadapt_flow/validation/identity_roc.py",
             "tests/test_identity_out_of_corpus.py",
             "private/identity/operating-point.json",
+            "openadapt_flow/benchmark/agent-arm/official/results.json",
+            "openadapt_flow/benchmark/run/rows.jsonl",
+            "openadapt_flow/benchmark/COST_LEDGER.md",
             "openadapt_flow/renamed-neutral.json",  # caught by banner, not path
         )
     ):
@@ -569,12 +594,12 @@ def test_wheel_refuses_private_corpus_material(tmp_path: Path) -> None:
                 else None
             ),
         )
-        with pytest.raises(ValueError, match="private, deployment-derived"):
+        with pytest.raises(ValueError, match="private source-policy"):
             validate_wheel_license_boundary(mixed)
 
 
 def test_sdist_refuses_private_corpus_material(tmp_path: Path) -> None:
-    """The sdist must reject private, deployment-derived hardening artifacts."""
+    """The sdist must reject private source-policy material."""
     clean_members = {*REQUIRED_SDIST_PATHS, "PKG-INFO"}
 
     # The committed public synthetic corpus is allowed in the sdist.
@@ -605,6 +630,9 @@ def test_sdist_refuses_private_corpus_material(tmp_path: Path) -> None:
             "docs/validation/identity_roc.json",
             "tests/test_identity_corpus_rates.py",
             "private/identity/operating-point.json",
+            "benchmark/openemr_local/agent-arm/official/results.json",
+            "benchmark/private-run/rows.jsonl",
+            "benchmark/agent_arm_verticals/COST_LEDGER.md",
             "benchmark/renamed-neutral.json",  # caught by banner, not path
         )
     ):
@@ -618,7 +646,7 @@ def test_sdist_refuses_private_corpus_material(tmp_path: Path) -> None:
                 else None
             ),
         )
-        with pytest.raises(ValueError, match="private, deployment-derived"):
+        with pytest.raises(ValueError, match="private source-policy"):
             validate_sdist_license_boundary(mixed)
 
 
@@ -728,12 +756,12 @@ def test_archives_refuse_nested_private_segments(tmp_path: Path) -> None:
     ):
         wheel = tmp_path / f"private-segment-{index}.whl"
         _write_wheel(wheel, {license_path, metadata_path, relative})
-        with pytest.raises(ValueError, match="private, deployment-derived"):
+        with pytest.raises(ValueError, match="private source-policy"):
             validate_wheel_license_boundary(wheel)
 
         sdist = tmp_path / f"private-segment-{index}.tar.gz"
         _write_sdist(sdist, {*REQUIRED_SDIST_PATHS, "PKG-INFO", relative})
-        with pytest.raises(ValueError, match="private, deployment-derived"):
+        with pytest.raises(ValueError, match="private source-policy"):
             validate_sdist_license_boundary(sdist)
 
 

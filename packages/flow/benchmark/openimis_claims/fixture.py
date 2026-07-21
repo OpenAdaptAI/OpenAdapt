@@ -9,7 +9,8 @@ against the database — the same record -> compile -> replay loop the OpenEMR
 
 It is a DEMO/reference environment, not a benchmark:
 
-* no timing matrix, no agent arm, no publication protocol;
+* no matched timing matrix or publication protocol; a separate 3-trial paid
+  agent run is reported only as small-N aggregate engineering evidence;
 * the success oracle is a direct SQL read of the claim row (actor self-report
   and pixels never establish success), plus an exact one-row cardinality check;
 * every value is synthetic. The upstream openIMIS demo dataset is a fictional

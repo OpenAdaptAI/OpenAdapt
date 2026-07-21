@@ -8,11 +8,34 @@ entered through the browser UI (claims intake), recorded once, compiled, and
 replayed — with success established only by a direct SQL read of the claim
 row, never by pixels or actor self-report.
 
-There is no timing matrix, no agent arm, and no publication protocol here. Any
-future reliability claim would need the full matched protocol the Frappe
-Lending and OpenEMR benchmarks define (paid agent arm, 10 fresh trials per
-cell, snapshot-reset baselines). Nothing in this directory is publication
-evidence.
+On 2026-07-21 the **paid computer-use agent arm was run** on this environment,
+so the insurance vertical is no longer agent-arm-free. On the pinned synthetic
+reference, the `claude-sonnet-5` agent drove the same claim-intake task and was
+scored by the same arm-independent effect contract:
+
+| metric | value |
+|---|---|
+| trials | 3 |
+| primary outcome | 3/3 `correct` (exactly one 'Entered' claim for the synthetic policyholder each time) |
+| over-halt | 0/3 |
+| silent incorrect success | 0/3 (no duplicate / wrong / collateral claim) |
+| model cost / run | $0.4793 (list price) |
+| total model cost | $1.4380 |
+| latency (wall) mean | 69.8 s |
+| model | `claude-sonnet-5`, `computer_20251124`, <=30 actions/run, <=$1.50/run cap |
+
+Raw per-run rows, environment fingerprints, application-specific
+adapter/oracle wiring, and the detailed cost ledger are retained in the private
+`OpenAdaptAI/openadapt-corpus` repository. The public generic cost-capped agent
+mechanism remains in
+`openadapt_flow/benchmark/agent_baseline.py`. See the
+[aggregate report](../agent_arm_verticals/README.md).
+
+There is still no full timing matrix and no publication protocol here: a
+publication reliability claim would need the full matched protocol the Frappe
+Lending and OpenEMR benchmarks define (compiled + agent + API arms, 10 fresh
+trials per cell, snapshot-reset baselines). Nothing in this directory is
+publication evidence.
 
 ## The application
 

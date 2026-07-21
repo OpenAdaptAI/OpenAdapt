@@ -4,9 +4,34 @@ Status: **local model-free initial engineering matrix complete; not publication
 evidence**. On 2026-07-16, the compiled and direct-API arms each completed three
 trials under the pinned baseline and three under `ui_cosmetic_v1`: 12/12 rows
 were `correct`, with zero silent incorrect successes, zero over-halts, zero
-model calls, and $0 model cost. The agent arm was intentionally omitted, so the
-result records `full_matrix_complete: false` and `publication_ready: false`.
-Publication still requires the paid agent arm and 10 fresh trials per cell.
+model calls, and $0 model cost.
+
+On 2026-07-21 the **paid computer-use agent arm was run** (it is no longer
+omitted). On a separately provisioned synthetic baseline, the
+`claude-sonnet-5` agent completed 3 trials under the pinned condition and 3
+under `ui_cosmetic_v1` (6 total), driving the same Loan Application task and
+being scored by the same arm-independent effect contract:
+
+| metric | value |
+|---|---|
+| trials | 6 (2 conditions x 3) |
+| primary outcome | 6/6 `correct` (the target Loan Application persisted every time) |
+| clean success | 5/6; 1 run over-halted at the cost cap after the record had already persisted |
+| over-halt | 1/6 (the same post-write cost-cap halt) |
+| silent incorrect success | 0/6 |
+| model cost / run | $0.4240 (list price) |
+| total model cost | $2.5437 |
+| latency (wall) mean | 67.3 s |
+| model | `claude-sonnet-5`, `computer_20251124`, <=30 actions/run, <=$2.00/run cap |
+
+This agent arm was measured separately from the earlier compiled/API
+model-free subset; a fully matched single-baseline three-arm matrix at 10
+trials per cell remains the publication bar. Raw per-run rows, environment
+fingerprints, application-specific adapter/oracle wiring, and the detailed cost
+ledger are retained in the private `OpenAdaptAI/openadapt-corpus` repository.
+The public generic cost-capped agent mechanism remains in
+`openadapt_flow/benchmark/agent_baseline.py`. See the
+[aggregate report](../agent_arm_verticals/README.md).
 
 The accepted run used baseline SHA-256
 `7fd6c965f6b7a11f54e451cdc73fdf65f88d9883dc5f8eb5b2055b3cd4be8b83`.
@@ -126,7 +151,7 @@ conditions, with zero model calls and $0 model cost.
 | reset | exact hashed SQL snapshot before every trial | exact hashed SQL snapshot before every trial |
 | oracle | separate read-only REST client + direct SQL + exact table deltas | separate read-only REST user + direct SQL + exact table deltas |
 | completed subset | compiled/API, baseline + drift, 3/cell: 12/12 correct | compiled/API, baseline + drift, 3/cell: 12/12 correct |
-| agent arm | omitted | omitted |
+| paid-agent evidence outside the model-free subset | 0/6 correct, all missing-write, 0 silent incorrect (separate 2026-07-21 baseline) | 6/6 correct writes, 5/6 clean, 0 silent incorrect (separate 2026-07-21 baseline) |
 | publication ready | **No** | **No** |
 
 This is matched local engineering evidence, not a cross-application reliability

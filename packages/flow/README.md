@@ -402,8 +402,11 @@ containers, a lockfile, and independent REST, SQL, and exact table-delta
 verification of every write. In the model-free engineering matrix (compiled
 and direct-API arms, baseline plus cosmetic drift), it delivered **12/12
 correct rows with zero silent wrong writes, zero over-halts, and $0 model
-cost**. The paid agent arm and full per-cell trial counts are the next stage
-of the matrix.
+cost**. A separate paid-agent run completed 6/6 correct writes (5/6 clean;
+one post-write cost-cap over-halt) with zero silent incorrect successes. That
+small-N run used a separately provisioned baseline, so it is engineering
+evidence rather than a matched comparison or publication result. See the
+[aggregate agent-arm report](benchmark/agent_arm_verticals/README.md).
 
 The silent-wrong-effect result is also packaged as a standalone, versioned,
 independently runnable benchmark — **EffectBench** — that a third party can
