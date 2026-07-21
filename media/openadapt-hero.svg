@@ -77,26 +77,26 @@
 <text x="194.0" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Browser</text>
 <rect x="256.6" y="463" width="36.8" height="16" rx="8" fill="var(--accentfill)"/>
 <text x="275.0" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--accentink)">BETA</text>
-<rect x="319.4" y="456" width="138.8" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<rect x="319.4" y="456" width="173.0" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
 <text x="333.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Windows</text>
-<rect x="396.0" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
-<text x="420.1" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
-<rect x="470.2" y="456" width="123.2" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
-<text x="484.2" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">macOS</text>
-<rect x="531.2" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
-<text x="555.3" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
-<rect x="605.4" y="456" width="134.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
-<text x="619.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Linux</text>
-<rect x="666.4" y="463" width="59.6" height="16" rx="8" fill="var(--mutefill)"/>
-<text x="696.2" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">RESEARCH</text>
-<rect x="752.0" y="456" width="107.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
-<text x="766.0" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">RDP</text>
-<rect x="797.4" y="463" width="48.2" height="16" rx="8" fill="var(--warnfill)"/>
-<text x="821.5" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">SCOPED</text>
-<rect x="871.6" y="456" width="206.3" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
-<text x="885.6" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Citrix / VDI</text>
-<rect x="987.2" y="463" width="76.7" height="16" rx="8" fill="var(--mutefill)"/>
-<text x="1025.5" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">EXPLORATORY</text>
+<rect x="396.0" y="463" width="82.4" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="437.2" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">EARLY ACCESS</text>
+<rect x="504.4" y="456" width="157.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="518.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">macOS</text>
+<rect x="565.4" y="463" width="82.4" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="606.6" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">EARLY ACCESS</text>
+<rect x="673.8" y="456" width="134.6" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="687.8" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Linux</text>
+<rect x="734.8" y="463" width="59.6" height="16" rx="8" fill="var(--mutefill)"/>
+<text x="764.6" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">RESEARCH</text>
+<rect x="820.4" y="456" width="141.8" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="834.4" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">RDP</text>
+<rect x="865.8" y="463" width="82.4" height="16" rx="8" fill="var(--warnfill)"/>
+<text x="907.0" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--warnink)">EARLY ACCESS</text>
+<rect x="974.2" y="456" width="206.3" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
+<text x="988.2" y="476" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">Citrix / VDI</text>
+<rect x="1089.8" y="463" width="76.7" height="16" rx="8" fill="var(--mutefill)"/>
+<text x="1128.1" y="474.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.4" text-anchor="middle" fill="var(--muteink)">EXPLORATORY</text>
 <text x="48" y="534" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.4" fill="var(--ink3)">SURFACED VIA</text>
 <rect x="180.0" y="520" width="51.4" height="30" rx="8" fill="var(--chip)" stroke="var(--edge)" stroke-width="1.1"/>
 <text x="194.0" y="540" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">CLI</text>
