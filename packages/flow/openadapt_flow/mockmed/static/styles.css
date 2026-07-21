@@ -179,6 +179,11 @@ textarea#note {
   width: 100%;
   max-width: 640px;
   display: block;
+  /* Native form-control "normal" line metrics vary by host font and can make
+     rows="6" change height between the separate record/replay browsers. Keep
+     this synthetic fixture pixel-stable so a no-drift replay stays zero-heal. */
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 20px;
 }
 
 #encounter-list li {
