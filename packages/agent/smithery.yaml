@@ -1,0 +1,52 @@
+# Smithery configuration for openadapt-agent (Experimental v2).
+#
+# Exposes compiled openadapt-flow workflow bundles as governed MCP tools
+# over stdio. The bundle directory is the operator's OWN private artifact:
+# Smithery collects its path/config at launch; nothing about a user's
+# compiled workflow is baked into this package or its registry listing.
+#
+# Reference: https://smithery.ai/docs/build/project-config/smithery.yaml
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - bundlesDir
+    properties:
+      bundlesDir:
+        type: string
+        title: Bundles directory
+        description: >-
+          Path to a directory of compiled openadapt-flow bundles (either a
+          single bundle, or a directory whose immediate subdirectories are
+          bundles). This is your own private artifact.
+      allowRun:
+        type: boolean
+        title: Allow execution (run_* tools)
+        default: false
+        description: >-
+          When false (default), only the read-only tools (list_workflows,
+          get_workflow, get_run_report) are registered. When true, each
+          loadable bundle also gets a run_<slug> tool that executes through
+          the governed `openadapt-flow run` CLI (fail-closed admission
+          gates). A halt or refusal is always surfaced as such, never as a
+          fabricated success.
+      bundleKey:
+        type: string
+        title: Bundle decryption key
+        description: >-
+          Decryption key for encrypted-at-rest bundles (workflow.json.enc).
+          Leave empty for plaintext bundles. Passed as OPENADAPT_BUNDLE_KEY.
+  commandFunction: |-
+    (config) => ({
+      command: 'openadapt-agent',
+      args: [
+        'serve',
+        '--bundles', config.bundlesDir,
+        ...(config.allowRun ? ['--allow-run'] : [])
+      ],
+      env: config.bundleKey ? { OPENADAPT_BUNDLE_KEY: config.bundleKey } : {}
+    })
+  exampleConfig:
+    bundlesDir: /path/to/compiled/bundles
+    allowRun: false

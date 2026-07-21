@@ -1,0 +1,203 @@
+name: Release
+
+# Builds the package, gates it on the license/boundary check, and — ONLY on
+# a version tag or a published GitHub Release — publishes to PyPI and to the
+# official MCP registry. A normal push or PR runs the validate job only
+# (dry run, no publish), so the workflow itself is testable without shipping.
+#
+# Auth is OIDC-first and secret-free for the io.github.OpenAdaptAI namespace:
+#   - PyPI: Trusted Publishing (needs a one-time publisher config on PyPI +
+#     a GitHub environment named `pypi`; NO repo secret).
+#   - MCP registry: `mcp-publisher login github-oidc` (NO repo secret).
+# Optional token fallbacks are wired and fail LOUD if selected-but-unset;
+# see docs/DISTRIBUTION.md.
+
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "server.json"
+      - "smithery.yaml"
+      - "scripts/check_release_artifacts.py"
+      - ".github/workflows/release.yml"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build + validate (dry run, no publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade build "twine>=6.1" "packaging>=24.2" jsonschema
+          python -m pip install -e ".[dev]"
+      - name: Version-consistency guard (server.json / pyproject / __version__)
+        run: python -m pytest tests/test_distribution.py -q
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: License / package-boundary check on built archives
+        run: python scripts/check_release_artifacts.py dist
+      - name: twine check
+        run: twine check dist/*
+      - name: Validate server.json against the MCP registry schema
+        run: |
+          python - <<'PY'
+          import json, sys, urllib.request
+          from jsonschema import Draft202012Validator
+          doc = json.load(open("server.json"))
+          url = doc["$schema"]
+          try:
+              schema = json.load(urllib.request.urlopen(url, timeout=30))
+          except Exception as exc:  # network hiccup: don't fail the dry run
+              print(f"WARNING: could not fetch {url}: {exc}; skipping live schema check")
+              sys.exit(0)
+          errors = sorted(Draft202012Validator(schema).iter_errors(doc), key=lambda e: list(e.path))
+          for e in errors:
+              print("SCHEMA ERROR:", list(e.path), e.message)
+          sys.exit(1 if errors else 0)
+          PY
+      - name: Upload built distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  pypi-publish:
+    name: Publish to PyPI
+    needs: validate
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC for PyPI Trusted Publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve release version + assert it matches the package
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          tag_version="${tag#v}"
+          pkg_version="$(grep -m1 -E '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')"
+          echo "version=${pkg_version}" >> "$GITHUB_OUTPUT"
+          if [ "${tag_version}" != "${pkg_version}" ]; then
+            echo "::error::Tag version '${tag_version}' != pyproject version '${pkg_version}'." \
+                 "Bump pyproject.toml, __init__.py, and server.json together (the" \
+                 "tests/test_distribution.py guard pins them) and re-tag." >&2
+            exit 1
+          fi
+      - name: Download built distributions
+        uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - name: Fail loud if token method selected without a token
+        if: ${{ vars.PYPI_PUBLISH_METHOD == 'token' }}
+        env:
+          TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::PYPI_PUBLISH_METHOD is 'token' but the repo secret" \
+                 "PYPI_API_TOKEN is not set. Add it, or unset the variable to use" \
+                 "OIDC Trusted Publishing (recommended)." >&2
+            exit 1
+          fi
+      - name: Publish to PyPI (OIDC Trusted Publishing)
+        if: ${{ vars.PYPI_PUBLISH_METHOD != 'token' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No password -> the action uses OIDC Trusted Publishing.
+          print-hash: true
+      - name: Publish to PyPI (API token fallback)
+        if: ${{ vars.PYPI_PUBLISH_METHOD == 'token' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          print-hash: true
+
+  mcp-registry-publish:
+    name: Publish server.json to the MCP registry
+    needs: [validate, pypi-publish]
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC for `mcp-publisher login github-oidc`
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve release version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg_version="$(grep -m1 -E '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')"
+          echo "version=${pkg_version}" >> "$GITHUB_OUTPUT"
+      - name: Wait for the PyPI package to be installable
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.ver.outputs.version }}"
+          url="https://pypi.org/pypi/openadapt-agent/${version}/json"
+          for attempt in $(seq 1 20); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"
+            if [ "$code" = "200" ]; then
+              echo "openadapt-agent ${version} is live on PyPI."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: PyPI returned ${code} for ${version}; waiting 15s..."
+            sleep 15
+          done
+          echo "::error::openadapt-agent ${version} did not appear on PyPI in time." \
+               "The MCP registry validates package existence, so it would reject" \
+               "this publish. Check the PyPI publish job." >&2
+          exit 1
+      - name: Install mcp-publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" \
+            | tar xz mcp-publisher
+      - name: Fail loud if token method selected without a token
+        if: ${{ vars.MCP_PUBLISH_METHOD == 'token' }}
+        env:
+          TOKEN: ${{ secrets.MCP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::MCP_PUBLISH_METHOD is 'token' but the repo secret" \
+                 "MCP_GITHUB_TOKEN is not set. Add a PAT with read:org + read:user," \
+                 "or unset the variable to use OIDC (recommended)." >&2
+            exit 1
+          fi
+      - name: Authenticate to the MCP registry (OIDC)
+        if: ${{ vars.MCP_PUBLISH_METHOD != 'token' }}
+        run: ./mcp-publisher login github-oidc
+      - name: Authenticate to the MCP registry (PAT fallback)
+        if: ${{ vars.MCP_PUBLISH_METHOD == 'token' }}
+        run: ./mcp-publisher login github --token "${{ secrets.MCP_GITHUB_TOKEN }}"
+      - name: Publish server.json
+        run: ./mcp-publisher publish

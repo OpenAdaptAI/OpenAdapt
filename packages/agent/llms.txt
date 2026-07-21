@@ -1,0 +1,34 @@
+# openadapt-agent
+
+> The agent-facing bridge for [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow). It exposes compiled workflow bundles to other agents (Claude Code, Claude Desktop, any MCP client) as an **MCP server** and as **Agent Skills**. Every execution shells out to the governed `openadapt-flow run` CLI, so flow's fail-closed admission gates (certification, identity arming, effect contracts, encryption at rest, integrity pinning) cannot be bypassed. A halted or refused run is always returned as a structured halt/refusal with an evidence pointer, never as a fabricated success. Status: Experimental (v2).
+
+## What it provides
+
+- `openadapt-agent serve --bundles <dir> [--allow-run]`: an MCP server (stdio) over a directory of compiled bundles. Tools: `list_workflows`, `get_workflow`, `get_run_report` (always on, read-only) and `run_<slug>` (only when the operator passes `--allow-run`), whose JSON input schema is derived from the bundle's declared parameters.
+- `openadapt-agent emit-skill <bundle> --out <dir>`: a Claude Agent Skill folder for one bundle. Wraps flow's own `emit-skill` and appends MCP-invocation and halt-semantics guidance.
+
+## Run outcomes (honesty invariant)
+
+- `success`: exit 0 AND the persisted `report.json` marks the run successful. Only then did the workflow complete.
+- `halt`: the run executed and stopped at an unhandled state (halt instead of guessing). NOT a success; evidence in `report.json`/`REPORT.md`.
+- `refused`: a governed admission gate refused the bundle before execution; nothing ran.
+- `timeout` / `error`: killed at the deadline / infrastructure problem.
+
+## Public capability vs private artifact
+
+- The **package/MCP server is the public, official OpenAdapt capability**: inspect and (opt-in) run a compiled bundle under governance. It is what gets published to PyPI and listed in MCP registries.
+- A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing.
+
+## Key documents
+
+- [README](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/README.md): install, quickstart, honest limits.
+- [docs/DESIGN.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DESIGN.md): architecture, security model, what v2 deliberately does not do.
+- [docs/DISTRIBUTION.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DISTRIBUTION.md): registry artifacts, the public-vs-private-server distinction, and the submission plan.
+- [server.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/server.json): official MCP registry manifest.
+- [smithery.yaml](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/smithery.yaml): Smithery launch config.
+
+## Related
+
+- [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow): the governed demonstration compiler and runtime this package bridges.
+- [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt): the umbrella project.
+- [docs.openadapt.ai](https://docs.openadapt.ai): OpenAdapt documentation.

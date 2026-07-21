@@ -44,6 +44,8 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
+    # Parses smithery.yaml in the distribution-artifact guard tests.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

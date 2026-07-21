@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.OpenAdaptAI/openadapt-agent",
+  "title": "OpenAdapt Agent (openadapt-flow bridge)",
+  "description": "Expose compiled openadapt-flow workflow bundles as governed MCP tools (Experimental).",
+  "websiteUrl": "https://docs.openadapt.ai",
+  "repository": {
+    "url": "https://github.com/OpenAdaptAI/openadapt-agent",
+    "source": "github"
+  },
+  "version": "2.0.0.dev0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "openadapt-agent",
+      "version": "2.0.0.dev0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "subcommand",
+          "value": "serve",
+          "description": "Serve a directory of compiled bundles over MCP (stdio)."
+        },
+        {
+          "type": "named",
+          "name": "--bundles",
+          "valueHint": "bundles_dir",
+          "format": "filepath",
+          "isRequired": true,
+          "description": "Directory of compiled openadapt-flow bundles (one bundle, or a directory whose immediate subdirectories are bundles). This is the operator's own private artifact and is never shipped with the package."
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OPENADAPT_BUNDLE_KEY",
+          "description": "Decryption key for encrypted-at-rest bundles (workflow.json.enc). Omit for plaintext bundles.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "notes": "Read-only by default. The server registers execution (run_*) tools only when the operator adds the --allow-run flag; a registry-launched install stays inspection-only unless that flag is appended. See docs/DISTRIBUTION.md."
+    }
+  }
+}
