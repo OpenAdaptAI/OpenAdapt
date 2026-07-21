@@ -44,9 +44,16 @@ against explicit safety properties \cite{havelund2002synthesizing}, and the
 end-to-end argument places a correctness check at the layer that can establish
 the intended property rather than an intermediate subsystem \cite{saltzer1984end}.
 Deciding whether an observed outcome is correct is the \emph{test-oracle problem}
-\cite{barr2015oracle}; the faults \system{} targets---duplicate submission,
-double delivery, stale overwrite---are the same exactly-once and idempotency
-hazards studied in transactional systems \cite{gray1981transaction}. These
+\cite{barr2015oracle}, and a large software-testing literature builds partial
+oracles when a full specification is absent: metamorphic testing checks relations
+between related executions \cite{chen2018metamorphic}, and regression and
+differential oracles compare against a trusted prior or a reference
+implementation. Our silent-wrong-effect rate is in this family: it is a partial,
+state-based oracle that reads the system of record out of band rather than
+deriving a full specification of correctness. The faults \system{} targets---
+duplicate submission, double delivery, stale overwrite---are the same
+exactly-once and idempotency hazards studied in transactional systems
+\cite{gray1981transaction}. These
 principles motivate \system{}'s separation between screen postconditions and
 system-of-record effects: a rendered success banner cannot independently
 establish that a transaction was persisted correctly. Unlike a general
@@ -55,9 +62,12 @@ declared effects, configured verifiers, and named policies.
 
 \begin{table}[t]
 \centering
-\caption{Where \system{} sits. Columns are the properties that matter for
-repeated, consequential GUI work; \checkmark{} = designed-in, $\sim$ = partial
-or tool-dependent, blank = not addressed by the paradigm.}
+\caption{Where \system{} sits, as a \emph{design-intent} positioning rather than
+an empirical head-to-head. The columns are the properties \system{} was designed
+around, so its clean row is by construction; the table summarizes which
+paradigm \emph{addresses} each property, not a measured capability comparison.
+\checkmark{} = designed-in, $\sim$ = partial or tool-dependent, blank = not
+addressed by the paradigm.}
 \label{tab:positioning}
 \small
 \begin{tabular}{lccccc}

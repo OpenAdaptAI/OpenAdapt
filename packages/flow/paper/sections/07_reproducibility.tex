@@ -8,9 +8,9 @@ bounded aggregate summary. Task definitions, benchmark prose, failure
 taxonomies, and selected run reports are versioned where their release boundary
 permits it. Grown identity and reliability corpora, deployment-derived tuning,
 target-specific recipes, and raw private rows are deliberately excluded. The
-machine-check therefore proves consistency between the paper and released
-evidence; it does not claim that every underlying private row is public or that
-the evidence independently proves ground truth.
+machine-check therefore establishes consistency between the paper and released
+evidence; it neither claims that every underlying private row is public nor
+validates the design of the underlying measurement.
 
 Evidence carries one of four labels:
 \begin{itemize}
@@ -28,3 +28,21 @@ Before submission, the release candidate must re-run promoted experiments,
 archive its exact commit and environment, record task-level oracles, and check
 that no application artifact contains sensitive or prohibited data. The
 repository's \texttt{paper/ARTIFACT\_CHECKLIST.md} is the submission gate.
+
+\paragraph{Data availability and ethics.}
+Every released system-of-record fixture is synthetic: the MockMed and MockLoan
+fixtures, their injected-fault suites, and the benchmark task packs contain no
+real patient, borrower, or customer data. The public-web study observed public,
+unauthenticated applications, but only its bounded aggregate is released; its
+raw per-target rows and curated target recipes remain private. This paper
+release contains no customer-derived hardening corpus. Such grown corpora and
+raw private evaluation rows remain outside the public repository; when an
+approved sanitized derivative crosses a trust boundary, the pipeline applies
+type-specific transformations, rescans the result, and binds human approval to
+its exact hash as described in
+Section~\ref{sec:governance}. Human review reduces but does not prove
+de-identification, so sanitization remains a defense-in-depth control rather
+than a guarantee. Repository-only third-party reference environments are also
+excluded from the permissively licensed wheel and source distribution; the
+release gate inspects the built archives rather than inferring their contents
+from the source tree.

@@ -6,9 +6,10 @@ that the screen misses, and only as far as it can read.} The paper's central
 claim is a safety one, and we measure it end to end through the live replayer.
 Ten persistence scenarios, seven fault classes plus an accepted-write control and
 two delivery controls, are each driven nine times per arm through the real
-governed path: the replayer's actuator issues an HTTP write to an on-disk system
-of record, and every run is judged three genuinely independent ways
-(Section~\ref{sec:method}). Judged by the \emph{screen}, the same signal an agent
+governed path: the replayer's actuator writes over HTTP, the system-under-test
+verifier reads through REST, and the benchmark judge reads SQLite directly with
+separate classifier code (Section~\ref{sec:method}). Judged by the \emph{screen},
+the same signal an agent
 or a script trusts, replay silently accepted a wrong persisted effect on 54 of 90
 fault runs (60\%). An out-of-band effect verifier that reads the record back over
 a different endpoint than the write drove silent acceptance down to 9 of 90
@@ -22,8 +23,10 @@ three arms, a conservative halt on a commit whose outcome is unknown to the
 client, so they do not distinguish the oracles. This end-to-end measurement
 supersedes an earlier in-process fault study whose effect and ground-truth checks
 read the same object, which made its zero circular by construction; the numbers
-here come from the real replayer with three genuinely distinct write, read-back,
-and ground-truth paths.
+here come from the real replayer with operationally separate write, read-back,
+and ground-truth paths. These paths do not make the shared business
+specification independent; Section~\ref{sec:limits} bounds that closed-world
+assumption.
 
 \paragraph{Per class, the screen misses five of seven fault types.} In a
 companion transactional study at the same persistence boundary, screen-only

@@ -1,4 +1,5 @@
 \section{Limitations and Threats to Validity}
+\label{sec:limits}
 
 The evidence does not establish long-term reliability, maintenance effort,
 total cost of ownership, multi-tenant scale, or safety in clinical production.
@@ -46,10 +47,25 @@ the end-to-end study a collateral write to a billing surface the oracle did not
 read slipped through (9 of 90) until the read path was extended to every mutable
 surface, so effect verification guarantees only what it reads.
 
+The same read-coverage limit binds the independent \emph{ground truth}, and this
+is why the complete-read-path 0 of 90 must be read as zero in a closed world, not
+an absolute zero. The judge audits every persisted table it discovers in the
+SQLite system of record, so it is open-world over that database; but an effect
+that lands outside the database entirely---an outbound HL7 or message-queue
+publish, a filesystem side channel, a downstream service call---is invisible to
+both the complete read path and the judge, because no in-database audit can see
+it. Independence of code and read path is moreover not independence of
+\emph{specification}: the judge and the effect contract encode the same business
+intent, so a fault class no one thought to define is invisible to all three
+paths. For these reasons the realistic figure we foreground is the 9 of 90
+residual under a single out-of-band oracle, the deployment an operator actually
+ships; the 0 of 90 is the best case under a complete in-database read path.
+
 Cost values use recorded provider usage and then-current price metadata. They do
 not include recording, compilation, operator review, exception handling,
 infrastructure, support, or maintenance. Provider prices and models change.
 
-Finally, the authors develop the evaluated system. Raw artifacts and scripts
+Finally, the authors develop the evaluated system. Released raw artifacts where
+the source boundary permits them, bounded aggregate summaries, and scripts
 reduce but do not eliminate experimenter bias. Independent replication and
 pre-registered longitudinal workloads remain necessary.

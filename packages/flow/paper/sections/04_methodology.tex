@@ -17,18 +17,37 @@ recorded token usage and the list-price schedule stored in each raw result; the
 compiled condition recorded no model calls. The agent is a single-attempt
 observe-act loop given the task goal and the same settled screenshots the
 replayer uses, without a system prompt, planning or reflection scaffolding, or
-whole-task retry, and bounded by per-run action and cost caps. It is a fair
-same-backend reference rather than a maximally scaffolded agent, so the latency
-and cost gaps should be read as lower bounds on what scaffolding could close,
-not as a reliability comparison.
+whole-task retry, and bounded by per-run action and cost caps. It is a
+same-backend reference rather than a maximally scaffolded agent. The measured
+latency and cost differences characterize only these exact configurations; they
+do not predict what additional planning, reflection, or retry scaffolding would
+cost or recover, and they are not a reliability comparison.
 
 \paragraph{Outcome taxonomy.}
 Success means the external task oracle is satisfied. A safe halt stops without
 the intended effect. Over-halt is a safe halt when the intended correct action
 was in fact available. Silent incorrect success means the runtime reports
 success while the external oracle disagrees. False abort means the intended
-effect occurred but the runtime reports failure. We report run counts rather
-than confidence intervals for small bounded studies.
+effect occurred but the runtime reports failure.
+
+\paragraph{Scripted coverage counts, not sampled rates.}
+The fault-injection and end-to-end studies use localhost, make no model calls,
+and inject a fixed fault at the persistence boundary. In the released matrices,
+the repeated outcomes were invariant within each arm--scenario cell. Those
+repeats confirm reproducibility in this implementation and environment; they are
+not independent samples from a target population. We therefore report run
+counts as a \emph{coverage matrix} over a small, hand-authored fault taxonomy,
+not as an estimate of a production incidence rate. Inferential confidence
+intervals would require a sampling design and a target distribution that this
+study does not have. Two consequences are load-bearing for how these numbers
+should be read. First, the screen-versus-effect headline is determined by the
+authored differentiating classes, and the out-of-band-versus-complete-read-path
+gap rests on exactly one class, rather than on a sampled workload distribution.
+Second, the taxonomy is an adversarial transactional-fault lineage
+\cite{gray1981transaction} chosen to differentiate oracles; it is not weighted
+to any measured EMR or lending incident distribution, so a figure such as the
+screen arm's 60\% is fault coverage under this taxonomy, never an expected
+production frequency.
 
 \paragraph{OpenEMR comparison.}
 The task logs into the shared public OpenEMR demonstration site, searches a
@@ -60,14 +79,16 @@ The headline safety result is measured through the actual governed replay path,
 not an in-process stub. Ten persistence scenarios, seven fault classes plus an
 accepted-write control and two delivery controls, are each run nine times per
 arm. Every write is issued by the replayer's actuator as an HTTP POST to an
-on-disk SQLite system of record, and each run is judged by three genuinely
-distinct paths: the write itself; an effect verifier that reads the record back
-over a different endpoint and connection than the write; and an independent
-ground truth that opens the SQLite file read-only over every table, fingerprints
-canonical typed schema and row content, and classifies the before/after state
-without ever seeing the write's success flag. Because the
-verifier and the ground truth share neither code nor state, the effect
-verifier's zero is earned rather than definitional. We evaluate three arms:
+on-disk SQLite system of record. Each trial contains three operationally
+distinct paths: the actuator writes over HTTP; the system-under-test effect
+verifier reads through a separate REST endpoint and connection; and the
+benchmark ground truth opens the SQLite file read-only over every table,
+fingerprints canonical typed schema and row content, and classifies the
+before/after state without seeing the write's success flag. The verifier and
+judge necessarily observe the same persisted system of record, but they share
+neither a read channel nor classifier implementation, so the system-under-test
+verifier cannot define its own score. This is operational independence, not
+independence of the business specification. We evaluate three arms:
 screen-only banner verification, an out-of-band effect oracle whose read path
 covers the record surface, and a complete effect oracle whose read path covers
 every mutable surface the action can touch. This supersedes an earlier in-process
@@ -93,7 +114,16 @@ calls.
 The metric and fault taxonomy are packaged as EffectBench, a standalone,
 versioned, and independently runnable benchmark (specification version 1.0.0), so
 that the silent-wrong-effect rate can be measured against any GUI or API
-automation, not only ours.
+automation, not only ours. We state its current scope honestly. The public
+reference pack ships one synthetic system of record and its reference oracle, and
+the two baselines scored so far are our own screen-only and effect-verified arms;
+no independent third-party system has been scored yet, so fair cross-system
+ranking is a design property, not a demonstrated one. A pluggable interface lets
+a third party bring its own system of record and its own independent oracle, and
+the built-in oracle is marked reference-only rather than handed to the system
+under test as a general capability, because authoring a cheap, correct,
+independent oracle for a real system of record is the actual cost the reference
+fixture abstracts away.
 
 \paragraph{Identity ladder.}
 Adversarial same-name/same-date-of-birth homonyms differ by confusable glyphs
