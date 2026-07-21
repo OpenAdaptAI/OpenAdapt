@@ -63,7 +63,16 @@ class FakeVision:
             return self.template_results.pop(0)
         return None
 
-    def find_text(self, screen_png, text, *, region=None, min_ratio=0.8):
+    def find_text(
+        self,
+        screen_png,
+        text,
+        *,
+        region=None,
+        min_ratio=0.8,
+        raise_on_ambiguity=False,
+    ):
+        del raise_on_ambiguity
         self.text_calls.append(text)
         result = self.text_results.get(text)
         if isinstance(result, list):
@@ -400,9 +409,23 @@ class RatioRecordingVision(FakeVision):
         super().__init__()
         self.min_ratios: dict = {}
 
-    def find_text(self, screen_png, text, *, region=None, min_ratio=0.8):
+    def find_text(
+        self,
+        screen_png,
+        text,
+        *,
+        region=None,
+        min_ratio=0.8,
+        raise_on_ambiguity=False,
+    ):
         self.min_ratios[text] = min_ratio
-        return super().find_text(screen_png, text, region=region, min_ratio=min_ratio)
+        return super().find_text(
+            screen_png,
+            text,
+            region=region,
+            min_ratio=min_ratio,
+            raise_on_ambiguity=raise_on_ambiguity,
+        )
 
 
 def test_ocr_rung_requires_strict_label_ratio(screen, anchor):

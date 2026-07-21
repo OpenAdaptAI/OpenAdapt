@@ -15,7 +15,10 @@ implemented here are:
 1. ``template``         — template match inside ``anchor.region`` padded by
    ``anchor.search_pad`` (clamped to the viewport).
 2. ``template_global``  — template match over the full frame.
-3. ``ocr``              — fuzzy text match on ``anchor.ocr_text``.
+3. ``ocr``              — uniquely established fuzzy text match on
+   ``anchor.ocr_text`` in the anchor's padded local region, then globally only
+   after a local miss. Repeated labels require independent retained locality
+   or landmark evidence; candidate order is never used.
 4. ``geometry``         — locate landmark text and offset by
    relation/distance to estimate the target point.
 5. ``grounder``         — optional injected model-backed grounding.
@@ -40,6 +43,10 @@ from typing import Any, Optional
 
 from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.ir import Anchor, Point, Region, Resolution, Rung
+from openadapt_flow.vision.ocr import (
+    AmbiguousOcrMatchError,
+    ContradictoryOcrEvidenceError,
+)
 
 RUNG_ORDER: tuple[Rung, ...] = (
     "structural",
@@ -218,7 +225,20 @@ def _landmarks_contradict(
     for landmark in anchor.landmarks:
         if landmark.dx_px is None or landmark.dy_px is None:
             continue
-        match = vision.find_text(screen_png, landmark.ocr_text, min_ratio=OCR_MIN_RATIO)
+        try:
+            match = vision.find_text(
+                screen_png,
+                landmark.ocr_text,
+                min_ratio=OCR_MIN_RATIO,
+                raise_on_ambiguity=True,
+            )
+        except AmbiguousOcrMatchError:
+            # A repeated/generic landmark cannot corroborate or contradict a
+            # candidate.  It abstains while any independent unique landmark
+            # remains available.  Treating one ambiguous landmark as a veto
+            # makes the outcome depend on irrelevant repeated labels and
+            # over-halts otherwise uniquely established targets.
+            continue
         if match is None:
             continue
         estimates.append(
@@ -229,10 +249,195 @@ def _landmarks_contradict(
         )
     if not estimates:
         return False
+    if _estimates_conflict(estimates):
+        # Conflicting fixed-offset context cannot safely corroborate a global
+        # template candidate, but it also cannot prove that a uniquely
+        # observed target label is wrong after legitimate layout reflow.
+        # Reject this template rung and let target OCR attempt an independent
+        # uniqueness proof. If OCR cannot do so, the geometry rung below keeps
+        # the same disagreement as a typed terminal refusal.
+        return True
     return all(
         math.hypot(ex - point[0], ey - point[1]) > GLOBAL_LANDMARK_TOLERANCE_PX
         for ex, ey in estimates
     )
+
+
+def _estimates_conflict(estimates: list[Point]) -> bool:
+    """Whether retained unique landmarks disagree beyond the target tolerance."""
+    return any(
+        math.hypot(ax - bx, ay - by) > GLOBAL_LANDMARK_TOLERANCE_PX
+        for index, (ax, ay) in enumerate(estimates)
+        for bx, by in estimates[index + 1 :]
+    )
+
+
+def _point_in_region(point: Point, region: Region) -> bool:
+    """Whether ``point`` lies inside ``region`` (inclusive at the far edge)."""
+    x, y, width, height = region
+    return x <= point[0] <= x + width and y <= point[1] <= y + height
+
+
+def _select_ocr_candidate(
+    anchor: Anchor,
+    candidates: list[Any],
+    screen_png: bytes,
+    vision: Any,
+) -> Any:
+    """Select one OCR target only when independent retained evidence does so.
+
+    A sole qualifying OCR line is already unique textual evidence. Repeated
+    labels require either exactly one candidate in the recorded target region
+    or unique support from retained landmark relations. If those independent
+    sources select different observed candidates, resolution terminates as a
+    contradiction. Candidate enumeration order and fuzzy-score arg-max are
+    intentionally never used.
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+
+    locality = [
+        candidate
+        for candidate in candidates
+        if _point_in_region(
+            (int(candidate.point[0]), int(candidate.point[1])),
+            anchor.region,
+        )
+    ]
+    locality_choice = locality[0] if len(locality) == 1 else None
+
+    supported_indices: set[int] = set()
+    for landmark in anchor.landmarks:
+        if landmark.dx_px is None or landmark.dy_px is None:
+            continue
+        try:
+            match = vision.find_text(
+                screen_png,
+                landmark.ocr_text,
+                min_ratio=OCR_MIN_RATIO,
+                raise_on_ambiguity=True,
+            )
+        except AmbiguousOcrMatchError:
+            # A repeated context label supplies no unique relation.
+            continue
+        if match is None:
+            continue
+        estimate = (
+            int(match.point[0]) + landmark.dx_px,
+            int(match.point[1]) + landmark.dy_px,
+        )
+        near = [
+            index
+            for index, candidate in enumerate(candidates)
+            if math.hypot(
+                int(candidate.point[0]) - estimate[0],
+                int(candidate.point[1]) - estimate[1],
+            )
+            <= GLOBAL_LANDMARK_TOLERANCE_PX
+        ]
+        if len(near) == 1:
+            supported_indices.add(near[0])
+
+    if len(supported_indices) > 1:
+        raise ContradictoryOcrEvidenceError(
+            "independent OCR landmark relations select different target candidates"
+        )
+    landmark_choice = (
+        candidates[next(iter(supported_indices))] if supported_indices else None
+    )
+
+    if locality_choice is not None and landmark_choice is not None:
+        if locality_choice is not landmark_choice:
+            raise ContradictoryOcrEvidenceError(
+                "recorded target region and OCR landmark relations select "
+                "different candidates"
+            )
+        return locality_choice
+    if locality_choice is not None:
+        return locality_choice
+    if landmark_choice is not None:
+        return landmark_choice
+
+    raise AmbiguousOcrMatchError(
+        f"{len(candidates)} OCR target candidates remain after retained-evidence "
+        "disambiguation"
+    )
+
+
+def _select_geometry_estimates(
+    anchor: Anchor,
+    estimates: list[Point],
+    confidences: list[float],
+) -> tuple[Point, float]:
+    """Resolve landmark estimates without averaging incompatible coordinates.
+
+    Coherent estimates may be averaged. When layout drift leaves a stale
+    landmark far away, exactly one estimate inside the recorded target region
+    is independently supported by retained locality and can win. With three or
+    more estimates, a unique largest pairwise-coherent cluster can win. If that
+    cluster conflicts with an in-region estimate, neither silently outranks the
+    other: the independent disagreement remains a typed terminal refusal.
+    """
+    selected = list(range(len(estimates)))
+    if _estimates_conflict(estimates):
+        in_region = [
+            index
+            for index, estimate in enumerate(estimates)
+            if _point_in_region(estimate, anchor.region)
+        ]
+        clusters: set[frozenset[int]] = set()
+        for index, estimate in enumerate(estimates):
+            cluster = frozenset(
+                other
+                for other, candidate in enumerate(estimates)
+                if math.hypot(
+                    estimate[0] - candidate[0],
+                    estimate[1] - candidate[1],
+                )
+                <= GLOBAL_LANDMARK_TOLERANCE_PX
+            )
+            points = [estimates[item] for item in cluster]
+            if len(cluster) >= 2 and not _estimates_conflict(points):
+                clusters.add(cluster)
+        largest: list[frozenset[int]] = []
+        if clusters:
+            largest_size = max(len(cluster) for cluster in clusters)
+            largest = [cluster for cluster in clusters if len(cluster) == largest_size]
+
+        if len(largest) == 1:
+            cluster = largest[0]
+            if any(index not in cluster for index in in_region):
+                raise ContradictoryOcrEvidenceError(
+                    "recorded target region and coherent OCR landmark cluster disagree"
+                )
+            selected = sorted(cluster)
+        elif len(largest) > 1:
+            locality_clusters = [
+                cluster
+                for cluster in largest
+                if in_region and all(index in cluster for index in in_region)
+            ]
+            if len(locality_clusters) == 1:
+                selected = sorted(locality_clusters[0])
+            else:
+                raise ContradictoryOcrEvidenceError(
+                    "OCR landmark estimates form tied target clusters"
+                )
+        elif len(in_region) == 1:
+            selected = in_region
+        elif in_region and not _estimates_conflict(
+            [estimates[index] for index in in_region]
+        ):
+            selected = in_region
+        else:
+            raise ContradictoryOcrEvidenceError(
+                "unique OCR landmark estimates disagree beyond tolerance"
+            )
+
+    px = int(round(sum(estimates[index][0] for index in selected) / len(selected)))
+    py = int(round(sum(estimates[index][1] for index in selected) / len(selected)))
+    confidence = sum(confidences[index] for index in selected) / len(selected)
+    return (px, py), confidence
 
 
 def resolve(
@@ -274,6 +479,11 @@ def resolve(
         is the screen region the evidence matched (used for healing), or None
         when every rung fails. ``resolution.elapsed_ms`` is the total time
         spent across all rungs attempted.
+
+    Raises:
+        OcrResolutionRefused: When OCR target/context evidence is ambiguous or
+            contradictory. This is deliberately distinct from absence so the
+            runtime halts without retrying or downgrading to weaker evidence.
     """
     t0 = time.monotonic()
     if viewport is None:
@@ -357,7 +567,8 @@ def resolve(
         )
         if match is not None:
             point = _scaled_click_point(anchor, tuple(match.region))
-            if not _landmarks_contradict(anchor, point, screen_png, vision):
+            contradicted = _landmarks_contradict(anchor, point, screen_png, vision)
+            if not contradicted:
                 resolution = Resolution(
                     rung="template_global",
                     point=point,
@@ -366,13 +577,64 @@ def resolve(
                 )
                 return resolution, tuple(match.region)
 
-    # Rung 3: OCR text match.
+    # Rung 3: OCR text match. Search the same anchor-bounded padded region as
+    # the local template rung first. Only after a local miss may the resolver
+    # search the full frame. On the real vision namespace, candidate enumeration
+    # lets repeated labels be disambiguated only by independent retained
+    # locality/landmark evidence. Older injected vision namespaces retain the
+    # strict ``raise_on_ambiguity`` contract for API compatibility.
+    #
+    # A sole target label remains valid under legitimate layout reflow even
+    # when old fixed-offset landmark geometry has gone stale. Landmarks are
+    # therefore used to disambiguate observed repeated target candidates, not
+    # to veto a uniquely observed target merely for moving independently.
     if anchor.ocr_text:
-        match = vision.find_text(screen_png, anchor.ocr_text, min_ratio=OCR_MIN_RATIO)
-        if match is not None:
+        search_region = pad_region(anchor.region, anchor.search_pad, viewport)
+        ocr_regions: tuple[Region | None, ...] = (search_region, None)
+        find_candidates = getattr(vision, "find_text_candidates", None)
+        for ocr_region in ocr_regions:
+            if find_candidates is not None:
+                candidates = find_candidates(
+                    screen_png,
+                    anchor.ocr_text,
+                    region=ocr_region,
+                    min_ratio=OCR_MIN_RATIO,
+                )
+                if not candidates:
+                    continue
+                match = _select_ocr_candidate(
+                    anchor,
+                    list(candidates),
+                    screen_png,
+                    vision,
+                )
+                point = (int(match.point[0]), int(match.point[1]))
+                resolution = Resolution(
+                    rung="ocr",
+                    point=point,
+                    confidence=float(match.confidence),
+                    elapsed_ms=elapsed_ms(),
+                )
+                return resolution, tuple(match.region)
+            try:
+                match = vision.find_text(
+                    screen_png,
+                    anchor.ocr_text,
+                    region=ocr_region,
+                    min_ratio=OCR_MIN_RATIO,
+                    raise_on_ambiguity=True,
+                )
+            except AmbiguousOcrMatchError:
+                # Ambiguity is not absence.  Preserve the typed refusal so the
+                # runtime does not retry it as a miss or downgrade to geometry,
+                # model grounding, healing, or coordinate actuation.
+                raise
+            if match is None:
+                continue
+            point = (int(match.point[0]), int(match.point[1]))
             resolution = Resolution(
                 rung="ocr",
-                point=(int(match.point[0]), int(match.point[1])),
+                point=point,
                 confidence=float(match.confidence),
                 elapsed_ms=elapsed_ms(),
             )
@@ -381,10 +643,21 @@ def resolve(
     # Rung 4: geometry from landmarks.
     estimates: list[Point] = []
     confidences: list[float] = []
+    ambiguous_landmark = False
     for landmark in anchor.landmarks:
-        lm_match = vision.find_text(
-            screen_png, landmark.ocr_text, min_ratio=OCR_MIN_RATIO
-        )
+        try:
+            lm_match = vision.find_text(
+                screen_png,
+                landmark.ocr_text,
+                min_ratio=OCR_MIN_RATIO,
+                raise_on_ambiguity=True,
+            )
+        except AmbiguousOcrMatchError:
+            # An ambiguous landmark contributes no coordinate.  Other unique
+            # landmarks remain independently usable under the existing
+            # geometry contract, regardless of declaration order.
+            ambiguous_landmark = True
+            continue
         if lm_match is None:
             continue
         estimates.append(
@@ -398,19 +671,29 @@ def resolve(
         )
         confidences.append(float(lm_match.confidence))
     if estimates:
-        px = int(round(sum(p[0] for p in estimates) / len(estimates)))
-        py = int(round(sum(p[1] for p in estimates) / len(estimates)))
+        (px, py), geometry_confidence = _select_geometry_estimates(
+            anchor,
+            estimates,
+            confidences,
+        )
         region = _clamp_region_of_size(
             (px, py), (anchor.region[2], anchor.region[3]), viewport
         )
         resolution = Resolution(
             rung="geometry",
             point=(px, py),
-            confidence=(sum(confidences) / len(confidences))
-            * _GEOMETRY_CONFIDENCE_SCALE,
+            confidence=geometry_confidence * _GEOMETRY_CONFIDENCE_SCALE,
             elapsed_ms=elapsed_ms(),
         )
         return resolution, region
+
+    if ambiguous_landmark:
+        # Every locatable landmark was ambiguous.  This is a terminal typed
+        # refusal, not a miss: a grounder or healer must not guess beneath the
+        # unresolved repeated-row evidence.
+        raise AmbiguousOcrMatchError(
+            "OCR landmark evidence did not uniquely establish a target"
+        )
 
     # Rung 5: optional grounder.
     if grounder is not None:

@@ -28,7 +28,6 @@ from __future__ import annotations
 from typing import Optional
 
 import pytest
-from tests.test_replayer import FakeBackend, FakeVision, Match, make_png
 
 from openadapt_flow.ir import (
     ActionKind,
@@ -59,6 +58,7 @@ from openadapt_flow.learning.synth_stream import (
 )
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.vision.ocr import OcrLine
+from tests.test_replayer import FakeBackend, FakeVision, Match, make_png
 
 # -- the modal-once scenario --------------------------------------------------
 
@@ -163,7 +163,16 @@ class ModalOnceVision(FakeVision):
             return Match(point=DISMISS_POINT, region=(90, 90, 20, 20), confidence=0.95)
         return None
 
-    def find_text(self, screen_png, text, *, region=None, min_ratio=0.8):
+    def find_text(
+        self,
+        screen_png,
+        text,
+        *,
+        region=None,
+        min_ratio=0.8,
+        raise_on_ambiguity=False,
+    ):
+        del raise_on_ambiguity
         self.text_calls.append(text)
         if self._modal_up() and text == self.modal_text:
             return Match(point=(50, 10), region=(30, 5, 160, 16), confidence=0.9)

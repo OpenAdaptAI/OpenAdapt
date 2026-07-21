@@ -27,6 +27,7 @@ from openadapt_flow.runtime.authorization import (
     runtime_inputs_digest,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.vision.ocr import AmbiguousOcrMatchError
 
 VIEWPORT = (300, 200)
 
@@ -101,7 +102,16 @@ class FakeVision:
             return self.structural_template_results.pop(0)
         return None
 
-    def find_text(self, screen_png, text, *, region=None, min_ratio=0.8):
+    def find_text(
+        self,
+        screen_png,
+        text,
+        *,
+        region=None,
+        min_ratio=0.8,
+        raise_on_ambiguity=False,
+    ):
+        del raise_on_ambiguity
         self.text_calls.append(text)
         result = self.text_results.get(text)
         if isinstance(result, list):
@@ -298,6 +308,40 @@ def test_missing_param_fails_step_and_aborts_run(bundle, run_dir):
     assert len(report.results) == 1  # run aborted; k1 never executed
     assert "note" in report.results[0].error
     assert backend.actions == []  # nothing typed, nothing pressed
+
+
+def test_ocr_ambiguity_is_an_operator_visible_safety_halt(bundle, run_dir):
+    """Repeated OCR targets never become a generic miss/retry or an action."""
+
+    class AmbiguousTargetVision(FakeVision):
+        def find_text(
+            self,
+            screen_png,
+            text,
+            *,
+            region=None,
+            min_ratio=0.8,
+            raise_on_ambiguity=False,
+        ):
+            del screen_png, text, region, min_ratio
+            if raise_on_ambiguity:
+                raise AmbiguousOcrMatchError("two OCR target candidates qualify")
+            return None
+
+    backend = FakeBackend()
+    report = Replayer(
+        backend, vision=AmbiguousTargetVision(), poll_interval_s=0.01
+    ).run(
+        Workflow(name="wf", steps=[click_step()]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+
+    assert report.success is False
+    assert report.results[0].safety_halt is True
+    assert "OCR safety refusal" in report.results[0].error
+    assert "no action was admitted" in report.results[0].error
+    assert backend.actions == []
 
 
 def test_param_overrides_recorded_literal_text(bundle, run_dir):

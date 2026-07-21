@@ -96,6 +96,7 @@ from openadapt_flow.runtime.effects import (
     reconcile_or_escalate,
 )
 from openadapt_flow.runtime.resolver import is_below_ocr, pad_region, resolve
+from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 # REGION_STABLE template check: how far the expected content may shift from
 # the recorded region (real apps re-layout by a few pixels between runs),
@@ -243,7 +244,9 @@ class Replayer:
             ``phash_distance``, and ``wait_settled``. Defaults to the
             real ``openadapt_flow.vision``
             module, imported lazily so unit tests can inject a fake without
-            the OCR stack ever loading.
+            the OCR stack ever loading. Target-resolution providers implement
+            ``find_text(..., raise_on_ambiguity=True)`` so repeated candidates
+            produce a typed refusal instead of a first-match action.
         grounder: Optional Grounder used as the last resolution rung.
         identity_vlm: Optional IdentityVLM (see runtime.identity) used as the
             optional local-VLM veto tier of the pre-click identity ladder;
@@ -2718,6 +2721,16 @@ class Replayer:
                     result.ok = False
                     error = heal_outcome.halt_reason
                     result.error = error
+        except OcrResolutionRefused as exc:
+            # Repeated target/landmark OCR is a deterministic ambiguity, not a
+            # transient absence. Surface it as a typed operator-visible safety
+            # halt immediately; never retry into weaker evidence or actuation.
+            result.ok = False
+            result.safety_halt = True
+            result.error = (
+                f"OCR safety refusal for step '{step.id}' "
+                f"({step.intent}): {exc} — no action was admitted"
+            )
         except StructuralResolutionRefused as exc:
             # Ambiguity, disappearance, or a stale resolve->act fingerprint is
             # an intentional fail-closed refusal. Record it as a safety halt,

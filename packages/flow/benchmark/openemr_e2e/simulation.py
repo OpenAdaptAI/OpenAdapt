@@ -321,7 +321,9 @@ class AddNoteVision:
         *,
         region: Any = None,
         min_ratio: float = 0.8,
+        raise_on_ambiguity: bool = False,
     ) -> Optional[_Match]:
+        del raise_on_ambiguity
         if text == "Saved":
             # The app always paints "Saved" after the commit key -- the whole
             # point of effect verification is that this can be true while the

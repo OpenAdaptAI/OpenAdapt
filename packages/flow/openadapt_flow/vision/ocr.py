@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import difflib
 import threading
-from typing import Any, Optional
+from typing import Any
 
 import cv2
 import numpy as np
@@ -21,6 +21,24 @@ from openadapt_flow.vision.match import Match, _clamp_region
 
 _engine: Any = None
 _engine_lock = threading.Lock()
+
+
+class OcrResolutionRefused(RuntimeError):
+    """Base class for fail-closed OCR target-resolution refusals."""
+
+
+class AmbiguousOcrMatchError(OcrResolutionRefused):
+    """Raised when target resolution sees more than one qualifying OCR line.
+
+    Generic OCR consumers retain the historical best-match behavior. The
+    resolution ladder opts into this typed signal so it can distinguish
+    ambiguity (halt) from absence (continue to the next independent evidence
+    rung).
+    """
+
+
+class ContradictoryOcrEvidenceError(OcrResolutionRefused):
+    """Raised when independently located OCR evidence disagrees on target."""
 
 
 def _get_engine() -> Any:
@@ -206,34 +224,99 @@ def find_text(
     *,
     region: Region | None = None,
     min_ratio: float = 0.8,
+    raise_on_ambiguity: bool = False,
 ) -> Match | None:
     """Locate a text label on screen via OCR plus fuzzy matching.
 
     Each OCR line is compared to ``text`` with
     ``difflib.SequenceMatcher.ratio()`` over normalized (lowercased,
-    whitespace-collapsed) strings; the best line at or above ``min_ratio``
-    wins.
+    whitespace-collapsed) strings. Generic callers receive the best qualifying
+    line, preserving the historical presence/readiness behavior. Targeting
+    callers set ``raise_on_ambiguity`` so repeated labels become a typed refusal
+    instead of silently selecting the first or highest-scoring control.
 
     Args:
         screen_png: Full-frame screenshot as PNG bytes.
         text: Target text to find.
         region: Optional ``(x, y, w, h)`` sub-region to search within.
         min_ratio: Minimum similarity ratio in ``[0, 1]`` to accept.
+        raise_on_ambiguity: Raise :class:`AmbiguousOcrMatchError` instead of
+            selecting the best line when multiple lines qualify. Target
+            resolution enables this so ambiguity cannot be mistaken for a miss
+            and fall through to weaker evidence.
 
     Returns:
-        A :class:`Match` centered on the best-matching line's bounding box,
+        A :class:`Match` centered on the best qualifying line's bounding box,
         or ``None`` if no line is similar enough.
     """
-    target = normalize_text(text)
-    if not target:
+    qualifying = _qualifying_text_lines(
+        screen_png,
+        text,
+        region=region,
+        min_ratio=min_ratio,
+    )
+    if len(qualifying) > 1:
+        if raise_on_ambiguity:
+            raise AmbiguousOcrMatchError(
+                f"{len(qualifying)} OCR lines qualify for target text"
+            )
+    if not qualifying:
         return None
-    best: Optional[tuple[float, OcrLine]] = None
-    for line in ocr(screen_png, region=region):
-        ratio = difflib.SequenceMatcher(None, normalize_text(line.text), target).ratio()
-        if best is None or ratio > best[0]:
-            best = (ratio, line)
-    if best is None or best[0] < min_ratio:
-        return None
-    ratio, line = best
+    ratio, line = max(qualifying, key=lambda item: item[0])
     x, y, w, h = line.region
     return Match(point=(x + w // 2, y + h // 2), region=line.region, confidence=ratio)
+
+
+def find_text_candidates(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None = None,
+    min_ratio: float = 0.8,
+) -> list[Match]:
+    """Return every OCR line that qualifies for ``text``.
+
+    Target resolution needs the complete candidate set so it can distinguish
+    repeated labels with independent retained evidence (for example the
+    recorded target region or landmark relations).  This API deliberately
+    makes no selection: candidate order is not evidence, and callers must
+    prove uniqueness before acting.
+
+    Generic callers should continue to use :func:`find_text`, whose default
+    best-match behavior remains backward compatible.
+    """
+    matches: list[Match] = []
+    for ratio, line in _qualifying_text_lines(
+        screen_png,
+        text,
+        region=region,
+        min_ratio=min_ratio,
+    ):
+        x, y, w, h = line.region
+        matches.append(
+            Match(
+                point=(x + w // 2, y + h // 2),
+                region=line.region,
+                confidence=ratio,
+            )
+        )
+    return matches
+
+
+def _qualifying_text_lines(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None,
+    min_ratio: float,
+) -> list[tuple[float, OcrLine]]:
+    """Return qualifying ``(similarity, line)`` pairs without selecting one."""
+    target = normalize_text(text)
+    if not target:
+        return []
+    qualifying: list[tuple[float, OcrLine]] = []
+    for line in ocr(screen_png, region=region):
+        ratio = difflib.SequenceMatcher(None, normalize_text(line.text), target).ratio()
+        if ratio >= min_ratio:
+            qualifying.append((ratio, line))
+    return qualifying

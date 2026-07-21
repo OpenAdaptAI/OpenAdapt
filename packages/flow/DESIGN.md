@@ -118,10 +118,23 @@ def find_template(screen_png: bytes, template_png: bytes, *,
 # ocr.py  (rapidocr_onnxruntime; instantiate the engine once, module-level lazy)
 class OcrLine(BaseModel):
     text: str; region: Region; confidence: float
+class OcrResolutionRefused(RuntimeError): ...
+class AmbiguousOcrMatchError(OcrResolutionRefused): ...
+class ContradictoryOcrEvidenceError(OcrResolutionRefused): ...
 def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]
 def find_text(screen_png: bytes, text: str, *,
-              region: Region | None = None, min_ratio: float = 0.8) -> Match | None
-    # normalized fuzzy match (difflib ratio on lowercased/stripped text)
+              region: Region | None = None, min_ratio: float = 0.8,
+              raise_on_ambiguity: bool = False) -> Match | None
+def find_text_candidates(screen_png: bytes, text: str, *,
+                         region: Region | None = None,
+                         min_ratio: float = 0.8) -> list[Match]
+    # normalized fuzzy match (difflib ratio on lowercased/stripped text);
+    # resolution enables the typed ambiguity signal so duplicates halt instead
+    # of falling through, while presence/readiness callers retain best-match.
+    # Candidate enumeration never selects by order: the resolver requires a
+    # unique recorded-region or landmark-relation choice for repeated labels.
+    # Contradictory independent choices and unresolved repeats halt rather than
+    # averaging coordinates or delegating to a weaker model-backed rung.
 
 # hashing.py
 def phash_png(png: bytes, region: Region | None = None) -> str
@@ -202,15 +215,24 @@ implemented rungs are:
    irreversible risk gate still fire on it — structure makes identity STRONGER
    (an exact element), it never bypasses it. Rungs 1–5 remain the visual
    FALLBACK floor and are unchanged:
-1. `template` — find_template within anchor.region padded by search_pad
-2. `template_global` — find_template full frame; for UNLABELED anchors
-   (no ocr_text) the match is rejected when every locatable landmark places
-   the target more than 40px away (repeated-icon UIs: an identical glyph on
-   another card can outscore the true target when mutable content near the
-   target changed) — the ladder then continues to ocr/geometry
-3. `ocr` — find_text(anchor.ocr_text) full frame
+1. `template` — find_template within anchor.region padded by search_pad, with
+   recorded-position locality; repeated-widget frames are refused when no
+   candidate is near the recorded position
+2. `template_global` — find_template full frame; for labeled and unlabeled
+   anchors alike, a match is rejected when locatable landmarks contradict its
+   position, and repeated look-alikes with no expected-position candidate halt
+3. `ocr` — enumerate qualifying `anchor.ocr_text` candidates in the padded
+   local region; only a true miss searches globally. A sole label is accepted
+   even when legitimate layout reflow makes old fixed landmark offsets stale.
+   Repeated labels require exactly one candidate established by the recorded
+   target region or retained landmark relations. Unresolved repeats or
+   independent evidence selecting different observed candidates halt instead
+   of falling through to weaker rungs
 4. `geometry` — landmarks: locate landmark text, offset by the exact
-   `dx_px`/`dy_px` offsets when recorded, else by relation/distance
+   `dx_px`/`dy_px` offsets when recorded, else by relation/distance. Coherent
+   estimates may be averaged; incompatible estimates never are. A unique
+   recorded-region estimate or unique largest coherent cluster may resolve;
+   otherwise disagreement is a typed halt
 5. `grounder` — optional injected `Grounder.locate(png, intent) -> Match|None`
    (protocol in `runtime/grounder.py`; ship a `NullGrounder`; an Anthropic
    implementation goes behind the `grounder` extra and is NOT used in tests)

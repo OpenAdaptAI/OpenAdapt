@@ -45,6 +45,7 @@ from openadapt_flow import vision as vision_mod
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.ir import Anchor
 from openadapt_flow.runtime.resolver import resolve
+from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 # Grid layout (viewport is the PlaywrightBackend default 1280x800).
 _COL_X = 90  # baseline button column (left)
@@ -179,14 +180,20 @@ def run_probe(n: int = 21, *, headless: bool = True) -> dict:
             s_ok = handle is not None and _inside(handle.point, correct_box)
 
             # visual ladder only (structural disabled)
-            res = resolve(
-                anchors[i],
-                drift_png,
-                vision_mod,
-                template_png=templates[i],
-                viewport=backend.viewport,
-                structural=None,
-            )
+            try:
+                res = resolve(
+                    anchors[i],
+                    drift_png,
+                    vision_mod,
+                    template_png=templates[i],
+                    viewport=backend.viewport,
+                    structural=None,
+                )
+            except OcrResolutionRefused:
+                # This probe compares successful target localization counts;
+                # a typed ambiguity/contradiction is the visual arm's intended
+                # fail-closed outcome, equivalent to no visual resolution.
+                res = None
             v_ok = res is not None and _inside(res[0].point, correct_box)
 
             structural_ok += int(s_ok)
