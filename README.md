@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://openadapt.ai">
-    <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/openadapt-hero.svg" width="100%" alt="OpenAdapt is the governed demonstration compiler for GUI workflows. Record a demonstration once, compile it to a deterministic program, and replay it locally with no model calls on the healthy path. When the UI drifts, a resolution ladder (structural, template, OCR, geometry, with an optional grounding model that is never on the hot path) re-resolves the target; armed identity gates and independent out-of-band effect verification guard writes; and the run halts with a report for a human or an AI instead of guessing. It runs across browser (Beta), Windows, macOS and RDP (scoped), Linux (research) and Citrix/VDI (exploratory), surfaced via CLI, desktop app, tray, Cloud (Beta, browser) and emitted MCP servers and Agent Skills.">
+    <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/openadapt-hero.svg" width="100%" alt="OpenAdapt is the governed demonstration compiler for GUI workflows. Record a demonstration once, compile it to a deterministic program, and replay it locally with no model calls on the healthy path. When the UI drifts, a resolution ladder (structural, template, OCR, geometry, with an optional grounding model that is never on the hot path) re-resolves the target; armed identity gates and independent out-of-band effect verification guard writes; and the run halts with a report for a human or an AI instead of guessing. It runs across browser (Beta), Windows, macOS and RDP (early access), Linux (research) and Citrix/VDI (exploratory), surfaced via CLI, desktop app, tray, Cloud (Beta, browser) and emitted MCP servers and Agent Skills.">
   </a>
 </p>
 
@@ -163,9 +163,10 @@ openadapt flow record --backend rdp --rdp-host 10.0.0.5 --out rec
 ```
 
 The browser path is the Beta reference loop and runs in CI with no OS
-permissions. Windows, macOS, and RDP are scoped, design-partner qualifications
-for specific tasks and environments, not arbitrary-application support, and
-Citrix is research-stage; see [Substrate maturity](#substrate-maturity).
+permissions. Windows, macOS, and RDP are Early access: validated on specific
+named tasks and environments, not arbitrary-application support. Citrix/VDI is
+Exploratory (no validated real-environment integration yet); see
+[Substrate maturity](#substrate-maturity).
 
 Before you deploy, apply the stricter gates:
 
@@ -421,12 +422,20 @@ qualified. These labels come from one canonical, machine-readable
 [status manifest](https://openadapt.ai/status.json) that the website, docs, and
 this README all reconcile to, so no surface can drift ahead of the evidence.
 
+The label is a maturity tier that says how broadly a surface has been exercised
+today, not whether it is first-class in the product:
+
+- **Beta**: works and is broadly exercised.
+- **Early access**: works and is validated on specific named tasks, but not yet broadly exercised.
+- **Exploratory**: no validated real-environment integration yet.
+- **Research**: experimental and not yet part of the governed product.
+
 | Surface | Public label | What it means |
 |---------|--------------|---------------|
 | Browser | **Beta** | Reference record → compile → replay path; runs in CI with no OS permissions and backs the public managed subscription. |
-| Windows / macOS / RDP | **Scoped acceptance — design partners only** | Each passed a real, counted scoped qualification (0 silent incorrect successes, 0 over-halts, 0 model calls) for an exact task and environment. Not arbitrary-application or clean-machine support; design-partner only until a customer runs it in production. |
-| Citrix / VDI | **Research / design-partner qualification** | No validated ICA/HDX integration yet; qualification can only begin inside a design partner's real Citrix/VDI environment. RDP evidence does not transfer. |
-| Hosted Cloud | **Beta / public offer** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Non-browser hosted substrates are separately scoped design-partner deployments. |
+| Windows / macOS / RDP | **Early access** | Each passed a real, counted qualification (0 silent incorrect successes, 0 over-halts, 0 model calls) for an exact named task and environment. Not arbitrary-application or clean-machine support; run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
+| Citrix / VDI | **Exploratory** | No validated ICA/HDX integration yet; qualification can only begin inside a design partner's real Citrix/VDI environment. RDP evidence does not transfer. |
+| Hosted Cloud | **Beta** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Desktop, RDP, and Citrix run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
 
 Current components (see the manifest for the source of truth): launcher
 `openadapt` 1.7.1 · `openadapt-flow` 1.19.0 · desktop 0.6.2.
