@@ -32,7 +32,7 @@ def test_semantic_release_refreshes_and_stages_lock_before_tagging() -> None:
     assert "uv lock --upgrade-package" not in pyproject
 
     install = pyproject.index(
-        'python -m pip install --disable-pip-version-check "uv==0.11.26"'
+        'python -m pip install --disable-pip-version-check "uv==0.11.29"'
     )
     synchronize = pyproject.index(
         "python scripts/check_release_consistency.py --write-lock"
