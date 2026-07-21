@@ -1,0 +1,30 @@
+{
+  "token": "golden-hmac-key-秘密",
+  "value": {
+    "certification": {
+      "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "passed": true,
+      "policy": "clinical-write",
+      "risk_class": "consequential"
+    },
+    "challenge_id": "challenge-α",
+    "execution": {
+      "allowed_hosts": ["app.example", "cdn.example"],
+      "entry_url": "https://app.example/login",
+      "target_origin": "https://app.example"
+    },
+    "parameter_schema_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "parameters": [
+      {
+        "choices": [],
+        "name": "patient_id",
+        "required": true,
+        "secret": false,
+        "type": "entity_ref"
+      }
+    ],
+    "schema": "openadapt.runtime-validation/v1"
+  },
+  "canonical": "{\"certification\":{\"evidence_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"passed\":true,\"policy\":\"clinical-write\",\"risk_class\":\"consequential\"},\"challenge_id\":\"challenge-α\",\"execution\":{\"allowed_hosts\":[\"app.example\",\"cdn.example\"],\"entry_url\":\"https://app.example/login\",\"target_origin\":\"https://app.example\"},\"parameter_schema_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"parameters\":[{\"choices\":[],\"name\":\"patient_id\",\"required\":true,\"secret\":false,\"type\":\"entity_ref\"}],\"schema\":\"openadapt.runtime-validation/v1\"}",
+  "signature": "bdb491013fa4eb5fc8e7ed2b92ae0ebadd853da1a44b136d96dad0c31f52c403"
+}

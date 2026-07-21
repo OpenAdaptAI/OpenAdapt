@@ -1,0 +1,106 @@
+{
+  "application": "TextEdit",
+  "capabilities_proven": [
+    "IdentityBackend.structured_text_at",
+    "StructuralActionBackend.structural_locator_at",
+    "StructuralActionBackend.locate_structural"
+  ],
+  "cleanup": {
+    "temporary_root_removed": true,
+    "terminate": {
+      "initially_present": true,
+      "pid": 72248,
+      "verified_absent": true
+    },
+    "unrelated_textedit_pids_after": [
+      35849
+    ],
+    "unrelated_textedit_pids_preserved": true
+  },
+  "enumeration": {
+    "candidate_count": 1,
+    "truncated": false
+  },
+  "environment": {
+    "candidate": {
+      "flow_version": "1.19.0",
+      "git_dirty": true,
+      "git_sha": "b1a3726f1b5f3fc2507c214a3ffd1659f3725ceb"
+    },
+    "machine": "arm64",
+    "os": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.7"
+  },
+  "evidence_classification": "diagnostic_local_engineering_evidence",
+  "identity_under_test": {
+    "exact_match": true,
+    "expected": "MG4408 Okafor, Philip DOB 1966-01-17",
+    "glyph_fidelity": {
+      "contains_digit_zero": true,
+      "contains_letter_O": true
+    },
+    "observed": "MG4408 Okafor, Philip DOB 1966-01-17"
+  },
+  "lane": "development",
+  "model_calls": 0,
+  "negative_controls": {
+    "nonexistent_locator_is_miss": true,
+    "out_of_window_point_text_is_none": true
+  },
+  "probe_point_px": [
+    646,
+    446
+  ],
+  "refusal_contract": {
+    "note": "ambiguity / truncation / scope-escape refusals (halt-don't-guess) are exercised deterministically in tests/test_macos_structural.py; a live app cannot be forced to publish two byte-identical durable controls, so this run proves the positive path plus live scope negative controls",
+    "unit_covered_cases": [
+      "ambiguous enumeration -> StructuralResolutionRefused",
+      "truncated enumeration -> StructuralResolutionRefused",
+      "candidate outside app/window scope -> StructuralResolutionRefused",
+      "element outside captured window rect -> ordinary miss"
+    ]
+  },
+  "status": "passed",
+  "structural_handle": {
+    "candidate_count": 1,
+    "point": [
+      646,
+      446
+    ],
+    "region": [
+      0,
+      56,
+      1292,
+      780
+    ],
+    "supported_operations": [
+      "menu"
+    ],
+    "target_fingerprint": "e2537ff5e200c63373d8de5584986420a9a1d0f767395d66a3b8aec44f5fb2bf"
+  },
+  "structural_locator": {
+    "automation_id": "First Text View",
+    "name": null,
+    "role": "textbox",
+    "selector": null,
+    "window_name": "oa-axid-cae9895e.txt"
+  },
+  "task": "macos_ax_structured_identity",
+  "window": {
+    "scale": [
+      2.0,
+      2.0
+    ],
+    "screen_bounds": [
+      297.0,
+      225.0,
+      646.0,
+      418.0
+    ],
+    "title": "oa-axid-cae9895e.txt",
+    "viewport": [
+      1292,
+      836
+    ]
+  }
+}

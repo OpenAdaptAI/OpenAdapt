@@ -1,0 +1,63 @@
+name: canvas-nodom-ladder
+
+# No-DOM HTML5-canvas vision-ladder qualification (DRAFT CI wiring).
+#
+# Runs the record -> compile -> replay contract through the vision-only resolver
+# ladder over a genuine no-accessible-DOM HTML5 <canvas> (noVNC/TigerVNC,
+# benchmark/canvas_ladder) with NO structural backend. This is the CI-viable
+# stand-in for the Citrix Workspace-WEB canvas class -- it is NOT Citrix ICA/HDX
+# (see benchmark/canvas_ladder/README.md).
+#
+# NIGHTLY + manual only (not a per-PR required gate): the harness drives a real
+# browser over a VNC round-trip, so a run is minutes, not seconds. The fixture
+# image is amd64+arm64; GitHub's ubuntu runners are amd64.
+on:
+  schedule:
+    - cron: "30 8 * * *"   # nightly 08:30 UTC (offset from docker-rdp-vision-ladder)
+  workflow_dispatch: {}
+
+jobs:
+  canvas-nodom-ladder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install flow with the vision + browser stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[ocr,cv]" || pip install -e .
+          pip install opencv-python-headless rapidocr-onnxruntime pillow imagehash playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Build the no-DOM canvas fixture image
+        run: docker build -t oaflow-canvas-fixture:latest benchmark/canvas_ladder/fixture
+
+      - name: Start the no-DOM canvas surface
+        run: |
+          docker run -d --name oaflow-canvas-ladder --shm-size=1g -p 6080:6080 \
+            oaflow-canvas-fixture:latest
+          sleep 18
+
+      - name: Run the no-DOM canvas vision-ladder qualification
+        run: |
+          python benchmark/canvas_ladder/run_canvas_ladder_qualification.py \
+            --container oaflow-canvas-ladder \
+            --output runs/canvas-ladder/results.json \
+            --candidate-commit "${GITHUB_SHA}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: canvas-nodom-ladder-qualification
+          path: runs/canvas-ladder/results.json
+          if-no-files-found: error
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f oaflow-canvas-ladder || true

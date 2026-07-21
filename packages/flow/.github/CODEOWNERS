@@ -1,0 +1,54 @@
+# Code owners. A PR touching a matched path requires review from the listed
+# owner before it can merge -- but ONLY once "Require review from Code Owners"
+# is enabled in branch protection (see the PR body). Without that repo setting
+# these lines are advisory, not enforced.
+
+# Default owner for everything in the repo.
+* @abrichr
+
+# --------------------------------------------------------------------------
+# SAFETY-CRITICAL PATH -- extra scrutiny required (never-false-accept
+# invariant, deterministic compile/replay, irreversible-effect gating).
+# These are the modules the mypy-strict-safety gate and the safety coverage
+# floor also cover. Keep this list in sync with:
+#   - .github/workflows/ci.yml (mypy-strict-safety file list + coverage --include)
+#   - the mypy strict scope documented in pyproject.toml
+# --------------------------------------------------------------------------
+
+# Compiler: recording -> deterministic workflow program (codegen, effect
+# mining, induction, annotation).
+/openadapt_flow/compiler/                      @abrichr
+
+# Pre-action identity gate (template + VLM tiers) -- the never-false-accept
+# check that decides whether a click is allowed to fire.
+/openadapt_flow/runtime/identity.py            @abrichr
+/openadapt_flow/runtime/identity_template.py   @abrichr
+/openadapt_flow/runtime/identity_vlm.py        @abrichr
+
+# Irreversible-effect verifiers + compensation (write/verify/rollback).
+/openadapt_flow/runtime/effects/               @abrichr
+
+# Policy engine (certify) -- turns "runnable" into "certified safe".
+/openadapt_flow/policy.py                      @abrichr
+/openadapt_flow/policies/                      @abrichr
+
+# Replayer + resolution ladder -- the halt/postcondition execution core.
+/openadapt_flow/runtime/replayer.py            @abrichr
+/openadapt_flow/runtime/resolver.py            @abrichr
+
+# Offline safety validation harnesses (identity ROC, adversary corpus, ...).
+/openadapt_flow/validation/                    @abrichr
+
+# Safety documentation whose claims the gates enforce.
+/docs/LIMITS.md                                @abrichr
+/docs/EFFECT_VERIFIER.md                       @abrichr
+/docs/WORKFLOW_PROGRAM_IR.md                   @abrichr
+/docs/phi_at_rest.md                           @abrichr
+/docs/PRIVACY.md                               @abrichr
+/SECURITY.md                                   @abrichr
+
+# --------------------------------------------------------------------------
+# Release, CI, and supply-chain configuration.
+# --------------------------------------------------------------------------
+/.github/                                       @abrichr
+/pyproject.toml                                 @abrichr

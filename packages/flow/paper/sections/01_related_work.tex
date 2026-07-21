@@ -1,0 +1,75 @@
+\section{Related Work}
+
+\paragraph{GUI automation and RPA.}
+Robotic process automation systems execute rules over existing application
+interfaces and organizational workflows; their adoption and governance
+questions are surveyed by van der Aalst et al. \cite{vanderaalst2018rpa}.
+Screenshot-driven automation predates current multimodal agents. Sikuli made
+visual patterns a first-class interface for search and scripting
+\cite{sikuli}. \system{} shares the objective of operating interfaces that lack
+a practical API, but combines structured elements and visual evidence in an
+ordered ladder and makes a repair an auditable program change.
+
+\paragraph{Programming by demonstration and synthesis.}
+Programming by demonstration infers reusable behavior from user actions rather
+than requiring conventional source code \cite{cypher1993watch}. Programming-by-
+example systems such as FlashFill demonstrate how compact examples can produce
+deterministic programs while exposing ambiguity in the inferred intent
+\cite{gulwani2011automating}, and web-scraping-by-demonstration systems such as
+Rousillon compile direct manipulation into a reusable program
+\cite{chasins2018rousillon}. A GUI trace similarly under-specifies intent:
+coordinates do not identify the semantic target, and one trajectory does not
+determine every branch or loop. \system{} therefore retains redundant target
+evidence, represents control flow explicitly, and quarantines underdetermined
+induction instead of filling gaps with an unverified guess. It also departs from
+this line in two ways: it repairs targets at runtime under drift, and it verifies
+downstream effects rather than only reproducing input actions.
+
+\paragraph{Computer-use agents and benchmarks.}
+A rapidly growing line of computer-use agents observes the screen and chooses
+each action with a general multimodal model
+\cite{anthropic2024computeruse,uitars2025,cheng2024seeclick}, evaluated on
+breadth-oriented benchmarks such as WebArena, WorkArena, and OSWorld
+\cite{webarena,workarena,osworld}. These emphasize task completion under online
+reasoning on previously unseen tasks. Our question is complementary: after a
+workflow has been \emph{demonstrated}, when can execution be compiled so that
+repeated healthy runs need no model decision? We retain task-level oracles but
+additionally measure silent incorrect success and over-halt, which distinguish
+unsafe success from conservative refusal---quantities these benchmarks do not
+report.
+
+\paragraph{Runtime verification, oracles, and end-to-end effects.}
+Runtime verification synthesizes monitors that evaluate execution traces
+against explicit safety properties \cite{havelund2002synthesizing}, and the
+end-to-end argument places a correctness check at the layer that can establish
+the intended property rather than an intermediate subsystem \cite{saltzer1984end}.
+Deciding whether an observed outcome is correct is the \emph{test-oracle problem}
+\cite{barr2015oracle}; the faults \system{} targets---duplicate submission,
+double delivery, stale overwrite---are the same exactly-once and idempotency
+hazards studied in transactional systems \cite{gray1981transaction}. These
+principles motivate \system{}'s separation between screen postconditions and
+system-of-record effects: a rendered success banner cannot independently
+establish that a transaction was persisted correctly. Unlike a general
+formal-verification claim, the guarantees here remain scoped to armed steps,
+declared effects, configured verifiers, and named policies.
+
+\begin{table}[t]
+\centering
+\caption{Where \system{} sits. Columns are the properties that matter for
+repeated, consequential GUI work; \checkmark{} = designed-in, $\sim$ = partial
+or tool-dependent, blank = not addressed by the paradigm.}
+\label{tab:positioning}
+\small
+\begin{tabular}{lccccc}
+\toprule
+ & No per-run & Deterministic & Repairs & Verifies & Refuses on \\
+Approach & model call & healthy path & under drift & effect & ambiguity \\
+\midrule
+Selector RPA \cite{vanderaalst2018rpa} & \checkmark & \checkmark & & & \\
+Visual scripting \cite{sikuli}          & \checkmark & \checkmark & $\sim$ & & \\
+PBD / synthesis \cite{cypher1993watch,gulwani2011automating} & \checkmark & \checkmark & & & $\sim$ \\
+Computer-use agents \cite{anthropic2024computeruse,webarena} & & & \checkmark & & $\sim$ \\
+\textbf{\system{}} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,430 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-flow"
+version = "1.19.0"
+description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
+readme = "README.md"
+license = { text = "MIT" }
+# rapidocr-onnxruntime is part of the validated identity/OCR path and does not
+# publish Python 3.13-compatible releases. Keep the package boundary aligned
+# with the runtime we actually qualify; migrating OCR engines requires rerunning
+# the identity and dense-surface safety evidence first.
+requires-python = ">=3.10,<3.13"
+authors = [{ name = "OpenAdapt.AI" }]
+dependencies = [
+    "pydantic>=2.5",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "pillow>=10.0",
+    "imagehash>=4.3",
+    "rapidocr-onnxruntime>=1.3",
+    # The reference backend and the CLI's demo-record/replay self-serve
+    # path drive a Playwright browser; core, not a dev extra.
+    "playwright>=1.44",
+    # GPU-less runners call the on-prem VLM appliance over HTTP
+    # (runtime.remote_vlm). Lightweight; core so the fail-safe client is
+    # always importable on a runner.
+    "httpx>=0.27",
+    "idna>=3.6",
+    # Policy files (openadapt_flow.policy) are YAML; the `certify` CLI and the
+    # shipped example policies load them. Tiny, pure-Python, core so `certify`
+    # works out of the box.
+    "pyyaml>=6.0",
+    "tomli>=2.0; python_version < '3.11'",
+    # Opt-in encryption-at-rest for compiled bundles and durable checkpoints
+    # (openadapt_flow.crypto: AES-256-GCM sealed containers). Core so
+    # Workflow.save(encrypt=True) / load(key=...) and encrypted checkpoints work
+    # out of the box in a regulated/PHI deployment; the audited AEAD substrate
+    # for docs/phi_at_rest.md. Imported lazily, only on the encryption path.
+    "cryptography>=42.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-timeout>=2.2",
+    # Property-based (fuzz) testing of the identity gate's never-false-accept
+    # invariant (tests/test_identity_fuzz.py).
+    "hypothesis>=6.100",
+    # Benchmark harness: agent baseline (anthropic) + chart rendering.
+    "anthropic>=0.40",
+    "matplotlib>=3.8",
+    # Pixel-identity validation probe: SSIM comparison method (dev-only; the
+    # pixel tier is hard-gated OFF in the shipped runtime).
+    "scikit-image>=0.22",
+    # WindowsBackend tests (mock WAA server).
+    "requests>=2.31",
+    # VLM service + operator console tests (TestClient over the FastAPI apps);
+    # uvicorn for the console's boot smoke test.
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    # Engineering-hygiene gates (lint+format, type-check, coverage). Pinned to
+    # majors so CI and local dev run the same checkers.
+    "ruff==0.15.22",
+    "mypy>=1.11",
+    "pytest-cov>=5.0",
+    "jsonschema>=4.21",
+]
+grounder = ["anthropic>=0.40"]
+# PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
+# (pillow + pytesseract; CPU-only, no GPU, no served model, no paid API).
+# OCRAnchorGrounder imports it lazily and abstains (returns None) when absent,
+# so the core stays installable and the ladder safe-halts without it.
+grounding = ["openadapt-grounding>=0.1.0"]
+# Operator console: `openadapt-flow console` serves a localhost-only web UI
+# over compiled bundles / run reports / skill libraries (openadapt_flow.console).
+# FastAPI app + uvicorn server; the API client side (httpx) is already core.
+console = ["fastapi>=0.110", "uvicorn>=0.29"]
+# WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
+windows = ["requests>=2.31"]
+# Native macOS window capture/input. Imported lazily; other platforms never
+# install or import these framework bindings.
+macos = [
+    "pyobjc-framework-applicationservices>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-cocoa>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-quartz>=10.3; sys_platform == 'darwin'",
+]
+# Native Linux AT-SPI observation/actuation. Imported lazily; the system must
+# also provide the AT-SPI typelib/runtime (for example gir1.2-atspi-2.0 on
+# Debian/Ubuntu) and an interactive X11 session.
+linux = [
+    "PyGObject>=3.46; sys_platform == 'linux'",
+]
+# FreeRDPBackend: pure-Python async RDP client for the pixel-only RDP path
+# (L1/Retinology EMR over RDP). Lazily imported by AardwolfTransport — never
+# needed for the mock-tested adapter, only for the real/live transport.
+rdp = ["aardwolf==0.2.14"]
+# PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
+# runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
+# no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated
+# deployment installs this and sets OPENADAPT_FLOW_SCRUB=on to fail closed.
+# After install: python -m spacy download en_core_web_sm
+privacy = [
+    "openadapt-privacy[presidio]>=1.0.0",
+    # spaCy imports Click directly from its CLI package but does not declare it;
+    # Typer 0.27 stopped supplying Click transitively. Keep regulated-mode
+    # compilation importable under fresh, unconstrained PyPI resolution.
+    "click>=8.0,<9",
+]
+# Preferred hosted-token storage. Without this extra, use the environment or
+# explicitly opt into the mode-0600 plaintext fallback.
+hosted = ["keyring>=25"]
+# On-prem VLM inference service (the GPU-box appliance side).
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+# Apple-Silicon Research backend for the VLM service (local model, no GPU box).
+# mlx-vlm 0.6.4 requires the Transformers range containing fixes for
+# GHSA-69w3-r845-3855, GHSA-29pf-2h5f-8g72, and GHSA-fgcw-684q-jj6r. Keep the
+# direct constraint as defense in depth in case a future transitive requirement
+# is loosened.
+service-mlx = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "mlx-vlm>=0.6.4,<0.7",
+    "transformers>=5.5,<5.15",
+]
+# Cross-platform desktop recording on-ramp: convert an openadapt-capture
+# session into a flow recording (openadapt_flow.adapters.capture). Optional and
+# imported lazily — the flow core never pulls it onto the replay hot path.
+# Floor 0.6.0: adds window-scoped recording and CaptureSession.window_capture,
+# while retaining headless-safe import and persisted pixel_ratio. The adapter
+# tests therefore run against the exact producer contract in headless CI (the
+# `test` job installs this extra).
+capture = ["openadapt-capture>=0.6.0"]
+# Canonical action-vocabulary interop (openadapt_flow.interop.types). Boundary
+# only (emit / benchmark round-trip); never on the replay hot path. The shim
+# imports openadapt-types lazily, so the core stays importable without it.
+# Bounded pin: openadapt-types is 0-based semver (major_on_zero=false), so
+# breaking changes land at the MINOR level. The shim in interop/types.py is
+# field-exact against the 0.2.x/0.3.x schema; cap below the next (breaking)
+# 0.4.0 and floor at the earliest tested minor. The `interop-types` CI job
+# installs this extra so the shim is type-checked and tested against the real
+# package (see .github/workflows/ci.yml). Raise the ceiling only after
+# validating the shim against a new minor.
+interop = ["openadapt-types>=0.2.0,<0.4.0"]
+
+[project.scripts]
+openadapt-flow = "openadapt_flow.__main__:main"
+openadapt-flow-vlm-service = "openadapt_flow.services.vlm_service.__main__:main"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_flow"]
+# Publication artifacts carry the public mechanism, interfaces, and
+# conservative runtime defaults -- never the grown identity corpora, their ROC
+# tuning surface, or repository-only reliability recipes/results.  Keep this
+# list in lockstep with the sdist target and the archive validator below.
+exclude = [
+    "/.hypothesis",
+    "/benchmark/reliability",
+    "/docs/validation/IDENTITY_ROC.md",
+    "/docs/validation/adversary_corpus_manifest.json",
+    "/docs/validation/adversary_corpus_v2_manifest.json",
+    "/docs/validation/adversary_corpus_v3_manifest.json",
+    "/docs/validation/identity_roc.json",
+    "/docs/validation/identity_roc.png",
+    "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/openadapt_flow/validation/adversary_corpus.py",
+    "/openadapt_flow/validation/adversary_corpus_v2.py",
+    "/openadapt_flow/validation/adversary_corpus_v3.py",
+    "/openadapt_flow/validation/identity_roc.py",
+    "/scripts/reliability",
+    "/tests/test_adversary_corpus.py",
+    "/tests/test_adversary_corpus_v2.py",
+    "/tests/test_adversary_corpus_v3.py",
+    "/tests/test_identity_corpus_rates.py",
+    "/tests/test_identity_out_of_corpus.py",
+    "/tests/test_reliability.py",
+]
+# Ship the PEP 561 marker so downstream type-checkers honor our annotations.
+[tool.hatch.build.targets.wheel.force-include]
+"openadapt_flow/py.typed" = "openadapt_flow/py.typed"
+"schemas" = "openadapt_flow/schemas"
+"public-artifacts.json" = "openadapt_flow/public-artifacts.json"
+# NOTE: the operator console's static UI (openadapt_flow/console/static/) is
+# package data hatchling already ships by default -- do NOT force-include it
+# (a duplicate-path entry fails the wheel build).
+
+[tool.hatch.build.targets.sdist]
+# Keep PyPI artifacts under the declared MIT package license. The source
+# checkout carries an isolated openIMIS reference environment whose adapted
+# deployment files remain AGPL-3.0-only; ship none of that benchmark surface
+# (including its launcher/test and repository-only notice) in the sdist. The
+# exclusions below are defense in depth for former paths and future regressions:
+# grown identity corpora, ROC tuning artifacts, and detailed public-web target
+# recipes/raw rows are absent from the current public tree. Public mechanisms,
+# fake-patient synthetic fixtures, and bounded aggregate evidence remain.
+exclude = [
+    "/.hypothesis",
+    "/THIRD_PARTY_NOTICES.md",
+    "/benchmark/openimis_claims",
+    "/benchmark/reliability",
+    "/docs/validation/IDENTITY_ROC.md",
+    "/docs/validation/adversary_corpus_manifest.json",
+    "/docs/validation/adversary_corpus_v2_manifest.json",
+    "/docs/validation/adversary_corpus_v3_manifest.json",
+    "/docs/validation/identity_roc.json",
+    "/docs/validation/identity_roc.png",
+    "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/openadapt_flow/validation/adversary_corpus.py",
+    "/openadapt_flow/validation/adversary_corpus_v2.py",
+    "/openadapt_flow/validation/adversary_corpus_v3.py",
+    "/openadapt_flow/validation/identity_roc.py",
+    "/scripts/openimis_claims_demo.py",
+    "/scripts/reliability",
+    "/tests/test_adversary_corpus.py",
+    "/tests/test_adversary_corpus_v2.py",
+    "/tests/test_adversary_corpus_v3.py",
+    "/tests/test_identity_corpus_rates.py",
+    "/tests/test_identity_out_of_corpus.py",
+    "/tests/test_openimis_claims_fixture.py",
+    "/tests/test_reliability.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 600
+
+# Auto-release (matches the other openadapt repos). Python Semantic Release
+# computes the next version from Conventional Commit subjects since the last
+# tag: `feat:` -> minor, `fix:`/`perf:` -> patch, `BREAKING CHANGE` -> major.
+# See .github/workflows/release.yml.
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+# Keep the package __version__ in lockstep with the pyproject version so a
+# released wheel never reports a stale version (they had drifted: 0.1.0 vs the
+# released pyproject version).
+version_variables = ["openadapt_flow/__init__.py:__version__"]
+commit_message = "chore: release {version}"
+# Semantic Release runs its build inside a Python 3.14 container, while Flow's
+# validated runtime is Python 3.10-3.12. Stamp only the editable root lock entry
+# instead of asking uv to resolve the project under an unsupported interpreter.
+build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && git add uv.lock && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+# --------------------------------------------------------------------------
+# Lint + format (ruff). Real, enforced gates — see .github/workflows/ci.yml.
+# --------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+# Generated / non-package trees at the repo root are not part of the lint
+# surface. Anchored with a leading slash so the package's own
+# openadapt_flow/benchmark/ IS still linted (a bare "benchmark" would match it).
+extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
+
+[tool.ruff.lint]
+# Start pragmatic: pyflakes (real bugs), the safe pycodestyle subset, warnings,
+# and import sorting. Deliberately excludes opinionated rewrite families
+# (UP/SIM/B) for now so the gate is green on the current code and can be
+# tightened incrementally.
+select = ["E4", "E7", "E9", "F", "W", "I"]
+ignore = [
+    # Ambiguous single-letter name `l`: used only as an OCR-line loop variable
+    # in a handful of comprehensions; renaming is churn with no safety value.
+    "E741",
+    # Line length is shaped by the formatter; long strings/URLs/regexes here
+    # would otherwise trip E501 without improving readability.
+    "E501",
+]
+
+[tool.ruff.format]
+# Match the formatter to the codebase's existing conventions.
+quote-style = "double"
+indent-style = "space"
+
+# --------------------------------------------------------------------------
+# Type checking (mypy). TWO gates, both required on PRs (see
+# .github/workflows/ci.yml):
+#
+#   1. `lint` job -> plain `mypy` with THIS config: LENIENT, whole-package.
+#      Green today; catches import/name/obvious-signature errors everywhere.
+#      Tighten the knobs below over time (they are deliberately off to start).
+#
+#   2. `mypy-strict-safety` job -> a STRICT run scoped to the safety-critical
+#      path ONLY (compiler, identity, effects, policy, replayer, resolver).
+#      It turns ON the highest-value strict knob this config leaves off --
+#      `--check-untyped-defs` (type-check the BODIES of un-annotated functions,
+#      where real safety bugs hide) -- plus no-implicit-optional, strict
+#      equality, redundant-cast / unused-ignore / untyped-decorator checks and
+#      --extra-checks. The full `--strict` superset (disallow-untyped-defs,
+#      disallow-any-generics, warn-return-any, warn-unreachable) is NOT yet
+#      green on these files without source changes; those remain the ratchet to
+#      flip as annotations harden. The strict file list lives in the workflow
+#      and mirrors the CODEOWNERS safety path -- keep the three in sync.
+#
+# Scoped to the core package (not tests, not the benchmark harness).
+# --------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+files = ["openadapt_flow"]
+# Optional extras (aardwolf, openadapt_grounding, openadapt_capture, mlx_vlm,
+# rapidocr, cv2, …) are imported lazily and have no stubs — don't fail on them.
+ignore_missing_imports = true
+warn_unused_configs = true
+# Kept off intentionally to start lenient (annotations are not yet complete);
+# these are the knobs to flip when tightening.
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+# numpy 2.x ships stubs that use 3.12-only `type` statement syntax; parsing
+# them under our 3.10 target crashes mypy. We don't type-check against numpy's
+# internals, so skip following into it (and treat it as untyped). (scikit-image
+# -> tifffile has the same issue, but its only consumer here — the pixel probe —
+# is in the ignore-errors debt list below, so mypy never follows into it.)
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
+# Known type-check debt. These modules have pre-existing errors that need real
+# code changes to resolve; they're excluded from the gate for now so the
+# checker is green while still covering the other modules. Remove entries here
+# as the annotations are hardened.
+#
+# The SAFETY-CRITICAL compile/replay path is NOT in this list: the compiler
+# (compiler.compile), the pre-click identity gate (runtime.identity), and the
+# replayer (runtime.replayer) are fully type-checked. What remains is genuinely
+# lower-stakes, harder-to-annotate debt:
+#   - CLI / reporting surface: __main__, report
+#   - alternate backends: backends.playwright_backend, backends.rdp_backend
+#   - benchmark & interactive tooling: benchmark.desktop_benchmark,
+#     interactive_recorder
+#   - learning-loop synthesis: learning.synth_stream
+#   - disambiguation heuristics: compiler.disambiguation
+#   - runtime helpers still on untyped deps: runtime.effects._common,
+#     runtime.grounder, runtime.healing.perturbation
+#   - the VLM microservice (FastAPI, dynamic): services.vlm_service.*
+#   - offline validation harnesses (not on the runtime path):
+#     validation.* (dense_surface, identity_ladder,
+#     pixel_identity_probe, pixel_identity_aligned,
+#     vlm_identity_probe)
+#   - perceptual hashing on numpy internals: vision.hashing
+[[tool.mypy.overrides]]
+module = [
+    "openadapt_flow.__main__",
+    "openadapt_flow.backends.playwright_backend",
+    "openadapt_flow.backends.rdp_backend",
+    "openadapt_flow.benchmark.desktop_benchmark",
+    "openadapt_flow.compiler.disambiguation",
+    "openadapt_flow.interactive_recorder",
+    "openadapt_flow.learning.synth_stream",
+    "openadapt_flow.report",
+    "openadapt_flow.runtime.effects._common",
+    "openadapt_flow.runtime.grounder",
+    "openadapt_flow.runtime.healing.perturbation",
+    "openadapt_flow.services.vlm_service.app",
+    "openadapt_flow.services.vlm_service.backends",
+    "openadapt_flow.services.vlm_service.batching",
+    "openadapt_flow.validation.dense_surface",
+    "openadapt_flow.validation.identity_ladder",
+    "openadapt_flow.validation.pixel_identity_probe",
+    "openadapt_flow.validation.pixel_identity_aligned",
+    "openadapt_flow.validation.vlm_identity_probe",
+    "openadapt_flow.vision.hashing",
+]
+ignore_errors = true
+
+# --------------------------------------------------------------------------
+# Coverage. Whole-package measurement stays a VISIBILITY number, but the
+# safety-critical path now has an ENFORCED, required floor on PRs.
+#
+# The `test` job (see .github/workflows/ci.yml) runs the fast unit suite under
+# coverage, then enforces a ratchet with a SCOPED report:
+#
+#     coverage report --fail-under=85 \
+#       --include='openadapt_flow/compiler/*,openadapt_flow/runtime/identity*,\
+#                  openadapt_flow/runtime/replayer.py,\
+#                  openadapt_flow/runtime/resolver.py,openadapt_flow/policy.py,\
+#                  openadapt_flow/runtime/effects/*'
+#
+# 85% is the ratchet floor: it sits just under the fast-suite's measured
+# branch-inclusive coverage of that path (~88% locally, higher in CI where the
+# FHIR-effect + replayer-dependent tests that collide with a sibling repo's
+# `tests` package locally also run). NEVER decrease it -- raise it as coverage
+# climbs. Keep the --include globs in sync with the mypy strict scope above and
+# with CODEOWNERS.
+# --------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["openadapt_flow"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 2

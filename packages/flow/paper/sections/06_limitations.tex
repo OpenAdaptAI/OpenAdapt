@@ -1,0 +1,55 @@
+\section{Limitations and Threats to Validity}
+
+The evidence does not establish long-term reliability, maintenance effort,
+total cost of ownership, multi-tenant scale, or safety in clinical production.
+OpenEMR uses a shared public demonstration site and a small sample. MockMed is a
+fixture, and the second-domain lending study is likewise a bounded mechanism
+study (eleven tasks, three trials each) on a purpose-built MockLoan ledger, not a
+production lending system. The breadth corpus has one trial per application and
+selection bias toward public no-auth browser apps. No published study covers
+weeks of natural drift or a representative distribution of customer workflows.
+
+Identity is only checked on armed steps. Risk classification uses keywords and
+can miss an icon-only or indirect write. Visual postconditions do not verify a
+system-of-record effect. Effect declarations and verifiers require deployment
+work. Optional model rescue can false-rescue an ambiguous state, and measured
+grounding is weak on dense lists. Human review can catch contextual sanitation
+errors but is not proof of de-identification.
+
+The substrate qualifications cover one Windows UIA workflow and VM snapshot,
+one macOS host and TextEdit task, and one RDP task and snapshot. They establish
+working observation, actuation, refusal, and effect-oracle mechanisms in those
+environments, not reliability across application families or deployment fleets.
+Remote display introduces compression, scaling, latency, coordinate,
+lock-screen, credential, input-acceptance, and identity-availability variables.
+No measured result covers Citrix ICA/HDX, so RDP evidence does not transfer to a
+Citrix deployment. Citrix is a pixel-only remote-display environment in the same
+class as the measured RDP backend, and the resolution ladder and identity gate
+are substrate-independent by construction, but the paper reports no ICA/HDX
+measurement. A concrete validation would record and compile a workflow inside a
+real Citrix Workspace session, replay it through the vision-only rungs of the
+ladder over the ICA/HDX channel, and confirm the identity gate refuses ambiguous
+targets and that an out-of-band effect oracle catches an injected transactional
+fault. That study is not reported here.
+
+Effect verification also has a substrate-dependent reach that the RDP row can
+obscure. The strong oracle is only available when the system of record can be
+read out of band, through a database, API, or file interface independent of the
+substrate that carried the write. The RDP qualification reads the persisted file
+through guest tools, an out-of-band channel that a locked-down Citrix session may
+not expose. Where no such read path exists, the transactional strong oracle is
+unavailable; a same-application re-read cannot catch a partial, duplicate, stale,
+or lost-update write, and on such substrates safety rests on the identity gate
+and halt-on-ambiguity rather than on effect verification. Even where a read path
+exists, an out-of-band effect oracle is only as strong as its read coverage: in
+the end-to-end study a collateral write to a billing surface the oracle did not
+read slipped through (9 of 90) until the read path was extended to every mutable
+surface, so effect verification guarantees only what it reads.
+
+Cost values use recorded provider usage and then-current price metadata. They do
+not include recording, compilation, operator review, exception handling,
+infrastructure, support, or maintenance. Provider prices and models change.
+
+Finally, the authors develop the evaluated system. Raw artifacts and scripts
+reduce but do not eliminate experimenter bias. Independent replication and
+pre-registered longitudinal workloads remain necessary.

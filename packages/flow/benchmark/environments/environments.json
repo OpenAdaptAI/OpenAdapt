@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "description": "Pinned, reproducible system-of-record environments for the Silent Wrong-Effect benchmark. Digests are resolved from each environment.lock.json at snapshot time.",
+  "environments": [
+    {
+      "name": "mockmed",
+      "app": "MockMed fault-injection SPA (bundled)",
+      "vertical": "fixture",
+      "substrate": "web",
+      "lock_relpath": null,
+      "compose_relpath": null,
+      "ci_fast": true,
+      "requires_docker": false,
+      "ui_urls": {
+        "app": "http://127.0.0.1:<ephemeral>/"
+      },
+      "sor": {
+        "kind": "in-process encounter store behind a real HTTP persistence boundary",
+        "channels": [
+          "http_json"
+        ],
+        "read_recipe": "GET /api/db -> {records:[{id,patient_id,type,note,source,key}]}",
+        "reset_recipe": "POST /api/reset {seed_concurrent?: bool}",
+        "isolated_from_actor": true
+      },
+      "creds_location": "none (loopback, no auth)",
+      "seed_state": "empty store; POST /api/reset {seed_concurrent:true} plants one concurrent-actor row to expose lost-update (C4/stale) faults",
+      "bringup": [
+        "python -c \"from openadapt_flow.mockmed.fault_server import serve; print(serve(port=0)[0])\"",
+        "# or: python -m benchmark.environments.verify mockmed"
+      ],
+      "teardown": [
+        "call the returned stop() callable (daemon thread; no residue)"
+      ],
+      "license": {
+        "upstream_license": "MIT (OpenAdapt Flow's own code)",
+        "delivery": "first-party source; shipped in the wheel as openadapt_flow.mockmed",
+        "ship_in_artifacts": true,
+        "notes": "Fake data only; the CI-fast anchor that needs no Docker."
+      },
+      "reference_docs": [
+        "openadapt_flow/mockmed/fault_server.py",
+        "benchmark/fault_model/FAULT_MODEL.md"
+      ],
+      "service_digests": {},
+      "unpinned_services": {}
+    },
+    {
+      "name": "openemr_local",
+      "app": "OpenEMR 8.0.0.3 (containerized EMR)",
+      "vertical": "healthcare",
+      "substrate": "web",
+      "lock_relpath": "benchmark/openemr_local/environment.lock.json",
+      "compose_relpath": "benchmark/openemr_local/compose.yml",
+      "ci_fast": false,
+      "requires_docker": true,
+      "ui_urls": {
+        "http_ui": "http://127.0.0.1:9301",
+        "https_api": "https://127.0.0.1:9300"
+      },
+      "sor": {
+        "kind": "MariaDB row-state + OpenEMR Standard REST readback",
+        "channels": [
+          "sql",
+          "rest_api"
+        ],
+        "read_recipe": "SQL: MariaDB service 'db', SELECT from openemr.patient_data; REST: GET https://127.0.0.1:9300/apis/default/api/patient with a least-privilege OAuth oracle client (scope 'openid api:oemr user/patient.rs' -> read/search only, no create/update/delete)",
+        "reset_recipe": "OpenEMRFixture.reset(): restore the SHA-256-verified baseline SQL dump while the openemr writer container is stopped",
+        "isolated_from_actor": true
+      },
+      "creds_location": "benchmark/openemr_local/state/runtime.env (generated, 0600, gitignored) and state/oauth-clients.json; actor user 'openadapt_actor'",
+      "seed_state": "pinned image install + APIs enabled by bootstrap(); one immutable hashed SQL baseline (snapshot()) restored before every trial",
+      "bringup": [
+        "python scripts/openemr_local_demo.py preflight",
+        "python scripts/openemr_local_demo.py prepare",
+        "python scripts/openemr_local_demo.py up",
+        "python scripts/openemr_local_demo.py bootstrap",
+        "python scripts/openemr_local_demo.py snapshot"
+      ],
+      "teardown": [
+        "docker compose -p openadapt-openemr-benchmark down -v",
+        "rm -rf benchmark/openemr_local/state"
+      ],
+      "license": {
+        "upstream_license": "GPL-3.0 (OpenEMR)",
+        "delivery": "official openemr/openemr image pulled at runtime by digest; no OpenEMR source vendored into this repo",
+        "ship_in_artifacts": false,
+        "notes": "Running a pinned upstream container is not redistribution. The compose.yml is OpenAdapt's own (adapted, attributed). Nothing OpenEMR-licensed is under openadapt_flow/, so the wheel excludes it."
+      },
+      "reference_docs": [
+        "benchmark/openemr_local/README.md",
+        "benchmark/openemr_local/fixture.py"
+      ],
+      "service_digests": {
+        "openemr": "openemr/openemr:8.0.0.3@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab",
+        "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+      },
+      "unpinned_services": {}
+    },
+    {
+      "name": "frappe_lending",
+      "app": "Frappe/ERPNext + Lending v16 (containerized ERP)",
+      "vertical": "lending",
+      "substrate": "web",
+      "lock_relpath": "benchmark/frappe_lending/environment.lock.json",
+      "compose_relpath": "benchmark/frappe_lending/compose.yml",
+      "ci_fast": false,
+      "requires_docker": true,
+      "ui_urls": {
+        "http_ui": "http://127.0.0.1:8080"
+      },
+      "sor": {
+        "kind": "MariaDB row-state + Frappe REST readback",
+        "channels": [
+          "sql",
+          "rest_api"
+        ],
+        "read_recipe": "SQL: MariaDB service 'db', SELECT from `tabLoan Application`; REST: Frappe /api authenticated as read-only oracle user 'openadapt.oracle@example.invalid' (custom read-only Loan Application permission; not the UI/API writer)",
+        "reset_recipe": "FrappeLendingFixture.reset(): restore the SHA-256-verified baseline SQL dump with writer services stopped",
+        "isolated_from_actor": true
+      },
+      "creds_location": "benchmark/frappe_lending/state/runtime.env (generated, 0600, gitignored); site 'frontend', admin via SITE_ADMIN_PASSWORD",
+      "seed_state": "custom image built from pinned upstream tags (verified against locked commits); one immutable hashed SQL baseline restored before every trial",
+      "bringup": [
+        "python scripts/frappe_lending_demo.py preflight",
+        "python scripts/frappe_lending_demo.py prepare",
+        "python scripts/frappe_lending_demo.py build",
+        "python scripts/frappe_lending_demo.py up",
+        "python scripts/frappe_lending_demo.py bootstrap",
+        "python scripts/frappe_lending_demo.py snapshot"
+      ],
+      "teardown": [
+        "docker compose -p openadapt-frappe-lending-benchmark down -v",
+        "rm -rf benchmark/frappe_lending/state"
+      ],
+      "license": {
+        "upstream_license": "GPL-3.0 (Frappe/ERPNext/Lending), MIT (frappe_docker)",
+        "delivery": "custom image built at runtime from official frappe/build+base images and pinned app tags; no Frappe source vendored into this repo",
+        "ship_in_artifacts": false,
+        "notes": "Build+run only, from digest-pinned bases and commit-pinned apps. Top-level benchmark/ is outside the openadapt_flow wheel package."
+      },
+      "reference_docs": [
+        "benchmark/frappe_lending/README.md",
+        "benchmark/frappe_lending/fixture.py"
+      ],
+      "service_digests": {
+        "frappe_build": "frappe/build:v16.27.0@sha256:03e6e1266d8427cbc8b524d5dc1afcfdf313dd3e0dc01f384e1564a10df970b2",
+        "frappe_base": "frappe/base:v16.27.0@sha256:87f036846924f1b9be1b30d590e7156c1013f73bbf946e6a43d8f1560a1f0d33",
+        "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+        "redis": "redis:6.2-alpine@sha256:c9ab371a96b057d3642be9bd71cb1b3fe97920d345dc949860578bffb3d54460"
+      },
+      "unpinned_services": {}
+    },
+    {
+      "name": "openimis_claims",
+      "app": "openIMIS 25.10 (containerized insurance claims)",
+      "vertical": "insurance",
+      "substrate": "web",
+      "lock_relpath": "benchmark/openimis_claims/environment.lock.json",
+      "compose_relpath": "benchmark/openimis_claims/compose.yml",
+      "ci_fast": false,
+      "requires_docker": true,
+      "ui_urls": {
+        "http_ui": "http://127.0.0.1:9401"
+      },
+      "sor": {
+        "kind": "PostgreSQL row-state (tblClaim)",
+        "channels": [
+          "sql"
+        ],
+        "read_recipe": "SQL: PostgreSQL 'IMIS' database; require exactly one non-voided tblClaim row with the trial claim code in status 2 ('Entered') for the synthetic insuree + health facility",
+        "reset_recipe": "compose down --volumes (full reset) then up + bootstrap",
+        "isolated_from_actor": true
+      },
+      "creds_location": "benchmark/openimis_claims/out/state/ (generated, gitignored); demo actor credential 'Admin'",
+      "seed_state": "upstream openIMIS demo dataset (fictional regions/facilities/insurees) plus one synthetic policyholder added by bootstrap()",
+      "bringup": [
+        "python scripts/openimis_claims_demo.py up",
+        "python scripts/openimis_claims_demo.py bootstrap"
+      ],
+      "teardown": [
+        "python scripts/openimis_claims_demo.py down --volumes"
+      ],
+      "license": {
+        "upstream_license": "AGPL-3.0-only (openIMIS)",
+        "delivery": "OPT-IN / REPO-ONLY: images pulled at runtime by digest; the adapted compose.yml + conf/nginx templates are AGPL-3.0-only, carry SPDX headers, and are recorded in THIRD_PARTY_NOTICES.md",
+        "ship_in_artifacts": false,
+        "notes": "CAVEAT \u2014 enforced by pyproject sdist 'exclude': /benchmark/openimis_claims, /scripts/openimis_claims_demo.py, /tests/test_openimis_claims_fixture.py, /THIRD_PARTY_NOTICES.md are kept out of the sdist; the wheel packages only openadapt_flow/, so no AGPL file can ship in either artifact. Do NOT relocate these files under openadapt_flow/."
+      },
+      "reference_docs": [
+        "benchmark/openimis_claims/README.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "service_digests": {
+        "backend": "ghcr.io/openimis/openimis-be:25.10@sha256:a77228c7469fab5f3523d3f7b9877d62aa116b303fd87a6d55aa3a46c1892592",
+        "frontend": "ghcr.io/openimis/openimis-fe:25.10@sha256:ed0e0b1dbe91308d4df3322a1aee40176b42d47bbf72fea79a59fa84ef63db4a",
+        "pgsql": "ghcr.io/openimis/openimis-pgsql:25.10@sha256:d4bc881e408b74b4cf47fb718534fe0f10940bb951b6cb7ee9a1a30048adf29d",
+        "redis": "redis@sha256:234c902a2db49461a129e2d4aeff85b28cf20187ed274a67f6e50995fa713c7b",
+        "rabbitmq": "rabbitmq:3-management@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69"
+      },
+      "unpinned_services": {}
+    }
+  ]
+}

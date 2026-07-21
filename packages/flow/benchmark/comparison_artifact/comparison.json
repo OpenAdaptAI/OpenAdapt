@@ -1,0 +1,103 @@
+{
+  "generated_by": "benchmark.comparison_artifact.generate",
+  "model_calls_compiled": 0,
+  "network_calls": 0,
+  "provenance": "Every figure is read from the source results.json files; the only prose-sourced figure is the one-time human demonstration cost, quoted from benchmark/openemr/BENCHMARK.md + benchmark/BENCHMARK.md (prose).",
+  "source_files": {
+    "openemr": "benchmark/openemr/results.json",
+    "mockmed": "benchmark/results.json"
+  },
+  "demonstration_cost": {
+    "text": "about a minute of human demonstration",
+    "source": "benchmark/openemr/BENCHMARK.md + benchmark/BENCHMARK.md (prose)"
+  },
+  "benchmarks": {
+    "openemr": {
+      "label": "OpenEMR public demo \u2014 a real third-party EMR",
+      "kind": "field",
+      "reproducible": false,
+      "source_file": "benchmark/openemr/results.json",
+      "task": "OpenEMR public demo: log in, search the demo patient, open the chart, scroll the dashboard to the Messages card, open Patient Messages, add a parameterized note, save",
+      "model": "claude-sonnet-5",
+      "workflow_steps": 18,
+      "arms": {
+        "compiled": {
+          "n": 20,
+          "success_count": 20,
+          "success_rate": 1.0,
+          "wall_s_p50": 39.170917561999886,
+          "wall_s_p95": 41.04867044315233,
+          "cost_usd_per_run": 0.0,
+          "cost_usd_total": 0.0
+        },
+        "agent": {
+          "n": 10,
+          "success_count": 10,
+          "success_rate": 1.0,
+          "wall_s_p50": 70.44607112499943,
+          "wall_s_p95": 82.59687604810188,
+          "cost_usd_per_run": 0.552150765,
+          "cost_usd_total": 5.52150765
+        }
+      },
+      "extras": {
+        "target": "https://demo.openemr.io/openemr/index.php",
+        "cost_caps_usd": {
+          "per_run": 1.5,
+          "total": 8.0
+        },
+        "pricing_note": "list price; an introductory $2/$10 rate applies through 2026-08-31",
+        "compiled_self_flag": {
+          "i": 19,
+          "success": true,
+          "first_failure_step": "step_017"
+        }
+      }
+    },
+    "mockmed": {
+      "label": "MockMed \u2014 the bundled demo clinic (CI-reproducible anchor)",
+      "kind": "reproducible",
+      "reproducible": true,
+      "source_file": "benchmark/results.json",
+      "task": "MockMed triage: login, open first referral, create a Triage encounter, enter the note, save",
+      "model": "claude-sonnet-5",
+      "workflow_steps": null,
+      "arms": {
+        "compiled": {
+          "n": 100,
+          "success_count": 100,
+          "success_rate": 1.0,
+          "wall_s_p50": 4.9309526044999075,
+          "wall_s_p95": 5.055971199399937,
+          "cost_usd_per_run": 0.0,
+          "cost_usd_total": 0.0
+        },
+        "agent": {
+          "n": 20,
+          "success_count": 20,
+          "success_rate": 1.0,
+          "wall_s_p50": 37.492187666500286,
+          "wall_s_p95": 43.44962514519993,
+          "cost_usd_per_run": 0.27155505,
+          "cost_usd_total": 5.431101
+        }
+      },
+      "extras": {
+        "pricing_note": "list price; an introductory $2/$10 rate applies through 2026-08-31",
+        "drift_theme": {
+          "compiled_wall_s": 9.720975041999736,
+          "compiled_heal_count": 8,
+          "compiled_success": true,
+          "agent_wall_s": 87.36445195899978,
+          "agent_cost_usd": 0.631923,
+          "agent_actions": 23,
+          "agent_success": true
+        }
+      }
+    }
+  },
+  "derived": {
+    "openemr_speedup_p50": 1.8,
+    "mockmed_speedup_p50": 7.6
+  }
+}

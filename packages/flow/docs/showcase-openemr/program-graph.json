@@ -1,0 +1,1116 @@
+{
+  "spec_version": 1,
+  "bundle": {
+    "name": "openemr-showcase",
+    "schema_version": 2,
+    "created_at": "2026-07-14T00:51:06.482608+00:00",
+    "viewport": [
+      1280,
+      800
+    ],
+    "is_program": false,
+    "contains_phi": false,
+    "phi_scrubbed": false,
+    "encrypted": false,
+    "step_count": 18,
+    "action_count": 18,
+    "irreversible_count": 2,
+    "identity_armed_count": 3,
+    "identity_unarmed_count": 6,
+    "effect_count": 0,
+    "api_binding_count": 0,
+    "halt_point_count": 1,
+    "params": [
+      {
+        "name": "note",
+        "type": "string",
+        "required": true,
+        "secret": false,
+        "example": "Reviewed hypertension follow-up; BP within target range today.",
+        "choices": []
+      }
+    ],
+    "provenance": {
+      "compiler_version": "1.19.0",
+      "certified": false,
+      "certification_status": null,
+      "policy_name": null,
+      "expires_at": null,
+      "content_digest": "42f4cf477578ce0c7e6170a32f5580b50d45c37ae584d85ae66f41ab66f5dcf2",
+      "source_recording_sha256": null
+    }
+  },
+  "nodes": [
+    {
+      "id": "step_000",
+      "index": 0,
+      "kind": "action",
+      "title": "click 'ername'",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_000.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "ername"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "step_001",
+      "index": 1,
+      "kind": "action",
+      "title": "type 'admin'",
+      "action": "type",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_002",
+      "index": 2,
+      "kind": "action",
+      "title": "click 'Password'",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_002.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "Password"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "step_003",
+      "index": 3,
+      "kind": "action",
+      "title": "type 'pass'",
+      "action": "type",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_004",
+      "index": 4,
+      "kind": "action",
+      "title": "click 'Login'",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_004.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "Login"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "step_005",
+      "index": 5,
+      "kind": "action",
+      "title": "click 'Searchbyanydemogre'",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_005.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "Searchbyanydemogre"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "reason": null,
+        "phi_free": true,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "identity gate"
+      ]
+    },
+    {
+      "id": "step_006",
+      "index": 6,
+      "kind": "action",
+      "title": "type 'Phil'",
+      "action": "type",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_007",
+      "index": 7,
+      "kind": "action",
+      "title": "press Enter",
+      "action": "key",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": "Enter",
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_008",
+      "index": 8,
+      "kind": "action",
+      "title": "click 'ford,Phil'",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_008.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "ford,Phil"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "reason": null,
+        "phi_free": true,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "identity gate"
+      ]
+    },
+    {
+      "id": "step_009",
+      "index": 9,
+      "kind": "action",
+      "title": "scroll by (0, 400)",
+      "action": "scroll",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_010",
+      "index": 10,
+      "kind": "action",
+      "title": "scroll by (0, 400)",
+      "action": "scroll",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_011",
+      "index": 11,
+      "kind": "action",
+      "title": "scroll by (0, 400)",
+      "action": "scroll",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_012",
+      "index": 12,
+      "kind": "action",
+      "title": "scroll by (0, 400)",
+      "action": "scroll",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_013",
+      "index": 13,
+      "kind": "action",
+      "title": "click at (815, 369)",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_013.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "step_014",
+      "index": 14,
+      "kind": "action",
+      "title": "click '+Add <B'",
+      "action": "click",
+      "risk": "irreversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_014.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "+Add <B"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": true,
+        "reason": null,
+        "phi_free": true,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "irreversible",
+        "identity gate"
+      ]
+    },
+    {
+      "id": "step_015",
+      "index": 15,
+      "kind": "action",
+      "title": "click at (639, 357)",
+      "action": "click",
+      "risk": "reversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_015.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": [
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "step_016",
+      "index": 16,
+      "kind": "action",
+      "title": "type <note>",
+      "action": "type",
+      "risk": "reversible",
+      "param": "note",
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": {
+        "applicable": false,
+        "armed": null,
+        "reason": null,
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [],
+      "badges": []
+    },
+    {
+      "id": "step_017",
+      "index": 17,
+      "kind": "action",
+      "title": "click 'Save as new messag'",
+      "action": "click",
+      "risk": "irreversible",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": {
+        "rungs": [
+          {
+            "name": "api",
+            "label": "API / tool call",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "structural",
+            "label": "DOM / accessibility selector",
+            "present": false,
+            "detail": ""
+          },
+          {
+            "name": "template",
+            "label": "Image template match",
+            "present": true,
+            "detail": "templates/step_017.png"
+          },
+          {
+            "name": "ocr",
+            "label": "OCR text match",
+            "present": true,
+            "detail": "Save as new messag"
+          },
+          {
+            "name": "landmarks",
+            "label": "Nearby-landmark geometry",
+            "present": true,
+            "detail": "2 landmark(s)"
+          }
+        ],
+        "top_rung": "template"
+      },
+      "identity": {
+        "applicable": true,
+        "armed": false,
+        "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+        "phi_free": false,
+        "has_structured": false,
+        "has_identifier_crop": false
+      },
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [
+        "region_stable",
+        "text_present"
+      ],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": null,
+      "reason": "",
+      "halts": [
+        "irreversible write WITHOUT an armed identity gate"
+      ],
+      "badges": [
+        "irreversible",
+        "no identity gate"
+      ]
+    },
+    {
+      "id": "__end__",
+      "index": 18,
+      "kind": "terminal",
+      "title": "Success",
+      "action": null,
+      "risk": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "resolution": null,
+      "identity": null,
+      "effects": [],
+      "has_api_binding": false,
+      "api_summary": null,
+      "postconditions": [],
+      "guard": null,
+      "guard_on_unmet": null,
+      "wait_until": null,
+      "outcome": "success",
+      "reason": "",
+      "halts": [],
+      "badges": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "step_000",
+      "target": "step_001",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_001",
+      "target": "step_002",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_002",
+      "target": "step_003",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_003",
+      "target": "step_004",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_004",
+      "target": "step_005",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_005",
+      "target": "step_006",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_006",
+      "target": "step_007",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_007",
+      "target": "step_008",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_008",
+      "target": "step_009",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_009",
+      "target": "step_010",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_010",
+      "target": "step_011",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_011",
+      "target": "step_012",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_012",
+      "target": "step_013",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_013",
+      "target": "step_014",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_014",
+      "target": "step_015",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_015",
+      "target": "step_016",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_016",
+      "target": "step_017",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    },
+    {
+      "source": "step_017",
+      "target": "__end__",
+      "kind": "sequence",
+      "label": "",
+      "guard": null
+    }
+  ]
+}

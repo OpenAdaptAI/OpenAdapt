@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiled program — openemr-showcase</title>
+<style>
+body { margin: 0; padding: 24px; max-width: 900px; margin-inline: auto;
+       background: Canvas; color: CanvasText; }
+/* Shared, dependency-free styles for the compiled-program visualizer.
+ *
+ * ONE renderer, THREE surfaces: this file (and program_graph.js) render the
+ * shared ProgramGraphSpec. The flow CLI inlines both into a self-contained
+ * HTML page; the desktop (Tauri) view vendors both verbatim; the cloud view
+ * reimplements the same layout in React over the same spec. Theme-aware via
+ * prefers-color-scheme AND an explicit [data-theme] override on :root. */
+
+.opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-irrev: #b4530a;
+  --opg-irrev-bg: #fdf1e6;
+  --opg-ok: #197a3d;
+  --opg-ok-bg: #e8f6ec;
+  --opg-warn: #9a6a00;
+  --opg-warn-bg: #fbf3d9;
+  --opg-halt: #b21f2d;
+  --opg-halt-bg: #fbe9eb;
+  --opg-chip: #e7ebf0;
+  color: var(--opg-fg);
+  background: var(--opg-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .opg-root {
+    --opg-bg: #0f1319;
+    --opg-fg: #e6e9ee;
+    --opg-muted: #9aa4b2;
+    --opg-card: #171c24;
+    --opg-border: #2a323d;
+    --opg-line: #3a4550;
+    --opg-accent: #6ea8fe;
+    --opg-irrev: #ffb27a;
+    --opg-irrev-bg: #2c1c0f;
+    --opg-ok: #7ee2a8;
+    --opg-ok-bg: #10241a;
+    --opg-warn: #f2cd6b;
+    --opg-warn-bg: #2a2410;
+    --opg-halt: #ff9aa4;
+    --opg-halt-bg: #2c1315;
+    --opg-chip: #232b35;
+  }
+}
+:root[data-theme="dark"] .opg-root {
+  --opg-bg: #0f1319;
+  --opg-fg: #e6e9ee;
+  --opg-muted: #9aa4b2;
+  --opg-card: #171c24;
+  --opg-border: #2a323d;
+  --opg-line: #3a4550;
+  --opg-accent: #6ea8fe;
+  --opg-irrev: #ffb27a;
+  --opg-irrev-bg: #2c1c0f;
+  --opg-ok: #7ee2a8;
+  --opg-ok-bg: #10241a;
+  --opg-warn: #f2cd6b;
+  --opg-warn-bg: #2a2410;
+  --opg-halt: #ff9aa4;
+  --opg-halt-bg: #2c1315;
+  --opg-chip: #232b35;
+}
+:root[data-theme="light"] .opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-chip: #e7ebf0;
+}
+
+.opg-root * { box-sizing: border-box; }
+
+.opg-header { margin-bottom: 18px; }
+.opg-title { font-size: 20px; font-weight: 650; margin: 0 0 2px; }
+.opg-subtitle { color: var(--opg-muted); font-size: 13px; margin: 0 0 12px; }
+
+.opg-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.opg-stat {
+  background: var(--opg-card);
+  border: 1px solid var(--opg-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 78px;
+}
+.opg-stat .n { font-size: 17px; font-weight: 650; }
+.opg-stat .l { font-size: 11px; color: var(--opg-muted); text-transform: uppercase; letter-spacing: .03em; }
+.opg-stat.warn { border-color: var(--opg-warn); background: var(--opg-warn-bg); }
+.opg-stat.halt { border-color: var(--opg-halt); background: var(--opg-halt-bg); }
+
+.opg-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.opg-flow { display: flex; flex-direction: column; align-items: stretch; }
+
+.opg-node {
+  border: 1px solid var(--opg-border);
+  border-radius: 10px;
+  background: var(--opg-card);
+  padding: 10px 12px;
+  position: relative;
+}
+.opg-node.irreversible { border-left: 4px solid var(--opg-irrev); }
+.opg-node.terminal {
+  align-self: center;
+  min-width: 180px;
+  text-align: center;
+  border-style: dashed;
+}
+.opg-node.terminal.ok { border-color: var(--opg-ok); color: var(--opg-ok); }
+.opg-node.terminal.halt { border-color: var(--opg-halt); color: var(--opg-halt); }
+
+.opg-node-head { display: flex; align-items: baseline; gap: 8px; }
+.opg-idx {
+  flex: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--opg-accent);
+  color: #fff;
+  font-size: 12px; font-weight: 650;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.opg-node-title { font-weight: 600; font-size: 14px; }
+.opg-node-action { color: var(--opg-muted); font-size: 12px; font-weight: 500; }
+
+.opg-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.opg-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--opg-chip);
+  color: var(--opg-fg);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.opg-chip.irreversible { background: var(--opg-irrev-bg); color: var(--opg-irrev); border-color: var(--opg-irrev); }
+.opg-chip.identity { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.no-identity { background: var(--opg-warn-bg); color: var(--opg-warn); border-color: var(--opg-warn); }
+.opg-chip.effect { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.api { background: var(--opg-ok-bg); color: var(--opg-ok); }
+.opg-chip.secret { background: var(--opg-warn-bg); color: var(--opg-warn); }
+
+.opg-detail { margin-top: 8px; font-size: 12.5px; }
+.opg-detail .row { display: flex; gap: 6px; margin: 3px 0; }
+.opg-detail .k { color: var(--opg-muted); flex: none; min-width: 78px; }
+.opg-detail .v { color: var(--opg-fg); }
+
+.opg-ladder { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.opg-rung {
+  font-size: 11px; padding: 1px 7px; border-radius: 5px;
+  border: 1px solid var(--opg-border); color: var(--opg-muted);
+  opacity: .5;
+}
+.opg-rung.present { opacity: 1; color: var(--opg-fg); border-color: var(--opg-accent); font-weight: 600; }
+.opg-rung.top { background: var(--opg-accent); color: #fff; border-color: var(--opg-accent); }
+
+.opg-halts { margin-top: 8px; }
+.opg-halt-item {
+  font-size: 12px;
+  background: var(--opg-halt-bg);
+  color: var(--opg-halt);
+  border: 1px solid var(--opg-halt);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 4px;
+}
+.opg-halt-item::before { content: "\26D4  "; }
+
+.opg-reason { color: var(--opg-muted); font-size: 12px; font-style: italic; margin-top: 4px; }
+
+.opg-connector { display: flex; flex-direction: column; align-items: center; height: 30px; }
+.opg-connector .line { width: 2px; flex: 1; background: var(--opg-line); }
+.opg-connector .lbl {
+  font-size: 11px; color: var(--opg-muted);
+  background: var(--opg-bg); padding: 0 6px; margin: 2px 0;
+}
+.opg-connector.branch .line { background: var(--opg-accent); }
+
+.opg-legend {
+  margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--opg-border);
+  display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--opg-muted);
+}
+.opg-legend .item { display: flex; align-items: center; gap: 5px; }
+.opg-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--opg-border); }
+
+</style>
+</head>
+<body>
+<div id="program-graph"></div>
+<script type="application/json" id="program-graph-spec">{"spec_version":1,"bundle":{"name":"openemr-showcase","schema_version":2,"created_at":"2026-07-14T00:51:06.482608+00:00","viewport":[1280,800],"is_program":false,"contains_phi":false,"phi_scrubbed":false,"encrypted":false,"step_count":18,"action_count":18,"irreversible_count":2,"identity_armed_count":3,"identity_unarmed_count":6,"effect_count":0,"api_binding_count":0,"halt_point_count":1,"params":[{"name":"note","type":"string","required":true,"secret":false,"example":"Reviewed hypertension follow-up; BP within target range today.","choices":[]}],"provenance":{"compiler_version":"1.19.0","certified":false,"certification_status":null,"policy_name":null,"expires_at":null,"content_digest":"42f4cf477578ce0c7e6170a32f5580b50d45c37ae584d85ae66f41ab66f5dcf2","source_recording_sha256":null}},"nodes":[{"id":"step_000","index":0,"kind":"action","title":"click 'ername'","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_000.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"ername"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["no identity gate"]},{"id":"step_001","index":1,"kind":"action","title":"type 'admin'","action":"type","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_002","index":2,"kind":"action","title":"click 'Password'","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_002.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"Password"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["no identity gate"]},{"id":"step_003","index":3,"kind":"action","title":"type 'pass'","action":"type","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_004","index":4,"kind":"action","title":"click 'Login'","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_004.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"Login"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"the only readable row text is the target's own label (mutable evidence, excluded from identity)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["no identity gate"]},{"id":"step_005","index":5,"kind":"action","title":"click 'Searchbyanydemogre'","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_005.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"Searchbyanydemogre"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":true,"reason":null,"phi_free":true,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["identity gate"]},{"id":"step_006","index":6,"kind":"action","title":"type 'Phil'","action":"type","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_007","index":7,"kind":"action","title":"press Enter","action":"key","risk":"reversible","param":null,"secret":false,"key":"Enter","resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_008","index":8,"kind":"action","title":"click 'ford,Phil'","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_008.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"ford,Phil"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":true,"reason":null,"phi_free":true,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["identity gate"]},{"id":"step_009","index":9,"kind":"action","title":"scroll by (0, 400)","action":"scroll","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_010","index":10,"kind":"action","title":"scroll by (0, 400)","action":"scroll","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_011","index":11,"kind":"action","title":"scroll by (0, 400)","action":"scroll","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_012","index":12,"kind":"action","title":"scroll by (0, 400)","action":"scroll","risk":"reversible","param":null,"secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_013","index":13,"kind":"action","title":"click at (815, 369)","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_013.png"},{"name":"ocr","label":"OCR text match","present":false,"detail":""},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["no identity gate"]},{"id":"step_014","index":14,"kind":"action","title":"click '+Add <B'","action":"click","risk":"irreversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_014.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"+Add <B"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":true,"reason":null,"phi_free":true,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["irreversible","identity gate"]},{"id":"step_015","index":15,"kind":"action","title":"click at (639, 357)","action":"click","risk":"reversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_015.png"},{"name":"ocr","label":"OCR text match","present":false,"detail":""},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":["no identity gate"]},{"id":"step_016","index":16,"kind":"action","title":"type <note>","action":"type","risk":"reversible","param":"note","secret":false,"key":null,"resolution":null,"identity":{"applicable":false,"armed":null,"reason":null,"phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":[],"badges":[]},{"id":"step_017","index":17,"kind":"action","title":"click 'Save as new messag'","action":"click","risk":"irreversible","param":null,"secret":false,"key":null,"resolution":{"rungs":[{"name":"api","label":"API / tool call","present":false,"detail":""},{"name":"structural","label":"DOM / accessibility selector","present":false,"detail":""},{"name":"template","label":"Image template match","present":true,"detail":"templates/step_017.png"},{"name":"ocr","label":"OCR text match","present":true,"detail":"Save as new messag"},{"name":"landmarks","label":"Nearby-landmark geometry","present":true,"detail":"2 landmark(s)"}],"top_rung":"template"},"identity":{"applicable":true,"armed":false,"reason":"row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)","phi_free":false,"has_structured":false,"has_identifier_crop":false},"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":["region_stable","text_present"],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":null,"reason":"","halts":["irreversible write WITHOUT an armed identity gate"],"badges":["irreversible","no identity gate"]},{"id":"__end__","index":18,"kind":"terminal","title":"Success","action":null,"risk":null,"param":null,"secret":false,"key":null,"resolution":null,"identity":null,"effects":[],"has_api_binding":false,"api_summary":null,"postconditions":[],"guard":null,"guard_on_unmet":null,"wait_until":null,"outcome":"success","reason":"","halts":[],"badges":[]}],"edges":[{"source":"step_000","target":"step_001","kind":"sequence","label":"","guard":null},{"source":"step_001","target":"step_002","kind":"sequence","label":"","guard":null},{"source":"step_002","target":"step_003","kind":"sequence","label":"","guard":null},{"source":"step_003","target":"step_004","kind":"sequence","label":"","guard":null},{"source":"step_004","target":"step_005","kind":"sequence","label":"","guard":null},{"source":"step_005","target":"step_006","kind":"sequence","label":"","guard":null},{"source":"step_006","target":"step_007","kind":"sequence","label":"","guard":null},{"source":"step_007","target":"step_008","kind":"sequence","label":"","guard":null},{"source":"step_008","target":"step_009","kind":"sequence","label":"","guard":null},{"source":"step_009","target":"step_010","kind":"sequence","label":"","guard":null},{"source":"step_010","target":"step_011","kind":"sequence","label":"","guard":null},{"source":"step_011","target":"step_012","kind":"sequence","label":"","guard":null},{"source":"step_012","target":"step_013","kind":"sequence","label":"","guard":null},{"source":"step_013","target":"step_014","kind":"sequence","label":"","guard":null},{"source":"step_014","target":"step_015","kind":"sequence","label":"","guard":null},{"source":"step_015","target":"step_016","kind":"sequence","label":"","guard":null},{"source":"step_016","target":"step_017","kind":"sequence","label":"","guard":null},{"source":"step_017","target":"__end__","kind":"sequence","label":"","guard":null}]}</script>
+<script>
+/* Shared, dependency-free renderer for the compiled-program visualizer.
+ *
+ * ONE renderer, THREE surfaces (see program_graph.css header). Exposes a single
+ * pure function:
+ *
+ *     OpenAdaptProgramGraph.render(spec, container)
+ *
+ * `spec` is the ProgramGraphSpec emitted by the engine
+ * (openadapt_flow.visualize.build_program_graph); `container` is a DOM element.
+ * No external libraries, no network, no framework — safe under a strict CSP
+ * (the flow CLI inlines this; the Tauri desktop view vendors it verbatim).
+ * Cloud reimplements the same layout in React over the same spec shape. */
+(function (global) {
+  "use strict";
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text; // textContent => no HTML injection
+    return e;
+  }
+
+  function stat(container, n, label, cls) {
+    var s = el("div", "opg-stat" + (cls ? " " + cls : ""));
+    s.appendChild(el("div", "n", String(n)));
+    s.appendChild(el("div", "l", label));
+    container.appendChild(s);
+  }
+
+  function chip(text, cls) {
+    return el("span", "opg-chip" + (cls ? " " + cls : ""), text);
+  }
+
+  function detailRow(parent, key, valueNode) {
+    var row = el("div", "row");
+    row.appendChild(el("span", "k", key));
+    if (typeof valueNode === "string") valueNode = el("span", "v", valueNode);
+    else valueNode.classList.add("v");
+    row.appendChild(valueNode);
+    parent.appendChild(row);
+  }
+
+  function renderHeader(spec, root) {
+    var b = spec.bundle;
+    var head = el("div", "opg-header");
+    head.appendChild(el("div", "opg-title", b.name));
+    var sub =
+      "Compiled program · schema v" +
+      b.schema_version +
+      " · " +
+      (b.is_program ? "program graph" : "linear program") +
+      (b.created_at ? " · compiled " + b.created_at.slice(0, 10) : "");
+    head.appendChild(el("div", "opg-subtitle", sub));
+
+    var stats = el("div", "opg-stats");
+    stat(stats, b.action_count, "steps");
+    stat(stats, b.identity_armed_count, "identity gates");
+    if (b.identity_unarmed_count)
+      stat(stats, b.identity_unarmed_count, "no gate", "warn");
+    if (b.irreversible_count)
+      stat(stats, b.irreversible_count, "irreversible", "warn");
+    if (b.effect_count) stat(stats, b.effect_count, "effect checks");
+    if (b.api_binding_count) stat(stats, b.api_binding_count, "API writes");
+    if (b.halt_point_count) stat(stats, b.halt_point_count, "halt points", "halt");
+    head.appendChild(stats);
+
+    // governance + provenance chips
+    var meta = el("div", "opg-meta");
+    meta.appendChild(
+      chip(
+        b.contains_phi ? "contains PHI" : "no plaintext PHI",
+        b.contains_phi ? "no-identity" : "identity"
+      )
+    );
+    if (b.encrypted) meta.appendChild(chip("encrypted at rest", "identity"));
+    if (b.phi_scrubbed) meta.appendChild(chip("PHI-scrubbed", "identity"));
+    var prov = b.provenance || {};
+    if (prov.compiler_version)
+      meta.appendChild(chip("compiler " + prov.compiler_version));
+    if (prov.certified)
+      meta.appendChild(
+        chip("certified: " + (prov.policy_name || "policy"), "identity")
+      );
+    else if (prov.certification_status)
+      meta.appendChild(chip(prov.certification_status, "warn"));
+    head.appendChild(meta);
+
+    // parameters
+    if (b.params && b.params.length) {
+      var pwrap = el("div", "opg-meta");
+      pwrap.appendChild(el("span", "opg-node-action", "Parameters:"));
+      b.params.forEach(function (p) {
+        var label = p.name + " : " + p.type + (p.required ? "" : " (optional)");
+        pwrap.appendChild(chip(label, p.secret ? "secret" : ""));
+      });
+      head.appendChild(pwrap);
+    }
+    root.appendChild(head);
+  }
+
+  function renderLadder(res) {
+    var wrap = el("div", "opg-ladder");
+    res.rungs.forEach(function (r) {
+      var cls = "opg-rung";
+      if (r.present) cls += " present";
+      if (r.name === res.top_rung) cls += " top";
+      var c = el("span", cls, r.label);
+      if (r.present && r.detail) c.title = r.detail;
+      wrap.appendChild(c);
+    });
+    return wrap;
+  }
+
+  function renderActionNode(node) {
+    var card = el(
+      "div",
+      "opg-node" + (node.risk === "irreversible" ? " irreversible" : "")
+    );
+    var head = el("div", "opg-node-head");
+    head.appendChild(el("span", "opg-idx", String(node.index + 1)));
+    head.appendChild(el("span", "opg-node-title", node.title));
+    if (node.action)
+      head.appendChild(el("span", "opg-node-action", " " + node.action));
+    card.appendChild(head);
+
+    if (node.badges && node.badges.length) {
+      var chips = el("div", "opg-chips");
+      node.badges.forEach(function (bd) {
+        var cls = "";
+        if (bd === "irreversible") cls = "irreversible";
+        else if (bd === "identity gate") cls = "identity";
+        else if (bd === "no identity gate") cls = "no-identity";
+        else if (bd === "effect check") cls = "effect";
+        else if (bd === "API") cls = "api";
+        else if (bd === "secret") cls = "secret";
+        chips.appendChild(chip(bd, cls));
+      });
+      card.appendChild(chips);
+    }
+
+    var detail = el("div", "opg-detail");
+    if (node.resolution)
+      detailRow(detail, "resolve by", renderLadder(node.resolution));
+    if (node.identity && node.identity.applicable) {
+      if (node.identity.armed) {
+        var idv =
+          "armed" +
+          (node.identity.phi_free ? " · PHI-free template" : "") +
+          (node.identity.has_structured ? " · structured" : "") +
+          (node.identity.has_identifier_crop ? " · pixel crop" : "");
+        detailRow(detail, "identity", idv);
+      } else {
+        detailRow(
+          detail,
+          "identity",
+          "UNARMED — " + (node.identity.reason || "no identity band")
+        );
+      }
+    }
+    if (node.effects && node.effects.length) {
+      node.effects.forEach(function (ef) {
+        detailRow(detail, "effect", ef.summary);
+      });
+    }
+    if (node.postconditions && node.postconditions.length)
+      detailRow(detail, "verify", node.postconditions.join(", "));
+    if (node.wait_until) detailRow(detail, "wait until", node.wait_until);
+    if (node.guard)
+      detailRow(
+        detail,
+        "guard",
+        node.guard + " → " + (node.guard_on_unmet || "halt")
+      );
+    if (node.param) detailRow(detail, "input", "parameter " + node.param);
+    if (detail.childNodes.length) card.appendChild(detail);
+
+    if (node.halts && node.halts.length) {
+      var halts = el("div", "opg-halts");
+      node.halts.forEach(function (h) {
+        halts.appendChild(el("div", "opg-halt-item", h));
+      });
+      card.appendChild(halts);
+    }
+    return card;
+  }
+
+  function renderTerminalNode(node) {
+    var cls = "opg-node terminal";
+    if (node.outcome === "success") cls += " ok";
+    else if (node.outcome === "halt" || node.outcome === "escalate") cls += " halt";
+    var card = el("div", cls);
+    card.appendChild(el("div", "opg-node-title", node.title));
+    if (node.reason) card.appendChild(el("div", "opg-reason", node.reason));
+    return card;
+  }
+
+  function renderControlNode(node) {
+    var card = el("div", "opg-node");
+    var head = el("div", "opg-node-head");
+    head.appendChild(el("span", "opg-idx", String(node.index + 1)));
+    head.appendChild(el("span", "opg-node-title", node.title));
+    head.appendChild(el("span", "opg-node-action", node.kind));
+    card.appendChild(head);
+    if (node.badges && node.badges.length) {
+      var chips = el("div", "opg-chips");
+      node.badges.forEach(function (bd) {
+        chips.appendChild(chip(bd));
+      });
+      card.appendChild(chips);
+    }
+    return card;
+  }
+
+  function connector(label, branch) {
+    var c = el("div", "opg-connector" + (branch ? " branch" : ""));
+    c.appendChild(el("div", "line"));
+    if (label) c.appendChild(el("div", "lbl", label));
+    c.appendChild(el("div", "line"));
+    return c;
+  }
+
+  function renderLegend(root) {
+    var items = [
+      ["identity", "identity gate armed"],
+      ["no-identity", "no identity gate"],
+      ["irreversible", "irreversible write"],
+      ["halt", "fail-safe halt point"],
+    ];
+    var leg = el("div", "opg-legend");
+    items.forEach(function (it) {
+      var wrap = el("div", "item");
+      var sw = el("span", "opg-swatch opg-chip " + it[0]);
+      sw.textContent = "";
+      wrap.appendChild(sw);
+      wrap.appendChild(document.createTextNode(it[1]));
+      leg.appendChild(wrap);
+    });
+    root.appendChild(leg);
+  }
+
+  function render(spec, container) {
+    container.innerHTML = "";
+    var root = el("div", "opg-root");
+    renderHeader(spec, root);
+
+    var flow = el("div", "opg-flow");
+    // Build an index of outgoing edges for linear sequencing / labels.
+    var outBySource = {};
+    (spec.edges || []).forEach(function (e) {
+      (outBySource[e.source] = outBySource[e.source] || []).push(e);
+    });
+
+    var nodes = spec.nodes || [];
+    nodes.forEach(function (node, i) {
+      var card;
+      if (node.kind === "terminal") card = renderTerminalNode(node);
+      else if (node.kind === "action") card = renderActionNode(node);
+      else card = renderControlNode(node);
+      flow.appendChild(card);
+
+      // connector to the next node in document order (linear default). For a
+      // branch/loop, surface the first outgoing edge's label so multi-way
+      // structure is legible even without a full 2-D graph layout.
+      if (i < nodes.length - 1) {
+        var edges = outBySource[node.id] || [];
+        var isBranch = edges.some(function (e) {
+          return e.kind === "branch" || e.kind === "loop_body";
+        });
+        var label = "";
+        if (edges.length === 1 && edges[0].label) label = edges[0].label;
+        else if (isBranch) label = edges.length + " branches";
+        flow.appendChild(connector(label, isBranch));
+      }
+    });
+    root.appendChild(flow);
+    renderLegend(root);
+    container.appendChild(root);
+    return root;
+  }
+
+  var api = { render: render };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  global.OpenAdaptProgramGraph = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+(function () {
+  var raw = document.getElementById("program-graph-spec").textContent;
+  var spec = JSON.parse(raw);
+  OpenAdaptProgramGraph.render(spec, document.getElementById("program-graph"));
+})();
+</script>
+</body>
+</html>

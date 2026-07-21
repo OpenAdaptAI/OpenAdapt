@@ -1,0 +1,125 @@
+\section{System Design}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm,
+  box/.style={draw=oaink, rounded corners=2pt, align=center, inner sep=4pt,
+    minimum height=8mm, fill=white},
+  stage/.style={box, fill=oagray!50, minimum width=20mm},
+  gate/.style={draw=oablue, rounded corners=2pt, align=center, inner sep=3pt,
+    fill=oablue!8, font=\footnotesize},
+  outcome/.style={align=center, font=\footnotesize\bfseries, inner sep=2pt},
+  flow/.style={-{Stealth[length=2mm]}, draw=oaink, thick},
+  ]
+  \node[stage] (rec) {\textbf{Record}\\one demo};
+  \node[stage, right=of rec] (comp) {\textbf{Compile}\\bundle};
+  \node[stage, right=of comp] (rep) {\textbf{Replay}\\deterministic};
+  \draw[flow] (rec) -- (comp);
+  \draw[flow] (comp) -- (rep);
+
+  % Governance gate stack, to the right of replay (left-aligned so the widest
+  % gate does not overrun the Replay node).
+  \coordinate (gx) at ($(rep.east)+(15mm,0)$);
+  \node[gate, anchor=west] (id)   at ($(gx)+(0,9mm)$)   {identity};
+  \node[gate, anchor=west] (post) at ($(gx)+(0,3mm)$)   {postcondition};
+  \node[gate, anchor=west] (eff)  at ($(gx)+(0,-3mm)$)  {effect (system of record)};
+  \node[gate, anchor=west] (pol)  at ($(gx)+(0,-9mm)$)  {policy};
+  \begin{scope}[on background layer]
+    \node[draw=oablue, dashed, rounded corners=3pt, fit=(id)(post)(eff)(pol),
+      inner sep=3pt, label={[font=\footnotesize\itshape,oablue]above:governance gates}] (gatebox) {};
+  \end{scope}
+  \draw[flow] (rep) -- (gatebox.west);
+
+  % Three outcomes.
+  \node[outcome, right=10mm of gatebox, yshift=8mm, text=oagreen] (ok) {Success\\(verified)};
+  \node[outcome, below=3mm of ok, text=oaamber] (heal) {Repair\\(logged)};
+  \node[outcome, below=3mm of heal, text=oared] (halt) {Refuse\\(halt)};
+  \draw[flow, oagreen] (gatebox.east) -- (ok);
+  \draw[flow, oaamber] (gatebox.east) -- (heal);
+  \draw[flow, oared] (gatebox.east) -- (halt);
+
+  % Repair feeds back a patch; refusal stops.
+  \draw[flow, oaamber, dashed] (heal.south) to[out=-90,in=-90] node[below,font=\scriptsize\itshape]{reviewable patch} (rep.south);
+\end{tikzpicture}
+\caption{\system{} compiles one demonstration into a deterministic program.
+Healthy replay makes no model calls. Each step passes governance gates; the
+runtime verifies and succeeds, records a bounded \emph{repair} when a lower-
+fidelity rung re-resolves a changed target, or \emph{refuses} when a configured
+check cannot be verified. A repair is an auditable patch, never a silent
+overwrite of the deployed bundle.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Record and compile}
+A recorder captures actions, frames, element observations, and structural state
+when available. Declared secret fields are replaced with runtime parameters.
+The compiler emits a bundle containing a workflow program, target crops,
+locators, landmarks, postconditions, parameter declarations, and a manifest.
+The linear trace is the simplest program; the intermediate representation also
+supports states, guarded transitions, branches, loops, and subflows. Induction
+that cannot determine a branch condition quarantines the result rather than
+inventing one.
+
+\subsection{Resolution ladder}
+For an action target, replay tries evidence in descending order of fidelity:
+structured DOM or accessibility identity, local and global template matching,
+OCR, landmark geometry, and an optional grounding model. A backend presents a
+small common contract for observation and actuation. This provides a pixel
+floor without discarding structured evidence on browsers and native desktops.
+
+Healthy execution stops at deterministic tiers and makes zero model calls. A
+lower rung resolving a changed but verified target creates a repair patch. The
+runtime can save a healed derivative bundle, but does not silently replace the
+deployed source bundle.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  rung/.style={draw=oaink, rounded corners=2pt, minimum width=62mm,
+    minimum height=6.5mm, align=center, inner sep=2pt},
+  ]
+  \node[rung, fill=oagreen!14] (r1) {1. Structured DOM / accessibility identity};
+  \node[rung, fill=oagreen!10, below=1.6mm of r1] (r2) {2. Local template match (cropped target)};
+  \node[rung, fill=oagreen!7, below=1.6mm of r2] (r3) {3. Global template match};
+  \node[rung, fill=oaamber!12, below=1.6mm of r3] (r4) {4. OCR text anchor};
+  \node[rung, fill=oaamber!16, below=1.6mm of r4] (r5) {5. Landmark geometry \quad (pixel floor)};
+  \node[rung, fill=oared!12, below=1.6mm of r5] (r6) {6. Grounding model \quad (optional, off by default)};
+
+  \draw[-{Stealth[length=2mm]}, very thick, oaink]
+    ($(r1.north west)+(-6mm,0)$) -- ($(r6.south west)+(-6mm,0)$)
+    node[midway, rotate=90, anchor=south, font=\footnotesize\itshape]{descending fidelity};
+
+  \node[right=3mm of r3, align=left, font=\scriptsize, text=oagreen!60!black] (det)
+    {deterministic;\\zero model calls};
+  \draw[decorate, decoration={brace, amplitude=4pt}, oagreen!60!black]
+    ($(r1.north east)+(1mm,0)$) -- ($(r5.south east)+(1mm,0)$);
+  \node[right=6mm of r4, font=\scriptsize\itshape, text=oared] {model calls only here};
+\end{tikzpicture}
+\caption{The resolution ladder tries evidence in descending order of fidelity.
+Structured identity is preferred; local visual evidence gives a pixel floor for
+substrates without a DOM. Rungs 1--5 are deterministic and make no model calls.
+A grounding model is an optional last rung, disabled by default, and its rescue
+is subject to the same identity and effect checks.}
+\label{fig:ladder}
+\end{figure}
+
+\subsection{Postconditions and reports}
+Each step may carry visual or structural postconditions such as text presence,
+region stability, URL change, or window state. Replay writes a human-readable
+and machine-readable report with rung, confidence, identity verdict,
+postconditions, effects, model calls, elapsed time, repair, and halt reason.
+Postconditions are necessary but not sufficient: a success banner is evidence
+about the screen, not independent evidence about a database write.
+
+\subsection{Backends}
+The browser backend is the reference implementation and supplies published
+end-to-end evidence against a real third-party application. Windows UI
+Automation adds structured candidate enumeration and native actions behind a
+typed, authenticated in-session contract. Native macOS binds capture and input
+to a unique application window. The RDP backend exposes the same runtime
+contract over a pixel-only network session. Section~4 reports scoped task and
+effect qualifications for all three mechanisms. Citrix/ICA/HDX remains a
+separate deployment environment and does not inherit RDP qualification.

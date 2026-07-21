@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "generated_for": "OpenAdapt matched synthetic OpenEMR benchmark",
+  "upstreams": {
+    "openemr": {
+      "url": "https://github.com/openemr/openemr.git",
+      "ref": "v8_0_0_3",
+      "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69"
+    }
+  },
+  "services": {
+    "openemr": "openemr/openemr:8.0.0.3@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab",
+    "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+  },
+  "source_proofs": {
+    "/var/www/localhost/htdocs/openemr/version.php": "7666ccade8b6a34658962389f111363440e6f81a4a4ec5e4a5881d14a94309df",
+    "/var/www/localhost/htdocs/openemr/src/RestControllers/PatientRestController.php": "43ddeadbea85bf25490a5432f54a040e9870b63007fbde70525b2d8ef23e9512",
+    "/var/www/localhost/htdocs/openemr/apis/routes/_rest_routes_standard.inc.php": "451b227034caec9b34fe958c07f5fd166f381598d195e040ab8d2cd266b50f75",
+    "/var/www/localhost/htdocs/openemr/interface/new/new_comprehensive.php": "982d7579524249f05b67d2562e49cf5b3850808d3d9329a931af2ddbfd22c59f",
+    "/var/www/localhost/htdocs/openemr/interface/new/new_search_popup.php": "a7be41c50680627b201b3f8320f199eff5b826c636ce622c750dd44098f7ffaf",
+    "/var/www/localhost/htdocs/openemr/interface/new/new_comprehensive_save.php": "c401760ea73d9e9db57b3fcab645cbeae3dd8ab2098aee8e0f18b253f897f2d2",
+    "/var/www/localhost/htdocs/openemr/library/patient.inc.php": "aa08ad05233c14731f65ea7fd7d256386e9192b8f09d242d983e15d5c1c3229e",
+    "/var/www/localhost/htdocs/openemr/src/Services/PatientService.php": "a75fb68f3d7ef8207c276a6c789e3027fa7df108ca0c8e759650eb253f76f25c",
+    "/var/www/localhost/htdocs/openemr/src/Services/SocialHistoryService.php": "f9ea9f94405e0d77032fa768d140128a4e8fd62d471987bea86046be5fc0202a",
+    "/var/www/localhost/htdocs/openemr/src/Validators/PatientValidator.php": "c616a10f59fe699f55a4e663289f6b4d920b23a89446a22464dda6aa26d372e8",
+    "/var/www/localhost/htdocs/openemr/interface/login/login.php": "6a5f7260beaef411ccc1a2475d1881ee23b7834eb241f981ece0a47bcaa57ee5",
+    "/var/www/localhost/htdocs/openemr/src/Common/Command/RegisterApiTestClientCommand.php": "d29e24d1e2c7f5efdf8f24653718365557f6669aaae48acf99c42aa5e662baea",
+    "/var/www/localhost/htdocs/openemr/LICENSE": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  "database": "openemr",
+  "project": "openadapt-openemr-benchmark"
+}

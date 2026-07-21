@@ -1,0 +1,4072 @@
+{
+  "meta": {
+    "generated_at": "2026-07-21 01:26:41",
+    "platform": "Darwin arm64 py3.12.7",
+    "domain": "lending (MockLoan) - loan disbursement authorization",
+    "oracle": "runtime.effects.RestRecordVerifier over GET /api/db",
+    "ground_truth": "mockloan.fault_server in-process ledger",
+    "arms": [
+      "screen_only",
+      "effect_verify"
+    ],
+    "tasks": 11,
+    "trials_per_task_per_arm": 3,
+    "model_calls": 0
+  },
+  "screen_only": {
+    "arm": "screen_only",
+    "n_episodes": 33,
+    "n_tasks": 11,
+    "arms": [
+      "screen_only"
+    ],
+    "swer": {
+      "numerator": 21,
+      "denominator": 33,
+      "rate": 0.6363636363636364,
+      "ci": {
+        "lo": 0.466161783022664,
+        "hi": 0.7781282176475764,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "swer_wrong_write": {
+      "numerator": 12,
+      "denominator": 33,
+      "rate": 0.36363636363636365,
+      "ci": {
+        "lo": 0.2218717823524236,
+        "hi": 0.5338382169773361,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "swer_phantom": {
+      "numerator": 9,
+      "denominator": 33,
+      "rate": 0.2727272727272727,
+      "ci": {
+        "lo": 0.1506744088542064,
+        "hi": 0.44217559002872625,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "over_halt": {
+      "numerator": 0,
+      "denominator": 33,
+      "rate": 0.0,
+      "ci": {
+        "lo": 0.0,
+        "hi": 0.10426999754245206,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "task_success": {
+      "numerator": 6,
+      "denominator": 33,
+      "rate": 0.18181818181818182,
+      "ci": {
+        "lo": 0.08610768208940667,
+        "hi": 0.3438823163466992,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "screen_success": {
+      "numerator": 27,
+      "denominator": 33,
+      "rate": 0.8181818181818182,
+      "ci": {
+        "lo": 0.6561176836533009,
+        "hi": 0.9138923179105933,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "success_effect_gap": 0.6363636363636364,
+    "success_effect_gap_ci": {
+      "lo": 0.45454545454545453,
+      "hi": 0.7878787878787878,
+      "method": "bootstrap",
+      "confidence": 0.95
+    },
+    "total_cost_usd": 0.0,
+    "mean_cost_usd": 0.0,
+    "mean_latency_s": 0.2763121212121212,
+    "pass_hat_k": {
+      "1": 0.18181818181818182,
+      "2": 0.18181818181818182,
+      "4": 0.0,
+      "8": 0.0
+    },
+    "cells": [
+      {
+        "category": "C1_partial_save",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "C2_duplicate_submission",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "C3_optimistic_then_reject",
+        "substrate": "web",
+        "n": 9,
+        "swer": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333,
+          "ci": {
+            "lo": 0.1205838183869109,
+            "hi": 0.6457978644196036,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333,
+          "ci": {
+            "lo": 0.1205838183869109,
+            "hi": 0.6457978644196036,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333,
+          "ci": {
+            "lo": 0.1205838183869109,
+            "hi": 0.6457978644196036,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.3333333333333333
+      },
+      {
+        "category": "C4_stale_overwrite",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "C5_double_delivered_input",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "C6_wrong_record_homonym",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "C7_silent_noop_wrong_target",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 1.0
+      },
+      {
+        "category": "control",
+        "substrate": "web",
+        "n": 6,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.6096657120978346,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.6096657120978346,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      }
+    ],
+    "outcome_counts": {
+      "success": 6,
+      "silent_wrong_effect": 21,
+      "false_abort": 3,
+      "safe_halt": 3
+    }
+  },
+  "effect_verify": {
+    "arm": "effect_verify",
+    "n_episodes": 33,
+    "n_tasks": 11,
+    "arms": [
+      "effect_verify"
+    ],
+    "swer": {
+      "numerator": 0,
+      "denominator": 33,
+      "rate": 0.0,
+      "ci": {
+        "lo": 0.0,
+        "hi": 0.10426999754245206,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "swer_wrong_write": {
+      "numerator": 0,
+      "denominator": 33,
+      "rate": 0.0,
+      "ci": {
+        "lo": 0.0,
+        "hi": 0.10426999754245206,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "swer_phantom": {
+      "numerator": 0,
+      "denominator": 33,
+      "rate": 0.0,
+      "ci": {
+        "lo": 0.0,
+        "hi": 0.10426999754245206,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "over_halt": {
+      "numerator": 6,
+      "denominator": 33,
+      "rate": 0.18181818181818182,
+      "ci": {
+        "lo": 0.08610768208940667,
+        "hi": 0.3438823163466992,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "task_success": {
+      "numerator": 9,
+      "denominator": 33,
+      "rate": 0.2727272727272727,
+      "ci": {
+        "lo": 0.1506744088542064,
+        "hi": 0.44217559002872625,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "screen_success": {
+      "numerator": 9,
+      "denominator": 33,
+      "rate": 0.2727272727272727,
+      "ci": {
+        "lo": 0.1506744088542064,
+        "hi": 0.44217559002872625,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    },
+    "success_effect_gap": 0.0,
+    "success_effect_gap_ci": {
+      "lo": 0.0,
+      "hi": 0.0,
+      "method": "bootstrap",
+      "confidence": 0.95
+    },
+    "total_cost_usd": 0.0,
+    "mean_cost_usd": 0.0,
+    "mean_latency_s": 0.43112727272727275,
+    "pass_hat_k": {
+      "1": 0.2727272727272727,
+      "2": 0.2727272727272727,
+      "4": 0.0,
+      "8": 0.0
+    },
+    "cells": [
+      {
+        "category": "C1_partial_save",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C2_duplicate_submission",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C3_optimistic_then_reject",
+        "substrate": "web",
+        "n": 9,
+        "swer": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0,
+          "ci": {
+            "lo": 0.0,
+            "hi": 0.2991450484195441,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333,
+          "ci": {
+            "lo": 0.1205838183869109,
+            "hi": 0.6457978644196036,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333,
+          "ci": {
+            "lo": 0.1205838183869109,
+            "hi": 0.6457978644196036,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C4_stale_overwrite",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C5_double_delivered_input",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C6_wrong_record_homonym",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "C7_silent_noop_wrong_target",
+        "substrate": "web",
+        "n": 3,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.4385029682449546,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0,
+          "ci": {
+            "lo": 5.551115123125783e-17,
+            "hi": 0.5614970317550454,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      },
+      {
+        "category": "control",
+        "substrate": "web",
+        "n": 6,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0,
+          "ci": {
+            "lo": 2.7755575615628914e-17,
+            "hi": 0.3903342879021653,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "task_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.6096657120978346,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0,
+          "ci": {
+            "lo": 0.6096657120978346,
+            "hi": 1.0,
+            "method": "wilson",
+            "confidence": 0.95
+          }
+        },
+        "success_effect_gap": 0.0
+      }
+    ],
+    "outcome_counts": {
+      "success": 9,
+      "wrong_action": 12,
+      "safe_halt": 6,
+      "over_halt": 6
+    }
+  },
+  "episodes": [
+    {
+      "episode_id": "screen_only::lending_ctl_clean::0",
+      "task_id": "lending_ctl_clean",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "control",
+      "seed": 0,
+      "expected_effect_hash": "sha256:7b80dcbddd4bec83c715815f7d5a37ebaceb4dc024b2cb6f72c093d029c08851",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0033,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.423207+00:00",
+      "finished_at": "2026-07-21T05:26:07.423217+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_ctl_clean::1",
+      "task_id": "lending_ctl_clean",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "control",
+      "seed": 1,
+      "expected_effect_hash": "sha256:b14284001720ac57cd983c346090ce45d269bdb0ce58e9debd5bb1daa694fee2",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.003,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.432800+00:00",
+      "finished_at": "2026-07-21T05:26:07.432810+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_ctl_clean::2",
+      "task_id": "lending_ctl_clean",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "control",
+      "seed": 2,
+      "expected_effect_hash": "sha256:3566deff1e20d5217dc90befaa375abe0524a9f03daf863903d1fdbb16737984",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0044,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.448320+00:00",
+      "finished_at": "2026-07-21T05:26:07.448329+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_clean::0",
+      "task_id": "lending_ctl_clean",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "control",
+      "seed": 0,
+      "expected_effect_hash": "sha256:7b80dcbddd4bec83c715815f7d5a37ebaceb4dc024b2cb6f72c093d029c08851",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0074,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.462743+00:00",
+      "finished_at": "2026-07-21T05:26:07.462754+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_clean::1",
+      "task_id": "lending_ctl_clean",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "control",
+      "seed": 1,
+      "expected_effect_hash": "sha256:b14284001720ac57cd983c346090ce45d269bdb0ce58e9debd5bb1daa694fee2",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0076,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.478390+00:00",
+      "finished_at": "2026-07-21T05:26:07.478401+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_clean::2",
+      "task_id": "lending_ctl_clean",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "control",
+      "seed": 2,
+      "expected_effect_hash": "sha256:3566deff1e20d5217dc90befaa375abe0524a9f03daf863903d1fdbb16737984",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0242,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.513119+00:00",
+      "finished_at": "2026-07-21T05:26:07.513132+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c1_partial_memo_dropped::0",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a341e1474fde0ff5fc594d76e1fb0f1c353e5eb4157ea66c436d1ddef4e246aa",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 30fe8f616d3e' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0032,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.732290+00:00",
+      "finished_at": "2026-07-21T05:26:07.732299+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c1_partial_memo_dropped::1",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 1,
+      "expected_effect_hash": "sha256:2bd8ec2dfce5e1a0a5198a82108b5c306a73256c84a0024cfc80ce9e50772619",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 36692765a839' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0019,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:07.950017+00:00",
+      "finished_at": "2026-07-21T05:26:07.950028+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c1_partial_memo_dropped::2",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5808cd55d3946b524f435ff5bfe87961e92f1176d892cb18a5f07cba6360c840",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 123c91fef501' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0021,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:08.165939+00:00",
+      "finished_at": "2026-07-21T05:26:08.165951+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c1_partial_memo_dropped::0",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a341e1474fde0ff5fc594d76e1fb0f1c353e5eb4157ea66c436d1ddef4e246aa",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 30fe8f616d3e' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2152,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:08.592960+00:00",
+      "finished_at": "2026-07-21T05:26:08.592970+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c1_partial_memo_dropped::1",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 1,
+      "expected_effect_hash": "sha256:2bd8ec2dfce5e1a0a5198a82108b5c306a73256c84a0024cfc80ce9e50772619",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 36692765a839' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2098,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:09.015940+00:00",
+      "finished_at": "2026-07-21T05:26:09.015953+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c1_partial_memo_dropped::2",
+      "task_id": "lending_c1_partial_memo_dropped",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C1_partial_save",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5808cd55d3946b524f435ff5bfe87961e92f1176d892cb18a5f07cba6360c840",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "field_equals",
+        "channel": "rest",
+        "reason": "field 'memo' is '', expected 'funding ref 123c91fef501' (partial save -- the row persisted but this field was dropped or differs)",
+        "observed_count": 1,
+        "expected_count": null,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2124,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:09.440630+00:00",
+      "finished_at": "2026-07-21T05:26:09.440640+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c2_duplicate_submit::0",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 0,
+      "expected_effect_hash": "sha256:b3459fa5ce0bcd32f8e2837450c8f529f3a40877bc55ef45d1b776b65f925588",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0038,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:09.673512+00:00",
+      "finished_at": "2026-07-21T05:26:09.673523+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c2_duplicate_submit::1",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 1,
+      "expected_effect_hash": "sha256:cc01a9f5d9943652dd43e149da462d16c7c0bafa3de54ffde9cc57c989ab0b09",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0045,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:09.892386+00:00",
+      "finished_at": "2026-07-21T05:26:09.892398+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c2_duplicate_submit::2",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5ab782ca4b3d29aff4e27c65b458378647b17717a33e795b71cb32f97a3c9930",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0071,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:10.109356+00:00",
+      "finished_at": "2026-07-21T05:26:10.109367+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c2_duplicate_submit::0",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 0,
+      "expected_effect_hash": "sha256:b3459fa5ce0bcd32f8e2837450c8f529f3a40877bc55ef45d1b776b65f925588",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2184,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:10.542587+00:00",
+      "finished_at": "2026-07-21T05:26:10.542598+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c2_duplicate_submit::1",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 1,
+      "expected_effect_hash": "sha256:cc01a9f5d9943652dd43e149da462d16c7c0bafa3de54ffde9cc57c989ab0b09",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2147,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:10.970403+00:00",
+      "finished_at": "2026-07-21T05:26:10.970413+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c2_duplicate_submit::2",
+      "task_id": "lending_c2_duplicate_submit",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C2_duplicate_submission",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5ab782ca4b3d29aff4e27c65b458378647b17717a33e795b71cb32f97a3c9930",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2215,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:11.415634+00:00",
+      "finished_at": "2026-07-21T05:26:11.415644+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_optimistic_reject::0",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:ff5a08d37abc3df3933fdb7a5777f95d80d7204e884c3c0ec64427c122b1efba",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:11.631390+00:00",
+      "finished_at": "2026-07-21T05:26:11.631401+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_optimistic_reject::1",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:d5a5810f47811dd2bf3dea35e054dcb7379a32d37de7bc327c08980b21541cd5",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:11.848464+00:00",
+      "finished_at": "2026-07-21T05:26:11.848475+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_optimistic_reject::2",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5e4e694c2cbd0a7aa2a77db34c05cb4954fe93cfb360779fa5fbd0355c9fdb2a",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0021,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:12.061758+00:00",
+      "finished_at": "2026-07-21T05:26:12.061768+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_optimistic_reject::0",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:ff5a08d37abc3df3933fdb7a5777f95d80d7204e884c3c0ec64427c122b1efba",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2136,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:12.484918+00:00",
+      "finished_at": "2026-07-21T05:26:12.484928+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_optimistic_reject::1",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:d5a5810f47811dd2bf3dea35e054dcb7379a32d37de7bc327c08980b21541cd5",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.21,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:12.905863+00:00",
+      "finished_at": "2026-07-21T05:26:12.905873+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_optimistic_reject::2",
+      "task_id": "lending_c3_optimistic_reject",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:5e4e694c2cbd0a7aa2a77db34c05cb4954fe93cfb360779fa5fbd0355c9fdb2a",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2141,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:13.331657+00:00",
+      "finished_at": "2026-07-21T05:26:13.331669+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_timeout_false_abort::0",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:eff8226f7f060aff14aeb0bc58403363e75ae51910eeb379e41e78061da948fb",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "false_abort",
+      "swer_variant": "none",
+      "reason": "the correct effect persisted but the run reported failure (effect unverified; a retry would double-write)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0056,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:16.346683+00:00",
+      "finished_at": "2026-07-21T05:26:16.346697+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_timeout_false_abort::1",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:42269ea775c04120cd1eca781cc2386981617f89a83094b2d60f0cff3679655f",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "false_abort",
+      "swer_variant": "none",
+      "reason": "the correct effect persisted but the run reported failure (effect unverified; a retry would double-write)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0065,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:19.358647+00:00",
+      "finished_at": "2026-07-21T05:26:19.358653+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_timeout_false_abort::2",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:06a0437835c27983529a577096acc3a823180d426a79572c78e5d9d33a4fedda",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "false_abort",
+      "swer_variant": "none",
+      "reason": "the correct effect persisted but the run reported failure (effect unverified; a retry would double-write)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0035,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:22.366227+00:00",
+      "finished_at": "2026-07-21T05:26:22.366233+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_timeout_false_abort::0",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:eff8226f7f060aff14aeb0bc58403363e75ae51910eeb379e41e78061da948fb",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0093,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:25.379503+00:00",
+      "finished_at": "2026-07-21T05:26:25.379509+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_timeout_false_abort::1",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:42269ea775c04120cd1eca781cc2386981617f89a83094b2d60f0cff3679655f",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0084,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:28.394124+00:00",
+      "finished_at": "2026-07-21T05:26:28.394135+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_timeout_false_abort::2",
+      "task_id": "lending_c3_timeout_false_abort",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:06a0437835c27983529a577096acc3a823180d426a79572c78e5d9d33a4fedda",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 3.0143,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:31.419164+00:00",
+      "finished_at": "2026-07-21T05:26:31.419169+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_session_expired::0",
+      "task_id": "lending_c3_session_expired",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:422cc390e019de45a5d77a9d0f404abc7cf9ce45e2e30b12ae20c24801481527",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:31.640073+00:00",
+      "finished_at": "2026-07-21T05:26:31.640087+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_session_expired::1",
+      "task_id": "lending_c3_session_expired",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:7abf29f855073485e5f0a514e007ccfc8a9a18c3b8fec1ec202ba9e99928d640",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:31.856789+00:00",
+      "finished_at": "2026-07-21T05:26:31.856802+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c3_session_expired::2",
+      "task_id": "lending_c3_session_expired",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:bafbe60e3c6d7ee45a7548d1603471662d894ed22d7ee927e948a3b1c0b1b677",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0021,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:32.073759+00:00",
+      "finished_at": "2026-07-21T05:26:32.073765+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_session_expired::0",
+      "task_id": "lending_c3_session_expired",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 0,
+      "expected_effect_hash": "sha256:422cc390e019de45a5d77a9d0f404abc7cf9ce45e2e30b12ae20c24801481527",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2122,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:32.500521+00:00",
+      "finished_at": "2026-07-21T05:26:32.500532+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_session_expired::1",
+      "task_id": "lending_c3_session_expired",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 1,
+      "expected_effect_hash": "sha256:7abf29f855073485e5f0a514e007ccfc8a9a18c3b8fec1ec202ba9e99928d640",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2147,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:32.929771+00:00",
+      "finished_at": "2026-07-21T05:26:32.929782+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c3_session_expired::2",
+      "task_id": "lending_c3_session_expired",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C3_optimistic_then_reject",
+      "seed": 2,
+      "expected_effect_hash": "sha256:bafbe60e3c6d7ee45a7548d1603471662d894ed22d7ee927e948a3b1c0b1b677",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "safe_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect and the correct action was NOT available (the desired failure mode)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2119,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:33.352529+00:00",
+      "finished_at": "2026-07-21T05:26:33.352538+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c4_stale_lost_update::0",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 0,
+      "expected_effect_hash": "sha256:bfd15b113e6c48352bc823c4926092b9e7031086c70cff567f52618d08119772",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0025,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:33.568084+00:00",
+      "finished_at": "2026-07-21T05:26:33.568093+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c4_stale_lost_update::1",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 1,
+      "expected_effect_hash": "sha256:f52cf2161ba6565b25599578986c2e28b89c07650ff595fbc21d262153d4a4ac",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:33.781740+00:00",
+      "finished_at": "2026-07-21T05:26:33.781751+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c4_stale_lost_update::2",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 2,
+      "expected_effect_hash": "sha256:37aa4619346e6df9990a98b9a777c53def4d6a440aea577511d77c7b0e4a502c",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0022,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:33.993817+00:00",
+      "finished_at": "2026-07-21T05:26:33.993826+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c4_stale_lost_update::0",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 0,
+      "expected_effect_hash": "sha256:bfd15b113e6c48352bc823c4926092b9e7031086c70cff567f52618d08119772",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2106,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:34.412898+00:00",
+      "finished_at": "2026-07-21T05:26:34.412908+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c4_stale_lost_update::1",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 1,
+      "expected_effect_hash": "sha256:f52cf2161ba6565b25599578986c2e28b89c07650ff595fbc21d262153d4a4ac",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2145,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:34.837927+00:00",
+      "finished_at": "2026-07-21T05:26:34.837937+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c4_stale_lost_update::2",
+      "task_id": "lending_c4_stale_lost_update",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C4_stale_overwrite",
+      "seed": 2,
+      "expected_effect_hash": "sha256:37aa4619346e6df9990a98b9a777c53def4d6a440aea577511d77c7b0e4a502c",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2147,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:35.264551+00:00",
+      "finished_at": "2026-07-21T05:26:35.264560+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c5_double_delivered::0",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 0,
+      "expected_effect_hash": "sha256:20ee389b8cebf0c0cea6a8d5c4082d298b35121705a775d83eaebd1208755c2d",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0165,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:35.506159+00:00",
+      "finished_at": "2026-07-21T05:26:35.506170+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c5_double_delivered::1",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 1,
+      "expected_effect_hash": "sha256:fe32547ab1a06df55783e247bbe4e13861f38c14397b3b7d6c268a35f68b5764",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.005,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:35.724823+00:00",
+      "finished_at": "2026-07-21T05:26:35.724830+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c5_double_delivered::2",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 2,
+      "expected_effect_hash": "sha256:6dac289ffeefbd1989585c9369452114acf88b94ea1c323310313480ad863e7e",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "wrong_write",
+      "reason": "reported success but a WRONG effect persisted (duplicate / partial / lost update / wrong record) - silent wrong-write",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0051,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:35.943675+00:00",
+      "finished_at": "2026-07-21T05:26:35.943691+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c5_double_delivered::0",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 0,
+      "expected_effect_hash": "sha256:20ee389b8cebf0c0cea6a8d5c4082d298b35121705a775d83eaebd1208755c2d",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2165,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:36.375849+00:00",
+      "finished_at": "2026-07-21T05:26:36.375860+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c5_double_delivered::1",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 1,
+      "expected_effect_hash": "sha256:fe32547ab1a06df55783e247bbe4e13861f38c14397b3b7d6c268a35f68b5764",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2174,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:36.807431+00:00",
+      "finished_at": "2026-07-21T05:26:36.807440+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c5_double_delivered::2",
+      "task_id": "lending_c5_double_delivered",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C5_double_delivered_input",
+      "seed": 2,
+      "expected_effect_hash": "sha256:6dac289ffeefbd1989585c9369452114acf88b94ea1c323310313480ad863e7e",
+      "correct_action_available": false,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+        "observed_count": 2,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": true,
+        "effect_absent": false
+      },
+      "outcome": "wrong_action",
+      "swer_variant": "none",
+      "reason": "a wrong effect persisted and the run reported failure - a bad write, at least not silent",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2143,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:37.235364+00:00",
+      "finished_at": "2026-07-21T05:26:37.235376+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c6_homonym_wrong_loan::0",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a8388676b7387bf1a23bed2ddbac0d7663602a5236bdac639a71e25ccbfccdd3",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0023,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:37.453411+00:00",
+      "finished_at": "2026-07-21T05:26:37.453421+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c6_homonym_wrong_loan::1",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 1,
+      "expected_effect_hash": "sha256:677c7fa920fa23be8406b321e9917513420e0f539a94edb25ef2728e4e4fa5f6",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0026,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:37.675029+00:00",
+      "finished_at": "2026-07-21T05:26:37.675039+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c6_homonym_wrong_loan::2",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 2,
+      "expected_effect_hash": "sha256:9f4858a65aba63ff8146eb4e164ab08c3009fc5264d093b0c2d1b2fc81dbf201",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0017,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:37.893240+00:00",
+      "finished_at": "2026-07-21T05:26:37.893248+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c6_homonym_wrong_loan::0",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a8388676b7387bf1a23bed2ddbac0d7663602a5236bdac639a71e25ccbfccdd3",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2118,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:38.319414+00:00",
+      "finished_at": "2026-07-21T05:26:38.319437+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c6_homonym_wrong_loan::1",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 1,
+      "expected_effect_hash": "sha256:677c7fa920fa23be8406b321e9917513420e0f539a94edb25ef2728e4e4fa5f6",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2153,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:38.751652+00:00",
+      "finished_at": "2026-07-21T05:26:38.751664+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c6_homonym_wrong_loan::2",
+      "task_id": "lending_c6_homonym_wrong_loan",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C6_wrong_record_homonym",
+      "seed": 2,
+      "expected_effect_hash": "sha256:9f4858a65aba63ff8146eb4e164ab08c3009fc5264d093b0c2d1b2fc81dbf201",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2124,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:39.177740+00:00",
+      "finished_at": "2026-07-21T05:26:39.177745+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c7_silent_noop::0",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 0,
+      "expected_effect_hash": "sha256:ade059c248ffc0cea38036962c463ee8ba2c147a867ad8700b69b31eee9363dc",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:39.388380+00:00",
+      "finished_at": "2026-07-21T05:26:39.388390+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c7_silent_noop::1",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 1,
+      "expected_effect_hash": "sha256:2bf6a53d1708e49564210041fafe02964a097a7d037a6ff5daf53d956fd93d04",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:39.601722+00:00",
+      "finished_at": "2026-07-21T05:26:39.601732+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_c7_silent_noop::2",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 2,
+      "expected_effect_hash": "sha256:a84d64ca75c48db16e8e319922eeb24c5c76e8c6bb578cb4f673da2437049f10",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "silent_wrong_effect",
+      "swer_variant": "phantom",
+      "reason": "reported success but NOTHING persisted - phantom success",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:39.812349+00:00",
+      "finished_at": "2026-07-21T05:26:39.812359+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c7_silent_noop::0",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 0,
+      "expected_effect_hash": "sha256:ade059c248ffc0cea38036962c463ee8ba2c147a867ad8700b69b31eee9363dc",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2106,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:40.237812+00:00",
+      "finished_at": "2026-07-21T05:26:40.237822+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c7_silent_noop::1",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 1,
+      "expected_effect_hash": "sha256:2bf6a53d1708e49564210041fafe02964a097a7d037a6ff5daf53d956fd93d04",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2116,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:40.661889+00:00",
+      "finished_at": "2026-07-21T05:26:40.661900+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_c7_silent_noop::2",
+      "task_id": "lending_c7_silent_noop",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "C7_silent_noop_wrong_target",
+      "seed": 2,
+      "expected_effect_hash": "sha256:a84d64ca75c48db16e8e319922eeb24c5c76e8c6bb578cb4f673da2437049f10",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": false,
+        "halted": true,
+        "message": "self-verified effect: refuted"
+      },
+      "oracle": {
+        "verdict": "refuted",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+        "observed_count": 0,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": false,
+        "effect_wrong_persisted": false,
+        "effect_absent": true
+      },
+      "outcome": "over_halt",
+      "swer_variant": "none",
+      "reason": "halted with no effect while the correct action WAS available (recoverable - a human finishes it)",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.2124,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.087532+00:00",
+      "finished_at": "2026-07-21T05:26:41.087543+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_ctl_idempotent_fix::0",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "screen_only",
+      "trial": 0,
+      "substrate": "web",
+      "category": "control",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a8b0f330c18927a846a6dfba22502b50cc68eba9cb38f87bba289b6b5932be97",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0063,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.109036+00:00",
+      "finished_at": "2026-07-21T05:26:41.109044+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_ctl_idempotent_fix::1",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "screen_only",
+      "trial": 1,
+      "substrate": "web",
+      "category": "control",
+      "seed": 1,
+      "expected_effect_hash": "sha256:fdafdb666bad7874706055bded81f3f074845729ae9298c6c800fc8468d17d6f",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0049,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.146995+00:00",
+      "finished_at": "2026-07-21T05:26:41.147006+00:00"
+    },
+    {
+      "episode_id": "screen_only::lending_ctl_idempotent_fix::2",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "screen_only",
+      "trial": 2,
+      "substrate": "web",
+      "category": "control",
+      "seed": 2,
+      "expected_effect_hash": "sha256:d5c0a8c50a25d61860e083d9890b3856a74c3afb71e328e32b7dd3e06be270b8",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "believed the rendered banner"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0046,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.159150+00:00",
+      "finished_at": "2026-07-21T05:26:41.159163+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_idempotent_fix::0",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "effect_verify",
+      "trial": 0,
+      "substrate": "web",
+      "category": "control",
+      "seed": 0,
+      "expected_effect_hash": "sha256:a8b0f330c18927a846a6dfba22502b50cc68eba9cb38f87bba289b6b5932be97",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0091,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.174969+00:00",
+      "finished_at": "2026-07-21T05:26:41.174976+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_idempotent_fix::1",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "effect_verify",
+      "trial": 1,
+      "substrate": "web",
+      "category": "control",
+      "seed": 1,
+      "expected_effect_hash": "sha256:fdafdb666bad7874706055bded81f3f074845729ae9298c6c800fc8468d17d6f",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0075,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.188466+00:00",
+      "finished_at": "2026-07-21T05:26:41.188475+00:00"
+    },
+    {
+      "episode_id": "effect_verify::lending_ctl_idempotent_fix::2",
+      "task_id": "lending_ctl_idempotent_fix",
+      "arm": "effect_verify",
+      "trial": 2,
+      "substrate": "web",
+      "category": "control",
+      "seed": 2,
+      "expected_effect_hash": "sha256:d5c0a8c50a25d61860e083d9890b3856a74c3afb71e328e32b7dd3e06be270b8",
+      "correct_action_available": true,
+      "agent": {
+        "reported_success": true,
+        "halted": false,
+        "message": "self-verified effect: confirmed"
+      },
+      "oracle": {
+        "verdict": "confirmed",
+        "kind": "record_written",
+        "channel": "rest",
+        "reason": "exactly 1 record(s) match the target selector",
+        "observed_count": 1,
+        "expected_count": 1,
+        "before_reachable": true,
+        "effect_correct": true,
+        "effect_wrong_persisted": false,
+        "effect_absent": false
+      },
+      "outcome": "success",
+      "swer_variant": "none",
+      "reason": "reported success and exactly one correct, complete effect persisted",
+      "model_calls": [],
+      "cost_usd": 0.0,
+      "latency_s": 0.0088,
+      "env_fingerprint": {
+        "env": "mockloan",
+        "substrate": "web",
+        "ci_fast": true
+      },
+      "started_at": "2026-07-21T05:26:41.202861+00:00",
+      "finished_at": "2026-07-21T05:26:41.202870+00:00"
+    }
+  ]
+}

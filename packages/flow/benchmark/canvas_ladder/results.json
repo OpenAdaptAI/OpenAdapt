@@ -1,0 +1,94 @@
+{
+  "accepted": true,
+  "base_commit": "",
+  "candidate_commit": "972ed38f9213aee89ad0ad5244a5de5a35847ef1",
+  "caveat": "no-DOM HTML5-canvas class (the class Citrix Workspace-web presents) -- NOT Citrix ICA/HDX (no HDX codecs, no ICA compression, no Workspace-client input path), NOT an aardwolf/RDP transport proof, and the drift is simulated-on-a-real-session (not WAN/HDX capture).",
+  "contract": {
+    "healthy_effect_confirmed": true,
+    "healthy_structural_rung_used": 0,
+    "healthy_visual_rungs_used": {
+      "template": 3
+    },
+    "healthy_zero_model_calls": true,
+    "moderate_drift_no_silent_wrong_write": true,
+    "moderate_drift_resolved_correctly": true,
+    "severe_drift_no_silent_write": true,
+    "severe_drift_safely_halted": true
+  },
+  "environment": {
+    "backend": "CanvasBrowserBackend (Playwright, pixel-only; no structural/identity)",
+    "canvas_gateway": "noVNC + websockify (HTML5 <canvas> on :6080)",
+    "note": "The <canvas> exposes no accessible content, so the structural rung is unavailable by construction and resolution runs on the visual floor -- the Citrix Workspace-web class.",
+    "surface": "Tk kiosk rendered into a no-accessible-DOM HTML5 canvas",
+    "viewport": [
+      1280,
+      800
+    ],
+    "vnc_server": "TigerVNC Xvnc (X display :0 + VNC :5900)"
+  },
+  "failure_taxonomy": [
+    "connect_or_frame_failure",
+    "healthy_contract_violation",
+    "effect_not_confirmed",
+    "silent_wrong_write_or_model_call",
+    "drift_not_safely_halted"
+  ],
+  "generated_at": "2026-07-20T18:51:18.115815+00:00",
+  "model_calls": 0,
+  "oracle": "docker exec cat of the kiosk-persisted note file",
+  "run_count": 3,
+  "schema_version": "openadapt.canvas-ladder-qualification.v1",
+  "substrate": "no-dom-html5-canvas-novnc-tigervnc-linux-kiosk",
+  "successes": 3,
+  "task": "record->compile->replay a patient-note write through the vision-only resolver ladder over a no-DOM HTML5 <canvas> (noVNC), with no structural backend; confirm the write via an independent document oracle; and halt under injected DPI/theme/JPEG drift",
+  "total_s": 44.241,
+  "trials": [
+    {
+      "effect_confirmed": true,
+      "effect_expected": "MRN A1001\tfollowup in two weeks",
+      "effect_observed": "MRN A1001\tfollowup in two weeks",
+      "failure_class": null,
+      "kind": "healthy_record_compile_replay",
+      "model_calls": 0,
+      "passed": true,
+      "rung_counts": {
+        "template": 3
+      },
+      "structural_rung_used": 0,
+      "success": true,
+      "trial": 1,
+      "visual_rungs_used": {
+        "template": 3
+      }
+    },
+    {
+      "drift": "downscale_0.4x + theme_invert + jpeg_q8 (legible; simulated on real session)",
+      "effect_expected": "MRN A1001\tfollowup in two weeks",
+      "effect_observed": "MRN A1001\tfollowup in two weeks",
+      "failure_class": null,
+      "halted": false,
+      "kind": "moderate_drift_no_silent_wrong_write",
+      "model_calls": 0,
+      "passed": true,
+      "resolved_and_correct": true,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "trial": 2,
+      "wrong_write": false
+    },
+    {
+      "drift": "downscale_0.14x + gaussian_blur_2.0 + theme_invert + jpeg_q5 (illegible; simulated on real session)",
+      "effect_after_drift": null,
+      "failure_class": null,
+      "halted": true,
+      "kind": "severe_drift_safe_halt",
+      "model_calls": 0,
+      "passed": true,
+      "rung_counts": {},
+      "silent_write": false,
+      "trial": 3
+    }
+  ]
+}

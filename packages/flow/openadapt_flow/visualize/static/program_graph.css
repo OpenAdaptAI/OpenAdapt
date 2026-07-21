@@ -1,0 +1,194 @@
+/* Shared, dependency-free styles for the compiled-program visualizer.
+ *
+ * ONE renderer, THREE surfaces: this file (and program_graph.js) render the
+ * shared ProgramGraphSpec. The flow CLI inlines both into a self-contained
+ * HTML page; the desktop (Tauri) view vendors both verbatim; the cloud view
+ * reimplements the same layout in React over the same spec. Theme-aware via
+ * prefers-color-scheme AND an explicit [data-theme] override on :root. */
+
+.opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-irrev: #b4530a;
+  --opg-irrev-bg: #fdf1e6;
+  --opg-ok: #197a3d;
+  --opg-ok-bg: #e8f6ec;
+  --opg-warn: #9a6a00;
+  --opg-warn-bg: #fbf3d9;
+  --opg-halt: #b21f2d;
+  --opg-halt-bg: #fbe9eb;
+  --opg-chip: #e7ebf0;
+  color: var(--opg-fg);
+  background: var(--opg-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .opg-root {
+    --opg-bg: #0f1319;
+    --opg-fg: #e6e9ee;
+    --opg-muted: #9aa4b2;
+    --opg-card: #171c24;
+    --opg-border: #2a323d;
+    --opg-line: #3a4550;
+    --opg-accent: #6ea8fe;
+    --opg-irrev: #ffb27a;
+    --opg-irrev-bg: #2c1c0f;
+    --opg-ok: #7ee2a8;
+    --opg-ok-bg: #10241a;
+    --opg-warn: #f2cd6b;
+    --opg-warn-bg: #2a2410;
+    --opg-halt: #ff9aa4;
+    --opg-halt-bg: #2c1315;
+    --opg-chip: #232b35;
+  }
+}
+:root[data-theme="dark"] .opg-root {
+  --opg-bg: #0f1319;
+  --opg-fg: #e6e9ee;
+  --opg-muted: #9aa4b2;
+  --opg-card: #171c24;
+  --opg-border: #2a323d;
+  --opg-line: #3a4550;
+  --opg-accent: #6ea8fe;
+  --opg-irrev: #ffb27a;
+  --opg-irrev-bg: #2c1c0f;
+  --opg-ok: #7ee2a8;
+  --opg-ok-bg: #10241a;
+  --opg-warn: #f2cd6b;
+  --opg-warn-bg: #2a2410;
+  --opg-halt: #ff9aa4;
+  --opg-halt-bg: #2c1315;
+  --opg-chip: #232b35;
+}
+:root[data-theme="light"] .opg-root {
+  --opg-bg: #ffffff;
+  --opg-fg: #1a1d24;
+  --opg-muted: #5b6472;
+  --opg-card: #f6f8fa;
+  --opg-border: #d6dae0;
+  --opg-line: #b7bec8;
+  --opg-accent: #2563eb;
+  --opg-chip: #e7ebf0;
+}
+
+.opg-root * { box-sizing: border-box; }
+
+.opg-header { margin-bottom: 18px; }
+.opg-title { font-size: 20px; font-weight: 650; margin: 0 0 2px; }
+.opg-subtitle { color: var(--opg-muted); font-size: 13px; margin: 0 0 12px; }
+
+.opg-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.opg-stat {
+  background: var(--opg-card);
+  border: 1px solid var(--opg-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 78px;
+}
+.opg-stat .n { font-size: 17px; font-weight: 650; }
+.opg-stat .l { font-size: 11px; color: var(--opg-muted); text-transform: uppercase; letter-spacing: .03em; }
+.opg-stat.warn { border-color: var(--opg-warn); background: var(--opg-warn-bg); }
+.opg-stat.halt { border-color: var(--opg-halt); background: var(--opg-halt-bg); }
+
+.opg-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.opg-flow { display: flex; flex-direction: column; align-items: stretch; }
+
+.opg-node {
+  border: 1px solid var(--opg-border);
+  border-radius: 10px;
+  background: var(--opg-card);
+  padding: 10px 12px;
+  position: relative;
+}
+.opg-node.irreversible { border-left: 4px solid var(--opg-irrev); }
+.opg-node.terminal {
+  align-self: center;
+  min-width: 180px;
+  text-align: center;
+  border-style: dashed;
+}
+.opg-node.terminal.ok { border-color: var(--opg-ok); color: var(--opg-ok); }
+.opg-node.terminal.halt { border-color: var(--opg-halt); color: var(--opg-halt); }
+
+.opg-node-head { display: flex; align-items: baseline; gap: 8px; }
+.opg-idx {
+  flex: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--opg-accent);
+  color: #fff;
+  font-size: 12px; font-weight: 650;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.opg-node-title { font-weight: 600; font-size: 14px; }
+.opg-node-action { color: var(--opg-muted); font-size: 12px; font-weight: 500; }
+
+.opg-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.opg-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--opg-chip);
+  color: var(--opg-fg);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.opg-chip.irreversible { background: var(--opg-irrev-bg); color: var(--opg-irrev); border-color: var(--opg-irrev); }
+.opg-chip.identity { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.no-identity { background: var(--opg-warn-bg); color: var(--opg-warn); border-color: var(--opg-warn); }
+.opg-chip.effect { background: var(--opg-ok-bg); color: var(--opg-ok); border-color: var(--opg-ok); }
+.opg-chip.api { background: var(--opg-ok-bg); color: var(--opg-ok); }
+.opg-chip.secret { background: var(--opg-warn-bg); color: var(--opg-warn); }
+
+.opg-detail { margin-top: 8px; font-size: 12.5px; }
+.opg-detail .row { display: flex; gap: 6px; margin: 3px 0; }
+.opg-detail .k { color: var(--opg-muted); flex: none; min-width: 78px; }
+.opg-detail .v { color: var(--opg-fg); }
+
+.opg-ladder { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.opg-rung {
+  font-size: 11px; padding: 1px 7px; border-radius: 5px;
+  border: 1px solid var(--opg-border); color: var(--opg-muted);
+  opacity: .5;
+}
+.opg-rung.present { opacity: 1; color: var(--opg-fg); border-color: var(--opg-accent); font-weight: 600; }
+.opg-rung.top { background: var(--opg-accent); color: #fff; border-color: var(--opg-accent); }
+
+.opg-halts { margin-top: 8px; }
+.opg-halt-item {
+  font-size: 12px;
+  background: var(--opg-halt-bg);
+  color: var(--opg-halt);
+  border: 1px solid var(--opg-halt);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 4px;
+}
+.opg-halt-item::before { content: "\26D4  "; }
+
+.opg-reason { color: var(--opg-muted); font-size: 12px; font-style: italic; margin-top: 4px; }
+
+.opg-connector { display: flex; flex-direction: column; align-items: center; height: 30px; }
+.opg-connector .line { width: 2px; flex: 1; background: var(--opg-line); }
+.opg-connector .lbl {
+  font-size: 11px; color: var(--opg-muted);
+  background: var(--opg-bg); padding: 0 6px; margin: 2px 0;
+}
+.opg-connector.branch .line { background: var(--opg-accent); }
+
+.opg-legend {
+  margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--opg-border);
+  display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--opg-muted);
+}
+.opg-legend .item { display: flex; align-items: center; gap: 5px; }
+.opg-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--opg-border); }

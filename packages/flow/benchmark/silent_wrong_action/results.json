@@ -1,0 +1,1883 @@
+{
+  "instrument": "silent-wrong-action-rate (screen-verify vs effect-verify)",
+  "generated_at": "2026-07-13T14:41:23.272198+00:00",
+  "target": "MockMed transactional-fault suite (mockmed.fault_server)",
+  "system_of_record": "GET /api/db (in-process FaultDB ground truth)",
+  "effect_contract": "record_written (exactly once) AND field_equals (note), verified by RestRecordVerifier (#63) against the system of record",
+  "screen_oracle": "app.js saveViaBackend banner rule applied to the real server response(s) \u2014 the weak vision-style oracle",
+  "n_per_scenario": 10,
+  "scenarios": [
+    "ok",
+    "partial",
+    "optimistic",
+    "duplicate",
+    "double",
+    "stale",
+    "timeout",
+    "session",
+    "idempotent"
+  ],
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "metrics": {
+    "n_runs": 90,
+    "n_wrong_effect": 60,
+    "n_correct_effect": 30,
+    "screen": {
+      "silent_wrong_action_rate": 0.5555555555555556,
+      "undetected_wrong_rate": 0.8333333333333334,
+      "false_abort_rate": 0.3333333333333333,
+      "silent_wrong_count": 50,
+      "false_abort_count": 10
+    },
+    "effect": {
+      "silent_wrong_action_rate": 0.0,
+      "undetected_wrong_rate": 0.0,
+      "false_abort_rate": 0.0,
+      "silent_wrong_count": 0,
+      "false_abort_count": 0
+    },
+    "per_scenario": {
+      "ok": {
+        "n": 10,
+        "blurb": "control: a clean accepted write",
+        "ground_truth_correct": true,
+        "ground_truth_fault": "correct",
+        "screen_pass": true,
+        "effect_verdict": "confirmed",
+        "screen_silent_wrong_rate": 0.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 1
+      },
+      "partial": {
+        "n": 10,
+        "blurb": "backend persisted the row but dropped the note field",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "wrong_field",
+        "screen_pass": true,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 1.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 1
+      },
+      "optimistic": {
+        "n": 10,
+        "blurb": "UI painted success; the server then rejected the write",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "absent",
+        "screen_pass": true,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 1.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 0
+      },
+      "duplicate": {
+        "n": 10,
+        "blurb": "double-submit: the write landed twice",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "duplicate",
+        "screen_pass": true,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 1.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 2
+      },
+      "double": {
+        "n": 10,
+        "blurb": "double-delivered click: the write landed twice",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "duplicate",
+        "screen_pass": true,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 1.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 2
+      },
+      "stale": {
+        "n": 10,
+        "blurb": "last-write-wins destroyed a concurrent actor's row",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "collateral_loss",
+        "screen_pass": true,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 1.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 1
+      },
+      "timeout": {
+        "n": 10,
+        "blurb": "row committed, then the client aborted (screen false-abort)",
+        "ground_truth_correct": true,
+        "ground_truth_fault": "correct",
+        "screen_pass": false,
+        "effect_verdict": "confirmed",
+        "screen_silent_wrong_rate": 0.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 1
+      },
+      "session": {
+        "n": 10,
+        "blurb": "session expired (401): nothing persisted (both halt safely)",
+        "ground_truth_correct": false,
+        "ground_truth_fault": "absent",
+        "screen_pass": false,
+        "effect_verdict": "refuted",
+        "screen_silent_wrong_rate": 0.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 0
+      },
+      "idempotent": {
+        "n": 10,
+        "blurb": "recommended fix: idempotency key collapses the double-submit",
+        "ground_truth_correct": true,
+        "ground_truth_fault": "correct",
+        "screen_pass": true,
+        "effect_verdict": "confirmed",
+        "screen_silent_wrong_rate": 0.0,
+        "effect_silent_wrong_rate": 0.0,
+        "records_after": 1
+      }
+    }
+  },
+  "runs": [
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "ok",
+      "blurb": "control: a clean accepted write",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "partial",
+      "blurb": "backend persisted the row but dropped the note field",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "wrong_field",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "field 'note' is '', expected 'Silent-wrong-action benchmark triage note' (partial save -- the row persisted but this field was dropped or differs)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "optimistic",
+      "blurb": "UI painted success; the server then rejected the write",
+      "statuses": [
+        409
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "duplicate",
+      "blurb": "double-submit: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "double",
+      "blurb": "double-delivered click: the write landed twice",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 2,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "duplicate",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "2 records match the target selector but exactly 1 was expected (duplicate / double-delivered write -- not at-most-once)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "stale",
+      "blurb": "last-write-wins destroyed a concurrent actor's row",
+      "statuses": [
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "collateral_loss",
+      "screen_pass": true,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "1 pre-existing record(s) vanished -- collateral loss (stale / concurrent last-write-wins overwrote another actor's row)",
+      "screen_silent_wrong": true,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "timeout",
+      "blurb": "row committed, then the client aborted (screen false-abort)",
+      "statuses": [
+        null
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": false,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": true,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "session",
+      "blurb": "session expired (401): nothing persisted (both halt safely)",
+      "statuses": [
+        401
+      ],
+      "records_after": 0,
+      "ground_truth_correct": false,
+      "ground_truth_fault": "absent",
+      "screen_pass": false,
+      "effect_verdict": "refuted",
+      "effect_confirmed": false,
+      "effect_reason": "0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed)",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 0
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 1
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 2
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 3
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 4
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 5
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 6
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 7
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 8
+    },
+    {
+      "scenario": "idempotent",
+      "blurb": "recommended fix: idempotency key collapses the double-submit",
+      "statuses": [
+        200,
+        200
+      ],
+      "records_after": 1,
+      "ground_truth_correct": true,
+      "ground_truth_fault": "correct",
+      "screen_pass": true,
+      "effect_verdict": "confirmed",
+      "effect_confirmed": true,
+      "effect_reason": "field 'note' equals the expected value",
+      "screen_silent_wrong": false,
+      "effect_silent_wrong": false,
+      "screen_false_abort": false,
+      "effect_false_abort": false,
+      "i": 9
+    }
+  ]
+}

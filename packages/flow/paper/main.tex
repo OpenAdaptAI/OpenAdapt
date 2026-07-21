@@ -1,0 +1,87 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc,decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+
+% Shared figure palette.
+\definecolor{oaink}{HTML}{1F2933}
+\definecolor{oablue}{HTML}{2563EB}
+\definecolor{oagreen}{HTML}{15803D}
+\definecolor{oared}{HTML}{B91C1C}
+\definecolor{oaamber}{HTML}{B45309}
+\definecolor{oagray}{HTML}{E5E7EB}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue,
+  pdftitle={Compile Once, Govern Every Repair: Deterministic Replay for Repeated GUI Work},
+  pdfsubject={A reproducible technical-report draft for OpenAdapt}
+}
+\newcommand{\system}{OpenAdapt}
+\newcommand{\artifacturl}{\url{https://github.com/OpenAdaptAI/openadapt-flow}}
+
+\title{Compile Once, Govern Every Repair:\\Deterministic Replay for Repeated GUI Work}
+\author{Richard Abrich\\OpenAdapt.AI (MLDSAI Inc.)\\\texttt{richard@openadapt.ai}}
+\date{Draft of July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Reasoning through a known workflow on every run is wasteful and unsafe. It adds
+latency, inference cost, and run-to-run variation, and---because a rendered
+success banner is not a persisted write---it can report success after a partial,
+duplicate, stale, or rejected business effect. We present \system{}, a
+demonstration compiler that converts one recorded GUI trace into a deterministic
+program. Healthy replay follows structured elements and local visual evidence
+with \emph{no model calls}; when evidence changes, a resolution ladder
+re-resolves the target and records the change as a reviewable \emph{repair}; and
+the runtime \emph{refuses} to continue when configured identity, postcondition,
+effect, or policy checks cannot verify an action. The central safety mechanism is
+system-of-record effect verification: a consequential step declares a typed
+effect and checks it against the application's own state, not the screen.
+Measured end to end through the live replayer and judged by an independent
+system-of-record ground truth, screen-only verification silently accepted 54 of
+90 injected-fault runs; an out-of-band effect check cut that to 9 of 90 and a
+complete system-of-record read path to 0 of 90, the residual nine being one
+collateral-write class outside the out-of-band oracle's read coverage. The
+finding replicates on a second, non-healthcare lending domain: 21 of 33 silent
+wrong effects under screen-only verification, 0 of 33 under effect verification.
+Bounded experiments span a public OpenEMR
+workflow, a CI-reproducible fixture, a 29-application public-web corpus,
+transactional fault injection, adversarial identity tests, and scoped
+qualifications of native Windows UIA, macOS, and real-network RDP mechanisms.
+Across these tasks compiled replay reduced latency and per-run inference while
+preserving independently checked effects and ambiguity refusal. Every headline
+number in this paper is bound by a released machine-check to either a reviewed
+raw artifact or a bounded aggregate summary. The release publishes the engine,
+the machine-check, permitted benchmark files, and the failure taxonomy; grown
+identity and reliability corpora, deployment-derived tuning, per-target recipes,
+and raw private evaluation rows are not part of the public release.
+\end{abstract}
+
+\input{sections/01_introduction}
+\input{sections/01_related_work}
+\input{sections/02_system}
+\input{sections/03_governance}
+\input{sections/04_methodology}
+\input{sections/05_results}
+\input{sections/06_limitations}
+\input{sections/07_reproducibility}
+\input{sections/08_conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}

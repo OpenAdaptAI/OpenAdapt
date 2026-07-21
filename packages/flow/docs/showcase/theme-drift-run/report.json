@@ -1,0 +1,758 @@
+{
+  "workflow_name": "mockmed-triage",
+  "started_at": "2026-07-06T18:29:56.944727+00:00",
+  "params": {
+    "note": "Showcase triage booking three months"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click at (214, 195)",
+      "ok": true,
+      "resolution": {
+        "rung": "geometry",
+        "point": [
+          214,
+          195
+        ],
+        "confidence": 0.9,
+        "elapsed_ms": 527.1148746833205
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_000",
+        "kind": "anchor_refresh",
+        "rung_used": "geometry",
+        "old_anchor": {
+          "template": "templates/step_000.png",
+          "region": [
+            134,
+            163,
+            160,
+            64
+          ],
+          "click_point": [
+            214,
+            195
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Sign in to MockMed",
+              "distance_px": 131,
+              "dx_px": 77,
+              "dy_px": 106
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "Username",
+              "distance_px": 132,
+              "dx_px": 129,
+              "dy_px": 29
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_000.png",
+          "region": [
+            134,
+            163,
+            160,
+            64
+          ],
+          "click_point": [
+            214,
+            195
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Sign in to MockMed",
+              "distance_px": 131,
+              "dx_px": 77,
+              "dy_px": 106
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "Username",
+              "distance_px": 132,
+              "dx_px": 129,
+              "dy_px": 29
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_000/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 1036.5308336913586
+    },
+    {
+      "step_id": "step_001",
+      "intent": "type 'nurse.demo'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 581.5875846892595
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click at (214, 264)",
+      "ok": true,
+      "resolution": {
+        "rung": "geometry",
+        "point": [
+          214,
+          264
+        ],
+        "confidence": 0.9,
+        "elapsed_ms": 483.5854582488537
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_002",
+        "kind": "anchor_refresh",
+        "rung_used": "geometry",
+        "old_anchor": {
+          "template": "templates/step_002.png",
+          "region": [
+            134,
+            232,
+            160,
+            64
+          ],
+          "click_point": [
+            214,
+            264
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "left_of",
+              "ocr_text": "Sign In",
+              "distance_px": 112,
+              "dx_px": 94,
+              "dy_px": -60
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "nurse.demo",
+              "distance_px": 132,
+              "dx_px": 113,
+              "dy_px": 69
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_002.png",
+          "region": [
+            134,
+            232,
+            160,
+            64
+          ],
+          "click_point": [
+            214,
+            264
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "left_of",
+              "ocr_text": "Sign In",
+              "distance_px": 112,
+              "dx_px": 94,
+              "dy_px": -60
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "nurse.demo",
+              "distance_px": 132,
+              "dx_px": 113,
+              "dy_px": 69
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_002/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 942.5421673804522
+    },
+    {
+      "step_id": "step_003",
+      "intent": "type 'mockmed-demo-pass'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 339.3452502787113
+    },
+    {
+      "step_id": "step_004",
+      "intent": "click 'Sign In'",
+      "ok": true,
+      "resolution": {
+        "rung": "ocr",
+        "point": [
+          120,
+          324
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 295.23670859634876
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_004",
+        "kind": "anchor_refresh",
+        "rung_used": "ocr",
+        "old_anchor": {
+          "template": "templates/step_004.png",
+          "region": [
+            39,
+            292,
+            160,
+            64
+          ],
+          "click_point": [
+            119,
+            324
+          ],
+          "ocr_text": "Sign In",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Password",
+              "distance_px": 95,
+              "dx_px": 34,
+              "dy_px": 89
+            },
+            {
+              "relation": "above",
+              "ocr_text": "nurse.demo",
+              "distance_px": 130,
+              "dx_px": 19,
+              "dy_px": 129
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_004.png",
+          "region": [
+            40,
+            292,
+            160,
+            64
+          ],
+          "click_point": [
+            120,
+            324
+          ],
+          "ocr_text": "Sign In",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Password",
+              "distance_px": 95,
+              "dx_px": 34,
+              "dy_px": 89
+            },
+            {
+              "relation": "above",
+              "ocr_text": "nurse.demo",
+              "distance_px": 130,
+              "dx_px": 19,
+              "dy_px": 129
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_004/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 1122.5003749132156
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Open'",
+      "ok": true,
+      "resolution": {
+        "rung": "ocr",
+        "point": [
+          777,
+          186
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 377.1315421909094
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_005",
+        "kind": "anchor_refresh",
+        "rung_used": "ocr",
+        "old_anchor": {
+          "template": "templates/step_005.png",
+          "region": [
+            695,
+            154,
+            160,
+            64
+          ],
+          "click_point": [
+            775,
+            186
+          ],
+          "ocr_text": "Open",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Action",
+              "distance_px": 51,
+              "dx_px": 20,
+              "dy_px": 47
+            },
+            {
+              "relation": "below",
+              "ocr_text": "Open",
+              "distance_px": 58,
+              "dx_px": -2,
+              "dy_px": -58
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_005.png",
+          "region": [
+            697,
+            154,
+            160,
+            64
+          ],
+          "click_point": [
+            777,
+            186
+          ],
+          "ocr_text": "Open",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Action",
+              "distance_px": 51,
+              "dx_px": 20,
+              "dy_px": 47
+            },
+            {
+              "relation": "below",
+              "ocr_text": "Open",
+              "distance_px": 58,
+              "dx_px": -2,
+              "dy_px": -58
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_005/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 1192.341959103942
+    },
+    {
+      "step_id": "step_006",
+      "intent": "click 'New Encounter'",
+      "ok": true,
+      "resolution": {
+        "rung": "ocr",
+        "point": [
+          114,
+          159
+        ],
+        "confidence": 0.96,
+        "elapsed_ms": 327.7791254222393
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_006",
+        "kind": "anchor_refresh",
+        "rung_used": "ocr",
+        "old_anchor": {
+          "template": "templates/step_006.png",
+          "region": [
+            34,
+            127,
+            160,
+            64
+          ],
+          "click_point": [
+            114,
+            159
+          ],
+          "ocr_text": "New Encounter",
+          "landmarks": [
+            {
+              "relation": "below",
+              "ocr_text": "Encounters",
+              "distance_px": 61,
+              "dx_px": 34,
+              "dy_px": -51
+            },
+            {
+              "relation": "below",
+              "ocr_text": "No encountersyet.",
+              "distance_px": 85,
+              "dx_px": 24,
+              "dy_px": -82
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_006.png",
+          "region": [
+            34,
+            127,
+            160,
+            64
+          ],
+          "click_point": [
+            114,
+            159
+          ],
+          "ocr_text": "New Encounter",
+          "landmarks": [
+            {
+              "relation": "below",
+              "ocr_text": "Encounters",
+              "distance_px": 61,
+              "dx_px": 34,
+              "dy_px": -51
+            },
+            {
+              "relation": "below",
+              "ocr_text": "No encountersyet.",
+              "distance_px": 85,
+              "dx_px": 24,
+              "dy_px": -82
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_006/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_006_before.png",
+      "after_png": "steps/step_006_after.png",
+      "elapsed_ms": 1057.248417288065
+    },
+    {
+      "step_id": "step_007",
+      "intent": "click 'Triage'",
+      "ok": true,
+      "resolution": {
+        "rung": "ocr",
+        "point": [
+          85,
+          160
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 307.87454172968864
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_007",
+        "kind": "anchor_refresh",
+        "rung_used": "ocr",
+        "old_anchor": {
+          "template": "templates/step_007.png",
+          "region": [
+            5,
+            128,
+            160,
+            64
+          ],
+          "click_point": [
+            85,
+            160
+          ],
+          "ocr_text": "Triage",
+          "landmarks": [
+            {
+              "relation": "below",
+              "ocr_text": "Note",
+              "distance_px": 70,
+              "dx_px": 44,
+              "dy_px": -55
+            },
+            {
+              "relation": "above",
+              "ocr_text": "NewEncounter",
+              "distance_px": 76,
+              "dx_px": -27,
+              "dy_px": 71
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_007.png",
+          "region": [
+            5,
+            128,
+            160,
+            64
+          ],
+          "click_point": [
+            85,
+            160
+          ],
+          "ocr_text": "Triage",
+          "landmarks": [
+            {
+              "relation": "below",
+              "ocr_text": "Note",
+              "distance_px": 70,
+              "dx_px": 44,
+              "dy_px": -55
+            },
+            {
+              "relation": "above",
+              "ocr_text": "NewEncounter",
+              "distance_px": 76,
+              "dx_px": -27,
+              "dy_px": 71
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_007/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_007_before.png",
+      "after_png": "steps/step_007_after.png",
+      "elapsed_ms": 859.1104168444872
+    },
+    {
+      "step_id": "step_008",
+      "intent": "click at (344, 290)",
+      "ok": true,
+      "resolution": {
+        "rung": "geometry",
+        "point": [
+          344,
+          290
+        ],
+        "confidence": 0.9,
+        "elapsed_ms": 505.78083377331495
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_008",
+        "kind": "anchor_refresh",
+        "rung_used": "geometry",
+        "old_anchor": {
+          "template": "templates/step_008.png",
+          "region": [
+            184,
+            226,
+            320,
+            128
+          ],
+          "click_point": [
+            344,
+            290
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "left_of",
+              "ocr_text": "Consult",
+              "distance_px": 189,
+              "dx_px": 137,
+              "dy_px": 130
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "Save Encounter",
+              "distance_px": 233,
+              "dx_px": 210,
+              "dy_px": -101
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_008.png",
+          "region": [
+            184,
+            226,
+            320,
+            128
+          ],
+          "click_point": [
+            344,
+            290
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "left_of",
+              "ocr_text": "Consult",
+              "distance_px": 189,
+              "dx_px": 137,
+              "dy_px": 130
+            },
+            {
+              "relation": "left_of",
+              "ocr_text": "Save Encounter",
+              "distance_px": 233,
+              "dx_px": 210,
+              "dy_px": -101
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_008/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_008_before.png",
+      "after_png": "steps/step_008_after.png",
+      "elapsed_ms": 971.8694584444165
+    },
+    {
+      "step_id": "step_009",
+      "intent": "type <note>",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_009_before.png",
+      "after_png": "steps/step_009_after.png",
+      "elapsed_ms": 335.23920830339193
+    },
+    {
+      "step_id": "step_010",
+      "intent": "click 'Save Encounter'",
+      "ok": true,
+      "resolution": {
+        "rung": "ocr",
+        "point": [
+          133,
+          391
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 389.24199994653463
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_010",
+        "kind": "anchor_refresh",
+        "rung_used": "ocr",
+        "old_anchor": {
+          "template": "templates/step_010.png",
+          "region": [
+            54,
+            359,
+            160,
+            64
+          ],
+          "click_point": [
+            134,
+            391
+          ],
+          "ocr_text": "Save Encounter",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Showcase triage booking three months",
+              "distance_px": 162,
+              "dx_px": -71,
+              "dy_px": 146
+            },
+            {
+              "relation": "above",
+              "ocr_text": "Note",
+              "distance_px": 199,
+              "dx_px": 93,
+              "dy_px": 176
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_010.png",
+          "region": [
+            53,
+            359,
+            160,
+            64
+          ],
+          "click_point": [
+            133,
+            391
+          ],
+          "ocr_text": "Save Encounter",
+          "landmarks": [
+            {
+              "relation": "above",
+              "ocr_text": "Showcase triage booking three months",
+              "distance_px": 162,
+              "dx_px": -71,
+              "dy_px": 146
+            },
+            {
+              "relation": "above",
+              "ocr_text": "Note",
+              "distance_px": 199,
+              "dx_px": 93,
+              "dy_px": 176
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_010/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_010_before.png",
+      "after_png": "steps/step_010_after.png",
+      "elapsed_ms": 1255.196082405746
+    }
+  ],
+  "success": true,
+  "rung_counts": {
+    "geometry": 3,
+    "ocr": 5
+  },
+  "heal_count": 8,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "total_ms": 9693.565333262086
+}

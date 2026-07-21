@@ -1,0 +1,30 @@
+\section{Reproducibility and Artifacts}
+
+The source repository and reviewed public evaluation artifacts are published
+together \cite{openadaptartifact} at \artifacturl{}. The paper package includes
+a script that reads released benchmark JSON and fails if a headline constant
+drifts. Depending on the study, that released source is either a raw result or a
+bounded aggregate summary. Task definitions, benchmark prose, failure
+taxonomies, and selected run reports are versioned where their release boundary
+permits it. Grown identity and reliability corpora, deployment-derived tuning,
+target-specific recipes, and raw private rows are deliberately excluded. The
+machine-check therefore proves consistency between the paper and released
+evidence; it does not claim that every underlying private row is public or that
+the evidence independently proves ground truth.
+
+Evidence carries one of four labels:
+\begin{itemize}
+  \item \textbf{CI-reproducible}: fixture and environment can run in automated
+        CI, subject to browser and dependency availability.
+  \item \textbf{Field}: real third-party target, but shared mutable state or
+        credentials prevent full CI reproduction.
+  \item \textbf{Fixture/fault injection}: deterministic mechanism study, not a
+        population estimate.
+  \item \textbf{Descriptive}: useful for discovering failures, but missing the
+        repeated trials needed for comparative inference.
+\end{itemize}
+
+Before submission, the release candidate must re-run promoted experiments,
+archive its exact commit and environment, record task-level oracles, and check
+that no application artifact contains sensitive or prohibited data. The
+repository's \texttt{paper/ARTIFACT\_CHECKLIST.md} is the submission gate.

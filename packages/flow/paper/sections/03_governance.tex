@@ -1,0 +1,106 @@
+\section{Governed Execution}
+
+\subsection{Identity before action}
+Target resolution answers where to act; identity verification asks whether the
+resolved target belongs to the intended entity. Structured text is authoritative
+where available. On pure-pixel substrates, OCR ambiguity can make distinct
+identifiers observationally identical. The safe response is abstention and
+halt, not a guessed click. Importantly, identity guarantees apply only to armed
+steps. Current real bundles can contain unarmed clicks, so coverage is reported
+per workflow and certification policy can impose a minimum.
+
+\subsection{Effect verification}
+A screen may paint success after a partial, duplicate, rejected, or stale write.
+Consequential steps can therefore declare typed effects and use an independent
+verifier against REST, FHIR, or document state. The verifier snapshots the
+system of record before and after an action and returns confirmed, refuted, or
+indeterminate. A declared effect without a configured verifier halts.
+
+Crucially, the strong-oracle read is performed \emph{out of band}: the verifier
+queries the system of record through its own interface (a SQL read on a
+read-only role, a REST or FHIR read, or a document or file read), independently
+of the substrate that carried the write. It does not parse the pixel stream or
+scrape the rendered page. The same effect contract therefore holds whether the
+write was driven through a browser DOM, native accessibility, or a pixel-only
+remote session: what changes is only the connector, not the check. Because the
+read is out of band, an unreachable, unreadable, or unauthenticated system of
+record maps to indeterminate and halts; the runtime never upgrades ``I could not
+read the record'' into a reported success.
+
+Two consequences follow for pixel-only substrates such as RDP and Citrix. First,
+the effect check still applies as long as some out-of-band read path exists: the
+RDP qualification in Section~\ref{sec:results}, for instance, reads the persisted
+file through guest tools, a channel independent of the RDP display. Second, when
+a locked-down session exposes \emph{no} such path, no database, no reachable API,
+and no readable file, the transactional strong oracle is simply unavailable. The
+only fallback is a same-application re-read of the record, which cannot catch a
+partial save, a duplicate, a stale overwrite, or a lost update, and the honest
+runtime treats that as a halt rather than a confirmation. On such substrates the
+safety guarantee rests instead on the identity gate and halt-on-ambiguity, not on
+effect verification. Effects are currently authored per deployment; the compiler
+does not infer them from a single demonstration. This is the classic \emph{oracle
+problem}
+\cite{barr2015oracle} made concrete: the screen is a weak oracle and the
+application's own state is the strong oracle (Figure~\ref{fig:oracle}). Many of
+the faults it catches---duplicate submission, double delivery, stale
+overwrite---are exactly-once and idempotency hazards long studied in
+transactional systems \cite{gray1981transaction}.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  screen/.style={draw=oaink, rounded corners=2pt, minimum width=30mm,
+    minimum height=13mm, align=center, fill=white},
+  db/.style={draw=oaink, cylinder, shape border rotate=90, aspect=0.28,
+    minimum width=22mm, minimum height=15mm, align=center, fill=oagray!40,
+    inner sep=1pt},
+  verdict/.style={align=left, font=\footnotesize},
+  ]
+  % The action.
+  \node[align=center, font=\footnotesize\itshape] (act) {consequential\\action};
+  \node[screen, right=10mm of act] (scr)
+    {\textcolor{oagreen}{$\checkmark$}\,``Saved''\\\scriptsize green banner};
+  \node[db, right=20mm of scr] (db) {system of\\record};
+
+  \draw[-{Stealth[length=2mm]}, thick, oaink] (act) -- (scr);
+  \draw[-{Stealth[length=2mm]}, thick, oaink] (act.east) to[out=-30,in=180] (db.west);
+
+  % Weak vs strong oracle labels.
+  \node[above=1mm of scr, font=\scriptsize\itshape, text=oared] {weak oracle (screen)};
+  \node[above=1mm of db, font=\scriptsize\itshape, text=oagreen!55!black] {strong oracle (state)};
+
+  % The disagreement.
+  \node[verdict, below=7mm of scr, text width=78mm, xshift=18mm] (gap)
+    {\textcolor{oared}{Same green banner} can follow: partial save $\cdot$
+     duplicate $\cdot$ stale overwrite $\cdot$ silent reject.
+     \\[1mm]
+     \textcolor{oagreen!55!black}{Effect verifier} snapshots state before/after
+     $\Rightarrow$ \textbf{confirmed} / \textbf{refuted} / \textbf{indeterminate};
+     a refuted effect \emph{halts}.};
+  \draw[-{Stealth[length=1.6mm]}, oared, dashed] (scr.south) -- (gap.north -| scr.south);
+  \draw[-{Stealth[length=1.6mm]}, oagreen!55!black, dashed] (db.south) to[out=-90,in=0] (gap.east);
+\end{tikzpicture}
+\caption{Effect verification separates the weak screen oracle from the strong
+system-of-record oracle. A rendered success is evidence about pixels, not about
+a persisted write; only an independent before/after snapshot of the application's
+state can refute a silent wrong action. In the fault study this reduced silent
+acceptance from 50 of 90 runs to 0 of 90.}
+\label{fig:oracle}
+\end{figure}
+
+\subsection{Policy and refusal}
+The linter exposes unarmed clicks, vacuous postconditions, and risk-classifier
+gaps. Certification evaluates a named policy before deployment. A strict run
+gate can require certification, identity and effect coverage, encryption, and
+manifest integrity. Passing a policy means only that its assertions hold; it is
+not a general safety proof.
+
+\subsection{Sanitized artifact derivatives}
+Compilation is not de-identification. When an artifact crosses a boundary, the
+launch protocol inventories the source, transforms a copy with type-specific
+handlers, rescans the derivative, records unresolved findings and tool versions,
+and binds local review to the derivative hash. Unknown or unresolved content is
+refused. Sanitized authoring evidence is distinct from runtime observations:
+opening a live patient record can reintroduce protected information, which must
+remain inside the declared trusted execution boundary.

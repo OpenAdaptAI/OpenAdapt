@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_for": "OpenAdapt openIMIS claims-intake reference environment",
+  "upstreams": {
+    "openimis-dist_dkr": {
+      "url": "https://github.com/openimis/openimis-dist_dkr.git",
+      "commit": "cd6220d1f0578e56a589c47953250c2ad3d0caa5",
+      "license": "AGPL-3.0-only",
+      "license_file": "benchmark/openimis_claims/conf/nginx/LICENSE-AGPL-3.0.md",
+      "notice_file": "THIRD_PARTY_NOTICES.md",
+      "note": "compose topology and adapted conf/nginx templates",
+      "adapted_files": {
+        "benchmark/openimis_claims/compose.yml": {
+          "upstream_path": "compose.base.yml",
+          "upstream_sha256": "d630a35a3739846f7b548df02741db7605b6b356d523b74d96af9ed069e5c643",
+          "modification_status": "adapted",
+          "local_sha256": "7363bd86f233760cf3b0518864f385ad5ff89c43c37ef0f1621bac027ca3a90b",
+          "additional_upstream_sources": {
+            "compose.postgresql.yml": "2038cc6a76be39c0ec15b0965d5d9c161d7f4706c1a125eff70be8d5b5b7dc94",
+            "compose.cache.yml": "4a2d2ce493494292fc65f54a7d53ee622d435e25d0e59900a307d917016f500c"
+          }
+        },
+        "benchmark/openimis_claims/conf/nginx/openimis.conf": {
+          "upstream_path": "conf/nginx/openimis.conf",
+          "upstream_sha256": "4ef6926304640d1cf42412d4a325c3468e5c0a53f36912d4714b99687e0c1d5a",
+          "modification_status": "adapted",
+          "local_sha256": "cb52a65b81c6501ce84ebd9e1a719cb7026d2c018a58788a5368ec5f86df9762"
+        },
+        "benchmark/openimis_claims/conf/nginx/locations/backend.loc": {
+          "upstream_path": "conf/nginx/locations/backend.loc",
+          "upstream_sha256": "790f7c16dc7cd95e7f8bebb584670ce24759c0a5a995e4c6dbabfeadb289f015",
+          "modification_status": "adapted",
+          "local_sha256": "6f68567dc9e50e07e9996c5bb9d81b1d7dde8e407688bd197f7f675d061227c4"
+        },
+        "benchmark/openimis_claims/conf/nginx/locations/frontend.loc": {
+          "upstream_path": "conf/nginx/locations/frontend.loc",
+          "upstream_sha256": "09570a3f630dc32b56efff592ee545990dd7c44e75db5793f5d8585e0bbf07f1",
+          "modification_status": "adapted",
+          "local_sha256": "6778193d4c0ceb8a3a1a5d2bcb967ff3538ec2765c3fcb678ee64c3e95c0b6a1"
+        },
+        "benchmark/openimis_claims/conf/nginx/variables/var.conf": {
+          "upstream_path": "conf/nginx/variables/var.conf",
+          "upstream_sha256": "807856dc6650fb56bcfbefafab6d7e0574757c6c67a635b34d3854a942df6841",
+          "modification_status": "adapted",
+          "local_sha256": "75a5c2831c1f8703d1ec3efbdadd64d3797ac5377370edab44b518caa4de704d"
+        }
+      }
+    }
+  },
+  "services": {
+    "backend": "ghcr.io/openimis/openimis-be:25.10@sha256:a77228c7469fab5f3523d3f7b9877d62aa116b303fd87a6d55aa3a46c1892592",
+    "frontend": "ghcr.io/openimis/openimis-fe:25.10@sha256:ed0e0b1dbe91308d4df3322a1aee40176b42d47bbf72fea79a59fa84ef63db4a",
+    "pgsql": "ghcr.io/openimis/openimis-pgsql:25.10@sha256:d4bc881e408b74b4cf47fb718534fe0f10940bb951b6cb7ee9a1a30048adf29d",
+    "redis": "redis@sha256:234c902a2db49461a129e2d4aeff85b28cf20187ed274a67f6e50995fa713c7b",
+    "rabbitmq": "rabbitmq:3-management@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69"
+  },
+  "platform_note": "openIMIS 25.10 images publish linux/amd64 only; on Apple Silicon they run under Docker Desktop's Rosetta emulation (verified 2026-07-17 on macOS/arm64).",
+  "database": "IMIS",
+  "project": "openadapt-openimis-claims"
+}

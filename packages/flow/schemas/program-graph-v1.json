@@ -1,0 +1,711 @@
+{
+  "$defs": {
+    "BundleMeta": {
+      "description": "Bundle-level summary shown in the visualization header.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "schema_version": {
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport"
+        },
+        "is_program": {
+          "default": false,
+          "description": "True when a Phase-2 ProgramGraph is present (branches/loops); False for a linear step list.",
+          "title": "Is Program",
+          "type": "boolean"
+        },
+        "contains_phi": {
+          "default": false,
+          "title": "Contains Phi",
+          "type": "boolean"
+        },
+        "phi_scrubbed": {
+          "default": false,
+          "title": "Phi Scrubbed",
+          "type": "boolean"
+        },
+        "encrypted": {
+          "default": false,
+          "title": "Encrypted",
+          "type": "boolean"
+        },
+        "step_count": {
+          "default": 0,
+          "title": "Step Count",
+          "type": "integer"
+        },
+        "action_count": {
+          "default": 0,
+          "title": "Action Count",
+          "type": "integer"
+        },
+        "irreversible_count": {
+          "default": 0,
+          "title": "Irreversible Count",
+          "type": "integer"
+        },
+        "identity_armed_count": {
+          "default": 0,
+          "title": "Identity Armed Count",
+          "type": "integer"
+        },
+        "identity_unarmed_count": {
+          "default": 0,
+          "title": "Identity Unarmed Count",
+          "type": "integer"
+        },
+        "effect_count": {
+          "default": 0,
+          "title": "Effect Count",
+          "type": "integer"
+        },
+        "api_binding_count": {
+          "default": 0,
+          "title": "Api Binding Count",
+          "type": "integer"
+        },
+        "halt_point_count": {
+          "default": 0,
+          "title": "Halt Point Count",
+          "type": "integer"
+        },
+        "params": {
+          "items": {
+            "$ref": "#/$defs/ParamInfo"
+          },
+          "title": "Params",
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/ProvenanceInfo"
+        }
+      },
+      "required": [
+        "name",
+        "schema_version"
+      ],
+      "title": "BundleMeta",
+      "type": "object"
+    },
+    "EdgeKind": {
+      "description": "Kind of graph edge. ``sequence`` is the unconditional next-step edge of a\nlinear program; ``branch`` is a guarded transition; ``exception`` routes a\nfailed action to a handler; ``loop_body`` links a loop node to its per-row\nbody. Only ``sequence`` occurs in a linear bundle today; the rest leave room\nfor compiled control flow.",
+      "enum": [
+        "sequence",
+        "branch",
+        "exception",
+        "loop_body"
+      ],
+      "title": "EdgeKind",
+      "type": "string"
+    },
+    "EffectInfo": {
+      "description": "One declared system-of-record effect on a node -- what must be true of\nthe REAL record for the step to have actually succeeded (verified after the\naction; a non-confirmed verdict HALTs).",
+      "properties": {
+        "kind": {
+          "description": "record_written | field_equals",
+          "title": "Kind",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Short human description of the effect contract",
+          "title": "Summary",
+          "type": "string"
+        },
+        "risk": {
+          "default": "reversible",
+          "title": "Risk",
+          "type": "string"
+        },
+        "needs_operator_confirmation": {
+          "default": false,
+          "description": "Placeholder effect: binding not derivable from the demo; HALTs until bound",
+          "title": "Needs Operator Confirmation",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "summary"
+      ],
+      "title": "EffectInfo",
+      "type": "object"
+    },
+    "GraphEdge": {
+      "description": "A directed edge between two nodes.",
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EdgeKind",
+          "default": "sequence"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "guard": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Guard summary for a branch edge",
+          "title": "Guard"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "GraphEdge",
+      "type": "object"
+    },
+    "GraphNode": {
+      "description": "A node in the program graph. A compiled step projects to an ``action``\nnode; a Phase-2 program state projects to its matching kind.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "index": {
+          "description": "0-based order in the program (for layout)",
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/NodeKind",
+          "default": "action"
+        },
+        "title": {
+          "description": "Human-readable intent / purpose",
+          "title": "Title",
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "click|type|key|wait|scroll",
+          "title": "Action"
+        },
+        "risk": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "reversible|irreversible",
+          "title": "Risk"
+        },
+        "param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bound run parameter, if any",
+          "title": "Param"
+        },
+        "secret": {
+          "default": false,
+          "description": "Types a secret (never stored)",
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key for a KEY action",
+          "title": "Key"
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResolutionInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/EffectInfo"
+          },
+          "title": "Effects",
+          "type": "array"
+        },
+        "has_api_binding": {
+          "default": false,
+          "title": "Has Api Binding",
+          "type": "boolean"
+        },
+        "api_summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Summary"
+        },
+        "postconditions": {
+          "description": "Vision postcondition kinds checked after the action",
+          "items": {
+            "type": "string"
+          },
+          "title": "Postconditions",
+          "type": "array"
+        },
+        "guard": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Precondition summary, if guarded",
+          "title": "Guard"
+        },
+        "guard_on_unmet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "halt|skip when guard unmet",
+          "title": "Guard On Unmet"
+        },
+        "wait_until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Readiness predicate summary",
+          "title": "Wait Until"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "success|halt|escalate",
+          "title": "Outcome"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "halts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Halts",
+          "type": "array"
+        },
+        "badges": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Badges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "index",
+        "title"
+      ],
+      "title": "GraphNode",
+      "type": "object"
+    },
+    "IdentityInfo": {
+      "description": "The pre-action identity gate for a click / anchored-type node -- the\nwrong-record guard's compile-time coverage.\n\n``armed`` is True when the gate will verify the target's identity band\nbefore acting, False when the step will act WITHOUT identity verification\n(``reason`` says why it compiled unarmed), and None when identity does not\napply to this node. ``phi_free`` is True when identity is carried as a\nsalted-hash template rather than a plaintext band.",
+      "properties": {
+        "applicable": {
+          "default": false,
+          "description": "Does an identity gate apply?",
+          "title": "Applicable",
+          "type": "boolean"
+        },
+        "armed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Is the gate armed?",
+          "title": "Armed"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the step compiled unarmed (if unarmed)",
+          "title": "Reason"
+        },
+        "phi_free": {
+          "default": false,
+          "description": "Identity carried as salted-hash template (no plaintext)",
+          "title": "Phi Free",
+          "type": "boolean"
+        },
+        "has_structured": {
+          "default": false,
+          "description": "Structured (DOM/a11y) identity present",
+          "title": "Has Structured",
+          "type": "boolean"
+        },
+        "has_identifier_crop": {
+          "default": false,
+          "description": "Pixel identifier crop present",
+          "title": "Has Identifier Crop",
+          "type": "boolean"
+        }
+      },
+      "title": "IdentityInfo",
+      "type": "object"
+    },
+    "NodeKind": {
+      "description": "Kind of graph node -- mirrors :class:`openadapt_flow.ir.StateKind` so a\nPhase-2 program graph projects 1:1, while a linear bundle is all ``action``\nnodes plus a trailing ``terminal``.",
+      "enum": [
+        "action",
+        "branch",
+        "loop",
+        "subflow_call",
+        "terminal"
+      ],
+      "title": "NodeKind",
+      "type": "string"
+    },
+    "ParamInfo": {
+      "description": "A typed workflow parameter (the run's inputs).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "title": "Type",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Example"
+        },
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Choices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ParamInfo",
+      "type": "object"
+    },
+    "ProvenanceInfo": {
+      "description": "Bundle provenance + certification, projected from the bundle manifest.",
+      "properties": {
+        "compiler_version": {
+          "default": "",
+          "title": "Compiler Version",
+          "type": "string"
+        },
+        "certified": {
+          "default": false,
+          "title": "Certified",
+          "type": "boolean"
+        },
+        "certification_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Certification Status"
+        },
+        "policy_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Name"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "content_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Digest"
+        },
+        "source_recording_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Recording Sha256"
+        }
+      },
+      "title": "ProvenanceInfo",
+      "type": "object"
+    },
+    "ResolutionInfo": {
+      "description": "The full resolution ladder for an action node (ordered strongest-first).\n\n``top_rung`` names the strongest rung actually present -- the one the\nruntime prefers -- so a surface can badge \"resolves by DOM selector\" vs\n\"resolves by pixels\" at a glance.",
+      "properties": {
+        "rungs": {
+          "items": {
+            "$ref": "#/$defs/ResolutionRung"
+          },
+          "title": "Rungs",
+          "type": "array"
+        },
+        "top_rung": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Strongest present rung (None if none captured)",
+          "title": "Top Rung"
+        }
+      },
+      "title": "ResolutionInfo",
+      "type": "object"
+    },
+    "ResolutionRung": {
+      "description": "One rung of the target-resolution ladder for an action node.\n\nThe ladder is consumed strongest-first at replay (structural DOM/UIA ->\ntemplate -> ocr -> landmarks -> grounder), with an optional API tier ABOVE\nthe GUI ladder. ``present`` is whether the compiler captured evidence for\nthis rung; ``detail`` is a short human hint (e.g. the selector, or landmark\ncount).",
+      "properties": {
+        "name": {
+          "description": "Rung id: api|structural|template|ocr|landmarks|grounder",
+          "title": "Name",
+          "type": "string"
+        },
+        "label": {
+          "description": "Human label for the rung",
+          "title": "Label",
+          "type": "string"
+        },
+        "present": {
+          "description": "Whether the compiler captured this rung",
+          "title": "Present",
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "description": "Short human hint about the evidence",
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "present"
+      ],
+      "title": "ResolutionRung",
+      "type": "object"
+    }
+  },
+  "description": "Shared, serializable visualization spec emitted by openadapt-flow from a compiled bundle. Every visualization surface (CLI, cloud, desktop) renders THIS; none re-parse the bundle IR.",
+  "properties": {
+    "spec_version": {
+      "default": 1,
+      "title": "Spec Version",
+      "type": "integer"
+    },
+    "bundle": {
+      "$ref": "#/$defs/BundleMeta"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/GraphNode"
+      },
+      "title": "Nodes",
+      "type": "array"
+    },
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/GraphEdge"
+      },
+      "title": "Edges",
+      "type": "array"
+    }
+  },
+  "required": [
+    "bundle"
+  ],
+  "title": "OpenAdapt Program Graph Spec v1",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/program-graph-v1.json"
+}

@@ -1,0 +1,70 @@
+# Source-equivalent to frappe_docker images/layered/Containerfile at
+# c004361e790125ed13aaa933d11f7838711a8960, with official v16.27.0 OCI
+# manifest-list digests substituted for its mutable base-image references.
+ARG FRAPPE_BUILD_IMAGE=frappe/build:v16.27.0@sha256:03e6e1266d8427cbc8b524d5dc1afcfdf313dd3e0dc01f384e1564a10df970b2
+ARG FRAPPE_BASE_IMAGE=frappe/base:v16.27.0@sha256:87f036846924f1b9be1b30d590e7156c1013f73bbf946e6a43d8f1560a1f0d33
+
+FROM ${FRAPPE_BUILD_IMAGE} AS builder
+
+ARG FRAPPE_BRANCH=v16.27.0
+ARG FRAPPE_PATH=https://github.com/frappe/frappe.git
+ARG FRAPPE_COMMIT
+ARG ERPNEXT_COMMIT
+ARG LENDING_COMMIT
+ARG CACHE_BUST=""
+
+USER frappe
+
+RUN --mount=type=secret,id=apps_json,target=/opt/frappe/apps.json,uid=1000,gid=1000 \
+  : "${CACHE_BUST}" && \
+  export APP_INSTALL_ARGS="" && \
+  if [ -f /opt/frappe/apps.json ] && [ -s /opt/frappe/apps.json ]; then \
+    export APP_INSTALL_ARGS="--apps_path=/opt/frappe/apps.json"; \
+  fi && \
+  bench init ${APP_INSTALL_ARGS} \
+    --frappe-branch=${FRAPPE_BRANCH} \
+    --frappe-path=${FRAPPE_PATH} \
+    --no-procfile \
+    --no-backups \
+    --skip-redis-config-generation \
+    --verbose \
+    /home/frappe/frappe-bench && \
+  cd /home/frappe/frappe-bench && \
+  test "$(git -C apps/frappe rev-parse HEAD)" = "${FRAPPE_COMMIT}" && \
+  test "$(git -C apps/erpnext rev-parse HEAD)" = "${ERPNEXT_COMMIT}" && \
+  test "$(git -C apps/lending rev-parse HEAD)" = "${LENDING_COMMIT}" && \
+  echo "{}" > sites/common_site_config.json && \
+  find apps -mindepth 1 -path "*/.git" | xargs rm -fr
+
+FROM ${FRAPPE_BASE_IMAGE} AS backend
+
+ARG FRAPPE_COMMIT
+ARG ERPNEXT_COMMIT
+ARG LENDING_COMMIT
+ARG FRAPPE_DOCKER_COMMIT
+
+LABEL ai.openadapt.benchmark.frappe.commit="${FRAPPE_COMMIT}" \
+  ai.openadapt.benchmark.erpnext.commit="${ERPNEXT_COMMIT}" \
+  ai.openadapt.benchmark.lending.commit="${LENDING_COMMIT}" \
+  ai.openadapt.benchmark.frappe_docker.commit="${FRAPPE_DOCKER_COMMIT}"
+
+USER frappe
+
+COPY --from=builder --chown=frappe:frappe /home/frappe/frappe-bench /home/frappe/frappe-bench
+
+WORKDIR /home/frappe/frappe-bench
+
+RUN cp -r /home/frappe/frappe-bench/sites/assets /home/frappe/frappe-bench/assets && \
+  rm -rf /home/frappe/frappe-bench/sites/assets
+
+VOLUME ["/home/frappe/frappe-bench/sites", "/home/frappe/frappe-bench/logs"]
+
+USER root
+COPY resources/core/main-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
+COPY resources/core/start.sh /usr/local/bin/start.sh
+RUN chmod 755 /usr/local/bin/start.sh
+
+USER frappe
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["start.sh"]

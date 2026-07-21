@@ -1,0 +1,162 @@
+# openadapt-flow deployment configuration.
+#
+# ONE file wires a full deployment. It is read by:
+#   record | compile | certify | replay | run | resume   (via --config)
+# so the same backend / actuation / effects / runtime / policy configuration
+# drives every stage.
+#
+# Every section is OPTIONAL. An empty file is a valid deployment: fully local,
+# GUI-only, no effect verification, non-durable, zero outbound calls. Add only
+# the sections your deployment needs.
+#
+# Loader + schema: openadapt_flow/deployment.py (DeploymentConfig).
+
+name: mockmed-triage-demo
+
+# -- backend: where/how to drive the target application's GUI ----------------
+backend:
+  # The GUI URL under automation. Omit to let the command choose its default
+  # (replay/run serve the bundled MockMed demo app when no url is given).
+  url: http://localhost:8080
+  headed: false            # true => a visible browser (demo / debugging)
+
+  # Native Linux alternative (AT-SPI, one exact X11 app window):
+  # kind: linux
+  # linux_app: gedit
+  # linux_window_title: oa-trial.txt
+  # linux_allow_physical_input: false  # native AT-SPI actions only by default
+
+# -- actuation: the API/tool tier (top of the capability ladder) -------------
+# When api=true, a step carrying an ir.ApiBinding is PERFORMED via the API
+# (deterministic, $0, no GUI) and confirmed by the effects verifier below;
+# the GUI resolve/act is skipped for that step. Disabled => GUI ladder only.
+actuation:
+  api: false
+  base_url: http://localhost:8080   # base for relative ApiBinding url_templates
+  timeout_s: 5.0
+
+# -- effects: the system of record consequential writes are verified against -
+# kind: none | rest | fhir | sql | file | document-hash
+#   none          -> no verifier (replay HALTs; governed run may execute GUI
+#                    writes only with --approve-unverified-writes, recorded as
+#                    approved-unverified; direct API writes still refuse)
+#   rest          -> JSON REST SoR (e.g. MockMed /api/db, Frappe REST)
+#   fhir          -> FHIR R4 search (e.g. OpenEMR)
+#   sql           -> a read-only SELECT against the app database (enforced
+#                    statement whitelist; the verifier cannot write)
+#   file          -> file/SFTP arrival (pattern + size>0 + mtime freshness +
+#                    optional content probe)
+#   document-hash -> a filesystem document store (exact SHA-256 content)
+#
+# Kit conventions (docs/EFFECT_KIT.md):
+#   * SECRETS ARE REFERENCES: auth / access_token_env / sql_password_env name
+#     env vars; a missing var fails LOUD at construction. Never put a
+#     credential literal in this file.
+#   * RUN-PARAM BINDING IS EXPLICIT: path_params / search_param_exprs /
+#     sql_query_params values are {param: name} or {literal: v} (a bare
+#     string is a literal), resolved against the governed --params-file /
+#     --param values when the verifier is built.
+effects:
+  kind: rest
+
+  # rest ---------------------------------------------------------------------
+  base_url: http://localhost:8080
+  records_path: /api/db
+  records_key: records
+  # Secret-isolated auth (exactly one style; values are ENV VAR NAMES):
+  # auth:
+  #   bearer_env: SOR_BEARER_TOKEN
+  #   # header: Authorization        # arbitrary-header style (e.g. Frappe
+  #   # value_env: FRAPPE_API_AUTH   #   "token <key>:<secret>")
+  #   # basic_env: SOR_BASIC_CREDS   # "user:pass"
+  # Template the records path against run params ({applicant} in the path):
+  # records_path: "/api/resource/Loan Application?filters=[[\"applicant\",\"=\",\"{applicant}\"]]"
+  # path_params:
+  #   applicant: { param: applicant }
+
+  # fhir (used when kind: fhir) ----------------------------------------------
+  # base_url: https://openemr.example.org/apis/default/fhir
+  # resource_type: Observation
+  # search_params: { category: vital-signs }
+  # search_param_exprs:
+  #   patient: { param: patient_ref }      # bound per-run
+  # access_token_env: OPENEMR_FHIR_TOKEN   # secret-isolated (preferred over
+  #                                        # the deprecated access_token literal)
+  # verify_tls: true
+
+  # sql (used when kind: sql) -------------------------------------------------
+  # sql_query: >-
+  #   SELECT name, applicant, loan_product, loan_amount
+  #   FROM "tabLoan Application" WHERE applicant = :applicant
+  # sql_query_params:
+  #   applicant: { param: applicant }
+  # sqlite_database: /var/lib/app/app.db   # stdlib sqlite3 driver, OR:
+  # sql_driver: pymysql                    # any DB-API module name
+  # sql_connect_args: { host: db.internal, user: oracle_ro, database: app }
+  # sql_password_env: ORACLE_RO_PASSWORD   # injected as connect(password=...)
+
+  # file (used when kind: file) -----------------------------------------------
+  # root: /var/lib/interface/outbox
+  # file_pattern: "claim_batch_*.csv"
+  # file_min_size: 1
+  # file_mtime_window_s: 120
+  # file_content_probe: "^BATCH_HEADER"
+
+  # document-hash (used when kind: document-hash) ----------------------------
+  # root: /var/lib/exports
+  # glob: "**/*.pdf"
+
+  timeout_s: 5.0
+  poll_interval_s: 0.2
+
+# -- runtime: durability + model-egress posture ------------------------------
+runtime:
+  # Tier-3 durable runtime: checkpoint each verified step, durably PAUSE on a
+  # halt (never re-perform a confirmed write), resume via `openadapt-flow
+  # resume <run_dir>`. Off by default.
+  durable: true
+
+  # EGRESS OPT-IN (PHI audit REM-3). Off => fully local, zero outbound calls.
+  # true => permit wiring an off-box model grounder / identity-VLM / state
+  # verifier (screenshots may leave the box). Leave false unless required.
+  allow_model_grounding: false
+
+  # Arm the pixel-compare identity tier's VERIFY branch (experimental,
+  # evidence-gated). Off by default: the tier can still HALT on a wrong
+  # identifier or ABSTAIN, it just never pixel-VERIFIES a match. Only set true
+  # on a substrate where the pixel VERIFY gate has been validated for your
+  # renders (see docs/LIMITS.md); MISMATCH/ABSTAIN are unaffected either way.
+  pixel_verify_enabled: false
+
+  # Operator-selected ("bring your own") model grounder: the VLM fallback rung
+  # BEHIND the local OCR rung. Configuring it NEVER enables egress by itself —
+  # `allow_model_grounding` above still governs whether anything leaves the box.
+  # The API key is a REFERENCE (`api_key_env` names an env var), never a literal.
+  grounding_model:
+    enabled: false
+    # anthropic          -> the built-in Anthropic API path.
+    # openai_compatible  -> any {base_url}/chat/completions vision endpoint
+    #                       (OpenRouter, Azure OpenAI, a Bedrock/OpenAI proxy,
+    #                       self-hosted vLLM / Ollama / LM Studio).
+    provider: openai_compatible
+    base_url: "http://vllm.internal:8000/v1"   # openai_compatible only
+    model: "qwen2.5-vl-7b-instruct"
+    api_key_env: "OPENADAPT_FLOW_GROUNDING_API_KEY"  # env var NAME, not the key
+
+  # PHI-mode egress allowlist (FAIL-CLOSED). When PHI mode is active
+  # (OPENADAPT_FLOW_PHI_MODE / SCRUB=on), a configured grounding endpoint is
+  # REFUSED unless its host appears here — the run then stays FULLY LOCAL. Empty
+  # => no endpoint may egress under PHI. Non-PHI runs ignore this list (the
+  # normal egress opt-in governs). Known public aggregators (openrouter.ai,
+  # api.openai.com, api.anthropic.com, generativelanguage.googleapis.com) stay
+  # BLOCKED under PHI even if listed here, unless phi_egress_attested is true.
+  phi_grounding_allowlist:
+    - "vllm.internal"
+  # Admin attestation that a BAA / equivalent covers the public aggregators
+  # above. Default false => they are blocked under PHI regardless of allowlist.
+  phi_egress_attested: false
+
+# -- policy: the safety policy that certifies this bundle --------------------
+policy:
+  # A policy YAML path, or a shipped built-in name (permissive, clinical-write).
+  policy: clinical-write

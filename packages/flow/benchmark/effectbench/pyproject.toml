@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "effectbench"
+version = "1.0.0"
+description = "EffectBench: the Silent Wrong-Effect Rate (SWER) benchmark for automation agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "OpenAdapt.AI (MLDSAI Inc.)" }]
+keywords = ["benchmark", "agents", "reliability", "swer", "effect-verification"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+# pydantic is the ONLY runtime dependency -- EffectBench installs and runs
+# without the OpenAdapt codebase.
+dependencies = ["pydantic>=2,<3"]
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-flow"
+Specification = "https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effectbench/SPEC.md"
+
+[project.scripts]
+effectbench = "effectbench.__main__:main"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+# Package ONLY the standalone `effectbench` package. The sibling
+# container-gated task_pack (real-system-of-record recipes) and the engine
+# re-expression are NOT part of this artifact -- they are excluded here so no
+# crown-jewel recipe or non-synthetic dataset can ride inside the wheel/sdist.
+[tool.hatch.build.targets.wheel]
+packages = ["effectbench"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/effectbench",
+    "/tests",
+    "/SPEC.md",
+    "/LEADERBOARD.md",
+    "/README.md",
+    "/VERSION",
+    "/LICENSE",
+    "/results",
+]
+exclude = [
+    "/task_pack",
+    "/reference_fault_model.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

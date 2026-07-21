@@ -1,0 +1,173 @@
+name: Validate claims
+
+# Make every public maturity claim a FUNCTION of automated evidence.
+#
+#   - pull_request: run the fast claim->evidence GATE
+#     (scripts/validate_claims.py --check) on every PR. This is a
+#     required-check CANDIDATE: wire it into branch protection as the context
+#     "validate-claims" to block a PR that overclaims (a `supported` claim whose
+#     only backing is an opt-in/infra-gated test, a `field` result labeled
+#     `supported`, or a missing evidence path). It NEVER touches infra.
+#   - schedule + workflow_dispatch: the infra-gated leg that provisions a real
+#     Windows VM (via oa-vm) and runs the OPT-IN desktop + Citrix e2e that back
+#     the `validating` tiers, then regenerates the evidence report. Where the
+#     infra/secrets are absent it SKIPS cleanly and says so -- it never fakes a
+#     pass (a fabricated green would defeat the whole harness).
+#
+# GitHub Actions are pinned to full commit SHAs (supply-chain control); the
+# trailing comment records the human-readable version, matching ci.yml.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 8 * * 1" # 08:00 UTC Mondays: refresh the validating-tier evidence
+  workflow_dispatch:
+    inputs:
+      run_infra:
+        description: "Provision a Windows VM and run the opt-in desktop/Citrix e2e"
+        type: boolean
+        default: false
+
+concurrency:
+  group: validate-claims-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # --- Required-check candidate: the fast claim->evidence GATE --------------
+  # Structural, sub-second, no browser/OS/infra: parses claims.yaml and fails
+  # if any claim's tier outranks its strongest backing evidence, or an evidence
+  # path is missing. Runs on every PR. See scripts/validate_claims.py.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # The validator needs only PyYAML + stdlib (no package install, no
+      # browser), so the gate stays fast and cannot be broken by heavy deps.
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6"
+
+      - name: Claim -> evidence gate
+        run: python scripts/validate_claims.py --check
+
+      # Prove the doc is regenerable and in sync with the registry: regenerate
+      # docs/VERIFICATION.md + docs/verification.json into a temp dir would be
+      # ideal, but the simplest honest check is to regenerate in place and fail
+      # if it drifts from what is committed (a stale report is itself a drift).
+      # The committed docs/VERIFICATION.md is generated with this FIXED sentinel
+      # `--now` (not a wall-clock) so the report is a deterministic function of
+      # the registry -- the sync diff then flags real content drift only, not a
+      # changing timestamp. The infra leg below regenerates with a real
+      # timestamp for its uploaded (non-committed) artifact.
+      - name: Report is in sync with the registry
+        run: |
+          python scripts/validate_claims.py --report \
+            --now "committed registry state (regenerate: scripts/validate_claims.py --report)" \
+            >/dev/null
+          if ! git diff --quiet -- docs/VERIFICATION.md docs/verification.json; then
+            echo "::error::docs/VERIFICATION.md is stale. Run:" \
+              "python scripts/validate_claims.py --report and commit the result."
+            git --no-pager diff -- docs/VERIFICATION.md docs/verification.json
+            exit 1
+          fi
+
+      - name: Also run the validator's own tests
+        run: |
+          pip install "pytest>=8"
+          pytest -q tests/test_validate_claims.py
+
+  # --- Infra-gated: refresh the VALIDATING-tier evidence on a real VM -------
+  # Provisions a Windows VM via oa-vm and runs the OPT-IN desktop + Citrix e2e
+  # that ground the `windows-desktop-validating` / `citrix-pixel-validating`
+  # claims (see tests/e2e/test_parallels_desktop_e2e.py and
+  # tests/e2e/test_citrix_pixel_e2e.py). NOT run on PRs and NOT a required
+  # check. It documents the human, infra half the PR gate cannot self-generate.
+  #
+  # IMPORTANT: when the VM credentials/runner are absent this job SKIPS every
+  # infra step (never fails, never fabricates a pass). A green here means the
+  # opt-in e2e actually ran on real infra; a skip means "not proven this run".
+  refresh-validating-evidence:
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Gate the whole infra leg on a secret being present. Secrets are not
+      # available to forks/PRs, so this cannot be tricked into running from an
+      # untrusted PR, and a repo without infra configured simply skips.
+      - name: Detect infra availability
+        id: infra
+        env:
+          OA_VM_TOKEN: ${{ secrets.OA_VM_TOKEN }}
+        run: |
+          if [ -n "${OA_VM_TOKEN}" ] && \
+             { [ "${{ github.event_name }}" = "schedule" ] || \
+               [ "${{ github.event.inputs.run_infra }}" = "true" ]; }; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Windows VM infra not available (no OA_VM_TOKEN or" \
+              "run_infra not requested) -- SKIPPING the opt-in desktop/Citrix" \
+              "e2e. This is a clean skip, NOT a pass. The validating-tier" \
+              "claims remain grounded by their committed opt-in tests."
+          fi
+
+      # The following steps are the DOCUMENTED infra path. They only run when a
+      # real VM is reachable; otherwise they are skipped by the `if:` guard.
+      - name: Provision Windows VM (oa-vm)
+        if: steps.infra.outputs.available == 'true'
+        env:
+          OA_VM_TOKEN: ${{ secrets.OA_VM_TOKEN }}
+        run: |
+          pip install "pyyaml>=6"
+          pip install -e .[dev]
+          # oa-vm brings up a WAA pool VM; the win_agent + Parallels/RDP target
+          # is what the opt-in e2e drive. Terminate is in the always() step.
+          oa-vm pool-create --name claims-validation
+          oa-vm pool-wait --name claims-validation
+
+      - name: Run opt-in desktop + Citrix e2e (the validating-tier proofs)
+        if: steps.infra.outputs.available == 'true'
+        env:
+          OAFLOW_PARALLELS_E2E: "1"
+          OAFLOW_CITRIX_PIXEL_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -q \
+            tests/e2e/test_parallels_desktop_e2e.py \
+            tests/e2e/test_citrix_pixel_e2e.py \
+            --junitxml=runs/validating-junit.xml --basetemp=runs/ci
+
+      - name: Regenerate evidence report with the live green-check
+        if: steps.infra.outputs.available == 'true'
+        run: |
+          python scripts/validate_claims.py --report \
+            --junit runs/validating-junit.xml
+
+      - name: Upload refreshed evidence
+        if: steps.infra.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-evidence
+          path: |
+            docs/VERIFICATION.md
+            docs/verification.json
+            runs/validating-junit.xml
+          if-no-files-found: warn
+
+      - name: Terminate VM (always)
+        if: always() && steps.infra.outputs.available == 'true'
+        env:
+          OA_VM_TOKEN: ${{ secrets.OA_VM_TOKEN }}
+        run: oa-vm pool-cleanup --name claims-validation || true

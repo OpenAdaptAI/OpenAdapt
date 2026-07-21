@@ -1,0 +1,178 @@
+\section{Results}
+\label{sec:results}
+
+\paragraph{Headline: an independent effect check catches silent wrong actions
+that the screen misses, and only as far as it can read.} The paper's central
+claim is a safety one, and we measure it end to end through the live replayer.
+Ten persistence scenarios, seven fault classes plus an accepted-write control and
+two delivery controls, are each driven nine times per arm through the real
+governed path: the replayer's actuator issues an HTTP write to an on-disk system
+of record, and every run is judged three genuinely independent ways
+(Section~\ref{sec:method}). Judged by the \emph{screen}, the same signal an agent
+or a script trusts, replay silently accepted a wrong persisted effect on 54 of 90
+fault runs (60\%). An out-of-band effect verifier that reads the record back over
+a different endpoint than the write drove silent acceptance down to 9 of 90
+(10\%). Extending that verifier to a complete system-of-record read path, one
+that covers every mutable surface the action can touch, drove it to 0 of 90
+(Figure~\ref{fig:silentbar}). The residual 9 of 90 is the honest mechanism
+finding: they are a single fault class, a collateral write to a billing surface
+the out-of-band oracle's read path never covered, so the guarantee is exactly as
+strong as the oracle's read coverage. False aborts are a constant 9 of 90 in all
+three arms, a conservative halt on a commit whose outcome is unknown to the
+client, so they do not distinguish the oracles. This end-to-end measurement
+supersedes an earlier in-process fault study whose effect and ground-truth checks
+read the same object, which made its zero circular by construction; the numbers
+here come from the real replayer with three genuinely distinct write, read-back,
+and ground-truth paths.
+
+\paragraph{Per class, the screen misses five of seven fault types.} In a
+companion transactional study at the same persistence boundary, screen-only
+verification silently mishandled five of seven injected fault classes: partial
+save, duplicate submission, optimistic UI followed by rejection, stale overwrite,
+and double delivery. There were 10 consistent repeats per class. When the step
+declared the expected effect and a system-of-record verifier was configured,
+those five classes refuted and halted. This improvement has two non-optional
+preconditions: the effect must be authored and the verifier deployed.
+
+\paragraph{Generalization: the same silent-wrong gap on a second, non-healthcare
+domain.} The effect-verification result is not specific to clinical records. On
+MockLoan, a loan-disbursement authorization workflow with its own ledger,
+screen-only verification silently accepted 21 of 33 wrong ledger effects (64\%)
+while over-halting none; reading the true effect from the ledger through an
+independent verifier drove silent wrong effects to 0 of 33, at a cost of 6 of 33
+safe over-halts. Broken out by class, screen-only verification again silently
+mishandled five of seven injected fault classes. A decoy-loan task shows the
+identity gate doing its job on the money-movement step: a blind write to a
+same-name loan is a silent wrong effect under screen-only verification and a
+caught, safe over-halt under effect verification. This is the same mechanism as
+the healthcare study, on a different system of record.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar,
+  bar width=15pt,
+  width=0.86\linewidth,
+  height=4.6cm,
+  ymin=0, ymax=90,
+  ylabel={runs (of 90)},
+  ylabel style={font=\footnotesize},
+  symbolic x coords={Screen-only, {Effect (out-of-band)}, {Effect (complete read)}},
+  xtick=data,
+  xticklabel style={font=\footnotesize},
+  ytick={0,15,30,45,60,75,90},
+  yticklabel style={font=\footnotesize},
+  enlarge x limits=0.28,
+  legend style={font=\footnotesize, at={(0.5,1.14)}, anchor=south,
+    legend columns=-1, /tikz/every even column/.append style={column sep=8pt}},
+  nodes near coords, nodes near coords style={font=\scriptsize},
+]
+\addplot[fill=oared!75, draw=oared] coordinates {(Screen-only,54) ({Effect (out-of-band)},9) ({Effect (complete read)},0)};
+\addplot[fill=oaamber!70, draw=oaamber] coordinates {(Screen-only,9) ({Effect (out-of-band)},9) ({Effect (complete read)},9)};
+\legend{silent wrong effect, false abort}
+\end{axis}
+\end{tikzpicture}
+\caption{Same 90 injected-fault runs, three verification policies, measured end
+to end through the live replayer and judged by an independent ground truth.
+Screen-only verification silently accepted 54 wrong persisted effects; an
+out-of-band effect oracle that reads the record back cut that to 9 (one
+uncovered collateral-write class); a complete system-of-record read path drove it
+to 0. False aborts are a constant 9, a safe halt on an unknown-outcome commit.
+This is the failure mode general computer-use agents and selector RPA do not
+measure.}
+\label{fig:silentbar}
+\end{figure}
+
+\paragraph{Compiled replay removes per-run reasoning on demonstrated tasks.}
+Table~\ref{tab:comparison} shows that, on these two already-demonstrated tasks,
+compiled replay completed every measured run with lower median latency and no
+model calls. The unequal, small samples do not establish superior reliability.
+The correct inference is narrower: repeated reasoning was unnecessary for the
+healthy executions measured here.
+
+\begin{table}[t]
+\centering
+\caption{Bounded repeated-workflow comparison. Model API costs are estimates
+derived from recorded token usage and artifact-declared list prices; they
+exclude authoring and operations.}
+\label{tab:comparison}
+\begin{tabular}{llrrrr}
+\toprule
+Task & Arm & Success & $n$ & Median (s) & Model cost/run \\
+\midrule
+OpenEMR & Compiled & 20/20 & 20 & 39.2 & \$0.00 \\
+OpenEMR & Agent & 10/10 & 10 & 70.4 & \$0.55 \\
+MockMed & Compiled & 100/100 & 100 & 4.9 & \$0.00 \\
+MockMed & Agent & 20/20 & 20 & 37.5 & \$0.27 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Repair under drift: the compiler heals what breaks the agent's day.}
+The comparison above is the healthy path. To exercise the ``govern every
+repair'' half of the thesis, we forced the MockMed interface to re-render with a
+dark palette, invalidating every recorded template crop. As a single observation
+per arm, compiled replay self-healed in 9.7\,s with 8 target repairs and zero
+model calls, while the same computer-use agent under the same drift took 87.4\,s
+and \$0.63 across 24 model calls. One run is not a reliability claim, but it
+shows the mechanism working end to end: the resolution ladder re-resolved changed
+targets deterministically and logged each as a reviewable patch rather than
+re-reasoning the whole task.
+
+\paragraph{Breadth: weak postconditions can still emit a green report.}
+On the one-run public-web corpus, all 29 recordings compiled; 17 replays reached
+a verified success, 10 halted safely, and 2 reported success while the external
+oracle disagreed. Both silent wrong actions were vacuous successes under an
+environment blocker rather than a harmful persisted write, but they demonstrate
+that weak postconditions can still yield a green report. Because each app ran
+once and the corpus excludes authenticated enterprise and desktop applications,
+these counts are failure discovery, not a generalization rate estimate.
+
+\paragraph{Identity: zero false accepts, honestly at the cost of availability.}
+The integrated identity ladder recorded zero false accepts in every tested
+configuration. Structured browser identity also had zero over-halts on 14
+correct homonym cases. Pure-pixel configurations halted on all correct
+confusable cases: zero false accepts at 100\% over-halt. This is the intended
+safety/availability disclosure, not evidence that pixel-only identity is ready
+for dense clinical lists.
+
+\paragraph{Substrate reach: the same governed semantics across four backends.}
+The governed contract is not browser-specific. Table~\ref{tab:substrates}
+qualifies three additional substrates on named tasks, each with an independent
+effect oracle and refusal controls.
+
+\begin{table}[t]
+\centering
+\caption{Scoped substrate qualifications. Each row is one named task and
+environment, not an arbitrary-application support claim.}
+\label{tab:substrates}
+\begin{tabular}{llll}
+\toprule
+Substrate & Effect trials & Refusal controls & Independent oracle \\
+\midrule
+Windows UIA & 3/3 & stale 3/3; ambiguous 3/3 & SQLite row state \\
+Native macOS & 3/3 & ambiguous 1/1 & exact file bytes \\
+Network RDP & 3/3 & readiness/timeout gate & guest-tools file readback \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Windows UIA counted matrix recorded 12 native structural-action receipts,
+three independently confirmed note effects, three stale-target refusals, three
+ambiguous-target refusals, zero silent incorrect successes, zero over-halts, and
+zero model calls. The native receipts establish delivery to a unique refreshed
+fingerprint; the SQLite oracle establishes the business effect.
+
+On macOS, all three isolated TextEdit replace-and-save trials matched the exact
+expected file bytes, and the two-window control refused without changing either
+file. There were zero silent incorrect successes and zero over-halts. We retain
+the original failed batch classification and use its separate adjudication only
+for these action-effect and refusal observations.
+
+The network RDP batch completed three of three Windows Run-dialog unique-file
+tasks with exact guest-tools readback. Trial latencies were 51.845, 10.467, and
+7.477 seconds, with zero failures, zero silent incorrect successes, zero
+over-halts, and zero model calls. Snapshot cleanup restored the pre-run inventory
+and suspended base state. Together these studies qualify the named substrate
+mechanisms; they do not transfer to other applications, environments, or Citrix.

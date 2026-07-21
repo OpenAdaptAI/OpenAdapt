@@ -1,0 +1,112 @@
+\section{Evaluation Methodology}
+\label{sec:method}
+
+We separate comparative task performance, breadth, transactional safety, and
+identity availability. A single aggregate success rate would hide materially
+different errors.
+
+\paragraph{Comparative conditions.}
+Both repeated-workflow comparisons were generated on 2026-07-08 on the recorded
+platform \texttt{macOS-15.7.3-arm64-arm-64bit}. The compiled and agent arms
+drove the same vision-only Playwright backend: screenshots in and pixel clicks,
+typed text, key presses, and scrolling out, with no DOM selectors at runtime.
+The agent condition used \texttt{claude-sonnet-5} with the
+\texttt{computer\_20251124} tool and
+\texttt{computer-use-2025-11-24} beta header. Agent costs are calculated from
+recorded token usage and the list-price schedule stored in each raw result; the
+compiled condition recorded no model calls. The agent is a single-attempt
+observe-act loop given the task goal and the same settled screenshots the
+replayer uses, without a system prompt, planning or reflection scaffolding, or
+whole-task retry, and bounded by per-run action and cost caps. It is a fair
+same-backend reference rather than a maximally scaffolded agent, so the latency
+and cost gaps should be read as lower bounds on what scaffolding could close,
+not as a reliability comparison.
+
+\paragraph{Outcome taxonomy.}
+Success means the external task oracle is satisfied. A safe halt stops without
+the intended effect. Over-halt is a safe halt when the intended correct action
+was in fact available. Silent incorrect success means the runtime reports
+success while the external oracle disagrees. False abort means the intended
+effect occurred but the runtime reports failure. We report run counts rather
+than confidence intervals for small bounded studies.
+
+\paragraph{OpenEMR comparison.}
+The task logs into the shared public OpenEMR demonstration site, searches a
+patient, opens Patient Messages, adds a parameterized note, and saves. The
+compiled arm has 20 runs and the computer-use-agent arm 10. Both use the same
+task-level success check. The shared public instance is mutable and the study is
+not fully reproducible in CI; it is field evidence, not a production study.
+
+\paragraph{MockMed comparison.}
+The bundled browser fixture performs a triage workflow. The compiled arm has
+100 runs and the agent arm 20. This is the CI-reproducible anchor, but the
+application is purpose-built and is not evidence about hostile enterprise UIs.
+
+\paragraph{Public-web reliability corpus.}
+Twenty-nine public, unauthenticated applications are recorded, compiled, and
+replayed once on an unchanged UI using an external goal oracle. This study is
+descriptive: one run per application does not meet the repeated-trial standard
+for a capability claim, and the selection excludes SSO-walled and desktop
+targets.
+
+\paragraph{Transactional fault model.}
+Seven persistence faults and controls are injected at a real HTTP persistence
+boundary behind the MockMed UI, with 10 repeats per class. Database state, not
+the UI report, is the oracle. This per-class study measures what screen-only
+verification silently mishandles; it is separate from the end-to-end study below.
+
+\paragraph{End-to-end effect verification.}
+The headline safety result is measured through the actual governed replay path,
+not an in-process stub. Ten persistence scenarios, seven fault classes plus an
+accepted-write control and two delivery controls, are each run nine times per
+arm. Every write is issued by the replayer's actuator as an HTTP POST to an
+on-disk SQLite system of record, and each run is judged by three genuinely
+distinct paths: the write itself; an effect verifier that reads the record back
+over a different endpoint and connection than the write; and an independent
+ground truth that opens the SQLite file read-only over every table and classifies
+the before/after state without ever seeing the write's success flag. Because the
+verifier and the ground truth share neither code nor state, the effect
+verifier's zero is earned rather than definitional. We evaluate three arms:
+screen-only banner verification, an out-of-band effect oracle whose read path
+covers the record surface, and a complete effect oracle whose read path covers
+every mutable surface the action can touch. This supersedes an earlier in-process
+study in which the effect verifier and the ground truth read the same object,
+which made its zero circular by construction. Zero model calls, localhost only.
+
+\paragraph{Second domain: lending.}
+To test generalization beyond healthcare, the same effect-verification protocol
+is replicated on MockLoan, a loan-disbursement authorization workflow with its
+own ledger. Eleven tasks spanning all seven divergence categories plus clean and
+idempotent controls are each run three times per arm, judged by an independent
+REST verifier that reads the ledger at an endpoint the application never calls.
+One task seeds a same-name decoy loan to exercise the identity gate on the
+money-movement step. Zero model calls.
+
+\paragraph{Released benchmark.}
+The metric and fault taxonomy are packaged as EffectBench, a standalone,
+versioned, and independently runnable benchmark (specification version 1.0.0), so
+that the silent-wrong-effect rate can be measured against any GUI or API
+automation, not only ours.
+
+\paragraph{Identity ladder.}
+Adversarial same-name/same-date-of-birth homonyms differ by confusable glyphs
+such as O/0 and l/1. The actual replayer stack is evaluated with structured and
+pure-pixel configurations. False accept and over-halt are both reported because
+a system can obtain zero wrong clicks by refusing every correct one.
+
+\paragraph{Desktop and remote-substrate qualification.}
+These mechanism studies are task-bound rather than comparative. Windows UIA is
+evaluated on one in-tree WinForms Patient Notes workflow in a Windows 11 ARM VM.
+Each counted trial starts from a clean snapshot, writes a trial-unique note, and
+uses an independent SQLite query as the effect oracle; stale and ambiguous
+candidate controls must leave every row unchanged. Native macOS is evaluated on
+one macOS 15.7.3 arm64 host using TextEdit, exact file-byte readback, and a
+two-window ambiguity control. The preserved batch report classifies graceful-
+close cleanup warnings as failure; a separate hash-bound offline adjudication
+accepts only the three action effects and ambiguity refusal after verifying the
+exact harness processes and temporary root were absent. RDP is evaluated over
+Aardwolf 0.2.14 into one 1280x800 Parallels Windows 11 snapshot: input through
+the Windows Run dialog creates a trial-unique file whose exact contents are read
+back through guest tools independently of the RDP channel. Each promoted task
+has three counted trials, records model calls, silent incorrect success and
+over-halt, and retains environment-cleanup evidence.
