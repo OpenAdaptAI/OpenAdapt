@@ -1,18 +1,53 @@
 # OpenAdapt Capture
 
+> [!IMPORTANT]
+> **Status: Experimental.** OpenAdapt Capture records native mouse, keyboard,
+> and screen activity into a time-aligned local capture session. Its current
+> product role is the optional cross-platform desktop recorder used by
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+>
+> The OpenAdapt product is the demonstration compiler,
+> [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), installed
+> via the [`OpenAdapt`](https://github.com/OpenAdaptAI/OpenAdapt) launcher
+> (`pip install openadapt`): it compiles a demonstrated GUI workflow into a
+> deterministic, locally executable program. Healthy runs make no model calls,
+> and it halts instead of guessing when verification fails. Lifecycle labels for
+> every repository are in the
+> [repository lifecycle registry](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md).
+
 [![Build Status](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-capture/actions/workflows/test.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-capture.svg)](https://pypi.org/project/openadapt-capture/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Lifecycle: Experimental.** OpenAdapt Capture records native mouse, keyboard,
-and screen activity into a time-aligned local capture session. Its current
-product role is the optional desktop recorder used by
-[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), OpenAdapt's
-workflow compiler and governed runtime.
+Cross-platform local desktop recording: native mouse, keyboard, and screen
+activity captured into a time-aligned local session that the compiler turns into
+deterministic replay input. Local-first by default; a raw capture never leaves
+the machine unless you run an explicit opt-in command.
 
 Start with the [OpenAdapt documentation](https://docs.openadapt.ai/) if you want
 to record, compile, verify, and replay a workflow.
+
+## The OpenAdapt stack
+
+OpenAdapt is a governed demonstration compiler: record a workflow once, compile
+the recording into a deterministic program, and replay that program with zero
+model calls on the healthy path. When the live screen does not match what was
+demonstrated it halts instead of guessing, using identity gates and independent
+effect verification. Every substrate is first-class: web and desktop recording
+are validated, RDP and Windows replay are early, and Citrix is exploratory.
+
+| Package | Role |
+| --- | --- |
+| [`openadapt`](https://github.com/OpenAdaptAI/OpenAdapt) | Launcher and installer (`pip install openadapt`) |
+| [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) | Records, compiles, verifies, and replays workflows |
+| **`openadapt-capture`** | Cross-platform local desktop recording (this package) |
+| [`openadapt-types`](https://github.com/OpenAdaptAI/openadapt-types) | Canonical action and UI-state schema |
+| [`openadapt-grounding`](https://github.com/OpenAdaptAI/openadapt-grounding) | Local OCR text-anchoring plus optional model grounding |
+| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | PHI/PII detection and redaction |
+
+Documentation for the whole stack lives at
+[docs.openadapt.ai](https://docs.openadapt.ai).
 
 ## Where it fits
 
@@ -97,7 +132,7 @@ smoke test awaits an interactive Windows desktop. Not yet validated against
 a Parallels/Citrix client window specifically.**
 
 By default the recorder captures the full screen. Window-scoped mode records
-ONE window in that window's own pixel space — the mode built for
+ONE window in that window's own pixel space. This is the mode built for
 remote-display demonstrations (Parallels, Citrix Workspace, Microsoft Remote
 Desktop), where `openadapt-flow`'s `rdp_window` replay drives the client
 window's pixels directly. Recording scoped to the same window removes the
@@ -133,13 +168,13 @@ In this mode:
 - **The window scoping is persisted**: the recording's config JSON carries the
   target, resolved window, initial bounds, scale, and viewport
   (`CaptureSession.window_capture`), and the window is re-resolved every
-  frame with bounds changes recorded as window events — a bounds timeline
+  frame with bounds changes recorded as window events, a bounds timeline
   converters can use to be exact even when the window moves.
 - **Fail-loud guarantees:** recording refuses to start if the window cannot be
   resolved and captured; input arriving before the first frame is discarded
   with a warning instead of being recorded in the wrong coordinate space; a
   mid-recording window *resize* skips unencodable video frames loudly
-  (screenshots and the bounds timeline stay exact) — avoid resizing the
+  (screenshots and the bounds timeline stay exact), so avoid resizing the
   target during a demonstration.
 
 Note for converters: window-mode coordinates are already in captured-frame
