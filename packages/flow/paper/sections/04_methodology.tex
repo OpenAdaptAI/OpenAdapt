@@ -63,8 +63,9 @@ arm. Every write is issued by the replayer's actuator as an HTTP POST to an
 on-disk SQLite system of record, and each run is judged by three genuinely
 distinct paths: the write itself; an effect verifier that reads the record back
 over a different endpoint and connection than the write; and an independent
-ground truth that opens the SQLite file read-only over every table and classifies
-the before/after state without ever seeing the write's success flag. Because the
+ground truth that opens the SQLite file read-only over every table, fingerprints
+canonical typed schema and row content, and classifies the before/after state
+without ever seeing the write's success flag. Because the
 verifier and the ground truth share neither code nor state, the effect
 verifier's zero is earned rather than definitional. We evaluate three arms:
 screen-only banner verification, an out-of-band effect oracle whose read path
@@ -76,11 +77,17 @@ which made its zero circular by construction. Zero model calls, localhost only.
 \paragraph{Second domain: lending.}
 To test generalization beyond healthcare, the same effect-verification protocol
 is replicated on MockLoan, a loan-disbursement authorization workflow with its
-own ledger. Eleven tasks spanning all seven divergence categories plus clean and
-idempotent controls are each run three times per arm, judged by an independent
-REST verifier that reads the ledger at an endpoint the application never calls.
-One task seeds a same-name decoy loan to exercise the identity gate on the
-money-movement step. Zero model calls.
+own SQLite ledger. Twelve tasks span the seven EffectBench divergence categories,
+a lending-local cross-surface collateral variant of the extra-write category,
+and clean and idempotent controls. Each runs three times per arm. The product
+arms read their declared surface through REST; the benchmark judge instead opens
+the persisted SQLite file through a separate read-only connection before and
+after each write, discovers business tables from SQLite's catalog, and
+uses benchmark-local canonical typed row and table-content classification rather
+than the runtime effect classifier. One task funds a decoy loan; post-action,
+identity-sensitive readback locates the trial-unique persisted row by memo and
+product, then verifies its loan identifier against the intended loan. Zero model
+calls.
 
 \paragraph{Released benchmark.}
 The metric and fault taxonomy are packaged as EffectBench, a standalone,

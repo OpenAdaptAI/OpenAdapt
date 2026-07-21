@@ -16,10 +16,10 @@ page is loaded with ``?fault=<mode>`` (a flag-gated hook that mirrors the
 existing ``?drift=`` hooks). With no ``?fault`` query the app never calls the
 API and behaves byte-for-byte as before.
 
-The server keeps an in-process "ledger" (a list of disbursement records) that is
-the independent GROUND TRUTH: the fault-model study judges each replay by what
-actually landed in this store via ``GET /api/db`` - never by the replay's own
-vision-based self-report.
+The server keeps an isolated temporary SQLite ledger. Product-facing verifier
+arms read it through the REST API, while the benchmark judge opens the SQLite
+file read-only and independently observes what actually persisted. Neither path
+trusts the replay's vision-based self-report.
 
 Fault modes (selected by ``?fault=`` on the write POST, forwarded by the app):
 
@@ -40,6 +40,26 @@ Fault modes (selected by ``?fault=`` on the write POST, forwarded by the app):
                      disbursements (the borrower is paid twice).
 - ``idempotent``  -- like ``duplicate`` but the app sends an idempotency key
                      and the core de-duplicates on it (the RECOMMENDED fix).
+- ``collateral``  -- the CORRECT disbursement to the target loan is booked (the
+                     disbursements ledger looks perfect), but a spurious
+                     money-movement (an unauthorized servicing fee referencing
+                     the same loan and funding memo) is ALSO written to a
+                     SEPARATE fees / general-ledger surface. This is the lending
+                     analog of the clinical ``collateral_unaudited`` fault (a
+                     correct encounter plus a stray billing row). A
+                     disbursements-only oracle certifies the write; only a
+                     COMPLETE read path spanning both ledgers sees the extra row.
+
+The ledger records two surfaces: ``disbursements`` (the money paid out to the
+borrower) and ``fees`` (a general-ledger / charges surface). A record carries a
+``surface`` field (default ``"disbursements"``). Two read paths expose them:
+
+- ``GET /api/disbursements`` -- the SINGLE-surface read path: only the
+  disbursements ledger. A single out-of-band oracle over this path is blind to a
+  fees-surface write (the lending analog of the clinical single-surface REST
+  oracle over encounters only).
+- ``GET /api/db`` -- the COMPLETE read path: every mutable surface. The full
+  read path an effect oracle needs to reach 0 residual.
 
 A ``DELETE /api/disbursement/<id>`` route (additive; never used by a ``?fault=``
 path) lets an EffectVerifier compensation hook reconcile a detected duplicate
@@ -51,6 +71,8 @@ All data is fake. Nothing here touches the network beyond localhost.
 from __future__ import annotations
 
 import json
+import sqlite3
+import tempfile
 import threading
 import time
 from functools import partial
@@ -68,41 +90,89 @@ TIMEOUT_HANG_S = 3.0
 
 
 class LedgerDB:
-    """Thread-safe in-process store of disbursement writes (the ground truth).
+    """Thread-safe SQLite store of synthetic disbursement writes.
 
     A record is ``{"id", "loan_id", "product", "amount", "memo", "source",
-    "key"}``. ``source`` is ``"replay"`` for writes made during a run and
-    ``"other"`` for rows seeded to model a concurrent actor. The store is
-    deliberately dumb: it records exactly what the fault path did, so the study
-    can judge the replay against effects rather than against the screen.
+    "key", "surface"}``. ``source`` is ``"replay"`` for writes made during a run
+    and ``"other"`` for rows seeded to model a concurrent actor. ``surface`` is
+    ``"disbursements"`` (money paid to the borrower) or ``"fees"`` (a
+    general-ledger / charges surface); a single-surface oracle reads only the
+    former. The store is deliberately dumb: it records exactly what the fault
+    path did, so the study can judge the replay against effects rather than
+    against the screen.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._records: list[dict] = []
-        self._seq = 0
-        self.rejected_writes = 0  # optimistic-mode rejections observed
+        self._tempdir = tempfile.TemporaryDirectory(prefix="openadapt-mockloan-")
+        self.database_path = Path(self._tempdir.name) / "ledger.sqlite3"
+        with self._connect() as conn:
+            conn.executescript(
+                """
+                CREATE TABLE records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    loan_id TEXT NOT NULL,
+                    product TEXT NOT NULL,
+                    amount TEXT NOT NULL,
+                    memo TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    record_key TEXT,
+                    surface TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX records_record_key_unique
+                    ON records(record_key)
+                    WHERE record_key IS NOT NULL;
+                CREATE TABLE metadata (
+                    name TEXT PRIMARY KEY,
+                    value INTEGER NOT NULL
+                );
+                INSERT INTO metadata(name, value) VALUES ('rejected_writes', 0);
+                """
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.database_path, timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    @staticmethod
+    def _record(row: sqlite3.Row) -> dict:
+        record = dict(row)
+        record["key"] = record.pop("record_key")
+        return record
+
+    @property
+    def rejected_writes(self) -> int:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM metadata WHERE name = 'rejected_writes'"
+            ).fetchone()
+            return int(row[0]) if row is not None else 0
 
     def reset(self, *, seed_concurrent: bool = False) -> None:
-        with self._lock:
-            self._records = []
-            self._seq = 0
-            self.rejected_writes = 0
+        with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM records")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name = 'records'")
+            conn.execute("UPDATE metadata SET value = 0 WHERE name = 'rejected_writes'")
             if seed_concurrent:
                 # A concurrent loan officer placed an URGENT fraud hold /
                 # adjustment on the same loan between record and replay. A blind
                 # last-write-wins authorize (``stale`` mode) will lose it.
-                self._seq += 1
-                self._records.append(
-                    {
-                        "id": self._seq,
-                        "loan_id": "L1001",
-                        "product": "Hold",
-                        "amount": "0",
-                        "memo": "URGENT: fraud hold placed - do not disburse",
-                        "source": "other",
-                        "key": None,
-                    }
+                conn.execute(
+                    """
+                    INSERT INTO records(
+                        loan_id, product, amount, memo, source, record_key, surface
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "L1001",
+                        "Hold",
+                        "0",
+                        "URGENT: fraud hold placed - do not disburse",
+                        "other",
+                        None,
+                        "disbursements",
+                    ),
                 )
 
     def add(
@@ -114,32 +184,55 @@ class LedgerDB:
         *,
         key: Optional[str] = None,
         overwrite_loan: bool = False,
+        surface: str = "disbursements",
     ) -> dict:
-        with self._lock:
+        with self._lock, self._connect() as conn:
             if key is not None:
-                for r in self._records:
-                    if r.get("key") == key:
-                        return r  # idempotent: de-duplicate on the key
+                existing = conn.execute(
+                    """
+                    SELECT id, loan_id, product, amount, memo, source,
+                           record_key, surface
+                    FROM records WHERE record_key = ?
+                    """,
+                    (key,),
+                ).fetchone()
+                if existing is not None:
+                    return self._record(existing)
             if overwrite_loan:
-                # Last-write-wins: drop every existing row for this loan
-                # (including a concurrent officer's hold) before writing ours.
-                self._records = [r for r in self._records if r["loan_id"] != loan_id]
-            self._seq += 1
-            rec = {
-                "id": self._seq,
-                "loan_id": loan_id,
-                "product": product,
-                "amount": amount,
-                "memo": memo,
-                "source": "replay",
-                "key": key,
-            }
-            self._records.append(rec)
-            return rec
+                # Last-write-wins: drop every existing row for this loan on the
+                # SAME surface (including a concurrent officer's hold) before
+                # writing ours.
+                conn.execute(
+                    "DELETE FROM records WHERE loan_id = ? AND surface = ?",
+                    (loan_id, surface),
+                )
+            cursor = conn.execute(
+                """
+                INSERT INTO records(
+                    loan_id, product, amount, memo, source, record_key, surface
+                ) VALUES (?, ?, ?, ?, 'replay', ?, ?)
+                """,
+                (loan_id, product, amount, memo, key, surface),
+            )
+            row = conn.execute(
+                """
+                SELECT id, loan_id, product, amount, memo, source,
+                       record_key, surface
+                FROM records WHERE id = ?
+                """,
+                (cursor.lastrowid,),
+            ).fetchone()
+            assert row is not None
+            return self._record(row)
 
     def note_rejected(self) -> None:
-        with self._lock:
-            self.rejected_writes += 1
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE metadata SET value = value + 1
+                WHERE name = 'rejected_writes'
+                """
+            )
 
     def delete(self, record_id: int) -> bool:
         """Delete the record with ``record_id``. Returns True iff one was
@@ -150,17 +243,36 @@ class LedgerDB:
         The fault-model study never issues a DELETE, so study behavior and every
         ``?fault=`` path are unchanged.
         """
-        with self._lock:
-            before = len(self._records)
-            self._records = [r for r in self._records if r["id"] != record_id]
-            return len(self._records) != before
+        with self._lock, self._connect() as conn:
+            cursor = conn.execute("DELETE FROM records WHERE id = ?", (record_id,))
+            return cursor.rowcount > 0
 
-    def snapshot(self) -> dict:
-        with self._lock:
+    def snapshot(self, *, surface: Optional[str] = None) -> dict:
+        """Return the ledger. ``surface=None`` is the COMPLETE read path (every
+        mutable surface); ``surface="disbursements"`` is the SINGLE-surface read
+        path a disbursements-only oracle sees (blind to a fees-surface write)."""
+        with self._lock, self._connect() as conn:
+            query = (
+                "SELECT id, loan_id, product, amount, memo, source, "
+                "record_key, surface FROM records"
+            )
+            params: tuple[str, ...] = ()
+            if surface is not None:
+                query += " WHERE surface = ?"
+                params = (surface,)
+            query += " ORDER BY id"
+            records = [self._record(row) for row in conn.execute(query, params)]
+            rejected = conn.execute(
+                "SELECT value FROM metadata WHERE name = 'rejected_writes'"
+            ).fetchone()
             return {
-                "records": [dict(r) for r in self._records],
-                "rejected_writes": self.rejected_writes,
+                "records": records,
+                "rejected_writes": int(rejected[0]) if rejected is not None else 0,
             }
+
+    def close(self) -> None:
+        """Remove this harness's isolated temporary SQLite ledger."""
+        self._tempdir.cleanup()
 
 
 def _make_handler(db: LedgerDB, directory: str):
@@ -193,7 +305,12 @@ def _make_handler(db: LedgerDB, directory: str):
         def do_GET(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
             if path == "/api/db":
+                # Complete read path: every mutable surface (disbursements + fees).
                 self._send_json(200, db.snapshot())
+                return
+            if path == "/api/disbursements":
+                # Single-surface read path: the disbursements ledger only.
+                self._send_json(200, db.snapshot(surface="disbursements"))
                 return
             super().do_GET()
 
@@ -270,6 +387,17 @@ def _make_handler(db: LedgerDB, directory: str):
                 )
                 self._send_json(200, {"ok": True, "id": rec["id"]})
                 return
+            if fault == "collateral":
+                # Book the CORRECT disbursement (the disbursements ledger looks
+                # perfect), then ALSO book a spurious money-movement to a
+                # SEPARATE fees / general-ledger surface: an unauthorized
+                # servicing fee referencing the same loan and funding memo. A
+                # disbursements-only oracle certifies the write; only a complete
+                # read path over both surfaces sees the collateral row.
+                rec = db.add(loan_id, product, amount, memo, key=key)
+                db.add(loan_id, product, amount, memo, surface="fees")
+                self._send_json(200, {"ok": True, "id": rec["id"], "collateral": True})
+                return
             # ok / duplicate / double / idempotent: a plain accepted write.
             # ``idempotent`` de-duplicates because the app supplies ``key``.
             rec = db.add(loan_id, product, amount, memo, key=key)
@@ -306,5 +434,6 @@ def serve(
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=5)
+        db.close()
 
     return url, db, stop

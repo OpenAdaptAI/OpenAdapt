@@ -34,18 +34,28 @@ declared the expected effect and a system-of-record verifier was configured,
 those five classes refuted and halted. This improvement has two non-optional
 preconditions: the effect must be authored and the verifier deployed.
 
-\paragraph{Generalization: the same silent-wrong gap on a second, non-healthcare
-domain.} The effect-verification result is not specific to clinical records. On
-MockLoan, a loan-disbursement authorization workflow with its own ledger,
-screen-only verification silently accepted 21 of 33 wrong ledger effects (64\%)
-while over-halting none; reading the true effect from the ledger through an
-independent verifier drove silent wrong effects to 0 of 33, at a cost of 6 of 33
-safe over-halts. Broken out by class, screen-only verification again silently
-mishandled five of seven injected fault classes. A decoy-loan task shows the
-identity gate doing its job on the money-movement step: a blind write to a
-same-name loan is a silent wrong effect under screen-only verification and a
-caught, safe over-halt under effect verification. This is the same mechanism as
-the healthcare study, on a different system of record.
+\paragraph{Generalization: the same silent-wrong ladder on a second,
+non-healthcare domain.} The effect-verification result is not specific to
+clinical records, and it reproduces the healthcare three-arm ladder rather than
+an easier two-arm version. On MockLoan, a loan-disbursement authorization
+workflow with its own ledger and a second, collateral fee surface, screen-only
+verification silently accepted 24 of 36 wrong ledger effects (67\%) while
+over-halting none. A single out-of-band oracle over one surface left 3 of 36,
+exactly the collateral-write residual the healthcare study exhibits: a spurious
+fee posts to a surface the disbursement oracle does not read. Extending to a
+complete read path drove it to 0 of 36, with 3 of 36 over-halts.
+That final arm also classified 18 of 36 runs as wrong actions: the verifier
+detected an incorrect effect after persistence and refused to certify it. Thus
+zero SWER means zero \emph{silently accepted} wrong effects in this matrix, not
+rollback, prevention, or zero incorrect writes.
+Broken out by class, screen-only verification again silently mishandled the same
+2xx-but-wrong fault classes. In the decoy-loan task, post-action readback finds
+the trial-unique wrong-loan row and both effect arms report a detected wrong
+action rather than an over-halt. This is the same mechanism, and the same read-coverage
+residual, as the healthcare study, on a different system of record; both
+applications are synthetic and built by the same authors, so the replication
+shows the pattern transfers across two record shapes we designed, not that it
+transfers to a hostile production system.
 
 \begin{figure}[t]
 \centering

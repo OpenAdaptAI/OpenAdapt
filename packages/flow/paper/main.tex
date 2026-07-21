@@ -57,8 +57,10 @@ system-of-record ground truth, screen-only verification silently accepted 54 of
 90 injected-fault runs; an out-of-band effect check cut that to 9 of 90 and a
 complete system-of-record read path to 0 of 90, the residual nine being one
 collateral-write class outside the out-of-band oracle's read coverage. The
-finding replicates on a second, non-healthcare lending domain: 21 of 33 silent
-wrong effects under screen-only verification, 0 of 33 under effect verification.
+finding replicates on a second, non-healthcare lending domain with the same
+three-arm ladder: 24 of 36 silent wrong effects under screen-only verification,
+3 of 36 under a single out-of-band oracle (the same collateral residual), and
+0 of 36 under a complete read path.
 Bounded experiments span a public OpenEMR
 workflow, a CI-reproducible fixture, a 29-application public-web corpus,
 transactional fault injection, adversarial identity tests, and scoped

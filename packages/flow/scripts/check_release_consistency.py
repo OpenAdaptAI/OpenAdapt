@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -14,6 +15,7 @@ import zipfile
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "openadapt-flow"
@@ -188,6 +190,98 @@ PUBLIC_SOURCE_FORBIDDEN_CATEGORIES = frozenset(
     }
 )
 
+LENDING_PUBLIC_EVIDENCE_PATH = "benchmark/lending_fault_model/swer_results.json"
+LENDING_PUBLIC_EVIDENCE_ARMS = (
+    "screen_only",
+    "effect_verify_single",
+    "effect_verify_full",
+)
+LENDING_PUBLIC_EVIDENCE_META = {
+    "schema_version": 1,
+    "evidence_scope": "bounded_aggregate",
+    "synthetic": True,
+    "domain": "lending (MockLoan) - loan disbursement authorization",
+    "oracle": (
+        "benchmark-local read-only SQLite ground truth with independent "
+        "row and open-world canonical table-content classification"
+    ),
+    "judge_read_path": (
+        "direct read-only SQLite capture over sqlite_master-discovered business tables"
+    ),
+    "single_surface_read_path": "/api/disbursements",
+    "full_read_path": "/api/db",
+    "ground_truth": "mockloan.fault_server isolated temporary SQLite ledger",
+    "arms": list(LENDING_PUBLIC_EVIDENCE_ARMS),
+    "tasks": 12,
+    "trials_per_task_per_arm": 3,
+    "deterministic": True,
+    "model_calls": 0,
+}
+LENDING_PUBLIC_EVIDENCE_ARM_KEYS = frozenset(
+    {
+        "arm",
+        "arms",
+        "n_episodes",
+        "n_tasks",
+        "swer",
+        "swer_wrong_write",
+        "swer_phantom",
+        "over_halt",
+        "task_success",
+        "screen_success",
+        "success_effect_gap",
+        "total_cost_usd",
+        "mean_cost_usd",
+        "cells",
+        "outcome_counts",
+    }
+)
+LENDING_PUBLIC_EVIDENCE_CELL_KEYS = frozenset(
+    {
+        "category",
+        "substrate",
+        "n",
+        "swer",
+        "swer_wrong_write",
+        "swer_phantom",
+        "over_halt",
+        "task_success",
+        "screen_success",
+        "success_effect_gap",
+    }
+)
+LENDING_PUBLIC_EVIDENCE_RATE_KEYS = frozenset({"numerator", "denominator", "rate"})
+LENDING_PUBLIC_EVIDENCE_RATE_FIELDS = (
+    "swer",
+    "swer_wrong_write",
+    "swer_phantom",
+    "over_halt",
+    "task_success",
+    "screen_success",
+)
+LENDING_PUBLIC_EVIDENCE_CATEGORIES = frozenset(
+    {
+        "C1_partial_save",
+        "C2_duplicate_submission",
+        "C3_optimistic_then_reject",
+        "C4_stale_overwrite",
+        "C5_double_delivered_input",
+        "C6_wrong_record_homonym",
+        "C7_silent_noop_wrong_target",
+        "control",
+    }
+)
+LENDING_PUBLIC_EVIDENCE_OUTCOMES = frozenset(
+    {
+        "false_abort",
+        "over_halt",
+        "safe_halt",
+        "silent_wrong_effect",
+        "success",
+        "wrong_action",
+    }
+)
+
 
 def _canonical_source_path(path: str, *, source: str) -> str:
     """Return a canonical relative POSIX path or fail closed."""
@@ -331,7 +425,9 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
     try:
         document = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError(f"could not parse reviewed public artifact inventory in {source}: {error}") from error
+        raise ValueError(
+            f"could not parse reviewed public artifact inventory in {source}: {error}"
+        ) from error
     if not isinstance(document, dict) or set(document) != {
         "schema_version",
         "policy",
@@ -354,11 +450,15 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
         if not isinstance(row, dict) or set(row) != {"path", "sha256"}:
             raise ValueError("public artifact inventory row has an unexpected schema")
         if not isinstance(row["path"], str) or not isinstance(row["sha256"], str):
-            raise ValueError("public artifact inventory path and SHA-256 must be strings")
+            raise ValueError(
+                "public artifact inventory path and SHA-256 must be strings"
+            )
         relative = _canonical_source_path(row["path"], source="inventory")
         digest = row["sha256"]
         if relative <= previous:
-            raise ValueError("public artifact inventory paths must be unique and sorted")
+            raise ValueError(
+                "public artifact inventory paths must be unique and sorted"
+            )
         if not _artifact_inventory_candidate(relative):
             raise ValueError(
                 f"public artifact inventory contains a non-artifact path: {relative}"
@@ -397,7 +497,9 @@ def _validate_public_artifact_inventory(
             f"missing={sorted(expected - observed)}"
         )
     changed = [
-        path for path in sorted(expected) if _sha256_file(files[path]) != inventory[path]
+        path
+        for path in sorted(expected)
+        if _sha256_file(files[path]) != inventory[path]
     ]
     if changed:
         raise ValueError(
@@ -405,6 +507,204 @@ def _validate_public_artifact_inventory(
             f"review it: {changed}"
         )
     return inventory
+
+
+def _bounded_lending_error(message: str) -> ValueError:
+    return ValueError(f"bounded public lending evidence {message}")
+
+
+def _finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _validate_lending_rate(
+    value: object, *, path: str, denominator: int
+) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != LENDING_PUBLIC_EVIDENCE_RATE_KEYS:
+        raise _bounded_lending_error(f"has an unexpected rate schema at {path}")
+    numerator = value["numerator"]
+    observed_denominator = value["denominator"]
+    rate = value["rate"]
+    if (
+        not isinstance(numerator, int)
+        or isinstance(numerator, bool)
+        or not isinstance(observed_denominator, int)
+        or isinstance(observed_denominator, bool)
+        or observed_denominator != denominator
+        or not 0 <= numerator <= denominator
+        or not _finite_number(rate)
+    ):
+        raise _bounded_lending_error(f"has invalid counts or rate at {path}")
+    expected_rate = numerator / denominator
+    if not math.isclose(float(rate), expected_rate, rel_tol=0.0, abs_tol=1e-12):
+        raise _bounded_lending_error(f"has a rate/count mismatch at {path}")
+    return value
+
+
+def _validate_bounded_lending_evidence(files: dict[str, Path]) -> None:
+    """Recursively enforce the deterministic, aggregate-only lending schema."""
+    path = files.get(LENDING_PUBLIC_EVIDENCE_PATH)
+    if path is None:
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise _bounded_lending_error(
+            f"could not be parsed at {path}: {error}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise _bounded_lending_error("must be a JSON object")
+    if set(payload) != {"meta", *LENDING_PUBLIC_EVIDENCE_ARMS}:
+        raise _bounded_lending_error(
+            "has unexpected top-level keys; raw rows and scenario recipes "
+            "must remain private/in-memory"
+        )
+    if payload.get("meta") != LENDING_PUBLIC_EVIDENCE_META:
+        raise _bounded_lending_error("has invalid or non-canonical metadata")
+
+    task_count = cast(int, LENDING_PUBLIC_EVIDENCE_META["tasks"])
+    trial_count = cast(int, LENDING_PUBLIC_EVIDENCE_META["trials_per_task_per_arm"])
+    expected_episodes = task_count * trial_count
+    for arm in LENDING_PUBLIC_EVIDENCE_ARMS:
+        summary = payload.get(arm)
+        arm_path = arm
+        if (
+            not isinstance(summary, dict)
+            or set(summary) != LENDING_PUBLIC_EVIDENCE_ARM_KEYS
+        ):
+            raise _bounded_lending_error(f"has an unexpected {arm} schema")
+        if (
+            summary["arm"] != arm
+            or summary["arms"] != [arm]
+            or summary["n_tasks"] != task_count
+            or summary["n_episodes"] != expected_episodes
+        ):
+            raise _bounded_lending_error(f"has inconsistent arm counts at {arm_path}")
+
+        rates = {
+            field: _validate_lending_rate(
+                summary[field],
+                path=f"{arm_path}.{field}",
+                denominator=expected_episodes,
+            )
+            for field in LENDING_PUBLIC_EVIDENCE_RATE_FIELDS
+        }
+        if (
+            cast(int, rates["swer_wrong_write"]["numerator"])
+            + cast(int, rates["swer_phantom"]["numerator"])
+            != rates["swer"]["numerator"]
+        ):
+            raise _bounded_lending_error(
+                f"has inconsistent SWER variants at {arm_path}"
+            )
+
+        gap = summary["success_effect_gap"]
+        if not _finite_number(gap) or not -1.0 <= float(gap) <= 1.0:
+            raise _bounded_lending_error(
+                f"has invalid success/effect gap at {arm_path}"
+            )
+        expected_gap = float(cast(float, rates["screen_success"]["rate"])) - float(
+            cast(float, rates["task_success"]["rate"])
+        )
+        if not math.isclose(float(gap), expected_gap, rel_tol=0.0, abs_tol=1e-12):
+            raise _bounded_lending_error(
+                f"has inconsistent success/effect gap at {arm_path}"
+            )
+        for cost_field in ("total_cost_usd", "mean_cost_usd"):
+            if summary[cost_field] != 0.0:
+                raise _bounded_lending_error(
+                    f"must report zero model cost at {arm_path}.{cost_field}"
+                )
+        outcome_counts = summary["outcome_counts"]
+        if (
+            not isinstance(outcome_counts, dict)
+            or not outcome_counts
+            or not set(outcome_counts) <= LENDING_PUBLIC_EVIDENCE_OUTCOMES
+            or any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in outcome_counts.values()
+            )
+            or sum(outcome_counts.values()) != expected_episodes
+        ):
+            raise _bounded_lending_error(f"has invalid outcome counts at {arm_path}")
+        if rates["swer"]["numerator"] != outcome_counts.get("silent_wrong_effect", 0):
+            raise _bounded_lending_error(
+                f"has inconsistent SWER outcomes at {arm_path}"
+            )
+        if rates["over_halt"]["numerator"] != outcome_counts.get("over_halt", 0):
+            raise _bounded_lending_error(
+                f"has inconsistent over-halt outcomes at {arm_path}"
+            )
+        if rates["task_success"]["numerator"] != outcome_counts.get("success", 0):
+            raise _bounded_lending_error(
+                f"has inconsistent task-success outcomes at {arm_path}"
+            )
+        if rates["screen_success"]["numerator"] != (
+            outcome_counts.get("success", 0)
+            + outcome_counts.get("silent_wrong_effect", 0)
+        ):
+            raise _bounded_lending_error(
+                f"has inconsistent screen-success outcomes at {arm_path}"
+            )
+
+        cells = summary["cells"]
+        if not isinstance(cells, list) or len(cells) != len(
+            LENDING_PUBLIC_EVIDENCE_CATEGORIES
+        ):
+            raise _bounded_lending_error(
+                f"must retain one bounded category cell at {arm_path}"
+            )
+        categories: set[str] = set()
+        cell_episodes = 0
+        for index, cell in enumerate(cells):
+            cell_path = f"{arm_path}.cells[{index}]"
+            if (
+                not isinstance(cell, dict)
+                or set(cell) != LENDING_PUBLIC_EVIDENCE_CELL_KEYS
+            ):
+                raise _bounded_lending_error(
+                    f"has an unexpected cell schema at {cell_path}"
+                )
+            category = cell["category"]
+            n = cell["n"]
+            if (
+                category not in LENDING_PUBLIC_EVIDENCE_CATEGORIES
+                or category in categories
+                or cell["substrate"] != "web"
+                or not isinstance(n, int)
+                or isinstance(n, bool)
+                or n <= 0
+            ):
+                raise _bounded_lending_error(
+                    f"has invalid cell identity/count at {cell_path}"
+                )
+            categories.add(category)
+            cell_episodes += n
+            cell_rates = {
+                field: _validate_lending_rate(
+                    cell[field], path=f"{cell_path}.{field}", denominator=n
+                )
+                for field in LENDING_PUBLIC_EVIDENCE_RATE_FIELDS
+            }
+            cell_gap = cell["success_effect_gap"]
+            expected_cell_gap = float(
+                cast(float, cell_rates["screen_success"]["rate"])
+            ) - float(cast(float, cell_rates["task_success"]["rate"]))
+            if not _finite_number(cell_gap) or not math.isclose(
+                float(cell_gap), expected_cell_gap, rel_tol=0.0, abs_tol=1e-12
+            ):
+                raise _bounded_lending_error(f"has an invalid cell gap at {cell_path}")
+        if (
+            categories != LENDING_PUBLIC_EVIDENCE_CATEGORIES
+            or cell_episodes != expected_episodes
+        ):
+            raise _bounded_lending_error(
+                f"has incomplete category coverage at {arm_path}"
+            )
 
 
 def _wheel_member_source_path(member: str) -> str:
@@ -461,6 +761,7 @@ def validate_public_source_tree(root: Path = ROOT) -> None:
     files = _walk_public_source_files(root)
     members = set(files)
     _validate_public_artifact_inventory(files, root=root)
+    _validate_bounded_lending_evidence(files)
 
     private_signature_hits = {
         member
@@ -877,17 +1178,14 @@ def validate_distribution_directory(
         wheel_inventory = wheel_archive.read(WHEEL_ARTIFACT_INVENTORY_PATH)
     expected_sdist_root = sdist.name.removesuffix(".tar.gz")
     with tarfile.open(sdist, mode="r:gz") as sdist_archive:
-        sdist_member = (
-            f"{expected_sdist_root}/{PUBLIC_ARTIFACT_INVENTORY_PATH}"
-        )
+        sdist_member = f"{expected_sdist_root}/{PUBLIC_ARTIFACT_INVENTORY_PATH}"
         extracted = sdist_archive.extractfile(sdist_member)
         if extracted is None:  # already rejected by the individual validator
             raise ValueError("source distribution inventory could not be read")
         sdist_inventory = extracted.read()
     if wheel_inventory != sdist_inventory:
         raise ValueError(
-            "wheel and source distribution embed different public artifact "
-            "inventories"
+            "wheel and source distribution embed different public artifact inventories"
         )
     effective_version = version or wheel_version
     expected_prefix = f"{DIST_NAME}-{effective_version}"
@@ -926,7 +1224,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.write_public_artifact_inventory:
-        if args.sync or args.require_dist or args.validate_dist_dir or args.license_file:
+        if (
+            args.sync
+            or args.require_dist
+            or args.validate_dist_dir
+            or args.license_file
+        ):
             parser.error(
                 "--write-public-artifact-inventory cannot be combined with "
                 "release synchronization or distribution validation"

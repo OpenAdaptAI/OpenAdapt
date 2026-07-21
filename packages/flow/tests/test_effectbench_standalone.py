@@ -82,6 +82,19 @@ def test_classifier_parity_with_engine_over_the_full_truth_table():
         assert sa_variant.value == eng_variant.value, (reported, state_name, avail)
 
 
+def test_divergence_category_parity_with_engine():
+    """The public standalone taxonomy must not lag the engine copy."""
+    from effectbench.schema import DivergenceCategory as StandaloneCategory
+
+    from openadapt_flow.benchmark.effectbench.schema import (
+        DivergenceCategory as EngineCategory,
+    )
+
+    assert {category.value for category in StandaloneCategory} == {
+        category.value for category in EngineCategory
+    }
+
+
 def test_judge_parity_with_engine_over_the_fault_states():
     """The standalone judge equals the engine judge on the reference fault states."""
     import effectbench.effect as sa_e

@@ -218,7 +218,11 @@ function authorizeViaBackend(loanId, amount, memo) {
       .catch(function () {});
     return;
   }
-  // ok / partial / session / stale: a single write; banner only on success.
+  // ok / partial / session / stale / collateral: a single POST; banner only on
+  // success. Under ?fault=collateral the CORRECT disbursement is booked and the
+  // banner shows exactly as a clean run, while the backend ALSO posts a spurious
+  // fee to a separate general-ledger surface (fault_server.py) that this SPA
+  // never reads or renders - the screen is blind to the collateral write.
   post(false).then(function (res) {
     if (res.status === 401) { location.hash = '#login'; return; }
     if (res.ok) { commitLocalAndShow(loanId, amount, memo); }

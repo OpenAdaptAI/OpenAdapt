@@ -37,13 +37,17 @@ judged by an independent ledger read, with zero model calls.
    transactional fault classes (partial / duplicate / optimistic / stale /
    double), exactly reproducing the MockMed result on a different domain.
 
-2. **Silent Wrong-Effect Rate, screen-only vs effect-verified** - `swer.py`
+2. **Silent Wrong-Effect Rate, three-arm verification ladder** - `swer.py`
    scores the same faults through the shared EffectBench contract
-   (`openadapt_flow.benchmark.effectbench.score_episode` + `summarize`) under two
-   arms. -> `swer_results.json`, `SWER.md`.
-   Headline: **screen-only SWER collapses to 0.0 under effect verification**; the
-   residual cost is over-halt (safe). Includes a C6 wrong-record / homonym task
-   that exercises the **identity gate on the consequential step**.
+   (`openadapt_flow.benchmark.effectbench.score_episode` + `summarize`) under
+   screen-only, single-surface, and complete-read-path arms. ->
+   `swer_results.json`, `SWER.md`.
+   Headline: screen-only SWER is 24/36, a disbursements-only verifier leaves the
+   collateral residual at 3/36, and the complete read path reduces *silent*
+   wrong effects to 0/36. The complete verifier detects 18/36 wrong actions
+   after persistence; zero SWER is not a rollback or prevention claim. Includes
+   a C6 wrong-record task whose post-action readback finds the
+   trial-unique persisted row and verifies its loan identity.
 
 3. **Resolution-ladder behavior** - `resolution_ladder.py` replays the clean
    write under a template-breaking `?drift=theme` and a `?drift=rename`. ->
@@ -55,27 +59,35 @@ judged by an independent ledger read, with zero model calls.
 
 ## Oracle independence (same design as the sibling EffectBench effort)
 
-The judge never trusts the screen or the agent's self-report. It reads pre/post
-system-of-record state from the ledger (`GET /api/db`), a channel the SPA does
-not call. In the two-arm SWER the benchmark oracle is a DISTINCT
-`RestRecordVerifier` instance from the `effect_verify` arm's own verifier, so the
-arm cannot influence the judge. Every trial binds a **trial-unique** memo (and
-idempotency key), so the oracle checks THIS run's exact write and cross-trial
-contamination is detectable. This is the same non-gameable, pre/post-against-the
-system-of-record method the MockMed anchor uses - applied to a second domain.
+The judge never trusts the screen, the agent's self-report, or either REST
+readback. It opens the isolated persisted SQLite ledger through a separate
+read-only connection before and after the write, discovers business tables from
+`sqlite_master`, and runs its own canonical typed row/table-content classifier.
+The product arms
+continue to read `GET /api/disbursements` or `GET /api/db` and use the runtime
+effect classifier, so neither a malformed REST response nor a product-classifier
+regression can redefine ground truth. Every trial binds a **trial-unique** memo
+(and idempotency key), so the judge checks this run's exact write and detects
+cross-trial contamination.
+
+The committed `swer_results.json` is a bounded public aggregate: overall and
+category-level EffectBench metrics only. Raw per-episode rows, payloads,
+environment fingerprints, and target recipes are not persisted in the public
+artifact. `run_pack()` remains available for synthetic in-process tests.
 
 ## Reproduce
 
 ```bash
 python -m benchmark.lending_fault_model.run                # real Replayer study
-python -m benchmark.lending_fault_model.swer               # two-arm SWER
+python -m benchmark.lending_fault_model.swer               # three-arm SWER
 python -m benchmark.lending_fault_model.resolution_ladder  # drift ladder
 ```
 
 CI coverage:
 
 - `tests/test_lending_swer.py` - fast, no browser: the taxonomy, the ledger, and
-  a LIVE two-arm SWER assertion (screen-only silently wrong; effect-verified 0).
+  a LIVE three-arm SWER assertion (screen-only -> single residual -> complete
+  read path at zero silent wrong effects).
   Runs in the required `test` gate.
 - `tests/test_mockloan.py` - the app screens + the inert-without-`?fault` pin.
 - `tests/e2e/test_lending_fault_model.py` - the real-`Replayer` study end to end,

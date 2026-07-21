@@ -268,7 +268,7 @@
     },
     {
       "path": "benchmark/lending_fault_model/swer_results.json",
-      "sha256": "a54daf65c7f960907698f0ef905eeddb01e4d3a42b26f5aaa6f888e3341ad919"
+      "sha256": "1dd7720a9a44bd5a453ea16fa8ac2f7050beceedf3a1f220312296cb3675bf09"
     },
     {
       "path": "benchmark/macos_native/ax_identity_20260720.adjudication.json",
@@ -1628,7 +1628,7 @@
     },
     {
       "path": "openadapt_flow/mockloan/static/app.js",
-      "sha256": "b0ef03d1aa9e5d817c31d69c0a9020b13f964fe6ca838e1069c97e220937bef2"
+      "sha256": "5580accb8f4ecd94b48cc452ec84941da3814f0b1665bf8d239f2c241303765a"
     },
     {
       "path": "openadapt_flow/mockloan/static/index.html",

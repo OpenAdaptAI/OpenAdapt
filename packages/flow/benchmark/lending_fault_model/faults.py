@@ -35,6 +35,21 @@ Outcome taxonomy (judged by effect, not by the screen):
                             not happen, or happened wrong (phantom success /
                             partial save). The screen lied and nothing caught
                             it. The most dangerous class for a record system.
+
+Honest scope of the ground-truth oracle (why 0 is not free). This browser study
+judges by ``GET /api/db`` over the disbursements ledger. That single read path
+catches every fault that lands on THAT surface, but a single out-of-band record
+oracle is NOT sufficient in general: a write to a surface it does not read is
+invisible to it. The companion SWER study
+(``benchmark/lending_fault_model/swer.py``) makes this explicit with a
+``collateral`` scenario---a lending-local cross-surface variant of EffectBench's
+C2 extra-write category---that books the correct disbursement AND a spurious fee
+to a SEPARATE fees / general-ledger surface. A single-surface oracle leaves a
+residual silent-wrong-effect on exactly that scenario (the lending analog of the
+clinical study's 9/90 single-surface residual); only a COMPLETE read path over
+every mutable surface reaches 0. Both MockLoan and the clinical MockMed are
+SYNTHETIC apps built by the same team - a matching residual across the two is
+suggestive of generalizability, not proof.
 """
 
 from __future__ import annotations

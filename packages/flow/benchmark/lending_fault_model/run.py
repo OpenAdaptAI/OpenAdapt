@@ -263,7 +263,7 @@ def render_markdown(results: list[ClassResult], meta: dict) -> str:
         "truth. This study adds a real persistence boundary "
         "(`openadapt_flow/mockloan/fault_server.py`): a flag-gated `?fault=` "
         "hook in the app (mirroring the `?drift=` hooks) routes the Authorize "
-        "write through a backend API with an in-process ledger. **With no "
+        "write through a backend API with an isolated SQLite ledger. **With no "
         "`?fault` query the app never calls the API and the normal benchmark "
         "is byte-for-byte unaffected** (pinned by a test). Each fault class is "
         "injected at that boundary; the SAME recorded bundle is replayed "
