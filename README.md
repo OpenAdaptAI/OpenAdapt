@@ -1,5 +1,11 @@
 # OpenAdapt: Launcher for the OpenAdapt Flow Compiler
 
+<p align="center">
+  <a href="https://openadapt.ai">
+    <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/openadapt-hero.svg" width="100%" alt="OpenAdapt is the governed demonstration compiler for GUI workflows. Record a demonstration once, compile it to a deterministic program, and replay it locally with no model calls on the healthy path. When the UI drifts, a resolution ladder (structural, template, OCR, geometry, with an optional grounding model that is never on the hot path) re-resolves the target; armed identity gates and independent out-of-band effect verification guard writes; and the run halts with a report for a human or an AI instead of guessing. It runs across browser (Beta), Windows, macOS and RDP (scoped), Linux (research) and Citrix/VDI (exploratory), surfaced via CLI, desktop app, tray, Cloud (Beta, browser) and emitted MCP servers and Agent Skills.">
+  </a>
+</p>
+
 [![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Downloads](https://img.shields.io/pypi/dm/openadapt.svg)](https://pypi.org/project/openadapt/)
@@ -57,15 +63,19 @@ flowchart LR
   R -->|UI drifted| L{"Resolution ladder<br/>re-resolves the target?"}
   L -->|resolved| V
   L -->|no confident match| H["Halt with a report"]
+  V --> P["Illustrated run report"]
+  H --> P
   classDef halt stroke:#b21f2d,stroke-width:2px;
+  classDef ok stroke:#3e6b4f,stroke-width:2px;
   class H halt;
+  class V ok;
 ```
 
 *Text summary (PyPI does not render Mermaid): demonstrate once, compile to a
 local program, then replay it deterministically with no model calls. If the UI
 matches, the write is verified; if it drifted, the resolution ladder re-resolves
 the target, and if it cannot establish a confident match the run halts with a
-report instead of guessing.*
+report instead of guessing. Either way, every run writes an illustrated report.*
 
 ---
 
