@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "1.19.0"
+version = "1.20.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
