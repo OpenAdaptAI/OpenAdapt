@@ -127,3 +127,19 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
     assert "h264_videotoolbox" in script
     assert "h264_mf" in script
     assert "software_fallback_encoder" in script
+
+
+def test_runtime_builder_normalizes_windows_paths_and_materializes_smoke_bytes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "scripts" / "build_managed_ffmpeg_runtime.sh").read_text()
+
+    source_conversion = 'SOURCE_ARCHIVE="$(cygpath -u "${SOURCE_ARCHIVE}")"'
+    output_conversion = 'OUTPUT_DIR="$(cygpath -u "${OUTPUT_DIR}")"'
+    assert source_conversion in script
+    assert output_conversion in script
+    assert script.index(source_conversion) < script.index('bundle_dir="${OUTPUT_DIR}/bundle"')
+    assert script.index(output_conversion) < script.index('bundle_dir="${OUTPUT_DIR}/bundle"')
+
+    assert 'frames = b"".join(' in script
+    assert '(root / "frames.rgb").write_bytes(frames)' in script
+    assert '(root / "frames.rgb").write_bytes(\n' not in script

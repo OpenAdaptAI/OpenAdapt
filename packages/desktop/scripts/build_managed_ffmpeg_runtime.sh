@@ -12,6 +12,10 @@ if command -v python3 >/dev/null 2>&1; then
 else
   python_cmd="python"
 fi
+if [[ "${TARGET_TRIPLE}" == "x86_64-pc-windows-msvc" ]]; then
+  SOURCE_ARCHIVE="$(cygpath -u "${SOURCE_ARCHIVE}")"
+  OUTPUT_DIR="$(cygpath -u "${OUTPUT_DIR}")"
+fi
 
 workspace="$(pwd)"
 work_root="${RUNNER_TEMP:-/tmp}/openadapt-ffmpeg-${TARGET_TRIPLE}"
@@ -259,10 +263,11 @@ png = (
     + chunk(b"IEND", b"")
 )
 (root / "frame.png").write_bytes(png)
-(root / "frames.rgb").write_bytes(
+frames = b"".join(
     b"".join(bytes((x * 16, y * 16, frame * 8)) for y in range(height) for x in range(width))
     for frame in range(25)
 )
+(root / "frames.rgb").write_bytes(frames)
 PY
 
 for _ in $(seq 1 25); do
