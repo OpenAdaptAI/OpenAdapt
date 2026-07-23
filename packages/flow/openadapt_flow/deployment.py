@@ -51,18 +51,21 @@ class BackendConfig(BaseModel):
     - ``linux`` — one exact local Linux application window through AT-SPI.
       Requires ``linux_app`` and ``linux_window_title``. Native accessibility
       actions are preferred; global pointer/keyboard fallback is opt-in.
-    - ``rdp`` — a pixel-only remote-desktop backend for the Citrix/legacy-EMR
-      wedge. ``rdp_host`` drives a network RDP session (FreeRDP/aardwolf);
-      ``rdp_window`` instead drives a local remote-display CLIENT WINDOW (the
-      faithful Citrix analog — a Citrix Workspace / Parallels window captured
-      and injected at the host OS level).
+    - ``rdp`` — a pixel-only network-RDP or local remote-display backend.
+      ``rdp_host`` drives a network RDP session (FreeRDP/aardwolf);
+      ``rdp_window`` instead drives a local remote-display client window.
+    - ``citrix`` — the local Citrix Workspace/Viewer window preset over the
+      remote-display backend. It defaults the owner selector for the host OS,
+      accepts ``rdp_window`` / ``rdp_window_title`` overrides, and refuses an
+      ``rdp_host`` rather than silently constructing the wrong RDP substrate.
 
     Every non-``web`` field is optional and defaults to None, so an existing
     ``web`` deployment (or an empty config) is byte-for-byte unchanged.
     """
 
     #: Which backend to drive:
-    #: ``web`` (default) | ``windows`` | ``macos`` | ``linux`` | ``rdp``.
+    #: ``web`` (default) | ``windows`` | ``macos`` | ``linux`` | ``rdp`` |
+    #: ``citrix``.
     kind: str = "web"
 
     #: The GUI URL to drive (the app under automation). None => the caller's
@@ -122,7 +125,7 @@ class BackendConfig(BaseModel):
     rdp_readiness_text: Optional[str] = None
     rdp_readiness_min_ratio: float = Field(default=0.85, ge=0.0, le=1.0)
 
-    # -- rdp (local remote-display client window — the Citrix analog) --------
+    # -- rdp/citrix (local remote-display client window) ---------------------
     #: Exact case-insensitive owner-app name of the local client WINDOW to drive
     #: (e.g. ``"Citrix Workspace"`` / ``"Parallels Desktop"``). When set (and
     #: ``rdp_host`` is not), the backend captures and injects into that on-screen

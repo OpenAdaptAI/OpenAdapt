@@ -138,12 +138,15 @@ def build_backend(
 
     if kind == "rdp":
         return _build_rdp_backend(
-            cfg, rdp_transport=rdp_transport, window_client=window_client
+            cfg,
+            rdp_transport=rdp_transport,
+            window_client=window_client,
+            citrix=(cfg.kind or "").strip().lower() == "citrix",
         )
 
     raise ValueError(
         "unknown backend.kind "
-        f"{cfg.kind!r} (expected: web | windows | macos | linux | rdp)"
+        f"{cfg.kind!r} (expected: web | windows | macos | linux | rdp | citrix)"
     )
 
 
@@ -152,6 +155,7 @@ def _build_rdp_backend(
     *,
     rdp_transport: Optional["RDPTransport"],
     window_client: Optional["WindowClient"],
+    citrix: bool = False,
 ) -> "Backend":
     """Build the ``rdp`` backend: network RDP (FreeRDP) or local client window.
 
@@ -159,10 +163,36 @@ def _build_rdp_backend(
     :class:`AardwolfTransport`; ``rdp_window`` (no host) selects the local
     remote-display client-window backend (the faithful Citrix analog). Exactly
     one target must be given.
+
+    When ``citrix`` is True (``backend.kind: citrix``) and no ``rdp_host`` is
+    given, the window path builds a
+    :class:`~openadapt_flow.backends.citrix_workspace.CitrixWorkspaceBackend`,
+    which defaults its target owner to the host's Citrix Workspace/Viewer window
+    -- so ``--backend citrix`` works without the caller knowing the per-platform
+    owner string (``rdp_window`` still overrides it; ``rdp_window_title``
+    disambiguates multiple sessions).
     """
     has_host = bool(cfg.rdp_host)
     has_window = bool(cfg.rdp_window)
     readiness_probe = _build_rdp_readiness_probe(cfg)
+
+    if citrix and (has_host or rdp_transport is not None):
+        raise ValueError(
+            "backend.kind 'citrix' drives a local Citrix Workspace window and "
+            "does not accept backend.rdp_host or an RDP transport; use "
+            "backend.kind 'rdp' for a network RDP session"
+        )
+
+    if citrix:
+        from openadapt_flow.backends.citrix_workspace import CitrixWorkspaceBackend
+
+        return CitrixWorkspaceBackend(
+            window_client,
+            owner_substr=cfg.rdp_window or None,
+            window_title=cfg.rdp_window_title,
+            max_frame_age_s=cfg.rdp_max_frame_age_s,
+            readiness_probe=readiness_probe,
+        )
 
     if rdp_transport is not None or has_host:
         from openadapt_flow.backends.rdp_backend import FreeRDPBackend

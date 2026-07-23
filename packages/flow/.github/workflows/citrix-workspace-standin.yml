@@ -1,0 +1,96 @@
+name: citrix-workspace-standin
+
+# Citrix-Workspace-window backend qualification over the no-DOM canvas STAND-IN
+# (DRAFT CI wiring). Drives the CitrixWorkspaceBackend (window-scoped capture +
+# actuation through the inherited fail-loud gates) over the Part-1
+# no-DOM <canvas> through the WindowClient seam. This is the Citrix
+# Workspace-WEB canvas class, NOT ICA/HDX. Real ICA/HDX acceptance requires the
+# separate 3+3 release gate in benchmark/citrix_workspace/README.md.
+#
+# Pull requests that touch the backend, harness, or its exact runtime
+# dependencies run the headless stand-in before merge. The exact PR head is
+# checked out rather than GitHub's synthetic merge ref, and the merge-base is
+# recorded alongside it for reproducibility. Manual candidate-branch reruns
+# remain available; there is no recurring schedule while ICA/HDX acceptance is
+# pending.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/citrix-workspace-standin.yml"
+      - "benchmark/canvas_ladder/**"
+      - "benchmark/citrix_workspace/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "openadapt_flow/__main__.py"
+      - "openadapt_flow/backend.py"
+      - "openadapt_flow/backends/citrix_workspace.py"
+      - "openadapt_flow/backends/factory.py"
+      - "openadapt_flow/backends/remote_display.py"
+      - "openadapt_flow/compiler/**"
+      - "openadapt_flow/deployment.py"
+      - "openadapt_flow/hosted.py"
+      - "openadapt_flow/ir.py"
+      - "openadapt_flow/policy.py"
+      - "openadapt_flow/recorder.py"
+      - "openadapt_flow/run_gate.py"
+      - "openadapt_flow/runtime/**"
+      - "openadapt_flow/vision/**"
+      - "tests/test_citrix_workspace_backend.py"
+      - "tests/test_citrix_workspace_qualification.py"
+      - "tests/e2e/test_citrix_workspace_standin_e2e.py"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  citrix-workspace-standin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install flow with the vision + browser stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[ocr,cv]" || pip install -e .
+          pip install opencv-python-headless rapidocr-onnxruntime pillow imagehash playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Build the no-DOM canvas fixture image (Part-1)
+        run: docker build -t oaflow-canvas-fixture:latest benchmark/canvas_ladder/fixture
+
+      - name: Start the no-DOM canvas surface
+        run: |
+          docker run -d --name oaflow-canvas-ladder --shm-size=1g -p 6080:6080 \
+            oaflow-canvas-fixture:latest
+          sleep 18
+
+      - name: Run the Citrix-Workspace-backend qualification (stand-in)
+        run: |
+          python benchmark/citrix_workspace/run_citrix_workspace_qualification.py \
+            --container oaflow-canvas-ladder \
+            --output runs/citrix-workspace/results.json \
+            --candidate-commit "$(git rev-parse HEAD)" \
+            --base-commit "$(git merge-base HEAD origin/main)"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: citrix-workspace-standin-qualification
+          path: runs/citrix-workspace/results.json
+          if-no-files-found: error
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f oaflow-canvas-ladder || true

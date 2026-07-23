@@ -19,6 +19,7 @@ from openadapt_flow.compiler.codegen import render_workflow_py
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    BackendHints,
     Postcondition,
     PostconditionKind,
     Step,
@@ -289,6 +290,12 @@ def test_phi_bearing_canonical_bundle_is_scrubbed_resealed_and_loadable(tmp_path
         name="Jane Doe intake",
         recording_id="c770c8bdbb6c4864a5e29eec19f4bafd",
         viewport=(8, 8),
+        backend_hints=BackendHints(
+            backend="citrix",
+            rdp_window="wfica32",
+            rdp_window_title="Jane Doe - Appointments",
+            rdp_readiness_text="MRN-123",
+        ),
         steps=[
             Step(
                 id="step_000",
@@ -328,7 +335,12 @@ def test_phi_bearing_canonical_bundle_is_scrubbed_resealed_and_loadable(tmp_path
         if path.is_file() and path.suffix in {".json", ".py"}
     )
     assert b"Jane Doe" not in text_bytes
+    assert b"MRN-123" not in text_bytes
     assert Workflow.load(destination).steps[0].anchor is not None
+    sanitized_hints = Workflow.load(destination).backend_hints
+    assert sanitized_hints is not None
+    assert sanitized_hints.rdp_window_title == "[PERSON] - Appointments"
+    assert sanitized_hints.rdp_readiness_text == "[MRN]"
     approve_derivative(destination, source=bundle, reviewer="privacy-reviewer")
 
 

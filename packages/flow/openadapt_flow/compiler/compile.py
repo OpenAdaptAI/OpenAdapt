@@ -27,6 +27,7 @@ from openadapt_flow import volatility
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    BackendHints,
     BundleManifest,
     BundleProvenance,
     Landmark,
@@ -1019,6 +1020,18 @@ def compile_recording(
     (bundle / "templates").mkdir(parents=True, exist_ok=True)
 
     meta = json.loads((recording / "meta.json").read_text())
+    backend_hints_raw = meta.get("backend_hints")
+    backend_hints: Optional[BackendHints] = None
+    if backend_hints_raw is not None:
+        if not isinstance(backend_hints_raw, dict):
+            raise ValueError("meta.json backend_hints must be an object")
+        try:
+            backend_hints = BackendHints.model_validate(backend_hints_raw)
+        except Exception as exc:
+            raise ValueError(
+                "meta.json backend_hints does not match the closed "
+                "rdp/citrix execution-target schema"
+            ) from exc
     events = _load_events(recording)
     params: dict[str, str] = dict(meta.get("params") or {})
     viewport = meta.get("viewport")
@@ -1428,6 +1441,7 @@ def compile_recording(
         name=name,
         recording_id=meta.get("id"),
         viewport=tuple(viewport) if viewport else None,
+        backend_hints=backend_hints,
         params=params,
         # Workflow-program IR, Phase 1: emit a TYPED spec for each recorded
         # parameter alongside the frozen ``params`` dict -- generalizing the

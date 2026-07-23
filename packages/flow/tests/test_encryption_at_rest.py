@@ -27,6 +27,7 @@ from openadapt_flow import crypto
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    BackendHints,
     Step,
     Workflow,
 )
@@ -179,6 +180,30 @@ def test_bundle_encrypted_round_trip(tmp_path):
     loaded = Workflow.load(b, key=KEY)
     assert loaded.model_dump() == wf.model_dump()
     assert loaded.encrypted is True
+
+
+def test_citrix_target_hints_are_sealed_and_absent_from_plaintext_manifest(tmp_path):
+    b = _bundle_dir(tmp_path)
+    wf = _workflow()
+    sensitive_title = "Patient Jane Doe - Appointments"
+    sensitive_marker = "MRN-123 ready"
+    wf.backend_hints = BackendHints(
+        backend="citrix",
+        rdp_window="wfica32",
+        rdp_window_title=sensitive_title,
+        rdp_readiness_text=sensitive_marker,
+    )
+    wf.save(b, encrypt=True, key=KEY)
+
+    assert not (b / "workflow.json").exists()
+    on_disk = (b / "workflow.json.enc").read_bytes()
+    manifest = (b / "manifest.json").read_bytes()
+    for value in (b"wfica32", sensitive_title.encode(), sensitive_marker.encode()):
+        assert value not in on_disk
+        assert value not in manifest
+
+    loaded = Workflow.load(b, key=KEY)
+    assert loaded.backend_hints == wf.backend_hints
 
 
 def test_bundle_load_without_key_fails_loudly(tmp_path, monkeypatch):

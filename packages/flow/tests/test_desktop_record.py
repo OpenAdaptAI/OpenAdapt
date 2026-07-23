@@ -270,7 +270,13 @@ def test_cli_record_windows_invokes_capture(tmp_path: Path, monkeypatch) -> None
     captured: dict = {}
 
     def fake_record(
-        out_dir, *, task_description, params, identifier_region=None, window=None
+        out_dir,
+        *,
+        task_description,
+        params,
+        identifier_region=None,
+        window=None,
+        **kwargs,
     ):
         captured["out"] = Path(out_dir)
         captured["task"] = task_description
@@ -305,7 +311,13 @@ def test_cli_record_rdp_invokes_capture(tmp_path: Path, monkeypatch) -> None:
     captured: dict = {}
 
     def fake_record(
-        out_dir, *, task_description, params, identifier_region=None, window=None
+        out_dir,
+        *,
+        task_description,
+        params,
+        identifier_region=None,
+        window=None,
+        **kwargs,
     ):
         captured["params"] = params
         Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -325,7 +337,13 @@ def test_cli_record_desktop_identifier_region(tmp_path: Path, monkeypatch) -> No
     captured: dict = {}
 
     def fake_record(
-        out_dir, *, task_description, params, identifier_region=None, window=None
+        out_dir,
+        *,
+        task_description,
+        params,
+        identifier_region=None,
+        window=None,
+        **kwargs,
     ):
         captured["identifier_region"] = identifier_region
         Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -390,6 +408,46 @@ def test_orchestration_stamps_identifier_region_into_meta(tmp_path: Path) -> Non
     assert meta["id"] == "x"  # existing keys preserved (additive stamp)
 
 
+def test_orchestration_stamps_exact_citrix_replay_binding(tmp_path: Path) -> None:
+    log: list = []
+
+    def fake_convert(cap_dir, out_dir, *, params=None):
+        (Path(out_dir) / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "x",
+                    "viewport": [800, 600],
+                    "params": {},
+                    "window_capture": {
+                        "resolved_owner": "Citrix Workspace",
+                        "resolved_title": "Claims - Citrix Workspace",
+                    },
+                    "backend_hints": {"backend": "rdp"},
+                }
+            )
+        )
+        return Path(out_dir)
+
+    out = record_desktop_capture(
+        tmp_path / "rec",
+        backend_kind="citrix",
+        replay_window="wfica32",
+        replay_window_title="Claims - Citrix Workspace",
+        readiness_text="Claims queue",
+        recorder_factory=_make(log),
+        convert=fake_convert,
+        stop=lambda: True,
+        announce=False,
+    )
+    meta = json.loads((Path(out) / "meta.json").read_text())
+    assert meta["backend_hints"] == {
+        "backend": "citrix",
+        "rdp_window": "wfica32",
+        "rdp_window_title": "Claims - Citrix Workspace",
+        "rdp_readiness_text": "Claims queue",
+    }
+
+
 def test_cli_record_desktop_rejects_secret(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="secret"):
         _run_cli(
@@ -430,9 +488,16 @@ def test_cli_record_web_requires_url(tmp_path: Path) -> None:
 
 def _fake_desktop_record(captured: dict):
     def fake_record(
-        out_dir, *, task_description, params, identifier_region=None, window=None
+        out_dir,
+        *,
+        task_description,
+        params,
+        identifier_region=None,
+        window=None,
+        **kwargs,
     ):
         captured["window"] = window
+        captured.update(kwargs)
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         return Path(out_dir)
 
@@ -461,6 +526,47 @@ def test_cli_record_window_threads_owner_and_title(tmp_path: Path, monkeypatch) 
     )
     assert rc == 0
     assert captured["window"] == {"owner": "Parallels", "title": "Windows 11"}
+
+
+def test_cli_record_citrix_threads_capture_and_exact_replay_targets(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        "openadapt_flow.desktop_record.record_desktop_capture",
+        _fake_desktop_record(captured),
+    )
+    rc = _run_cli(
+        [
+            "record",
+            "--backend",
+            "citrix",
+            "--window",
+            "Citrix Workspace",
+            "--window-title",
+            "Claims",
+            "--rdp-window",
+            "wfica32",
+            "--rdp-window-title",
+            "Claims - Citrix Workspace",
+            "--rdp-readiness-text",
+            "Claims queue",
+            "--out",
+            str(tmp_path / "rec"),
+        ]
+    )
+    assert rc == 0
+    assert captured["window"] == {
+        "owner": "Citrix Workspace",
+        "title": "Claims",
+    }
+    assert captured["backend_kind"] == "citrix"
+    assert captured["replay_window"] == "wfica32"
+    assert captured["replay_window_title"] == "Claims - Citrix Workspace"
+    assert captured["readiness_text"] == "Claims queue"
+    output = capsys.readouterr().out
+    assert "Claims - Citrix Workspace" not in output
+    assert "Claims queue" not in output
 
 
 def test_cli_record_window_owner_only(tmp_path: Path, monkeypatch) -> None:

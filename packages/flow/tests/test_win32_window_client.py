@@ -36,6 +36,7 @@ import sys
 import pytest
 from PIL import Image
 
+from openadapt_flow.backends.citrix_workspace import default_citrix_owner
 from openadapt_flow.backends.remote_display import (
     RemoteDisplayBackend,
     RemoteDisplayError,
@@ -269,6 +270,24 @@ def test_find_windows_matches_process_and_exact_title() -> None:
     assert matches[0].owner == "wfica32.exe"
     assert matches[0].bounds == (300.0, 200.0, 1280.0, 800.0)
     assert matches[0].on_screen is True
+
+
+def test_citrix_default_matches_native_process_not_display_label() -> None:
+    """The Citrix preset must resolve the real wfica32.exe process exactly."""
+    api = FakeWin32Api(
+        windows=[
+            FakeWindow(101, image="wfica32.exe", pid=4242),
+            FakeWindow(
+                202,
+                image="Citrix Workspace.exe",
+                pid=5252,
+                title="Citrix Workspace launcher",
+            ),
+        ]
+    )
+    client, _ = _client(api)
+    matches = client.find_windows(default_citrix_owner("win32"), None)
+    assert [w.window_id for w in matches] == [101]
 
 
 def test_find_windows_skips_cloaked_invisible_and_untitled() -> None:

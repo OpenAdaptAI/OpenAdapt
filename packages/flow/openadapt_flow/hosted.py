@@ -1557,7 +1557,7 @@ BREAK_SUMMARY_SCHEMA = "break-summary/v2"
 #: only carry one of these fixed tokens, never a free-text hint. In particular
 #: recorded window titles / ``backend_hints`` (meta.json) are PHI-bearing
 #: (PMS titles embed patient names) and are NEVER read by this rail.
-_BACKEND_ENUM = frozenset({"web", "windows", "macos", "linux", "rdp"})
+_BACKEND_ENUM = frozenset({"web", "windows", "macos", "linux", "rdp", "citrix"})
 _RUN_SUMMARY_RUNGS = frozenset(
     {"structural", "template", "template_global", "ocr", "geometry", "grounder", "api"}
 )
@@ -1925,7 +1925,7 @@ def _build_run_summary_payload(
     """
     normalized_workflow_id = _optional_uuid(workflow_id, field="workflow_id")
     if backend is not None and backend not in _BACKEND_ENUM:
-        raise HostedError("backend must be web, windows, macos, linux, or rdp")
+        raise HostedError("backend must be web, windows, macos, linux, rdp, or citrix")
     normalized_client_run_id = _optional_uuid(
         client_run_id,
         field="client_run_id",

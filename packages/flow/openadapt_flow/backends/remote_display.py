@@ -432,17 +432,14 @@ class RemoteDisplayBackend:
         matches = self._client.find_windows(self._owner_substr, self._title_substr)
         if not matches:
             raise RemoteDisplayError(
-                "no window exactly matching owner "
-                f"{self._owner_substr!r} title {self._title_substr!r}; "
-                "is the remote-display client window open and visible?"
+                "no window exactly matching the configured remote-display "
+                "target; is the client window open and visible?"
             )
         if len(matches) != 1:
-            identities = [
-                (w.window_id, w.pid, w.owner, w.title, w.bounds) for w in matches
-            ]
             raise RemoteDisplayError(
                 "ambiguous remote-display target: expected one exact owner/title "
-                f"match, found {len(matches)}: {identities!r}"
+                f"match, found {len(matches)}; target identities are withheld "
+                "because window titles can contain sensitive record data"
             )
         self._window = matches[0]
         return matches[0]
@@ -473,8 +470,8 @@ class RemoteDisplayBackend:
                 ):
                     return
         raise RemoteDisplayError(
-            f"client window {self._owner_substr!r}/{self._title_substr!r} "
-            "did not come to the foreground (frontmost check failed)"
+            "configured client window did not come to the foreground "
+            "(frontmost check failed)"
         )
 
     # -- Backend protocol ----------------------------------------------------

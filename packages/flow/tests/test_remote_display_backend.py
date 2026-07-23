@@ -239,6 +239,18 @@ def test_coordinate_click_requires_prior_frame_lease() -> None:
 def test_duplicate_exact_windows_refused_instead_of_largest_selection() -> None:
     backend, client = _backend()
     old = client.window
+    sensitive_title = "Patient Jane Doe - Claims"
+    backend._title_substr = sensitive_title
+    client.window = WindowInfo(
+        window_id=old.window_id,
+        owner=old.owner,
+        title=sensitive_title,
+        pid=old.pid,
+        bounds=old.bounds,
+        on_screen=old.on_screen,
+    )
+    old = client.window
+    client.windows = [old]
     client.windows.append(
         WindowInfo(
             window_id=2,
@@ -249,17 +261,24 @@ def test_duplicate_exact_windows_refused_instead_of_largest_selection() -> None:
             on_screen=True,
         )
     )
-    with pytest.raises(RemoteDisplayError, match="ambiguous remote-display target"):
+    with pytest.raises(
+        RemoteDisplayError, match="ambiguous remote-display target"
+    ) as exc_info:
         backend.screenshot()
+    assert sensitive_title not in str(exc_info.value)
 
 
 def test_partial_owner_match_is_not_accepted() -> None:
     client = FakeClient()
+    sensitive_owner = "Patient Jane Doe - Citrix"
     backend = RemoteDisplayBackend(
-        client=client, owner_substr="Parallels", settle_s=0.0
+        client=client, owner_substr=sensitive_owner, settle_s=0.0
     )
-    with pytest.raises(RemoteDisplayError, match="no window exactly matching"):
+    with pytest.raises(
+        RemoteDisplayError, match="no window exactly matching"
+    ) as exc_info:
         backend.screenshot()
+    assert sensitive_owner not in str(exc_info.value)
 
 
 def test_same_pid_front_window_mismatch_refuses_keyboard_and_click() -> None:

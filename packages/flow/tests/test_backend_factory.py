@@ -12,9 +12,14 @@ from __future__ import annotations
 import pytest
 from PIL import Image
 
-from openadapt_flow.__main__ import _resolve_backend_config, build_parser
+from openadapt_flow.__main__ import (
+    _report_backend_kind,
+    _resolve_backend_config,
+    build_parser,
+)
 from openadapt_flow.backends.factory import _normalize_kind, build_backend
 from openadapt_flow.deployment import BackendConfig, DeploymentConfig
+from openadapt_flow.ir import BackendHints, Workflow
 
 # --- kind normalization -----------------------------------------------------
 
@@ -308,6 +313,119 @@ def test_rdp_host_flag_overrides_config() -> None:
     assert merged.rdp_host == "10.1.2.3"
 
 
+def test_citrix_window_flags_override_config() -> None:
+    cfg = DeploymentConfig()
+    args = _replay_args(
+        [
+            "--backend",
+            "citrix",
+            "--rdp-window",
+            "wfica32",
+            "--rdp-window-title",
+            "Claims - Citrix Workspace",
+            "--rdp-readiness-text",
+            "Claims queue",
+        ]
+    )
+    merged = _resolve_backend_config(args, cfg)
+    assert merged.kind == "citrix"
+    assert merged.rdp_window == "wfica32"
+    assert merged.rdp_window_title == "Claims - Citrix Workspace"
+    assert merged.rdp_readiness_text == "Claims queue"
+
+
+def test_recorded_citrix_target_binds_unconfigured_replay() -> None:
+    workflow = Workflow(
+        name="citrix",
+        backend_hints=BackendHints(
+            backend="citrix",
+            rdp_window="wfica32",
+            rdp_window_title="Claims - Citrix Workspace",
+            rdp_readiness_text="Claims queue",
+        ),
+    )
+    merged = _resolve_backend_config(_replay_args([]), DeploymentConfig(), workflow)
+    assert merged.kind == "citrix"
+    assert merged.rdp_window == "wfica32"
+    assert merged.rdp_window_title == "Claims - Citrix Workspace"
+    assert merged.rdp_readiness_text == "Claims queue"
+
+
+def test_explicit_citrix_config_overrides_recorded_target_field_by_field() -> None:
+    workflow = Workflow(
+        name="citrix",
+        backend_hints=BackendHints(
+            backend="citrix",
+            rdp_window="recorded-owner",
+            rdp_window_title="Recorded title",
+            rdp_readiness_text="Recorded readiness",
+        ),
+    )
+    cfg = DeploymentConfig(
+        backend=BackendConfig(
+            kind="citrix",
+            rdp_window="configured-owner",
+            rdp_readiness_text="Configured readiness",
+        )
+    )
+    merged = _resolve_backend_config(_replay_args([]), cfg, workflow)
+    assert merged.kind == "citrix"
+    assert merged.rdp_window == "configured-owner"
+    assert merged.rdp_window_title == "Recorded title"
+    assert merged.rdp_readiness_text == "Configured readiness"
+
+
+@pytest.mark.parametrize("alias", ["remote-display", "remote_display"])
+def test_rdp_alias_config_inherits_recorded_rdp_target(alias) -> None:
+    workflow = Workflow(
+        name="rdp",
+        backend_hints=BackendHints(
+            backend="rdp",
+            rdp_window="Microsoft Remote Desktop",
+            rdp_window_title="Finance VM",
+            rdp_readiness_text="Ledger",
+        ),
+    )
+    cfg = DeploymentConfig(backend=BackendConfig(kind=alias))
+    merged = _resolve_backend_config(_replay_args([]), cfg, workflow)
+    assert merged.kind == alias
+    assert merged.rdp_window == "Microsoft Remote Desktop"
+    assert merged.rdp_window_title == "Finance VM"
+    assert merged.rdp_readiness_text == "Ledger"
+
+
+def test_explicit_backend_does_not_inherit_different_recorded_target() -> None:
+    workflow = Workflow(
+        name="citrix",
+        backend_hints=BackendHints(
+            backend="citrix",
+            rdp_window="wfica32",
+            rdp_window_title="Claims - Citrix Workspace",
+            rdp_readiness_text="Claims queue",
+        ),
+    )
+    args = _replay_args(["--backend", "rdp", "--rdp-host", "10.1.2.3"])
+    merged = _resolve_backend_config(args, DeploymentConfig(), workflow)
+    assert merged.kind == "rdp"
+    assert merged.rdp_host == "10.1.2.3"
+    assert merged.rdp_window is None
+    assert merged.rdp_window_title is None
+    assert merged.rdp_readiness_text is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("remote-display", "rdp"),
+        ("remote_display", "rdp"),
+        ("RDP", "rdp"),
+        ("citrix", "citrix"),
+    ],
+)
+def test_report_backend_kind_closes_execution_aliases(raw, expected) -> None:
+    assert _report_backend_kind(raw) == expected
+
+
 def test_config_backend_used_when_no_flag() -> None:
     # A deployment config selects windows; no CLI flag needed.
     cfg = DeploymentConfig(
@@ -321,19 +439,17 @@ def test_config_backend_used_when_no_flag() -> None:
 # --- record refuses non-web -------------------------------------------------
 
 
-@pytest.mark.parametrize("kind", ["windows", "macos", "linux", "rdp"])
+@pytest.mark.parametrize("kind", ["windows", "macos", "linux", "rdp", "citrix"])
 def test_record_desktop_backend_invokes_capture(monkeypatch, tmp_path, kind) -> None:
     """Every desktop selector routes to capture, not the web recorder."""
     from openadapt_flow.__main__ import _cmd_record
 
     captured: dict = {}
 
-    def fake_record(
-        out_dir, *, task_description, params, identifier_region=None, window=None
-    ):
+    def fake_record(out_dir, *, task_description, params, **kwargs):
         captured["out"] = out_dir
         captured["params"] = params
-        captured["window"] = window
+        captured.update(kwargs)
         return out_dir
 
     monkeypatch.setattr(
@@ -345,6 +461,7 @@ def test_record_desktop_backend_invokes_capture(monkeypatch, tmp_path, kind) -> 
     assert _cmd_record(args) == 0
     assert captured["params"] == {}
     assert captured["window"] is None  # no --window: full-screen capture
+    assert captured["backend_kind"] == (kind if kind in ("rdp", "citrix") else None)
 
 
 # --- CLI replay drives the desktop backend (no browser, stubbed agent) ------

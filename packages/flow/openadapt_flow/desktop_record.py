@@ -1,4 +1,4 @@
-"""Live desktop recording for ``record --backend windows|macos|linux|rdp``.
+"""Live desktop recording for ``record --backend windows|macos|linux|rdp|citrix``.
 
 Capturing the operator's REAL desktop demonstration is NOT reinvented here — it
 reuses the two tested pieces that already exist in this repo:
@@ -15,7 +15,7 @@ reuses the two tested pieces that already exist in this repo:
   (``tests/test_capture_adapter.py``).
 
 This module is the thin, genuinely-missing piece: the LIVE orchestration that
-``record --backend windows|macos|linux|rdp`` needs — start a capture session, let the
+``record --backend windows|macos|linux|rdp|citrix`` needs — start a capture session, let the
 operator perform the workflow, stop on Ctrl-C, then convert to a compile-ready
 recording:
 
@@ -129,6 +129,10 @@ def record_desktop_capture(
     params: Optional[dict[str, str]] = None,
     identifier_region: Optional[tuple[int, int, int, int]] = None,
     window: Optional[dict[str, Optional[str]]] = None,
+    backend_kind: Optional[str] = None,
+    replay_window: Optional[str] = None,
+    replay_window_title: Optional[str] = None,
+    readiness_text: Optional[str] = None,
     capture_dir: Optional[Path | str] = None,
     ready_timeout_s: float = 60.0,
     recorder_factory: Optional[RecorderFactory] = None,
@@ -167,6 +171,13 @@ def record_desktop_capture(
             surfaced into ``meta.json`` by the capture adapter. Refused up front
             on hosts where capture has no per-window primitive
             (see :data:`WINDOW_CAPTURE_PLATFORMS`).
+        backend_kind: Optional replay substrate identity (``rdp`` or
+            ``citrix``) to seal into the compiled bundle's local execution
+            hints. Other backends do not use the ``rdp_*`` target contract.
+        replay_window: Optional exact owner/process selector for replay.
+        replay_window_title: Optional exact title selector for replay.
+        readiness_text: Optional current-frame marker required by governed
+            Citrix execution.
         capture_dir: Where the raw capture session is written (default: a
             ``.capture`` subdir of ``out_dir``). Kept so the raw session is
             inspectable / re-convertible.
@@ -193,6 +204,10 @@ def record_desktop_capture(
             f"{' and '.join(WINDOW_CAPTURE_PLATFORMS)}. Record on a supported "
             "host, or omit --window to capture the full screen."
         )
+    if backend_kind is not None and backend_kind not in ("rdp", "citrix"):
+        raise ValueError(
+            "backend_kind execution hints are supported only for rdp or citrix"
+        )
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -213,11 +228,9 @@ def record_desktop_capture(
     if announce:
         scope_line = ""
         if window is not None:
-            owner = window.get("owner")
-            title = window.get("title")
             scope_line = (
-                f"  Window-scoped: owner={owner!r} title={title!r} "
-                "(recording that window's own pixels).\n"
+                "  Window-scoped capture is active (recording that window's "
+                "own pixels; target selectors are not printed).\n"
             )
         print(
             f"Recording desktop workflow (task: {task_description!r}).\n"
@@ -234,12 +247,47 @@ def record_desktop_capture(
     # The recorder context has exited: capture threads joined, the session is
     # fully written to disk. Convert it into the compile-ready recording.
     recording = convert(cap_dir, out_dir, params=params or {})
+    if backend_kind is None and identifier_region is None:
+        return recording
+    meta_path = Path(recording) / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    changed = False
+    if backend_kind is not None:
+        # Capture accepts a substring selector, while replay requires one exact
+        # owner/title. Prefer the exact resolved window identity unless the
+        # operator supplied an explicit replay selector.
+        window_capture = meta.get("window_capture")
+        resolved_owner = None
+        resolved_title = None
+        if isinstance(window_capture, dict):
+            resolved_owner = window_capture.get("resolved_owner")
+            resolved_title = window_capture.get("resolved_title")
+
+        if backend_kind == "citrix":
+            from openadapt_flow.backends.citrix_workspace import (
+                default_citrix_owner,
+            )
+
+            default_owner: Optional[str] = default_citrix_owner()
+        else:
+            default_owner = None
+
+        hints: dict[str, str] = {"backend": backend_kind}
+        owner = replay_window or resolved_owner or default_owner
+        title = replay_window_title or resolved_title
+        if owner and str(owner).strip():
+            hints["rdp_window"] = str(owner).strip()
+        if title and str(title).strip():
+            hints["rdp_window_title"] = str(title).strip()
+        if readiness_text and readiness_text.strip():
+            hints["rdp_readiness_text"] = readiness_text.strip()
+        meta["backend_hints"] = hints
+        changed = True
     if identifier_region is not None:
-        # Additive meta.json stamp (the compiler reads `identifier_region`;
-        # everything else ignores unknown keys). Written post-convert so the
-        # converter contract stays unchanged.
-        meta_path = Path(recording) / "meta.json"
-        meta = json.loads(meta_path.read_text())
+        # Additive meta.json stamp (the compiler reads `identifier_region`).
+        # Written post-convert so the converter contract stays unchanged.
         meta["identifier_region"] = [int(v) for v in identifier_region]
+        changed = True
+    if changed:
         meta_path.write_text(json.dumps(meta, indent=2))
     return recording

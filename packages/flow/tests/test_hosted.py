@@ -2480,6 +2480,43 @@ def test_maybe_report_run_fires_on_opt_in_success_only(tmp_path, monkeypatch, ca
     assert len(calls) == 1
 
 
+def test_maybe_report_run_uses_resolved_citrix_token_without_target_leak(
+    tmp_path, monkeypatch
+):
+    import argparse as _argparse
+
+    from openadapt_flow.__main__ import _maybe_report_run
+
+    run_dir = tmp_path / "runs" / "r1"
+    _successful_run(run_dir)
+    calls: list = []
+
+    def fake_report_run(run_dir, **kw):
+        calls.append(kw)
+        return {"emitted": True, "run_id": "run_9"}
+
+    monkeypatch.setattr(hosted, "report_run", fake_report_run)
+    report = RunReport.model_validate_json(
+        (run_dir / "report.json").read_text(encoding="utf-8")
+    )
+    sensitive_title = "Patient Jane Doe - Claims"
+    sensitive_marker = "Jane Doe coverage queue"
+    args = _argparse.Namespace(
+        report=True,
+        backend=None,
+        rdp_window="wfica32",
+        rdp_window_title=sensitive_title,
+        rdp_readiness_text=sensitive_marker,
+    )
+    _maybe_report_run(run_dir, report, args, backend_kind="citrix")
+
+    assert calls == [{"workflow_id": None, "backend": "citrix"}]
+    payload_repr = repr(calls)
+    assert "wfica32" not in payload_repr
+    assert sensitive_title not in payload_repr
+    assert sensitive_marker not in payload_repr
+
+
 def test_maybe_report_run_env_opt_in_and_swallows_errors(tmp_path, monkeypatch, capsys):
     from openadapt_flow.__main__ import _maybe_report_run
 

@@ -88,10 +88,12 @@ This adapter detects such a session and:
   * stamps the output ``meta.json`` with the recorded scoping
     (``window_capture``) plus ``backend_hints`` naming the recorded target
     owner/title in ``BackendConfig`` terms (``rdp_window`` /
-    ``rdp_window_title``) so a ``replay --backend rdp`` invocation can
-    resolve the same client window. Both fields are additive; the compiler
-    ignores unknown ``meta.json`` keys, and nothing in the replay path reads
-    them yet (wiring them into the backend factory is a follow-up).
+    ``rdp_window_title``). Live ``record --backend rdp|citrix`` orchestration
+    seals these hints, the compiler carries them in ``Workflow.backend_hints``,
+    and replay uses them unless explicit deployment config or CLI flags
+    override them. Direct offline conversion cannot infer Citrix versus another
+    remote-display client, so it retains the generic ``backend: rdp`` identity
+    for backward compatibility.
 
 A window-scoped session that declares a coordinate space this adapter does
 not understand is refused loudly rather than converted with guessed scaling.

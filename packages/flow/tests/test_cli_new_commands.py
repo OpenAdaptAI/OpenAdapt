@@ -22,7 +22,7 @@ from openadapt_flow.__main__ import (
     main,
 )
 from openadapt_flow.compiler.induction import induce_program
-from openadapt_flow.ir import ActionKind, Step, Workflow
+from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
     PendingEscalation,
@@ -161,11 +161,25 @@ def test_deployment_runtime_bad_effects_config_exits() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _paused_run(tmp_path: Path, *, verified_first: bool = True) -> Path:
+def _paused_run(
+    tmp_path: Path,
+    *,
+    verified_first: bool = True,
+    backend_hints: BackendHints | None = None,
+) -> Path:
     run = tmp_path / "run"
+    bundle = tmp_path / "b"
+    Workflow(
+        name="w",
+        backend_hints=backend_hints,
+        steps=[
+            Step(id="s0", intent="first", action=ActionKind.KEY, key="A"),
+            Step(id="s1", intent="second", action=ActionKind.KEY, key="B"),
+        ],
+    ).save(bundle)
     store = CheckpointStore(run)
     store.write_manifest(
-        RunManifest(workflow_name="w", bundle_dir=str(tmp_path / "b"), params={})
+        RunManifest(workflow_name="w", bundle_dir=str(bundle), params={})
     )
     if verified_first:
         store.write_checkpoint(
@@ -545,6 +559,102 @@ def test_resume_windows_config_builds_windows_backend(
     backend = captured["backend"]
     assert type(backend).__name__ == "WindowsBackend"
     assert backend.server_url == "http://localhost:5001"
+
+
+def test_resume_uses_recorded_citrix_target_and_readiness(
+    tmp_path: Path, monkeypatch
+) -> None:
+    run = _paused_run(
+        tmp_path,
+        backend_hints=BackendHints(
+            backend="citrix",
+            rdp_window="wfica32",
+            rdp_window_title="Claims - Citrix Workspace",
+            rdp_readiness_text="Claims queue",
+        ),
+    )
+    main(["approve", str(run)])
+
+    captured: dict = {}
+
+    class FakeBackend:
+        def close(self):
+            pass
+
+    class CapturingReplayer:
+        def __init__(self, backend, **kwargs):
+            captured["backend"] = backend
+
+    import openadapt_flow.backends.factory as factory
+    import openadapt_flow.report as report_mod
+    import openadapt_flow.runtime as runtime_mod
+    import openadapt_flow.runtime.durable as durable_mod
+
+    def fake_build(cfg, **kwargs):
+        captured["config"] = cfg
+        return FakeBackend()
+
+    monkeypatch.setattr(factory, "build_backend", fake_build)
+    monkeypatch.setattr(runtime_mod, "Replayer", CapturingReplayer)
+    monkeypatch.setattr(
+        durable_mod, "resume", lambda run_dir, replayer, key=None: _FakeReport()
+    )
+    monkeypatch.setattr(report_mod, "render_run_report", lambda run_dir: "REPORT.md")
+
+    assert main(["resume", str(run), "--require-approval"]) == 0
+    cfg = captured["config"]
+    assert cfg.kind == "citrix"
+    assert cfg.rdp_window == "wfica32"
+    assert cfg.rdp_window_title == "Claims - Citrix Workspace"
+    assert cfg.rdp_readiness_text == "Claims queue"
+
+
+def test_resume_refuses_blank_citrix_readiness_before_backend(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    run = _paused_run(tmp_path)
+    main(["approve", str(run)])
+    config = tmp_path / "citrix.yaml"
+    config.write_text(
+        "backend:\n  kind: citrix\n  rdp_window: wfica32\n  rdp_readiness_text: '   '\n"
+    )
+
+    import openadapt_flow.backends.factory as factory
+
+    monkeypatch.setattr(
+        factory,
+        "build_backend",
+        lambda *args, **kwargs: pytest.fail("backend must not be constructed"),
+    )
+    assert (
+        main(
+            [
+                "resume",
+                str(run),
+                "--require-approval",
+                "--config",
+                str(config),
+            ]
+        )
+        == 2
+    )
+    out = capsys.readouterr().out
+    assert "Resume REFUSED" in out
+    assert "Nothing was executed" in out
+
+
+def test_resume_bundle_load_refusal_has_safe_constant_guidance(
+    tmp_path: Path, capsys
+) -> None:
+    run = _paused_run(tmp_path)
+    main(["approve", str(run)])
+    (tmp_path / "b" / "workflow.json").unlink()
+
+    assert main(["resume", str(run), "--require-approval"]) == 3
+    out = capsys.readouterr().out
+    assert "paused workflow bundle could not be loaded safely" in out
+    assert "OPENADAPT_BUNDLE_KEY" in out
+    assert "Nothing was executed" in out
 
 
 # ---------------------------------------------------------------------------

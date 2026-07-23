@@ -1,10 +1,10 @@
-# Desktop recording — `record --backend windows|macos|linux|rdp`
+# Desktop recording — `record --backend windows|macos|linux|rdp|citrix`
 
 `openadapt-flow record` records a workflow **once** so it can be compiled into a
 deterministic, vision-anchored script and replayed. This page documents the
 **desktop** side of that verb — capturing a workflow the operator performs on a
 native Windows desktop (`--backend windows`) or a remote display / Citrix
-(`--backend rdp`) — so `record → compile → replay` closes through the product
+(`--backend rdp|citrix`) — so `record → compile → replay` closes through the product
 CLI on the desktop substrate, not just the browser.
 
 ```
@@ -16,7 +16,7 @@ openadapt-flow replay bundle/ --backend windows --agent-url http://localhost:500
 ## What it does (and what it reuses)
 
 Desktop capture is **not reinvented**. The
-`record --backend windows|macos|linux|rdp` path
+`record --backend windows|macos|linux|rdp|citrix` path
 is a thin orchestration over two components that already exist and are tested:
 
 1. **[openadapt-capture](https://pypi.org/project/openadapt-capture/)** — the
@@ -108,8 +108,12 @@ substring to disambiguate):
 
 ```
 openadapt-flow record --backend rdp --window Parallels --out rec/
-openadapt-flow record --backend rdp --window 'Citrix Workspace' \
-    --window-title 'Ward A' --out rec/
+openadapt-flow record --backend citrix \
+    --window 'Citrix Viewer' \
+    --rdp-window 'Citrix Viewer' \
+    --rdp-window-title 'Ward A' \
+    --rdp-readiness-text 'Appointments' \
+    --out rec/
 ```
 
 Selectors are case-insensitive substrings matching openadapt-capture's
@@ -121,8 +125,33 @@ replays in (`CaptureSession.window_capture`, `coordinate_space:
 window_pixels`). The capture adapter stamps the window identity into
 `meta.json` under `window_capture` (target + resolved owner/title, plus the
 resolved `resolved_pid` / `resolved_window_id` OS handle where available) and
-emits `backend_hints` (`rdp_window` / `rdp_window_title`) so
-`replay --backend rdp` can resolve the same client window.
+emits closed `backend_hints` (`backend`, `rdp_window`, `rdp_window_title`, and
+optional `rdp_readiness_text`) so compile preserves the target and an unflagged
+replay resolves the same client window. Capture selectors are intentionally
+substring-based; replay selectors are exact. Use `--window` to find the window
+during recording and `--rdp-window` / `--rdp-window-title` to pin the exact
+replay identity. The resolved exact owner/title is used when the explicit replay
+selector is omitted.
+
+The Citrix defaults are `Citrix Viewer` on macOS and the exact process basename
+`wfica32` on Windows (`.exe` is optional). `CDViewer` remains an explicit
+alternate on Windows; the driver never cycles through candidates or accepts the
+first partial match. Duplicate exact matches require a title or other explicit
+disambiguation and otherwise refuse.
+
+```bash
+openadapt-flow compile rec/ --out bundle/ --name ward-a
+# Uses the recorded Citrix target and readiness marker.
+openadapt-flow replay bundle/
+# Explicit config/CLI remains authoritative.
+openadapt-flow replay bundle/ --backend citrix \
+    --rdp-window wfica32 --rdp-window-title 'Ward A'
+```
+
+Governed `run` requires a current-frame readiness marker for Citrix. Record it
+with `--rdp-readiness-text`, set `backend.rdp_readiness_text` in deployment
+config, or pass the flag directly. If it is absent, `run` refuses before any
+action; ordinary record/replay remains available.
 
 Window-scoped capture is implemented on **macOS and Windows** hosts
 (`CGWindowListCreateImage` / Win32 region grab); on any other host `--window`
@@ -131,9 +160,16 @@ would record coordinates in the wrong pixel space). `--window` applies only to
 the desktop backends — `--backend web` records the Playwright page and refuses
 it.
 
-**PHI note:** a window title can contain a patient name. The resolved title is
-kept in the **local recording metadata only** (`meta.json`); it is not emitted
-to any report/evidence rail.
+**PHI note:** a window title or readiness marker can contain a patient name.
+These values remain local execution metadata: plaintext in `meta.json` and in an
+explicitly unencrypted local bundle, encrypted inside `workflow.json.enc` when
+the bundle is sealed, and subject to the existing sanitized-derivative review
+before egress. They are never copied into `manifest.json`, hosted run summaries,
+or console logs. Command-line values are still visible in process listings and
+shell history: use `--rdp-window-title` / `--rdp-readiness-text` only for stable,
+non-sensitive application chrome. Put sensitive deployment values in a
+permission-protected YAML config, or record them once and seal the compiled
+bundle rather than repeating them on the command line.
 
 ## Parameters
 

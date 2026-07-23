@@ -23,7 +23,14 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Iterator, Literal, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    model_serializer,
+    model_validator,
+)
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -1076,6 +1083,35 @@ class BundleManifest(BaseModel):
     )
 
 
+class BackendHints(BaseModel):
+    """Trusted local execution target captured with a remote-display demo.
+
+    These hints bind a window-scoped recording to the same local client window
+    at replay time. They live only inside ``workflow.json``: plaintext in an
+    explicitly unencrypted local bundle, or encrypted with the rest of a sealed
+    bundle. They never enter the plaintext manifest or PHI-free hosted report
+    rail because a window title can contain a patient or account name.
+
+    The schema is deliberately closed to the two pixel-window substrates that
+    use ``BackendConfig.rdp_*``.  Network endpoints, credentials, arbitrary
+    backend configuration, and provider-specific recipes are not recording
+    metadata and must still come from the deployment config.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        hide_input_in_errors=True,
+        str_strip_whitespace=True,
+    )
+
+    backend: Literal["rdp", "citrix"]
+    rdp_window: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    rdp_window_title: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    rdp_readiness_text: Optional[str] = Field(
+        default=None, min_length=1, max_length=512
+    )
+
+
 # -- template-asset sealing (PHI-at-rest: image crops) -----------------------
 #
 # When a bundle is encrypted (``Workflow.save(encrypt=True)``), the ``templates/``
@@ -1214,6 +1250,12 @@ class Workflow(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     viewport: Optional[tuple[int, int]] = None
+    # Local-only remote-display target captured with the demonstration.
+    # ``BackendHints`` can contain a PHI-bearing window title, so it is sealed
+    # inside encrypted workflow.json and is never mirrored into manifest.json
+    # or a hosted run summary. Empty for browser/native bundles, preserving
+    # their serialized form through the compatibility serializer below.
+    backend_hints: Optional[BackendHints] = None
     params: dict[str, str] = Field(
         default_factory=dict, description="param name -> example/default value"
     )
@@ -1269,6 +1311,14 @@ class Workflow(BaseModel):
     # from ``model_dump`` / the content digest (a private attribute). The
     # resolver consumes a decrypted crop via :meth:`decrypted_template`.
     _decrypted_templates: dict[str, bytes] = PrivateAttr(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit empty additive execution hints from legacy bundle bytes."""
+        data: dict[str, Any] = handler(self)
+        if self.backend_hints is None:
+            data.pop("backend_hints", None)
+        return data
 
     # -- bundle I/O ---------------------------------------------------------
 

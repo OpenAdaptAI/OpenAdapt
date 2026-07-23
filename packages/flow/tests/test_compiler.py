@@ -175,6 +175,63 @@ class TestCompileRecording:
             ActionKind.CLICK,
         ]
 
+    def test_citrix_target_hints_compile_but_never_enter_manifest(
+        self, tmp_path: Path
+    ) -> None:
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        (recording / "events.jsonl").write_text("")
+        sensitive_title = "Patient Jane Doe - Claims"
+        sensitive_marker = "Jane Doe coverage queue"
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "citrix-target",
+                    "viewport": [800, 600],
+                    "params": {},
+                    "backend_hints": {
+                        "backend": "citrix",
+                        "rdp_window": "wfica32",
+                        "rdp_window_title": sensitive_title,
+                        "rdp_readiness_text": sensitive_marker,
+                    },
+                }
+            )
+        )
+        bundle = tmp_path / "bundle"
+        workflow = compile_recording(recording, bundle, name="citrix-target")
+        assert workflow.backend_hints is not None
+        assert workflow.backend_hints.backend == "citrix"
+        assert workflow.backend_hints.rdp_window == "wfica32"
+        assert workflow.backend_hints.rdp_window_title == sensitive_title
+        assert workflow.backend_hints.rdp_readiness_text == sensitive_marker
+
+        # Target details remain local workflow content. The plaintext manifest
+        # carries only digests/provenance and must never leak them.
+        manifest_text = (bundle / "manifest.json").read_text()
+        assert "wfica32" not in manifest_text
+        assert sensitive_title not in manifest_text
+        assert sensitive_marker not in manifest_text
+
+    def test_citrix_target_hints_reject_unrecognized_config(self, tmp_path: Path):
+        recording = tmp_path / "recording"
+        (recording / "frames").mkdir(parents=True)
+        (recording / "events.jsonl").write_text("")
+        (recording / "meta.json").write_text(
+            json.dumps(
+                {
+                    "viewport": [800, 600],
+                    "backend_hints": {
+                        "backend": "citrix",
+                        "rdp_window": "wfica32",
+                        "credential": "must-never-become-recording-metadata",
+                    },
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="closed.*execution-target schema"):
+            compile_recording(recording, tmp_path / "bundle", name="citrix-target")
+
     def test_click_template_cropped_correctly(self, compiled) -> None:
         wf, bundle, login = (
             compiled["workflow"],
