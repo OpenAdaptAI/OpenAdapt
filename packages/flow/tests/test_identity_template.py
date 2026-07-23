@@ -239,6 +239,57 @@ def test_structured_tier_is_exact_match_over_hash() -> None:
     )
     # Tier unavailable when there is no live structured text.
     assert verify_structured_template(tmpl, None) is None
+    # Default-empty structured parameter metadata stays absent on the wire so
+    # adding this feature does not invalidate sealed pre-feature bundles.
+    assert "structured_params" not in tmpl.model_dump_json()
+
+
+def test_structured_tier_substitutes_run_bound_parameter_before_exact_hash() -> None:
+    recorded = (
+        '{"target_kind":"eligibility_service",'
+        '"target_id":"service_code","insurance_no":"999000001"}'
+    )
+    tmpl = build_identity_template(
+        None,
+        structured_identity=recorded,
+        param_examples={"insurance_no": "999000001"},
+    )
+    assert tmpl is not None
+    assert tmpl.structured_params == ["insurance_no"]
+    serialized = tmpl.model_dump_json()
+    assert '"structured_params":["insurance_no"]' in serialized
+    assert "999000001" not in serialized
+
+    live = recorded.replace("999000001", "999000003")
+    assert (
+        verify_structured_template(
+            tmpl,
+            live,
+            params={"insurance_no": "999000003"},
+            param_examples={"insurance_no": "999000001"},
+        ).status
+        == "verified"
+    )
+    wrong_record = recorded
+    check = verify_structured_template(
+        tmpl,
+        wrong_record,
+        params={"insurance_no": "999000003"},
+        param_examples={"insurance_no": "999000001"},
+    )
+    assert check.status == "mismatch"
+    assert check.param == "insurance_no"
+
+    wrong_target = live.replace("service_code", "claim_code")
+    assert (
+        verify_structured_template(
+            tmpl,
+            wrong_target,
+            params={"insurance_no": "999000003"},
+            param_examples={"insurance_no": "999000001"},
+        ).status
+        == "mismatch"
+    )
 
 
 def test_external_salt_keeps_salt_out_of_bundle(monkeypatch) -> None:

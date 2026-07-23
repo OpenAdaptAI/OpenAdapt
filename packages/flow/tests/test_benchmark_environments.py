@@ -120,6 +120,13 @@ def test_agpl_openimis_is_excluded_from_sdist() -> None:
     exclude = pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["exclude"]
     assert "/benchmark/openimis_claims" in exclude
     assert "/scripts/openimis_claims_demo.py" in exclude
+    assert "/scripts/openimis_eligibility_demo.py" in exclude
+    assert "/tests/test_openimis_claims_fixture.py" in exclude
+    assert "/tests/test_openimis_eligibility.py" in exclude
+    assert "/docs/showcase-openimis" in exclude
+    # This notice applies only to the repository-only adapted openIMIS files;
+    # the distribution still carries the reviewed package MIT LICENSE.
+    assert "/THIRD_PARTY_NOTICES.md" in exclude
     # The wheel must package only the first-party MIT package.
     wheel_packages = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
     assert wheel_packages == ["openadapt_flow"]

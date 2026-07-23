@@ -8,7 +8,7 @@ fault-model study found 5 of 7 transactional fault classes silently mishandled
 by screen verification. An :class:`EffectVerifier` reads the REAL system of
 record (a FHIR/REST API, a document store) and rules CONFIRMED / REFUTED /
 INDETERMINATE, halting (never guessing success) whenever it cannot certify the
-write.
+declared write or independently read business outcome.
 
 Public surface:
 

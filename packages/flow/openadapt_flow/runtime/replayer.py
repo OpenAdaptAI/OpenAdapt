@@ -3025,8 +3025,9 @@ class Replayer:
                 f"System-of-record effect verification HALTED step "
                 f"'{step.id}' ({step.intent}): {effect.kind.value} "
                 f"{verdict.verdict.value} against the {verdict.substrate} "
-                f"system of record (the screen showed success but the record "
-                f"is wrong or unverifiable) — {verdict.reason} — run aborted"
+                f"system of record (the screen indicated completion but the "
+                f"declared outcome is contradicted or unverifiable) — "
+                f"{verdict.reason} — run aborted"
             )
 
         result.effect_verified = True
@@ -4004,7 +4005,12 @@ class Replayer:
             if has_template_structured:
                 from openadapt_flow.runtime import identity_template as itmpl
 
-                return itmpl.verify_structured_template(tmpl, live)
+                return itmpl.verify_structured_template(
+                    tmpl,
+                    live,
+                    params=params,
+                    param_examples=workflow.params,
+                )
             return identity_mod.verify_structured_identity(recorded, live)
 
         # Recorded + live identifier crops, shared by the pixel and VLM tiers.

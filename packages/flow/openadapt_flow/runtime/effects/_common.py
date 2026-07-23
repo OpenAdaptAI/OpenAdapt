@@ -71,7 +71,7 @@ def judge_records(
             effect,
             substrate,
             "system of record unreachable at verify time -- cannot certify "
-            "the write landed; HALT (never assume success)",
+            "the declared outcome/effect; HALT (never assume success)",
         )
 
     matched = [r for r in current if record_matches(r, effect.match)]
@@ -182,7 +182,7 @@ def _judge_field_equals(
             reason=(
                 "no record matches the target selector, so field "
                 f"'{effect.field}' cannot equal the expected value "
-                "(phantom / rejected write)"
+                "(missing or unverifiable business outcome)"
             ),
             observed_count=0,
             expected_value=want,
@@ -194,7 +194,7 @@ def _judge_field_equals(
             substrate=substrate,
             reason=(
                 f"{len(matched)} records match the target selector -- "
-                "ambiguous field read-back (duplicate write)"
+                "ambiguous field/outcome read-back"
             ),
             observed_count=len(matched),
             expected_value=want,
@@ -219,8 +219,7 @@ def _judge_field_equals(
         substrate=substrate,
         reason=(
             f"field '{effect.field}' is {observed!r}, expected {want!r} "
-            "(partial save -- the row persisted but this field was dropped "
-            "or differs)"
+            "(the system of record contradicts the declared outcome)"
         ),
         observed_count=1,
         observed_value=observed,

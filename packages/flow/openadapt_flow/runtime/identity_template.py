@@ -112,6 +112,39 @@ def _token_template(salt: bytes, squashed: str) -> TokenTemplate:
     )
 
 
+def _parameterize_structured(
+    text: str,
+    values: dict[str, str],
+    *,
+    names: Optional[list[str]] = None,
+) -> tuple[str, list[str]]:
+    """Replace exact structured parameter values with non-PHI sentinels.
+
+    Structured DOM/a11y identity is exact evidence, so unlike OCR bands it
+    needs no fuzzy matching.  Longer values are replaced first to avoid a
+    shorter parameter claiming a substring of another.  The resulting string
+    is only an intermediate input to the salted hash; it is never persisted.
+    """
+    result = text
+    candidates = names if names is not None else list(values)
+    candidates = sorted(
+        candidates,
+        key=lambda name: len(str(values.get(name, ""))),
+        reverse=True,
+    )
+    used: list[str] = []
+    for name in candidates:
+        value = str(values.get(name, ""))
+        if len(_id.squash(value)) < _id.MIN_PARAM_CHARS:
+            continue
+        pattern = re.compile(re.escape(value), re.IGNORECASE)
+        if not pattern.search(result):
+            continue
+        result = pattern.sub(f"__OPENADAPT_PARAM_{name}__", result)
+        used.append(name)
+    return result, used
+
+
 def build_identity_template(
     context_text: Optional[str],
     *,
@@ -141,7 +174,11 @@ def build_identity_template(
     tmpl = IdentityTemplate(salt=salt_hex)
 
     if structured_identity:
-        tmpl.structured = _hash(salt, _id.normalize_structured(structured_identity))
+        structured_form, structured_params = _parameterize_structured(
+            structured_identity, param_examples
+        )
+        tmpl.structured = _hash(salt, _id.normalize_structured(structured_form))
+        tmpl.structured_params = structured_params
 
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any
@@ -608,7 +645,11 @@ def token_in_template(tmpl: IdentityTemplate, token: str) -> bool:
 
 
 def verify_structured_template(
-    tmpl: Optional[IdentityTemplate], live: Optional[str]
+    tmpl: Optional[IdentityTemplate],
+    live: Optional[str],
+    *,
+    params: Optional[dict[str, str]] = None,
+    param_examples: Optional[dict[str, str]] = None,
 ) -> Optional[IdentityCheck]:
     """Structured-tier verdict from a hashed template (tier 1, PHI-free).
 
@@ -621,11 +662,30 @@ def verify_structured_template(
     if tmpl is None or not tmpl.structured or not live:
         return None
     salt = _salt_bytes(tmpl.salt)
-    ok = tmpl.structured == _hash(salt, _id.normalize_structured(live))
+    live_form = live
+    if tmpl.structured_params:
+        values = {**(param_examples or {}), **(params or {})}
+        live_form, used = _parameterize_structured(
+            live, values, names=tmpl.structured_params
+        )
+        if set(used) != set(tmpl.structured_params):
+            missing = next(
+                name for name in tmpl.structured_params if name not in set(used)
+            )
+            return IdentityCheck(
+                status="mismatch",
+                mode="structured",
+                coverage=0.0,
+                expected="<structured identity template>",
+                observed=live,
+                param=missing,
+            )
+    ok = tmpl.structured == _hash(salt, _id.normalize_structured(live_form))
     return IdentityCheck(
         status="verified" if ok else "mismatch",
         mode="structured",
         coverage=1.0 if ok else 0.0,
         expected="<structured identity template>",
         observed=live,
+        param=tmpl.structured_params[0] if tmpl.structured_params else None,
     )

@@ -308,7 +308,7 @@
     },
     {
       "path": "benchmark/openimis_claims/compose.yml",
-      "sha256": "7363bd86f233760cf3b0518864f385ad5ff89c43c37ef0f1621bac027ca3a90b"
+      "sha256": "6077478524bccb8b77c277b80d11b8749971257db79ffe9296718154ea3c03d2"
     },
     {
       "path": "benchmark/openimis_claims/conf/nginx/openimis.conf",
@@ -319,8 +319,12 @@
       "sha256": "75a5c2831c1f8703d1ec3efbdadd64d3797ac5377370edab44b518caa4de704d"
     },
     {
+      "path": "benchmark/openimis_claims/deployment.eligibility.yaml",
+      "sha256": "03f46f4762bad3e465b65217f6080f203e8fe0b167288f65a7a76edfe469d538"
+    },
+    {
       "path": "benchmark/openimis_claims/environment.lock.json",
-      "sha256": "a2c7ab095f4fda50eb0ad7051395e68c1932d989929f035fc206028ee42efc0d"
+      "sha256": "98c8008eb7b34371379fb54b968299070c51f760152f36a4d13bdd2e25cdb4ab"
     },
     {
       "path": "benchmark/pixel_identity/crop_O0_digit_1_sibling.png",
@@ -1157,6 +1161,134 @@
     {
       "path": "docs/showcase-openemr/runs/summary.json",
       "sha256": "8c0e63a1eb2f8e1e88526f5dc3a5952f703d1504b0de2d81ee16944d42f38409"
+    },
+    {
+      "path": "docs/showcase-openimis/eligibility_halt.gif",
+      "sha256": "0a088b1be63ad55f91c76f27e470b339dcab1d3eaeca8557252e271faebcd01f"
+    },
+    {
+      "path": "docs/showcase-openimis/eligibility_replay.gif",
+      "sha256": "9185da261ed141042497505eddb54a4280a09824e8783cd6e74ead32079b0065"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/report.json",
+      "sha256": "e53bac5868ac1fcc3cb42570456f3739744ba11ed7e8d1fff47efa0d281fe355"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_000_after.png",
+      "sha256": "a423c69783652b5f9df627d13805a452cd5b6b117626aad2d4da08bca24f1d9d"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_000_before.png",
+      "sha256": "aec68f54d6c64b77a6468c45e4ef84411193d769f95fd6b86940fade56303a06"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_001_after.png",
+      "sha256": "5d5a32fd7d61e27356638677bd1ac3fb38185428efd203fae5bde00518dcbf42"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_001_before.png",
+      "sha256": "cf13e305c65e39f9a51e1a88d08fe3c00225260a51cdc6674d4f8cfe1703b201"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_002_after.png",
+      "sha256": "d0c4938116477e13363151db626049275fdaa2ace0cdfec80df67585bcd7821c"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_002_before.png",
+      "sha256": "5d5a32fd7d61e27356638677bd1ac3fb38185428efd203fae5bde00518dcbf42"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_003_after.png",
+      "sha256": "623bb880ca332855398225928ae5b6aff9504a0af134120f449f5335ecb36ac5"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_003_before.png",
+      "sha256": "d0c4938116477e13363151db626049275fdaa2ace0cdfec80df67585bcd7821c"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_004_after.png",
+      "sha256": "10b5848810f2027132ce7618ae2cae770b1c4a71ebe75de0aa41cc93386e692f"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_004_before.png",
+      "sha256": "623bb880ca332855398225928ae5b6aff9504a0af134120f449f5335ecb36ac5"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_005_after.png",
+      "sha256": "a9f159aa2cdd4cc705d2af18529a9704371b30e3a492caa9d337a03725f48b28"
+    },
+    {
+      "path": "docs/showcase-openimis/green-run/steps/step_005_before.png",
+      "sha256": "10b5848810f2027132ce7618ae2cae770b1c4a71ebe75de0aa41cc93386e692f"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/report.json",
+      "sha256": "07c780544ced5ad011b065421e5a00e89727ef81cba3e5ed2d17d8390835d017"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_000_after.png",
+      "sha256": "cf13e305c65e39f9a51e1a88d08fe3c00225260a51cdc6674d4f8cfe1703b201"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_000_before.png",
+      "sha256": "aec68f54d6c64b77a6468c45e4ef84411193d769f95fd6b86940fade56303a06"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_001_after.png",
+      "sha256": "1f7df44312c7cbd8686a549a6122a34d95a171e5364d5d9c2728429c97723f63"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_001_before.png",
+      "sha256": "cf13e305c65e39f9a51e1a88d08fe3c00225260a51cdc6674d4f8cfe1703b201"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_002_after.png",
+      "sha256": "7f3d3ee7c818b311ab3be014630e2586cc40581358fad7199452f66ff08f36b7"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_002_before.png",
+      "sha256": "1f7df44312c7cbd8686a549a6122a34d95a171e5364d5d9c2728429c97723f63"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_003_after.png",
+      "sha256": "452ee078707776e87e907a921813c5d903266143dee564d645d6092c270a06e2"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_003_before.png",
+      "sha256": "7f3d3ee7c818b311ab3be014630e2586cc40581358fad7199452f66ff08f36b7"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_004_after.png",
+      "sha256": "989ce2dde333ce88c61e14030f19ad743793fdf3e194c2a2f43c4a26e8801e89"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_004_before.png",
+      "sha256": "452ee078707776e87e907a921813c5d903266143dee564d645d6092c270a06e2"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_005_after.png",
+      "sha256": "4d84382e22c0b84be6c2d7fc9b96f7ea98159661f66ed9323e4abdafc4632968"
+    },
+    {
+      "path": "docs/showcase-openimis/halt-run/steps/step_005_before.png",
+      "sha256": "989ce2dde333ce88c61e14030f19ad743793fdf3e194c2a2f43c4a26e8801e89"
+    },
+    {
+      "path": "docs/showcase-openimis/stills/coverage_active_dialog.png",
+      "sha256": "a9f159aa2cdd4cc705d2af18529a9704371b30e3a492caa9d337a03725f48b28"
+    },
+    {
+      "path": "docs/showcase-openimis/stills/coverage_lapsed_dialog.png",
+      "sha256": "4d84382e22c0b84be6c2d7fc9b96f7ea98159661f66ed9323e4abdafc4632968"
+    },
+    {
+      "path": "docs/showcase-openimis/stills/verdict_confirmed_card.png",
+      "sha256": "8aca159b9d207a5527d5e4aff9c501baa9d644f0d3c02e3f60c4dcafb39c4759"
+    },
+    {
+      "path": "docs/showcase-openimis/stills/verdict_refuted_card.png",
+      "sha256": "6383bab553e3ef240895d083fd043a24d624795c19b6bf46edf03e879f01801d"
     },
     {
       "path": "docs/showcase/baseline-run/report.json",

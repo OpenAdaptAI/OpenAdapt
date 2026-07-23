@@ -1,4 +1,4 @@
-# The effect-verifier kit — declare a write's effect, ship its verification
+# The effect-verifier kit — declare an outcome, ship its verification
 
 **Status:** kit surface implemented + CI contract-proven. Per-substrate
 maturity is listed honestly below — the SQL and file/SFTP verifiers are
@@ -8,9 +8,9 @@ verifier additionally has an opt-in live-OpenEMR test
 (`tests/test_effect_fhir_live_openemr.py`).
 
 > Without a declared effect and a configured verifier, OpenAdapt falls back to
-> screen evidence for a consequential write. This kit exists so declaring the
-> effect and configuring the verifier is a **reviewed YAML section**, not a
-> bespoke per-deployment integration.
+> screen evidence for a consequential write or read outcome. This kit exists
+> so declaring the outcome and configuring the verifier is a **reviewed YAML
+> section**, not a bespoke per-deployment integration.
 
 The underlying design (three-valued verdicts, fail-safe-to-HALT, the shared
 judge) is [`docs/design/EFFECT_VERIFIER.md`](./design/EFFECT_VERIFIER.md).
@@ -21,9 +21,10 @@ from the reference apps.
 ## Concept
 
 1. **The bundle declares WHAT must be true** — typed `Effect` contracts on
-   each consequential step (`record_written` / `field_equals`, at-most-once
-   counts, idempotency keys, `{param: ...}` references that bind to the run's
-   governed parameters). Contracts are substrate-neutral.
+   each consequential step (`record_written` for mutations; `field_equals`
+   for a unique persisted field or independently read business outcome),
+   at-most-once counts, idempotency keys, and `{param: ...}` references that
+   bind to the run's governed parameters. Contracts are substrate-neutral.
 2. **The deployment declares WHERE truth lives** — the `effects:` section of
    `deployment.yaml` wires exactly one `EffectVerifier` (REST / FHIR / SQL /
    file / document-hash) plus its secret-isolated auth.

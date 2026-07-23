@@ -239,6 +239,7 @@ exclude = [
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
     "/scripts/openimis_claims_demo.py",
+    "/scripts/openimis_eligibility_demo.py",
     "/scripts/reliability",
     "/tests/test_adversary_corpus.py",
     "/tests/test_adversary_corpus_v2.py",
@@ -246,7 +247,9 @@ exclude = [
     "/tests/test_identity_corpus_rates.py",
     "/tests/test_identity_out_of_corpus.py",
     "/tests/test_openimis_claims_fixture.py",
+    "/tests/test_openimis_eligibility.py",
     "/tests/test_reliability.py",
+    "/docs/showcase-openimis",
 ]
 
 [tool.pytest.ini_options]

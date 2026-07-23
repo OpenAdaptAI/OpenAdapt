@@ -14,7 +14,7 @@
           "upstream_path": "compose.base.yml",
           "upstream_sha256": "d630a35a3739846f7b548df02741db7605b6b356d523b74d96af9ed069e5c643",
           "modification_status": "adapted",
-          "local_sha256": "7363bd86f233760cf3b0518864f385ad5ff89c43c37ef0f1621bac027ca3a90b",
+          "local_sha256": "6077478524bccb8b77c277b80d11b8749971257db79ffe9296718154ea3c03d2",
           "additional_upstream_sources": {
             "compose.postgresql.yml": "2038cc6a76be39c0ec15b0965d5d9c161d7f4706c1a125eff70be8d5b5b7dc94",
             "compose.cache.yml": "4a2d2ce493494292fc65f54a7d53ee622d435e25d0e59900a307d917016f500c"

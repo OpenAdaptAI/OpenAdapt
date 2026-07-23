@@ -142,9 +142,10 @@ class EffectKind(str, Enum):
     #: at-most-once for a consequential write; catches missing, phantom,
     #: duplicate, and double-click writes).
     RECORD_WRITTEN = "record_written"
-    #: The record matching :attr:`Effect.match` must carry
-    #: ``field == value`` (read-back of a specific field; catches partial
-    #: saves that persist the row but drop a field).
+    #: The unique record matching :attr:`Effect.match` must carry
+    #: ``field == value``. For a write this is read-back of a persisted field
+    #: (and catches a partial save); for a read-only workflow it independently
+    #: verifies the declared business outcome against the system of record.
     FIELD_EQUALS = "field_equals"
 
 
@@ -239,10 +240,12 @@ class Effect(BaseModel):
     #: v1 bundles is coerced to ``ValueExpr(literal=...)`` and behaves
     #: identically.
     match: dict[str, ValueExpr] = Field(default_factory=dict)
-    #: ``field_equals`` only: the record field that must equal :attr:`value`.
+    #: ``field_equals`` only: the record/outcome field that must equal
+    #: :attr:`value`.
     field: Optional[str] = None
     #: ``field_equals`` only: the required value of :attr:`field` (literal or a
-    #: run-``param`` reference; see :attr:`match`).
+    #: run-``param`` reference; see :attr:`match`). Exactly one matching record
+    #: is required, so missing or ambiguous read outcomes refuse.
     value: Optional[ValueExpr] = None
     #: ``record_written`` only: how many matching records must exist. 1 is the
     #: at-most-once contract for a consequential write; 0 asserts absence.

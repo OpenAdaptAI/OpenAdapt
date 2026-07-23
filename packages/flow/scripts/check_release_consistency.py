@@ -817,13 +817,16 @@ FORBIDDEN_SDIST_PATHS = frozenset(
     {
         "THIRD_PARTY_NOTICES.md",
         "scripts/openimis_claims_demo.py",
+        "scripts/openimis_eligibility_demo.py",
         "tests/test_openimis_claims_fixture.py",
+        "tests/test_openimis_eligibility.py",
     }
 )
 FORBIDDEN_SDIST_PREFIXES = (
     "benchmark/openimis_claims/",
     "benchmark/frappe_lending/agent-arm/",
     "benchmark/openemr_local/agent-arm/",
+    "docs/showcase-openimis/",
 )
 
 FORBIDDEN_PUBLIC_SOURCE_PATHS = frozenset(

@@ -86,6 +86,89 @@ oracle then requires **exactly one** non-voided `tblClaim` row with that code,
 in status 2 ("Entered"), for the demonstrated insuree and health facility — a
 duplicate or missing row fails the run loudly.
 
+## The eligibility-check workflow (effect-verified)
+
+`scripts/openimis_eligibility_demo.py` demonstrates the second reference
+workflow on the same stack: a front-office **coverage / eligibility check** —
+look up a policyholder by insuree number in openIMIS's Insuree Enquiry,
+confirm the policy panel and a service-eligibility answer, and **verify the
+declared outcome against the system of record** with the effect-verifier kit
+(`docs/EFFECT_KIT.md`) instead of trusting the screen.
+
+Why the contract is the point: for a policyholder whose coverage has LAPSED,
+the enquiry dialog still renders a service-eligibility thumbs-up next to the
+selected service — a screen a hurried human (or any screen-scraping
+automation) can misread as "covered". The committed
+`deployment.eligibility.yaml` wires ONE read-only SELECT over openIMIS's own
+policy, product-benefit, and service tables
+(`fixture.py::ELIGIBILITY_ORACLE_SQL`; a unit test pins the two to each
+other), executed as the dedicated read-only role
+`oa_eligibility_oracle` (SELECT on exactly five tables,
+`default_transaction_read_only=on`, no inherited/owner/schema/temp/write
+privileges, and a fail-closed effective-privilege audit at every bootstrap —
+the role, not the kit's statement filter, is the real enforcement). The
+bundle's single `field_equals` outcome
+contract binds to the run's `insurance_no` parameter and to the exact question
+shown in the UI: service **A1 (General Consultation)** on **2026-07-21**.
+
+The SELECT must yield exactly one policy/product/service row. It derives
+`eligibility=Eligible` only when both the policy and insuree-policy link are
+active and effective on the declared date, and the policy's product includes
+the current A1 service. Missing, duplicate, expired, not-yet-effective, and
+wrong-service rows all refuse; no mutation is invented for this read-only
+workflow.
+
+A replay for an eligible policyholder ends with the outcome CONFIRMED in
+the run report's effect-verification section; a replay for the lapsed
+policyholder completes the GUI lookup, then **HALTS** with
+`field_equals REFUTED — eligibility 'Ineligible', expected 'Eligible'` instead of
+reporting the check a success. Halt + evidence, never a guess.
+
+`bootstrap` (below) adds three more synthetic policyholders: **Jordan Roe,
+insuree no. 999000002** (policy expired 2026-05-31 — the halt scenario) and
+**Sam Poe, insuree no. 999000003** (eligible for A1 on 2026-07-21), so the
+green replay parameterizes onto a policyholder the demonstration never saw.
+It also adds **Taylor Foe, insuree no. 999000004** (effective 2026-08-01) so
+the not-yet-effective refusal is regression-tested. All values are invented.
+
+```bash
+# One-time: the SQL verifier needs a PostgreSQL DB-API driver.
+uv pip install "psycopg[binary]"
+
+.venv/bin/python scripts/openimis_eligibility_demo.py up         # same stack
+.venv/bin/python scripts/openimis_eligibility_demo.py bootstrap  # + role
+
+.venv/bin/python scripts/openimis_eligibility_demo.py record \
+  --out benchmark/openimis_claims/out/eligibility/recording --headed
+.venv/bin/python scripts/openimis_eligibility_demo.py compile \
+  --recording benchmark/openimis_claims/out/eligibility/recording \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle
+.venv/bin/openadapt-flow lint benchmark/openimis_claims/out/eligibility/bundle
+.venv/bin/openadapt-flow certify \
+  benchmark/openimis_claims/out/eligibility/bundle --policy permissive
+
+# Green: A1 eligibility on 2026-07-21 CONFIRMED for a policyholder the demo never saw.
+.venv/bin/python scripts/openimis_eligibility_demo.py replay \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle \
+  --insuree 999000003 --headed
+
+# Halt-on-anomaly: lapsed coverage -> field_equals REFUTED -> HALT.
+.venv/bin/python scripts/openimis_eligibility_demo.py replay \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle \
+  --insuree 999000002 --expect-halt --headed
+```
+
+Honesty box: this is a **contract-proven fixture demo** on synthetic data —
+the same status the effect kit's SQL substrate documents. It is not a
+benchmark, not a customer deployment, and not a claim about any commercial
+payer portal; a real dental-office eligibility deployment would target the
+payer portal / clearinghouse the office actually uses and would need its own
+read-only oracle. Under the `permissive` policy the bundle certifies clean;
+the stricter `clinical-write` policy still flags the two unlabeled dialog
+clicks (compile-time confidence 0.70 < 0.80) and the parameter-typing step's
+vacuous postcondition — accurate findings for an unattended-write posture,
+acceptable for a demonstrated read-only check.
+
 ## Pinning
 
 `environment.lock.json` pins every image by digest (openIMIS 25.10 backend /
@@ -122,7 +205,7 @@ license is included at
 [`conf/nginx/LICENSE-AGPL-3.0.md`](conf/nginx/LICENSE-AGPL-3.0.md), and the
 aggregate Git-checkout/GitHub-generated-source-archive boundary is recorded in
 the root
-[`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md). The MIT license
+[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md). The MIT license
 does not relicense those adapted files.
 
 ## Reproduction commands
