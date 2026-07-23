@@ -23,6 +23,7 @@ SERVER_JSON = REPO_ROOT / "server.json"
 SMITHERY_YAML = REPO_ROOT / "smithery.yaml"
 LLMS_TXT = REPO_ROOT / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+README = REPO_ROOT / "README.md"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 REVERSE_DNS_NAME = "io.github.OpenAdaptAI/openadapt-agent"
@@ -61,6 +62,13 @@ def test_version_is_consistent_everywhere() -> None:
     assert doc["version"] == __version__
     assert doc["packages"][0]["version"] == __version__
     assert _pyproject_version() == __version__
+
+
+def test_pypi_readme_proves_mcp_namespace_ownership() -> None:
+    """The MCP registry validates the reverse-DNS name through PyPI metadata."""
+    assert f"mcp-name: {REVERSE_DNS_NAME}" in README.read_text(encoding="utf-8")
+    pyproject = PYPROJECT.read_text(encoding="utf-8")
+    assert re.search(r'(?m)^readme\s*=\s*"README\.md"$', pyproject)
 
 
 def test_release_workflow_runs_the_complete_archive_boundary() -> None:

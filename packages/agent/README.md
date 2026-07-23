@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
 
+`mcp-name: io.github.OpenAdaptAI/openadapt-agent`
+
 The local agent bridge for
 [`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
 It presents compiled, governed workflows to MCP clients and Agent Skills

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-agent"
-version = "2.0.0"
+version = "2.0.1"
 description = "Local agent bridge for governed OpenAdapt workflows, attended actions, MCP, and Agent Skills"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
