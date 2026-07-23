@@ -64,7 +64,7 @@ common_args=(
   "--enable-zlib"
   "--enable-swscale"
   "--enable-protocol=file,pipe"
-  "--enable-demuxer=concat,image2,image2pipe,mov,rawvideo"
+  "--enable-demuxer=concat,image2,mov,rawvideo"
   "--enable-muxer=mp4,null,image2,image2pipe"
   "--enable-decoder=png,mpeg4,h264,rawvideo"
   "--enable-parser=h264,mpeg4video"
@@ -136,13 +136,13 @@ if grep -Eq -- '--enable-(gpl|nonfree|version3)' ffbuild/config.mak; then
   exit 1
 fi
 
-jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
-make -j"${jobs}" ffmpeg ffprobe
-
 exe_suffix=""
 if [[ "${TARGET_TRIPLE}" == "x86_64-pc-windows-msvc" ]]; then
   exe_suffix=".exe"
 fi
+jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+make -j"${jobs}" "ffmpeg${exe_suffix}" "ffprobe${exe_suffix}"
+
 cp "ffmpeg${exe_suffix}" "${bundle_dir}/bin/ffmpeg${exe_suffix}"
 cp "ffprobe${exe_suffix}" "${bundle_dir}/bin/ffprobe${exe_suffix}"
 chmod +x "${bundle_dir}/bin/ffmpeg${exe_suffix}" "${bundle_dir}/bin/ffprobe${exe_suffix}"
@@ -265,6 +265,15 @@ png = (
     + chunk(b"IEND", b"")
 )
 (root / "frame.png").write_bytes(png)
+(
+    root / "frames.ffconcat"
+).write_text(
+    "ffconcat version 1.0\n"
+    "file frame.png\n"
+    "duration 0.040000000\n"
+    "file frame.png\n",
+    encoding="utf-8",
+)
 frames = b"".join(
     b"".join(bytes((x * 16, y * 16, frame * 8)) for y in range(height) for x in range(width))
     for frame in range(25)
@@ -272,11 +281,10 @@ frames = b"".join(
 (root / "frames.rgb").write_bytes(frames)
 PY
 
-for _ in $(seq 1 25); do
-  cat "${smoke_dir}/frame.png"
-done | "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
-  -f image2pipe -framerate 25 -vcodec png -i pipe:0 \
-  -an -c:v mpeg4 -q:v 5 -pix_fmt yuv420p -y "${smoke_dir}/png-input.mp4"
+"${ffmpeg_bin}" -hide_banner -loglevel error -nostdin -y \
+  -f concat -safe 1 -i "${smoke_dir}/frames.ffconcat" \
+  -an -c:v mpeg4 -q:v 5 -pix_fmt yuv420p -fps_mode vfr -f mp4 \
+  "${smoke_dir}/png-input.mp4"
 
 "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
   -f rawvideo -pixel_format rgb24 -video_size 16x16 -framerate 25 \

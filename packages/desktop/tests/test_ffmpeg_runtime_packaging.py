@@ -119,7 +119,7 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
         "--disable-version3",
         "--enable-ffmpeg",
         "--enable-ffprobe",
-        "--enable-demuxer=concat,image2,image2pipe,mov,rawvideo",
+        "--enable-demuxer=concat,image2,mov,rawvideo",
         "--enable-muxer=mp4,null,image2,image2pipe",
         "--enable-filter=scale,format,setpts,select",
     ):
@@ -144,7 +144,12 @@ def test_runtime_builder_normalizes_windows_paths_and_materializes_smoke_bytes()
     assert script.index(temp_conversion) < script.index(
         'work_root="${temp_root}/openadapt-ffmpeg-${TARGET_TRIPLE}"'
     )
+    assert script.index('exe_suffix=".exe"') < script.index(
+        'make -j"${jobs}" "ffmpeg${exe_suffix}" "ffprobe${exe_suffix}"'
+    )
 
     assert 'frames = b"".join(' in script
     assert '(root / "frames.rgb").write_bytes(frames)' in script
     assert '(root / "frames.rgb").write_bytes(\n' not in script
+    assert '"ffconcat version 1.0\\n"' in script
+    assert '-f concat -safe 1 -i "${smoke_dir}/frames.ffconcat"' in script
