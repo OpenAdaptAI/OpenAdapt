@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import sys
 
+from openadapt_capture.x11_threads import ensure_xlib_thread_support
+
 if not sys.platform.startswith("linux"):
     raise ImportError("This module is only available on Linux")
 
@@ -43,6 +45,7 @@ class LinuxPlatform:
         Returns:
             Tuple of (width, height) in physical pixels.
         """
+        ensure_xlib_thread_support()
         try:
             from PIL import ImageGrab
             screenshot = ImageGrab.grab()
@@ -108,6 +111,8 @@ class LinuxPlatform:
             Pixel ratio (physical pixels / logical pixels).
         """
         import os
+
+        ensure_xlib_thread_support()
 
         # Check GNOME scaling factor
         try:

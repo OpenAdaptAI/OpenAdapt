@@ -15,6 +15,8 @@ import mss.base
 from loguru import logger
 from PIL import Image
 
+from openadapt_capture.x11_threads import ensure_xlib_thread_support
+
 if sys.platform == "win32":
     import mss.windows
 
@@ -39,6 +41,7 @@ _process_local = threading.local()
 def get_process_local_sct() -> mss.mss:
     """Retrieve or create the `mss` instance for the current thread."""
     if not hasattr(_process_local, "sct"):
+        ensure_xlib_thread_support()
         _process_local.sct = mss.mss()
     return _process_local.sct
 

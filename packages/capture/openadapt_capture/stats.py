@@ -117,6 +117,10 @@ class CaptureStats:
             PIL Image if neither output_path nor show, else None.
         """
         try:
+            import matplotlib
+
+            if not show:
+                matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except ImportError:
             raise ImportError(

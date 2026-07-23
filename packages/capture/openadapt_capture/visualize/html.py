@@ -1108,7 +1108,7 @@ def _generate_html(
             if (!showOverlay) return;
 
             // Scale factors: convert mouse coordinates to display pixels
-            // Mouse coords from pynput are in LOGICAL space (e.g., 1512x982 on Retina)
+            // Native observer mouse coords are LOGICAL (e.g., 1512x982 on Retina)
             // screenWidth/Height we stored are in PHYSICAL space (e.g., 3024x1964)
             // pixelRatio = physical/logical (e.g., 2.0 for Retina)
             //

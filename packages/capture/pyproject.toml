@@ -22,7 +22,6 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.0.0",
-    "pynput>=1.7.6",
     "av>=12.0.0",
     "Pillow>=10.1.0",
     "fire>=0.7.1",
@@ -41,7 +40,11 @@ dependencies = [
     "pympler>=1.0.0",
     "tqdm>=4.0.0",
     "numpy>=1.26.0",
-    "oa-atomacos>=3.2.0; sys_platform == 'darwin'",
+    # Recorder generates a performance plot by default, and the package-level
+    # API imports the plotting module while exposing Recorder.
+    "matplotlib>=3.10.8",
+    # Native macOS window/accessibility observation via permissive PyObjC.
+    "pyobjc-framework-ApplicationServices>=12.2.1; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
@@ -76,7 +79,6 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.0.0",
     "ruff>=0.1.0",
-    "matplotlib>=3.5.0",
     "numpy>=1.21.0",
 ]
 
@@ -128,8 +130,9 @@ patch_tags = ["fix", "perf"]
 
 [dependency-groups]
 dev = [
-    "matplotlib>=3.10.8",
     "numpy>=2.2.6",
     "psutil>=7.2.2",
+    # Test-only synthetic input driver; excluded from package metadata/runtime.
+    "pynput>=1.7.6",
     "pytest>=9.0.2",
 ]

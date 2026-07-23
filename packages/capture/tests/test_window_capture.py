@@ -22,6 +22,7 @@ from PIL import Image
 
 from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
+from openadapt_capture.recorder import Recorder
 from openadapt_capture.window_capture import (
     TargetWindow,
     WindowCaptureError,
@@ -30,13 +31,6 @@ from openadapt_capture.window_capture import (
     build_window_scope,
     translate_point,
 )
-
-# Recorder requires pynput which needs a display server
-try:
-    from openadapt_capture.recorder import Recorder
-except ImportError:
-    Recorder = None
-
 
 # ---------------------------------------------------------------------------
 # translate_point: exact inverse of flow's replay mapping
@@ -283,7 +277,6 @@ class TestWindowConfigPlumbing:
         assert config.RECORD_WINDOW_OWNER is None
         assert config.RECORD_WINDOW_TITLE is None
 
-    @pytest.mark.skipif(Recorder is None, reason="pynput unavailable (headless)")
     def test_recorder_accepts_window_param(self):
         rec = Recorder(
             "/tmp/test_never_created",
@@ -293,13 +286,11 @@ class TestWindowConfigPlumbing:
         assert rec._recording_config.window_owner == "Parallels"
         assert rec._recording_config.window_title is None
 
-    @pytest.mark.skipif(Recorder is None, reason="pynput unavailable (headless)")
     def test_recorder_without_window_param_records_fullscreen(self):
         rec = Recorder("/tmp/test_never_created")
         assert rec._recording_config.window_owner is None
         assert rec._recording_config.window_title is None
 
-    @pytest.mark.skipif(Recorder is None, reason="pynput unavailable (headless)")
     def test_recorder_rejects_bad_window_spec(self):
         with pytest.raises(ValueError):
             Recorder("/tmp/test_never_created", window={"app": "Parallels"})
@@ -310,7 +301,6 @@ class TestWindowConfigPlumbing:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(Recorder is None, reason="pynput unavailable (headless)")
 class TestActionTranslation:
     """trigger_action_event translates coordinates in window mode."""
 

@@ -38,12 +38,12 @@ jobs:
 
   # Windows is the primary live-recording platform: this job runs the full
   # unit suite AND the live Recorder integration tests (tests/test_performance.py,
-  # marked 'slow'), which start the real multiprocessing pipeline (pynput
-  # listeners -> writer processes -> per-capture SQLite + video) and verify
+  # marked 'slow'), which start the real multiprocessing pipeline (native
+  # observers -> writer processes -> per-capture SQLite + video) and verify
   # clean startup, bounded shutdown/memory, and db creation. The three
   # listener-dependent tests (roundtrip/reuse/throughput) skip here via
   # OPENADAPT_CI_NO_INPUT_INJECTION: hosted runners execute jobs in a
-  # non-interactive session, so injected input never reaches pynput's hooks;
+  # non-interactive session, so injected input never reaches native hooks;
   # run those on an interactive Windows desktop. These tests skip everywhere
   # except Windows, so this job is the org's live-recording CI proof.
   test-windows:
@@ -68,7 +68,7 @@ jobs:
 
       - name: Run live recorder integration tests
         env:
-          # Non-interactive session: SendInput never reaches pynput's
+          # Non-interactive session: SendInput never reaches native
           # low-level hooks, so the event-capture tests skip (see
           # tests/test_performance.py); pipeline start/stop/db/memory
           # tests still run the live recorder for real.
@@ -79,7 +79,7 @@ jobs:
   # macOS coverage: runs the unit suite (event processing, storage, video
   # encode/decode via PyAV, headless-import invariant, Recorder API surface —
   # CGWindowList-backed screen capture works on GitHub macOS runners). The
-  # 'slow' live-recording tests stay skipped here: pynput input injection
+  # 'slow' live-recording tests stay skipped here: synthetic input injection
   # requires Accessibility permissions a hosted runner cannot grant, and the
   # multiprocessing 'spawn' writer path is not yet validated on macOS (see
   # tests/test_performance.py).
@@ -121,3 +121,22 @@ jobs:
 
       - name: Run ruff
         run: uv run ruff check openadapt_capture/
+
+  package-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Verify release archive boundaries
+        run: python scripts/verify_distribution.py dist/*

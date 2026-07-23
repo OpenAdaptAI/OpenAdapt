@@ -15,7 +15,7 @@ Coordinate semantics (kept in exact parity with openadapt-flow
 ``backends/remote_display.py`` — read that module before changing these):
 
 - ``bounds`` is ``(x, y, w, h)`` in **screen points**, top-left origin — the
-  space pynput/CGEvent global mouse coordinates use.
+  space native platform observers use for global mouse coordinates.
 - A captured frame contains the window's own **pixels** (macOS:
   ``CGWindowListCreateImage`` with ``kCGWindowImageBoundsIgnoreFraming`` — the
   identical call flow's replay capture path uses).
@@ -102,7 +102,7 @@ class TargetWindow:
     """One resolved on-screen window.
 
     ``bounds`` is ``(x, y, w, h)`` in screen points, top-left origin — the
-    same space as global pynput mouse coordinates. Same field semantics as
+    same space as native global mouse coordinates. Same field semantics as
     openadapt-flow's ``WindowInfo``.
     """
 
@@ -143,7 +143,7 @@ class WindowCaptureScope:
     """Thread-safe tracker of the target window's bounds/scale during recording.
 
     The screen-reader thread calls :meth:`capture_frame` (which re-resolves the
-    window each frame — windows move and resize); pynput listener threads call
+    window each frame — windows move and resize); native observer threads call
     :meth:`translate` concurrently to convert global input coordinates into
     the captured frame's pixel space using the freshest bounds.
 

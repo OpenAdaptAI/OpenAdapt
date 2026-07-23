@@ -5,14 +5,13 @@ the most battle-tested recording code in the org, refined against years of
 real desktop workflows. It is the recorder behind OpenAdapt's desktop path
 (openadapt-flow ``record --backend windows|rdp`` wraps ``Recorder``).
 
-Architecture: a multiprocessing pipeline. pynput listeners feed raw
-mouse/keyboard events into synchronized queues; dedicated writer processes
+Architecture: a multiprocessing pipeline. Native platform input observers feed
+normalized mouse/keyboard events into synchronized queues; dedicated writer processes
 persist action events, screenshots, video frames, and (optionally) audio and
 window state into a per-capture SQLite database plus time-aligned media files.
 Adapted from the original for per-capture databases. Importing this module
 must never touch the display (no screenshot at module scope — enforced by
-tests/test_headless_import.py); pynput itself may be unavailable headless, in
-which case the package ``__init__`` degrades ``Recorder`` to ``None``.
+tests/test_headless_import.py).
 
 Usage:
 
@@ -40,14 +39,22 @@ import numpy as np
 import psutil
 from loguru import logger
 from pympler import tracker
-from pynput import keyboard, mouse
 from tqdm import tqdm
 
-from openadapt_capture import platform, plotting, utils, video, window
+from openadapt_capture import platform, utils, video, window
 from openadapt_capture.config import config
 from openadapt_capture.db import create_db, crud, get_session_for_path
 from openadapt_capture.db.models import ActionEvent, Recording
 from openadapt_capture.extensions import synchronized_queue as sq
+from openadapt_capture.input_observer import (
+    ObservedInput,
+    ObservedKey,
+    ObservedMouseButton,
+    ObservedMouseMove,
+    ObservedMouseScroll,
+    add_exception_note,
+    create_input_observer,
+)
 from openadapt_capture.window_capture import (
     WindowCaptureError,
     WindowCaptureScope,
@@ -154,9 +161,115 @@ PROC_WRITE_BY_EVENT_TYPE = {
     "browser": True,
 }
 NUM_MEMORY_STATS_TO_LOG = 3
+STARTUP_WAIT_POLL_SECONDS = 0.1
+PRE_READY_TASK_JOIN_TIMEOUT_SECONDS = 2.0
 
 stop_sequence_detected = False
 ws_server_instance = None
+
+
+def _run_task_fail_loud(
+    task_name: str,
+    target: Callable[..., None],
+    args: tuple[Any, ...],
+    terminate_processing: Any,
+    task_errors: queue.Queue,
+) -> None:
+    """Propagate reader-thread failures back through the recording boundary."""
+    try:
+        target(*args)
+    except BaseException as exc:
+        task_errors.put((task_name, exc))
+        terminate_processing.set()
+
+
+def _wait_for_tasks_started(
+    task_by_name: dict[str, Any],
+    task_started_events: dict[str, Any],
+    terminate_processing: Any,
+) -> bool:
+    """Wait for pipeline readiness while honoring shutdown and worker failure.
+
+    Returns ``True`` only when every task has announced readiness. A shutdown
+    request or a task that exits before setting its readiness event fails the
+    startup and signals the rest of the pipeline to stop.
+    """
+    expected_starts = len(task_by_name)
+    logger.info(f"{expected_starts=}")
+
+    while True:
+        if terminate_processing.is_set():
+            logger.info("Recording startup cancelled before all tasks were ready")
+            return False
+
+        waiting_for = [
+            name
+            for name, event in task_started_events.items()
+            if not event.is_set()
+        ]
+        if not waiting_for:
+            return True
+
+        stopped_before_ready = [
+            name
+            for name in waiting_for
+            if name in task_by_name and not task_by_name[name].is_alive()
+        ]
+        if stopped_before_ready:
+            logger.error(
+                "Recording tasks exited before readiness: "
+                f"{stopped_before_ready}"
+            )
+            terminate_processing.set()
+            return False
+
+        logger.info(f"Waiting for tasks to start: {waiting_for}")
+        logger.info(
+            f"Started tasks: {expected_starts - len(waiting_for)}/{expected_starts}"
+        )
+        terminate_processing.wait(STARTUP_WAIT_POLL_SECONDS)
+
+
+def _join_tasks(
+    task_by_name: dict[str, Any],
+    task_names: list[str],
+    *,
+    timeout: float | None = None,
+) -> list[str]:
+    """Join pipeline tasks, bounding teardown when startup never completed."""
+    deadline = time.monotonic() + timeout if timeout is not None else None
+    lingering: list[str] = []
+
+    for task_name in task_names:
+        task = task_by_name.get(task_name)
+        if task is None:
+            continue
+
+        logger.info(f"joining {task_name=}...")
+        if deadline is None:
+            task.join()
+        else:
+            task.join(timeout=max(0.0, deadline - time.monotonic()))
+
+        if not task.is_alive():
+            continue
+
+        # Processes can be stopped after the shared graceful-shutdown deadline.
+        # Python cannot forcibly stop threads; recorder-owned threads are daemons
+        # and all receive terminate_processing before this helper is called.
+        if isinstance(task, multiprocessing.process.BaseProcess):
+            logger.warning(
+                f"terminating {task_name!r} after pre-ready shutdown timeout"
+            )
+            task.terminate()
+            task.join(timeout=0.5)
+
+        if task.is_alive():
+            lingering.append(task_name)
+
+    if lingering:
+        logger.warning(f"tasks still exiting after bounded shutdown: {lingering}")
+    return lingering
 
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
@@ -698,6 +811,7 @@ def trigger_action_event(
     event_q: queue.Queue,
     action_event_args: dict[str, Any],
     window_scope: WindowCaptureScope | None = None,
+    timestamp: float | None = None,
 ) -> None:
     """Triggers an action event and adds it to the event queue.
 
@@ -708,6 +822,8 @@ def trigger_action_event(
             coordinates are translated into the target window's pixel space
             before being recorded, so recorded coordinates match the captured
             frames directly.
+        timestamp: Native event-receipt time. Defaults to the current recording
+            clock only for legacy/direct callers.
 
     Returns:
         None
@@ -731,15 +847,22 @@ def trigger_action_event(
                 return
             action_event_args["mouse_x"] = wx
             action_event_args["mouse_y"] = wy
-    event_q.put(Event(utils.get_timestamp(), "action", action_event_args))
+    event_q.put(
+        Event(
+            utils.get_timestamp() if timestamp is None else timestamp,
+            "action",
+            action_event_args,
+        )
+    )
 
 
 def on_move(
     event_q: queue.Queue,
     window_scope: WindowCaptureScope | None,
-    x: int,
-    y: int,
+    x: float,
+    y: float,
     injected: bool = False,
+    timestamp: float | None = None,
 ) -> None:
     """Handles the 'move' event.
 
@@ -759,17 +882,19 @@ def on_move(
             event_q,
             {"name": "move", "mouse_x": x, "mouse_y": y},
             window_scope,
+            timestamp,
         )
 
 
 def on_click(
     event_q: queue.Queue,
     window_scope: WindowCaptureScope | None,
-    x: int,
-    y: int,
-    button: mouse.Button,
+    x: float,
+    y: float,
+    button: str,
     pressed: bool,
     injected: bool = False,
+    timestamp: float | None = None,
 ) -> None:
     """Handles the 'click' event.
 
@@ -793,21 +918,23 @@ def on_click(
                 "name": "click",
                 "mouse_x": x,
                 "mouse_y": y,
-                "mouse_button_name": button.name,
+                "mouse_button_name": button,
                 "mouse_pressed": pressed,
             },
             window_scope,
+            timestamp,
         )
 
 
 def on_scroll(
     event_q: queue.Queue,
     window_scope: WindowCaptureScope | None,
-    x: int,
-    y: int,
-    dx: int,
-    dy: int,
+    x: float,
+    y: float,
+    dx: float,
+    dy: float,
     injected: bool = False,
+    timestamp: float | None = None,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -835,41 +962,36 @@ def on_scroll(
                 "mouse_dy": dy,
             },
             window_scope,
+            timestamp,
         )
 
 
 def handle_key(
     event_q: queue.Queue,
-    event_name: str,
-    key: keyboard.KeyCode,
-    canonical_key: keyboard.KeyCode,
+    key: ObservedKey,
 ) -> None:
-    """Handles a key event.
+    """Persist a normalized native key transition.
 
     Args:
         event_q: The event queue to add the key event to.
-        event_name: The name of the key event.
-        key: The key code of the key event.
-        canonical_key: The canonical key code of the key event.
+        key: Normalized physical/canonical key identity.
 
     Returns:
         None
     """
-    attr_names = [
-        "name",
-        "char",
-        "vk",
-    ]
-    attrs = {
-        f"key_{attr_name}": getattr(key, attr_name, None) for attr_name in attr_names
-    }
-    logger.debug(f"{attrs=}")
-    canonical_attrs = {
-        f"canonical_key_{attr_name}": getattr(canonical_key, attr_name, None)
-        for attr_name in attr_names
-    }
-    logger.debug(f"{canonical_attrs=}")
-    trigger_action_event(event_q, {"name": event_name, **attrs, **canonical_attrs})
+    trigger_action_event(
+        event_q,
+        {
+            "name": "press" if key.pressed else "release",
+            "key_name": key.key_name,
+            "key_char": key.key_char,
+            "key_vk": key.key_vk,
+            "canonical_key_name": key.canonical_key_name,
+            "canonical_key_char": key.canonical_key_char,
+            "canonical_key_vk": key.canonical_key_vk,
+        },
+        timestamp=key.timestamp,
+    )
 
 
 def read_screen_events(
@@ -1156,153 +1278,100 @@ def create_recording(
     return recording, db_path
 
 
-def read_keyboard_events(
-    event_q: queue.Queue,
-    terminate_processing: multiprocessing.Event,
-    recording: Recording,
-    started_event: threading.Event,
-) -> None:
-    """Reads keyboard events and adds them to the event queue.
-
-    Args:
-        event_q (queue.Queue): The event queue to add the keyboard events to.
-        terminate_processing (multiprocessing.Event): The event to signal termination
-          of event reading.
-        recording (Recording): The recording object.
-        started_event: Event to set once started.
-
-    Returns:
-        None
-    """
-    # create list of indices for sequence detection
-    # one index for each stop sequence in config.STOP_SEQUENCES
-    stop_sequences = config.STOP_SEQUENCES
-    stop_sequence_indices = [0 for _ in stop_sequences]
-
-    def on_press(
-        event_q: queue.Queue,
-        key: keyboard.Key | keyboard.KeyCode,
-        injected: bool = False,
-    ) -> None:
-        """Event handler for key press events.
-
-        Args:
-            event_q (queue.Queue): The event queue for processing key events.
-            key (keyboard.KeyboardEvent): The key event object representing
-              the pressed key.
-            injected (bool): A flag indicating whether the key event was injected.
-
-        Returns:
-            None
-        """
-        canonical_key = keyboard_listener.canonical(key)
-        logger.debug(f"{key=} {injected=} {canonical_key=}")
-        if not injected:
-            handle_key(event_q, "press", key, canonical_key)
-
-        # stop sequence code
-        nonlocal stop_sequence_indices
-        global stop_sequence_detected
-        canonical_key_name = getattr(canonical_key, "name", None)
-
-        for i in range(0, len(stop_sequences)):
-            # check each stop sequence
-            stop_sequence = stop_sequences[i]
-            # stop_sequence_indices[i] is the index for this stop sequence
-            # get canonical KeyCode of current letter in this sequence
-            canonical_sequence = keyboard_listener.canonical(
-                keyboard.KeyCode.from_char(stop_sequence[stop_sequence_indices[i]])
-            )
-
-            # Check if the pressed key matches the current key in this sequence
-            if (
-                canonical_key == canonical_sequence
-                or canonical_key_name == stop_sequence[stop_sequence_indices[i]]
-            ):
-                # increment this index
-                stop_sequence_indices[i] += 1
-            else:
-                # Reset index since pressed key doesn't match sequence key
-                stop_sequence_indices[i] = 0
-
-            # Check if the entire sequence has been entered correctly
-            if stop_sequence_indices[i] >= len(stop_sequence):
-                stop_sequence_indices[i] = 0
-                logger.info("Stop sequence entered! Stopping recording now.")
-                stop_sequence_detected = True
-
-    def on_release(
-        event_q: queue.Queue,
-        key: keyboard.Key | keyboard.KeyCode,
-        injected: bool = False,
-    ) -> None:
-        """Event handler for key release events.
-
-        Args:
-            event_q (queue.Queue): The event queue for processing key events.
-            key (keyboard.KeyboardEvent): The key event object representing
-              the released key.
-            injected (bool): A flag indicating whether the key event was injected.
-
-        Returns:
-            None
-        """
-        canonical_key = keyboard_listener.canonical(key)
-        logger.debug(f"{key=} {injected=} {canonical_key=}")
-        if not injected:
-            handle_key(event_q, "release", key, canonical_key)
-
-    utils.set_start_time(recording.timestamp)
-
-    keyboard_listener = keyboard.Listener(
-        on_press=partial(on_press, event_q),
-        on_release=partial(on_release, event_q),
-    )
-    keyboard_listener.start()
-
-    # NOTE: listener may not have actually started by now
-    # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    started_event.set()
-
-    terminate_processing.wait()
-    keyboard_listener.stop()
-
-
-def read_mouse_events(
+def read_input_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
     recording: Recording,
     started_event: threading.Event,
     window_scope: WindowCaptureScope | None = None,
 ) -> None:
-    """Reads mouse events and adds them to the event queue.
+    """Read globally ordered keyboard and mouse events from one native observer."""
+    stop_sequences = [sequence for sequence in config.STOP_SEQUENCES if sequence]
+    stop_sequence_indices = [0 for _ in stop_sequences]
 
-    Args:
-        event_q: The event queue to add the mouse events to.
-        terminate_processing: The event to signal termination of event reading.
-        recording: The recording object.
-        started_event: Event to set once started.
-        window_scope: Optional window scope; when set, mouse coordinates are
-            translated into the target window's pixel space.
+    def on_observed(event: ObservedInput) -> None:
+        if isinstance(event, ObservedMouseMove):
+            on_move(
+                event_q,
+                window_scope,
+                event.x,
+                event.y,
+                event.injected,
+                timestamp=event.timestamp,
+            )
+            return
+        if isinstance(event, ObservedMouseButton):
+            on_click(
+                event_q,
+                window_scope,
+                event.x,
+                event.y,
+                event.button,
+                event.pressed,
+                event.injected,
+                timestamp=event.timestamp,
+            )
+            return
+        if isinstance(event, ObservedMouseScroll):
+            on_scroll(
+                event_q,
+                window_scope,
+                event.x,
+                event.y,
+                event.dx,
+                event.dy,
+                event.injected,
+                timestamp=event.timestamp,
+            )
+            return
+        if event.injected:
+            return
 
-    Returns:
-        None
-    """
+        logger.debug(f"{event=}")
+        handle_key(event_q, event)
+        if not event.pressed:
+            return
+
+        nonlocal stop_sequence_indices
+        global stop_sequence_detected
+        candidate = event.canonical_key_char or event.canonical_key_name
+        if candidate is None:
+            stop_sequence_indices = [0 for _ in stop_sequences]
+            return
+        candidate = candidate.lower()
+        for index, sequence in enumerate(stop_sequences):
+            expected = sequence[stop_sequence_indices[index]].lower()
+            if candidate == expected:
+                stop_sequence_indices[index] += 1
+            else:
+                stop_sequence_indices[index] = (
+                    1 if candidate == sequence[0].lower() else 0
+                )
+            if stop_sequence_indices[index] == len(sequence):
+                stop_sequence_indices[index] = 0
+                logger.info("Stop sequence entered! Stopping recording now.")
+                stop_sequence_detected = True
+
     utils.set_start_time(recording.timestamp)
-
-    mouse_listener = mouse.Listener(
-        on_move=partial(on_move, event_q, window_scope),
-        on_click=partial(on_click, event_q, window_scope),
-        on_scroll=partial(on_scroll, event_q, window_scope),
+    observer = create_input_observer(
+        on_observed,
+        observe_keyboard=True,
+        observe_mouse=True,
+        capture_mouse_moves=True,
     )
-    mouse_listener.start()
-
-    # NOTE: listener may not have actually started by now
-    # TODO: handle race condition, e.g. by sending synthetic events from main thread
-    started_event.set()
-
-    terminate_processing.wait()
-    mouse_listener.stop()
+    started = False
+    try:
+        observer.start()
+        started = True
+        started_event.set()
+        while not terminate_processing.wait(0.1):
+            observer.check_health()
+    except BaseException:
+        terminate_processing.set()
+        raise
+    finally:
+        if started:
+            observer.stop()
 
 
 def record_audio(
@@ -1508,7 +1577,7 @@ def run_browser_event_server(
     server_thread.join()
 
 
-@logger.catch
+@logger.catch(reraise=True)
 @utils.trace(logger)
 def record(
     task_description: str,
@@ -1605,6 +1674,7 @@ def record(
         terminate_processing = multiprocessing.Event()
     task_by_name = {}
     task_started_events = {}
+    task_errors: queue.Queue = queue.Queue()
     _screen_timing = _ScreenTimingStats()  # running stats, no unbounded list
 
     # In window-scoped mode the screen reader emits the target window's
@@ -1613,6 +1683,7 @@ def record(
     if config.RECORD_WINDOW_DATA and window_scope is None:
         window_event_reader = threading.Thread(
             target=read_window_events,
+            daemon=True,
             args=(
                 event_q,
                 terminate_processing,
@@ -1628,6 +1699,7 @@ def record(
     if config.RECORD_BROWSER_EVENTS:
         browser_event_reader = threading.Thread(
             target=run_browser_event_server,
+            daemon=True,
             args=(
                 event_q,
                 terminate_processing,
@@ -1642,6 +1714,7 @@ def record(
 
     screen_event_reader = threading.Thread(
         target=read_screen_events,
+        daemon=True,
         args=(
             event_q,
             terminate_processing,
@@ -1654,30 +1727,26 @@ def record(
     screen_event_reader.start()
     task_by_name["screen_event_reader"] = screen_event_reader
 
-    keyboard_event_reader = threading.Thread(
-        target=read_keyboard_events,
+    input_reader_args = (
+        event_q,
+        terminate_processing,
+        recording,
+        task_started_events.setdefault("input_event_reader", threading.Event()),
+        window_scope,
+    )
+    input_event_reader = threading.Thread(
+        target=_run_task_fail_loud,
+        daemon=True,
         args=(
-            event_q,
+            "input_event_reader",
+            read_input_events,
+            input_reader_args,
             terminate_processing,
-            recording,
-            task_started_events.setdefault("keyboard_event_reader", threading.Event()),
+            task_errors,
         ),
     )
-    keyboard_event_reader.start()
-    task_by_name["keyboard_event_reader"] = keyboard_event_reader
-
-    mouse_event_reader = threading.Thread(
-        target=read_mouse_events,
-        args=(
-            event_q,
-            terminate_processing,
-            recording,
-            task_started_events.setdefault("mouse_event_reader", threading.Event()),
-            window_scope,
-        ),
-    )
-    mouse_event_reader.start()
-    task_by_name["mouse_event_reader"] = mouse_event_reader
+    input_event_reader.start()
+    task_by_name["input_event_reader"] = input_event_reader
 
     if num_action_events is None:
         num_action_events = multiprocessing.Value("i", 0)
@@ -1692,6 +1761,7 @@ def record(
 
     event_processor = threading.Thread(
         target=process_events,
+        daemon=True,
         args=(
             event_q,
             screen_write_q,
@@ -1875,35 +1945,31 @@ def record(
 
     # TODO: discard events until everything is ready
 
-    # Wait for all to signal they've started
-    expected_starts = len(task_by_name)
-    logger.info(f"{expected_starts=}")
-    while True:
-        started_tasks = sum(event.is_set() for event in task_started_events.values())
-        if started_tasks >= expected_starts:
-            break
-        waiting_for = [
-            task for task, event in task_started_events.items() if not event.is_set()
-        ]
-        logger.info(f"Waiting for tasks to start: {waiting_for}")
-        logger.info(f"Started tasks: {started_tasks}/{expected_starts}")
-        time.sleep(1)  # Sleep to reduce busy waiting
-
-    for _ in range(5):
-        logger.info("*" * 40)
-    logger.info("All readers and writers have started. Waiting for input events...")
-
-    if status_pipe:
-        status_pipe.send({"type": "record.started"})
-
     global stop_sequence_detected
     stop_sequence_detected = False
-    try:
-        while not (stop_sequence_detected or terminate_processing.is_set()):
-            time.sleep(1)
-        terminate_processing.set()
-    except KeyboardInterrupt:
-        terminate_processing.set()
+    startup_ready = _wait_for_tasks_started(
+        task_by_name,
+        task_started_events,
+        terminate_processing,
+    )
+    if startup_ready:
+        for _ in range(5):
+            logger.info("*" * 40)
+        logger.info(
+            "All readers and writers have started. Waiting for input events..."
+        )
+
+        if status_pipe:
+            status_pipe.send({"type": "record.started"})
+
+        try:
+            while not (stop_sequence_detected or terminate_processing.is_set()):
+                terminate_processing.wait(1)
+        except KeyboardInterrupt:
+            terminate_processing.set()
+    else:
+        logger.info("Tearing down recording after incomplete startup")
+    terminate_processing.set()
 
     if status_pipe:
         status_pipe.send({"type": "record.stopping"})
@@ -1912,20 +1978,16 @@ def record(
         collect_stats(performance_snapshots)
         log_memory_usage(_tracker, performance_snapshots)
 
-    def join_tasks(task_names: list[str]) -> None:
-        for task_name in task_names:
-            if task_name in task_by_name:
-                logger.info(f"joining {task_name=}...")
-                task = task_by_name[task_name]
-                task.join()
-
-    join_tasks(
+    pre_ready_timeout = (
+        None if startup_ready else PRE_READY_TASK_JOIN_TIMEOUT_SECONDS
+    )
+    _join_tasks(
+        task_by_name,
         [
             "window_event_reader",
             "browser_event_reader",
             "screen_event_reader",
-            "keyboard_event_reader",
-            "mouse_event_reader",
+            "input_event_reader",
             "event_processor",
             "screen_event_writer",
             "browser_event_writer",
@@ -1933,18 +1995,28 @@ def record(
             "window_event_writer",
             "video_writer",
             "audio_recorder",
-        ]
+        ],
+        timeout=pre_ready_timeout,
     )
 
     terminate_perf_event.set()
-    join_tasks(
+    _join_tasks(
+        task_by_name,
         [
             "perf_stats_writer",
             "mem_writer",
-        ]
+        ],
+        timeout=pre_ready_timeout,
     )
 
-    if config.PLOT_PERFORMANCE:
+    if not task_errors.empty():
+        task_name, task_error = task_errors.get_nowait()
+        add_exception_note(task_error, f"recording task {task_name!r} failed")
+        raise task_error
+
+    if config.PLOT_PERFORMANCE and startup_ready:
+        from openadapt_capture import plotting
+
         session = get_session_for_path(db_path)
         plotting.plot_performance(
             session, recording, save_dir=capture_dir,
@@ -2119,11 +2191,14 @@ class Recorder:
         self._status_recv, self._status_send = multiprocessing.Pipe(duplex=False)
         self._ready_event = threading.Event()
         self._stopped_event = threading.Event()
+        self._ready_or_stopped_event = threading.Event()
 
         # Internal
         self._record_thread: threading.Thread | None = None
         self._status_thread: threading.Thread | None = None
         self._capture = None  # lazy CaptureSession
+        self._worker_error: BaseException | None = None
+        self._worker_error_lock = threading.Lock()
 
     def _drain_status_pipe(self) -> None:
         """Background thread that reads status messages from record()."""
@@ -2134,8 +2209,10 @@ class Recorder:
                     if isinstance(msg, dict):
                         if msg.get("type") == "record.started":
                             self._ready_event.set()
+                            self._ready_or_stopped_event.set()
                         elif msg.get("type") == "record.stopped":
                             self._stopped_event.set()
+                            self._ready_or_stopped_event.set()
         except (EOFError, OSError):
             pass
 
@@ -2143,20 +2220,33 @@ class Recorder:
         """Thread target: apply config overrides, then call record()."""
         from openadapt_capture.config import config_override
 
-        with config_override(self._recording_config):
-            record(
-                task_description=self.task_description,
-                capture_dir=self.capture_dir,
-                terminate_processing=self._terminate_processing,
-                terminate_recording=self._terminate_recording,
-                status_pipe=self._status_send,
-                num_action_events=self._num_action_events,
-                num_screen_events=self._num_screen_events,
-                num_window_events=self._num_window_events,
-                num_browser_events=self._num_browser_events,
-                num_video_events=self._num_video_events,
-                send_profile=self._send_profile,
-            )
+        try:
+            with config_override(self._recording_config):
+                record(
+                    task_description=self.task_description,
+                    capture_dir=self.capture_dir,
+                    terminate_processing=self._terminate_processing,
+                    terminate_recording=self._terminate_recording,
+                    status_pipe=self._status_send,
+                    num_action_events=self._num_action_events,
+                    num_screen_events=self._num_screen_events,
+                    num_window_events=self._num_window_events,
+                    num_browser_events=self._num_browser_events,
+                    num_video_events=self._num_video_events,
+                    send_profile=self._send_profile,
+                )
+        except BaseException as exc:
+            # A setup exception must wake wait_for_ready() and let context-manager
+            # teardown finish instead of leaving callers blocked for its timeout.
+            with self._worker_error_lock:
+                if self._worker_error is None:
+                    self._worker_error = exc
+            self._terminate_processing.set()
+            try:
+                self._status_send.send({"type": "record.stopped"})
+            except (BrokenPipeError, EOFError, OSError):
+                self._stopped_event.set()
+                self._ready_or_stopped_event.set()
 
     def __enter__(self) -> "Recorder":
         # Start status drain thread
@@ -2177,17 +2267,37 @@ class Recorder:
         self._stopped_event.set()  # ensure status thread exits
         if self._status_thread is not None:
             self._status_thread.join(timeout=5)
+        if self._worker_error is not None:
+            if exc_val is not None:
+                add_exception_note(
+                    exc_val,
+                    f"the recorder worker also failed: {self._worker_error!r}"
+                )
+            else:
+                raise self._worker_error
 
     def stop(self) -> None:
-        """Stop recording programmatically."""
+        """Stop, join, and surface any recording-worker failure."""
         self._terminate_processing.set()
+        if self._record_thread is not None:
+            self._record_thread.join()
+        self.check_health()
+
+    def check_health(self) -> None:
+        """Raise the first recording-worker error observed by the owner thread."""
+        with self._worker_error_lock:
+            worker_error = self._worker_error
+        if worker_error is not None:
+            raise worker_error
 
     def wait_for_ready(self, timeout: float = 60) -> bool:
         """Block until all recording threads/processes have started.
 
-        Returns True if ready, False if timeout expired.
+        Returns True if ready, False if startup stopped or the timeout expired.
         """
-        return self._ready_event.wait(timeout=timeout)
+        self._ready_or_stopped_event.wait(timeout=timeout)
+        self.check_health()
+        return self._ready_event.is_set()
 
     @property
     def is_recording(self) -> bool:
@@ -2231,6 +2341,7 @@ class Recorder:
 
         Returns None if recording has not finished yet.
         """
+        self.check_health()
         if self._capture is None and not self.is_recording:
             try:
                 from openadapt_capture.capture import CaptureSession

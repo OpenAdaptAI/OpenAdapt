@@ -3,7 +3,12 @@
 Platform-agnostic event streams with time-aligned media.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("openadapt-capture")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
 
 # High-level APIs (primary interface)
 from openadapt_capture.capture import Action, Capture, CaptureSession
@@ -68,20 +73,9 @@ from openadapt_capture.processing import (
     remove_redundant_mouse_move_events,
 )
 
-# Recorder requires pynput which needs a display server (X11/Wayland/macOS/Windows).
-# Make it optional so the package is importable in headless environments (CI, servers).
-# The recorder must never take a screenshot at import time, but guard against a
-# display/screenshot failure (mss ScreenShotError) as well as a missing dependency
-# so a headless import degrades to ``Recorder = None`` instead of crashing.
-try:
-    from mss.exception import ScreenShotError as _ScreenShotError
-except ImportError:  # pragma: no cover - mss is a hard dependency
-    _ScreenShotError = ()  # type: ignore[assignment,misc]
-
-try:
-    from openadapt_capture.recorder import Recorder
-except (ImportError, OSError, _ScreenShotError):
-    Recorder = None  # type: ignore[assignment,misc]
+# Recorder imports are display-side-effect free. Platform permissions and
+# display availability are checked only when native observers start.
+from openadapt_capture.recorder import Recorder
 
 # Performance statistics
 from openadapt_capture.stats import (

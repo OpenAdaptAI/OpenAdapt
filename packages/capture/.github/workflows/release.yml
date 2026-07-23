@@ -1,60 +1,155 @@
 name: Release and PyPI Publish
 
+# Publication is a deliberate operation from protected main. Ordinary merges
+# run Tests only; this workflow refuses to version or publish until that exact
+# main commit has completed the full test.yml workflow (including the package
+# archive contract).
+#
+# Requires ADMIN_TOKEN (GitHub PAT with repo scope) to push the release commit
+# and tag through branch protection. PyPI publication uses Trusted Publishing.
+
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Release operation"
+        type: choice
+        required: true
+        default: semantic-release
+        options:
+          - semantic-release
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release:
+  semantic-release:
+    name: Version, tag, and publish the green main release train
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'semantic-release' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    concurrency: release
     permissions:
+      actions: read
       id-token: write
       contents: write
+      issues: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Checkout protected main at the dispatched commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ secrets.ADMIN_TOKEN }}
 
-      - name: Check if should skip
+      - name: Refuse a release commit replay
         id: check_skip
+        shell: bash
         run: |
-          if [ "$(git log -1 --pretty=format:'%an')" = "semantic-release" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          author="$(git log -1 --pretty=format:'%an')"
+          subject="$(git log -1 --pretty=format:'%s')"
+          if [ "${author}" = "semantic-release" ] || printf '%s' "${subject}" | grep -q '^chore: release'; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Wait for exact-head Tests workflow
+        if: steps.check_skip.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 2700))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            response="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/test.yml/runs" \
+                --raw-field head_sha="${GITHUB_SHA}" \
+                --raw-field event=push \
+                --raw-field per_page=20
+            )"
+            status="$(
+              printf '%s' "${response}" |
+                jq -r --arg sha "${GITHUB_SHA}" \
+                  '[.workflow_runs[]
+                    | select(.head_sha == $sha and .event == "push")]
+                   | sort_by(.created_at) | last | .status // "missing"'
+            )"
+            conclusion="$(
+              printf '%s' "${response}" |
+                jq -r --arg sha "${GITHUB_SHA}" \
+                  '[.workflow_runs[]
+                    | select(.head_sha == $sha and .event == "push")]
+                   | sort_by(.created_at) | last | .conclusion // "pending"'
+            )"
+            echo "test.yml for ${GITHUB_SHA}: ${status}/${conclusion}"
+            if [ "${status}" = "completed" ] && [ "${conclusion}" != "success" ]; then
+              echo "Refusing to publish because test.yml concluded ${conclusion}."
+              exit 1
+            fi
+            if [ "${status}" = "completed" ] && [ "${conclusion}" = "success" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ "${status}" != "completed" ] || [ "${conclusion}" != "success" ]; then
+            echo "Refusing to publish: exact-head test.yml did not succeed within 45 minutes."
+            exit 1
+          fi
+
+      - name: Require dispatched head to remain current protected main
+        if: steps.check_skip.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${current_main}" != "${GITHUB_SHA}" ]; then
+            echo "Refusing stale release dispatch: main is ${current_main}, dispatched head is ${GITHUB_SHA}."
+            exit 1
           fi
 
       - name: Set up Python
         if: steps.check_skip.outputs.skip != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install uv
+      - name: Install exact uv
         if: steps.check_skip.outputs.skip != 'true'
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
 
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@v10.6.1
+        uses: python-semantic-release/python-semantic-release@39dd2052f2ce8282a5d932c31d58a2ca06d2550e # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
-      - name: Build package
+      # Do not trust the semantic-release action's transient build directory.
+      # Rebuild the versioned tree and re-run the exact archive boundary guard
+      # before either external publication channel sees an artifact.
+      - name: Rebuild and verify release artifacts
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        run: uv build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          uv build --wheel --sdist
+          python scripts/verify_distribution.py dist/*
 
       - name: Publish to PyPI
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@v9.15.2
+        uses: python-semantic-release/publish-action@5a5718ce47b892ef699f2972dae122297771d641 # v10.6.1
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
@@ -64,6 +159,7 @@ jobs:
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        shell: bash
         run: |
           TITLE="Release workflow failed on main"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -4,20 +4,16 @@ Updated for legacy-style SQLAlchemy storage.
 """
 
 import tempfile
+import threading
 import time
 from pathlib import Path
 
 import pytest
 
+from openadapt_capture import recorder as recorder_module
 from openadapt_capture.capture import Capture
 from openadapt_capture.db import create_db, crud
-
-# Recorder requires pynput which needs a display server
-try:
-    from openadapt_capture.recorder import Recorder
-except ImportError:
-    Recorder = None
-
+from openadapt_capture.recorder import Recorder
 
 # Sessions/engines created by _create_test_recording, released by the
 # temp_capture_dir teardown BEFORE the TemporaryDirectory is removed. Both
@@ -66,7 +62,6 @@ def _create_test_recording(capture_dir, task_description="Test task"):
     return recording, db_path, session
 
 
-@pytest.mark.skipif(Recorder is None, reason="pynput unavailable (headless)")
 class TestRecorder:
     """Tests for Recorder class."""
 
@@ -135,6 +130,52 @@ class TestRecorder:
         """Test Recorder has video_frame_count property."""
         rec = Recorder("/tmp/test_never_created")
         assert rec.video_frame_count == 0
+
+    def test_stop_during_incomplete_startup_returns_promptly(
+        self, monkeypatch, tmp_path
+    ):
+        """A worker that never announces readiness cannot trap context teardown."""
+        worker_entered = threading.Event()
+
+        def stalled_record(
+            *,
+            terminate_processing,
+            terminate_recording,
+            status_pipe,
+            **_kwargs,
+        ):
+            def wait_for_shutdown():
+                worker_entered.set()
+                terminate_processing.wait()
+
+            worker = threading.Thread(target=wait_for_shutdown, daemon=True)
+            worker.start()
+            tasks = {"never_ready": worker}
+            started_events = {"never_ready": threading.Event()}
+
+            assert not recorder_module._wait_for_tasks_started(
+                tasks,
+                started_events,
+                terminate_processing,
+            )
+            assert not recorder_module._join_tasks(
+                tasks,
+                ["never_ready"],
+                timeout=0.5,
+            )
+            status_pipe.send({"type": "record.stopped"})
+            terminate_recording.set()
+
+        monkeypatch.setattr(recorder_module, "record", stalled_record)
+        recorder = Recorder(str(tmp_path / "incomplete-startup"))
+
+        with recorder:
+            assert worker_entered.wait(timeout=1)
+            stop_started = time.monotonic()
+            recorder.stop()
+
+        assert time.monotonic() - stop_started < 1
+        assert recorder.wait_for_ready(timeout=0) is False
 
 
 class TestCapture:

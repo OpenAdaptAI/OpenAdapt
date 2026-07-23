@@ -26,25 +26,20 @@ import psutil
 import pytest
 
 from openadapt_capture.capture import CaptureSession
-
-# Recorder requires pynput which needs a display server
-try:
-    from openadapt_capture.recorder import Recorder
-except ImportError:
-    Recorder = None
+from openadapt_capture.recorder import Recorder
 
 # Skip on non-Windows platforms where the live pipeline is not yet validated
 _SKIP_REASON = (
     "Live recorder integration tests target Windows (the primary recording "
     "platform, exercised in CI on windows-latest). The multiprocessing "
     "'spawn' writer path on macOS/Linux is not yet validated end to end; "
-    "on GitHub macOS runners pynput input injection also needs Accessibility "
+    "on GitHub macOS runners synthetic input injection also needs Accessibility "
     "permissions that cannot be granted."
 )
 _ON_WINDOWS = sys.platform == "win32"
 
 # GitHub-hosted Windows runners execute jobs in a non-interactive session:
-# SendInput-injected events never reach the low-level hooks pynput uses, so
+# SendInput-injected events never reach native low-level hooks in this session, so
 # listener-dependent tests capture zero events there. The CI workflow sets
 # this flag; the live-pipeline tests that do not depend on captured input
 # (startup/shutdown, db creation, bounded memory) still run for real. Run the
@@ -52,7 +47,7 @@ _ON_WINDOWS = sys.platform == "win32"
 # interactive self-hosted runner).
 _NO_INPUT_INJECTION = os.environ.get("OPENADAPT_CI_NO_INPUT_INJECTION") == "1"
 _INJECTION_SKIP_REASON = (
-    "OPENADAPT_CI_NO_INPUT_INJECTION=1: injected input does not reach pynput "
+    "OPENADAPT_CI_NO_INPUT_INJECTION=1: injected input does not reach native "
     "hooks in a non-interactive session, so event-capture assertions cannot "
     "hold (hosted CI runner limitation, not a recorder bug)"
 )

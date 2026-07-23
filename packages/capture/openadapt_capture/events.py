@@ -87,7 +87,7 @@ class MouseDownEvent(BaseEvent):
     type: Literal[EventType.MOUSE_DOWN] = EventType.MOUSE_DOWN
     x: float = Field(description="Mouse X position in pixels")
     y: float = Field(description="Mouse Y position in pixels")
-    button: MouseButton = Field(description="Mouse button name")
+    button: str = Field(description="Native mouse button name")
 
 
 class MouseUpEvent(BaseEvent):
@@ -99,7 +99,7 @@ class MouseUpEvent(BaseEvent):
     type: Literal[EventType.MOUSE_UP] = EventType.MOUSE_UP
     x: float = Field(description="Mouse X position in pixels")
     y: float = Field(description="Mouse Y position in pixels")
-    button: MouseButton = Field(description="Mouse button name")
+    button: str = Field(description="Native mouse button name")
 
 
 class MouseScrollEvent(BaseEvent):
@@ -202,7 +202,7 @@ class MouseClickEvent(BaseEvent):
     type: Literal[EventType.MOUSE_SINGLECLICK] = EventType.MOUSE_SINGLECLICK
     x: float = Field(description="Mouse X position in pixels")
     y: float = Field(description="Mouse Y position in pixels")
-    button: MouseButton = Field(description="Mouse button name")
+    button: str = Field(description="Native mouse button name")
     children: list[MouseDownEvent | MouseUpEvent] = Field(
         default_factory=list, description="Child events that were merged"
     )
@@ -218,7 +218,7 @@ class MouseDoubleClickEvent(BaseEvent):
     type: Literal[EventType.MOUSE_DOUBLECLICK] = EventType.MOUSE_DOUBLECLICK
     x: float = Field(description="Mouse X position in pixels")
     y: float = Field(description="Mouse Y position in pixels")
-    button: MouseButton = Field(description="Mouse button name")
+    button: str = Field(description="Native mouse button name")
     children: list[MouseDownEvent | MouseUpEvent] = Field(
         default_factory=list, description="Child events that were merged"
     )
@@ -236,7 +236,7 @@ class MouseDragEvent(BaseEvent):
     y: float = Field(description="Starting Y position in pixels")
     dx: float = Field(description="Horizontal displacement (end_x - start_x)")
     dy: float = Field(description="Vertical displacement (end_y - start_y)")
-    button: MouseButton = Field(description="Mouse button name")
+    button: str = Field(description="Native mouse button name")
     children: list[MouseDownEvent | MouseMoveEvent | MouseUpEvent] = Field(
         default_factory=list, description="Child events that were merged"
     )

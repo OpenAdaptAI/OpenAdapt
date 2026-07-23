@@ -30,7 +30,6 @@ from openadapt_capture.events import (
     KeyDownEvent,
     KeyTypeEvent,
     KeyUpEvent,
-    MouseButton,
     MouseDownEvent,
     MouseMoveEvent,
     MouseScrollEvent,
@@ -63,10 +62,6 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
         )
     elif db_event.name == "click":
         button = db_event.mouse_button_name or "left"
-        try:
-            button = MouseButton(button)
-        except ValueError:
-            button = MouseButton.LEFT
 
         if db_event.mouse_pressed is True:
             return MouseDownEvent(

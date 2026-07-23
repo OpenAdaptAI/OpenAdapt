@@ -1,11 +1,7 @@
-"""macOS platform window capture using Quartz/AppKit.
-
-Copied from legacy OpenAdapt window/_macos.py. Only import paths changed.
-"""
+"""macOS window and accessibility capture using native PyObjC frameworks."""
 
 import pickle
 import plistlib
-import re
 import time
 from pprint import pprint
 from typing import Any, Literal, Union
@@ -14,11 +10,11 @@ try:
     import AppKit
     import ApplicationServices
     import Foundation
-    import oa_atomacos
     import Quartz
 except ImportError as e:
     raise ImportError(
-        f"macOS window capture requires AppKit, Quartz, and oa_atomacos: {e}"
+        f"macOS window capture requires PyObjC AppKit, Quartz, and "
+        f"ApplicationServices: {e}"
     )
 
 from loguru import logger
@@ -257,24 +253,10 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
         value = {deepconvert_objc(k): deepconvert_objc(v) for k, v in object.items()}
     elif isinstance(object, strings):
         value = str(object)
-    # handle core-foundation class AXValueRef
+    # Handle Core Foundation AXValueRef without a third-party accessibility
+    # wrapper. PyObjC returns ``(success, value)`` from AXValueGetValue.
     elif isinstance(object, ApplicationServices.AXValueRef):
-        # convert to dict - note: this object is not iterable
-        # TODO: access directly, e.g. via
-        # ApplicationServices.AXUIElementCopyAttributeValue
-        rep = repr(object)
-        x_value = re.search(r"x:([\d.]+)", rep)
-        y_value = re.search(r"y:([\d.]+)", rep)
-        w_value = re.search(r"w:([\d.]+)", rep)
-        h_value = re.search(r"h:([\d.]+)", rep)
-        type_value = re.search(r"type\s?=\s?(\w+)", rep)
-        value = {
-            "x": float(x_value.group(1)) if x_value else None,
-            "y": float(y_value.group(1)) if y_value else None,
-            "w": float(w_value.group(1)) if w_value else None,
-            "h": float(h_value.group(1)) if h_value else None,
-            "type": type_value.group(1) if type_value else None,
-        }
+        value = _convert_ax_value(object)
     elif isinstance(object, Foundation.NSURL):
         value = str(object.absoluteString())
     elif isinstance(object, Foundation.__NSCFAttributedString):
@@ -294,9 +276,48 @@ def deepconvert_objc(object: Any) -> Any | list | dict | Literal[0]:
                 "github.com/OpenAdaptAI/openadapt-capture/issues/new"
             )
             logger.warning(f"{object=}")
-    if value:
-        value = oa_atomacos._converter.Converter().convert_value(value)
     return value
+
+
+def _convert_ax_value(value: ApplicationServices.AXValueRef) -> Any:
+    """Convert a PyObjC AXValue into stable, pickle-safe primitives."""
+    value_type = ApplicationServices.AXValueGetType(value)
+    success, raw_value = ApplicationServices.AXValueGetValue(
+        value,
+        value_type,
+        None,
+    )
+    if not success:
+        logger.warning(f"Could not convert AXValue of type {value_type}")
+        return None
+
+    if value_type == ApplicationServices.kAXValueCGPointType:
+        return {
+            "x": float(raw_value.x),
+            "y": float(raw_value.y),
+            "type": "CGPoint",
+        }
+    if value_type == ApplicationServices.kAXValueCGSizeType:
+        return {
+            "w": float(raw_value.width),
+            "h": float(raw_value.height),
+            "type": "CGSize",
+        }
+    if value_type == ApplicationServices.kAXValueCGRectType:
+        return {
+            "x": float(raw_value.origin.x),
+            "y": float(raw_value.origin.y),
+            "w": float(raw_value.size.width),
+            "h": float(raw_value.size.height),
+            "type": "CGRect",
+        }
+    if value_type == ApplicationServices.kAXValueCFRangeType:
+        return {
+            "location": int(raw_value.location),
+            "length": int(raw_value.length),
+            "type": "CFRange",
+        }
+    return str(raw_value)
 
 
 def get_active_element_state(x: int, y: int) -> dict:
@@ -309,11 +330,23 @@ def get_active_element_state(x: int, y: int) -> dict:
     Returns:
         dict: A dictionary containing the state of the active element.
     """
-    window_meta = get_active_window_meta()
-    pid = window_meta["kCGWindowOwnerPID"]
-    app = oa_atomacos._a11y.AXUIElement.from_pid(pid)
-    el = app.get_element_at_position(x, y)
-    state = dump_state(el.ref)
+    system_wide = ApplicationServices.AXUIElementCreateSystemWide()
+    error_code, element = (
+        ApplicationServices.AXUIElementCopyElementAtPosition(
+            system_wide,
+            float(x),
+            float(y),
+            None,
+        )
+    )
+    if error_code != ApplicationServices.kAXErrorSuccess or element is None:
+        logger.warning(
+            "Could not resolve accessibility element at "
+            f"({x}, {y}): AX error {error_code}"
+        )
+        return {}
+
+    state = dump_state(element)
     state = deepconvert_objc(state)
     try:
         pickle.dumps(state, protocol=pickle.HIGHEST_PROTOCOL)
