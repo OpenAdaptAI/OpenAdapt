@@ -13,6 +13,8 @@ Part-1 canvas). See that directory's README.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from openadapt_flow.backend import (
@@ -71,7 +73,21 @@ def test_owner_and_title_overrides():
 def test_pixel_only_protocol_surface():
     """Base Backend yes; structural/identity/system-of-record NO (ICA floor)."""
     be = CitrixWorkspaceBackend(_NoopWindowClient())
-    assert isinstance(be, Backend)
+    # Python 3.10/3.11's runtime Protocol check uses hasattr() for data
+    # members, which evaluates the side-effecting viewport property and takes a
+    # screenshot. Inspect the declared base-protocol surface statically instead:
+    # conformance checks must never require a live Citrix window.
+    members = {name for name in Backend.__dict__ if not name.startswith("_")}
+    assert members == {
+        "viewport",
+        "screenshot",
+        "click",
+        "type_text",
+        "press",
+        "scroll",
+    }
+    for member in members:
+        assert inspect.getattr_static(be, member) is not None
     assert not isinstance(be, StructuralBackend)
     assert not isinstance(be, IdentityBackend)
     assert not isinstance(be, StructuralActionBackend)
