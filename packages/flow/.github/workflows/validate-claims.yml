@@ -5,9 +5,10 @@ name: Validate claims
 #   - pull_request: run the fast claim->evidence GATE
 #     (scripts/validate_claims.py --check) on every PR. This is a
 #     required-check CANDIDATE: wire it into branch protection as the context
-#     "validate-claims" to block a PR that overclaims (a `supported` claim whose
-#     only backing is an opt-in/infra-gated test, a `field` result labeled
-#     `supported`, or a missing evidence path). It NEVER touches infra.
+#     "gate" (the actual CheckRun job name from the "Validate claims" workflow)
+#     to block a PR that overclaims (a `supported` claim whose only backing is
+#     an opt-in/infra-gated test, a `field` result labeled `supported`, or a
+#     missing evidence path). It NEVER touches infra.
 #   - schedule + workflow_dispatch: the infra-gated leg that provisions a real
 #     Windows VM (via oa-vm) and runs the OPT-IN desktop + Citrix e2e that back
 #     the `validating` tiers, then regenerates the evidence report. Where the

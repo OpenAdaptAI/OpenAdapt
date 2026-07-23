@@ -34,6 +34,27 @@ pytest -q                          # tests
 - **Coverage:** CI reports coverage for visibility. There is no hard floor yet,
   but new code should come with tests.
 
+### CI execution lanes
+
+Every pull request and push to `main` runs the required safety, unit, browser
+E2E, native-platform contract, type, PHI, documentation, interoperability, and
+package checks. The complete Python 3.10–3.12 Linux matrix plus macOS suite is
+intentionally a second lane: it runs nightly and as an explicit release
+qualification, avoiding four redundant full-suite jobs on every routine merge
+without reducing the required merge or exact-main gates.
+
+Before a release, dispatch the full matrix on the exact candidate ref:
+
+```bash
+gh workflow run ci.yml --ref <candidate-ref>
+```
+
+Wait for all four `test-matrix` jobs and the unchanged required jobs to pass
+before publishing. The release workflow independently resolves the exact
+candidate SHA and refuses both semantic and recovery publication unless that
+dispatched CI run completed successfully with all four matrix jobs present and
+green.
+
 ## Pull request guidelines
 
 - **Conventional Commits** for titles and commits: `feat:`, `fix:`, `perf:`,

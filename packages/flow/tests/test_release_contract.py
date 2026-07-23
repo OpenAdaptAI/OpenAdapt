@@ -330,29 +330,32 @@ def test_release_workflow_uses_pinned_actions() -> None:
     assert "# v10.6.1" in workflow
 
 
-def test_semantic_release_is_manual_and_waits_for_exact_head_ci() -> None:
+def test_semantic_release_requires_dispatched_exact_head_full_matrix() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
-    wait_index = workflow.index("- name: Wait for exact-head CI")
-    release_index = workflow.index("- name: Python Semantic Release")
+    auto = workflow[
+        workflow.index("\n  auto-release:") : workflow.index("\n  manual-publish:")
+    ]
+    wait_index = auto.index("- name: Wait for exact-head full-matrix qualification")
+    release_index = auto.index("- name: Python Semantic Release")
 
     assert "  push:" not in triggers
     assert "operation:" in triggers
     assert "- semantic-release" in triggers
     assert "- publish-existing-ref" in triggers
-    assert "inputs.operation == 'semantic-release'" in workflow
-    assert "actions: read # inspect the exact-head CI run before publishing" in workflow
+    assert "inputs.operation == 'semantic-release'" in auto
+    assert "actions: read # inspect exact-head full-matrix CI" in auto
     assert wait_index < release_index
-    assert "actions/workflows/ci.yml/runs" in workflow
-    assert '--raw-field head_sha="${GITHUB_SHA}"' in workflow
-    assert "--raw-field event=push" in workflow
-    assert "select(.head_sha == $sha)" in workflow
-    assert 'if [ "$conclusion" = "success" ]' in workflow
-    assert "Refusing to publish because exact-head CI concluded" in workflow
+    assert "python3 scripts/check_release_ci.py" in auto
+    assert '--repository "$GITHUB_REPOSITORY"' in auto
+    assert '--sha "$GITHUB_SHA"' in auto
+    assert "--wait-seconds 2700" in auto
+    assert "--poll-seconds 10" in auto
+    assert "gh api" not in auto
 
 
-def test_manual_publish_uses_current_guard_and_exact_target_ci() -> None:
+def test_manual_publish_requires_dispatched_exact_target_full_matrix() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
     manual = workflow[workflow.index("\n  manual-publish:") :]
     validate_index = manual.index("Independently validate publication artifacts")
@@ -362,7 +365,11 @@ def test_manual_publish_uses_current_guard_and_exact_target_ci() -> None:
     assert "inputs.operation == 'publish-existing-ref'" in manual
     assert "actions: read" in manual
     assert "git merge-base --is-ancestor" in manual
-    assert 'head_sha="${TARGET_SHA}"' in manual
+    assert "python3 guard/scripts/check_release_ci.py" in manual
+    assert '--repository "$GITHUB_REPOSITORY"' in manual
+    assert '--sha "$TARGET_SHA"' in manual
+    assert "--wait-seconds" not in manual
+    assert "gh api" not in manual
     assert "--validate-dist-dir target/dist" in manual
     assert "--license-file target/LICENSE" not in manual
     assert "packages-dir: target/dist/" in manual

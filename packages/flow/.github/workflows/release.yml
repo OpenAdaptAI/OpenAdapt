@@ -8,8 +8,9 @@ name: Release and PyPI Publish
 #                           (recovery, e.g. when a tag exists but publish failed).
 #
 # Releases are deliberately not triggered by every merge. Maintainers can merge
-# a reviewed train, require green protected-main CI, and publish one coherent
-# version only after its source and artifact boundaries are complete.
+# a reviewed train, require green protected-main CI plus an explicitly
+# dispatched full Python/OS matrix on the exact candidate SHA, and publish one
+# coherent version only after its source and artifact boundaries are complete.
 #
 # Prerequisites (repo/org settings): secrets.ADMIN_TOKEN (org-level, visibility
 # "all") to push the release commit/tag past branch protection; PyPI Trusted
@@ -48,7 +49,7 @@ jobs:
     concurrency: release
     environment: pypi
     permissions:
-      actions: read # inspect the exact-head CI run before publishing
+      actions: read # inspect exact-head full-matrix CI before publishing
       id-token: write # PyPI Trusted Publishing (OIDC)
       contents: write # push the version bump commit + tag, create the Release
 
@@ -68,44 +69,16 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Wait for exact-head CI
+      - name: Wait for exact-head full-matrix qualification
         if: steps.check_skip.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          deadline=$((SECONDS + 2700))
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            response="$(
-              gh api --method GET \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
-                --raw-field head_sha="${GITHUB_SHA}" \
-                --raw-field event=push \
-                --raw-field per_page=20
-            )"
-            status="$(
-              printf '%s' "$response" |
-                jq -r --arg sha "$GITHUB_SHA" \
-                  '[.workflow_runs[] | select(.head_sha == $sha)]
-                   | sort_by(.created_at) | last | .status // "missing"'
-            )"
-            conclusion="$(
-              printf '%s' "$response" |
-                jq -r --arg sha "$GITHUB_SHA" \
-                  '[.workflow_runs[] | select(.head_sha == $sha)]
-                   | sort_by(.created_at) | last | .conclusion // "pending"'
-            )"
-            echo "Exact-head CI for ${GITHUB_SHA}: ${status}/${conclusion}"
-            if [ "$status" = "completed" ]; then
-              if [ "$conclusion" = "success" ]; then
-                exit 0
-              fi
-              echo "Refusing to publish because exact-head CI concluded ${conclusion}."
-              exit 1
-            fi
-            sleep 10
-          done
-          echo "Refusing to publish: exact-head CI did not succeed within 45 minutes."
-          exit 1
+          python3 scripts/check_release_ci.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --wait-seconds 2700 \
+            --poll-seconds 10
 
       - name: Set up Python
         if: steps.check_skip.outputs.skip != 'true'
@@ -146,7 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      actions: read # require successful CI for the exact target commit
+      actions: read # require exact-target full-matrix CI before publishing
       contents: read # resolve the requested ref and protected-main guard
       id-token: write # PyPI Trusted Publishing (OIDC)
 
@@ -176,34 +149,14 @@ jobs:
           fi
           echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Require successful exact-target CI
+      - name: Require successful exact-target full-matrix qualification
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
-          response="$(
-            gh api --method GET \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
-              --raw-field head_sha="${TARGET_SHA}" \
-              --raw-field event=push \
-              --raw-field per_page=20
-          )"
-          status="$(
-            printf '%s' "$response" |
-              jq -r --arg sha "$TARGET_SHA" \
-                '[.workflow_runs[] | select(.head_sha == $sha)]
-                 | sort_by(.created_at) | last | .status // "missing"'
-          )"
-          conclusion="$(
-            printf '%s' "$response" |
-              jq -r --arg sha "$TARGET_SHA" \
-                '[.workflow_runs[] | select(.head_sha == $sha)]
-                 | sort_by(.created_at) | last | .conclusion // "pending"'
-          )"
-          if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
-            echo "Refusing to publish ${TARGET_SHA}: exact CI is ${status}/${conclusion}."
-            exit 1
-          fi
+          python3 guard/scripts/check_release_ci.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --sha "$TARGET_SHA"
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

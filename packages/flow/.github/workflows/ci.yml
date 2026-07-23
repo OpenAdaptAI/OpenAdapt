@@ -7,26 +7,41 @@ name: CI
 #       python-compatibility (lower-bound install + consistency tests),
 #       mypy-strict-safety (strict types on the safety path),
 #       phi-guard, docs-consistency, interop-types,
+#       effectbench-standalone (clean standalone benchmark install + tests),
 #       test (fast unit suite + enforced safety coverage floor),
 #       e2e-browser (record -> compile -> replay in a headless browser; no OS
 #         permissions needed, so it runs on PRs, NOT just nightly),
 #       linux-atspi-x11 (real GTK/AT-SPI actuation inside Xvfb + session D-Bus),
 #       wheel (clean-venv wheel install + CLI smoke),
 #       windows-mock (non-injecting Win32 ABI + fake behavior contract).
-#   - push to main: re-validate main AND run the genuinely-heavy suites that are
-#     too slow/OS-bound for PRs (full Python matrix + macOS).
-#   - schedule: a nightly run of the same heavy suites, so long-lived branches
-#     and environment drift are caught even without a merge.
-#   - workflow_dispatch: let maintainers validate those post-merge suites on an
-#     exact repair branch before merging a change to their own CI contract.
+#     The separate Validate claims workflow contributes its required CheckRun
+#     context named `gate`, bringing the app-pinned routine total to 13.
+#   - push to main: re-run the same required safety, unit, browser, packaging,
+#     and platform-contract gates against the exact merge commit.
+#   - schedule: run those gates plus the complete Python 3.10-3.12 / macOS
+#     matrix nightly, so interpreter and environment drift are caught daily.
+#   - workflow_dispatch: run the same complete matrix on an exact ref as the
+#     explicit release-qualification lane.
 # There is intentionally NO bare `push:` -- a bare push trigger fires a SECOND
 # identical run alongside `pull_request` on every PR-branch push (double the
 # runner spend for zero extra signal).
 #
-# Which jobs to mark REQUIRED in branch protection (repo Settings, owner-only):
-#   lint, python-compatibility, mypy-strict-safety, phi-guard, windows-mock,
-#   docs-consistency, interop-types, test, e2e-browser, linux-atspi-x11, wheel.
-#   (test-matrix remains post-merge/nightly.)
+# REQUIRED_CONTEXTS (app-pinned; exact CheckRun names):
+#   - lint
+#   - python-compatibility
+#   - mypy-strict-safety
+#   - phi-guard
+#   - windows-mock
+#   - docs-consistency
+#   - effectbench-standalone
+#   - interop-types
+#   - test
+#   - e2e-browser
+#   - linux-atspi-x11
+#   - wheel
+#   - gate
+# `gate` comes from the separate Validate claims workflow.
+#   (test-matrix remains nightly/explicit release qualification.)
 on:
   pull_request:
   push:
@@ -323,7 +338,9 @@ jobs:
       # by default they land in the system temp dir and are unrecoverable
       # when a drift/heal test fails in CI. --ignore=tests/e2e drops the slow
       # browser/OCR end-to-end suite from the fast required gate (it runs in the
-      # required `e2e-browser` job instead). --cov collects coverage into
+      # required `e2e-browser` job instead). The complete suite is repeated
+      # across supported interpreters/OSes nightly and for explicit release
+      # qualification. --cov collects coverage into
       # .coverage for the enforced safety floor in the next step.
       - name: Test (fast unit suite)
         run: |
@@ -458,16 +475,22 @@ jobs:
           path: runs/linux-atspi/results.json
           if-no-files-found: error
 
-  # --- Post-merge / nightly: full Python matrix + macOS platform suite ------
-  # NOT a required check and NOT run on PRs (so merges never block on it). Runs
-  # the COMPLETE suite including the slow tests/e2e browser/OCR leg across
-  # Python 3.10-3.12 on Linux. The macOS leg preserves every OS-specific test
-  # while omitting one platform-neutral harness already counted on Ubuntu 3.12,
-  # as documented at its exact pytest selection below.
+  # --- Nightly / release qualification: full Python + macOS matrix ----------
+  # NOT a required merge check and NOT run on PRs or routine main pushes.
+  # Scheduled runs exercise it nightly; maintainers dispatch it on the exact
+  # release candidate ref. It runs the COMPLETE suite including the slow
+  # tests/e2e browser/OCR leg across Python 3.10-3.12 on Linux. The macOS leg
+  # preserves every OS-specific test while omitting one platform-neutral
+  # harness already counted on Ubuntu 3.12, as documented at its exact pytest
+  # selection below.
   # Python 3.13 remains outside the supported boundary until the validated
   # rapidocr-onnxruntime identity path can be safely migrated and requalified.
   test-matrix:
-    if: ${{ github.event_name != 'pull_request' }}
+    if: >-
+      ${{
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch'
+      }}
     strategy:
       fail-fast: false
       matrix:
