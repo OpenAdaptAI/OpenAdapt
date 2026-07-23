@@ -119,7 +119,7 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
         "--disable-version3",
         "--enable-ffmpeg",
         "--enable-ffprobe",
-        "--enable-demuxer=concat,image2,mov,rawvideo",
+        "--enable-demuxer=concat,image2,image2pipe,mov,rawvideo",
         "--enable-muxer=mp4,null,image2,image2pipe",
         "--enable-filter=scale,format,setpts,select",
     ):
@@ -135,10 +135,15 @@ def test_runtime_builder_normalizes_windows_paths_and_materializes_smoke_bytes()
 
     source_conversion = 'SOURCE_ARCHIVE="$(cygpath -u "${SOURCE_ARCHIVE}")"'
     output_conversion = 'OUTPUT_DIR="$(cygpath -u "${OUTPUT_DIR}")"'
+    temp_conversion = 'temp_root="$(cygpath -u "${temp_root}")"'
     assert source_conversion in script
     assert output_conversion in script
+    assert temp_conversion in script
     assert script.index(source_conversion) < script.index('bundle_dir="${OUTPUT_DIR}/bundle"')
     assert script.index(output_conversion) < script.index('bundle_dir="${OUTPUT_DIR}/bundle"')
+    assert script.index(temp_conversion) < script.index(
+        'work_root="${temp_root}/openadapt-ffmpeg-${TARGET_TRIPLE}"'
+    )
 
     assert 'frames = b"".join(' in script
     assert '(root / "frames.rgb").write_bytes(frames)' in script

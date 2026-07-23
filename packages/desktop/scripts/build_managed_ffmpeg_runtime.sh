@@ -12,13 +12,15 @@ if command -v python3 >/dev/null 2>&1; then
 else
   python_cmd="python"
 fi
+temp_root="${RUNNER_TEMP:-/tmp}"
 if [[ "${TARGET_TRIPLE}" == "x86_64-pc-windows-msvc" ]]; then
   SOURCE_ARCHIVE="$(cygpath -u "${SOURCE_ARCHIVE}")"
   OUTPUT_DIR="$(cygpath -u "${OUTPUT_DIR}")"
+  temp_root="$(cygpath -u "${temp_root}")"
 fi
 
 workspace="$(pwd)"
-work_root="${RUNNER_TEMP:-/tmp}/openadapt-ffmpeg-${TARGET_TRIPLE}"
+work_root="${temp_root}/openadapt-ffmpeg-${TARGET_TRIPLE}"
 source_root="${work_root}/source"
 build_root="${work_root}/build"
 bundle_dir="${OUTPUT_DIR}/bundle"
@@ -62,7 +64,7 @@ common_args=(
   "--enable-zlib"
   "--enable-swscale"
   "--enable-protocol=file,pipe"
-  "--enable-demuxer=concat,image2,mov,rawvideo"
+  "--enable-demuxer=concat,image2,image2pipe,mov,rawvideo"
   "--enable-muxer=mp4,null,image2,image2pipe"
   "--enable-decoder=png,mpeg4,h264,rawvideo"
   "--enable-parser=h264,mpeg4video"
