@@ -69,7 +69,7 @@ than silently dropping an untranslatable action.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional, TypedDict
 
 from openadapt_flow import ir
 
@@ -82,6 +82,31 @@ _PARAM_PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 if TYPE_CHECKING:  # import-light: only for type checkers, never at runtime import
     from openadapt_types import Action, ActionResult
 
+    # Without pydantic's mypy plugin, ``Field(None, ...)`` defaults in
+    # openadapt-types look required to mypy.  The whole-package development
+    # check intentionally runs without that plugin, so tell the checker about
+    # those schema defaults while leaving them omitted at runtime.  Omitting
+    # them preserves ``model_fields_set`` / ``exclude_unset`` semantics at the
+    # interop boundary.
+    class _ActionTargetSchemaDefaults(TypedDict):
+        node_id: None
+
+    class _ActionSchemaDefaults(TypedDict):
+        modifiers: None
+        drag_end: None
+        raw: None
+
+
+_ScrollDirection = Literal["up", "down", "left", "right"]
+_ActionErrorType = Literal[
+    "grounding_error",
+    "execution_error",
+    "state_mismatch",
+    "timeout",
+    "permission_denied",
+    "infrastructure_error",
+]
+
 # The trivial, exhaustive enum map. flow's ActionKind values are a byte-identical
 # subset of openadapt-types ActionType, so we key by the shared string value and
 # resolve the ActionType member lazily (keeps this module import-light). Every
@@ -93,7 +118,7 @@ ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {
 
 def _scroll_to_canonical(
     scroll_dx: Optional[int], scroll_dy: Optional[int]
-) -> tuple[Optional[str], Optional[int]]:
+) -> tuple[Optional[_ScrollDirection], Optional[int]]:
     """Convert flow wheel deltas (px) to canonical (direction, amount).
 
     Vertical dominates when both axes are set (flow scrolls one axis per step).
@@ -154,8 +179,16 @@ def step_to_action(step: ir.Step) -> "Action":
     if step.anchor is not None:
         x, y = step.anchor.click_point
         description = step.anchor.ocr_text or step.anchor.context_text
+        if TYPE_CHECKING:
+            target_schema_defaults: _ActionTargetSchemaDefaults = {"node_id": None}
+        else:
+            target_schema_defaults = {}
         target = ActionTarget(
-            x=float(x), y=float(y), is_normalized=False, description=description
+            x=float(x),
+            y=float(y),
+            is_normalized=False,
+            description=description,
+            **target_schema_defaults,
         )
 
     # Text: literal text if present; otherwise a param placeholder so a
@@ -171,6 +204,15 @@ def step_to_action(step: ir.Step) -> "Action":
         step.scroll_dx, step.scroll_dy
     )
 
+    if TYPE_CHECKING:
+        action_schema_defaults: _ActionSchemaDefaults = {
+            "modifiers": None,
+            "drag_end": None,
+            "raw": None,
+        }
+    else:
+        action_schema_defaults = {}
+
     return Action(
         type=action_type,
         target=target,
@@ -179,6 +221,7 @@ def step_to_action(step: ir.Step) -> "Action":
         scroll_direction=scroll_direction,
         scroll_amount=scroll_amount,
         reasoning=step.intent or None,
+        **action_schema_defaults,
     )
 
 
@@ -215,7 +258,7 @@ def result_to_action_result(step_result: ir.StepResult) -> "ActionResult":
     # postcondition (expected-end-state) miss — BOTH surface as
     # ``state_mismatch``, so a consumer must read ``error`` (or flow's own
     # StepResult.identity) to separate them, not error_type alone.
-    error_type = None
+    error_type: Optional[_ActionErrorType] = None
     if not step_result.ok:
         identity = step_result.identity
         err = (step_result.error or "").lower()

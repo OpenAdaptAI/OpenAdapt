@@ -95,6 +95,28 @@ def test_click_step_round_trips_shared_fields() -> None:
     assert action.reasoning == "Click the Submit button"
 
 
+def test_export_does_not_mark_schema_defaults_as_explicit_fields() -> None:
+    """Static pydantic defaults must not change the serialized field boundary."""
+    action = interop.step_to_action(_click_step())
+
+    assert action.target is not None
+    assert action.target.model_fields_set == {
+        "description",
+        "x",
+        "y",
+        "is_normalized",
+    }
+    assert action.model_fields_set == {
+        "type",
+        "target",
+        "text",
+        "key",
+        "scroll_direction",
+        "scroll_amount",
+        "reasoning",
+    }
+
+
 def test_type_step_with_literal_text() -> None:
     from openadapt_types import ActionType
 
