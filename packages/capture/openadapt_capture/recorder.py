@@ -33,7 +33,6 @@ from collections import namedtuple
 from functools import partial
 from typing import Any, Callable
 
-import av
 import fire
 import numpy as np
 import psutil
@@ -270,6 +269,22 @@ def _join_tasks(
     if lingering:
         logger.warning(f"tasks still exiting after bounded shutdown: {lingering}")
     return lingering
+
+
+def _raise_for_failed_processes(task_by_name: dict[str, Any]) -> None:
+    """Surface required child-process failures through the recording boundary."""
+    failures = {
+        name: task.exitcode
+        for name, task in task_by_name.items()
+        if isinstance(task, multiprocessing.process.BaseProcess)
+        and task.exitcode not in (None, 0)
+    }
+    if failures:
+        detail = ", ".join(
+            f"{name} (exit code {exitcode})"
+            for name, exitcode in sorted(failures.items())
+        )
+        raise RuntimeError(f"Recording child process failed: {detail}")
 
 
 def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
@@ -670,6 +685,8 @@ def video_pre_callback(
     recording: Recording,
     video_dir: str = None,
     frame_size: tuple[int, int] | None = None,
+    provision: video.FFmpegProvision | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Function to call before main loop.
 
@@ -680,6 +697,9 @@ def video_pre_callback(
         frame_size: Explicit (width, height) for the video stream. Used by
             window-scoped capture, whose frames are the target window's pixels
             rather than the monitor's. Defaults to the full-screen size.
+        provision: Parent-preflighted encoder contract. Passing this immutable
+            value keeps spawn-based writers on the exact executable and codec.
+        timeout_seconds: Bound for final encoding and verification.
 
     Returns:
         dict[str, Any]: The updated state.
@@ -691,7 +711,13 @@ def video_pre_callback(
         # TODO XXX replace with utils.get_monitor_dims() once fixed
         monitor_width, monitor_height = utils.take_screenshot().size
     video_container, video_stream, video_start_timestamp = (
-        video.initialize_video_writer(video_file_path, monitor_width, monitor_height)
+        video.initialize_video_writer(
+            video_file_path,
+            monitor_width,
+            monitor_height,
+            timeout_seconds=timeout_seconds,
+            preflight_provision=provision,
+        )
     )
     crud.update_video_start_time(db, recording, video_start_timestamp)
     return {
@@ -730,8 +756,8 @@ def write_video_event(
     recording_timestamp: float,
     event: Event,
     perf_q: sq.SynchronizedQueue,
-    video_container: av.container.OutputContainer,
-    video_stream: av.stream.Stream,
+    video_container: Any,
+    video_stream: Any,
     video_start_timestamp: float,
     last_pts: int = 0,
     num_copies: int = 2,
@@ -744,9 +770,8 @@ def write_video_event(
         recording_timestamp: The timestamp of the recording.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
-        video_container (av.container.OutputContainer): The output container to which
-            the frame is written.
-        video_stream (av.stream.Stream): The video stream within the container.
+        video_container: The external-encoder staging container.
+        video_stream: The configured external-encoder stream.
         video_start_timestamp (float): The base timestamp from which the video
             recording started.
         last_pts: The last presentation timestamp.
@@ -1620,6 +1645,17 @@ def record(
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
+    # Refuse before touching the display or starting any worker. Capture never
+    # downloads or bundles FFmpeg; Desktop/standalone provisioning owns it.
+    video_provision = None
+    if config.RECORD_VIDEO:
+        video_provision = video.require_video_encoder(
+            ffmpeg_path=config.VIDEO_FFMPEG_PATH,
+            ffprobe_path=config.VIDEO_FFPROBE_PATH,
+            codec=config.VIDEO_ENCODING,
+            pixel_format=config.VIDEO_PIXEL_FORMAT,
+            muxer=config.VIDEO_MUXER,
+        )
 
     # Configure loguru level for recording (without destroying global config)
     logger.configure(handlers=[{"sink": sys.stderr, "level": LOG_LEVEL}])
@@ -1884,6 +1920,8 @@ def record(
                         if initial_window_frame is not None
                         else None
                     ),
+                    provision=video_provision,
+                    timeout_seconds=config.VIDEO_FFMPEG_TIMEOUT_SECONDS,
                 ),
                 video_post_callback,
             ),
@@ -2013,6 +2051,7 @@ def record(
         task_name, task_error = task_errors.get_nowait()
         add_exception_note(task_error, f"recording task {task_name!r} failed")
         raise task_error
+    _raise_for_failed_processes(task_by_name)
 
     if config.PLOT_PERFORMANCE and startup_ready:
         from openadapt_capture import plotting
@@ -2141,6 +2180,10 @@ class Recorder:
         capture_full_video: bool | None = None,
         video_encoding: str | None = None,
         video_pixel_format: str | None = None,
+        video_muxer: str | None = None,
+        ffmpeg_path: str | None = None,
+        ffprobe_path: str | None = None,
+        ffmpeg_timeout_seconds: float | None = None,
         stop_sequences: list[list[str]] | None = None,
         log_memory: bool | None = None,
         plot_performance: bool | None = None,
@@ -2170,6 +2213,10 @@ class Recorder:
             capture_full_video=capture_full_video,
             video_encoding=video_encoding,
             video_pixel_format=video_pixel_format,
+            video_muxer=video_muxer,
+            ffmpeg_path=ffmpeg_path,
+            ffprobe_path=ffprobe_path,
+            ffmpeg_timeout_seconds=ffmpeg_timeout_seconds,
             stop_sequences=stop_sequences,
             log_memory=log_memory,
             plot_performance=plot_performance,

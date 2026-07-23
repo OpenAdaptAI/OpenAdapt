@@ -17,7 +17,9 @@ We need a platform-agnostic representation of GUI interactions that:
 ### Key Features
 
 1. **Production-ready** - Designed for continuous operation without degradation
-2. **No external dependencies** - Native video capture via PyAV (no OBS required)
+2. **Process-isolated video** - The MIT package stages frames and invokes a
+   separately provisioned FFmpeg executable; it does not bundle or link codec
+   libraries
 3. **Low resource footprint** - Non-blocking capture that doesn't slow down user's work
 4. **Chunked media** - Video/audio split into manageable segments for long captures
 5. **Audio capture** - Built-in audio recording with Whisper transcription
@@ -164,11 +166,21 @@ class Capture:
 
 ### Video Encoding
 
-Based on OpenAdapt's working implementation:
+Capture keeps its video-first behavior without importing PyAV. During a
+recording it stages numeric-name lossless PNG frames plus exact integer PTS.
+Finalization writes a safe `ffconcat` manifest, invokes an externally
+provisioned FFmpeg argument vector with bounded execution, verifies the output
+by decoding a PNG frame, and atomically promotes it. Successful finalization
+deletes the transient stage; failure retains it for recovery and never reports
+an MP4 as complete. A sibling or explicitly configured `ffprobe` preserves
+nearest-frame extraction and metadata inspection without linking codec
+libraries into Capture. The real preflight exercises the selected encoder,
+MP4, PNG through `image2pipe`, and the `select` filter before any input listener
+starts.
 
 ```python
-codec = "libx264"      # H.264 for compatibility
-pix_fmt = "yuv444p"    # Full color (vs yuv420p for smaller files)
+codec = None           # Probe platform encoders, then portable mpeg4 fallback
+pix_fmt = None         # Selected with the verified codec
 crf = 0                # Lossless (adjustable for size vs quality)
 preset = "veryslow"    # Maximum compression
 fps = 24               # Configurable
@@ -194,12 +206,12 @@ capture_abc123/
 
 ### Screenshots vs Video
 
-**Recommendation:** Default to video mode.
+**Decision:** Default to video mode.
 
-- More storage-efficient (H.264 compression)
-- Easier timestamp alignment
+- More storage-efficient than permanent individual screenshots
+- Exact timestamp alignment is preserved by staged-frame PTS and VFR durations
 - Screenshots can be extracted from video when needed
-- Individual screenshots useful for debugging frame alignment
+- Individual screenshots remain optional for debugging frame alignment
 
 ## Audio Handling
 
@@ -269,7 +281,7 @@ def scrub_capture(capture: Capture, scrubber: ScrubbingProvider) -> Capture:
 
 1. Define exact event schemas (Pydantic models)
 2. Implement SQLite storage for events
-3. Implement video capture with PyAV
+3. Maintain external-process video capture without bundling codec binaries
 4. Port event processing from OpenAdapt's `events.py`
 5. Add drag detection
 6. Integrate with `openadapt-privacy`

@@ -3,6 +3,7 @@
 Updated for legacy-style SQLAlchemy storage.
 """
 
+import multiprocessing
 import tempfile
 import threading
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from openadapt_capture import recorder as recorder_module
+from openadapt_capture import video
 from openadapt_capture.capture import Capture
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.recorder import Recorder
@@ -176,6 +178,36 @@ class TestRecorder:
 
         assert time.monotonic() - stop_started < 1
         assert recorder.wait_for_ready(timeout=0) is False
+
+    def test_spawned_video_writer_failure_surfaces_through_recorder(
+        self, monkeypatch, tmp_path
+    ):
+        """A child finalization failure cannot be reported as a stopped capture."""
+
+        def record_with_failed_video_writer(**_kwargs):
+            process = multiprocessing.get_context("spawn").Process(
+                target=video._run_checked,
+                args=(["/definitely-missing-openadapt-ffmpeg"],),
+                kwargs={"timeout": 1},
+            )
+            process.start()
+            tasks = {"video_writer": process}
+            recorder_module._join_tasks(tasks, ["video_writer"])
+            recorder_module._raise_for_failed_processes(tasks)
+
+        monkeypatch.setattr(
+            recorder_module,
+            "record",
+            record_with_failed_video_writer,
+        )
+        recorder = Recorder(str(tmp_path / "failed-finalization"))
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"video_writer \(exit code 1\)",
+        ):
+            with recorder:
+                pass
 
 
 class TestCapture:

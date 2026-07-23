@@ -59,6 +59,9 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Install external video tools
+        run: choco install ffmpeg -y --no-progress
+
       - name: Install dependencies
         run: uv sync --extra dev
 
@@ -76,8 +79,8 @@ jobs:
         run: uv run pytest tests/test_performance.py -v -m slow --timeout=300
         timeout-minutes: 20
 
-  # macOS coverage: runs the unit suite (event processing, storage, video
-  # encode/decode via PyAV, headless-import invariant, Recorder API surface —
+  # macOS coverage: runs the unit suite (event processing, storage, external
+  # video boundary, headless-import invariant, Recorder API surface —
   # CGWindowList-backed screen capture works on GitHub macOS runners). The
   # 'slow' live-recording tests stay skipped here: synthetic input injection
   # requires Accessibility permissions a hosted runner cannot grant, and the
@@ -95,6 +98,9 @@ jobs:
 
       - name: Set up Python
         run: uv python install 3.12
+
+      - name: Install external video tools
+        run: brew install ffmpeg
 
       - name: Install dependencies
         run: uv sync --extra dev

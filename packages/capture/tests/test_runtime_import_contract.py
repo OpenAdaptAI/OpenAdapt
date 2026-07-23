@@ -53,6 +53,21 @@ def test_native_input_observers_do_not_ship_pynput() -> None:
     assert "pynput" not in package_sources
 
 
+def test_external_ffmpeg_keeps_core_recorder_video_first_and_pyav_free() -> None:
+    """Video stays default without linking PyAV/FFmpeg into the MIT package."""
+    assert "av" not in _runtime_dependency_names()
+    package_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "openadapt_capture").rglob("*.py")
+    )
+    assert "import av" not in package_sources
+
+    from openadapt_capture.config import config
+
+    assert config.RECORD_VIDEO is True
+    assert config.RECORD_IMAGES is False
+
+
 def test_default_install_exposes_recorder() -> None:
     """Recorder import never fails because a runtime dependency is undeclared."""
     result = subprocess.run(
@@ -78,3 +93,36 @@ def test_default_install_exposes_recorder() -> None:
         "Recorder depended on an undeclared default-runtime package.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
+
+
+def test_default_package_import_and_recorder_construction_do_not_import_av() -> None:
+    """The video-first API remains importable without in-process PyAV."""
+    script = """
+import importlib.abc
+import sys
+
+class BlockAv(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "av" or fullname.startswith("av."):
+            raise ModuleNotFoundError("blocked optional av", name="av")
+        return None
+
+sys.meta_path.insert(0, BlockAv())
+from openadapt_capture import Recorder
+recorder = Recorder("/tmp/openadapt-capture-core-import-contract")
+assert recorder._recording_config.capture_video is None
+assert recorder._recording_config.capture_images is None
+assert "av" not in sys.modules
+print("CORE_RECORDER_OK")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        "The default Recorder path imported optional PyAV.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "CORE_RECORDER_OK" in result.stdout

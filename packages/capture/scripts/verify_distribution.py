@@ -48,6 +48,23 @@ def verify_distribution(path: Path) -> None:
         assert f"requires-dist: {dependency}" not in metadata, (
             f"{path}: forbidden dependency {dependency!r} is in package metadata"
         )
+    assert "requires-dist: av" not in metadata, (
+        f"{path}: PyAV must not be in the package dependency closure"
+    )
+
+    forbidden_binary_names = (
+        "ffmpeg",
+        "ffprobe",
+        "avcodec",
+        "avformat",
+        "x264",
+        "x265",
+    )
+    for name in files:
+        leaf = Path(name).name.lower()
+        assert not any(token in leaf for token in forbidden_binary_names), (
+            f"{path}: bundled video binary violates the external-process boundary: {name}"
+        )
 
     python_sources = "\n".join(
         content.decode("utf-8")

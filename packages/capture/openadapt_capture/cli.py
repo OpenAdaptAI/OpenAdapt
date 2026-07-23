@@ -27,9 +27,10 @@ def record(
     Args:
         output_dir: Directory to save capture.
         description: Optional task description.
-        video: Capture video (default: True).
+        video: Capture MP4 video (default: True). Requires an externally
+            provisioned FFmpeg executable.
         audio: Capture audio (default: False).
-        images: Save screenshots as PNGs (default: False).
+        images: Also save screenshots as PNGs (default: False).
         browser_events: Capture browser DOM events via Chrome extension (default: False).
             Requires the openadapt-capture Chrome extension to be installed and
             connects via WebSocket on localhost:8765.

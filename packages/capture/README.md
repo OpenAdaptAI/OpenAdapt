@@ -53,7 +53,7 @@ Documentation for the whole stack lives at
 
 | Recording path | Current implementation |
 | --- | --- |
-| Windows and RDP demonstrations | `openadapt-capture` records native input and screen video; `openadapt-flow` converts the session into compiler input. |
+| Windows and RDP demonstrations | `openadapt-capture` records native input and action-gated screen video; `openadapt-flow` converts the session into compiler input. |
 | Browser demonstrations | `openadapt-flow` records its Playwright browser directly. It does not require this package. |
 | Chrome extension in this repository | Experimental DOM-capture code for development; it is not the supported web recorder or governed replay path. |
 
@@ -120,7 +120,17 @@ my-capture/
 └── profiling.json
 ```
 
-Audio and individual images are optional.
+Video remains the default evidence format. Capture stages exact-timestamp,
+lossless frames during the session, asks a separately provisioned FFmpeg
+executable to encode them, verifies the resulting MP4, and promotes it
+atomically. Capture never downloads, bundles, or links FFmpeg/PyAV. Set
+`OPENADAPT_FFMPEG_PATH`, pass `Recorder(ffmpeg_path=...)`, use Desktop's
+user-data `ffmpeg.json` provision manifest, or place `ffmpeg` and `ffprobe` on
+`PATH`. Recording performs a real encode-and-decode probe and refuses before
+input listeners start if the selected executable, codec, or PNG verification
+path is unavailable. A minimal managed runtime must provide the selected video
+encoder, MP4 demuxing/muxing, PNG decoding/encoding, the `image2pipe` muxer, and
+the `select` video filter; Desktop provisions and probes that exact closure.
 
 ## Window-scoped recording
 

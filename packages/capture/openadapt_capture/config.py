@@ -48,8 +48,16 @@ class Settings(BaseSettings):
     RECORD_WINDOW_TITLE: str | None = None
     # useful for debugging but expensive computationally
     LOG_MEMORY: bool = False
-    VIDEO_ENCODING: str = "libx264"
-    VIDEO_PIXEL_FORMAT: str = "yuv444p"
+    # None means: use the Desktop provision manifest when present, otherwise
+    # probe a usable platform encoder with a portable mpeg4 fallback.
+    VIDEO_ENCODING: str | None = None
+    VIDEO_PIXEL_FORMAT: str | None = None
+    VIDEO_MUXER: str | None = None
+    # Optional exact path to an externally provisioned FFmpeg executable.
+    # Capture never downloads or bundles FFmpeg.
+    VIDEO_FFMPEG_PATH: str | None = None
+    VIDEO_FFPROBE_PATH: str | None = None
+    VIDEO_FFMPEG_TIMEOUT_SECONDS: float = 900.0
     # sequences that when typed, will stop the recording of ActionEvents
     STOP_SEQUENCES: list[list[str]] = [
         list(stop_str) for stop_str in STOP_STRS
@@ -97,6 +105,10 @@ _FIELD_TO_CONFIG_ATTR = {
     "capture_full_video": "RECORD_FULL_VIDEO",
     "video_encoding": "VIDEO_ENCODING",
     "video_pixel_format": "VIDEO_PIXEL_FORMAT",
+    "video_muxer": "VIDEO_MUXER",
+    "ffmpeg_path": "VIDEO_FFMPEG_PATH",
+    "ffprobe_path": "VIDEO_FFPROBE_PATH",
+    "ffmpeg_timeout_seconds": "VIDEO_FFMPEG_TIMEOUT_SECONDS",
     "stop_sequences": "STOP_SEQUENCES",
     "log_memory": "LOG_MEMORY",
     "plot_performance": "PLOT_PERFORMANCE",
@@ -119,6 +131,10 @@ class RecordingConfig:
     capture_full_video: bool | None = None
     video_encoding: str | None = None
     video_pixel_format: str | None = None
+    video_muxer: str | None = None
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
+    ffmpeg_timeout_seconds: float | None = None
     stop_sequences: list[list[str]] | None = None
     log_memory: bool | None = None
     plot_performance: bool | None = None

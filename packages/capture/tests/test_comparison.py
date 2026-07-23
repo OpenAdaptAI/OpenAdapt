@@ -176,7 +176,7 @@ class TestCompareVideoToImages:
         img = Image.new("RGB", (100, 100), color="red")
         images = [(1.0, img)]
 
-        with pytest.raises(Exception):  # FileNotFoundError or av error
+        with pytest.raises(Exception):  # FileNotFoundError or decoder error
             compare_video_to_images(tmp_path / "nonexistent.mp4", images)
 
 
