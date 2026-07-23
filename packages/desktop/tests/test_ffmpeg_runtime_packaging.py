@@ -125,7 +125,8 @@ def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> N
     ):
         assert flag in script
     assert "h264_videotoolbox" in script
-    assert "h264_mf" in script
+    assert "h264_mf" not in script
+    assert "--enable-mediafoundation" not in script
     assert "software_fallback_encoder" in script
 
 
@@ -153,3 +154,5 @@ def test_runtime_builder_normalizes_windows_paths_and_materializes_smoke_bytes()
     assert '(root / "frames.rgb").write_bytes(\n' not in script
     assert '"ffconcat version 1.0\\n"' in script
     assert '-f concat -safe 1 -i "${smoke_dir}/frames.ffconcat"' in script
+    assert r"'select=eq(n\,0)'" in script
+    assert r"'select=eq(n\\,0)'" not in script

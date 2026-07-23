@@ -110,10 +110,8 @@ case "${TARGET_TRIPLE}" in
       "--cc=gcc"
       "--pkg-config-flags=--static"
       "--extra-ldflags=-static"
-      "--enable-mediafoundation"
-      "--enable-encoder=png,mpeg4,h264_mf"
+      "--enable-encoder=png,mpeg4"
     )
-    hardware_encoder="h264_mf"
     ;;
   *)
     echo "unsupported FFmpeg runtime target: ${TARGET_TRIPLE}" >&2
@@ -294,7 +292,7 @@ PY
 "${ffprobe_bin}" -v error -count_frames -show_streams -show_format \
   -of json "${smoke_dir}/raw-input.mp4" >"${smoke_dir}/probe.json"
 "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
-  -i "${smoke_dir}/raw-input.mp4" -vf 'select=eq(n\\,0)' -frames:v 1 \
+  -i "${smoke_dir}/raw-input.mp4" -vf 'select=eq(n\,0)' -frames:v 1 \
   -f image2pipe -vcodec png -y "${smoke_dir}/decoded.png"
 
 "${python_cmd}" - "${smoke_dir}" <<'PY'
