@@ -55,7 +55,7 @@ and [`../smithery.yaml`](../smithery.yaml).
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.0` (Beta)
+- **Version:** `2.0.1` (Beta)
 - **Description:** Local Beta bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
