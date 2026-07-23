@@ -340,13 +340,46 @@ jobs:
       # browser/OCR end-to-end suite from the fast required gate (it runs in the
       # required `e2e-browser` job instead). The complete suite is repeated
       # across supported interpreters/OSes nightly and for explicit release
-      # qualification. --cov collects coverage into
-      # .coverage for the enforced safety floor in the next step.
+      # qualification.
+      #
+      # Profiling identified exactly two identity outliers: the conservative
+      # real-OCR module and the all-config identity-ladder harness. Keep them in
+      # this required gate, but run them together in one heavy lane alongside
+      # the normal suite. The two pytest processes use disjoint temp and
+      # coverage files; both must finish successfully, then coverage is
+      # combined before the unchanged visibility report and 85% safety floor.
       - name: Test (fast unit suite)
+        shell: bash
         run: |
-          mkdir -p runs
-          pytest -q --ignore=tests/e2e --basetemp=runs/ci \
-            --cov=openadapt_flow --cov-report=
+          set -euo pipefail
+          mkdir -p runs/ci-normal runs/ci-heavy-identity
+
+          COVERAGE_FILE=.coverage.normal pytest -q \
+            --ignore=tests/e2e \
+            --ignore=tests/test_identity_ocr_conservative_9th.py \
+            --deselect=tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs \
+            --basetemp=runs/ci-normal \
+            --cov=openadapt_flow --cov-report= &
+          normal_pid=$!
+
+          COVERAGE_FILE=.coverage.heavy-identity pytest -q \
+            tests/test_identity_ocr_conservative_9th.py \
+            tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs \
+            --basetemp=runs/ci-heavy-identity \
+            --cov=openadapt_flow --cov-report= &
+          heavy_pid=$!
+
+          test_status=0
+          if ! wait "$normal_pid"; then
+            test_status=1
+          fi
+          if ! wait "$heavy_pid"; then
+            test_status=1
+          fi
+          exit "$test_status"
+
+      - name: Combine parallel coverage data
+        run: coverage combine
 
       # Enforced RATCHET floor on the safety-critical path (branch-inclusive).
       # Scoped via --include to exactly the safety modules (compiler, identity,
