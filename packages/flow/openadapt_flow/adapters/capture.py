@@ -16,7 +16,7 @@ Input contract (a real openadapt-capture >= 0.5 session directory):
                               #     mouse_y, mouse_dx, mouse_dy,
                               #     mouse_button_name, mouse_pressed, key_name,
                               #     key_char, canonical_key_name, ...)
-      oa_recording-*.mp4      # action-gated screen video
+      captured media         # external-FFmpeg video or supported frame store
 
 The adapter is a thin bridge over openadapt-capture's **public API** — it does
 *no* raw SQL and knows nothing about capture's schema. It calls
@@ -54,8 +54,8 @@ Loud rejection (a demonstrated action must never be *silently* dropped): drags
 key), unmapped named keys, and any unknown input action type all raise instead
 of being ignored.
 
-Coordinate spaces: capture mouse coordinates are in *logical points* (pynput);
-video frames are *physical pixels*. openadapt-flow requires event coordinates in
+Coordinate spaces: capture mouse coordinates are in *logical points*;
+captured frames are *physical pixels*. openadapt-flow requires event coordinates in
 the same pixel space as the frames, so points are scaled by
 ``CaptureSession.pixel_ratio`` (physical / logical). NOTE: sessions recorded
 with capture >=0.5.4 persist ``pixel_ratio`` on the recording model itself, so
@@ -78,7 +78,7 @@ This adapter detects such a session and:
     silent-mis-conversion this detection exists to prevent);
   * takes frames as-is (already the client-window viewport);
   * validates the static viewport and bounds timeline, refuses a mid-session
-    resize (capture's MP4 and Flow recordings each have one fixed viewport),
+    resize (capture media and Flow recordings each have one fixed viewport),
     verifies extracted frame sizes, and screens every mouse action against
     that pixel space: window capture records out-of-window input at
     out-of-range coordinates instead of clamping, and such an action targeted
@@ -98,15 +98,14 @@ This adapter detects such a session and:
 A window-scoped session that declares a coordinate space this adapter does
 not understand is refused loudly rather than converted with guessed scaling.
 
-Frame selection: openadapt-capture records **action-gated** video (frames are
-encoded around user actions, not continuously). For an event at wall-clock time
-``T`` the *before* frame is ``get_frame_at(T)`` and the *after* frame is
+Frame selection: ``CaptureSession.get_frame_at`` abstracts captured media
+(default external-FFmpeg video and any supported frame store). For an event at
+wall-clock time ``T`` the *before* frame is ``get_frame_at(T)`` and the *after* frame is
 ``get_frame_at(T + settle_s)`` clamped to just before the next event — an
 approximation of the live Recorder's perceptual-hash settle wait (see
-docs/desktop/PHASE1.md). Because the video is action-gated, a per-action frame
-may be unavailable; a missing *before* frame for a click is fatal (the compiler
-requires it), a missing *after* frame simply yields no postconditions for that
-step.
+docs/desktop/PHASE1.md). A per-action frame may be unavailable; a missing
+*before* frame for a click is fatal (the compiler requires it), while a missing
+*after* frame simply yields no postconditions for that step.
 
 Scroll deltas: pynput reports wheel *notches* with positive ``dy`` = scroll up,
 while the flow recording stores *pixels* with positive ``dy`` = view down
@@ -121,7 +120,7 @@ Structural-identity gap (desktop→web parity). This offline conversion produces
 a recording of the SAME shape as a web recording, and it compiles into a valid
 bundle, but it CANNOT carry the ``structural`` locator (UIA ``AutomationId`` or
 AT-SPI accessible ID / role+name) that a DOM-armed web bundle gets: capture records only
-mouse/keyboard/video, so there is no live accessibility tree at conversion time
+mouse/keyboard/frame evidence, so there is no live accessibility tree at conversion time
 to read an element identity from. Every ``anchor.structural`` is therefore None
 and replay uses the VISUAL ladder (template/ocr/geometry). To get the
 deterministic structural top rung on desktop, record LIVE over ``WindowsBackend``
@@ -149,8 +148,8 @@ if TYPE_CHECKING:  # pragma: no cover
 # after each gesture).
 SCROLL_PIXELS_PER_NOTCH = 100
 
-# Search window (seconds) for get_frame_at. Capture is action-gated, so frames
-# cluster around action timestamps; a generous window finds the nearest one.
+# Search window (seconds) for get_frame_at. Frames cluster around action
+# timestamps; a generous window finds the nearest one.
 FRAME_TOLERANCE_S = 2.0
 
 # The one coordinate space a window-scoped capture session may declare today:
@@ -283,8 +282,8 @@ def _window_viewport_timeline(
     ``session.window_events`` accessor when the installed capture exposes one,
     else via the session's underlying recording model (same rows).
 
-    Flow recordings and capture's MP4 stream each have one fixed viewport.
-    Capture currently skips video frames after a window resize because they no
+    Flow recordings and capture's frame timeline each have one fixed viewport.
+    Capture currently skips frames after a window resize because they no
     longer match the stream size. Therefore a timeline viewport change cannot
     be represented faithfully and is refused instead of pairing coordinates in
     the new pixel space with a stale frame in the old pixel space.
@@ -662,7 +661,8 @@ def convert_capture(
 
     Args:
         capture_dir: An openadapt-capture session directory (contains
-            ``recording.db`` and an ``oa_recording-*.mp4`` video).
+            ``recording.db`` and frame media readable through
+            ``CaptureSession.get_frame_at``).
         out_recording_dir: Output recording directory (created if missing).
         params: Optional ``{param_name: demonstrated_value}`` map. A coalesced
             ``type`` event whose text equals a demonstrated value is marked as
@@ -683,7 +683,7 @@ def convert_capture(
             flow equivalent (drag, non-left click, modifier chord, unmapped
             named key, unknown input type), multiple params demonstrating the
             same value, or a click whose before frame is missing from the
-            action-gated video. Also, for a window-scoped session: on an
+            captured frame timeline. Also, for a window-scoped session: on an
             out-of-window action, an unknown declared coordinate space,
             malformed selector/viewport metadata, a mid-recording resize, or
             an extracted frame whose dimensions disagree with the recorded
@@ -769,9 +769,9 @@ def convert_capture(
                         )
             if event["kind"] in ("click", "double_click") and before_img is None:
                 raise ValueError(
-                    f"no video frame available for {event['kind']} at "
-                    f"t={ts - started_at:.3f}s: the action-gated capture video "
-                    "has no frame near this action, so its target cannot be "
+                    f"no captured frame available for {event['kind']} at "
+                    f"t={ts - started_at:.3f}s: capture has no frame near "
+                    "this action, so its target cannot be "
                     "anchored"
                 )
             if before_img is not None:

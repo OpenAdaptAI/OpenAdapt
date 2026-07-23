@@ -17,7 +17,7 @@ Recording format (DESIGN.md):
       frames/{i:04d}_before.png
       frames/{i:04d}_after.png   # captured after the action settled
 
-The settle wait is implemented inline here (imagehash polling) on purpose:
+The settle wait is implemented inline here (perceptual-hash polling) on purpose:
 this module must not depend on `openadapt_flow.vision`.
 """
 
@@ -31,17 +31,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import imagehash
 from PIL import Image, ImageDraw
 
 from openadapt_flow.backend import Backend
+from openadapt_flow.image_hash import perceptual_hash
 from openadapt_flow.ir import StructuralLocator
 
 
-def _phash(png: bytes) -> imagehash.ImageHash:
+def _phash(png: bytes) -> str:
     """Perceptual hash of a PNG frame."""
     with Image.open(io.BytesIO(png)) as img:
-        return imagehash.phash(img)
+        return perceptual_hash(img)
 
 
 class Recorder:
@@ -373,7 +373,7 @@ class Recorder:
             time.sleep(self._settle_interval_s)
             png = self._backend.screenshot()
             cur = _phash(png)
-            if cur - prev == 0:
+            if cur == prev:
                 consecutive += 1
             else:
                 consecutive = 1

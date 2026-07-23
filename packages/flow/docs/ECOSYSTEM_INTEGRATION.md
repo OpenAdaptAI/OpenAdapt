@@ -367,7 +367,7 @@ tech debt. Explicit "keep it home-grown" calls:
    canonical schema. Those are flow's differentiators and don't belong in a passive shared
    type.
 2. **The replay hot path stays dependency-minimal.** `pydantic + opencv + rapidocr +
-   pillow + imagehash`. Grounding, capture, privacy, and types-interop are all **edges**
+   pillow + numpy`. Grounding, capture, privacy, and types-interop are all **edges**
    (compile-time or opt-in), never core. The property that "the whole loop runs in CI with
    no OS permissions and zero model calls" is the product; protect it.
 3. **Postcondition + identity verification stays home-grown.** Nothing in the ecosystem
@@ -406,6 +406,6 @@ The governing test for any future integration proposal:
 | Package | Import weight | On flow's hot path? |
 |---|---|---|
 | openadapt-types | pydantic only (light) | No — boundary/optional |
-| openadapt-capture | pynput + mss + PyAV + sounddevice (heavy, native, needs perms to record; import stays headless-safe) | No — compile-time on-ramp, optional extra |
+| openadapt-capture | Native input/screen APIs plus separately provisioned external FFmpeg for video | No — compile-time recorder on-ramp, optional extra |
 | openadapt-verifier | stdlib-only (light) | N/A — not integrated |
-| flow core | pydantic, numpy, opencv-headless, pillow, imagehash, rapidocr, playwright, httpx | This IS the hot path; keep it here |
+| flow core | pydantic, numpy, opencv-headless, pillow, rapidocr, playwright, httpx | This IS the hot path; keep it here |

@@ -56,6 +56,12 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from openadapt_flow.image_hash import (
+    difference_hash,
+    hash_distance,
+    perceptual_hash,
+)
+
 # Reuse the dense-surface fixture's RENDERING unchanged (read it, call it,
 # never edit it): the HTML/CSS that defines exactly how an MRN cell paints.
 from openadapt_flow.validation.dense_surface import (
@@ -373,18 +379,20 @@ def m_ssim(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def m_phash(a: np.ndarray, b: np.ndarray) -> float:
-    import imagehash
-
     return float(
-        imagehash.phash(_pil(a), hash_size=16) - imagehash.phash(_pil(b), hash_size=16)
+        hash_distance(
+            perceptual_hash(_pil(a), hash_size=16),
+            perceptual_hash(_pil(b), hash_size=16),
+        )
     )
 
 
 def m_dhash(a: np.ndarray, b: np.ndarray) -> float:
-    import imagehash
-
     return float(
-        imagehash.dhash(_pil(a), hash_size=16) - imagehash.dhash(_pil(b), hash_size=16)
+        hash_distance(
+            difference_hash(_pil(a), hash_size=16),
+            difference_hash(_pil(b), hash_size=16),
+        )
     )
 
 

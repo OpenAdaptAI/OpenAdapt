@@ -1,4 +1,4 @@
-"""Perceptual hashing helpers (imagehash-based).
+"""Perceptual hashing helpers.
 
 Used for change detection (settle polling) and REGION_STABLE postconditions.
 
@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import io
 
-import imagehash
 from PIL import Image, ImageFilter
 
+from openadapt_flow.image_hash import hash_distance, perceptual_hash
 from openadapt_flow.ir import Region
 
 
@@ -47,9 +47,9 @@ def phash_png(png: bytes, region: Region | None = None) -> str:
             raise ValueError(f"region {region} is empty after clamping")
         img = img.crop((x0, y0, x1, y1))
     edges = img.convert("L").filter(ImageFilter.FIND_EDGES)
-    return str(imagehash.phash(edges))
+    return perceptual_hash(edges)
 
 
 def phash_distance(a: str, b: str) -> int:
     """Return the Hamming distance between two hex phash strings."""
-    return imagehash.hex_to_hash(a) - imagehash.hex_to_hash(b)
+    return hash_distance(a, b)

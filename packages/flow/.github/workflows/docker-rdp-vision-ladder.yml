@@ -58,7 +58,7 @@ jobs:
       - name: Install flow with the vision + rdp stack
         run: |
           python -m pip install --upgrade pip
-          # Core owns cv2/RapidOCR/Pillow/imagehash; the rdp extra installs the
+          # Core owns cv2/RapidOCR/Pillow/NumPy hashing; the rdp extra installs the
           # product transport dependency even though this Linux fixture injects
           # the swappable DockerX11RdpTransport into the same backend.
           pip install -e ".[rdp]"

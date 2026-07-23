@@ -19,7 +19,6 @@ dependencies = [
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     "pillow>=10.0",
-    "imagehash>=4.3",
     "rapidocr-onnxruntime>=1.3",
     # The reference backend and the CLI's demo-record/replay self-serve
     # path drive a Playwright browser; core, not a dev extra.
