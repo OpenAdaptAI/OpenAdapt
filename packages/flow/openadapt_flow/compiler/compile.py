@@ -1193,7 +1193,16 @@ def compile_recording(
             # with NO identity verification at replay (docs/LIMITS.md), so
             # the bundle records armed/unarmed per step — with the reason
             # — for operator review BEFORE the workflow ever runs.
-            identity_armed = context_text is not None or structured_identity is not None
+            # An explicit/compiler-emitted identifier crop is itself a live
+            # identity tier on pixel-only RDP/Citrix/VDI surfaces. Treat it as
+            # armed in the audit/policy flag as well as in the replayer; the
+            # former context-only flag made governed execution refuse the very
+            # remote-display crop the compiler had emitted.
+            identity_armed = (
+                context_text is not None
+                or structured_identity is not None
+                or identifier_crop_rel is not None
+            )
             unarmed_reason: Optional[str] = None
             if not identity_armed:
                 unarmed_reason = _identity_unarmed_reason(

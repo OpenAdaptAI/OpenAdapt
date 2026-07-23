@@ -1,0 +1,98 @@
+name: docker-rdp-vision-ladder
+
+# Real-RDP vision-ladder qualification.
+#
+# Runs the record -> compile -> replay contract through the vision-only resolver
+# ladder over a genuine FreeRDP client/server round-trip (benchmark/rdp_ladder),
+# on a real RDP pixel surface with NO structural backend. This is the CI-viable
+# Linux analog of the aardwolf-over-Windows transport proof in benchmark/rdp.
+#
+# Pull requests that touch this harness or its exact core dependencies run the
+# qualification before merge. workflow_dispatch remains available for later
+# default-branch reruns. There is deliberately no schedule until a rebased
+# candidate produces a fresh accepted 3x healthy + 3x refusal batch, avoiding
+# recurring runner spend and red-main noise from an intentionally pending
+# qualification. The fixture image is amd64+arm64; GitHub's runner is amd64.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docker-rdp-vision-ladder.yml"
+      - "benchmark/rdp_ladder/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "openadapt_flow/backends/rdp_backend.py"
+      - "openadapt_flow/compiler/compile.py"
+      - "openadapt_flow/deployment.py"
+      - "openadapt_flow/ir.py"
+      - "openadapt_flow/policy.py"
+      - "openadapt_flow/recorder.py"
+      - "openadapt_flow/run_gate.py"
+      - "openadapt_flow/runtime/identity.py"
+      - "openadapt_flow/runtime/identity_template.py"
+      - "openadapt_flow/runtime/identity_vlm.py"
+      - "openadapt_flow/runtime/replayer.py"
+      - "openadapt_flow/runtime/resolver.py"
+      - "openadapt_flow/runtime/effects/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  docker-rdp-vision-ladder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # pull_request normally checks out a synthetic merge ref. Qualifying
+          # the exact PR head keeps the recorded candidate SHA reproducible;
+          # workflow_dispatch falls back to its explicitly selected ref.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install flow with the vision + rdp stack
+        run: |
+          python -m pip install --upgrade pip
+          # Core owns cv2/RapidOCR/Pillow/imagehash; the rdp extra installs the
+          # product transport dependency even though this Linux fixture injects
+          # the swappable DockerX11RdpTransport into the same backend.
+          pip install -e ".[rdp]"
+          pip check
+
+      - name: Build the real-RDP fixture image
+        run: docker build -t oaflow-rdp-fixture:latest benchmark/rdp_ladder/fixture
+
+      - name: Start the RDP round-trip
+        run: |
+          mkdir -p "${RUNNER_TEMP}/rdp-ladder-oracle"
+          docker run -d --name oaflow-rdp-ladder --shm-size=1g \
+            -e RDP_FIXTURE_ORACLE_ROOT=/oracle \
+            -v "${RUNNER_TEMP}/rdp-ladder-oracle:/oracle" \
+            oaflow-rdp-fixture:latest
+          sleep 22
+
+      - name: Run the vision-ladder qualification
+        run: |
+          python benchmark/rdp_ladder/run_rdp_ladder_qualification.py \
+            --container oaflow-rdp-ladder \
+            --oracle-root "${RUNNER_TEMP}/rdp-ladder-oracle" \
+            --output runs/rdp-ladder/results.json \
+            --candidate-commit "$(git rev-parse HEAD)" \
+            --base-commit "$(git merge-base HEAD origin/main)"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rdp-ladder-qualification
+          path: runs/rdp-ladder/results.json
+          if-no-files-found: error
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f oaflow-rdp-ladder || true

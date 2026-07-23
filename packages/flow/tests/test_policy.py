@@ -142,6 +142,13 @@ STRICT = Policy(
 
 
 class TestCertify:
+    def test_legacy_identifier_crop_is_identity_armed(self):
+        step = _click("step_000", "click 'Remote row'", armed=False)
+        step.identity_armed = None
+        assert step.anchor is not None
+        step.anchor.identifier_crop = "templates/identifiers/step_000.png"
+        assert is_identity_armed(step)
+
     def test_strict_fails_bundle_with_unarmed_clicks(self):
         report = evaluate_policy(_gappy_workflow(), STRICT)
         assert not report.passed

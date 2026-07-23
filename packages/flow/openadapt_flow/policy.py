@@ -61,15 +61,18 @@ def is_identity_armed(step: Step) -> bool:
     """True when the step's pre-click identity check will actually run.
 
     Prefers the compiler-written ``identity_armed`` audit flag; falls back to
-    the ground truth the gate itself keys on (``context_text`` or
-    ``structured_identity`` present) for bundles compiled before that flag
-    existed.
+    the ground truth the replayer keys on (structured/context identity,
+    identity template, or identifier crop) for bundles compiled before that
+    flag existed.
     """
     if step.identity_armed is not None:
         return step.identity_armed
     a = step.anchor
     return a is not None and bool(
-        a.context_text or a.structured_identity or a.identity_template
+        a.context_text
+        or a.structured_identity
+        or a.identity_template
+        or a.identifier_crop
     )
 
 
