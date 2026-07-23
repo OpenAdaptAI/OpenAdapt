@@ -1,0 +1,208 @@
+name: Build managed FFmpeg runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified runtime assets as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  FFMPEG_VERSION: "8.1.2"
+  RUNTIME_REVISION: "r1"
+  SOURCE_SHA256: "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+  SIGNING_KEY_FINGERPRINT: "FCF986EA15E6E293A5644F10B4322F04D67658D8"
+
+jobs:
+  source:
+    name: Verify official source
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download source, detached signature, and release key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/ffmpeg-source
+          curl --fail --show-error --silent --location --retry 5 \
+            --retry-all-errors --connect-timeout 20 --max-time 300 \
+            "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" \
+            --output "dist/ffmpeg-source/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+          curl --fail --show-error --silent --location --retry 5 \
+            --retry-all-errors --connect-timeout 20 --max-time 300 \
+            "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz.asc" \
+            --output "dist/ffmpeg-source/ffmpeg-${FFMPEG_VERSION}.tar.xz.asc"
+          curl --fail --show-error --silent --location --retry 5 \
+            --retry-all-errors --connect-timeout 20 --max-time 300 \
+            https://ffmpeg.org/ffmpeg-devel.asc \
+            --output dist/ffmpeg-source/ffmpeg-devel.asc
+
+      - name: Verify source hash and FFmpeg release signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_archive="dist/ffmpeg-source/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+          test "$(sha256sum "${source_archive}" | cut -d' ' -f1)" = "${SOURCE_SHA256}"
+          export GNUPGHOME="${RUNNER_TEMP}/ffmpeg-gnupg"
+          mkdir -m 700 "${GNUPGHOME}"
+          gpg --batch --import dist/ffmpeg-source/ffmpeg-devel.asc
+          fingerprint="$(
+            gpg --batch --with-colons --fingerprint \
+              | awk -F: '$1 == "fpr" { print $10; exit }'
+          )"
+          test "${fingerprint}" = "${SIGNING_KEY_FINGERPRINT}"
+          gpg --batch --verify \
+            "dist/ffmpeg-source/ffmpeg-${FFMPEG_VERSION}.tar.xz.asc" \
+            "${source_archive}"
+
+      - name: Upload verified source inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ffmpeg-official-source
+          path: dist/ffmpeg-source/*
+          if-no-files-found: error
+          retention-days: 30
+
+  build:
+    name: Runtime (${{ matrix.label }})
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - label: macOS x86_64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - label: Windows x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download verified source inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ffmpeg-official-source
+          path: dist/ffmpeg-source
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential nasm pkg-config zlib1g-dev
+
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        shell: bash
+        run: brew install nasm pkg-config
+
+      - name: Install Windows UCRT build tools
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            diffutils
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-zlib
+            tar
+
+      - name: Build, probe, smoke-test, and package runtime
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          TARGET_TRIPLE: ${{ matrix.target }}
+          SOURCE_ARCHIVE: ${{ github.workspace }}/dist/ffmpeg-source/ffmpeg-8.1.2.tar.xz
+          OUTPUT_DIR: ${{ github.workspace }}/dist/ffmpeg-runtime/${{ matrix.target }}
+        run: bash scripts/build_managed_ffmpeg_runtime.sh
+
+      - name: Build, probe, smoke-test, and package Windows runtime
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env:
+          TARGET_TRIPLE: ${{ matrix.target }}
+          SOURCE_ARCHIVE: ${{ github.workspace }}/dist/ffmpeg-source/ffmpeg-8.1.2.tar.xz
+          OUTPUT_DIR: ${{ github.workspace }}/dist/ffmpeg-runtime/${{ matrix.target }}
+        run: bash scripts/build_managed_ffmpeg_runtime.sh
+
+      - name: Upload runtime and exact manifest entry
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ffmpeg-runtime-${{ matrix.target }}
+          path: |
+            dist/ffmpeg-runtime/${{ matrix.target }}/*.zip
+            dist/ffmpeg-runtime/${{ matrix.target }}/*.manifest-entry.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Attest and publish runtime assets
+    if: inputs.publish
+    needs: [source, build]
+    runs-on: ubuntu-22.04
+    environment: native-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download all verified build inputs and outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -maxdepth 1 -type f \
+            ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sed 's#  release-assets/#  #' \
+            > release-assets/SHA256SUMS
+
+      - name: Attest runtime and source artifacts
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        with:
+          subject-path: |
+            release-assets/*.zip
+            release-assets/ffmpeg-8.1.2.tar.xz
+            release-assets/ffmpeg-8.1.2.tar.xz.asc
+            release-assets/SHA256SUMS
+
+      - name: Publish separately licensed runtime prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="ffmpeg-runtime-v${FFMPEG_VERSION}-${RUNTIME_REVISION}"
+          gh release create "${tag}" release-assets/* \
+            --target "${GITHUB_SHA}" \
+            --title "OpenAdapt managed FFmpeg ${FFMPEG_VERSION} ${RUNTIME_REVISION}" \
+            --notes "Separately licensed, process-isolated FFmpeg and ffprobe runtime assets for OpenAdapt Desktop. Built from the official signed FFmpeg source with GPL, nonfree, and version3 features disabled. The Desktop installer and Python sidecar do not embed these files." \
+            --prerelease
