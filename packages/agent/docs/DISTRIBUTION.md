@@ -55,7 +55,7 @@ and [`../smithery.yaml`](../smithery.yaml).
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
 - **Display name:** OpenAdapt Agent (openadapt-flow bridge)
 - **PyPI package:** `openadapt-agent`
-- **Version:** `2.0.0.dev0` (Beta development release; pick the final release version at publish — see step 3.1)
+- **Version:** `2.0.0` (Beta)
 - **Description:** Local Beta bridge for governed openadapt-flow workflows and attended actions.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
@@ -139,14 +139,12 @@ No secret is ever committed; these live only in repo Settings -> Secrets.
 
 ### 3.1 Decide the release version
 
-`2.0.0.dev0` is a dev pre-release; `pip install openadapt-agent` will not
-select it without `--pre`. For a real launch choose one of:
-- `2.0.0rc1` (recommended first public: pre-release, opt-in via `--pre`), or
-- `2.0.0` (final; remove development-release caveats only when the evidence supports it).
+The first public release is `2.0.0`. Future releases must keep the package,
+module, and registry metadata versions synchronized.
 
-Whatever you choose, set it in **three places that a CI test pins
-together**: `pyproject.toml` `version`, `src/openadapt_agent/__init__.py`
-`__version__`, and both `version` fields in `server.json`. The
+Set every future version in **three places that a CI test pins together**:
+`pyproject.toml` `version`, `src/openadapt_agent/__init__.py` `__version__`,
+and both `version` fields in `server.json`. The
 `tests/test_distribution.py` guard fails if they drift.
 
 ### 3.2 Publish to PyPI — AUTOMATED (`pypi-publish` job)

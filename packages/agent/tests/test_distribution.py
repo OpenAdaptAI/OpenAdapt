@@ -23,6 +23,7 @@ SERVER_JSON = REPO_ROOT / "server.json"
 SMITHERY_YAML = REPO_ROOT / "smithery.yaml"
 LLMS_TXT = REPO_ROOT / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 REVERSE_DNS_NAME = "io.github.OpenAdaptAI/openadapt-agent"
 PYPI_NAME = "openadapt-agent"
@@ -60,6 +61,14 @@ def test_version_is_consistent_everywhere() -> None:
     assert doc["version"] == __version__
     assert doc["packages"][0]["version"] == __version__
     assert _pyproject_version() == __version__
+
+
+def test_release_workflow_runs_the_complete_archive_boundary() -> None:
+    """The exact artifacts handed to publishers get both release guards."""
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert '- "scripts/check_dist.py"' in workflow
+    assert "python scripts/check_release_artifacts.py dist" in workflow
+    assert "python scripts/check_dist.py dist/*" in workflow
 
 
 def test_serve_is_the_subcommand_and_bundles_is_required() -> None:

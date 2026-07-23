@@ -24,6 +24,7 @@ on:
       - "server.json"
       - "smithery.yaml"
       - "scripts/check_release_artifacts.py"
+      - "scripts/check_dist.py"
       - ".github/workflows/release.yml"
 
 concurrency:
@@ -52,7 +53,9 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build
       - name: License / package-boundary check on built archives
-        run: python scripts/check_release_artifacts.py dist
+        run: |
+          python scripts/check_release_artifacts.py dist
+          python scripts/check_dist.py dist/*
       - name: twine check
         run: twine check dist/*
       - name: Validate server.json against the MCP registry schema

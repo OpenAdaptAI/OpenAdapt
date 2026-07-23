@@ -26,7 +26,7 @@ All mutations require an exact capability digest, a stable idempotency key, acti
 
 ## Public capability vs private artifact
 
-- The **package/MCP server is the public OpenAdapt capability**: inspect and, with explicit operator flags, run or attend a compiled workflow under governance. The v2 package is not yet published.
+- The **package/MCP server is the public OpenAdapt capability**: inspect and, with explicit operator flags, run or attend a compiled workflow under governance. Install it from PyPI as `openadapt-agent`.
 - A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing.
 
 ## Key documents
