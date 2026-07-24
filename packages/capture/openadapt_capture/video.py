@@ -1,19 +1,21 @@
 """Video capture through a separately provisioned FFmpeg executable.
 
-Capture itself never downloads or bundles FFmpeg. Frames are staged losslessly
-with exact presentation timestamps, encoded transactionally at finalization,
-verified, and only then promoted to the public MP4 path. A failed encode retains
-the staging directory for diagnosis/recovery and never leaves a false-success
-output file.
+Capture itself never downloads or bundles FFmpeg. In-memory RGB frames stream
+directly into the encoder process and become compact video while recording.
+The finished output is verified and atomically promoted; an encoder failure is
+reported and never leaves a false-success public MP4.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import math
 import os
+import queue
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -22,7 +24,7 @@ import uuid
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, BinaryIO, Sequence
 
 from loguru import logger
 from PIL import Image
@@ -41,8 +43,12 @@ DEFAULT_PRESET = "veryslow"
 DEFAULT_PROCESS_TIMEOUT_SECONDS = 900.0
 PROBE_TIMEOUT_SECONDS = 10.0
 EXTRACT_TIMEOUT_SECONDS = 120.0
+FRAME_WRITE_TIMEOUT_SECONDS = 30.0
 _ENCODER_LINE = re.compile(r"^\s*V\S*\s+(?P<name>\S+)\s", re.MULTILINE)
 _OPTION_TOKEN = re.compile(r"^[A-Za-z0-9_.-]+$")
+_TIMING_BOX_UUID = uuid.UUID("d8e90f06-20b4-4e0c-b449-4f70656e4164").bytes
+_TIMING_SCHEMA = "openadapt.capture-video-timing/v1"
+_MAX_TIMING_PAYLOAD_BYTES = 16 * 1024 * 1024
 
 
 class FFmpegUnavailableError(RuntimeError):
@@ -50,7 +56,7 @@ class FFmpegUnavailableError(RuntimeError):
 
 
 class FFmpegEncodingError(RuntimeError):
-    """FFmpeg failed to encode or verify a staged recording."""
+    """FFmpeg failed to encode or verify a recording."""
 
 
 @dataclass(frozen=True)
@@ -77,10 +83,107 @@ class FFmpegVideoStream:
     muxer: str
 
 
-@dataclass(frozen=True)
-class _StagedFrame:
-    path: Path
-    pts: int
+def _append_timing_box(
+    path: Path,
+    *,
+    fps: Fraction,
+    frames: list[tuple[int, float]],
+) -> None:
+    """Append logical capture-frame timestamps in an ignored MP4 UUID box."""
+    payload = json.dumps(
+        {
+            "schema": _TIMING_SCHEMA,
+            "fps": f"{fps.numerator}/{fps.denominator}",
+            "frames": [[index, timestamp] for index, timestamp in frames],
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    box_size = 24 + len(payload)
+    if len(payload) > _MAX_TIMING_PAYLOAD_BYTES or box_size >= 2**32:
+        raise FFmpegEncodingError("Video timing metadata exceeds its bounded MP4 box")
+    with path.open("ab") as output:
+        output.write(struct.pack(">I4s16s", box_size, b"uuid", _TIMING_BOX_UUID))
+        output.write(payload)
+        output.flush()
+        os.fsync(output.fileno())
+
+
+def _read_timing_box(
+    path: Path,
+) -> tuple[Fraction, list[tuple[int, float]]] | None:
+    """Read OpenAdapt logical timestamps from top-level MP4 boxes, if present."""
+    file_size = path.stat().st_size
+    with path.open("rb") as source:
+        offset = 0
+        while offset + 8 <= file_size:
+            source.seek(offset)
+            header = source.read(8)
+            size32, box_type = struct.unpack(">I4s", header)
+            header_size = 8
+            if size32 == 1:
+                extended = source.read(8)
+                if len(extended) != 8:
+                    return None
+                box_size = struct.unpack(">Q", extended)[0]
+                header_size = 16
+            elif size32 == 0:
+                box_size = file_size - offset
+            else:
+                box_size = size32
+            if box_size < header_size or offset + box_size > file_size:
+                return None
+            if box_type == b"uuid" and box_size >= header_size + 16:
+                user_type = source.read(16)
+                if user_type == _TIMING_BOX_UUID:
+                    payload_size = box_size - header_size - 16
+                    if payload_size > _MAX_TIMING_PAYLOAD_BYTES:
+                        raise FFmpegEncodingError("Video timing metadata exceeds its read bound")
+                    try:
+                        payload = json.loads(source.read(payload_size).decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        raise FFmpegEncodingError("Video timing metadata is invalid") from exc
+                    if not isinstance(payload, dict) or payload.get("schema") != _TIMING_SCHEMA:
+                        raise FFmpegEncodingError("Video timing metadata has an unknown schema")
+                    try:
+                        fps = Fraction(payload["fps"])
+                    except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
+                        raise FFmpegEncodingError(
+                            "Video timing metadata has an invalid frame rate"
+                        ) from exc
+                    if fps <= 0:
+                        raise FFmpegEncodingError(
+                            "Video timing metadata has a non-positive frame rate"
+                        )
+                    result: list[tuple[int, float]] = []
+                    previous_index = -1
+                    previous_timestamp = -1.0
+                    for entry in payload.get("frames", []):
+                        if (
+                            not isinstance(entry, list)
+                            or len(entry) != 2
+                            or not isinstance(entry[0], int)
+                        ):
+                            raise FFmpegEncodingError("Video timing metadata has an invalid frame")
+                        try:
+                            timestamp = float(entry[1])
+                        except (TypeError, ValueError) as exc:
+                            raise FFmpegEncodingError(
+                                "Video timing metadata has an invalid timestamp"
+                            ) from exc
+                        if (
+                            entry[0] <= previous_index
+                            or not math.isfinite(timestamp)
+                            or timestamp < previous_timestamp
+                        ):
+                            raise FFmpegEncodingError(
+                                "Video timing metadata is not strictly ordered"
+                            )
+                        result.append((entry[0], timestamp))
+                        previous_index = entry[0]
+                        previous_timestamp = timestamp
+                    return fps, result
+            offset += box_size
+    return None
 
 
 def _validate_option_token(label: str, value: str) -> str:
@@ -425,18 +528,24 @@ def _probe_encoder(
     """Perform a real one-frame encode and decode, not a name-only probe."""
     with tempfile.TemporaryDirectory(prefix="openadapt-ffmpeg-probe-") as temp:
         root = Path(temp)
-        source = root / "probe.png"
         output = root / f"probe.{muxer}"
-        Image.new("RGB", (64, 64), "black").save(source, format="PNG")
+        frame = Image.new("RGB", (64, 64), "black").tobytes()
         command = [
             provision.executable,
             "-hide_banner",
             "-loglevel",
             "error",
-            "-nostdin",
             "-y",
+            "-f",
+            "rawvideo",
+            "-pixel_format",
+            "rgb24",
+            "-video_size",
+            "64x64",
+            "-framerate",
+            "1",
             "-i",
-            str(source),
+            "pipe:0",
             "-frames:v",
             "1",
             "-an",
@@ -449,7 +558,7 @@ def _probe_encoder(
             muxer,
             str(output),
         ]
-        _run_checked(command, timeout=timeout)
+        _run_checked(command, timeout=timeout, input_bytes=frame)
         if not output.is_file() or output.stat().st_size == 0:
             raise FFmpegEncodingError(f"Encoder {codec!r} returned no non-empty {muxer} output")
         _decode_first_frame_png(
@@ -540,7 +649,7 @@ def require_video_encoder(
 
 
 class FFmpegFrameStage:
-    """Lossless timestamped frames awaiting transactional FFmpeg encoding."""
+    """Compatibility writer that streams timestamped frames directly to FFmpeg."""
 
     def __init__(
         self,
@@ -559,68 +668,45 @@ class FFmpegFrameStage:
         self.crf = crf
         self.preset = preset
         self.timeout_seconds = timeout_seconds
-        self.stage_dir = Path(
-            tempfile.mkdtemp(
-                prefix=f".{self.output_path.stem}-frames-",
-                dir=self.output_path.parent,
-            )
+        self.partial_path = self.output_path.with_name(
+            f".{self.output_path.name}.{uuid.uuid4().hex}.partial.{self.stream.muxer}"
         )
-        self.frames: list[_StagedFrame] = []
+        self._process: subprocess.Popen[bytes] | None = None
+        self._stderr_file: BinaryIO | None = None
+        self._input_queue: queue.Queue[tuple[bytes, int] | None] = queue.Queue(maxsize=4)
+        self._input_thread: threading.Thread | None = None
+        self._input_error: BaseException | None = None
+        self._last_frame: bytes | None = None
+        self._first_pts: int | None = None
+        self._last_pts = -1
+        self._emitted_frames = 0
+        self._logical_frames: list[tuple[int, float]] = []
         self._closed = False
         self._lock = threading.Lock()
 
-    def stage_frame(self, image: "PILImage", pts: int) -> None:
-        """Persist one numeric-name lossless frame and its exact PTS."""
-        with self._lock:
-            if self._closed:
-                raise FFmpegEncodingError("Video stage is already closed")
-            frame_path = self.stage_dir / f"frame_{len(self.frames):08d}.png"
-            image.convert("RGB").save(frame_path, format="PNG")
-            self.frames.append(_StagedFrame(frame_path, pts))
-
-    def _write_manifest(self) -> Path:
-        if not self.frames:
-            raise FFmpegEncodingError("Cannot encode a video with no frames")
-        manifest = self.stage_dir / "frames.ffconcat"
-        fps = float(self.stream.average_rate)
-        lines = ["ffconcat version 1.0"]
-        for index, frame in enumerate(self.frames):
-            if index + 1 < len(self.frames):
-                next_pts = self.frames[index + 1].pts
-                duration = max((next_pts - frame.pts) / fps, 1.0 / fps)
-            else:
-                duration = 1.0 / fps
-            # Staging names are generated numeric tokens, never user input.
-            lines.append(f"file {frame.path.name}")
-            lines.append(f"duration {duration:.9f}")
-        # ffconcat applies the final duration only when the last file is
-        # repeated. This is an intentional duplicate manifest entry, not
-        # duplicate raw-frame traffic.
-        lines.append(f"file {self.frames[-1].path.name}")
-        manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return manifest
-
-    def _encode_command(self, manifest: Path, output: Path, *, fps_mode: bool) -> list[str]:
+    def _encode_command(self) -> list[str]:
+        rate = self.stream.average_rate
         command = [
             self.provision.executable,
             "-hide_banner",
             "-loglevel",
             "error",
-            "-nostdin",
             "-y",
             "-f",
-            "concat",
-            "-safe",
-            "1",
+            "rawvideo",
+            "-pixel_format",
+            "rgb24",
+            "-video_size",
+            f"{self.stream.width}x{self.stream.height}",
+            "-framerate",
+            f"{rate.numerator}/{rate.denominator}",
             "-i",
-            manifest.name,
+            "pipe:0",
             "-an",
             "-c:v",
             self.stream.codec,
             "-pix_fmt",
             self.stream.pix_fmt,
-            "-movflags",
-            "+faststart",
         ]
         command.extend(
             _codec_arguments(
@@ -629,58 +715,238 @@ class FFmpegFrameStage:
                 preset=self.preset,
             )
         )
-        command.extend(["-fps_mode", "vfr"] if fps_mode else ["-vsync", "vfr"])
         command.extend(["-f", self.stream.muxer])
-        command.append(str(output))
+        command.append(str(self.partial_path))
         return command
 
+    def _start(self) -> subprocess.Popen[bytes]:
+        stderr_file = tempfile.TemporaryFile(mode="w+b")
+        try:
+            process = subprocess.Popen(
+                self._encode_command(),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_file,
+                bufsize=0,
+                shell=False,
+            )
+        except OSError as exc:
+            stderr_file.close()
+            raise FFmpegEncodingError(f"Could not execute FFmpeg: {exc}") from exc
+        if process.stdin is None:
+            process.kill()
+            process.wait()
+            stderr_file.close()
+            raise FFmpegEncodingError("FFmpeg did not expose its raw-video input pipe")
+        self._stderr_file = stderr_file
+        self._process = process
+        self._input_thread = threading.Thread(
+            target=self._write_input,
+            name="openadapt-ffmpeg-input",
+            daemon=True,
+        )
+        try:
+            self._input_thread.start()
+        except BaseException:
+            process.kill()
+            process.wait()
+            stderr_file.close()
+            self._process = None
+            self._stderr_file = None
+            self._input_thread = None
+            raise
+        return process
+
+    def _stderr_detail(self) -> str:
+        stderr_file = self._stderr_file
+        if stderr_file is None:
+            return ""
+        stderr_file.flush()
+        stderr_file.seek(0, os.SEEK_END)
+        size = stderr_file.tell()
+        stderr_file.seek(max(0, size - 64 * 1024))
+        return stderr_file.read().decode("utf-8", errors="replace").strip()
+
+    def _write_input(self) -> None:
+        process = self._process
+        assert process is not None and process.stdin is not None
+        try:
+            while True:
+                item = self._input_queue.get()
+                try:
+                    if item is None:
+                        return
+                    frame, repetitions = item
+                    for _ in range(repetitions):
+                        remaining = memoryview(frame)
+                        while remaining:
+                            written = process.stdin.write(remaining)
+                            if written is None or written <= 0:
+                                raise OSError("FFmpeg input pipe made no write progress")
+                            remaining = remaining[written:]
+                    process.stdin.flush()
+                finally:
+                    self._input_queue.task_done()
+        except BaseException as exc:
+            self._input_error = exc
+        finally:
+            try:
+                process.stdin.close()
+            except BaseException as exc:
+                if self._input_error is None:
+                    self._input_error = exc
+
+    def _abort_and_reap(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        input_thread = self._input_thread
+        if input_thread is not None and input_thread is not threading.current_thread():
+            input_thread.join(timeout=5)
+
+    def _enqueue_frames(self, frame: bytes, repetitions: int) -> None:
+        if repetitions <= 0:
+            return
+        process = self._process or self._start()
+        if process.poll() is not None:
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                f"FFmpeg exited with code {process.returncode}: {detail or '(no stderr)'}"
+            )
+        if self._input_error is not None:
+            self._abort_and_reap()
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                f"FFmpeg input pipe failed: {detail or self._input_error}"
+            ) from self._input_error
+        try:
+            self._input_queue.put(
+                (frame, repetitions),
+                timeout=min(self.timeout_seconds, FRAME_WRITE_TIMEOUT_SECONDS),
+            )
+        except queue.Full as exc:
+            self._abort_and_reap()
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                "FFmpeg input pipe stopped accepting frames" + (f": {detail}" if detail else "")
+            ) from exc
+
+    def stage_frame(self, image: "PILImage", pts: int) -> None:
+        """Stream one frame, filling PTS gaps deterministically without disk."""
+        with self._lock:
+            if self._closed:
+                raise FFmpegEncodingError("Video stream is already closed")
+            if pts <= self._last_pts:
+                raise FFmpegEncodingError(f"Video PTS must increase ({pts} <= {self._last_pts})")
+            if image.size != (self.stream.width, self.stream.height):
+                raise FFmpegEncodingError(
+                    f"Video frame size {image.size} does not match "
+                    f"{self.stream.width}x{self.stream.height}"
+                )
+            frame = image.convert("RGB").tobytes()
+            fps = float(self.stream.average_rate)
+            if self._first_pts is None:
+                self._enqueue_frames(frame, 1)
+                self._first_pts = pts
+                encoded_index = 0
+                emitted = 1
+            else:
+                assert self._last_frame is not None
+                gap = pts - self._last_pts
+                self._enqueue_frames(self._last_frame, gap - 1)
+                self._enqueue_frames(frame, 1)
+                encoded_index = self._emitted_frames + gap - 1
+                emitted = gap
+            assert self._first_pts is not None
+            self._logical_frames.append((encoded_index, (pts - self._first_pts) / fps))
+            self._emitted_frames += emitted
+            self._last_frame = frame
+            self._last_pts = pts
+
+    def _finish_input(self) -> None:
+        process = self._process
+        input_thread = self._input_thread
+        assert process is not None and input_thread is not None
+        try:
+            self._input_queue.put(
+                None,
+                timeout=min(self.timeout_seconds, FRAME_WRITE_TIMEOUT_SECONDS),
+            )
+        except queue.Full as exc:
+            self._abort_and_reap()
+            raise FFmpegEncodingError("FFmpeg input queue did not finish") from exc
+        input_thread.join(timeout=min(self.timeout_seconds, FRAME_WRITE_TIMEOUT_SECONDS))
+        if input_thread.is_alive():
+            self._abort_and_reap()
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                f"FFmpeg input pipe timed out after "
+                f"{min(self.timeout_seconds, FRAME_WRITE_TIMEOUT_SECONDS):g}s"
+                + (f": {detail}" if detail else "")
+            )
+        if self._input_error is not None:
+            self._abort_and_reap()
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                f"FFmpeg input pipe failed: {detail or self._input_error}"
+            ) from self._input_error
+
+    def _wait_for_process(self, process: subprocess.Popen[bytes]) -> None:
+        try:
+            process.wait(timeout=self.timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            self._abort_and_reap()
+            detail = self._stderr_detail()
+            raise FFmpegEncodingError(
+                f"FFmpeg timed out after {self.timeout_seconds:g}s"
+                + (f": {detail}" if detail else "")
+            ) from exc
+
     def close(self) -> None:
-        """Encode, verify, atomically promote, then remove staging data."""
+        """Finalize, verify, and atomically promote the directly encoded video."""
         with self._lock:
             if self._closed:
                 return
-            if not self.frames:
+            if self._process is None:
                 self._closed = True
-                shutil.rmtree(self.stage_dir)
                 return
-
-            manifest = self._write_manifest()
-            temp_output = self.output_path.with_name(
-                f".{self.output_path.name}.{uuid.uuid4().hex}.tmp.{self.stream.muxer}"
-            )
+            process = self._process
             try:
-                try:
-                    _run_checked(
-                        self._encode_command(manifest, temp_output, fps_mode=True),
-                        timeout=self.timeout_seconds,
-                        cwd=self.stage_dir,
+                self._finish_input()
+                self._wait_for_process(process)
+                if process.returncode != 0:
+                    detail = self._stderr_detail()
+                    raise FFmpegEncodingError(
+                        f"FFmpeg exited with code {process.returncode}: {detail or '(no stderr)'}"
                     )
-                except FFmpegEncodingError as exc:
-                    # FFmpeg <5 does not support -fps_mode. Retry only when the
-                    # failure identifies that exact compatibility condition.
-                    if "fps_mode" not in str(exc).lower() or "option" not in str(exc).lower():
-                        raise
-                    _run_checked(
-                        self._encode_command(manifest, temp_output, fps_mode=False),
-                        timeout=self.timeout_seconds,
-                        cwd=self.stage_dir,
-                    )
-
-                if not temp_output.is_file() or temp_output.stat().st_size == 0:
+                if not self.partial_path.is_file() or self.partial_path.stat().st_size == 0:
                     raise FFmpegEncodingError("FFmpeg returned success without a non-empty output")
+                _append_timing_box(
+                    self.partial_path,
+                    fps=self.stream.average_rate,
+                    frames=self._logical_frames,
+                )
                 _decode_first_frame_png(
                     self.provision,
-                    temp_output,
+                    self.partial_path,
                     timeout=min(self.timeout_seconds, EXTRACT_TIMEOUT_SECONDS),
                 )
-                os.replace(temp_output, self.output_path)
+                os.replace(self.partial_path, self.output_path)
             except BaseException:
-                if temp_output.exists():
-                    temp_output.unlink()
-                logger.error(f"Video encoding failed; retained lossless stage at {self.stage_dir}")
+                self._abort_and_reap()
+                logger.error(
+                    f"Video encoding failed; retained incomplete output at {self.partial_path}"
+                )
                 raise
-            else:
-                shutil.rmtree(self.stage_dir)
+            finally:
+                if self._stderr_file is not None:
+                    self._stderr_file.close()
                 self._closed = True
 
 
@@ -867,7 +1133,6 @@ def finalize_video_writer(
     video_file_path: str,
     fix_moov: bool = False,
 ) -> None:
-    del video_file_path
     write_video_frame(
         video_container,
         video_stream,
@@ -879,7 +1144,7 @@ def finalize_video_writer(
     )
     video_container.close()
     if fix_moov:
-        logger.info("FFmpeg encoding already applied +faststart")
+        move_moov_atom(video_file_path)
 
 
 def move_moov_atom(
@@ -890,6 +1155,7 @@ def move_moov_atom(
 ) -> None:
     provision = resolve_ffmpeg(ffmpeg_path or config.VIDEO_FFMPEG_PATH)
     input_path = Path(input_file)
+    timing = _read_timing_box(input_path)
     temp_file: Path | None = None
     if output_file is None:
         temp_file = input_path.with_name(f".{input_path.name}.{uuid.uuid4().hex}.mp4")
@@ -914,6 +1180,9 @@ def move_moov_atom(
         ],
         timeout=DEFAULT_PROCESS_TIMEOUT_SECONDS,
     )
+    if timing is not None:
+        fps, logical_frames = timing
+        _append_timing_box(output_path, fps=fps, frames=logical_frames)
     if temp_file is not None:
         os.replace(temp_file, input_path)
 
@@ -960,6 +1229,9 @@ def _frame_catalog(
     provision: FFmpegProvision,
 ) -> list[tuple[int, float]]:
     """Return decoded-frame indexes and timestamps in presentation order."""
+    timing = _read_timing_box(video_path)
+    if timing is not None:
+        return timing[1]
     payload = _probe_json(
         provision,
         [

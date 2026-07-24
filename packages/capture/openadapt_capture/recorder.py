@@ -770,7 +770,7 @@ def write_video_event(
         recording_timestamp: The timestamp of the recording.
         event: A screen event to be written.
         perf_q: A queue for collecting performance data.
-        video_container: The external-encoder staging container.
+        video_container: The direct external-encoder stream.
         video_stream: The configured external-encoder stream.
         video_start_timestamp (float): The base timestamp from which the video
             recording started.

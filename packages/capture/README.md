@@ -120,17 +120,21 @@ my-capture/
 └── profiling.json
 ```
 
-Video remains the default evidence format. Capture stages exact-timestamp,
-lossless frames during the session, asks a separately provisioned FFmpeg
-executable to encode them, verifies the resulting MP4, and promotes it
-atomically. Capture never downloads, bundles, or links FFmpeg/PyAV. Set
+Video remains the default evidence format. Capture streams in-memory RGB frames
+directly to a separately provisioned FFmpeg executable while recording. Missing
+integer PTS slots reuse the preceding frame, so encoding is deterministic and
+independent of scheduler or queue latency. A compact MP4 metadata box retains
+the logical capture-frame timestamps used by nearest-frame extraction. Capture
+then verifies and atomically promotes the MP4; no intermediate screenshot
+sequence is written. Capture never downloads, bundles, or links FFmpeg/PyAV. Set
 `OPENADAPT_FFMPEG_PATH`, pass `Recorder(ffmpeg_path=...)`, use Desktop's
 user-data `ffmpeg.json` provision manifest, or place `ffmpeg` and `ffprobe` on
 `PATH`. Recording performs a real encode-and-decode probe and refuses before
 input listeners start if the selected executable, codec, or PNG verification
-path is unavailable. A minimal managed runtime must provide the selected video
-encoder, MP4 demuxing/muxing, PNG decoding/encoding, the `image2pipe` muxer, and
-the `select` video filter; Desktop provisions and probes that exact closure.
+path is unavailable. A minimal managed runtime must provide raw-video input
+through a pipe, the selected video encoder, MP4 demuxing/muxing, PNG
+decoding/encoding, the `image2pipe` muxer, and the `select` video filter;
+Desktop provisions and probes that exact closure.
 
 ## Window-scoped recording
 

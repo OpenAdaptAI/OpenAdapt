@@ -38,6 +38,101 @@ def _stream(codec: str = "libx264") -> video.FFmpegVideoStream:
     )
 
 
+def _small_stream(codec: str = "mpeg4") -> video.FFmpegVideoStream:
+    return video.FFmpegVideoStream(
+        width=2,
+        height=1,
+        average_rate=Fraction(24),
+        pix_fmt="yuv420p",
+        codec=codec,
+        muxer="mp4",
+    )
+
+
+class _FakeInput:
+    def __init__(
+        self,
+        *,
+        broken: bool = False,
+        close_broken: bool = False,
+        max_write: int | None = None,
+    ) -> None:
+        self.data = bytearray()
+        self.broken = broken
+        self.close_broken = close_broken
+        self.max_write = max_write
+        self.closed = False
+
+    def write(self, payload: bytes) -> int:
+        if self.broken:
+            raise BrokenPipeError("encoder exited")
+        written = len(payload)
+        if self.max_write is not None:
+            written = min(written, self.max_write)
+        self.data.extend(payload[:written])
+        return written
+
+    def flush(self) -> None:
+        if self.broken:
+            raise BrokenPipeError("encoder exited")
+
+    def close(self) -> None:
+        self.closed = True
+        if self.close_broken:
+            raise OSError("stdin close failed")
+
+
+class _FakeProcess:
+    def __init__(
+        self,
+        command: list[str],
+        *,
+        returncode: int = 0,
+        stderr: bytes = b"",
+        broken: bool = False,
+        close_broken: bool = False,
+        max_write: int | None = None,
+        timeout: bool = False,
+    ) -> None:
+        self.command = command
+        self.pipe = _FakeInput(
+            broken=broken,
+            close_broken=close_broken,
+            max_write=max_write,
+        )
+        self.stdin = self.pipe
+        self.stderr_payload = stderr
+        self.returncode: int | None = None
+        self._final_returncode = returncode
+        self._timeout = timeout
+        self._killed = False
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def wait(self, timeout: float | None = None) -> int:
+        if self._timeout and not self._killed:
+            raise subprocess.TimeoutExpired(self.command, timeout)
+        self.returncode = -9 if self._killed else self._final_returncode
+        if self.returncode == 0:
+            Path(self.command[-1]).write_bytes(b"\x00\x00\x00\x08ftyp")
+        return self.returncode
+
+    def kill(self) -> None:
+        self._killed = True
+
+
+def _install_fake_popen(monkeypatch, process: _FakeProcess):
+    def popen(command, **kwargs):
+        process.command = list(command)
+        stderr_file = kwargs["stderr"]
+        stderr_file.write(process.stderr_payload)
+        stderr_file.flush()
+        return process
+
+    monkeypatch.setattr(video.subprocess, "Popen", popen)
+
+
 def _png_bytes(color: str = "black") -> bytes:
     output = io.BytesIO()
     Image.new("RGB", (2, 2), color).save(output, format="PNG")
@@ -255,120 +350,299 @@ def test_run_checked_timeout_is_fail_loud(monkeypatch):
         video._run_checked(["/tmp/ffmpeg"], timeout=3)
 
 
-def test_staged_pts_become_exact_ffconcat_durations(tmp_path):
+def test_encoder_probe_uses_one_raw_frame_over_stdin(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg"
     executable.write_bytes(b"fake")
-    output = tmp_path / "capture.mp4"
-    stage = video.FFmpegFrameStage(
-        output,
-        _stream(),
-        _provision(executable),
-    )
-    image = Image.new("RGB", (100, 80), color="red")
-    stage.stage_frame(image, 0)
-    stage.stage_frame(image, 24)
-    stage.stage_frame(image, 60)
+    captured: dict[str, object] = {}
 
-    manifest = stage._write_manifest()
-    lines = manifest.read_text(encoding="utf-8").splitlines()
-
-    assert lines == [
-        "ffconcat version 1.0",
-        "file frame_00000000.png",
-        "duration 1.000000000",
-        "file frame_00000001.png",
-        "duration 1.500000000",
-        "file frame_00000002.png",
-        "duration 0.041666667",
-        "file frame_00000002.png",
-    ]
-
-
-def test_successful_encode_is_verified_promoted_and_cleans_stage(tmp_path, monkeypatch):
-    executable = tmp_path / "ffmpeg"
-    executable.write_bytes(b"fake")
-    output = tmp_path / "capture.mp4"
-    stage = video.FFmpegFrameStage(
-        output,
-        _stream(),
-        _provision(executable),
-    )
-    stage.stage_frame(Image.new("RGB", (100, 80), "red"), 0)
-    commands: list[list[str]] = []
-
-    def fake_run(command, **_kwargs):
-        commands.append(list(command))
-        if "-f" in command and "concat" in command:
-            Path(command[-1]).write_bytes(b"verified-video")
-            stdout = b""
-        elif "image2pipe" in command:
-            stdout = _png_bytes()
-        else:
-            stdout = b""
-        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
+    def fake_run(command, **kwargs):
+        captured["command"] = list(command)
+        captured["kwargs"] = kwargs
+        Path(command[-1]).write_bytes(b"probe-video")
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
     monkeypatch.setattr(video, "_run_checked", fake_run)
-    stage_dir = stage.stage_dir
-    stage.close()
+    monkeypatch.setattr(video, "_decode_first_frame_png", lambda *_args, **_kwargs: _png_bytes())
 
-    assert output.read_bytes() == b"verified-video"
-    assert not stage_dir.exists()
-    assert any("-fps_mode" in command for command in commands)
-    assert any("0:v:0" in command for command in commands)
+    video._probe_encoder(_provision(executable), "mpeg4", "yuv420p", "mp4")
+
+    command = captured["command"]
+    kwargs = captured["kwargs"]
+    assert isinstance(command, list)
+    assert command[command.index("-f") + 1] == "rawvideo"
+    assert "pipe:0" in command
+    assert "concat" not in command
+    assert isinstance(kwargs, dict)
+    assert len(kwargs["input_bytes"]) == 64 * 64 * 3
 
 
-def test_failed_encode_retains_stage_and_never_promotes_output(tmp_path, monkeypatch):
+def test_direct_stream_preserves_pts_timing_without_png_staging(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg"
     executable.write_bytes(b"fake")
     output = tmp_path / "capture.mp4"
     stage = video.FFmpegFrameStage(
         output,
-        _stream(),
+        _small_stream(),
         _provision(executable),
     )
-    stage.stage_frame(Image.new("RGB", (100, 80), "red"), 0)
+    processes: list[_FakeProcess] = []
 
-    def fail(*_args, **_kwargs):
-        raise video.FFmpegEncodingError("encoder failed")
+    def popen(command, **kwargs):
+        assert kwargs["shell"] is False
+        process = _FakeProcess(list(command))
+        kwargs["stderr"].flush()
+        processes.append(process)
+        return process
 
-    monkeypatch.setattr(video, "_run_checked", fail)
+    monkeypatch.setattr(video.subprocess, "Popen", popen)
+    monkeypatch.setattr(video, "_decode_first_frame_png", lambda *_args, **_kwargs: _png_bytes())
+
+    red = Image.new("RGB", (2, 1), color="red")
+    blue = Image.new("RGB", (2, 1), color="blue")
+    stage.stage_frame(red, 0)
+    stage.stage_frame(blue, 3)
+    stage.close()
+
+    assert len(processes) == 1
+    process = processes[0]
+    red_bytes = red.tobytes()
+    blue_bytes = blue.tobytes()
+    assert bytes(process.pipe.data) == red_bytes * 3 + blue_bytes
+    assert process.pipe.closed is True
+    assert "-f" in process.command
+    assert "rawvideo" in process.command
+    assert "pipe:0" in process.command
+    assert "-use_wallclock_as_timestamps" not in process.command
+    assert "-fps_mode" not in process.command
+    assert "concat" not in process.command
+    assert "-nostdin" not in process.command
+    assert "+faststart" not in process.command
+    assert output.read_bytes().startswith(b"\x00\x00\x00\x08ftyp")
+    timing = video._read_timing_box(output)
+    assert timing is not None
+    assert timing[0] == Fraction(24)
+    assert timing[1] == [
+        (0, pytest.approx(0.0)),
+        (3, pytest.approx(3 / 24)),
+    ]
+    assert not list(tmp_path.glob("*.png"))
+    assert not list(tmp_path.glob("*.ffconcat"))
+
+
+def test_successful_direct_encode_is_verified_and_atomically_promoted(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    output = tmp_path / "capture.mp4"
+    stage = video.FFmpegFrameStage(
+        output,
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(stage._encode_command())
+    _install_fake_popen(monkeypatch, process)
+    monkeypatch.setattr(video, "_decode_first_frame_png", lambda *_args, **_kwargs: _png_bytes())
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    stage.close()
+
+    assert output.read_bytes().startswith(b"\x00\x00\x00\x08ftyp")
+    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)])
+    assert not stage.partial_path.exists()
+
+
+def test_direct_stream_normalizes_nonzero_initial_pts(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    output = tmp_path / "capture.mp4"
+    stage = video.FFmpegFrameStage(
+        output,
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(stage._encode_command())
+    _install_fake_popen(monkeypatch, process)
+    monkeypatch.setattr(video, "_decode_first_frame_png", lambda *_args, **_kwargs: _png_bytes())
+    red = Image.new("RGB", (2, 1), "red")
+    blue = Image.new("RGB", (2, 1), "blue")
+
+    stage.stage_frame(red, 100)
+    stage.stage_frame(blue, 103)
+    stage.close()
+
+    assert bytes(process.pipe.data) == red.tobytes() * 3 + blue.tobytes()
+    assert video._read_timing_box(output) == (
+        Fraction(24),
+        [(0, 0.0), (3, 3 / 24)],
+    )
+
+
+def test_failed_direct_encode_retains_partial_and_never_promotes_output(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    output = tmp_path / "capture.mp4"
+    stage = video.FFmpegFrameStage(
+        output,
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(
+        stage._encode_command(),
+        returncode=7,
+        stderr=b"encoder failed",
+    )
+    stage.partial_path.write_bytes(b"incomplete")
+    _install_fake_popen(monkeypatch, process)
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
     with pytest.raises(video.FFmpegEncodingError, match="encoder failed"):
         stage.close()
 
-    assert stage.stage_dir.is_dir()
-    assert (stage.stage_dir / "frame_00000000.png").is_file()
+    assert stage.partial_path.read_bytes() == b"incomplete"
     assert not output.exists()
 
 
-def test_fps_mode_compatibility_fallback_is_narrow_and_transactional(tmp_path, monkeypatch):
+def test_direct_encode_timeout_is_bounded_and_fail_loud(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg"
     executable.write_bytes(b"fake")
     output = tmp_path / "capture.mp4"
     stage = video.FFmpegFrameStage(
         output,
-        _stream(),
+        _small_stream(),
+        _provision(executable),
+        timeout_seconds=0.01,
+    )
+    process = _FakeProcess(stage._encode_command(), timeout=True)
+    _install_fake_popen(monkeypatch, process)
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    with pytest.raises(video.FFmpegEncodingError, match="timed out"):
+        stage.close()
+    assert process._killed is True
+    assert not output.exists()
+
+
+def test_direct_encode_broken_pipe_is_fail_loud(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
         _provision(executable),
     )
-    stage.stage_frame(Image.new("RGB", (100, 80), "red"), 0)
-    commands: list[list[str]] = []
+    process = _FakeProcess(
+        stage._encode_command(),
+        returncode=9,
+        stderr=b"codec crashed",
+        broken=True,
+    )
+    _install_fake_popen(monkeypatch, process)
 
-    def fake_run(command, **_kwargs):
-        commands.append(list(command))
-        if "-fps_mode" in command:
-            raise video.FFmpegEncodingError(
-                "FFmpeg exited with code 1: Unrecognized option 'fps_mode'"
-            )
-        if "-vsync" in command:
-            Path(command[-1]).write_bytes(b"legacy-compatible")
-        stdout = _png_bytes() if "image2pipe" in command else b""
-        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr=b"")
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    with pytest.raises(video.FFmpegEncodingError, match="codec crashed"):
+        stage.close()
+    assert process._killed is True
 
-    monkeypatch.setattr(video, "_run_checked", fake_run)
+
+def test_direct_encode_retries_partial_pipe_writes(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    output = tmp_path / "capture.mp4"
+    stage = video.FFmpegFrameStage(
+        output,
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(
+        stage._encode_command(),
+        max_write=2,
+    )
+    _install_fake_popen(monkeypatch, process)
+    monkeypatch.setattr(video, "_decode_first_frame_png", lambda *_args, **_kwargs: _png_bytes())
+    frame = Image.new("RGB", (2, 1), "red")
+
+    stage.stage_frame(frame, 0)
     stage.close()
 
-    assert output.read_bytes() == b"legacy-compatible"
-    assert any("-fps_mode" in command for command in commands)
-    assert any("-vsync" in command for command in commands)
+    assert bytes(process.pipe.data) == frame.tobytes()
+    assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)])
+
+
+def test_direct_encode_zero_length_pipe_write_fails_loudly(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(
+        stage._encode_command(),
+        max_write=0,
+    )
+    _install_fake_popen(monkeypatch, process)
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    with pytest.raises(video.FFmpegEncodingError, match="no write progress"):
+        stage.close()
+    assert process._killed is True
+
+
+def test_direct_encode_stdin_close_failure_reaps_process(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(
+        stage._encode_command(),
+        close_broken=True,
+    )
+    _install_fake_popen(monkeypatch, process)
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    with pytest.raises(video.FFmpegEncodingError, match="stdin close failed"):
+        stage.close()
+    assert process._killed is True
+
+
+def test_direct_encode_bounded_stderr_tail_does_not_block(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(
+        stage._encode_command(),
+        returncode=2,
+        stderr=b"x" * (128 * 1024) + b" final encoder error",
+    )
+    _install_fake_popen(monkeypatch, process)
+
+    stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    with pytest.raises(video.FFmpegEncodingError, match="final encoder error"):
+        stage.close()
+
+
+def test_empty_direct_stream_closes_without_starting_ffmpeg(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
+        _provision(executable),
+    )
+    monkeypatch.setattr(
+        video.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("empty stream must not start FFmpeg"),
+    )
+
+    stage.close()
+    assert stage._closed is True
 
 
 def test_record_refuses_missing_encoder_before_display_or_listeners(tmp_path, monkeypatch):
@@ -390,9 +664,7 @@ def test_record_refuses_missing_encoder_before_display_or_listeners(tmp_path, mo
     assert display_touched is False
 
 
-def test_preflight_provision_survives_spawn_without_child_config(
-    tmp_path, monkeypatch
-):
+def test_preflight_provision_survives_spawn_without_child_config(tmp_path, monkeypatch):
     """Spawned writers use the exact parent-selected provision, not fresh defaults."""
     executable = tmp_path / "managed-ffmpeg"
     executable.write_bytes(b"preflighted in parent")
@@ -614,6 +886,9 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
         start,
         -1,
     )
+    # Simulate a writer queue that falls behind capture time. Encoded PTS must
+    # follow the supplied capture timestamp, never this processing delay.
+    time.sleep(1.05)
     last_pts = video.write_video_frame(
         container,
         stream,
@@ -636,7 +911,28 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
     assert info["codec"] == "mpeg4"
     assert info["width"] == 100
     assert info["height"] == 80
-    assert info["frames"] >= 2
+    assert info["frames"] == 26
+    provision = video.resolve_ffmpeg(executable)
+    payload = video._probe_json(
+        provision,
+        [
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            str(output),
+        ],
+    )
+    decoded_timestamps = [float(item["best_effort_timestamp_time"]) for item in payload["frames"]]
+    assert decoded_timestamps == pytest.approx(
+        [index / 24 for index in range(26)],
+        abs=1e-6,
+    )
+    assert video._read_timing_box(output) == (
+        Fraction(24),
+        [(0, 0.0), (24, 1.0), (25, 25 / 24)],
+    )
     frame = video.extract_frame(
         output,
         0.8,
@@ -644,3 +940,9 @@ def test_real_external_mpeg4_preserves_metadata_and_nearest_frame(tmp_path):
         ffmpeg_path=executable,
     )
     assert frame.getpixel((10, 10))[2] > frame.getpixel((10, 10))[0]
+
+    video.move_moov_atom(output, ffmpeg_path=executable)
+    assert video._read_timing_box(output) == (
+        Fraction(24),
+        [(0, 0.0), (24, 1.0), (25, 25 / 24)],
+    )

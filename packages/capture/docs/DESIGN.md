@@ -167,16 +167,20 @@ class Capture:
 ### Video Encoding
 
 Capture keeps its video-first behavior without importing PyAV. During a
-recording it stages numeric-name lossless PNG frames plus exact integer PTS.
-Finalization writes a safe `ffconcat` manifest, invokes an externally
-provisioned FFmpeg argument vector with bounded execution, verifies the output
-by decoding a PNG frame, and atomically promotes it. Successful finalization
-deletes the transient stage; failure retains it for recovery and never reports
-an MP4 as complete. A sibling or explicitly configured `ffprobe` preserves
-nearest-frame extraction and metadata inspection without linking codec
-libraries into Capture. The real preflight exercises the selected encoder,
-MP4, PNG through `image2pipe`, and the `select` filter before any input listener
-starts.
+recording it streams in-memory RGB frames directly into an externally
+provisioned FFmpeg process. Missing integer PTS slots reuse the preceding RGB
+frame, producing a deterministic constant-rate stream without depending on
+wall-clock arrival time. A compact ignored MP4 UUID box maps logical capture
+timestamps to their decoded-frame indexes, preserving the existing
+nearest-frame contract without an image sidecar. Finalization closes the
+bounded process, appends that metadata, verifies the output by decoding a PNG
+frame, and atomically promotes it. No intermediate screenshot sequence or
+`ffconcat` manifest is written. Failure retains only an explicitly incomplete
+partial MP4 and never reports it as complete. A sibling or explicitly
+configured `ffprobe` supports legacy nearest-frame extraction and metadata
+inspection without linking codec libraries into Capture. The real preflight
+exercises raw-video input through a pipe, the selected encoder, MP4, PNG
+through `image2pipe`, and the `select` filter before any input listener starts.
 
 ```python
 codec = None           # Probe platform encoders, then portable mpeg4 fallback
@@ -209,7 +213,8 @@ capture_abc123/
 **Decision:** Default to video mode.
 
 - More storage-efficient than permanent individual screenshots
-- Exact timestamp alignment is preserved by staged-frame PTS and VFR durations
+- Exact timestamp alignment is preserved by deterministic PTS-gap filling and
+  logical timestamps embedded in the MP4
 - Screenshots can be extracted from video when needed
 - Individual screenshots remain optional for debugging frame alignment
 
