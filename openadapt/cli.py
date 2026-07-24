@@ -48,8 +48,13 @@ class _FlowFirstGroup(click.Group):
 
 _FLOW_PASSTHROUGH_COMMANDS = {
     "record": (
-        "Record YOUR app (web browser by default; --backend "
-        "windows/macos/linux/rdp for native desktop capture)."
+        "Record a human demonstration on this interactive host (web browser "
+        "by default; --backend windows/macos/linux/rdp/citrix selects the "
+        "intended replay substrate)."
+    ),
+    "replay": (
+        "Replay a bundle through web/windows/macos/linux/rdp/citrix; all "
+        "engine backend, target, config, and governance flags pass through."
     ),
     "induce": "Induce a parameterized program from multiple recordings.",
     "run": "Run a bundle under a fail-closed deployment configuration.",
@@ -110,7 +115,8 @@ def main():
 
     Compile a demonstrated workflow into deterministic local replay. Healthy
     runs make no model calls; configured checks can halt on ambiguity. Native
-    capture is experimental, and training/evaluation commands are research.
+    and remote substrates use platform-specific extras and permissions;
+    training/evaluation commands are research.
 
     \b
     Quick Start:
@@ -228,13 +234,12 @@ def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
     _run_flow(argv)
 
 
-# NOTE: `record` is intentionally NOT wrapped with explicit click options.
-# It delegates through _FlowPassthroughGroup so every engine option
-# (--backend web/windows/macos/linux/rdp, --agent-url, --macos-app,
-# --linux-app, --rdp-host, --task, ...) forwards verbatim and new engine
-# options never need a launcher release. An earlier explicit wrapper here
-# hid --backend (and required --url, which the engine only requires for
-# --backend web).
+# NOTE: `record` and `replay` are intentionally NOT wrapped with explicit
+# click options. They delegate through _FlowPassthroughGroup so every engine
+# option (--backend web/windows/macos/linux/rdp/citrix, --config, --agent-url,
+# --macos-app, --linux-app, --rdp-host, ...) forwards verbatim and new engine
+# options never need a launcher release. Earlier explicit wrappers hid backend
+# options or drifted behind the engine.
 
 
 @flow.command("demo-record")
@@ -274,57 +279,6 @@ def flow_compile(recording, out, name):
     _run_flow(["compile", recording, "--out", out, "--name", name])
 
 
-@flow.command("replay")
-@click.argument("bundle")
-@click.option(
-    "--url",
-    default=None,
-    help="URL of the target app (default: serve the bundled MockMed demo app)",
-)
-@click.option(
-    "--drift",
-    default=None,
-    help="MockMed drift modes to demo bounded re-resolution (no --url)",
-)
-@click.option("--run-dir", default=None, help="Run output directory")
-@click.option(
-    "--param",
-    multiple=True,
-    metavar="K=V",
-    help="Parameter substitution (repeatable)",
-)
-@click.option(
-    "--save-healed-to", default=None, help="Write the healed bundle to this directory"
-)
-@click.option("--headed", is_flag=True, help="Run the browser headed")
-@click.option(
-    "--record-video",
-    default=None,
-    metavar="DIR",
-    help="OPT-IN: capture a WebM video of the replay session into DIR",
-)
-def flow_replay(
-    bundle, url, drift, run_dir, param, save_healed_to, headed, record_video
-):
-    """Replay a bundle (serves the bundled MockMed demo app when no --url)."""
-    argv = ["replay", bundle]
-    if url:
-        argv += ["--url", url]
-    if drift:
-        argv += ["--drift", drift]
-    if run_dir:
-        argv += ["--run-dir", run_dir]
-    for value in param:
-        argv += ["--param", value]
-    if save_healed_to:
-        argv += ["--save-healed-to", save_healed_to]
-    if headed:
-        argv.append("--headed")
-    if record_video:
-        argv += ["--record-video", record_video]
-    _run_flow(argv)
-
-
 @flow.command("lint")
 @click.argument("bundle")
 @click.option(
@@ -359,7 +313,11 @@ def flow_certify(bundle, policy):
 
 @main.group()
 def capture():
-    """Experimental native GUI capture (optional extra).
+    """Standalone local human GUI capture (optional [capture] extra).
+
+    For a compile-ready workflow recording, prefer `openadapt flow record`.
+    These commands observe the current interactive desktop; they do not choose
+    or connect a replay target.
 
     \b
     Examples:

@@ -33,6 +33,11 @@ from click.testing import CliRunner
 
 from openadapt.cli import main as cli_main
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
+    import tomli as tomllib
+
 # Namespace attributes cli.py's serve command provides to cmd_serve.
 # Keep in sync with openadapt/cli.py::serve.
 SERVE_NAMESPACE_ATTRS = {
@@ -150,20 +155,41 @@ def test_doctor_lists_flow_as_core_not_extras():
 FLOW_VERBS = {"demo-record", "record", "compile", "replay", "lint", "certify"}
 
 # Verbs wrapped with explicit click options (local --help, no engine import).
-# `record` is intentionally absent: it delegates through the passthrough
-# group so every engine option (--backend, --agent-url, ...) forwards
-# verbatim — its --help comes from the engine itself.
-FLOW_WRAPPED_VERBS = FLOW_VERBS - {"record"}
+# `record` and `replay` are intentionally absent: they delegate through the
+# passthrough group so every engine option (--backend, --config, native target
+# selectors, ...) forwards verbatim — their --help comes from the engine.
+FLOW_PASSTHROUGH_VERBS = {"record", "replay"}
+FLOW_WRAPPED_VERBS = FLOW_VERBS - FLOW_PASSTHROUGH_VERBS
 
 
-def test_launcher_requires_pairing_enabled_flow_release():
-    """Every install route must resolve an engine with transactional pairing."""
-    metadata = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+def test_launcher_flow_and_substrate_extras_metadata():
+    """Install routes resolve the Flow release whose replay parser exposes
+    every native/remote backend, without installing OS bindings elsewhere."""
+    metadata = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    )["project"]
+    extras = metadata["optional-dependencies"]
 
-    assert metadata.count('"openadapt-flow[hosted]>=1.17.0,<2.0.0"') == 1
-    assert metadata.count('"openadapt-flow>=1.17.0,<2.0.0"') == 1
-    assert metadata.count('"openadapt-flow[privacy]>=1.17.0,<2.0.0"') == 1
-    assert "openadapt-flow>=1.7.0" not in metadata
+    assert metadata["dependencies"].count("openadapt-flow[hosted]>=1.20.1,<2.0.0") == 1
+    assert extras["flow"] == ["openadapt-flow>=1.20.1,<2.0.0"]
+    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.20.1,<2.0.0"]
+    assert extras["capture"] == [
+        "openadapt-capture>=1.0.4,<2.0.0",
+        "openadapt-flow[capture]>=1.20.1,<2.0.0",
+    ]
+    assert extras["windows"] == ["openadapt-flow[windows]>=1.20.1,<2.0.0"]
+    assert extras["macos"] == [
+        "openadapt-flow[macos]>=1.20.1,<2.0.0; sys_platform == 'darwin'"
+    ]
+    assert extras["linux"] == [
+        "openadapt-flow[linux]>=1.20.1,<2.0.0; sys_platform == 'linux'"
+    ]
+    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.20.1,<2.0.0"]
+    assert extras["all"] == [
+        "openadapt[core,grounding,retrieval,privacy,flow,windows,rdp]",
+        "openadapt[macos]; sys_platform == 'darwin'",
+        "openadapt[linux]; sys_platform == 'linux'",
+    ]
 
 
 def test_top_level_help_leads_with_flow():
@@ -174,7 +200,7 @@ def test_top_level_help_leads_with_flow():
     # Quick Start headline and Commands listing both lead with flow.
     assert "Beta launcher" in result.output
     assert "openadapt flow demo-record" in result.output
-    assert "Experimental native GUI capture" in result.output
+    assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output
     assert "Research: train" in result.output
     commands_idx = result.output.index("Commands:")
@@ -202,16 +228,21 @@ def test_flow_subcommand_help_renders():
         assert result.exit_code == 0, f"`flow {verb} --help` failed: {result.output}"
 
 
-def test_flow_record_help_is_engine_help():
-    """`openadapt flow record --help` must render the ENGINE's help (with
-    --backend and the desktop-backend options), not a launcher wrapper
-    that hides them."""
+@pytest.mark.parametrize("verb", sorted(FLOW_PASSTHROUGH_VERBS))
+def test_flow_capture_and_replay_help_is_engine_help(verb):
+    """Record/replay help must come from the engine, not a stale launcher
+    wrapper that hides backend and native-target options."""
     _require_openadapt_flow()
-    result = CliRunner().invoke(cli_main, ["flow", "record", "--help"])
+    result = CliRunner().invoke(cli_main, ["flow", verb, "--help"])
     assert result.exit_code == 0, result.output
-    for option in ("--backend", "--agent-url", "--task"):
+    expected_options = (
+        ("--backend", "--agent-url", "--task")
+        if verb == "record"
+        else ("--backend", "--config", "--rdp-readiness-text")
+    )
+    for option in expected_options:
         assert option in result.output, (
-            f"{option} missing from `flow record --help`; the launcher is "
+            f"{option} missing from `flow {verb} --help`; the launcher is "
             "hiding engine options again"
         )
 
@@ -509,6 +540,70 @@ def test_flow_replay_argv_reconstruction(monkeypatch):
     assert calls == [
         ["replay", "bundle", "--param", "note=hi", "--param", "id=7", "--headed"]
     ]
+
+
+@pytest.mark.parametrize(
+    ("backend", "target_args"),
+    [
+        ("windows", ["--agent-url", "http://localhost:5001"]),
+        (
+            "macos",
+            ["--macos-app", "TextEdit", "--macos-window-title", "Notes"],
+        ),
+        (
+            "linux",
+            [
+                "--linux-app",
+                "gedit",
+                "--linux-window-title",
+                "notes.txt",
+                "--linux-allow-physical-input",
+            ],
+        ),
+        ("rdp", ["--rdp-host", "rdp.example.test"]),
+        (
+            "citrix",
+            [
+                "--rdp-window",
+                "Citrix Viewer",
+                "--rdp-window-title",
+                "Ward A",
+                "--rdp-readiness-text",
+                "Appointments",
+            ],
+        ),
+    ],
+)
+def test_flow_replay_forwards_backend_config_and_native_targets(
+    monkeypatch, backend, target_args
+):
+    """Regression: replay must remain an argv-transparent engine command.
+
+    The former Click wrapper rejected every option below before Flow could
+    validate the selected deployment and target.
+    """
+    captured = {}
+    monkeypatch.setattr(
+        "openadapt.cli._run_flow", lambda argv: captured.update(argv=list(argv))
+    )
+    args = [
+        "flow",
+        "replay",
+        "bundle",
+        "--backend",
+        backend,
+        *target_args,
+        "--config",
+        "deployment.yaml",
+        "--params-file",
+        "params.json",
+        "--allow-model-grounding",
+    ]
+
+    result = CliRunner().invoke(cli_main, args)
+
+    assert result.exit_code == 0, result.output
+    assert captured["argv"] == ["replay", *args[2:]]
 
 
 # ---------------------------------------------------------------------------
