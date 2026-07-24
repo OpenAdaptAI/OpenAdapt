@@ -83,18 +83,47 @@ report instead of guessing. Either way, every run writes an illustrated report.*
 
 ```bash
 pip install openadapt              # CLI + demonstration compiler (openadapt flow …)
-pip install openadapt[capture]     # + native GUI capture/recording
-pip install openadapt[privacy]     # + Presidio-backed PII/PHI scrubbing
-pip install openadapt[all]         # Everything, including research extras
+pip install "openadapt[capture]"   # + local human desktop recording
+pip install "openadapt[privacy]"   # + Presidio-backed PII/PHI scrubbing
+pip install "openadapt[all]"       # Everything, including research extras
 ```
 
 The flagship compiler ships in the base install, so `openadapt flow …` works
 right after `pip install openadapt`. The base install includes OS-keychain
 credential storage for secure Cloud pairing; environment-based token
 configuration remains available on headless systems. This launcher requires
-`openadapt-flow>=1.17.0,<2`
+`openadapt-flow>=1.20.1,<2`
 so clean installs cannot resolve an older engine that lacks the governed hosted
-artifact commands documented below.
+artifact commands or the complete replay backend/config flag surface documented
+below.
+
+Desktop recording and replay dependencies are deliberately separate. Capture
+observes a human demonstration on the machine running the command; the selected
+replay backend may later drive a native app, a Windows agent, or a remote
+framebuffer:
+
+```bash
+pip install "openadapt[capture,windows]"  # local capture + WAA client replay
+pip install "openadapt[capture,macos]"    # local capture + native macOS replay
+pip install "openadapt[capture,linux]"    # local capture + native Linux AT-SPI replay
+pip install "openadapt[capture,rdp]"      # local capture + network RDP replay
+```
+
+The `macos` extra installs native bindings only on macOS. The `linux` extra
+installs only on Linux and still needs the host's AT-SPI typelib/runtime and an
+interactive X11 session. The `windows` extra is the cross-platform HTTP client
+for a separately running in-guest WAA agent. The `rdp` extra adds the network
+RDP transport; it does not install or configure an RDP server.
+
+Citrix local-window replay does not expose a cross-platform `citrix` extra: on
+Windows its Win32 client is in Flow's base install, while macOS uses the `macos`
+extra. Flow has no built-in Citrix window client on Linux. Citrix Workspace
+itself is external software and is never installed by this package. Add
+`openadapt[capture]` on Windows or install `openadapt[capture,macos]` on macOS
+when the same machine will also record the human demonstration. The Python
+`capture` extra does not bundle FFmpeg: video recording requires a separately
+provisioned `ffmpeg`/`ffprobe` pair, or the managed runtime provisioned by the
+Desktop app.
 
 **Requirements:** Python 3.10–3.12
 
@@ -106,8 +135,9 @@ OpenAdapt runs two ways:
 
 - **Local (recommended).** Record, compile, and replay entirely on your own
   machine. No account, no upload, no cloud: the recording, the compiled bundle,
-  and every replay stay local. This is the privacy-preserving default and works
-  today.
+  and every replay stay local. The browser reference path works end to end
+  today; native and remote targets additionally require the matching host,
+  dependency extra, permissions, and workflow qualification described below.
 - **Cloud (optional, managed).** A hosted service that adds managed execution, a
   dashboard, approvals, policy, audit, scheduling, and billing for teams. It is
   not required for the local loop.
@@ -141,9 +171,12 @@ and the
 The drift run demonstrates bounded deterministic re-resolution; it is not a
 claim that arbitrary UI changes can be repaired.
 
-Now record your own workflow. Recording is substrate-aware: `--backend` selects
-what you drive, and the browser backend is the default. The full loop stays
-local: record, compile, replay.
+Now record your own workflow. For `--backend web`, Flow drives a headed browser
+and records its page directly. For
+`--backend windows|macos|linux|rdp|citrix`, `record` observes the real mouse,
+keyboard, and screen while a human performs the demonstration on the current
+interactive desktop. The backend flag records the intended replay substrate; it
+does not connect to or automate a remote target during capture.
 
 ```bash
 # Browser (default backend; --url is the app to record)
@@ -152,15 +185,44 @@ openadapt flow compile rec --out bundle --name my-workflow
 openadapt flow replay bundle --url https://your.app
 ```
 
-Native desktop and remote-display substrates record with the same command and a
-different `--backend`, then replay locally with `openadapt flow run` under a
-deployment config:
+Native desktop and remote-display demonstrations use the same compile-ready
+recording command. For RDP/Citrix, scope capture to the visible client window so
+the recorded coordinates use the same pixel space as replay:
 
 ```bash
-openadapt flow record --backend windows --agent-url http://localhost:5001 --out rec
-openadapt flow record --backend macos --macos-app TextEdit --out rec
-openadapt flow record --backend rdp --rdp-host 10.0.0.5 --out rec
+openadapt flow record --backend windows --out rec --task "triage note"
+openadapt flow record --backend macos --out rec --task "edit a note"
+openadapt flow record --backend rdp --window "Windows App" \
+  --rdp-window "Windows App" --out rec
+openadapt flow record --backend citrix --window "Citrix Viewer" \
+  --rdp-window "Citrix Viewer" --rdp-window-title "Ward A" \
+  --rdp-readiness-text "Appointments" --out rec
 ```
+
+After compilation, `replay` accepts Flow's complete target and deployment
+surface. Pass target flags directly for a local qualification run, or use
+`--config deployment.yaml`; `run` uses the same backend surface and adds the
+stricter deployment admission gates:
+
+```bash
+openadapt flow compile rec --out bundle --name my-workflow
+
+openadapt flow replay bundle --backend windows \
+  --agent-url http://localhost:5001
+openadapt flow replay bundle --backend macos --macos-app TextEdit
+openadapt flow replay bundle --backend linux \
+  --linux-app gedit --linux-window-title notes.txt
+openadapt flow replay bundle --backend rdp --rdp-host 10.0.0.5
+openadapt flow replay bundle --backend citrix \
+  --rdp-window "Citrix Viewer" --rdp-window-title "Ward A" \
+  --rdp-readiness-text "Appointments"
+
+openadapt flow run bundle --config deployment.yaml
+```
+
+The Windows agent, native applications, RDP service, and Citrix Workspace
+session must already exist and be explicitly configured. Neither the launcher
+nor `replay` silently provisions or connects those external systems.
 
 The browser path is the Beta reference loop and runs in CI with no OS
 permissions. Windows, macOS, and RDP are Early access: validated on specific
@@ -438,15 +500,17 @@ today, not whether it is first-class in the product:
 | Hosted Cloud | **Beta** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Desktop, RDP, and Citrix run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
 
 Current components (see the manifest for the source of truth): launcher
-`openadapt` 1.7.1 · `openadapt-flow` 1.19.0 · desktop 0.6.2.
+`openadapt` 1.7.1 · `openadapt-flow` 1.20.1 · desktop 0.9.0.
 
 ### CLI reference
 
 ```
-openadapt flow record --backend web|windows|macos|linux|rdp --out <dir>
-                                                  Record a workflow once (web uses --url)
+openadapt flow record --backend web|windows|macos|linux|rdp|citrix --out <dir>
+                                                  Record a human demonstration
 openadapt flow compile <rec> --out <bundle>       Compile a recording into a bundle
-openadapt flow replay <bundle>                    Replay a bundle (local, $0)
+openadapt flow replay <bundle> [--backend ...]    Replay against a configured target
+openadapt flow replay <bundle> --config <yaml>    Replay with deployment wiring
+openadapt flow run <bundle> --config <yaml>       Add deployment admission gates
 openadapt flow lint <bundle>                       Report a bundle's coverage gaps
 openadapt flow certify <bundle> --policy <name>    Enforce a safety policy on a bundle
 openadapt flow sanitize <path> --kind <kind> --out <dir>
@@ -460,10 +524,12 @@ openadapt flow push <sanitized-bundle-dir> --kind bundle \
   [--resolves-run-id <halted-run-uuid>]
 openadapt flow report-break <run-dir> --workflow-id <id>
 
-openadapt capture start --name <name>    Start a native recording (requires [capture])
-openadapt capture stop                    Stop recording
-openadapt capture list                    List captures
-openadapt capture view <name>             Open capture viewer
+openadapt capture start --name <name>    Standalone local capture utility ([capture])
+openadapt capture stop                    Stop standalone capture
+openadapt capture list                    List standalone captures
+openadapt capture view <name>             Open standalone capture viewer
+
+# Prefer `openadapt flow record --backend ...` for compiler-ready recordings.
 
 openadapt version                         Show installed versions
 openadapt doctor                          Check system requirements
