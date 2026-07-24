@@ -47,7 +47,9 @@ from openadapt_flow.sanitized_artifact import (
     load_valid_approval,
 )
 
-SCHEMA = "openadapt.runtime-validation/v1"
+SCHEMA = "openadapt.runtime-validation/v2"
+LEGACY_SCHEMA = "openadapt.runtime-validation/v1"
+TARGET_KINDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
 RISK_CLASSES = ("low", "consequential")
 _DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _NON_PUBLIC_SUFFIXES = (
@@ -186,6 +188,40 @@ def normalize_execution_scope(
     }
 
 
+def normalize_target_execution(
+    target_kind: str,
+    target_url: Optional[str],
+    allowed_hosts: Optional[list[str]],
+) -> dict[str, Any]:
+    """Return the PHI-safe v2 execution contract for one resolved substrate.
+
+    Browser execution retains the exact v1 HTTPS/public-DNS boundary. Native
+    and remote targets deliberately emit an empty object: app names, window
+    titles, hostnames, readiness text, and backend hints can identify a patient
+    or customer environment and must not cross into Cloud. Their exact
+    environment remains bound opaquely by ``replay.environment_sha256``.
+    """
+    if target_kind not in TARGET_KINDS:
+        raise RuntimeValidationError(
+            "Target kind must be one of: " + ", ".join(TARGET_KINDS)
+        )
+    if target_kind == "web":
+        if not isinstance(target_url, str) or not target_url:
+            raise RuntimeValidationError(
+                "Web runtime validation requires the exact HTTPS target URL"
+            )
+        return normalize_execution_scope(target_url, allowed_hosts)
+    if target_url is not None:
+        raise RuntimeValidationError(
+            f"Target URL is web-only and must be omitted for {target_kind}"
+        )
+    if allowed_hosts:
+        raise RuntimeValidationError(
+            f"Allowed hosts are web-only and must be omitted for {target_kind}"
+        )
+    return {}
+
+
 def _canonical_bytes(value: Any) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -298,7 +334,8 @@ def create_runtime_validation_attestation(
     policy_source: str,
     risk_class: str,
     environment: str,
-    target_url: str,
+    target_kind: Optional[str] = None,
+    target_url: Optional[str] = None,
     allowed_hosts: Optional[list[str]] = None,
     compiler_config: Optional[dict[str, Any]] = None,
     host: Optional[str] = None,
@@ -328,7 +365,10 @@ def create_runtime_validation_attestation(
         raise RuntimeValidationError(
             "Risk class must be one of: " + ", ".join(RISK_CLASSES)
         )
-    execution = normalize_execution_scope(target_url, allowed_hosts)
+    if target_kind is not None and target_kind not in TARGET_KINDS:
+        raise RuntimeValidationError(
+            "Target kind must be one of: " + ", ".join(TARGET_KINDS)
+        )
     resolved_host = resolve_host(host)
     resolve_destination_policy(
         resolved_host,
@@ -468,13 +508,31 @@ def create_runtime_validation_attestation(
         raise RuntimeValidationError(
             "Run report parameter schema does not match the bundle"
         )
-    if report.execution_origin != execution["target_origin"]:
+    report_target_kind = report.execution_target_kind
+    if report_target_kind not in TARGET_KINDS:
         raise RuntimeValidationError(
-            "Run report browser origin does not match the attested target origin"
+            "Run report has no valid resolved execution target kind; rerun the "
+            "workflow with the current substrate-aware Flow runtime"
         )
-    if report.execution_entry_url != execution["entry_url"]:
+    if target_kind is not None and target_kind != report_target_kind:
         raise RuntimeValidationError(
-            "Run report browser entry URL does not match the attested target URL"
+            f"Requested target kind {target_kind!r} does not match the resolved "
+            f"run report target kind {report_target_kind!r}"
+        )
+    target_kind = report_target_kind
+    execution = normalize_target_execution(target_kind, target_url, allowed_hosts)
+    if target_kind == "web":
+        if report.execution_origin != execution["target_origin"]:
+            raise RuntimeValidationError(
+                "Run report browser origin does not match the attested target origin"
+            )
+        if report.execution_entry_url != execution["entry_url"]:
+            raise RuntimeValidationError(
+                "Run report browser entry URL does not match the attested target URL"
+            )
+    elif report.execution_origin is not None or report.execution_entry_url is not None:
+        raise RuntimeValidationError(
+            "Native/remote run report must not carry browser origin or entry URL"
         )
 
     compiler_version = provenance.compiler_version or __version__
@@ -483,6 +541,7 @@ def create_runtime_validation_attestation(
 
     payload: dict[str, Any] = {
         "schema": SCHEMA,
+        "target_kind": target_kind,
         "challenge_id": challenge["challenge_id"],
         "nonce": challenge["nonce"],
         "source_recording_sha256": recording_approval["approved_derivative_sha256"],
@@ -521,8 +580,25 @@ def verify_runtime_validation_attestation(
     attestation: dict[str, Any], *, bundle_sha256: str, token: str
 ) -> None:
     """Verify local signature and exact-bundle binding before upload."""
-    if attestation.get("schema") != SCHEMA:
+    schema = attestation.get("schema")
+    if schema not in (SCHEMA, LEGACY_SCHEMA):
         raise RuntimeValidationError("Unsupported runtime-validation schema")
+    if schema == SCHEMA:
+        target_kind = attestation.get("target_kind")
+        execution = attestation.get("execution")
+        if target_kind not in TARGET_KINDS:
+            raise RuntimeValidationError("Runtime validation target kind is invalid")
+        if not isinstance(execution, dict):
+            raise RuntimeValidationError("Runtime validation execution is invalid")
+        if target_kind == "web":
+            if set(execution) != {"entry_url", "target_origin", "allowed_hosts"}:
+                raise RuntimeValidationError(
+                    "Web runtime validation execution boundary is invalid"
+                )
+        elif execution:
+            raise RuntimeValidationError(
+                "Native/remote runtime validation execution must be PHI-safe and empty"
+            )
     if attestation.get("bundle_sha256") != bundle_sha256:
         raise RuntimeValidationError(
             "Runtime validation is bound to a different approved bundle"

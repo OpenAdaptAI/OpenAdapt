@@ -54,12 +54,12 @@ import argparse
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Optional, Sequence, cast
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
-    from openadapt_flow.ir import RunReport
+    from openadapt_flow.ir import ExecutionTargetKind, RunReport
 
 _VIEWPORT = {"width": 1280, "height": 800}
 
@@ -345,7 +345,7 @@ def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
     return backend
 
 
-def _report_backend_kind(kind: object) -> str:
+def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
     """Return the closed hosted-summary token for a resolved backend kind.
 
     Execution accepts ``remote-display`` / ``remote_display`` as RDP aliases.
@@ -355,7 +355,9 @@ def _report_backend_kind(kind: object) -> str:
     token = str(kind).strip().lower()
     if token in ("remote-display", "remote_display"):
         return "rdp"
-    return token
+    if token not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
+        raise ValueError(f"unsupported execution target kind: {kind!r}")
+    return cast("ExecutionTargetKind", token)
 
 
 def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> bool:
@@ -431,6 +433,7 @@ def _build_and_run_replayer(
     pixel_verify_enabled: bool = False,
     governed_authorization=None,
     runtime_config=None,
+    execution_target_kind: Optional["ExecutionTargetKind"] = None,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
 ):
@@ -452,6 +455,7 @@ def _build_and_run_replayer(
         bundle_dir=bundle,
         run_dir=run_dir,
         save_healed_to=save_healed_to,
+        execution_target_kind=execution_target_kind,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
     )
@@ -535,6 +539,7 @@ def _replay_desktop(
             pixel_verify_enabled=pixel_verify_enabled,
             governed_authorization=governed_authorization,
             runtime_config=runtime_config,
+            execution_target_kind=_report_backend_kind(backend_cfg.kind),
         )
     finally:
         close = getattr(backend, "close", None)
@@ -947,6 +952,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                         args, "_governed_run_authorization", None
                     ),
                     runtime_config=cfg.runtime,
+                    execution_target_kind="web",
                     execution_origin=(
                         f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
                     ),
@@ -1150,7 +1156,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             checkpoint_key=ckpt_key,
             allow_model_grounding=allow_egress,
         )
-        return resume(run_dir, replayer, key=ckpt_key)
+        return resume(
+            run_dir,
+            replayer,
+            key=ckpt_key,
+            execution_target_kind=_report_backend_kind(backend_cfg.kind),
+        )
 
     try:
         if _normalize_kind(backend_cfg.kind) == "web":
@@ -1634,6 +1645,7 @@ def _cmd_validate_hosted(args: argparse.Namespace) -> int:
             policy_source=args.policy,
             risk_class=args.risk_class,
             environment=args.environment,
+            target_kind=args.target_kind,
             target_url=args.target_url,
             allowed_hosts=args.allowed_host,
             compiler_config=compiler_config,
@@ -3009,11 +3021,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
-        "--target-url",
-        required=True,
+        "--target-kind",
+        choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
+        default=None,
         help=(
-            "Exact non-PHI HTTPS entry URL used by the validated browser workflow; "
-            "query strings, fragments, and credentials are refused"
+            "Optional expected replay substrate. The signed value is derived "
+            "from report.json; a supplied value must match it exactly."
+        ),
+    )
+    p.add_argument(
+        "--target-url",
+        default=None,
+        help=(
+            "Web only: exact non-PHI HTTPS entry URL used by the validated "
+            "browser workflow; required for web and refused for native/remote"
         ),
     )
     p.add_argument(
@@ -3390,7 +3411,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pe = csub.add_parser(
         "enroll",
-        help="Enroll this machine as a Connector and persist the token (0600)",
+        help="Enroll against a mock/development control plane and persist its token",
     )
     pe.add_argument(
         "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
@@ -3611,8 +3632,9 @@ def _cmd_connector(args: argparse.Namespace) -> int:
     # verb == "run"
     if not settings.token:
         print(
-            "connector run: not enrolled. Run `openadapt-flow connector enroll` "
-            "first, or pass --token / BYOC_CONNECTOR_TOKEN."
+            "connector run: no token. Create an organization connector in "
+            "OpenAdapt Cloud → Settings, then pass --token or set "
+            "BYOC_CONNECTOR_TOKEN."
         )
         return 2
     client = ConnectorClient(settings.control_plane_url, token=settings.token)

@@ -6,14 +6,15 @@ HTTPS connections and PULLS jobs down them (the shape of a GitHub self-hosted
 runner or a Citrix Cloud Connector). The customer opens ZERO inbound ports.
 
 Endpoints (all outbound):
-  * ``POST /api/connector/register``     enroll once -> per-connector token
+  * ``POST /api/connector/register``     mock/dev enrollment compatibility
   * ``POST /api/connector/poll``         long-poll -> lease the next job
   * ``POST /api/connector/ack``          release the lease (done|failed)
   * ``POST /api/internal/run-callback``  PHI-free status/metrics (existing boundary)
 
-Auth: the per-connector token as ``Authorization: Bearer`` on poll/ack; the org
-enrollment secret (``x-byoc-enrollment-secret``) once on enroll; the run-scoped
-``x-run-token`` on the callback. Only ``httpx`` (already core) + stdlib is used.
+Auth: the organization-scoped per-connector token as ``Authorization: Bearer``
+on poll/ack and the run-scoped ``x-run-token`` on the callback. Live Cloud
+mints the connector token through its authenticated settings API; the legacy
+enrollment secret is used only by mock/development control planes.
 
 A custom ``transport`` (an :class:`httpx.BaseTransport`) may be injected so tests
 drive the whole enroll -> poll -> callback -> ack loop with ZERO network.
@@ -118,9 +119,9 @@ class ConnectorClient:
         """POST PHI-free run status/metrics via the existing callback boundary.
 
         Authenticated by the run-scoped ``x-run-token`` delivered in the job
-        (proves this run; forbids forging another's status). Best-effort:
-        observability/status must not crash the loop, but a hard transport error
-        propagates so the caller records it.
+        (proves this run; forbids forging another's status). Every non-2xx
+        response propagates: the caller must not ACK a lease whose authoritative
+        run outcome the control plane rejected or did not receive.
         """
         headers = {"content-type": "application/json"}
         if run_token:
@@ -128,7 +129,7 @@ class ConnectorClient:
         resp = self._client.post(
             "/api/internal/run-callback", json=body, headers=headers
         )
-        if resp.status_code >= 500:
+        if not 200 <= resp.status_code < 300:
             raise ConnectorClientError(
                 f"run-callback failed: {resp.status_code} {resp.text[:300]}"
             )

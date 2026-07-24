@@ -23,9 +23,11 @@ For the current evidence behind each maturity claim, see
 | Deterministic re-resolution | **Beta** | Bounded visual or structural drift can be resolved through non-model evidence and recorded as a reviewable change. | It is not general adaptation to a redesigned workflow, changed business rules, or missing evidence. |
 | AI-assisted repair | **Experimental** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. |
 | Human teaching and resume | **Experimental** | A halt can produce evidence for an operator correction, guarded promotion, and durable resume. | Field recovery time, broad authoring UX, enterprise identity integration, and non-repudiation are not established. |
-| Windows UI Automation | **Experimental** | The backend contract is tested and a gated Windows environment has exercised structural resolution. | Windows is not the default supported substrate and is not broadly validated across third-party desktop applications. |
-| Native macOS automation | **Research** | The browser path runs on macOS. | There is no production-candidate native macOS accessibility backend in this repository. |
-| RDP and Citrix-style pixel-only automation | **Research** | Adapter and pixel-only analog tests exercise the backend seam and refusal behavior. | Real RDP session diversity, ICA/HDX, DPI changes, lock screens, latency, credentials, and clinical applications are not validated. This is not a validated Citrix integration. |
+| Windows UI Automation | **Scoped acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
+| Native macOS automation | **Scoped acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
+| Native Linux automation | **Scoped acceptance** | Required current-main CI exercises AT-SPI against GTK3 with 3 exact effects, 3 ambiguity refusals, and 3 stale-target refusals. | The built-in path is X11. Wayland needs an operator-approved portal session, and each application retains its own qualification. |
+| RDP automation | **Scoped acceptance** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The two records do not by themselves cover arbitrary applications, WAN conditions, display policy, or Citrix ICA/HDX. |
+| Citrix / VDI pixel-window automation | **Code-qualified** | The dedicated exact-Workspace-window backend, readiness gate, governed run, and durable resume passed 3 healthy effect-confirmed no-DOM trials plus 3 drift safe-halts. | The retained record explicitly has `ica_hdx_accepted=false`; live ICA/HDX acceptance stays bound to the exact deployment instead of being inferred from a stand-in or RDP. |
 | Managed browser execution | **Beta** | The hosted lane admits attested browser bundles; production mode requires a configured real runner and refuses silent mock fallback. | It does not extend the supported claim to Windows, RDP, Citrix, PHI-bearing shared-cloud execution, an SLA, or a regulated certification. |
 | On-premises / customer-managed deployment | **Experimental** | Deployment configuration, local run gates, egress checks, and audit primitives are supplied. | OpenAdapt does not configure the customer's firewall, KMS, storage, identity provider, backups, retention, incident response, or legal compliance program. |
 
@@ -145,7 +147,7 @@ from every different record — glyph-collapse siblings and wrong MRNs alike
 false-accept across the different-record trials with margin**. That evidence is
 **synthetic**; a pixel false-accept is a silent wrong record, the worst possible
 outcome, and no real RDP/Citrix/HDX identifier corpus has been captured yet
-(that substrate is Research). The exact bar to flip the default on: reproduce
+(so the shipped pixel-verify default remains off). The exact bar to flip the default on: reproduce
 `false_accept == 0` with a comparable gap on a **real captured remote-display
 identifier corpus**. Until then, verify is reachable only when a caller opts in
 per risk class (`verify_pixel_identity(..., enable_verify=True)`); mismatch and

@@ -24,6 +24,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from openadapt_flow.ir import ExecutionTargetKind
+
 
 class ByocJobParseError(ValueError):
     """A leased job payload could not be parsed as a BYOC dispatch."""
@@ -82,6 +84,10 @@ class ByocJob(BaseModel):
     org_id: str
     workflow_id: str
 
+    #: Required first-class execution substrate. The control plane derives this
+    #: from the signed runtime-validation attestation; the connector never
+    #: defaults a missing value to web.
+    target_kind: ExecutionTargetKind
     storage: Optional[ByocStorage] = None
     report_path: Optional[str] = None
     target_url: Optional[str] = None
@@ -99,7 +105,10 @@ class ByocJob(BaseModel):
     run_token: Optional[str] = None
     bundle_version_id: Optional[str] = None
     runtime_validation_id: Optional[str] = None
-    bundle_sha256: Optional[str] = None
+    #: SHA-256 of the exact approved sanitized derivative ZIP bytes staged at
+    #: ``storage.bundle_ref``. Distinct from the bundle's semantic content
+    #: digest; required so a valid but different archive cannot be executed.
+    bundle_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     # --- Governed policy delivery (fail-closed) --------------------------------
     #: The org's resolved (baseline-filled) Tier-3 safety block. Always fully
@@ -133,12 +142,30 @@ class ByocJob(BaseModel):
                 "byoc dispatch is missing the resolved safety policy; refusing to "
                 "run without the org's governed safety posture (fail closed)"
             )
+        compatibility_kind = self.params.get("target_kind")
+        if compatibility_kind is not None and compatibility_kind != self.target_kind:
+            raise ByocGovernanceError(
+                "byoc dispatch target_kind disagrees with the compatibility "
+                "params.target_kind; refusing ambiguous substrate routing "
+                "(fail closed)"
+            )
+        if self.target_kind != "web" and (self.target_url or self.allowed_hosts):
+            raise ByocGovernanceError(
+                "native/remote byoc dispatch carries a browser target boundary; "
+                "app, window, host, and readiness hints must come from the "
+                "customer-owned deployment profile (fail closed)"
+            )
         # grounding_model is always present (default factory); its absence would
         # mean the whole policy block was dropped, which `safety` already catches.
         if require_run_token and not self.run_token:
             raise ByocGovernanceError(
                 "byoc dispatch is missing a run-scoped callback token; refusing "
                 "to run a job whose outcome we could not report (fail closed)"
+            )
+        if not self.bundle_version_id or not self.runtime_validation_id:
+            raise ByocGovernanceError(
+                "byoc dispatch is missing its immutable bundle-version or "
+                "runtime-validation binding (fail closed)"
             )
         storage_ref = self.storage.bundle_ref if self.storage else None
         if not storage_ref:

@@ -19,7 +19,7 @@ openadapt-flow push triage.sanitized/ --kind recording
 openadapt-flow compile triage.sanitized/ --out triage.bundle/ --name triage
 openadapt-flow lint triage.bundle/ --strict
 openadapt-flow certify triage.bundle/ --policy permissive
-openadapt-flow replay triage.bundle/ --url https://example.internal/login \
+openadapt-flow replay triage.bundle/ --url https://app.example.com/login \
   --run-dir triage.run/ --param patient_id=example
 
 openadapt-flow sanitize triage.bundle/ --kind bundle \
@@ -31,7 +31,8 @@ openadapt-flow approve-sanitized triage.bundle.sanitized/ \
 openadapt-flow validate-hosted --recording triage.sanitized/ \
   --bundle triage.bundle.sanitized/ --run-dir triage.run/ \
   --policy permissive --risk-class low --environment staging-v1 \
-  --target-url https://example.internal/login --out triage.validation.json
+  --target-kind web --target-url https://app.example.com/login \
+  --out triage.validation.json
 openadapt-flow push triage.bundle.sanitized/ --kind bundle \
   --validation-attestation triage.validation.json
 ```
@@ -154,15 +155,22 @@ remain `not-preserved` and are refused by `push`.
 `validate-hosted` is deliberately later than privacy approval. It recomputes
 strict lint and policy certification, requires a successful non-halted report
 bound to the same bundle/source recording/parameter schema, derives the
-bundle's `low` or `consequential` risk class, and signs the exact HTTPS target
-origin and host allowlist against a short-lived one-time Cloud challenge. The
+bundle's `low` or `consequential` risk class, and signs the report's resolved
+target kind (`web`, `windows`, `macos`, `linux`, `rdp`, or `citrix`) against a
+short-lived one-time Cloud challenge. A supplied `--target-kind` is only a
+cross-check; it cannot relabel the run.
+
+For `web`, v2 retains the exact HTTPS target origin and host allowlist. Managed
+browser targets must use public DNS names; literal IP, loopback,
+private/link-local resolution, wildcard, and special-use hostnames are refused.
+For native and remote targets, `execution` is deliberately empty: app names,
+window titles, remote hosts, readiness text, and backend hints can identify a
+patient or customer environment and never cross this boundary.
+`--environment` names the exact qualified runner boundary, and only its SHA-256
+is included. Cloud binds that digest during activation; a descriptive label
+that was never qualified is not evidence by configuration alone.
+
 Cloud admission also requires exact membership in its policy, risk-class, and
-deployed compiler-version allowlists. Managed hosted targets must use public DNS
-names; literal IP, loopback, private/link-local resolution, wildcard, and
-special-use hostnames are refused. The HMAC is operator evidence: it proves
+deployed compiler-version allowlists. The HMAC is operator evidence: it proves
 token possession and envelope integrity, but does not mean Cloud or an
-independent auditor witnessed the local replay. `--environment` must name the
-exact runner boundary qualified by the deployment operator. Cloud hashes that
-identifier, binds it during activation, and the runner refuses a job whose
-boundary ID/hash differs; a descriptive label that was never qualified is not
-accepted as evidence by configuration alone.
+independent auditor witnessed the local replay.

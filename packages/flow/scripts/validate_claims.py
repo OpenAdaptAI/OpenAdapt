@@ -36,6 +36,7 @@ drive them with controlled registries (catching registry rot before CI does).
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -84,6 +85,92 @@ def detect_optin_env(source: str) -> Optional[str]:
     """
     if not _PYTESTMARK.search(source):
         return None
+
+    # Prefer syntax-aware detection so both of the supported module-level
+    # forms are classified correctly:
+    #
+    #   RUN = os.environ.get("FLAG") == "1"
+    #   pytestmark = pytest.mark.skipif(not RUN, ...)
+    #
+    # and:
+    #
+    #   pytestmark = pytest.mark.skipif(
+    #       os.environ.get("FLAG") != "1", ...
+    #   )
+    #
+    # Restrict the search to the value assigned to a module-level
+    # ``pytestmark``. An environment-gated test function elsewhere in the file
+    # must not make the whole module look opt-in.
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        tree = None
+    if tree is not None:
+        env_flags: dict[str, str] = {}
+        pytestmark_values: list[ast.AST] = []
+
+        def env_from_call(node: ast.AST) -> Optional[str]:
+            if not isinstance(node, ast.Call) or not node.args:
+                return None
+            func = node.func
+            is_environ_get = (
+                isinstance(func, ast.Attribute)
+                and func.attr == "get"
+                and isinstance(func.value, ast.Attribute)
+                and func.value.attr == "environ"
+                and isinstance(func.value.value, ast.Name)
+                and func.value.value.id == "os"
+            )
+            is_getenv = (
+                isinstance(func, ast.Attribute)
+                and func.attr == "getenv"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "os"
+            )
+            first = node.args[0]
+            if (is_environ_get or is_getenv) and isinstance(first, ast.Constant):
+                return first.value if isinstance(first.value, str) else None
+            return None
+
+        for statement in tree.body:
+            value: Optional[ast.AST] = None
+            targets: list[ast.expr] = []
+            if isinstance(statement, ast.Assign):
+                value = statement.value
+                targets = list(statement.targets)
+            elif isinstance(statement, ast.AnnAssign):
+                value = statement.value
+                targets = [statement.target]
+            if value is None:
+                continue
+            names = [target.id for target in targets if isinstance(target, ast.Name)]
+            if "pytestmark" in names:
+                pytestmark_values.append(value)
+            for name in names:
+                for node in ast.walk(value):
+                    if (env := env_from_call(node)) is not None:
+                        env_flags[name] = env
+                        break
+
+        for value in pytestmark_values:
+            for call in (
+                node
+                for node in ast.walk(value)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "skipif"
+            ):
+                if not call.args:
+                    continue
+                condition = call.args[0]
+                for node in ast.walk(condition):
+                    if (env := env_from_call(node)) is not None:
+                        return env
+                    if isinstance(node, ast.Name) and node.id in env_flags:
+                        return env_flags[node.id]
+
+    # Keep the deliberately narrow legacy pattern as a fail-safe for source
+    # syntax that the running Python cannot parse.
     flags = {m.group("flag"): m.group("env") for m in _ENV_FLAG.finditer(source)}
     for flag, env in flags.items():
         # `pytestmark = [pytest.mark.skipif(not FLAG, ...)]`
@@ -385,9 +472,9 @@ def render_markdown(results: list[ClaimResult], now: str, junit_used: bool) -> s
         "must be backed by a test that actually runs on the default (non-opt-in) "
         "CI suite; a `validating` claim must be grounded in a REAL opt-in / "
         "infra-gated proof or a field test, and is never presented as "
-        "supported. It does NOT replace the human half — third-party "
-        "design-partner validation of the `validating` surfaces (Windows, "
-        "Citrix) is exactly the evidence this repository cannot self-generate."
+        "supported. It does not replace workflow- and deployment-specific "
+        "acceptance: application controls, identity rules, effect oracles, and "
+        "live transport conditions remain bound to their counted evidence."
     )
     lines.append("")
 

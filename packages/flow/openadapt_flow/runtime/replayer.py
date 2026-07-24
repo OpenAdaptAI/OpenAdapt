@@ -48,6 +48,7 @@ from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ExecutionTargetKind,
     HaltObservation,
     IdentityCheck,
     Interstitial,
@@ -496,6 +497,7 @@ class Replayer:
         resume_from: Optional[int] = None,
         resume_program: Optional[ProgramCheckpoint] = None,
         run_id: Optional[str] = None,
+        execution_target_kind: Optional[ExecutionTargetKind] = None,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
     ) -> RunReport:
@@ -544,6 +546,9 @@ class Replayer:
                 New runs generate one; resumed legs preserve the manifest value
                 so attended capabilities and effect idempotency remain bound to
                 the same logical run.
+            execution_target_kind: Resolved backend token (web, windows, macos,
+                linux, rdp, or citrix). Runtime validation binds this report
+                field into the signed substrate-aware attestation.
             execution_origin: Actual browser origin loaded before replay. It is
                 evidence metadata only; hosted validation requires an exact
                 match to its signed target origin.
@@ -601,6 +606,7 @@ class Replayer:
         report = RunReport(
             workflow_name=workflow.name,
             started_at=datetime.now(timezone.utc).isoformat(),
+            execution_target_kind=execution_target_kind,
             execution_origin=execution_origin,
             execution_entry_url=execution_entry_url,
             bundle_content_digest=(

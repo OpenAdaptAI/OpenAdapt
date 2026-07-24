@@ -11,9 +11,9 @@ This module ships the two backends the core loop needs:
 
 * :class:`LocalCustomerStorage` — REAL: refs resolve under a customer directory
   (ideally a full-disk-encrypted volume). The on-prem clinic posture.
-* :class:`InMemoryCustomerStorage` — tests/dry-run: pretends the bundle is
-  present and CAPTURES the report in memory, proving the report bytes never
-  leave for the control plane, with zero infra.
+* :class:`InMemoryCustomerStorage` — tests/dry-run: stages exact archive bytes
+  and CAPTURES the report in memory, proving the report bytes never leave for
+  the control plane, with zero infra.
 
 S3 / Azure Blob backends are documented as production follow-ups (they need a
 customer cloud to exercise); the operator reference agent in openadapt-cloud
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any, Optional, Protocol
@@ -34,8 +35,8 @@ class CustomerStorage(Protocol):
 
     kind: str
 
-    def fetch_bundle(self, ref: Optional[str], dest_dir: Path) -> Path:
-        """Resolve ``ref`` to an unpacked bundle directory under ``dest_dir``."""
+    def fetch_bundle_archive(self, ref: Optional[str], dest_file: Path) -> Path:
+        """Copy the exact referenced ZIP bytes to ``dest_file``."""
         ...
 
     def write_report(self, ref: Optional[str], report: dict[str, Any]) -> Optional[str]:
@@ -43,7 +44,18 @@ class CustomerStorage(Protocol):
         ...
 
 
-def _safe_extract(zip_path: Path, dest: Path) -> None:
+def _customer_path(root: Path, ref: str, *, kind: str) -> Path:
+    """Resolve one relative customer-storage key without crossing its root."""
+    if Path(ref).is_absolute() or "\\" in ref:
+        raise RuntimeError(f"{kind} ref must be a relative customer-storage key")
+    resolved_root = root.resolve()
+    resolved = (resolved_root / ref).resolve()
+    if resolved == resolved_root or resolved_root not in resolved.parents:
+        raise RuntimeError(f"{kind} ref escapes the configured customer storage root")
+    return resolved
+
+
+def extract_bundle_archive(zip_path: Path, dest: Path) -> None:
     """Extract a zip, refusing any entry that escapes ``dest`` (zip-slip)."""
     dest = dest.resolve()
     with zipfile.ZipFile(zip_path) as zf:
@@ -62,21 +74,25 @@ class LocalCustomerStorage:
     def __init__(self, root: str) -> None:
         self.root = Path(root)
 
-    def fetch_bundle(self, ref: Optional[str], dest_dir: Path) -> Path:
+    def fetch_bundle_archive(self, ref: Optional[str], dest_file: Path) -> Path:
         if not ref:
             raise RuntimeError("byoc job has no storage.bundle_ref to read")
-        src = self.root / ref
+        src = _customer_path(self.root, ref, kind="bundle")
         if not src.exists():
             raise RuntimeError(f"bundle not found in customer storage: {src}")
-        if src.is_dir():
-            return src  # already an unpacked bundle directory
-        _safe_extract(src, dest_dir)
-        return dest_dir
+        if not src.is_file():
+            raise RuntimeError(
+                "byoc bundle_ref must resolve to the exact approved ZIP archive, "
+                "not an unpacked directory"
+            )
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest_file)
+        return dest_file
 
     def write_report(self, ref: Optional[str], report: dict[str, Any]) -> Optional[str]:
         if not ref:
             return None
-        dest = self.root / ref
+        dest = _customer_path(self.root, ref, kind="report")
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(report, indent=2), encoding="utf-8")
         try:
@@ -87,7 +103,7 @@ class LocalCustomerStorage:
 
 
 class InMemoryCustomerStorage:
-    """Tests/dry-run backend: a pre-staged bundle dir + an in-memory report sink.
+    """Tests/dry-run backend: exact bundle bytes + an in-memory report sink.
 
     Proves the report bytes are written to the CUSTOMER side and never returned
     to the control plane, with zero infra.
@@ -95,12 +111,16 @@ class InMemoryCustomerStorage:
 
     kind = "memory"
 
-    def __init__(self, bundle_dir: Optional[Path] = None) -> None:
-        self.bundle_dir = bundle_dir
+    def __init__(self, bundle_bytes: Optional[bytes] = None) -> None:
+        self.bundle_bytes = bundle_bytes
         self.written: dict[str, dict[str, Any]] = {}
 
-    def fetch_bundle(self, ref: Optional[str], dest_dir: Path) -> Path:
-        return self.bundle_dir if self.bundle_dir is not None else dest_dir
+    def fetch_bundle_archive(self, ref: Optional[str], dest_file: Path) -> Path:
+        if self.bundle_bytes is None:
+            raise RuntimeError("in-memory customer storage has no bundle archive")
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        dest_file.write_bytes(self.bundle_bytes)
+        return dest_file
 
     def write_report(self, ref: Optional[str], report: dict[str, Any]) -> Optional[str]:
         self.written[ref or "?"] = report

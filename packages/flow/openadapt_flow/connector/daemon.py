@@ -14,6 +14,7 @@ patient identifier.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, Optional
 
 from openadapt_flow.connector.client import ConnectorClient
@@ -25,6 +26,7 @@ from openadapt_flow.connector.storage import CustomerStorage, build_storage
 #: storage_factory(job) -> CustomerStorage. Injected in tests; the default builds
 #: from settings + the job's backend hint.
 StorageFactory = Callable[[ByocJob], CustomerStorage]
+CALLBACK_ATTEMPTS = 3
 
 
 def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, Any]:
@@ -40,7 +42,6 @@ def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, A
         "workflow_id": job.workflow_id,
         "bundle_version_id": job.bundle_version_id,
         "runtime_validation_id": job.runtime_validation_id,
-        "bundle_sha256": job.bundle_sha256,
         "mode": job.mode,
         "status": result.status,
         "report_path": result.report_ref,
@@ -49,6 +50,10 @@ def phi_free_callback_body(job: ByocJob, result: ExecutionResult) -> dict[str, A
         # name internal paths). error_code is the exact enum run-callback accepts.
         "error_code": "runner_failure" if result.status == "failed" else None,
     }
+    if result.verified_bundle_sha256 is not None:
+        # Never echo the job's untrusted digest claim. This field exists only
+        # after the connector copied, hashed, and matched the exact archive.
+        body["bundle_sha256"] = result.verified_bundle_sha256
     if result.halt is not None:
         # run-callback reads only halt.present; the structured block is additive.
         body["halt"] = {"present": True}
@@ -66,7 +71,9 @@ def handle_job(
 ) -> dict[str, Any]:
     """Run one leased job end to end: execute -> PHI-free callback -> ack.
 
-    Never raises: a failure still reports PHI-free + releases the lease.
+    Never raises: an execution failure still reports PHI-free and is ACKed only
+    after Cloud accepts that outcome. A callback/ACK delivery failure leaves the
+    lease to expire as terminal ``lease_expired_uncertain`` without re-offer.
     """
     try:
         storage = storage_factory(job)
@@ -78,26 +85,34 @@ def handle_job(
             "failed", {}, None, job.report_ref(), f"{type(exc).__name__}"
         )
 
-    # PHI-free callback (best effort; a transport error is caught so we still ack
-    # and release the lease rather than stranding the job).
-    try:
-        client.run_callback(
-            phi_free_callback_body(job, result), run_token=job.run_token
-        )
-    except Exception:  # noqa: BLE001 - callback failure must not strand the lease
-        pass
+    # The callback is the authoritative run outcome. Retry briefly for a
+    # transient transport failure, but NEVER ACK the lease unless Cloud accepted
+    # it. An unacked lease expires to `lease_expired_uncertain` and is not
+    # automatically re-offered, preventing blind duplicate actuation after a
+    # crash or partition.
+    callback_accepted = False
+    callback_body = phi_free_callback_body(job, result)
+    for attempt in range(CALLBACK_ATTEMPTS):
+        try:
+            client.run_callback(callback_body, run_token=job.run_token)
+            callback_accepted = True
+            break
+        except Exception:  # noqa: BLE001 - bounded retry, then leave lease unacked
+            if attempt + 1 < CALLBACK_ATTEMPTS:
+                time.sleep(0.25 * (2**attempt))
 
-    if job.lease_job_id:
+    if job.lease_job_id and callback_accepted:
         ack_status = "failed" if result.status == "failed" else "done"
         try:
             client.ack(job.lease_job_id, ack_status, result.error)
-        except Exception:  # noqa: BLE001 - lease will expire + re-offer if ack fails
+        except Exception:  # noqa: BLE001 - terminal uncertainty, never re-offered
             pass
 
     return {
         "job_id": job.lease_job_id,
         "run_id": job.run_id,
         "status": result.status,
+        "callback_accepted": callback_accepted,
     }
 
 

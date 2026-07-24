@@ -7,15 +7,16 @@ boundary: the PHI-bearing bundle and report bytes stay in their storage, and onl
 PHI-free status/halt metadata ever flows back to the control plane.
 
 Loop (all outbound HTTPS; zero inbound ports):
-    register -> POST /api/connector/register   (enroll once, get a token)
+    create   -> authenticated Cloud settings  (mint an org-scoped token once)
     poll     -> POST /api/connector/poll        (long-poll; lease the next job)
     execute  -> the governed ``openadapt-flow run`` admission gate + Replayer
                 (identity gates + effect verification + halt-don't-guess intact),
                 against the CUSTOMER'S own storage
     callback -> POST /api/internal/run-callback (PHI-free status/metrics)
-    ack      -> POST /api/connector/ack         (release the lease done|failed)
+    ack      -> POST /api/connector/ack         (only after callback acceptance)
 
-CLI: ``openadapt-flow connector enroll`` then ``openadapt-flow connector run``.
+CLI: create the token in Cloud settings, then ``openadapt-flow connector run``.
+``connector enroll`` is retained for mock/development control planes.
 """
 
 from openadapt_flow.connector.client import ConnectorClient, ConnectorClientError

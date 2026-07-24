@@ -32,6 +32,7 @@ _spec.loader.exec_module(vc)
 # registries. These paths are asserted to exist by the rot guard below, so if
 # they are ever moved this test fails loudly rather than testing a fiction.
 OPTIN_TEST = "tests/e2e/test_citrix_pixel_e2e.py"
+INLINE_OPTIN_TEST = "tests/e2e/test_citrix_workspace_standin_e2e.py"
 CI_TEST = "tests/test_replayer.py"
 DOC_ARTIFACT = "docs/desktop/CITRIX_PIXEL.md"
 
@@ -76,10 +77,12 @@ def test_every_real_evidence_path_exists() -> None:
 # --------------------------------------------------------------------------- #
 def test_optin_detector_flags_the_real_optin_tests() -> None:
     citrix = (REPO_ROOT / OPTIN_TEST).read_text(encoding="utf-8")
+    citrix_standin = (REPO_ROOT / INLINE_OPTIN_TEST).read_text(encoding="utf-8")
     parallels = (REPO_ROOT / "tests/e2e/test_parallels_desktop_e2e.py").read_text(
         encoding="utf-8"
     )
     assert vc.detect_optin_env(citrix) == "OAFLOW_CITRIX_PIXEL_E2E"
+    assert vc.detect_optin_env(citrix_standin) == "OAFLOW_CITRIX_STANDIN_E2E"
     assert vc.detect_optin_env(parallels) == "OAFLOW_PARALLELS_E2E"
 
 

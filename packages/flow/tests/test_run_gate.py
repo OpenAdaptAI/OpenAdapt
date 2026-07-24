@@ -841,9 +841,17 @@ def test_config_driven_citrix_run_reports_resolved_backend_token(tmp_path, monke
         halt = None
 
     calls: list[dict] = []
+    replay_kwargs: dict = {}
     monkeypatch.setattr(factory, "build_backend", lambda cfg: FakeBackend())
+
+    def fake_replay(backend, **kwargs):
+        replay_kwargs.update(kwargs)
+        return FakeReport()
+
     monkeypatch.setattr(
-        main, "_build_and_run_replayer", lambda backend, **kwargs: FakeReport()
+        main,
+        "_build_and_run_replayer",
+        fake_replay,
     )
     monkeypatch.setattr(report_mod, "render_run_report", lambda run_dir: "REPORT.md")
     monkeypatch.setattr(
@@ -867,6 +875,7 @@ def test_config_driven_citrix_run_reports_resolved_backend_token(tmp_path, monke
         ]
     )
     assert rc == 0
+    assert replay_kwargs["execution_target_kind"] == "citrix"
     assert calls == [{"workflow_id": "wf_1", "backend": "citrix"}]
 
 

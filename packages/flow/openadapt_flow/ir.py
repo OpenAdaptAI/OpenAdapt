@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 Region = tuple[int, int, int, int]
 Point = tuple[int, int]
+ExecutionTargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 
 #: Current bundle schema version. v2 adds the bundle manifest (per-asset
 #: hashes, a whole-bundle content digest, and compiler/certification
@@ -1812,6 +1813,14 @@ class HaltObservation(BaseModel):
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
+    execution_target_kind: Optional[ExecutionTargetKind] = Field(
+        default=None,
+        description=(
+            "Resolved backend/substrate that produced this report. The CLI "
+            "sets this from the resolved backend configuration; runtime "
+            "validation refuses a native/remote attestation without it."
+        ),
+    )
     execution_origin: Optional[str] = Field(
         default=None,
         description=(

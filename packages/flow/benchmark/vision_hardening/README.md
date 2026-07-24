@@ -187,9 +187,9 @@ pytest -q tests/test_hardening_flywheel.py
 
 - These are **synthetic fixtures**, not a live RDP/Citrix/HDX frame. The sweep
   measures the *resolution ladder's* silent-mis-resolution behaviour under a
-  controlled metamorphic perturbation space. It **does not** raise any
-  substrate's maturity claim; RDP/Citrix pixel-only stays **Research**
-  (`docs/LIMITS.md`).
+  controlled metamorphic perturbation space. It **does not independently
+  qualify** a substrate; the separate counted RDP and Citrix records and their
+  exact scope remain authoritative (`docs/LIMITS.md`).
 - It **adds no capability and weakens no guard** — it only measures the existing
   resolver and locks in that the silent-wrong rate can only fall.
 - The over-halt vs safe-halt split uses a documented per-perturbation severity

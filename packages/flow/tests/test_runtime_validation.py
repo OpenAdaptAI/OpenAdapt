@@ -14,11 +14,13 @@ from openadapt_flow.compiler import compile_recording
 from openadapt_flow.ir import ParamKind, ParamSpec, RunReport, Workflow
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.runtime_validation import (
+    LEGACY_SCHEMA,
     RuntimeValidationError,
     _canonical_bytes,
     _signature,
     create_runtime_validation_attestation,
     normalize_execution_scope,
+    normalize_target_execution,
     request_validation_challenge,
     verify_runtime_validation_attestation,
 )
@@ -43,7 +45,9 @@ def _privacy():
     privacy.reset_scrubbers()
 
 
-def _approved_artifacts(tmp_path: Path) -> tuple[Path, Path, Path]:
+def _approved_artifacts(
+    tmp_path: Path, *, target_kind: str = "web"
+) -> tuple[Path, Path, Path]:
     recording = tmp_path / "recording"
     recording.mkdir()
     (recording / "meta.json").write_text('{"patient":"Jane Doe"}')
@@ -67,8 +71,9 @@ def _approved_artifacts(tmp_path: Path) -> tuple[Path, Path, Path]:
         workflow,
         bundle_dir=bundle,
         run_dir=run_dir,
-        execution_origin=_TARGET_ORIGIN,
-        execution_entry_url=_TARGET_URL,
+        execution_target_kind=target_kind,
+        execution_origin=_TARGET_ORIGIN if target_kind == "web" else None,
+        execution_entry_url=_TARGET_URL if target_kind == "web" else None,
     )
     assert report.success is True
     return recording_derivative, bundle_derivative, run_dir
@@ -109,7 +114,7 @@ def test_attestation_binds_real_evidence_and_matches_schema(tmp_path):
     schema = json.loads(
         (
             Path(__file__).resolve().parents[1]
-            / "schemas/runtime-validation-attestation-v1.json"
+            / "schemas/runtime-validation-attestation-v2.json"
         ).read_text()
     )
     jsonschema.Draft202012Validator(schema).validate(value)
@@ -117,6 +122,8 @@ def test_attestation_binds_real_evidence_and_matches_schema(tmp_path):
         value, bundle_sha256=value["bundle_sha256"], token=token
     )
     assert value["source_recording_sha256"] != value["bundle_sha256"]
+    assert value["schema"] == "openadapt.runtime-validation/v2"
+    assert value["target_kind"] == "web"
     assert value["lint"] == {
         "strict": True,
         "passed": True,
@@ -141,6 +148,125 @@ def test_cross_language_canonicalization_golden_vector():
     )
     assert _canonical_bytes(fixture["value"]).decode("utf-8") == fixture["canonical"]
     assert _signature(fixture["value"], fixture["token"]) == fixture["signature"]
+
+
+@pytest.mark.parametrize("target_kind", ["windows", "macos", "linux", "rdp", "citrix"])
+def test_native_and_remote_attestation_is_substrate_bound_without_target_phi(
+    tmp_path, target_kind
+):
+    token = "oai_ingest_test"
+    recording, bundle, run_dir = _approved_artifacts(tmp_path, target_kind=target_kind)
+    value = create_runtime_validation_attestation(
+        recording_derivative=recording,
+        bundle_derivative=bundle,
+        run_dir=run_dir,
+        policy_source="permissive",
+        risk_class="low",
+        environment=f"qualified-{target_kind}-environment",
+        target_kind=target_kind,
+        host=hosted.DEFAULT_HOST,
+        token=token,
+        challenge=_challenge(),
+    )
+    schema = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "schemas/runtime-validation-attestation-v2.json"
+        ).read_text()
+    )
+    jsonschema.Draft202012Validator(schema).validate(value)
+    verify_runtime_validation_attestation(
+        value, bundle_sha256=value["bundle_sha256"], token=token
+    )
+    assert value["target_kind"] == target_kind
+    assert value["execution"] == {}
+    encoded = json.dumps(value)
+    assert f"qualified-{target_kind}-environment" not in encoded
+
+
+def test_target_kind_is_derived_from_report_and_cli_value_is_only_a_cross_check(
+    tmp_path,
+):
+    recording, bundle, run_dir = _approved_artifacts(tmp_path, target_kind="rdp")
+    with pytest.raises(RuntimeValidationError, match="does not match"):
+        create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="rdp-lab",
+            target_kind="citrix",
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+
+
+def test_native_and_remote_targets_refuse_browser_boundary_fields(tmp_path):
+    recording, bundle, run_dir = _approved_artifacts(tmp_path, target_kind="windows")
+    common = {
+        "recording_derivative": recording,
+        "bundle_derivative": bundle,
+        "run_dir": run_dir,
+        "policy_source": "permissive",
+        "risk_class": "low",
+        "environment": "windows-lab",
+        "host": hosted.DEFAULT_HOST,
+        "token": "oai_ingest_test",
+        "challenge": _challenge(),
+    }
+    with pytest.raises(RuntimeValidationError, match="Target URL is web-only"):
+        create_runtime_validation_attestation(
+            target_url=_TARGET_URL,
+            **common,
+        )
+    with pytest.raises(RuntimeValidationError, match="Allowed hosts are web-only"):
+        create_runtime_validation_attestation(
+            allowed_hosts=["cdn.example.com"],
+            **common,
+        )
+
+
+def test_attestation_refuses_report_without_resolved_target_kind(tmp_path):
+    recording, bundle, run_dir = _approved_artifacts(tmp_path)
+    report_path = run_dir / "report.json"
+    report = RunReport.model_validate_json(report_path.read_text())
+    report.execution_target_kind = None
+    report.save(run_dir)
+    with pytest.raises(RuntimeValidationError, match="no valid resolved"):
+        create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment="web-lab",
+            target_url=_TARGET_URL,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+
+
+def test_target_execution_contract_is_closed_per_substrate():
+    assert normalize_target_execution("citrix", None, None) == {}
+    with pytest.raises(RuntimeValidationError, match="Target kind"):
+        normalize_target_execution("unknown", None, None)
+
+
+def test_local_verifier_retains_signed_v1_web_compatibility(tmp_path):
+    token = "oai_ingest_test"
+    value, _ = _attestation(tmp_path, token)
+    legacy = json.loads(json.dumps(value))
+    legacy["schema"] = LEGACY_SCHEMA
+    legacy.pop("target_kind")
+    legacy["signature"] = _signature(legacy, token)
+    verify_runtime_validation_attestation(
+        legacy,
+        bundle_sha256=legacy["bundle_sha256"],
+        token=token,
+    )
 
 
 @pytest.mark.parametrize(

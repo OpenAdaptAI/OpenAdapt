@@ -481,6 +481,7 @@ def test_replay_windows_constructs_windows_backend(monkeypatch, tmp_path) -> Non
 
     def fake_run(backend, **kwargs):
         captured["backend"] = backend
+        captured.update(kwargs)
         return _FakeReport()
 
     monkeypatch.setattr(m, "_build_and_run_replayer", fake_run)
@@ -506,6 +507,7 @@ def test_replay_windows_constructs_windows_backend(monkeypatch, tmp_path) -> Non
     assert rc == 0
     assert type(captured["backend"]).__name__ == "WindowsBackend"
     assert captured["backend"].server_url == "http://localhost:5001"
+    assert captured["execution_target_kind"] == "windows"
 
 
 def test_replay_desktop_refuses_drift(monkeypatch, tmp_path) -> None:

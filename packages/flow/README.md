@@ -106,15 +106,23 @@ openadapt-flow record --backend macos --macos-app TextEdit --out rec
 openadapt-flow record --backend linux --linux-app gedit \
   --linux-window-title "Untitled Document 1" --out rec
 
-# Remote display / Citrix / VDI (pixel-only vision ladder over RDP).
+# RDP remote display (pixel-only vision ladder over the network session).
 openadapt-flow record --backend rdp --rdp-host 10.0.0.5 --out rec
+
+# Citrix / VDI (one exact local Citrix Workspace window).
+openadapt-flow record --backend citrix \
+  --window "Citrix Viewer" \
+  --rdp-window "Citrix Viewer" \
+  --rdp-window-title "Ward A" \
+  --rdp-readiness-text "Appointments" \
+  --out rec
 ```
 
 `--backend web` is browser-first (the app is a `--url`). For
-`windows`, `macos`, `linux`, and `rdp` the capture has no field identity, so the
+`windows`, `macos`, `linux`, `rdp`, and `citrix` the capture has no field identity, so the
 target is the app window or host: `--agent-url` for Windows, `--macos-app`,
 `--linux-app` plus `--linux-window-title`, and `--rdp-host` (or a configured
-`rdp_window` for a local Citrix / Parallels window). Pass the same `--backend`
+exact `rdp_window` / `rdp_window_title` for Citrix Workspace). Pass the same `--backend`
 plus target flags to `replay`, or drive a real deployment with
 `openadapt-flow run bundle --config deploy.yaml`, which reads the backend,
 effects, actuation, durable, and policy sections from one config. Recorded
@@ -208,14 +216,16 @@ runtime; none is a second-class add-on. Maturity is reported honestly per the
 |---|---|---|---|
 | Web / browser | `--backend web` | Validated | Full lifecycle on every CI build, plus third-party OpenEMR evidence |
 | Native macOS (AX) | `--backend macos` | Validated | 3/3 fixed TextEdit trials with exact file-byte effects; refused a two-window ambiguity without changing either file |
-| Native Windows (UIA) | `--backend windows` | Early | 3/3 fixed WinForms trials with independently confirmed SQLite effects; 3/3 refusal for both stale and ambiguous targets |
-| Native Linux (AT-SPI) | `--backend linux` | Early | Required CI drives a real GTK3 workflow through an isolated X11 / session-D-Bus environment: three verified effects, plus three ambiguous-target and three stale-target refusals |
-| RDP (remote display) | `--backend rdp` | Early | Real-network Aardwolf RDP into Windows 11 passed 3/3 fixed remote-input trials with independent guest-tools file verification |
-| Citrix / VDI (pixel ladder) | `--backend rdp` + `rdp_window` | Exploratory | Pixel-only vision ladder; no validated ICA / HDX environment qualified yet. Enters design-partner qualification in the customer's exact published application |
+| Native Windows (UIA) | `--backend windows` | Available | 3/3 fixed WinForms trials with independently confirmed SQLite effects; 3/3 refusal for both stale and ambiguous targets |
+| Native Linux (AT-SPI) | `--backend linux` | Available | Required CI drives a real GTK3 workflow through an isolated X11 / session-D-Bus environment: three verified effects, plus three ambiguous-target and three stale-target refusals |
+| RDP (remote display) | `--backend rdp` | Available | Real-network Aardwolf RDP into Windows 11 passed 3/3 fixed remote-input trials with independent guest-tools file verification; a separate real-FreeRDP batch covers record → compile → governed replay and refusal |
+| Citrix / VDI (pixel ladder) | `--backend citrix` | Code-qualified | Dedicated exact-Workspace-window driver, readiness gate, durable resume, and 3 healthy + 3 drift-halt no-DOM trials; the retained artifact records `ica_hdx_accepted=false` until a counted ICA/HDX run is attached |
 
-These are accepted scoped qualifications. A customer application is qualified
-against its own controls, session/display policy, identity evidence, and effect
-oracle. Details:
+Every row is bounded to its stated evidence. Accepted application workflows are
+qualified against their own controls, session/display policy, identity evidence,
+and effect oracle; code-qualified Citrix deployments additionally attach the
+counted ICA/HDX record for their exact Workspace/server/application matrix.
+Details:
 [`docs/backends/RDP.md`](docs/backends/RDP.md),
 [`docs/desktop/LINUX_NATIVE.md`](docs/desktop/LINUX_NATIVE.md),
 [`docs/desktop/CITRIX_PIXEL.md`](docs/desktop/CITRIX_PIXEL.md).
@@ -422,8 +432,11 @@ submission format: [`benchmark/effectbench/LEADERBOARD.md`](benchmark/effectbenc
 The reference browser path runs record, compile, policy-check, deterministic
 replay, refusal, and report generation in CI. Windows UIA, native macOS, native
 Linux, and RDP each have retained 3/3 accepted task evidence with independent
-effects or oracles. Citrix and each new third-party application are qualified
-with a design partner in the exact deployment environment. The workflow-program
+effects or oracles. Citrix has a dedicated exact-window backend and a retained
+3+3 code-readiness record; an exact ICA/HDX deployment receives its own counted
+qualification record rather than inheriting RDP or stand-in evidence. Each new
+third-party application is similarly qualified against its controls and effect
+oracle. The workflow-program
 IR adds parameters, branches, loops, effect verification, and governed recovery
 on the same runtime. `DESIGN.md` has the module contracts;
 [`docs/design/WORKFLOW_PROGRAM_IR.md`](docs/design/WORKFLOW_PROGRAM_IR.md)
@@ -503,7 +516,7 @@ openadapt-flow push ./triage.sanitized --kind recording
 openadapt-flow compile ./triage.sanitized --out ./triage.bundle --name triage
 openadapt-flow lint ./triage.bundle --strict
 openadapt-flow certify ./triage.bundle --policy permissive
-openadapt-flow replay ./triage.bundle --url https://example.internal/login \
+openadapt-flow replay ./triage.bundle --url https://app.example.com/login \
   --run-dir ./triage.run --param patient_id=example
 
 # Privacy-review the executable bytes. A changed executable is refused.
@@ -516,10 +529,16 @@ openadapt-flow approve-sanitized ./triage.bundle.sanitized \
 openadapt-flow validate-hosted \
   --recording ./triage.sanitized --bundle ./triage.bundle.sanitized \
   --run-dir ./triage.run --policy permissive --risk-class low \
-  --environment staging-v1 --target-url https://example.internal/login \
+  --environment staging-v1 --target-kind web \
+  --target-url https://app.example.com/login \
   --out triage.validation.json
 openadapt-flow push ./triage.bundle.sanitized --kind bundle \
   --validation-attestation triage.validation.json
+
+# Desktop/RDP/Citrix use the same validation command, deriving the signed
+# target kind from report.json. Their app/window/host details stay local:
+#   --target-kind citrix --environment clinic-citrix-qualified-v1
+# (omit --target-url and --allowed-host outside the web substrate).
 
 # To activate this as a new version of an existing workflow, add:
 #   --workflow-id 00000000-0000-0000-0000-000000000000

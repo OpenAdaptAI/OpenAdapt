@@ -169,5 +169,6 @@ statistical reliability claim for every Windows application.
 For a production workflow, record and qualify the customer's exact application
 under its real account/session policy, DPI and scaling, disconnect/reconnect
 behavior, latency envelope, identity evidence, and independent effect oracle.
-Citrix ICA/HDX is a separate design-partner qualification; the RDP batch is not
-used as Citrix acceptance evidence.
+Citrix ICA/HDX receives a separate counted qualification on its exact
+Workspace/server/application matrix; the RDP batch is not used as Citrix
+acceptance evidence.

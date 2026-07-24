@@ -34,7 +34,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from openadapt_flow.ir import RunReport, Workflow
+from openadapt_flow.ir import ExecutionTargetKind, RunReport, Workflow
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     BundleMismatch,
@@ -70,6 +70,7 @@ def resume(
     params: Optional[dict[str, str]] = None,
     worklists: Optional[dict[str, list[dict[str, str]]]] = None,
     save_healed_to: Optional[Path | str] = None,
+    execution_target_kind: Optional[ExecutionTargetKind] = None,
     now: Optional[datetime] = None,
     key: Optional[str] = None,
 ) -> RunReport:
@@ -94,6 +95,8 @@ def resume(
         worklists: Override the worklists recorded in the manifest; defaults to
             the original frozen worklists so program loops resume identically.
         save_healed_to: Override the manifest's healed-bundle path.
+        execution_target_kind: Resolved backend token for the resumed leg's
+            report and substrate-aware runtime attestation.
         now: Injectable clock for the stale-pause check (defaults to UTC now).
         key: At-rest passphrase for an ENCRYPTED run (its checkpoints and/or its
             bundle). Resolved from ``key`` or ``OPENADAPT_BUNDLE_KEY``. Used to
@@ -177,6 +180,7 @@ def resume(
             save_healed_to=resolved_healed,
             live_bundle_version=live_bundle_version,
             run_id=(manifest.run_id if manifest is not None else None),
+            execution_target_kind=execution_target_kind,
             manifest=manifest,
             pending=pending,
         )
@@ -193,6 +197,7 @@ def resume(
         save_healed_to=(Path(resolved_healed) if resolved_healed else None),
         resume_from=start_index,
         run_id=(manifest.run_id if manifest is not None else None),
+        execution_target_kind=execution_target_kind,
     )
 
 
@@ -208,6 +213,7 @@ def _resume_program(
     save_healed_to: Optional[Path | str],
     live_bundle_version: str,
     run_id: Optional[str],
+    execution_target_kind: Optional[ExecutionTargetKind],
     manifest: Any,
     pending: Any,
 ) -> RunReport:
@@ -269,4 +275,5 @@ def _resume_program(
         save_healed_to=(Path(save_healed_to) if save_healed_to else None),
         resume_program=checkpoint,
         run_id=run_id,
+        execution_target_kind=execution_target_kind,
     )

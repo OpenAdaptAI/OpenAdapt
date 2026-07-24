@@ -499,8 +499,9 @@ def test_resume_web_default_builds_playwright_backend(
 
     seen: dict = {}
 
-    def _fake_resume(run_dir, replayer, key=None):
+    def _fake_resume(run_dir, replayer, key=None, execution_target_kind=None):
         seen["called"] = True
+        seen["execution_target_kind"] = execution_target_kind
         return _FakeReport()
 
     monkeypatch.setattr(durable_mod, "resume", _fake_resume)
@@ -516,6 +517,7 @@ def test_resume_web_default_builds_playwright_backend(
     )
     assert rc == 0
     assert seen["called"] is True
+    assert seen["execution_target_kind"] == "web"
     # The factory built the browser-backed backend (the fake returns "backend").
     assert captured["ctor"]  # Replayer was constructed for the web path
 
@@ -540,7 +542,12 @@ def test_resume_windows_config_builds_windows_backend(
 
     monkeypatch.setattr(runtime_mod, "Replayer", _CapturingReplayer)
     monkeypatch.setattr(
-        durable_mod, "resume", lambda run_dir, replayer, key=None: _FakeReport()
+        durable_mod,
+        "resume",
+        lambda run_dir, replayer, key=None, execution_target_kind=None: (
+            captured.update(execution_target_kind=execution_target_kind)
+            or _FakeReport()
+        ),
     )
     monkeypatch.setattr(report_mod, "render_run_report", lambda run_dir: "REPORT.md")
 
@@ -559,6 +566,7 @@ def test_resume_windows_config_builds_windows_backend(
     backend = captured["backend"]
     assert type(backend).__name__ == "WindowsBackend"
     assert backend.server_url == "http://localhost:5001"
+    assert captured["execution_target_kind"] == "windows"
 
 
 def test_resume_uses_recorded_citrix_target_and_readiness(
@@ -597,7 +605,12 @@ def test_resume_uses_recorded_citrix_target_and_readiness(
     monkeypatch.setattr(factory, "build_backend", fake_build)
     monkeypatch.setattr(runtime_mod, "Replayer", CapturingReplayer)
     monkeypatch.setattr(
-        durable_mod, "resume", lambda run_dir, replayer, key=None: _FakeReport()
+        durable_mod,
+        "resume",
+        lambda run_dir, replayer, key=None, execution_target_kind=None: (
+            captured.update(execution_target_kind=execution_target_kind)
+            or _FakeReport()
+        ),
     )
     monkeypatch.setattr(report_mod, "render_run_report", lambda run_dir: "REPORT.md")
 
@@ -607,6 +620,7 @@ def test_resume_uses_recorded_citrix_target_and_readiness(
     assert cfg.rdp_window == "wfica32"
     assert cfg.rdp_window_title == "Claims - Citrix Workspace"
     assert cfg.rdp_readiness_text == "Claims queue"
+    assert captured["execution_target_kind"] == "citrix"
 
 
 def test_resume_refuses_blank_citrix_readiness_before_backend(

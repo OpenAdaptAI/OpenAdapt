@@ -6,11 +6,11 @@
 - Green-check against a junit artifact: **not run** (no `--junit` artifact supplied)
 - Gate: `python scripts/validate_claims.py --check` (a claim whose tier outranks its strongest backing evidence fails CI).
 
-**What this harness does and does not do.** It makes each public maturity claim a *function* of automated evidence: a `supported` claim must be backed by a test that actually runs on the default (non-opt-in) CI suite; a `validating` claim must be grounded in a REAL opt-in / infra-gated proof or a field test, and is never presented as supported. It does NOT replace the human half — third-party design-partner validation of the `validating` surfaces (Windows, Citrix) is exactly the evidence this repository cannot self-generate.
+**What this harness does and does not do.** It makes each public maturity claim a *function* of automated evidence: a `supported` claim must be backed by a test that actually runs on the default (non-opt-in) CI suite; a `validating` claim must be grounded in a REAL opt-in / infra-gated proof or a field test, and is never presented as supported. It does not replace workflow- and deployment-specific acceptance: application controls, identity rules, effect oracles, and live transport conditions remain bound to their counted evidence.
 
 ## What is CI-proven today vs. being validated
 
-- **CI-proven today (7):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `mockmed-benchmark-ci-reproducible`
+- **CI-proven today (8):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`
 - **Being validated — opt-in / infra-gated or field (8):** `effect-verifier-kit`, `windows-desktop-validating`, `macos-native-validating`, `linux-native-validating`, `rdp-validating`, `desktop-recording-validating`, `citrix-pixel-validating`, `openemr-field-benchmark`
 - **Roadmap / research (1):** `win32-window-replay-roadmap`
 
@@ -31,7 +31,7 @@
 
 **Caveats (honest limits):**
 
-- "Supported" is scoped to the reference headless-browser backend in this registry. Desktop and remote-display workflows use the separately scoped acceptance and design-partner claims below.
+- "Supported" is scoped to the reference headless-browser backend in this registry. Desktop and remote-display workflows use the separately scoped acceptance and code-qualified claims below.
 - The full record->compile->replay e2e runs in the post-merge/nightly full suite; the fast required PR gate covers the replayer + demo units.
 
 ### `deterministic-zero-model-replay` — supported — CI-proven today
@@ -232,16 +232,33 @@
 
 - Acceptance covers the named 1280x800 Windows Run/file task and exact VM environment, not arbitrary applications, identity policies, or Citrix.
 
+### `substrate-runtime-validation-supported` — supported — CI-proven today
+
+> Runtime-validation v2 binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`) into the signed operator attestation while preserving the same exact artifact, compiler, parameter-schema, strict-lint, policy, risk, report, and opaque environment bindings. Web retains its exact HTTPS/host boundary; native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud.
+
+- Surfaces: README.md, docs, website
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_runtime_validation.py` | test | ci (required PR gate (test)) | supported | Required CI exercises all six target kinds, validates v2 against its closed JSON Schema, refuses target-kind mismatch or missing report provenance, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1 web compatibility. |
+| `tests/test_cli_new_commands.py` | test | ci (required PR gate (test)) | supported | Required CI carries the resolved web, Windows, and Citrix backend token through durable resume into the new run report rather than trusting an upload-time relabel. |
+| `schemas/runtime-validation-attestation-v2.json` | doc | artifact (doc/benchmark) | roadmap | The public closed envelope requires target_kind and conditionally permits the browser execution fields only for web. |
+
+**Caveats (honest limits):**
+
+- The HMAC proves operator-token possession and envelope integrity; it is not independent observation of the local replay or certification of an arbitrary target application.
+
 ### `desktop-recording-validating` — validating — opt-in / infra-gated or field test
 
-> The product CLI records desktop workflows through openadapt-capture and `record --backend windows|rdp` captures the operator's real demonstration and emits the compile-ready recording format, so record -> compile -> replay closes on the desktop substrate, not just the browser.
+> The product CLI records desktop workflows through openadapt-capture and `record --backend windows|macos|linux|rdp|citrix` captures the operator's real demonstration and emits the compile-ready recording format, so record -> compile -> replay closes on the desktop substrate, not just the browser.
 
 - Surfaces: README.md, docs, website
 - Strongest evidence strength: **supported** (tier is `validating`)
 
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
-| `tests/test_desktop_record.py` | test | ci (required PR gate (test)) | supported | The live-capture orchestration + CLI wiring (record --backend windows|rdp -> openadapt-capture -> convert_capture), and that a desktop-shaped recording COMPILES into a bundle and REPLAYS to completion through the desktop backend path, resolving each click to its recorded target (runs on default CI). |
+| `tests/test_desktop_record.py` | test | ci (required PR gate (test)) | supported | The live-capture orchestration + CLI wiring (record --backend windows|macos|linux|rdp|citrix -> openadapt-capture -> convert_capture), and that a desktop-shaped recording COMPILES into a bundle and REPLAYS to completion through the desktop backend path, resolving each click to its recorded target (runs on default CI). |
 | `tests/test_capture_adapter.py` | test | ci (required PR gate (test)) | supported | The capture->recording bridge over a REAL openadapt-capture session (its own event-processing pipeline + frame extraction) feeding the UNMODIFIED compiler (runs on default CI: the `test` job installs the `capture` extra; openadapt-capture >=0.5.4 imports clean headless). |
 | `docs/desktop/RECORDING.md` | doc | artifact (doc/benchmark) | roadmap | The capture-assisted and live-observer paths, fail-closed secret handling, RDP coordinate binding, and reuse of openadapt-capture + the capture adapter. |
 
@@ -252,7 +269,7 @@
 
 ### `citrix-pixel-validating` — validating — opt-in / infra-gated or field test
 
-> Citrix uses the governed pixel-only remote-display contract and enters design-partner qualification in the customer's exact ICA/HDX application, with identity, ambiguity refusal, and independent effects above the driver.
+> Citrix uses a dedicated exact-Workspace-window backend beneath the governed pixel-only remote-display contract. Required CI covers its readiness gate, governed execution, durable resume, report binding, and refusal contracts; the counted no-DOM qualification covers the driver, visual ladder, independent effects, and drift halts. Live ICA/HDX acceptance remains separately bound to the exact deployment.
 
 - Surfaces: README.md, docs, website
 - Strongest evidence strength: **supported** (tier is `validating`)
@@ -261,12 +278,18 @@
 |---|---|---|---|---|
 | `tests/e2e/test_citrix_pixel_e2e.py` | test | opt-in (OAFLOW_CITRIX_PIXEL_E2E) | validating | OPT-IN pixel-only proof: structural_armed_coverage == 0, replay resolves on template/ocr/geometry only, on-screen OCR read-back verifies the write, the identity gate HALTs on a look-alike patient, and render drift triggers halt-on-ambiguity. |
 | `tests/test_pixel_identity_probe.py` | test | ci (required PR gate (test)) | supported | The pixel-substrate identity probe behind the on-pixels identity gate. |
-| `docs/desktop/CITRIX_PIXEL.md` | doc | artifact (doc/benchmark) | roadmap | The Citrix driver model, reusable evidence, design-partner acceptance contract, independent-effect boundary, and customer-controlled posture. |
+| `tests/test_citrix_workspace_backend.py` | test | ci (required PR gate (test)) | supported | Required CI covers the dedicated backend preset, exact owner/title overrides, readiness probe construction, pixel-only capability boundary, backend factory, and product CLI selectors. |
+| `tests/test_run_gate.py` | test | ci (required PR gate (test)) | supported | Required CI refuses governed Citrix execution before action when its readiness binding is absent or blank, admits a sealed bundle carrying a recorded readiness binding, and reports only the resolved backend token rather than sensitive target strings. |
+| `tests/test_cli_new_commands.py` | test | ci (required PR gate (test)) | supported | Required CI restores the recorded Citrix owner, exact title, and readiness binding through durable approve/resume, and refuses before backend construction when resumed configuration is incomplete. |
+| `tests/test_hosted.py` | test | ci (required PR gate (test)) | supported | Required CI binds a completed local Citrix report to the closed `citrix` execution token without copying target owner, title, or readiness values into the hosted summary. |
+| `tests/e2e/test_citrix_workspace_standin_e2e.py` | test | opt-in (OAFLOW_CITRIX_STANDIN_E2E) | validating | The dedicated Citrix backend passes three healthy effect-confirmed record->compile->replay trials and three severe-drift safe-halts over a no-DOM surface, with zero model calls, false completion, or silent incorrect success. |
+| `benchmark/citrix_workspace/results.json` | artifact | artifact (doc/benchmark) | roadmap | The retained six-trial record reports code_readiness_accepted=true and ica_hdx_accepted=false, keeping driver readiness distinct from a counted live ICA/HDX qualification. |
+| `docs/desktop/CITRIX_PIXEL.md` | doc | artifact (doc/benchmark) | roadmap | The Citrix driver model, reusable evidence, exact-deployment acceptance contract, independent-effect boundary, and customer-controlled posture. |
 
 **Caveats (honest limits):**
 
 - PIXEL-ONLY: no UIA/DOM crosses to the driver. On-screen OCR read-back is SAME-SURFACE, not an independent system-of-record check.
-- A Parallels VM window is a Citrix ANALOG; real HDX/latency/DPI/lock- screen drift is not simulated. OPT-IN + infra-gated (`OAFLOW_CITRIX_PIXEL_E2E=1`, macOS screen-recording + accessibility); never runs on default CI, and does not replace design-partner validation.
+- A Parallels VM window is a Citrix ANALOG; real HDX/latency/DPI/lock- screen drift is not simulated. OPT-IN + infra-gated (`OAFLOW_CITRIX_PIXEL_E2E=1` or `OAFLOW_CITRIX_STANDIN_E2E=1`); neither live-window proof runs on default CI, and neither replaces a counted live ICA/HDX acceptance record.
 
 ### `win32-window-replay-roadmap` — roadmap — designed, not yet proven
 
@@ -278,7 +301,7 @@
 | Backing evidence | Kind | Gating / CI stage | Strength | Proves |
 |---|---|---|---|---|
 | `tests/test_win32_window_client.py` | test | ci (required PR gate (test)) | supported | MOCK-ONLY conformance: the win32 WindowClient implements the remote-display WindowClient seam (exact process/title/class selection with ambiguity halt, client-area coordinate mapping under per-monitor DPI awareness, PrintWindow-then-BitBlt capture fallback, focus-verification refusal, and the UIPI elevation guard) against a scripted Win32 API — never against a real Windows host. |
-| `docs/desktop/CITRIX_PIXEL.md` | doc | artifact (doc/benchmark) | roadmap | The remote-display contract the client implements and the evidence ladder for qualifying it (Parallels/RDP client-window analog first, then design-partner Citrix). |
+| `docs/desktop/CITRIX_PIXEL.md` | doc | artifact (doc/benchmark) | roadmap | The remote-display contract the client implements and the evidence ladder for qualifying it (Parallels/RDP client-window analog first, then a counted live Citrix host run). |
 
 **Caveats (honest limits):**
 

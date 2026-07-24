@@ -847,6 +847,7 @@ def test_schema_files_are_valid_json():
         "sanitized-artifact-approval-v1.json",
         "sanitization-ingest-v1.json",
         "runtime-validation-attestation-v1.json",
+        "runtime-validation-attestation-v2.json",
     ):
         schema = json.loads((root / name).read_text())
         assert schema["$schema"].endswith("2020-12/schema")

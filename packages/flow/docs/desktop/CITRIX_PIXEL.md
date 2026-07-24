@@ -66,7 +66,7 @@ environment because the published application, Workspace policy, rendering,
 session behavior, and available effect oracle determine the workflow's accepted
 scope.
 
-## Design-partner qualification
+## Exact-deployment qualification
 
 A Citrix deployment starts with one repeated workflow and one independently
 observable business result. The acceptance record names:
