@@ -2,6 +2,100 @@
 
 <!-- version list -->
 
+## v1.7.2 (2026-07-24)
+
+### Bug Fixes
+
+- Complete all substrate metadata ([#1046](https://github.com/OpenAdaptAI/OpenAdapt/pull/1046),
+  [`cbb66e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbb66e550c2ba774c1611db6bacf1f3de549c9f1))
+
+- Expose native replay substrates through launcher
+  ([#1046](https://github.com/OpenAdaptAI/OpenAdapt/pull/1046),
+  [`cbb66e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbb66e550c2ba774c1611db6bacf1f3de549c9f1))
+
+### Build System
+
+- **deps**: Bump actions/attest from 4.1.1 to 4.2.0
+  ([#1034](https://github.com/OpenAdaptAI/OpenAdapt/pull/1034),
+  [`6dc9fa3`](https://github.com/OpenAdaptAI/OpenAdapt/commit/6dc9fa3095bde68bdb20a6296cab5f9c9ada1012))
+
+- **deps**: Bump actions/checkout from 6 to 7
+  ([#1036](https://github.com/OpenAdaptAI/OpenAdapt/pull/1036),
+  [`fd85d44`](https://github.com/OpenAdaptAI/OpenAdapt/commit/fd85d442a133435faa7a04f4ebce053ec4c14ea3))
+
+- **deps**: Bump actions/dependency-review-action from 4.9.0 to 5.0.0
+  ([#1037](https://github.com/OpenAdaptAI/OpenAdapt/pull/1037),
+  [`2c37add`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2c37add3a879a3c991882f3b4538ed6f630fc08e))
+
+- **deps**: Bump actions/setup-python from 6 to 7
+  ([#1035](https://github.com/OpenAdaptAI/OpenAdapt/pull/1035),
+  [`585494e`](https://github.com/OpenAdaptAI/OpenAdapt/commit/585494ed26861d452a295e8c740b9d89858861bc))
+
+- **deps**: Bump pypa/gh-action-pypi-publish from 1.14.0 to 1.14.1
+  ([#1033](https://github.com/OpenAdaptAI/OpenAdapt/pull/1033),
+  [`5ad5062`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5ad50627507f493a32deeb311885e461a1cb5793))
+
+### Chores
+
+- Add Contributor Covenant Code of Conduct
+  ([#1032](https://github.com/OpenAdaptAI/OpenAdapt/pull/1032),
+  [`5fcff80`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5fcff80db73b68e3c962e06216dfc717162e9b01))
+
+- Add security CI (CodeQL, gitleaks, dependency-review, Dependabot)
+  ([#1031](https://github.com/OpenAdaptAI/OpenAdapt/pull/1031),
+  [`2a683ea`](https://github.com/OpenAdaptAI/OpenAdapt/commit/2a683eaab6e69dd05c469a54995f0cb625f7ef02))
+
+### Documentation
+
+- Align launcher substrate availability
+  ([#1046](https://github.com/OpenAdaptAI/OpenAdapt/pull/1046),
+  [`cbb66e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbb66e550c2ba774c1611db6bacf1f3de549c9f1))
+
+- Reconcile README substrate maturity to the canonical status manifest
+  ([#1030](https://github.com/OpenAdaptAI/OpenAdapt/pull/1030),
+  [`5d0fc37`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5d0fc37959e897d6f46a882c6aa4ac08be014dcc))
+
+- Refresh reference sandbox source inventory
+  ([#1029](https://github.com/OpenAdaptAI/OpenAdapt/pull/1029),
+  [`8d696e8`](https://github.com/OpenAdaptAI/OpenAdapt/commit/8d696e88ec241301f07a961eff8ed0109be4b54e))
+
+- Synchronize hero substrate availability
+  ([#1046](https://github.com/OpenAdaptAI/OpenAdapt/pull/1046),
+  [`cbb66e5`](https://github.com/OpenAdaptAI/OpenAdapt/commit/cbb66e550c2ba774c1611db6bacf1f3de549c9f1))
+
+- **readme**: Add a data-driven loop program graph beside the linear one
+  ([#1045](https://github.com/OpenAdaptAI/OpenAdapt/pull/1045),
+  [`0ec1b7d`](https://github.com/OpenAdaptAI/OpenAdapt/commit/0ec1b7d4232ecf2a0c5cbb3fae46711706402b74))
+
+- **readme**: Add local-first path and restructure Quick Start into two paths
+  ([#1039](https://github.com/OpenAdaptAI/OpenAdapt/pull/1039),
+  [`14414ef`](https://github.com/OpenAdaptAI/OpenAdapt/commit/14414ef00f64502bb7e58463932cb1d090dddc26))
+
+- **readme**: Add real visualize graph, loop/halt diagrams, and run screenshots
+  ([#1040](https://github.com/OpenAdaptAI/OpenAdapt/pull/1040),
+  [`5a7acb4`](https://github.com/OpenAdaptAI/OpenAdapt/commit/5a7acb4bbea49bf763f37db1fa79dc443b86695d))
+
+- **readme**: Add SVG masthead hero and fix mermaid loop control overlap
+  ([#1041](https://github.com/OpenAdaptAI/OpenAdapt/pull/1041),
+  [`8023129`](https://github.com/OpenAdaptAI/OpenAdapt/commit/802312992c8199dce5e9ccbfb42b83805774a859))
+
+- **readme**: Fix Resolution ladder text overflow in masthead SVG
+  ([#1042](https://github.com/OpenAdaptAI/OpenAdapt/pull/1042),
+  [`b34cea2`](https://github.com/OpenAdaptAI/OpenAdapt/commit/b34cea2e1e73ea7ef395bdc09534652f3a9f3b70))
+
+- **readme**: Mention for-each loops and visualize in the launcher quickstart
+  ([#1038](https://github.com/OpenAdaptAI/OpenAdapt/pull/1038),
+  [`56d199f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/56d199f1cc9df465f5bffb07e1b16489bc29dcb5))
+
+- **readme**: Reconcile masthead + substrate maturity to the canonical ladder
+  ([#1044](https://github.com/OpenAdaptAI/OpenAdapt/pull/1044),
+  [`bbfcf8f`](https://github.com/OpenAdaptAI/OpenAdapt/commit/bbfcf8fe07ca1565bd8472616c7b210810105744))
+
+- **readme**: Use the real OpenAdapt brand mark in the masthead
+  ([#1043](https://github.com/OpenAdaptAI/OpenAdapt/pull/1043),
+  [`f308049`](https://github.com/OpenAdaptAI/OpenAdapt/commit/f308049b2074da44307e4fc7eef3e71e1f9591fa))
+
+
 ## v1.7.1 (2026-07-19)
 
 ### Bug Fixes
