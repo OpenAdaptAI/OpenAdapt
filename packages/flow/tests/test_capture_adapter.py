@@ -1,14 +1,18 @@
 """Tests for the openadapt-capture -> openadapt-flow recording adapter.
 
 These build a *real* openadapt-capture session on disk — a SQLAlchemy
-``recording.db`` written through capture's own db layer plus an
-``oa_recording-*.mp4`` written through capture's public ``VideoWriter`` — and
-then run the adapter over capture's public API
+``recording.db`` written through capture's own db layer plus deterministic
+lossless media — and then run the adapter over capture's public API
 (``CaptureSession.load(dir).actions()``). This exercises capture's real
 event-processing pipeline (raw mouse/keyboard streams -> merged
-clicks/drags/typed text) and real frame extraction, so the test cannot silently
+clicks/drags/typed text) and public frame lookup, so the test cannot silently
 pass against a schema that no longer exists. The converted recording is fed to
 the UNMODIFIED compiler — the format bridge, proven end to end.
+
+Capture's own qualification suite verifies the external FFmpeg writer and
+decoder. This adapter module replaces that codec boundary with a deterministic
+lossless fixture so it remains version-stable and independent of
+machine-global codec packages.
 
 openadapt-capture >=0.6.0 imports clean headless and exposes the exact
 window-scoped producer contract, so this module runs for real in headless CI —
@@ -19,6 +23,9 @@ optional extra is not installed.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -61,7 +68,107 @@ BANNER_SAVED = "Encounter Saved Successfully"
 NOTE_VALUE = "confidential follow up note"
 
 
-# -- fixture drawing (PIL, so frames go straight into capture's VideoWriter) ---
+def _fixture_video_frames(video_path: Path) -> tuple[list[str], list[float]]:
+    """Read the test-only frame manifest from synthetic recording media."""
+    with zipfile.ZipFile(video_path) as archive:
+        payload = json.loads(archive.read("_openadapt_flow_frames.json"))
+    return payload["frames"], payload["timestamps"]
+
+
+def _write_fixture_video(
+    output_path: Path,
+    frames: list[bytes],
+    timestamps: list[float],
+) -> None:
+    """Persist lossless frames behind the path Capture recognizes as video."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    frame_names = [f"frame_{index:08d}.png" for index in range(len(frames))]
+    with zipfile.ZipFile(
+        output_path, mode="w", compression=zipfile.ZIP_STORED
+    ) as archive:
+        archive.writestr(
+            "_openadapt_flow_frames.json",
+            json.dumps({"frames": frame_names, "timestamps": timestamps}),
+        )
+        for name, frame in zip(frame_names, frames, strict=True):
+            archive.writestr(name, frame)
+
+
+class _FixtureVideoWriter:
+    """Test-only lossless writer with Capture's public writer surface."""
+
+    def __init__(
+        self,
+        filename: str,
+        *,
+        width: int,
+        height: int,
+        fps: float,
+        **_kwargs: object,
+    ) -> None:
+        self._path = Path(filename)
+        self._size = (width, height)
+        self._fps = fps
+        self._frames: list[bytes] = []
+        self._timestamps: list[float] = []
+        self._started_at: float | None = None
+
+    def write_frame(self, frame: Image.Image, timestamp: float | None = None) -> None:
+        if frame.size != self._size:
+            raise ValueError(f"expected frame size {self._size}, got {frame.size}")
+        buffer = io.BytesIO()
+        frame.convert("RGB").save(buffer, format="PNG")
+        self._frames.append(buffer.getvalue())
+        if timestamp is None:
+            elapsed = len(self._timestamps) / self._fps
+        else:
+            timestamp = float(timestamp)
+            if self._started_at is None:
+                self._started_at = timestamp
+            elapsed = timestamp - self._started_at
+        self._timestamps.append(elapsed)
+
+    def close(self) -> None:
+        _write_fixture_video(self._path, self._frames, self._timestamps)
+
+
+def _extract_fixture_frame(
+    video_path: str | Path,
+    timestamp: float,
+    tolerance: float = 0.1,
+    **_kwargs: object,
+) -> Image.Image:
+    """Return the nearest lossless fixture frame through Capture's public seam."""
+    path = Path(video_path)
+    frame_names, timestamps = _fixture_video_frames(path)
+    nearest = min(
+        range(len(timestamps)),
+        key=lambda index: abs(timestamps[index] - timestamp),
+        default=None,
+    )
+    if nearest is None or abs(timestamps[nearest] - timestamp) > tolerance:
+        raise ValueError(f"No frame within tolerance for timestamp: {timestamp}")
+    with zipfile.ZipFile(path) as archive:
+        payload = archive.read(frame_names[nearest])
+    with Image.open(io.BytesIO(payload)) as image:
+        return image.convert("RGB").copy()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _provision_capture_video_boundary():
+    """Replace only the codec boundary owned by Capture's qualification suite."""
+    from openadapt_capture import video as capture_video
+
+    patch = pytest.MonkeyPatch()
+    patch.setitem(globals(), "VideoWriter", _FixtureVideoWriter)
+    patch.setattr(capture_video, "extract_frame", _extract_fixture_frame)
+    try:
+        yield
+    finally:
+        patch.undo()
+
+
+# -- fixture drawing (PIL, so frames go straight into the boundary writer) ----
 
 
 def blank() -> Image.Image:
@@ -92,12 +199,12 @@ def app_screens() -> list[Image.Image]:
 
 
 def write_video(path: Path, states: list[Image.Image]) -> None:
-    """Write a *dense* action-gated-style video via capture's public VideoWriter.
+    """Write dense action-gated media through the codec-boundary writer surface.
 
     State ``k`` is shown for the wall-clock window ``[VIDEO_T0 + k - 0.5,
     VIDEO_T0 + k + 0.5)`` (transitions on the half-second), so a frame sampled
     at whole-second offset ``k`` — where this fixture's actions land — resolves
-    unambiguously to state ``k`` through capture's real timestamp-based frame
+    unambiguously to state ``k`` through capture's timestamp-based frame
     extraction (a sparse video would collide on block boundaries).
     """
     import math
