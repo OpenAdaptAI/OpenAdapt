@@ -73,8 +73,9 @@ def deps(tmp_path: Path):
 
 
 class TestRecordingCommands:
-    def test_start_and_stop(self, deps) -> None:
+    def test_start_and_stop(self, deps, monkeypatch) -> None:
         disp, _db, events = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
         r = disp.dispatch("start_recording", {})
         assert r["capture_id"] == "cap1"
         assert ("recording_started", {"capture_id": "cap1"}) in events
@@ -87,6 +88,66 @@ class TestRecordingCommands:
         s = disp.dispatch("get_status", {})
         assert set(s) >= {"recording", "paused", "duration_secs", "capture_id"}
         assert s["recording"] is False
+
+    def test_mac_start_requests_input_monitoring_only_when_needed(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _events = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: False
+        )
+        requests: list[bool] = []
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: requests.append(True) or True,
+        )
+
+        result = disp.dispatch("start_recording", {})
+
+        assert result["recording"] is True
+        assert requests == [True]
+
+    def test_mac_start_refuses_when_input_monitoring_remains_denied(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, events = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: False
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring", lambda: False
+        )
+
+        with pytest.raises(PermissionError, match="Input Monitoring permission"):
+            disp.dispatch("start_recording", {})
+
+        assert disp.services.controller.is_recording is False
+        assert (
+            "recording_error",
+            {
+                "error": (
+                    "Input Monitoring permission is required to record keyboard "
+                    "and mouse input. Grant it in System Settings, then try again."
+                )
+            },
+        ) in events
+
+    def test_mac_start_does_not_request_when_input_monitoring_is_granted(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _events = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: True
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: pytest.fail("permission request must not run"),
+        )
+
+        assert disp.dispatch("start_recording", {})["recording"] is True
 
 
 class TestLibraryCommands:
@@ -385,10 +446,124 @@ class TestRunReportMapping:
 
 
 class TestMisc:
-    def test_check_permissions_shape(self, deps) -> None:
+    def test_non_mac_check_permissions_shape(self, deps, monkeypatch) -> None:
         disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
         p = disp.dispatch("check_permissions", {})
-        assert set(p) == {"screen_recording", "accessibility"}
+        assert p == {
+            "screen_recording": True,
+            "accessibility": True,
+            "input_monitoring": True,
+        }
+
+    def test_mac_permission_check_is_prompt_free(self, deps, monkeypatch) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr("engine.dispatch._mac_preflight_screen", lambda: True)
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_accessibility", lambda: False
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: False
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: pytest.fail("passive check must never request permission"),
+        )
+
+        assert disp.dispatch("check_permissions", {}) == {
+            "screen_recording": True,
+            "accessibility": False,
+            "input_monitoring": False,
+        }
+
+    def test_non_mac_input_monitoring_request_returns_granted_shape(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: pytest.fail("non-mac platforms must not request macOS access"),
+        )
+
+        assert disp.dispatch("request_input_monitoring", {}) == {
+            "screen_recording": True,
+            "accessibility": True,
+            "input_monitoring": True,
+        }
+
+    def test_mac_input_monitoring_request_rechecks_authoritative_state(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr("engine.dispatch._mac_preflight_screen", lambda: True)
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_accessibility", lambda: True
+        )
+        checks = iter((False, True))
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring",
+            lambda: next(checks),
+        )
+        requests: list[bool] = []
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: requests.append(True) or True,
+        )
+
+        assert disp.dispatch("request_input_monitoring", {}) == {
+            "screen_recording": True,
+            "accessibility": True,
+            "input_monitoring": True,
+        }
+        assert requests == [True]
+
+    def test_mac_input_monitoring_request_does_not_assume_success(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr("engine.dispatch._mac_preflight_screen", lambda: True)
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_accessibility", lambda: True
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: False
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring", lambda: True
+        )
+
+        assert disp.dispatch("request_input_monitoring", {}) == {
+            "screen_recording": True,
+            "accessibility": True,
+            "input_monitoring": False,
+        }
+
+    def test_mac_input_monitoring_request_skips_prompt_when_already_granted(
+        self, deps, monkeypatch
+    ) -> None:
+        disp, _db, _e = deps
+        monkeypatch.setattr("engine.dispatch.sys.platform", "darwin")
+        monkeypatch.setattr("engine.dispatch._mac_preflight_screen", lambda: True)
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_accessibility", lambda: True
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_preflight_input_monitoring", lambda: True
+        )
+        monkeypatch.setattr(
+            "engine.dispatch._mac_request_input_monitoring",
+            lambda: pytest.fail("granted access must not prompt again"),
+        )
+
+        assert disp.dispatch("request_input_monitoring", {}) == {
+            "screen_recording": True,
+            "accessibility": True,
+            "input_monitoring": True,
+        }
 
     def test_unknown_command_raises(self, deps) -> None:
         disp, _db, _e = deps
@@ -410,7 +585,8 @@ class TestMisc:
             "run_workflow", "get_run_report", "teach_fix", "push_workflow",
             "get_sync_state", "pause_sync", "resume_sync", "get_needs_attention",
             "login_browser", "login_paste", "logout", "get_auth_status",
-            "get_config", "set_config", "check_permissions", "scrub_capture",
+            "get_config", "set_config", "check_permissions",
+            "request_input_monitoring", "scrub_capture",
             "approve_review", "dismiss_review", "get_pending_reviews",
         }
         assert expected.issubset(set(disp.commands))

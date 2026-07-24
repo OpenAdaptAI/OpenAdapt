@@ -85,7 +85,7 @@ def test_dmg_is_mounted_copied_verified_removed_and_detached(
         elif command[0] == "ditto":
             shutil.copytree(command[1], command[2])
         elif command[0].endswith("openadapt-engine"):
-            return _completed(command, stdout="openadapt-flow 1.19.0\n")
+            return _completed(command, stdout=f"{smoke.bundled_flow_banner()}\n")
         return _completed(command)
 
     monkeypatch.setattr(smoke, "run_command", fake_run)
@@ -117,7 +117,7 @@ def test_adhoc_mode_verifies_installed_app_and_asserts_identity(
         if command[:3] == ["codesign", "--display", "--verbose=4"]:
             return _completed(command, stderr="Signature=adhoc\nTeamIdentifier=not set\n")
         if command[0].endswith("openadapt-engine"):
-            return _completed(command, stdout="openadapt-flow 1.19.0\n")
+            return _completed(command, stdout=f"{smoke.bundled_flow_banner()}\n")
         return _completed(command)
 
     monkeypatch.setattr(smoke, "run_command", fake_run)
@@ -159,7 +159,7 @@ def test_developer_id_mode_checks_codesign_gatekeeper_and_stapled_ticket(
                 ),
             )
         if command[0].endswith("openadapt-engine"):
-            return _completed(command, stdout="openadapt-flow 1.19.0\n")
+            return _completed(command, stdout=f"{smoke.bundled_flow_banner()}\n")
         return _completed(command)
 
     monkeypatch.setattr(smoke, "run_command", fake_run)
@@ -559,7 +559,7 @@ def test_launch_seconds_probe_targets_the_installed_bundle_executable(
         elif command[0] == "ditto":
             shutil.copytree(command[1], command[2])
         elif command[0].endswith("openadapt-engine"):
-            return _completed(command, stdout="openadapt-flow 1.19.0\n")
+            return _completed(command, stdout=f"{smoke.bundled_flow_banner()}\n")
         return _completed(command)
 
     def fake_probe(

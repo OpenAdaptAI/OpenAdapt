@@ -10,6 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod ffmpeg;
 mod pairing;
 mod sidecar;
 mod tray;
@@ -61,6 +62,11 @@ fn main() {
         .manage(SidecarHandle(engine.clone()))
         .setup(move |app| {
             tray::setup_tray(app)?;
+            let ffmpeg = Arc::new(
+                ffmpeg::FfmpegManager::from_app(&app.handle().clone())
+                    .map_err(std::io::Error::other)?,
+            );
+            app.manage(ffmpeg::FfmpegHandle(ffmpeg.clone()));
 
             // Show the main window (config keeps it hidden until the frontend is
             // ready so there is no white flash).
@@ -71,8 +77,13 @@ fn main() {
             // Spawn the frozen Python engine sidecar. Guarded: if the binary is
             // absent (frontend-only dev) the app still runs; the UI shows an
             // "engine offline" state.
-            sidecar::spawn(&app.handle().clone(), engine.clone());
+            sidecar::spawn(
+                &app.handle().clone(),
+                engine.clone(),
+                ffmpeg.effective_paths(),
+            );
             pairing::setup(app, engine.clone(), pairing_links.clone())?;
+            ffmpeg::start_provisioning(app.handle().clone(), ffmpeg);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -80,6 +91,8 @@ fn main() {
             commands::engine_invoke,
             commands::sidecar_status,
             commands::open_external,
+            ffmpeg::ffmpeg_status,
+            ffmpeg::retry_ffmpeg_provisioning,
             // typed convenience commands (forward to the sidecar)
             commands::start_recording,
             commands::stop_recording,

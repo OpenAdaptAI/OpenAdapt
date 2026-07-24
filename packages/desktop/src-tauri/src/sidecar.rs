@@ -31,6 +31,8 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::oneshot;
 
+use crate::ffmpeg::RuntimePaths;
+
 /// The frozen sidecar binary base name (see `tauri.conf.json` externalBin).
 const SIDECAR_NAME: &str = "openadapt-engine";
 /// Fast IPC queries should fail quickly; workflow operations may include a
@@ -65,6 +67,7 @@ pub struct SidecarInner {
     pending: Mutex<HashMap<String, oneshot::Sender<SidecarResponse>>>,
     running: AtomicBool,
     seq: AtomicU64,
+    runtime_paths: Mutex<Option<RuntimePaths>>,
 }
 
 /// Managed-state wrapper so Tauri commands can reach the sidecar.
@@ -144,12 +147,13 @@ impl SidecarInner {
 /// Guarded: if the frozen binary cannot be resolved or spawned, we log and
 /// return — the shell keeps running so the app builds and renders without a
 /// sidecar present (common during frontend development).
-pub fn spawn(app: &AppHandle, inner: Arc<SidecarInner>) {
+pub fn spawn(app: &AppHandle, inner: Arc<SidecarInner>, runtime_paths: Option<RuntimePaths>) {
+    *inner.runtime_paths.lock().unwrap() = runtime_paths;
     spawn_with_attempt(app.clone(), inner, 0);
 }
 
 fn spawn_with_attempt(app: AppHandle, inner: Arc<SidecarInner>, attempt: u32) {
-    let command = match app.shell().sidecar(SIDECAR_NAME) {
+    let mut command = match app.shell().sidecar(SIDECAR_NAME) {
         Ok(cmd) => cmd,
         Err(e) => {
             eprintln!("[sidecar] '{SIDECAR_NAME}' not available (frontend-only mode): {e}");
@@ -157,6 +161,11 @@ fn spawn_with_attempt(app: AppHandle, inner: Arc<SidecarInner>, attempt: u32) {
             return;
         }
     };
+    if let Some(paths) = inner.runtime_paths.lock().unwrap().as_ref() {
+        command = command
+            .env("OPENADAPT_FFMPEG_PATH", paths.ffmpeg.as_os_str())
+            .env("OPENADAPT_FFPROBE_PATH", paths.ffprobe.as_os_str());
+    }
 
     let (mut rx, child) = match command.spawn() {
         Ok(pair) => pair,

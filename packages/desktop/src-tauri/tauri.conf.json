@@ -50,7 +50,9 @@
     "externalBin": [
       "binaries/openadapt-engine"
     ],
-    "macOS": {},
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    },
     "windows": {
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.digicert.com",

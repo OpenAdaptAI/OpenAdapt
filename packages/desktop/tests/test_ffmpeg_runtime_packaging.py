@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import zipfile
 from pathlib import Path
@@ -85,6 +86,42 @@ def test_runtime_manifest_refuses_missing_probe_or_license(tmp_path: Path) -> No
     (bundle / "LICENSES/FFmpeg-LGPL-2.1-or-later.txt").unlink()
     with pytest.raises(ValueError, match="missing"):
         manifest_entry(bundle, archive, "target", "build")
+
+
+def test_embedded_runtime_manifest_pins_complete_reviewed_release() -> None:
+    manifest = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "src-tauri"
+            / "ffmpeg-runtime-manifest.json"
+        ).read_text()
+    )
+    assert manifest["schema_version"] == 1
+    assert manifest["runtime"] == "ffmpeg"
+    assert manifest["runtime_version"] == "8.1.2-r1"
+    artifacts = manifest["artifacts"]
+    assert {artifact["target"] for artifact in artifacts} == {
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+    }
+    for artifact in artifacts:
+        assert artifact["url"].startswith(
+            "https://github.com/OpenAdaptAI/openadapt-desktop/releases/download/"
+            "ffmpeg-runtime-v8.1.2-r1/"
+        )
+        assert re.fullmatch(r"[0-9a-f]{64}", artifact["archive_sha256"])
+        assert artifact["source"]["sha256"] == SOURCE_SHA256
+        assert (
+            artifact["source"]["signing_key_fingerprint"]
+            == SIGNING_KEY_FINGERPRINT
+        )
+        assert {
+            file.get("role")
+            for file in artifact["files"]
+            if file.get("role") is not None
+        } == {"ffmpeg", "ffprobe"}
 
 
 def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> None:

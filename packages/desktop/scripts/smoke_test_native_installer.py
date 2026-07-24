@@ -30,9 +30,12 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
+
+ROOT = Path(__file__).resolve().parents[1]
 
 SIGNING_MODES = (
     "unsigned",
@@ -41,6 +44,27 @@ SIGNING_MODES = (
     "authenticode",
     "gpg",
 )
+
+
+def bundled_flow_version(root: Path = ROOT) -> str:
+    """Return the single exact Flow version frozen into native installers."""
+
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = pyproject["project"]["optional-dependencies"]["build"]
+    pins = [
+        dependency.removeprefix("openadapt-flow==")
+        for dependency in dependencies
+        if dependency.startswith("openadapt-flow==")
+    ]
+    if len(pins) != 1 or not re.fullmatch(r"\d+\.\d+\.\d+", pins[0]):
+        raise SmokeTestError(f"expected one exact openadapt-flow build pin, found: {pins}")
+    return pins[0]
+
+
+def bundled_flow_banner(root: Path = ROOT) -> str:
+    """Return the exact CLI version banner expected from the frozen runtime."""
+
+    return f"openadapt-flow {bundled_flow_version(root)}"
 
 
 class SmokeTestError(RuntimeError):
@@ -215,7 +239,7 @@ def _verify_macos_embedded_flow_runtime(app_path: Path, *, timeout: float) -> No
         timeout=max(timeout, 60.0),
     )
     output = _combined_output(result)
-    if "openadapt-flow 1.19.0" not in output:
+    if bundled_flow_banner() not in output:
         raise SmokeTestError(f"installed engine has the wrong Flow runtime: {_tail(output)}")
 
 

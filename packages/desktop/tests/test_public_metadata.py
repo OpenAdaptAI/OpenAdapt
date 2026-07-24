@@ -6,6 +6,8 @@ import tomllib
 from pathlib import Path
 
 from scripts.check_release_consistency import release_versions, sync_lock_version
+from scripts.smoke_test_native_installer import bundled_flow_version
+from scripts.verify_build_artifact import bundled_flow_banner
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -67,6 +69,10 @@ def test_semantic_release_refreshes_lock_and_builds_before_tagging() -> None:
     assert "git add uv.lock" in build_command
     assert "uv build --wheel --sdist" in build_command
     assert "check_release_consistency.py --require-dist" in build_command
+    assert "verify_build_artifact.py python-distribution" in build_command
+    assert build_command.index("uv build --wheel --sdist") < build_command.index(
+        "verify_build_artifact.py python-distribution"
+    )
     assert "uv lock" not in build_command
     assert "$PACKAGE_NAME" not in build_command
 
@@ -147,13 +153,26 @@ def test_beta_release_notes_describe_the_bundled_flow_runtime() -> None:
     lock = (ROOT / "uv.lock").read_text()
     native_release = (ROOT / ".github/workflows/native-release.yml").read_text()
     build_dependencies = pyproject["project"]["optional-dependencies"]["build"]
+    dependencies = pyproject["project"]["dependencies"]
+    classifiers = pyproject["project"]["classifiers"]
 
     assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
     assert native_release.count("--notes-file docs/BETA_NATIVE_INSTALLERS.md") == 2
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
-    assert "openadapt-flow==1.19.0" in build_dependencies
+    flow_dependencies = [
+        dependency
+        for dependency in build_dependencies
+        if dependency.startswith("openadapt-flow==")
+    ]
+    assert flow_dependencies == ["openadapt-flow==1.20.1"]
+    assert "openadapt-capture>=1.0.4" in dependencies
+    assert "openadapt-privacy>=1.0.0" in dependencies
+    assert "Development Status :: 4 - Beta" in classifiers
+    assert "Development Status :: 2 - Pre-Alpha" not in classifiers
+    assert bundled_flow_version() == "1.20.1"
+    assert bundled_flow_banner() == "openadapt-flow 1.20.1"
     assert 'name = "playwright"\nversion = "1.61.0"' in lock
-    assert "openadapt-flow==1.19.0" in notes
+    assert flow_dependencies[0] in notes
     assert "playwright==1.61.0" in notes
     assert "without a separate Python" in notes
     assert "not frozen into these installers" not in notes

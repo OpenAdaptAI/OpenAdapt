@@ -12,15 +12,31 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from importlib.metadata import PackageNotFoundError, distribution
 from pathlib import Path
+
+try:
+    from scripts.frozen_notices import NOTICE_BUNDLE_MEMBER, prepare_notice_bundle
+except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...`` use
+    from frozen_notices import NOTICE_BUNDLE_MEMBER, prepare_notice_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 
 # Defense in depth.  Static analysis of the product CLI should not pull these
 # modules in, and the artifact audit independently refuses them if it ever does.
 EXCLUDED_MODULES = (
+    # NumPy, OpenCV, and RapidOCR are exact-hash, first-use runtime
+    # components. They remain outside the MIT sidecar/installer and are loaded
+    # from the verified user-data cache by engine.managed_vision.
+    "numpy",
+    "cv2",
+    "rapidocr_onnxruntime",
+    # Build tooling is neither required at runtime nor permitted in the frozen
+    # application artifact.
+    "setuptools",
+    "_distutils_hack",
     "openadapt_flow.benchmark",
     "openadapt_flow.validation.adversary_corpus",
     "openadapt_flow.validation.adversary_corpus_v2",
@@ -29,6 +45,24 @@ EXCLUDED_MODULES = (
 )
 
 RAPIDOCR_NOTICE_DIR = ROOT / "third_party" / "rapidocr"
+LINUX_RUNNER_RUNTIME_EXCLUDE = r"libgcc_s\.so(\..*)?"
+
+
+def configure_system_runtime_boundary(
+    *,
+    platform: str = sys.platform,
+    dylib_module=None,
+) -> bool:
+    """Keep the Linux runner's unpinned libgcc outside the frozen artifact."""
+
+    if not platform.startswith("linux"):
+        return False
+    if dylib_module is None:
+        from PyInstaller.depend import dylib as dylib_module
+
+    dylib_module._excludes.add(LINUX_RUNNER_RUNTIME_EXCLUDE)
+    dylib_module.exclude_list = dylib_module.MatchList(dylib_module._excludes)
+    return True
 
 
 def notice_data(
@@ -65,6 +99,7 @@ def build_command(
     signing_identity: str = "",
     platform: str = sys.platform,
     onnxruntime_dir: Path | None = None,
+    notice_bundle: Path | None = None,
 ) -> list[str]:
     """Return the deterministic PyInstaller command without importing it."""
 
@@ -85,12 +120,24 @@ def build_command(
         "--collect-data",
         "openadapt_flow",
         "--collect-data",
-        "rapidocr_onnxruntime",
+        "engine",
+        "--hidden-import",
+        "onnxruntime",
+        "--hidden-import",
+        "shapely",
+        "--hidden-import",
+        "pyclipper",
+        "--hidden-import",
+        "six",
+        "--hidden-import",
+        "tqdm",
         "--copy-metadata",
         "openadapt-flow",
     ]
     for source, destination in notice_data(onnxruntime_dir):
         command.extend(("--add-data", f"{source}:{destination}"))
+    notice_bundle = notice_bundle or (ROOT / ".build-frozen-notices")
+    command.extend(("--add-data", f"{notice_bundle}:{NOTICE_BUNDLE_MEMBER}"))
     for module in EXCLUDED_MODULES:
         command.extend(("--exclude-module", module))
     # A Developer ID build must sign the binaries *inside* PyInstaller's
@@ -102,6 +149,12 @@ def build_command(
     signing_identity = signing_identity.strip()
     if platform == "darwin" and signing_identity and signing_identity != "-":
         command.extend(("--codesign-identity", signing_identity))
+        command.extend(
+            (
+                "--osx-entitlements-file",
+                str(ROOT / "src-tauri" / "Entitlements.plist"),
+            )
+        )
     command.append(str(ROOT / "engine" / "__main__.py"))
     return command
 
@@ -115,13 +168,24 @@ def main() -> int:
 
     import PyInstaller.__main__
 
-    command = build_command(
-        distpath=args.distpath,
-        workpath=args.workpath,
-        specpath=args.specpath,
-        signing_identity=os.environ.get("APPLE_SIGNING_IDENTITY", ""),
+    workpath = Path(args.workpath)
+    notice_bundle_path = workpath.parent / f".{workpath.name}-frozen-notices"
+    notice_bundle = prepare_notice_bundle(
+        notice_bundle_path,
+        root_license=ROOT / "LICENSE",
     )
-    PyInstaller.__main__.run(command)
+    try:
+        configure_system_runtime_boundary()
+        command = build_command(
+            distpath=args.distpath,
+            workpath=args.workpath,
+            specpath=args.specpath,
+            signing_identity=os.environ.get("APPLE_SIGNING_IDENTITY", ""),
+            notice_bundle=notice_bundle,
+        )
+        PyInstaller.__main__.run(command)
+    finally:
+        shutil.rmtree(notice_bundle_path, ignore_errors=True)
     return 0
 
 

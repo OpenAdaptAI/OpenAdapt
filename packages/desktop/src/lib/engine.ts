@@ -11,6 +11,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { FfmpegRuntimeStatus } from "./types";
 
 /** Commands the frontend sends to the engine (Tauri cmd === engine IPC cmd). */
 export const CMD = {
@@ -48,8 +49,9 @@ export const CMD = {
   // cached fail-closed by the engine (engine/policy.py, docs/POLICY_SYNC.md).
   // The desktop consumes it read-only; the canonical write path is the cloud API.
   GET_EFFECTIVE_POLICY: "get_effective_policy",
-  // OS permissions (screen recording / accessibility)
+  // OS permissions (screen recording / accessibility / input monitoring)
   CHECK_PERMISSIONS: "check_permissions",
+  REQUEST_INPUT_MONITORING: "request_input_monitoring",
   // review / egress gate (existing engine surface)
   SCRUB_CAPTURE: "scrub_capture",
   APPROVE_REVIEW: "approve_review",
@@ -112,6 +114,45 @@ export async function sidecarRunning(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+const FFMPEG_BROWSER_FALLBACK: FfmpegRuntimeStatus = {
+  phase: "ready",
+  source: "managed",
+  runtime_version: "browser-preview",
+  target: "browser-preview",
+};
+
+/** Status of the separately provisioned local video runtime. */
+export async function ffmpegRuntimeStatus(): Promise<FfmpegRuntimeStatus> {
+  if (!inTauri()) return FFMPEG_BROWSER_FALLBACK;
+  try {
+    return await invoke<FfmpegRuntimeStatus>("ffmpeg_status");
+  } catch (error) {
+    return {
+      phase: "error",
+      source: "managed",
+      runtime_version: "unknown",
+      target: "unknown",
+      detail: String(error),
+    };
+  }
+}
+
+/** Retry automatic first-use runtime provisioning. */
+export async function retryFfmpegRuntime(): Promise<FfmpegRuntimeStatus> {
+  if (!inTauri()) return FFMPEG_BROWSER_FALLBACK;
+  return invoke<FfmpegRuntimeStatus>("retry_ffmpeg_provisioning");
+}
+
+/** Subscribe to native runtime provisioning progress. */
+export function onFfmpegRuntimeStatus(
+  handler: (payload: FfmpegRuntimeStatus) => void,
+): Promise<UnlistenFn> {
+  if (!inTauri()) return Promise.resolve(() => {});
+  return listen<FfmpegRuntimeStatus>("runtime://ffmpeg-status", (event) =>
+    handler(event.payload),
+  );
 }
 
 /** Open a URL in the system browser (login deep-link, cloud dashboard, panes). */

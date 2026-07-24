@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import enum
 import json
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,24 @@ if TYPE_CHECKING:
     from engine.db import IndexDB
     from engine.flow_bridge import FlowBridge
     from engine.storage_manager import StorageManager
+
+
+def _load_capture_recorder():
+    """Load the native recorder or fail before claiming a recording started."""
+
+    if getattr(sys, "frozen", False):
+        from engine.managed_vision import ensure_managed_vision_runtime
+
+        ensure_managed_vision_runtime()
+    try:
+        from openadapt_capture import Recorder
+    except ImportError as exc:
+        raise RuntimeError(
+            "OpenAdapt Capture could not be imported; reinstall OpenAdapt Desktop"
+        ) from exc
+    if Recorder is None:
+        raise RuntimeError("OpenAdapt Capture's native recorder is unavailable on this system")
+    return Recorder
 
 
 def _now_iso() -> str:
@@ -118,9 +137,7 @@ class RecordingController:
             RuntimeError: If a recording is already active.
         """
         if self.state != RecordingState.IDLE:
-            raise RuntimeError(
-                f"Cannot start recording: controller is in {self.state.value} state"
-            )
+            raise RuntimeError(f"Cannot start recording: controller is in {self.state.value} state")
 
         capture_id = uuid.uuid4().hex[:8]
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
@@ -140,30 +157,51 @@ class RecordingController:
         }
         (capture_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
-        # Write state.json
-        state = {"status": "recording", "started_at": started_at, "capture_id": capture_id}
-        (capture_dir / "state.json").write_text(json.dumps(state, indent=2))
+        state_path = capture_dir / "state.json"
+        state = {"status": "starting", "started_at": started_at, "capture_id": capture_id}
+        state_path.write_text(json.dumps(state, indent=2))
 
-        # Try to start openadapt-capture Recorder
+        recorder = None
         try:
-            from openadapt_capture import Recorder
-            self._recorder = Recorder(output_dir=str(capture_dir))
-            self._recorder.start()
-        except ImportError:
-            # openadapt-capture not installed -- record metadata only
-            self._recorder = None
-        except Exception:
-            # Recorder failed (e.g., no display) -- still track the session
-            self._recorder = None
+            Recorder = _load_capture_recorder()
+            recorder = Recorder(str(capture_dir), task_description=task_description)
+            recorder.__enter__()
+            if not recorder.wait_for_ready(timeout=60):
+                raise RuntimeError("OpenAdapt Capture did not become ready within 60 seconds")
+            if not recorder.is_recording:
+                raise RuntimeError("OpenAdapt Capture stopped before recording became ready")
 
-        self._current_capture_id = capture_id
-        self._capture_dir = capture_dir
-        self._started_at = started_at
-        self.state = RecordingState.RECORDING
+            self._recorder = recorder
+            self._current_capture_id = capture_id
+            self._capture_dir = capture_dir
+            self._started_at = started_at
+            self.state = RecordingState.RECORDING
+            state["status"] = "recording"
+            state_path.write_text(json.dumps(state, indent=2))
 
-        # Register in DB if storage_manager available
-        if self._storage_manager:
-            self._storage_manager.register_capture(capture_id, capture_dir)
+            if self._storage_manager:
+                self._storage_manager.register_capture(capture_id, capture_dir)
+        except Exception as exc:
+            if recorder is not None:
+                try:
+                    recorder.stop()
+                except Exception:
+                    logger.exception("Recorder stop failed after start error")
+                try:
+                    recorder.__exit__(type(exc), exc, exc.__traceback__)
+                except Exception:
+                    logger.exception("Recorder exit failed after start error")
+            state.update({"status": "failed", "failed_at": _now_iso(), "error": str(exc)})
+            try:
+                state_path.write_text(json.dumps(state, indent=2))
+            except Exception:
+                logger.exception("Could not persist failed recording state")
+            self._current_capture_id = None
+            self._capture_dir = None
+            self._started_at = None
+            self._recorder = None
+            self.state = RecordingState.IDLE
+            raise RuntimeError(f"Could not start native recording: {exc}") from exc
 
         return capture_id
 
@@ -182,84 +220,118 @@ class RecordingController:
         stopped_at = _now_iso()
         event_count = 0
 
-        # Stop the recorder
-        if self._recorder is not None:
+        recorder = self._recorder
+        if recorder is None:
+            raise RuntimeError("Recording state is active but the native recorder is missing")
+
+        try:
+            recorder.stop()
+            recorder.__exit__(None, None, None)
+            event_count = getattr(recorder, "event_count", 0) or 0
+        except Exception as exc:
             try:
-                self._recorder.stop()
-                event_count = getattr(self._recorder, "event_count", 0) or 0
+                recorder.__exit__(type(exc), exc, exc.__traceback__)
             except Exception:
-                pass
+                logger.exception("Recorder cleanup failed after stop error")
+            if self._capture_dir:
+                state = {
+                    "status": "failed",
+                    "started_at": self._started_at,
+                    "failed_at": _now_iso(),
+                    "capture_id": self._current_capture_id,
+                    "error": str(exc),
+                }
+                (self._capture_dir / "state.json").write_text(json.dumps(state, indent=2))
+            self._current_capture_id = None
+            self._capture_dir = None
+            self._started_at = None
+            self._recorder = None
+            self.state = RecordingState.IDLE
+            raise RuntimeError(f"Could not stop native recording cleanly: {exc}") from exc
 
-        # Calculate duration
-        duration = 0.0
-        if self._started_at:
-            try:
-                start = datetime.fromisoformat(self._started_at)
-                end = datetime.fromisoformat(stopped_at)
-                duration = (end - start).total_seconds()
-            except Exception:
-                pass
+        capture_id = self._current_capture_id
+        capture_dir = self._capture_dir
+        started_at = self._started_at
+        try:
+            duration = 0.0
+            if started_at:
+                try:
+                    start = datetime.fromisoformat(started_at)
+                    end = datetime.fromisoformat(stopped_at)
+                    duration = (end - start).total_seconds()
+                except Exception:
+                    pass
 
-        size_bytes = _dir_size(self._capture_dir) if self._capture_dir else 0
+            size_bytes = _dir_size(capture_dir) if capture_dir else 0
 
-        # Update state.json
-        if self._capture_dir:
-            state = {
-                "status": "completed",
-                "started_at": self._started_at,
-                "stopped_at": stopped_at,
-                "capture_id": self._current_capture_id,
-            }
-            (self._capture_dir / "state.json").write_text(json.dumps(state, indent=2))
+            if capture_dir:
+                state = {
+                    "status": "completed",
+                    "started_at": started_at,
+                    "stopped_at": stopped_at,
+                    "capture_id": capture_id,
+                }
+                (capture_dir / "state.json").write_text(json.dumps(state, indent=2))
 
-            # Update meta.json
-            meta_path = self._capture_dir / "meta.json"
-            if meta_path.exists():
-                meta = json.loads(meta_path.read_text())
-            else:
-                meta = {}
-            meta.update({
-                "stopped_at": stopped_at,
-                "duration_secs": duration,
+                meta_path = capture_dir / "meta.json"
+                if meta_path.exists():
+                    meta = json.loads(meta_path.read_text())
+                else:
+                    meta = {}
+                meta.update(
+                    {
+                        "stopped_at": stopped_at,
+                        "duration_secs": duration,
+                        "event_count": event_count,
+                        "size_bytes": size_bytes,
+                    }
+                )
+                meta_path.write_text(json.dumps(meta, indent=2))
+
+            if self._storage_manager:
+                self._storage_manager.db.update_capture(
+                    capture_id,
+                    stopped_at=stopped_at,
+                    duration_secs=duration,
+                    event_count=event_count,
+                    size_bytes=size_bytes,
+                )
+
+            metadata = {
+                "id": capture_id,
+                "duration": duration,
                 "event_count": event_count,
                 "size_bytes": size_bytes,
-            })
-            meta_path.write_text(json.dumps(meta, indent=2))
+                "path": str(capture_dir),
+            }
 
-        # Update DB
-        if self._storage_manager:
-            self._storage_manager.db.update_capture(
-                self._current_capture_id,
-                stopped_at=stopped_at,
-                duration_secs=duration,
-                event_count=event_count,
-                size_bytes=size_bytes,
-            )
+            if self._auto_compile and self._flow_bridge is not None and capture_dir:
+                compiled = self.compile_capture(capture_id, capture_dir)
+                if compiled:
+                    metadata["bundle_id"] = compiled.get("bundle_id")
+                    metadata["bundle_path"] = compiled.get("bundle_path")
 
-        metadata = {
-            "id": self._current_capture_id,
-            "duration": duration,
-            "event_count": event_count,
-            "size_bytes": size_bytes,
-            "path": str(self._capture_dir),
-        }
-
-        # Post-stop loop step: compile the recording into a flow bundle and track
-        # it. Opt-in so the pure-recording path (and existing tests) are untouched.
-        if self._auto_compile and self._flow_bridge is not None and self._capture_dir:
-            compiled = self.compile_capture(self._current_capture_id, self._capture_dir)
-            if compiled:
-                metadata["bundle_id"] = compiled.get("bundle_id")
-                metadata["bundle_path"] = compiled.get("bundle_path")
-
-        # Reset state
-        self._current_capture_id = None
-        self._capture_dir = None
-        self._started_at = None
-        self._recorder = None
-        self.state = RecordingState.IDLE
-
-        return metadata
+            return metadata
+        except Exception as exc:
+            if capture_dir:
+                failed_state = {
+                    "status": "failed",
+                    "started_at": started_at,
+                    "failed_at": _now_iso(),
+                    "capture_id": capture_id,
+                    "error": str(exc),
+                }
+                try:
+                    (capture_dir / "state.json").write_text(json.dumps(failed_state, indent=2))
+                except Exception:
+                    logger.exception("Could not persist failed recording finalization")
+            raise RuntimeError(f"Could not finalize native recording: {exc}") from exc
+        finally:
+            self._current_capture_id = None
+            self._capture_dir = None
+            self._started_at = None
+            self._recorder = None
+            self.state = RecordingState.IDLE
 
     def compile_capture(self, capture_id: str, capture_dir: Path) -> dict | None:
         """Compile a finished recording into an openadapt-flow bundle directory.
@@ -287,14 +359,13 @@ class RecordingController:
             logger.warning("Compile failed for {cid}: {e}", cid=capture_id, e=exc)
             return None
         if not result.ok:
-            logger.warning("Compile returned nonzero for {cid}: {err}",
-                           cid=capture_id, err=result.stderr[:200])
+            logger.warning(
+                "Compile returned nonzero for {cid}: {err}", cid=capture_id, err=result.stderr[:200]
+            )
             return None
         if self._db is not None:
             try:
-                self._db.insert_bundle(
-                    bundle_id, str(bundle_path), capture_id=capture_id
-                )
+                self._db.insert_bundle(bundle_id, str(bundle_path), capture_id=capture_id)
             except Exception as exc:
                 logger.warning("Could not record bundle {bid}: {e}", bid=bundle_id, e=exc)
         return {"bundle_id": bundle_id, "bundle_path": str(bundle_path), "ok": True}
@@ -360,9 +431,7 @@ class RecordingController:
                 # Register in DB if storage_manager available
                 if self._storage_manager:
                     self._storage_manager.register_capture(capture_id, capture_dir)
-                    self._storage_manager.db.update_capture(
-                        capture_id, stopped_at=stopped_at
-                    )
+                    self._storage_manager.db.update_capture(capture_id, stopped_at=stopped_at)
 
                 recovered.append(capture_id)
 

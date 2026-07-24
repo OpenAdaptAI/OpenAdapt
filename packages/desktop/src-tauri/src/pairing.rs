@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn rejects_malformed_duplicate_and_unknown_fields() {
         for raw in [
-            format!("openadapt://connect?pairing=short&host=https://app.openadapt.ai"),
+            "openadapt://connect?pairing=short&host=https://app.openadapt.ai".to_string(),
             format!("openadapt://connect?pairing={SECRET}"),
             format!(
                 "openadapt://connect?pairing={SECRET}&pairing={SECRET}&host=https://app.openadapt.ai"

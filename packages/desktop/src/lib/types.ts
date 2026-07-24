@@ -80,6 +80,23 @@ export interface NeedsAttention {
 export interface PermissionStatus {
   screen_recording: boolean;
   accessibility: boolean;
+  input_monitoring: boolean;
+}
+
+export interface FfmpegRuntimeStatus {
+  phase:
+    | "checking"
+    | "downloading"
+    | "verifying"
+    | "ready"
+    | "error"
+    | "unavailable";
+  source: "managed" | "override";
+  runtime_version: string;
+  target: string;
+  path?: string | null;
+  ffprobe_path?: string | null;
+  detail?: string | null;
 }
 
 // Runner lane (EXPERIMENTAL — outbound dispatch loop, spec §2).

@@ -125,9 +125,9 @@ def test_freshness_workflow_syncs_engine_releases_into_the_native_lane() -> None
         "src-tauri/tauri.conf.json",
     ):
         assert protected_path in provenance_gate
-    publish_step = freshness.split(
-        "- name: Commit the sync, tag desktop-v*, and push", 1
-    )[1].split("  supersede-published-native:", 1)[0]
+    publish_step = freshness.split("- name: Commit the sync, tag desktop-v*, and push", 1)[1].split(
+        "  supersede-published-native:", 1
+    )[0]
     assert 'git push --atomic origin HEAD:main "refs/tags/${NATIVE_TAG}"' in publish_step
     assert publish_step.count("git push origin") == 1
     # No builds here: the existing native release workflow owns the matrix,
@@ -165,14 +165,15 @@ def test_supersession_edits_notes_only_and_never_deletes() -> None:
 def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
     config = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text())
 
-    assert config["plugins"] == {
-        "deep-link": {"desktop": {"schemes": ["openadapt"]}}
-    }
+    assert config["plugins"] == {"deep-link": {"desktop": {"schemes": ["openadapt"]}}}
     assert "updater" not in config["plugins"]
     assert config["bundle"]["targets"] == ["dmg", "msi", "nsis", "deb", "appimage"]
     # Target releases inherit APPLE_SIGNING_IDENTITY and keep hardened runtime.
     # The explicit ad-hoc overlay is only for unsigned beta artifacts.
     assert "signingIdentity" not in config["bundle"]["macOS"]
+    assert config["bundle"]["macOS"]["entitlements"] == "Entitlements.plist"
+    entitlements = (ROOT / "src-tauri" / config["bundle"]["macOS"]["entitlements"]).read_text()
+    assert "com.apple.security.cs.disable-library-validation" in entitlements
     adhoc = json.loads((ROOT / "src-tauri/tauri.adhoc.conf.json").read_text())
     assert adhoc["bundle"]["macOS"] == {
         "signingIdentity": "-",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from types import ModuleType
 
 from engine import __version__
 from engine import main as engine_main
@@ -64,6 +65,58 @@ def test_embedded_playwright_strips_python_module_argv(monkeypatch) -> None:
     engine_main._run_embedded_playwright()
 
     assert observed == [["engine", "install", "chromium"]]
+
+
+def test_embedded_flow_version_stays_offline(monkeypatch, capsys) -> None:
+    managed = ModuleType("engine.managed_vision")
+
+    def unexpected_provision() -> None:
+        raise AssertionError("version discovery must not provision optional vision")
+
+    managed.ensure_managed_vision_runtime = unexpected_provision  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
+    monkeypatch.setattr(engine_main, "_configure_frozen_browser_cache", lambda: None)
+    monkeypatch.setattr(engine_main, "_normalize_flow_auto_scrub_capability", lambda: None)
+    monkeypatch.setattr(engine_main, "_embedded_flow_version", lambda: "1.20.1")
+    monkeypatch.setattr(sys, "argv", ["engine", "__openadapt_flow__", "--version"])
+
+    engine_main._run_embedded_flow()
+
+    assert capsys.readouterr().out == "openadapt-flow 1.20.1\n"
+
+
+def test_embedded_flow_command_provisions_vision_before_import(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(engine_main, "_configure_frozen_browser_cache", lambda: None)
+    monkeypatch.setattr(engine_main, "_normalize_flow_auto_scrub_capability", lambda: None)
+    monkeypatch.setattr(engine_main.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["engine", "__openadapt_flow__", "lint", "bundle"],
+    )
+
+    managed = ModuleType("engine.managed_vision")
+
+    def provision() -> None:
+        calls.append("provision")
+
+    managed.ensure_managed_vision_runtime = provision  # type: ignore[attr-defined]
+    flow = ModuleType("openadapt_flow.__main__")
+
+    def flow_main() -> None:
+        calls.append("flow")
+
+    flow.main = flow_main  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.__main__", flow)
+
+    engine_main._run_embedded_flow()
+
+    assert calls == ["provision", "flow"]
+    assert sys.argv == ["engine", "lint", "bundle"]
 
 
 def test_incomplete_auto_scrubber_matches_flow_auto_fallback(monkeypatch) -> None:

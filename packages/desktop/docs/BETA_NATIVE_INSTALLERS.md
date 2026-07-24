@@ -10,12 +10,25 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow==1.19.0` runtime and its
+native installer freezes the exact `openadapt-flow==1.20.1` runtime and its
 `playwright==1.61.0` browser automation dependency into the Desktop sidecar.
 Compile, replay, run, and teach therefore work without a separate Python,
 `openadapt-flow`, or `playwright` installation on `PATH`. The first browser
 workflow downloads the Chromium revision pinned by the bundled Playwright
 runtime unless an approved browser cache is pre-provisioned.
+
+Desktop keeps separately licensed media and vision components outside its MIT
+installer. On first use, it downloads the exact release-reviewed component for
+the current platform, verifies the pinned URL, byte count, and SHA-256, installs
+it into a versioned local cache, and re-verifies every extracted file before
+loading it. This applies to the managed FFmpeg 8.1.2 runtime used for capture
+encoding and the RapidOCR 1.4.4/OpenCV 5.0.0.93 runtime used for visual
+resolution. A partial or drifted download is never activated; rerunning the
+operation retries it. Enterprise images can pre-provision the same exact cache
+without changing the runtime contract. Developer ID builds carry the narrow
+macOS library-validation entitlement required to load that independently
+signed, hash-verified OpenCV extension; the manifest and full-file cache audit
+remain the admission boundary.
 
 Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
