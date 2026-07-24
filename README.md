@@ -85,7 +85,7 @@ report instead of guessing. Either way, every run writes an illustrated report.*
 pip install openadapt              # CLI + demonstration compiler (openadapt flow …)
 pip install "openadapt[capture]"   # + local human desktop recording
 pip install "openadapt[privacy]"   # + Presidio-backed PII/PHI scrubbing
-pip install "openadapt[all]"       # Everything, including research extras
+pip install "openadapt[all]"       # Platform substrate + research extras
 ```
 
 The flagship compiler ships in the base install, so `openadapt flow …` works
@@ -499,8 +499,10 @@ today, not whether it is first-class in the product:
 | Citrix / VDI | **Exploratory** | No validated ICA/HDX integration yet; qualification can only begin inside a design partner's real Citrix/VDI environment. RDP evidence does not transfer. |
 | Hosted Cloud | **Beta** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Desktop, RDP, and Citrix run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
 
-Current components (see the manifest for the source of truth): launcher
-`openadapt` 1.7.1 · `openadapt-flow` 1.20.1 · desktop 0.9.0.
+Current launcher, Flow, and Desktop versions are maintained only in the
+canonical machine-readable
+[status manifest](https://openadapt.ai/status.json). This README intentionally
+does not copy that release ledger because each component releases independently.
 
 ### CLI reference
 

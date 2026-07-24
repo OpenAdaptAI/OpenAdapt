@@ -84,7 +84,12 @@ core = [
     "openadapt[capture,ml,evals,viewer]",
 ]
 all = [
-    "openadapt[core,grounding,retrieval,privacy,flow]",
+    # Cross-platform clients are always safe to resolve. Native bindings remain
+    # conditional so `openadapt[all]` never pulls PyObjC onto Linux/Windows or
+    # PyGObject onto macOS/Windows.
+    "openadapt[core,grounding,retrieval,privacy,flow,windows,rdp]",
+    "openadapt[macos]; sys_platform == 'darwin'",
+    "openadapt[linux]; sys_platform == 'linux'",
 ]
 dev = [
     "build>=1.2.0",
