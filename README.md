@@ -224,10 +224,12 @@ The Windows agent, native applications, RDP service, and Citrix Workspace
 session must already exist and be explicitly configured. Neither the launcher
 nor `replay` silently provisions or connects those external systems.
 
-The browser path is the Beta reference loop and runs in CI with no OS
-permissions. Windows, macOS, and RDP are Early access: validated on specific
-named tasks and environments, not arbitrary-application support. Citrix/VDI is
-Exploratory (no validated real-environment integration yet); see
+Browser, Windows, macOS, Linux, RDP, and Citrix/VDI are available execution
+substrates in the same compiler and governed runtime. Each deployment still
+binds the exact application, environment, identity contract, and independent
+effect oracle; Citrix's retained qualification covers the shipped
+Workspace-window contract and records `ica_hdx_accepted=false` rather than
+mislabeling stand-in or RDP evidence as a counted ICA/HDX run. See
 [Substrate maturity](#substrate-maturity).
 
 Before you deploy, apply the stricter gates:
@@ -245,7 +247,7 @@ only that the bundle satisfies that named policy.
 
 The same halt-don't-guess principle holds at replay time. When a step cannot be
 verified, the run stops and reports why rather than writing to the wrong record.
-Below, the optional desktop app (**Experimental**) halts a run because the typed
+Below, the optional desktop app (**Beta**) halts a run because the typed
 value could not be verified on the target field:
 
 ![OpenAdapt Desktop halting a run safely: step 9 could not verify the typed value against the target field, so the run aborted before the write](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-halted.png)
@@ -346,7 +348,7 @@ The body shown is a compact MockMed fixture whose loop is replay-tested in
 `docs/showcase-loop`.
 
 Replayed locally, that same compiled workflow runs deterministically with no
-model calls. The optional desktop app (**Experimental**) shows a completed run:
+model calls. The optional desktop app (**Beta**) shows a completed run:
 11/11 steps verified, and `$0.000` because a healthy run makes no model calls:
 
 ![OpenAdapt Desktop replaying the compiled MockMed workflow locally: 11 of 11 steps verified, 8.2s, $0.000 cost, no model calls](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/media/desktop-replay-verified.png)
@@ -359,9 +361,10 @@ model calls. The optional desktop app (**Experimental**) shows a completed run:
 OpenAdapt Cloud is the optional hosted path for teams that want managed
 execution, a dashboard, approvals, policy, audit, scheduling, and billing. It is
 not required for the local loop above. The public managed subscription runs
-**browser** workflows today; desktop, RDP, and Citrix substrates run
-self-hosted or on-prem under the same governed contract, as separately scoped
-design-partner deployments.
+**browser** workflows today; Windows, macOS, Linux, RDP, and Citrix substrates
+run locally, self-hosted, or on-prem under the same governed contract and can
+connect to the control plane without moving live application data into the
+managed browser runner.
 
 First connect this computer to the workspace you already opened in Cloud. Click
 **Connect local OpenAdapt** there. The desktop app opens when its protocol
@@ -484,19 +487,19 @@ qualified. These labels come from one canonical, machine-readable
 [status manifest](https://openadapt.ai/status.json) that the website, docs, and
 this README all reconcile to, so no surface can drift ahead of the evidence.
 
-The label is a maturity tier that says how broadly a surface has been exercised
-today, not whether it is first-class in the product:
+The label describes product availability separately from the bounded evidence
+record for a particular application or environment:
 
-- **Beta**: works and is broadly exercised.
-- **Early access**: works and is validated on specific named tasks, but not yet broadly exercised.
-- **Exploratory**: no validated real-environment integration yet.
-- **Research**: experimental and not yet part of the governed product.
+- **Available**: implemented in the released compiler and governed runtime.
+- **Beta**: a public product or service with an explicit delivery and evidence
+  boundary.
 
 | Surface | Public label | What it means |
 |---------|--------------|---------------|
-| Browser | **Beta** | Reference record → compile → replay path; runs in CI with no OS permissions and backs the public managed subscription. |
-| Windows / macOS / RDP | **Early access** | Each passed a real, counted qualification (0 silent incorrect successes, 0 over-halts, 0 model calls) for an exact named task and environment. Not arbitrary-application or clean-machine support; run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
-| Citrix / VDI | **Exploratory** | No validated ICA/HDX integration yet; qualification can only begin inside a design partner's real Citrix/VDI environment. RDP evidence does not transfer. |
+| Browser | **Available** | Reference record → compile → replay path; runs in CI with no OS permissions and backs the public managed subscription. |
+| Windows / macOS / Linux | **Available** | Native UIA, AX/AppKit, and AT-SPI backends execute through the governed runtime. Retained counted tasks cover exact independently verified effects and ambiguity/stale-target refusal; each application retains its own qualification. |
+| RDP | **Available** | Real-network Aardwolf/Windows input and a separate real-FreeRDP full lifecycle have counted retained evidence. Remote applications, display policy, identity, and effect rules remain deployment-bound. |
+| Citrix / VDI | **Available** | The dedicated exact-Workspace-window backend, readiness gate, governed replay, durable resume, and refusal contract are released. The retained stand-in record has `ica_hdx_accepted=false`, so a consequential ICA/HDX deployment receives its own counted acceptance record rather than inheriting RDP evidence. |
 | Hosted Cloud | **Beta** | Live $500/month managed browser-workflow subscription. Maturity is Beta — not a certification, SLA, or completed paid-customer lifecycle. Desktop, RDP, and Citrix run self-hosted or in a customer-controlled deployment, not in the managed subscription. |
 
 Current launcher, Flow, and Desktop versions are maintained only in the
