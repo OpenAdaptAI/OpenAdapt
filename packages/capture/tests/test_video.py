@@ -567,6 +567,33 @@ def test_direct_encode_retries_partial_pipe_writes(tmp_path, monkeypatch):
     assert video._read_timing_box(output) == (Fraction(24), [(0, 0.0)])
 
 
+def test_direct_encode_worker_start_failure_reaps_process(tmp_path, monkeypatch):
+    executable = tmp_path / "ffmpeg"
+    executable.write_bytes(b"fake")
+    stage = video.FFmpegFrameStage(
+        tmp_path / "capture.mp4",
+        _small_stream(),
+        _provision(executable),
+    )
+    process = _FakeProcess(stage._encode_command())
+    _install_fake_popen(monkeypatch, process)
+
+    def fail_start(_thread):
+        raise RuntimeError("thread resources unavailable")
+
+    monkeypatch.setattr(video.threading.Thread, "start", fail_start)
+
+    with pytest.raises(
+        video.FFmpegEncodingError,
+        match="Could not start FFmpeg input worker",
+    ):
+        stage.stage_frame(Image.new("RGB", (2, 1), "red"), 0)
+    assert process._killed is True
+    assert process.returncode == -9
+    assert stage._process is None
+    assert stage._input_thread is None
+
+
 def test_direct_encode_zero_length_pipe_write_fails_loudly(tmp_path, monkeypatch):
     executable = tmp_path / "ffmpeg"
     executable.write_bytes(b"fake")

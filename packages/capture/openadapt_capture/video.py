@@ -747,14 +747,14 @@ class FFmpegFrameStage:
         )
         try:
             self._input_thread.start()
-        except BaseException:
+        except BaseException as exc:
             process.kill()
             process.wait()
             stderr_file.close()
             self._process = None
             self._stderr_file = None
             self._input_thread = None
-            raise
+            raise FFmpegEncodingError(f"Could not start FFmpeg input worker: {exc}") from exc
         return process
 
     def _stderr_detail(self) -> str:
