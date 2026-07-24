@@ -22,14 +22,18 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from loguru import logger
 
 FLOW_BIN = "openadapt-flow"
 EMBEDDED_FLOW_MODE = "__openadapt_flow__"
+EMBEDDED_FLOW_RECORD_MODE = "__openadapt_flow_record_config__"
+FlowOutcome = Literal["success", "halt", "unknown"]
 
 
 class FlowNotAvailableError(RuntimeError):
@@ -60,6 +64,44 @@ class FlowResult:
     stdout: str = ""
     stderr: str = ""
     out_dir: Path | None = None
+
+
+@dataclass
+class FlowRecordingSession:
+    """One canonical Flow record subprocess controlled by private sentinels."""
+
+    process: subprocess.Popen[str]
+    out_dir: Path
+    stop_path: Path
+    ready_path: Path
+
+    @property
+    def is_running(self) -> bool:
+        return self.process.poll() is None
+
+    def stop(self, timeout: float = 180) -> FlowResult:
+        """Ask Flow to finalize normally, then collect its bounded output."""
+
+        if self.process.poll() is None:
+            self.stop_path.parent.mkdir(parents=True, exist_ok=True)
+            self.stop_path.touch(mode=0o600, exist_ok=True)
+        try:
+            stdout, stderr = self.process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # A recorder that cannot finalize must not be reported as a usable
+            # capture. Termination is a last-resort resource cleanup.
+            self.process.terminate()
+            stdout, stderr = self.process.communicate(timeout=30)
+        finally:
+            self.stop_path.unlink(missing_ok=True)
+            self.ready_path.unlink(missing_ok=True)
+        return FlowResult(
+            ok=self.process.returncode == 0,
+            returncode=int(self.process.returncode or 0),
+            stdout=stdout or "",
+            stderr=stderr or "",
+            out_dir=self.out_dir,
+        )
 
 
 def _is_frozen() -> bool:
@@ -98,6 +140,37 @@ def _subprocess_env() -> dict[str, str]:
     return dict(os.environ)
 
 
+def _safe_command_for_log(cmd: list[str]) -> str:
+    """Render a command without logging secret- or selector-bearing values."""
+
+    redacted_after = {
+        "--token",
+        "--password",
+        "--rdp-password",
+        "--agent-token",
+        "--url",
+        "--agent-url",
+        "--macos-app",
+        "--macos-window-title",
+        "--linux-app",
+        "--linux-window-title",
+        "--rdp-host",
+        "--rdp-window",
+        "--rdp-window-title",
+        "--rdp-readiness-text",
+    }
+    safe: list[str] = []
+    redact_next = False
+    for value in cmd:
+        if redact_next:
+            safe.append("[REDACTED]")
+            redact_next = False
+            continue
+        safe.append(value)
+        redact_next = value in redacted_after
+    return " ".join(safe)
+
+
 class FlowBridge:
     """Invokes the ``openadapt-flow`` CLI for the local loop steps.
 
@@ -106,9 +179,15 @@ class FlowBridge:
         runner: Callable with ``subprocess.run`` semantics (injected in tests).
     """
 
-    def __init__(self, flow_bin: str = FLOW_BIN, runner=subprocess.run) -> None:
+    def __init__(
+        self,
+        flow_bin: str = FLOW_BIN,
+        runner=subprocess.run,
+        popen=subprocess.Popen,
+    ) -> None:
         self.flow_bin = flow_bin
         self._runner = runner
+        self._popen = popen
         self._run_auth_support: bool | None = None
 
     # --- low-level ---
@@ -122,7 +201,7 @@ class FlowBridge:
                 f"'{self.flow_bin}' not found on PATH; install openadapt-flow."
             )
         cmd = [*prefix, *args]
-        logger.debug("flow: {cmd}", cmd=" ".join(cmd))
+        logger.debug("flow: {cmd}", cmd=_safe_command_for_log(cmd))
         proc = self._runner(
             cmd,
             capture_output=True,
@@ -208,6 +287,74 @@ class FlowBridge:
             args += ["--url", url]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
+    def demo_record(
+        self,
+        out_dir: Path,
+        timeout: float | None = None,
+    ) -> FlowResult:
+        """Generate Flow's canonical bundled demonstration recording."""
+
+        return self._run(
+            ["demo-record", "--out", str(out_dir)],
+            out_dir=out_dir,
+            timeout=timeout,
+        )
+
+    def start_record(
+        self,
+        out_dir: Path,
+        *,
+        request: Path,
+        stop_path: Path,
+        ready_path: Path,
+        startup_timeout: float = 15,
+    ) -> FlowRecordingSession:
+        """Start canonical Flow authoring with only a private path in argv."""
+
+        if _is_frozen():
+            command = [
+                sys.executable,
+                EMBEDDED_FLOW_RECORD_MODE,
+                str(request),
+                "--watch-parent-stdin",
+            ]
+        else:
+            if find_spec("openadapt_flow") is None:
+                raise FlowNotAvailableError(
+                    "openadapt-flow is not importable by the Desktop runtime"
+                )
+            command = [
+                sys.executable,
+                "-m",
+                "engine.flow_record_entry",
+                str(request),
+                "--watch-parent-stdin",
+            ]
+        logger.debug("flow record: {cmd}", cmd=_safe_command_for_log(command))
+        process = self._popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_subprocess_env(),
+        )
+        deadline = time.monotonic() + startup_timeout
+        while time.monotonic() < deadline:
+            returncode = process.poll()
+            if returncode is not None:
+                _stdout, _stderr = process.communicate()
+                raise RuntimeError(
+                    f"openadapt-flow record stopped before authoring began (exit {returncode})"
+                )
+            if ready_path.exists():
+                ready_path.unlink(missing_ok=True)
+                return FlowRecordingSession(process, out_dir, stop_path, ready_path)
+            time.sleep(0.05)
+        process.terminate()
+        process.communicate()
+        raise RuntimeError("openadapt-flow record did not acknowledge authoring startup")
+
     def compile(
         self,
         recording_dir: Path,
@@ -230,19 +377,33 @@ class FlowBridge:
         ]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
-    def replay(self, bundle_dir: Path, out_dir: Path | None = None, url: str | None = None,
-               timeout: float | None = None) -> FlowResult:
+    def replay(
+        self,
+        bundle_dir: Path,
+        out_dir: Path | None = None,
+        url: str | None = None,
+        timeout: float | None = None,
+        *,
+        config: Path | None = None,
+    ) -> FlowResult:
         """Replay a bundle; returns the run directory in ``out_dir`` if given."""
         args = ["replay", str(bundle_dir)]
         if out_dir:
             args += ["--run-dir", str(out_dir)]
+        if config:
+            args += ["--config", str(config)]
         if url:
             args += ["--url", url]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
-    def run(self, bundle_dir: Path, config: Path, out_dir: Path | None = None,
-            timeout: float | None = None,
-            authorization_file: Path | None = None) -> FlowResult:
+    def run(
+        self,
+        bundle_dir: Path,
+        config: Path,
+        out_dir: Path | None = None,
+        timeout: float | None = None,
+        authorization_file: Path | None = None,
+    ) -> FlowResult:
         """Run a bundle under a deployment config.
 
         ``authorization_file`` forwards a cloud-minted GovernedRunAuthorization
@@ -294,8 +455,14 @@ class FlowBridge:
             args += ["--token", token]
         return self._run(args, timeout=timeout)
 
-    def teach(self, run_dir: Path, bundle_dir: Path, out_dir: Path, fix: Path | None = None,
-              timeout: float | None = None) -> FlowResult:
+    def teach(
+        self,
+        run_dir: Path,
+        bundle_dir: Path,
+        out_dir: Path,
+        fix: Path | None = None,
+        timeout: float | None = None,
+    ) -> FlowResult:
         """Teach a fix for a halted run, producing a promoted bundle in ``out_dir``."""
         args = ["teach", str(run_dir), "--bundle", str(bundle_dir), "--out", str(out_dir)]
         if fix:
@@ -311,9 +478,37 @@ class FlowBridge:
         if not report_path.exists():
             return {}
         try:
-            return json.loads(report_path.read_text())
+            report = json.loads(report_path.read_text())
         except (json.JSONDecodeError, OSError):
             return {}
+        return report if isinstance(report, dict) else {}
+
+    @staticmethod
+    def classify_outcome(returncode: int, report: dict) -> FlowOutcome:
+        """Classify only explicit Flow 1.20.1 success or halt evidence.
+
+        Flow's connector defines success as exit 0 plus a true ``success``
+        field, and a halt from ``terminal_outcome == "halt"`` or a structured
+        ``halt`` record.  Desktop additionally rejects contradictory reports
+        (for example ``success: true`` together with a halt) as unknown.
+        """
+
+        halt = report.get("halt")
+        explicit_halt = report.get("terminal_outcome") == "halt" or (
+            isinstance(halt, dict) and bool(halt)
+        )
+        terminal = report.get("terminal_outcome")
+        explicit_success = (
+            returncode == 0
+            and report.get("success") is True
+            and terminal in (None, "success")
+            and not explicit_halt
+        )
+        if explicit_success:
+            return "success"
+        if report.get("success") is not True and explicit_halt:
+            return "halt"
+        return "unknown"
 
     @classmethod
     def read_halt(cls, run_dir: Path) -> dict | None:
@@ -326,6 +521,8 @@ class FlowBridge:
         halt = report.get("halt")
         if isinstance(halt, dict) and halt:
             return halt
+        if report.get("terminal_outcome") == "halt":
+            return {"outcome": "halt"}
         if report.get("status") == "halt":
             return report
         return None

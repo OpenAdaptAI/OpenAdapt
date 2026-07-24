@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,8 +13,10 @@ from engine.flow_bridge import (
     EMBEDDED_FLOW_MODE,
     BrowserRuntimeError,
     FlowBridge,
+    _safe_command_for_log,
     flow_available,
 )
+from engine.targets import ExecutionTarget
 
 
 class FakeProc:
@@ -20,6 +24,22 @@ class FakeProc:
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
+
+
+class FakePopen:
+    def __init__(self, recorder, command, **kwargs):
+        recorder.append((command, kwargs))
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def communicate(self, timeout=None):
+        self.returncode = 0
+        return ("recorded", "")
+
+    def terminate(self):
+        self.returncode = 1
 
 
 def _runner(recorder, returncode=0, stdout="", stderr=""):
@@ -45,6 +65,27 @@ class TestFlowBridgeInvocation:
         assert "--name" in command
         assert command[command.index("--name") + 1] == "bundle"
 
+    def test_demo_record_uses_canonical_bundled_flow_command(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "engine.flow_bridge.shutil.which",
+            lambda _: "/usr/bin/openadapt-flow",
+        )
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls, stdout="ok"))
+
+        result = bridge.demo_record(tmp_path / "recording")
+
+        assert result.ok
+        command, _env = calls[0]
+        assert command == [
+            "/usr/bin/openadapt-flow",
+            "demo-record",
+            "--out",
+            str(tmp_path / "recording"),
+        ]
+
     def test_run_builds_args(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
         calls: list = []
@@ -65,6 +106,287 @@ class TestFlowBridgeInvocation:
         assert command[1] == "replay"
         assert "--run-dir" in command
         assert "--out" not in command
+
+    def test_config_only_replay_never_injects_web_backend(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls))
+        deployment = tmp_path / "deployment.yaml"
+        bridge.replay(
+            tmp_path / "bundle",
+            out_dir=tmp_path / "run",
+            config=deployment,
+        )
+
+        command, _ = calls[0]
+        assert command == [
+            "/usr/bin/openadapt-flow",
+            "replay",
+            str(tmp_path / "bundle"),
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--config",
+            str(deployment),
+        ]
+        assert "--backend" not in command
+
+    def test_run_uses_only_private_config_path_for_target_details(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls))
+        deployment = tmp_path / ".deployment-private.yaml"
+        bridge.run(
+            tmp_path / "bundle",
+            deployment,
+            out_dir=tmp_path / "run",
+        )
+
+        command, _ = calls[0]
+        assert command == [
+            "/usr/bin/openadapt-flow",
+            "run",
+            str(tmp_path / "bundle"),
+            "--config",
+            str(deployment),
+            "--run-dir",
+            str(tmp_path / "run"),
+        ]
+        assert "--backend" not in command
+
+    def test_record_process_argv_contains_only_private_request_path(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.find_spec", lambda _name: object())
+        calls: list = []
+
+        def popen(command, **kwargs):
+            return FakePopen(calls, command, **kwargs)
+
+        bridge = FlowBridge(popen=popen)
+        request = tmp_path / ".record-request-private.yaml"
+        request.write_text("Patient Jane Doe at rdp.internal")
+        stop_path = tmp_path / ".stop"
+        ready_path = tmp_path / ".ready"
+        ready_path.touch()
+
+        session = bridge.start_record(
+            tmp_path / "recording",
+            request=request,
+            stop_path=stop_path,
+            ready_path=ready_path,
+        )
+
+        command, _kwargs = calls[0]
+        assert command == [
+            sys.executable,
+            "-m",
+            "engine.flow_record_entry",
+            str(request),
+            "--watch-parent-stdin",
+        ]
+        assert _kwargs["stdin"] is subprocess.PIPE
+        assert "Jane Doe" not in repr(command)
+        assert "rdp.internal" not in repr(command)
+        assert session.out_dir == tmp_path / "recording"
+
+    @pytest.mark.parametrize(
+        ("target", "expected"),
+        [
+            (
+                ExecutionTarget(backend="windows", agent_url="http://localhost:5001"),
+                {"kind": "windows", "agent_url": "http://localhost:5001"},
+            ),
+            (
+                ExecutionTarget(
+                    backend="macos",
+                    macos_app="TextEdit",
+                    macos_window_title="Notes",
+                ),
+                {
+                    "kind": "macos",
+                    "macos_app": "TextEdit",
+                    "macos_window_title": "Notes",
+                },
+            ),
+            (
+                ExecutionTarget(
+                    backend="linux",
+                    linux_app="gedit",
+                    linux_window_title="Notes",
+                    linux_allow_physical_input=True,
+                ),
+                {
+                    "kind": "linux",
+                    "linux_app": "gedit",
+                    "linux_window_title": "Notes",
+                    "linux_allow_physical_input": True,
+                },
+            ),
+        ],
+    )
+    def test_native_targets_render_flow_deployment_overrides(
+        self, target: ExecutionTarget, expected: dict[str, object]
+    ) -> None:
+        assert target.deployment_overrides() == expected
+
+    @pytest.mark.parametrize(
+        ("target", "expected_tail"),
+        [
+            (
+                ExecutionTarget(
+                    backend="windows",
+                    agent_url="http://localhost:5001",
+                ),
+                [
+                    "--agent-url",
+                    "http://localhost:5001",
+                ],
+            ),
+            (
+                ExecutionTarget(
+                    backend="macos",
+                    macos_app="Clinical Notes",
+                    macos_window_title="Patient Jane Doe",
+                ),
+                [
+                    "--macos-app",
+                    "Clinical Notes",
+                    "--macos-window-title",
+                    "Patient Jane Doe",
+                    "--window",
+                    "Clinical Notes",
+                    "--window-title",
+                    "Patient Jane Doe",
+                ],
+            ),
+            (
+                ExecutionTarget(
+                    backend="linux",
+                    linux_app="gedit",
+                    linux_window_title="Clinical Notes",
+                    linux_allow_physical_input=True,
+                ),
+                [
+                    "--linux-app",
+                    "gedit",
+                    "--linux-window-title",
+                    "Clinical Notes",
+                    "--linux-allow-physical-input",
+                ],
+            ),
+            (
+                ExecutionTarget(
+                    backend="rdp",
+                    rdp_host="10.0.0.5",
+                    rdp_readiness_text="Patient Search",
+                ),
+                [
+                    "--rdp-host",
+                    "10.0.0.5",
+                    "--rdp-readiness-text",
+                    "Patient Search",
+                ],
+            ),
+            (
+                ExecutionTarget(
+                    backend="rdp",
+                    rdp_window="Microsoft Remote Desktop",
+                    rdp_window_title="Patient Jane Doe",
+                    rdp_readiness_text="MRN 12345",
+                ),
+                [
+                    "--rdp-window",
+                    "Microsoft Remote Desktop",
+                    "--rdp-window-title",
+                    "Patient Jane Doe",
+                    "--rdp-readiness-text",
+                    "MRN 12345",
+                ],
+            ),
+            (
+                ExecutionTarget(
+                    backend="citrix",
+                    rdp_window="Citrix Viewer",
+                    rdp_window_title="Patient Jane Doe",
+                    rdp_readiness_text="MRN 12345",
+                ),
+                [
+                    "--rdp-window",
+                    "Citrix Viewer",
+                    "--rdp-window-title",
+                    "Patient Jane Doe",
+                    "--rdp-readiness-text",
+                    "MRN 12345",
+                ],
+            ),
+        ],
+    )
+    def test_authoring_target_builds_exact_canonical_flow_record_arguments(
+        self,
+        tmp_path: Path,
+        target: ExecutionTarget,
+        expected_tail: list[str],
+    ) -> None:
+        args = target.record_args(tmp_path / "recording", task="Review workflow")
+
+        assert args[:7] == [
+            "record",
+            "--out",
+            str(tmp_path / "recording"),
+            "--backend",
+            target.backend,
+            "--task",
+            "Review workflow",
+        ]
+        assert args[7:] == expected_tail
+
+    def test_browser_authoring_preserves_flow_bundled_demo_default(self, tmp_path: Path) -> None:
+        assert ExecutionTarget(backend="web").record_args(tmp_path / "recording") == [
+            "demo-record",
+            "--out",
+            str(tmp_path / "recording"),
+        ]
+
+    def test_browser_authoring_with_url_uses_exact_interactive_record_args(
+        self, tmp_path: Path
+    ) -> None:
+        assert ExecutionTarget(
+            backend="web",
+            url="https://app.example",
+        ).record_args(tmp_path / "recording") == [
+            "record",
+            "--out",
+            str(tmp_path / "recording"),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example",
+        ]
+
+    def test_secret_flag_values_are_redacted_from_debug_command(self) -> None:
+        rendered = _safe_command_for_log(
+            ["openadapt-flow", "push", "--token", "oar_secret", "--kind", "bundle"]
+        )
+        assert "oar_secret" not in rendered
+        assert rendered == "openadapt-flow push --token [REDACTED] --kind bundle"
+
+    def test_phi_capable_selector_values_are_redacted_from_debug_command(self) -> None:
+        rendered = _safe_command_for_log(
+            [
+                "openadapt-flow",
+                "replay",
+                "--rdp-window-title",
+                "Patient Jane Doe",
+                "--rdp-readiness-text",
+                "MRN 12345",
+            ]
+        )
+        assert "Jane Doe" not in rendered
+        assert "12345" not in rendered
 
     def test_nonzero_returncode(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
@@ -139,6 +461,37 @@ class TestReportParsing:
     def test_read_halt_none_when_ok(self, tmp_path: Path) -> None:
         (tmp_path / "report.json").write_text(json.dumps({"status": "ok"}))
         assert FlowBridge.read_halt(tmp_path) is None
+
+    @pytest.mark.parametrize("payload", ["[]", '"success"', "true", "42", "null"])
+    def test_non_object_json_report_is_explicit_unknown(self, tmp_path: Path, payload: str) -> None:
+        (tmp_path / "report.json").write_text(payload)
+
+        report = FlowBridge.read_report(tmp_path)
+
+        assert report == {}
+        assert FlowBridge.classify_outcome(0, report) == "unknown"
+
+    @pytest.mark.parametrize(
+        ("returncode", "report", "expected"),
+        [
+            (0, {"success": True}, "success"),
+            (0, {"success": True, "terminal_outcome": "success"}, "success"),
+            (1, {"success": False, "halt": {"outcome": "halt"}}, "halt"),
+            (1, {"terminal_outcome": "halt"}, "halt"),
+            (1, {"halt": {"outcome": "escalate"}}, "halt"),
+            (1, {"success": True}, "unknown"),
+            (0, {"success": False}, "unknown"),
+            (0, {}, "unknown"),
+            (2, {"results": []}, "unknown"),
+            (0, {"success": True, "halt": {"outcome": "halt"}}, "unknown"),
+            (0, {"success": "yes"}, "unknown"),
+            (1, {"halt": "not-structured"}, "unknown"),
+        ],
+    )
+    def test_classifies_only_explicit_consistent_flow_outcomes(
+        self, returncode: int, report: dict, expected: str
+    ) -> None:
+        assert FlowBridge.classify_outcome(returncode, report) == expected
 
 
 class TestBrowserRuntime:

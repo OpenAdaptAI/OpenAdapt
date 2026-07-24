@@ -1386,6 +1386,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "tqdm" },
 ]
 
@@ -1424,6 +1425,7 @@ requires-dist = [
     { name = "psutil" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.16,<7" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },

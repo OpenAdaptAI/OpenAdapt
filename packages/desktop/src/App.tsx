@@ -11,6 +11,7 @@ import {
 } from "./lib/engine";
 import type {
   AuthStatus,
+  ExecutionTarget,
   NeedsAttention,
   SyncState,
   Workflow,
@@ -28,7 +29,7 @@ import { Settings } from "./screens/Settings";
 type Route =
   | { name: "library" }
   | { name: "record" }
-  | { name: "watch"; id: string }
+  | { name: "watch"; id: string; target?: ExecutionTarget }
   | { name: "teach"; id: string }
   | { name: "runner" }
   | { name: "settings" };
@@ -239,12 +240,15 @@ export default function App() {
         )}
         {route.name === "record" && (
           <RecordReview
-            onCompiled={(id) => setRoute({ name: "watch", id })}
+            onCompiled={(id, target) =>
+              setRoute({ name: "watch", id, target })
+            }
           />
         )}
         {route.name === "watch" && (
           <WatchRun
             workflowId={route.id}
+            initialTarget={route.target}
             onTeach={(id) => setRoute({ name: "teach", id })}
           />
         )}

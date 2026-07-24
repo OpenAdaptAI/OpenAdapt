@@ -1,10 +1,15 @@
 // Record & review — drive a recording, then review + compile it.
 // Recording state comes from the engine via events + get_status; after stop the
 // capture can be scrubbed (PHI gate) and compiled into a workflow.
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { CMD, engineInvoke, engineTry, onEngineEvent, EVT } from "../lib/engine";
-import type { EngineStatus } from "../lib/types";
-import { Button, Card, CardHead, Callout, Pill } from "../ui/primitives";
+import type {
+  BrowserRuntimeStatus,
+  EngineStatus,
+  ExecutionTarget,
+} from "../lib/types";
+import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
+import { Button, Card, CardHead, Callout, Field, Pill } from "../ui/primitives";
 
 function fmt(secs?: number | null) {
   if (secs == null) return "0:00";
@@ -13,7 +18,11 @@ function fmt(secs?: number | null) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void }) {
+export function RecordReview({
+  onCompiled,
+}: {
+  onCompiled: (id: string, target: ExecutionTarget) => void;
+}) {
   const [status, setStatus] = useState<EngineStatus>({
     recording: false,
     paused: false,
@@ -23,6 +32,10 @@ export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void 
   const [lastCapture, setLastCapture] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "compiling">("idle");
   const [busy, setBusy] = useState(false);
+  const [target, setTarget] = useState<ExecutionTarget>({ backend: "web" });
+  const [task, setTask] = useState("");
+  const [runtime, setRuntime] = useState<BrowserRuntimeStatus | null>(null);
+  const fieldPrefix = useId();
 
   async function refresh() {
     const s = await engineTry<EngineStatus>(CMD.GET_STATUS, {}, status);
@@ -36,6 +49,9 @@ export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void 
       onEngineEvent(EVT.RECORDING_STOPPED, (d: { capture_id?: string }) => {
         if (d?.capture_id) setLastCapture(d.capture_id);
       }),
+      onEngineEvent(EVT.BROWSER_RUNTIME, (next: BrowserRuntimeStatus) => {
+        if (next.workflow_id === "recording") setRuntime(next);
+      }),
     ];
     const t = setInterval(refresh, 1000);
     return () => {
@@ -47,8 +63,12 @@ export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void 
 
   async function start() {
     setBusy(true);
+    setRuntime(null);
     try {
-      await engineInvoke(CMD.START_RECORDING, {});
+      await engineInvoke(CMD.START_RECORDING, {
+        target,
+        ...(task.trim() ? { purpose: task.trim() } : {}),
+      });
     } finally {
       setBusy(false);
     }
@@ -73,7 +93,7 @@ export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void 
         CMD.COMPILE_RECORDING,
         { capture_id: lastCapture },
       );
-      if (r?.workflow_id) onCompiled(r.workflow_id);
+      if (r?.workflow_id) onCompiled(r.workflow_id, target);
     } finally {
       setPhase("idle");
     }
@@ -91,6 +111,52 @@ export function RecordReview({ onCompiled }: { onCompiled: (id: string) => void 
       </div>
 
       <Card>
+        <CardHead
+          eyebrow="Target"
+          title="What are you demonstrating?"
+          sub="The same target contract follows this recording into compile and execution."
+        />
+        <ExecutionTargetForm
+          target={target}
+          onChange={setTarget}
+          idPrefix={`${fieldPrefix}-record-target`}
+          disabled={recording || busy}
+        />
+        <Field
+          label="Task description"
+          hint="Optional local description stored with this recording."
+          htmlFor={`${fieldPrefix}-record-task`}
+          hintId={`${fieldPrefix}-record-task-hint`}
+        >
+          <input
+            id={`${fieldPrefix}-record-task`}
+            className="input"
+            value={task}
+            disabled={recording || busy}
+            aria-describedby={`${fieldPrefix}-record-task-hint`}
+            onChange={(event) => setTask(event.target.value)}
+          />
+        </Field>
+        <p className="page-sub">
+          Target selectors are handed to OpenAdapt Flow through a short-lived
+          private file; they never appear in the process command line or
+          Desktop logs.
+        </p>
+        {target.backend === "web" && runtime && runtime.state !== "ready" && (
+          <Callout
+            tone={runtime.state === "error" ? "warn" : "info"}
+            title={
+              runtime.state === "installing"
+                ? "Preparing the browser"
+                : runtime.state === "error"
+                  ? "Browser setup needs attention"
+                  : "Checking the browser"
+            }
+          >
+            {runtime.detail}
+          </Callout>
+        )}
+
         <div className="row">
           {recording ? (
             <>

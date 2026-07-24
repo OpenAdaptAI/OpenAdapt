@@ -30,7 +30,11 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import uuid
+from contextlib import nullcontext
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -43,6 +47,17 @@ EmitFn = Callable[[str, dict], None]
 
 def _noop_emit(event: str, data: dict) -> None:
     """Default event sink -- drops events when no emitter is wired."""
+
+
+@dataclass
+class _ActiveFlowRecording:
+    capture_id: str
+    capture_dir: Path
+    started_at: str
+    started_monotonic: float
+    session: Any
+    redactions: tuple[str, ...]
+    task: str = ""
 
 
 class EngineServices:
@@ -165,6 +180,7 @@ class EngineDispatcher:
         # Sync is orthogonal to recording -- a single paused flag mirrors the
         # tray's pause/resume-sync commands and the frontend sync banner.
         self._sync_paused = False
+        self._flow_recording: _ActiveFlowRecording | None = None
         self._handlers: dict[str, Callable[..., dict | None]] = {}
         self._register()
 
@@ -252,9 +268,33 @@ class EngineDispatcher:
     def start_recording(self, **params: Any) -> dict:
         """Start a recording session and emit ``recording_started``."""
         controller = self.services.controller
+        if self._flow_recording is not None:
+            return self._status_dict(controller)
         if controller.is_recording:
             return self._status_dict(controller)
-        if sys.platform == "darwin" and not _mac_preflight_input_monitoring():
+
+        target = None
+        if params.get("target") is not None:
+            try:
+                target, deployment_config = self._execution_target(params)
+                if target is None:
+                    raise ValueError("recording target is required")
+                if deployment_config is not None:
+                    raise ValueError(
+                        "deployment_config applies to replay and governed run, not recording"
+                    )
+                target.validate_record_required()
+            except ValueError as exc:
+                message = str(exc)
+                self.emit("recording_error", {"error": message})
+                raise ValueError(message) from None
+
+        needs_native_input = target is None or target.backend != "web"
+        if (
+            sys.platform == "darwin"
+            and needs_native_input
+            and not _mac_preflight_input_monitoring()
+        ):
             # Starting a capture is the explicit user action where macOS may
             # present its Input Monitoring consent prompt. Passive permission
             # checks must remain prompt-free.
@@ -265,7 +305,102 @@ class EngineDispatcher:
                 )
                 self.emit("recording_error", {"error": message})
                 raise PermissionError(message)
-        task = params.get("purpose") or params.get("task") or params.get("name") or ""
+        task = str(params.get("purpose") or params.get("task") or params.get("name") or "")
+        if target is not None:
+            if target.backend == "web":
+                ensure_browser = getattr(
+                    self.services.flow_bridge,
+                    "ensure_browser_runtime",
+                    None,
+                )
+                if ensure_browser is not None:
+                    try:
+                        ensure_browser(
+                            lambda state, detail: self.emit(
+                                "browser_runtime",
+                                {
+                                    "workflow_id": "recording",
+                                    "state": state,
+                                    "detail": detail,
+                                },
+                            )
+                        )
+                    except Exception:
+                        message = "Browser setup failed before recording began"
+                        self.emit("recording_error", {"error": message})
+                        raise RuntimeError(message) from None
+            capture_id = uuid.uuid4().hex[:8]
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+            capture_dir = self.config.data_dir / "captures" / f"{timestamp}_{capture_id}"
+            control_dir = self.config.data_dir / "recording-control"
+            stop_path = control_dir / f".stop-{capture_id}"
+            ready_path = control_dir / f".ready-{capture_id}"
+            started_at = datetime.now(timezone.utc).isoformat()
+            from engine.private_flow_config import (
+                prepare_flow_record_request,
+                stage_private_yaml,
+            )
+
+            if target.backend == "web" and not target.url:
+                active = _ActiveFlowRecording(
+                    capture_id=capture_id,
+                    capture_dir=capture_dir,
+                    started_at=started_at,
+                    started_monotonic=time.monotonic(),
+                    session=None,
+                    redactions=(),
+                    task=task,
+                )
+                self.services.audit.log("recording_started", capture_id=capture_id)
+                self.emit("recording_started", {"capture_id": capture_id})
+                try:
+                    result = self.services.flow_bridge.demo_record(capture_dir)
+                except Exception:
+                    message = "OpenAdapt Flow could not create the bundled demonstration"
+                    self.emit("recording_error", {"error": message})
+                    self.emit("status_update", self._status_dict(controller))
+                    raise RuntimeError(message) from None
+                return self._finalize_flow_capture(active, result)
+
+            prepared = prepare_flow_record_request(
+                target=target,
+                out_dir=capture_dir,
+                task=task,
+                stop_path=stop_path,
+                ready_path=ready_path,
+            )
+            try:
+                with stage_private_yaml(
+                    control_dir,
+                    prepared=prepared,
+                    prefix=".record-request-",
+                ) as request:
+                    session = self.services.flow_bridge.start_record(
+                        capture_dir,
+                        request=request,
+                        stop_path=stop_path,
+                        ready_path=ready_path,
+                    )
+            except Exception:
+                stop_path.unlink(missing_ok=True)
+                ready_path.unlink(missing_ok=True)
+                message = "OpenAdapt Flow could not start the selected recording target"
+                self.emit("recording_error", {"error": message})
+                raise RuntimeError(message) from None
+            self._flow_recording = _ActiveFlowRecording(
+                capture_id=capture_id,
+                capture_dir=capture_dir,
+                started_at=started_at,
+                started_monotonic=time.monotonic(),
+                session=session,
+                redactions=prepared.redactions,
+                task=task,
+            )
+            self.services.audit.log("recording_started", capture_id=capture_id)
+            self.emit("recording_started", {"capture_id": capture_id})
+            self.emit("status_update", self._status_dict(controller))
+            return {"capture_id": capture_id, "recording": True}
+
         capture_id = controller.start(task_description=str(task))
         self.services.audit.log("recording_started", capture_id=capture_id)
         self.emit("recording_started", {"capture_id": capture_id})
@@ -275,6 +410,13 @@ class EngineDispatcher:
     def stop_recording(self, **params: Any) -> dict:
         """Stop the active recording and emit ``recording_stopped``."""
         controller = self.services.controller
+        active = self._flow_recording
+        if active is not None:
+            try:
+                result = active.session.stop()
+            finally:
+                self._flow_recording = None
+            return self._finalize_flow_capture(active, result)
         if not controller.is_recording:
             self.emit("recording_error", {"error": "No recording is active"})
             return {"capture_id": None, "recording": False}
@@ -282,6 +424,59 @@ class EngineDispatcher:
         self.emit("recording_stopped", metadata)
         self.emit("status_update", self._status_dict(controller))
         return {"capture_id": metadata.get("id"), **metadata}
+
+    def _finalize_flow_capture(self, active: _ActiveFlowRecording, result: Any) -> dict:
+        """Register one compile-ready Flow capture and emit its local evidence."""
+
+        from engine.private_flow_config import redact_flow_log
+
+        for line in (result.stdout or "").splitlines():
+            self.emit(
+                "log_line",
+                {"line": redact_flow_log(line, active.redactions)},
+            )
+        if not result.ok or not (active.capture_dir / "meta.json").is_file():
+            message = (
+                "OpenAdapt Flow could not finalize a compile-ready recording; "
+                "the incomplete local capture was retained for inspection"
+            )
+            self.emit("recording_error", {"error": message})
+            self.emit("status_update", self._status_dict(self.services.controller))
+            raise RuntimeError(message)
+
+        meta_path = active.capture_dir / "meta.json"
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
+        meta.setdefault("capture_id", active.capture_id)
+        if active.task:
+            meta["task_description"] = active.task
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        if self.services.db.get_capture(active.capture_id) is None:
+            self.services.db.insert_capture(
+                active.capture_id,
+                str(active.capture_dir),
+                str(meta.get("started_at") or active.started_at),
+                task_description=str(meta.get("task_description") or ""),
+            )
+        duration = max(0.0, time.monotonic() - active.started_monotonic)
+        metadata = {
+            "capture_id": active.capture_id,
+            "id": active.capture_id,
+            "duration": duration,
+            "event_count": 0,
+            "size_bytes": sum(
+                path.stat().st_size for path in active.capture_dir.rglob("*") if path.is_file()
+            ),
+            "path": str(active.capture_dir),
+            "recording": False,
+        }
+        self.emit("recording_stopped", metadata)
+        self.emit("status_update", self._status_dict(self.services.controller))
+        return metadata
 
     def pause_recording(self, **params: Any) -> dict:
         """Pause is not supported (stop/start instead); report current status."""
@@ -298,6 +493,16 @@ class EngineDispatcher:
     def _status_dict(self, controller: Any) -> dict:
         from engine.controller import RecordingState
 
+        if self._flow_recording is not None:
+            return {
+                "recording": True,
+                "paused": False,
+                "duration_secs": max(
+                    0.0,
+                    time.monotonic() - self._flow_recording.started_monotonic,
+                ),
+                "capture_id": self._flow_recording.capture_id,
+            }
         recording = controller.is_recording
         paused = controller.state == RecordingState.PAUSED
         duration = None
@@ -413,64 +618,261 @@ class EngineDispatcher:
         workflow_id = params.get("workflow_id")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
-            return {"ok": False, "error": f"Unknown workflow {workflow_id}"}
+            return self._pre_action_refusal(f"Unknown workflow {workflow_id}")
+        try:
+            target, deployment_config = self._execution_target(params)
+        except ValueError as exc:
+            return self._pre_action_refusal(str(exc))
         run_id = uuid.uuid4().hex[:8]
         run_dir = self.config.data_dir / "runs" / f"{'run' if run else 'replay'}-{run_id}"
         run_dir.mkdir(parents=True, exist_ok=True)
-        self.emit("replay_progress", {"workflow_id": workflow_id, "state": "running"})
+        backend = target.backend if target is not None else "configured"
+        # A selected config always exists (validated above). The historical
+        # governed-run default remains fail-loud when absent; a direct target
+        # can still form a complete target-only deployment config.
+        default_config = self.config.data_dir / "deployment.json"
+        base_config = deployment_config
+        if run and base_config is None and default_config.is_file():
+            base_config = default_config
+
+        result = None
+        invocation_started = False
+        log_redactions: tuple[str, ...] = ()
         try:
-            if run:
-                config_path = self.config.data_dir / "deployment.json"
-                result = self.services.flow_bridge.run(bundle, config_path, out_dir=run_dir)
+            from engine.private_flow_config import (
+                prepare_flow_config,
+                stage_private_yaml,
+            )
+
+            prepared = prepare_flow_config(base_config, target)
+            log_redactions = prepared.redactions if prepared is not None else ()
+            if prepared is None:
+                staged_context = nullcontext(None)
             else:
+                staged_context = stage_private_yaml(run_dir, prepared=prepared)
+
+            with staged_context as staged_config:
+                # Native/remote Flow backends do not import or launch
+                # Playwright. Config-only execution delegates backend setup to
+                # Flow, preserving a native/remote backend without injecting
+                # Desktop's historical web default.
                 ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
-                if ensure_browser is not None:
-                    ensure_browser(
-                        lambda state, detail: self.emit(
-                            "browser_runtime",
-                            {
-                                "workflow_id": workflow_id,
-                                "state": state,
-                                "detail": detail,
-                            },
-                        )
+                should_ensure_browser = (
+                    not run
+                    and ensure_browser is not None
+                    and (
+                        (target is not None and target.backend == "web")
+                        or (target is None and deployment_config is None)
                     )
-                result = self.services.flow_bridge.replay(bundle, out_dir=run_dir)
+                )
+                if should_ensure_browser:
+                    try:
+                        ensure_browser(
+                            lambda state, detail: self.emit(
+                                "browser_runtime",
+                                {
+                                    "workflow_id": workflow_id,
+                                    "state": state,
+                                    "detail": detail,
+                                },
+                            )
+                        )
+                    except Exception:
+                        return self._pre_action_refusal(
+                            "Browser setup failed before Flow was invoked"
+                        )
+
+                self.emit(
+                    "replay_progress",
+                    {
+                        "workflow_id": workflow_id,
+                        "state": "running",
+                        "backend": backend,
+                    },
+                )
+                try:
+                    invocation_started = True
+                    if run:
+                        # A missing historical default stays fail-loud in Flow.
+                        config_path = staged_config or default_config
+                        result = self.services.flow_bridge.run(
+                            bundle,
+                            config_path,
+                            out_dir=run_dir,
+                        )
+                    else:
+                        result = self.services.flow_bridge.replay(
+                            bundle,
+                            out_dir=run_dir,
+                            config=staged_config,
+                        )
+                except Exception:
+                    # Once invocation begins, delivery/effect state is unknown.
+                    # Never echo exception text: it may contain config values.
+                    result = None
         except Exception as exc:
-            self.emit("replay_progress", {"workflow_id": workflow_id, "state": "error"})
-            return {"ok": False, "error": str(exc)}
-        for line in (result.stdout or "").splitlines():
-            self.emit("log_line", {"line": line})
+            from engine.private_flow_config import PrivateFlowConfigError
+
+            if invocation_started:
+                # Cleanup or post-spawn failures cannot prove that no action
+                # reached the target.
+                result = None
+            elif isinstance(exc, PrivateFlowConfigError):
+                return self._pre_action_refusal(str(exc))
+            else:
+                return self._pre_action_refusal(
+                    "Execution configuration could not be staged safely"
+                )
+
+        from engine.flow_bridge import FlowBridge
+
+        report_data = FlowBridge.read_report(run_dir)
+        if result is None:
+            outcome = "unknown"
+            error = (
+                "Flow invocation ended without a classifiable result. The "
+                "workflow may have delivered an action."
+            )
+        else:
+            from engine.private_flow_config import redact_flow_log
+
+            for line in (result.stdout or "").splitlines():
+                self.emit(
+                    "log_line",
+                    {"line": redact_flow_log(line, log_redactions)},
+                )
+            outcome = FlowBridge.classify_outcome(result.returncode, report_data)
+            error = None
+            if outcome == "unknown":
+                error = (
+                    "Flow produced no explicit success or halt outcome "
+                    f"(exit {result.returncode}). The workflow may have delivered "
+                    "an action."
+                )
+
         try:
             self.services.db.insert_run(run_id, str(run_dir), bundle_id=workflow_id)
+            self.services.db.update_run(run_id, status=outcome)
         except Exception:
             pass
-        report = self._run_report(run_dir, workflow_id, run_id)
+        report = self._run_report(
+            run_dir,
+            workflow_id,
+            run_id,
+            outcome=outcome,
+            error=error,
+        )
+        progress_state = {
+            "success": "done",
+            "halt": "halted",
+            "unknown": "unknown",
+        }[outcome]
         self.emit(
             "replay_progress",
-            {"workflow_id": workflow_id, "state": "halted" if report.get("halt") else "done"},
+            {
+                "workflow_id": workflow_id,
+                "state": progress_state,
+                "backend": backend,
+            },
         )
         return report
+
+    @staticmethod
+    def _pre_action_refusal(error: str) -> dict:
+        """Return the only response that proves Flow was never invoked."""
+
+        return {
+            "ok": False,
+            "outcome": "refused",
+            "pre_action_refusal": True,
+            "error": error,
+        }
+
+    def _execution_target(self, params: dict) -> tuple[Any | None, Path | None]:
+        """Validate one typed PHI-capable target and optional config path."""
+
+        from pydantic import ValidationError
+
+        from engine.targets import ExecutionTarget
+
+        raw_target = params.get("target")
+        target = None
+        if raw_target is not None:
+            if not isinstance(raw_target, dict):
+                raise ValueError("target must be an object")
+            try:
+                target = ExecutionTarget.model_validate(raw_target)
+            except ValidationError as exc:
+                # Pydantic errors can contain selector values. Return field
+                # names only; every target value is treated as PHI-capable.
+                fields = sorted(
+                    {
+                        ".".join(str(part) for part in error.get("loc", ()))
+                        for error in exc.errors()
+                        if error.get("loc")
+                    }
+                )
+                detail = ", ".join(fields) or "target"
+                raise ValueError(f"Invalid execution target ({detail})") from None
+
+        raw_config = params.get("deployment_config")
+        deployment_config: Path | None = None
+        if raw_config is not None:
+            if not isinstance(raw_config, str) or not raw_config.strip():
+                raise ValueError("deployment_config must be a non-empty local file path")
+            deployment_config = Path(raw_config.strip()).expanduser()
+            if not deployment_config.is_file():
+                raise ValueError("Selected deployment config file was not found")
+        if target is not None:
+            try:
+                target.validate_required(deployment_config=deployment_config is not None)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from None
+
+        return target, deployment_config
 
     def get_run_report(self, **params: Any) -> dict | None:
         """Return the latest ``RunReport`` for a workflow, or None if none."""
         workflow_id = params.get("workflow_id")
-        runs = [r for r in self.services.db.list_runs(limit=100)
-                if r.get("bundle_id") == workflow_id]
+        runs = [
+            r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id
+        ]
         if not runs:
             return None
         run = runs[0]
         run_dir = run.get("run_path")
         if not run_dir:
             return None
-        return self._run_report(Path(run_dir), workflow_id, run.get("run_id", ""))
+        stored_outcome = run.get("status")
+        outcome = stored_outcome if stored_outcome in {"success", "halt", "unknown"} else None
+        return self._run_report(
+            Path(run_dir),
+            workflow_id,
+            run.get("run_id", ""),
+            outcome=outcome,
+        )
 
-    def _run_report(self, run_dir: Path, workflow_id: str | None, run_id: str) -> dict:
+    def _run_report(
+        self,
+        run_dir: Path,
+        workflow_id: str | None,
+        run_id: str,
+        *,
+        outcome: str | None = None,
+        error: str | None = None,
+    ) -> dict:
         from engine.flow_bridge import FlowBridge
 
         report = FlowBridge.read_report(run_dir)
+        if outcome is None:
+            # Report-only fallback for older DB rows. A true report can be
+            # explicit success evidence; a structured halt remains a halt.
+            inferred_returncode = 0 if report.get("success") is True else 1
+            outcome = FlowBridge.classify_outcome(inferred_returncode, report)
         halt = FlowBridge.read_halt(run_dir)
-        halt_state = (halt or {}).get("state_id") if isinstance(halt, dict) else None
+        halt_state = (
+            (halt or {}).get("state_id") if outcome == "halt" and isinstance(halt, dict) else None
+        )
 
         # openadapt-flow writes per-step outcomes under ``results`` (each with
         # step_id / intent / ok / resolution / effect_verified / elapsed_ms). Map
@@ -484,7 +886,7 @@ class EngineDispatcher:
             steps = raw_steps if isinstance(raw_steps, list) else []
 
         halt_block = None
-        if isinstance(halt, dict) and halt:
+        if outcome == "halt" and isinstance(halt, dict) and halt:
             rung = None
             for r in results or []:
                 if r.get("step_id") == halt_state:
@@ -497,9 +899,7 @@ class EngineDispatcher:
             }
 
         total_steps = (
-            self._workflow_step_count(workflow_id)
-            or report.get("total_steps")
-            or len(steps)
+            self._workflow_step_count(workflow_id) or report.get("total_steps") or len(steps)
         )
         total_ms = report.get("total_ms")
         metrics = report.get("metrics") or {}
@@ -510,8 +910,10 @@ class EngineDispatcher:
         if cost is None:
             cost = report.get("est_model_cost_usd")
 
-        return {
-            "ok": True,
+        mapped = {
+            "ok": outcome == "success",
+            "outcome": outcome,
+            "pre_action_refusal": False,
             "run_id": report.get("run_id") or run_id,
             "workflow_id": workflow_id or report.get("workflow_id") or "",
             "workflow_name": report.get("workflow_name", ""),
@@ -520,6 +922,9 @@ class EngineDispatcher:
             "halt": halt_block,
             "metrics": {"duration_s": duration_s, "cost_usd": cost},
         }
+        if error:
+            mapped["error"] = error
+        return mapped
 
     @staticmethod
     def _step_index(step_id: Any) -> int:
@@ -578,15 +983,15 @@ class EngineDispatcher:
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
             return {"promoted": False, "message": f"Unknown workflow {workflow_id}"}
-        run = next((r for r in self.services.db.list_runs(limit=100)
-                    if r.get("bundle_id") == workflow_id), None)
+        run = next(
+            (r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id),
+            None,
+        )
         if run is None or not run.get("run_path"):
             return {"promoted": False, "message": "No halted run to teach against"}
         out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_taught_{uuid.uuid4().hex[:6]}"
         try:
-            result = self.services.flow_bridge.teach(
-                Path(run["run_path"]), bundle, out_dir
-            )
+            result = self.services.flow_bridge.teach(Path(run["run_path"]), bundle, out_dir)
         except Exception as exc:
             return {"promoted": False, "message": str(exc)}
         message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
@@ -887,8 +1292,11 @@ class EngineDispatcher:
         scrubber = Scrubber(level=ScrubLevel(level))
         scrubbed = scrubber.scrub_capture(Path(capture["capture_path"]))
         transition_status(
-            capture_id, ReviewStatus.CAPTURED, ReviewStatus.SCRUBBED,
-            db=self.services.db, audit=self.services.audit,
+            capture_id,
+            ReviewStatus.CAPTURED,
+            ReviewStatus.SCRUBBED,
+            db=self.services.db,
+            audit=self.services.audit,
         )
         self.services.db.update_capture(capture_id, scrubbed_path=str(scrubbed))
         return {"ok": True, "scrubbed_path": str(scrubbed)}
@@ -909,8 +1317,11 @@ class EngineDispatcher:
             return {"ok": False, "error": "capture_id is required"}
         try:
             transition_status(
-                capture_id, getattr(ReviewStatus, frm), getattr(ReviewStatus, to),
-                db=self.services.db, audit=self.services.audit,
+                capture_id,
+                getattr(ReviewStatus, frm),
+                getattr(ReviewStatus, to),
+                db=self.services.db,
+                audit=self.services.audit,
             )
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
@@ -929,9 +1340,7 @@ class EngineDispatcher:
         if self.services.runner is None:
             from engine.runner_loop import RunnerService
 
-            self.services.runner = RunnerService(
-                self.config, self.services, emit=self.emit
-            )
+            self.services.runner = RunnerService(self.config, self.services, emit=self.emit)
         return self.services.runner
 
     def runner_status(self, **params: Any) -> dict:

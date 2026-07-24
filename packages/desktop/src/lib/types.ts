@@ -2,6 +2,33 @@
 
 export type DeploymentLane = "cloud" | "byoc";
 export type PhiMode = "off" | "on";
+export type TargetBackend =
+  | "web"
+  | "windows"
+  | "macos"
+  | "linux"
+  | "rdp"
+  | "citrix";
+
+/**
+ * PHI-capable execution target staged in a private Flow deployment config.
+ * Backend credentials and policy stay in the operator-owned deployment config
+ * or its referenced environment.
+ */
+export interface ExecutionTarget {
+  backend: TargetBackend;
+  url?: string;
+  agent_url?: string;
+  macos_app?: string;
+  macos_window_title?: string;
+  linux_app?: string;
+  linux_window_title?: string;
+  linux_allow_physical_input?: boolean;
+  rdp_host?: string;
+  rdp_window?: string;
+  rdp_window_title?: string;
+  rdp_readiness_text?: string;
+}
 
 export type StepState =
   | "pending"
@@ -44,7 +71,9 @@ export interface RunStep {
 }
 
 export interface RunReport {
-  ok?: boolean;
+  ok: boolean;
+  outcome: "success" | "halt" | "unknown";
+  pre_action_refusal: false;
   error?: string;
   run_id: string;
   workflow_id: string;
@@ -60,10 +89,25 @@ export interface RunReport {
   metrics?: { duration_s?: number; cost_usd?: number } | null;
 }
 
+export interface ExecutionRefusal {
+  ok: false;
+  outcome: "refused";
+  pre_action_refusal: true;
+  error: string;
+}
+
+export type ExecutionResponse = RunReport | ExecutionRefusal;
+
 export interface BrowserRuntimeStatus {
   workflow_id: string;
   state: "checking" | "installing" | "ready" | "error";
   detail: string;
+}
+
+export interface ReplayProgress {
+  workflow_id: string;
+  state: "running" | "halted" | "done" | "unknown" | "error";
+  backend: TargetBackend | "configured";
 }
 
 export interface SyncState {

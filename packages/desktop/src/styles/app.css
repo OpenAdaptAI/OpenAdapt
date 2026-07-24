@@ -382,6 +382,22 @@ td.id {
   color: var(--text-faint);
   text-transform: uppercase;
 }
+.target-fieldset {
+  border: 0;
+  margin-left: 0;
+  margin-right: 0;
+  min-width: 0;
+  padding: 0;
+}
+.target-fieldset legend {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-2);
+  padding: 0;
+  text-transform: uppercase;
+}
 .input,
 textarea.input,
 select.input {
@@ -431,6 +447,65 @@ select.input:focus {
 }
 .seg button + button {
   border-left: 1px solid var(--border);
+}
+.radio-seg label {
+  position: relative;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.radio-seg label + label {
+  border-left: 1px solid var(--border);
+}
+.radio-seg label span {
+  display: block;
+  padding: var(--space-2) var(--space-4);
+}
+.radio-seg label.active {
+  background: var(--surface-sunk);
+  color: var(--text-strong);
+}
+.radio-seg input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+.radio-seg input:focus-visible + span {
+  box-shadow: inset 0 0 0 3px var(--focus-ring);
+}
+.target-fieldset:disabled .radio-seg label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.target-summary {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+}
+.check-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.check-row input {
+  margin-top: 3px;
+}
+.advanced-target {
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+}
+.advanced-target summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.advanced-target-body {
+  margin-top: var(--space-4);
 }
 
 /* -----------------------------------------------------------------------------

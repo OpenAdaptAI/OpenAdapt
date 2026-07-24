@@ -118,17 +118,25 @@ export function EmptyState({
 export function Field({
   label,
   hint,
+  htmlFor,
+  hintId,
   children,
 }: {
   label: string;
   hint?: string;
+  htmlFor?: string;
+  hintId?: string;
   children: ReactNode;
 }) {
   return (
     <div className="field">
-      <label>{label}</label>
+      <label htmlFor={htmlFor}>{label}</label>
       {children}
-      {hint && <span className="hint">{hint}</span>}
+      {hint && (
+        <span className="hint" id={hintId}>
+          {hint}
+        </span>
+      )}
     </div>
   );
 }
@@ -146,8 +154,10 @@ export function SegControl<T extends string>({
     <div className="seg" role="group">
       {options.map((o) => (
         <button
+          type="button"
           key={o.value}
           className={o.value === value ? "active" : ""}
+          aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
         >
           {o.label}

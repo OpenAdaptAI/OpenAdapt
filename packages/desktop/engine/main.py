@@ -32,6 +32,7 @@ ENGINE_VERSION = __version__
 # runs out-of-process; using the same signed binary avoids a second sidecar path
 # and guarantees that the installed cockpit invokes the version it shipped.
 EMBEDDED_FLOW_MODE = "__openadapt_flow__"
+EMBEDDED_FLOW_RECORD_MODE = "__openadapt_flow_record_config__"
 
 
 def _embedded_flow_version() -> str:
@@ -40,9 +41,7 @@ def _embedded_flow_version() -> str:
     try:
         return version("openadapt-flow")
     except PackageNotFoundError as exc:
-        raise RuntimeError(
-            "The bundled OpenAdapt Flow runtime metadata is missing."
-        ) from exc
+        raise RuntimeError("The bundled OpenAdapt Flow runtime metadata is missing.") from exc
 
 
 def _print_embedded_flow_help() -> None:
@@ -129,6 +128,20 @@ def _run_embedded_flow() -> None:
     flow_main()
 
 
+def _run_embedded_flow_record() -> None:
+    """Run canonical Flow record from one private staged request."""
+
+    _configure_frozen_browser_cache()
+    _normalize_flow_auto_scrub_capability()
+    if getattr(sys, "frozen", False):
+        from engine.managed_vision import ensure_managed_vision_runtime
+
+        ensure_managed_vision_runtime()
+    from engine.flow_record_entry import main as record_main
+
+    raise SystemExit(record_main(sys.argv[2:]))
+
+
 def _run_embedded_playwright() -> None:
     """Support Flow's one-time ``python -m playwright install`` in a freeze.
 
@@ -151,6 +164,9 @@ def main() -> None:
     _configure_frozen_browser_cache()
     if sys.argv[1:2] == [EMBEDDED_FLOW_MODE]:
         _run_embedded_flow()
+        return
+    if sys.argv[1:2] == [EMBEDDED_FLOW_RECORD_MODE]:
+        _run_embedded_flow_record()
         return
     if sys.argv[1:3] == ["-m", "playwright"]:
         _run_embedded_playwright()
