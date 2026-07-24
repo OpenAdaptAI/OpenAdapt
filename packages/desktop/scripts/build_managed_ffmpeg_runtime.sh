@@ -12,9 +12,15 @@ if command -v python3 >/dev/null 2>&1; then
 else
   python_cmd="python"
 fi
+temp_root="${RUNNER_TEMP:-/tmp}"
+if [[ "${TARGET_TRIPLE}" == "x86_64-pc-windows-msvc" ]]; then
+  SOURCE_ARCHIVE="$(cygpath -u "${SOURCE_ARCHIVE}")"
+  OUTPUT_DIR="$(cygpath -u "${OUTPUT_DIR}")"
+  temp_root="$(cygpath -u "${temp_root}")"
+fi
 
 workspace="$(pwd)"
-work_root="${RUNNER_TEMP:-/tmp}/openadapt-ffmpeg-${TARGET_TRIPLE}"
+work_root="${temp_root}/openadapt-ffmpeg-${TARGET_TRIPLE}"
 source_root="${work_root}/source"
 build_root="${work_root}/build"
 bundle_dir="${OUTPUT_DIR}/bundle"
@@ -104,10 +110,8 @@ case "${TARGET_TRIPLE}" in
       "--cc=gcc"
       "--pkg-config-flags=--static"
       "--extra-ldflags=-static"
-      "--enable-mediafoundation"
-      "--enable-encoder=png,mpeg4,h264_mf"
+      "--enable-encoder=png,mpeg4"
     )
-    hardware_encoder="h264_mf"
     ;;
   *)
     echo "unsupported FFmpeg runtime target: ${TARGET_TRIPLE}" >&2
@@ -130,13 +134,13 @@ if grep -Eq -- '--enable-(gpl|nonfree|version3)' ffbuild/config.mak; then
   exit 1
 fi
 
-jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
-make -j"${jobs}" ffmpeg ffprobe
-
 exe_suffix=""
 if [[ "${TARGET_TRIPLE}" == "x86_64-pc-windows-msvc" ]]; then
   exe_suffix=".exe"
 fi
+jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+make -j"${jobs}" "ffmpeg${exe_suffix}" "ffprobe${exe_suffix}"
+
 cp "ffmpeg${exe_suffix}" "${bundle_dir}/bin/ffmpeg${exe_suffix}"
 cp "ffprobe${exe_suffix}" "${bundle_dir}/bin/ffprobe${exe_suffix}"
 chmod +x "${bundle_dir}/bin/ffmpeg${exe_suffix}" "${bundle_dir}/bin/ffprobe${exe_suffix}"
@@ -259,17 +263,26 @@ png = (
     + chunk(b"IEND", b"")
 )
 (root / "frame.png").write_bytes(png)
-(root / "frames.rgb").write_bytes(
+(
+    root / "frames.ffconcat"
+).write_text(
+    "ffconcat version 1.0\n"
+    "file frame.png\n"
+    "duration 0.040000000\n"
+    "file frame.png\n",
+    encoding="utf-8",
+)
+frames = b"".join(
     b"".join(bytes((x * 16, y * 16, frame * 8)) for y in range(height) for x in range(width))
     for frame in range(25)
 )
+(root / "frames.rgb").write_bytes(frames)
 PY
 
-for _ in $(seq 1 25); do
-  cat "${smoke_dir}/frame.png"
-done | "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
-  -f image2pipe -framerate 25 -vcodec png -i pipe:0 \
-  -an -c:v mpeg4 -q:v 5 -pix_fmt yuv420p -y "${smoke_dir}/png-input.mp4"
+"${ffmpeg_bin}" -hide_banner -loglevel error -nostdin -y \
+  -f concat -safe 1 -i "${smoke_dir}/frames.ffconcat" \
+  -an -c:v mpeg4 -q:v 5 -pix_fmt yuv420p -fps_mode vfr -f mp4 \
+  "${smoke_dir}/png-input.mp4"
 
 "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
   -f rawvideo -pixel_format rgb24 -video_size 16x16 -framerate 25 \
@@ -279,7 +292,7 @@ done | "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
 "${ffprobe_bin}" -v error -count_frames -show_streams -show_format \
   -of json "${smoke_dir}/raw-input.mp4" >"${smoke_dir}/probe.json"
 "${ffmpeg_bin}" -hide_banner -loglevel error -nostdin \
-  -i "${smoke_dir}/raw-input.mp4" -vf 'select=eq(n\\,0)' -frames:v 1 \
+  -i "${smoke_dir}/raw-input.mp4" -vf 'select=eq(n\,0)' -frames:v 1 \
   -f image2pipe -vcodec png -y "${smoke_dir}/decoded.png"
 
 "${python_cmd}" - "${smoke_dir}" <<'PY'
