@@ -100,6 +100,32 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
         label = _mm(node.title)
         if node.kind.value == "action":
             badges = []
+            if node.resolution and node.resolution.top_rung:
+                rung = node.resolution.top_rung
+                rung_label = {
+                    "api": "API",
+                    "structural": "DOM/accessibility",
+                    "template": "visual template",
+                    "ocr": "OCR",
+                    "landmarks": "landmarks",
+                }.get(rung, rung)
+                if rung == "template":
+                    landmarks = next(
+                        (
+                            item
+                            for item in node.resolution.rungs
+                            if item.name == "landmarks" and item.present
+                        ),
+                        None,
+                    )
+                    if landmarks is not None:
+                        count = landmarks.detail.split(" ", 1)[0]
+                        rung_label += (
+                            f" + {count} OCR landmarks"
+                            if count.isdigit()
+                            else " + OCR landmarks"
+                        )
+                badges.append(rung_label)
             if node.identity and node.identity.armed is True:
                 badges.append("identity")
             if node.effects:
