@@ -62,6 +62,7 @@ export interface Workflow {
 }
 
 export type QualificationRisk = "reversible" | "irreversible";
+export type QualificationEffectKind = "record_written" | "field_equals";
 
 export interface QualificationIdentity {
   applicable: boolean;
@@ -77,6 +78,41 @@ export interface QualificationEffect {
   summary: string;
   risk: QualificationRisk;
   needs_operator_confirmation: boolean;
+}
+
+export interface QualificationIdentitySource {
+  kind: "structured" | "identifier_region" | "captured_context";
+  label: string;
+  match: string;
+  region?: [number, number, number, number];
+}
+
+export interface QualificationValueExpression {
+  source: "parameter" | "literal";
+  value?: string | null;
+}
+
+export interface QualificationEditableEffect {
+  index: number;
+  kind: QualificationEffectKind;
+  match: Record<string, QualificationValueExpression | null>;
+  field?: string | null;
+  value?: QualificationValueExpression | null;
+  expected_count: number;
+  idempotency_key?: QualificationValueExpression | null;
+  key_field: string;
+  count_new_only: boolean;
+  risk: QualificationRisk;
+  needs_operator_confirmation: boolean;
+}
+
+export interface QualificationActionControls {
+  identity: {
+    can_arm: boolean;
+    armed: boolean;
+    sources: QualificationIdentitySource[];
+  };
+  effects: QualificationEditableEffect[];
 }
 
 export interface QualificationNode {
@@ -144,6 +180,14 @@ export interface QualificationProject {
     certified: boolean;
     certification_status?: string | null;
     certified_at?: string | null;
+  };
+  controls: {
+    parameters: {
+      name: string;
+      type: string;
+      secret: boolean;
+    }[];
+    actions: Record<string, QualificationActionControls>;
   };
 }
 

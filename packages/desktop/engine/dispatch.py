@@ -208,6 +208,8 @@ class EngineDispatcher:
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
             "set_qualification_risk": self.set_qualification_risk,
+            "arm_qualification_identity": self.arm_qualification_identity,
+            "bind_qualification_effect": self.bind_qualification_effect,
             "certify_qualification": self.certify_qualification,
             # cloud sync / push
             "push_workflow": self.push_workflow,
@@ -1025,9 +1027,7 @@ class EngineDispatcher:
         cursor = bundle.absolute()
         while cursor.resolve() != root:
             if cursor == cursor.parent or not cursor.resolve().is_relative_to(root):
-                raise ValueError(
-                    "Workflow bundle is outside the local Desktop bundle store"
-                )
+                raise ValueError("Workflow bundle is outside the local Desktop bundle store")
             if cursor.is_symlink():
                 raise ValueError(
                     "Workflow bundle contains a symbolic link and cannot be edited safely"
@@ -1078,9 +1078,80 @@ class EngineDispatcher:
             self.services.db.update_bundle(
                 workflow_id,
                 status=(
-                    "certified"
-                    if result.get("certification_current")
-                    else "qualification_pending"
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def arm_qualification_identity(self, **params: Any) -> dict:
+        """Arm retained Flow identity evidence for one exact action."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            arm_action_identity,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = arm_action_identity(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def bind_qualification_effect(self, **params: Any) -> dict:
+        """Bind one parameterized Flow effect contract without raw JSON edits."""
+
+        from engine.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            bind_action_effect,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            raw_index = params.get("effect_index")
+            result = bind_action_effect(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                kind=str(params.get("kind") or ""),
+                match_field=str(params.get("match_field") or ""),
+                match_param=str(params.get("match_param") or ""),
+                field=(str(params["field"]) if params.get("field") is not None else None),
+                value_param=(
+                    str(params["value_param"]) if params.get("value_param") is not None else None
+                ),
+                idempotency_param=(
+                    str(params["idempotency_param"])
+                    if params.get("idempotency_param") is not None
+                    else None
+                ),
+                key_field=str(params.get("key_field") or "key"),
+                expected_count=int(params.get("expected_count", 1)),
+                count_new_only=bool(params.get("count_new_only", False)),
+                effect_index=int(raw_index) if raw_index is not None else None,
+                policy_source=policy,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
                 ),
             )
             return result
@@ -1104,9 +1175,7 @@ class EngineDispatcher:
             self.services.db.update_bundle(
                 workflow_id,
                 status=(
-                    "certified"
-                    if result.get("certification_current")
-                    else "qualification_failed"
+                    "certified" if result.get("certification_current") else "qualification_failed"
                 ),
             )
             return result

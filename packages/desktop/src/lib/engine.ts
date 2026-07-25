@@ -33,6 +33,8 @@ export const CMD = {
   TEACH_FIX: "teach_fix",
   GET_QUALIFICATION: "get_qualification",
   SET_QUALIFICATION_RISK: "set_qualification_risk",
+  ARM_QUALIFICATION_IDENTITY: "arm_qualification_identity",
+  BIND_QUALIFICATION_EFFECT: "bind_qualification_effect",
   CERTIFY_QUALIFICATION: "certify_qualification",
   // cloud sync / push
   PUSH_WORKFLOW: "push_workflow",
