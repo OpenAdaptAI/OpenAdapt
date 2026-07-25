@@ -1,0 +1,315 @@
+{
+  "$defs": {
+    "ControlOverlayControlsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "pause": {
+          "default": false,
+          "title": "Pause",
+          "type": "boolean"
+        },
+        "resume": {
+          "default": false,
+          "title": "Resume",
+          "type": "boolean"
+        },
+        "stop": {
+          "default": false,
+          "title": "Stop",
+          "type": "boolean"
+        }
+      },
+      "title": "ControlOverlayControlsV1",
+      "type": "object"
+    },
+    "ControlOverlayDataClassification": {
+      "description": "The only classifications allowed to leave a private evidence boundary.",
+      "enum": [
+        "synthetic",
+        "sanitized_public"
+      ],
+      "title": "ControlOverlayDataClassification",
+      "type": "string"
+    },
+    "ControlOverlayFrameV1": {
+      "additionalProperties": false,
+      "description": "A deterministic frame safe for public presentation and composition.",
+      "properties": {
+        "controls": {
+          "$ref": "#/$defs/ControlOverlayControlsV1"
+        },
+        "event_sequence": {
+          "minimum": 0,
+          "title": "Event Sequence",
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/ControlOverlayMode"
+        },
+        "observed_at_monotonic_ms": {
+          "minimum": 0,
+          "title": "Observed At Monotonic Ms",
+          "type": "number"
+        },
+        "observed_at_unix_ms": {
+          "minimum": 0,
+          "title": "Observed At Unix Ms",
+          "type": "integer"
+        },
+        "phase": {
+          "$ref": "#/$defs/ControlOverlayPhase"
+        },
+        "presentation": {
+          "const": true,
+          "default": true,
+          "title": "Presentation",
+          "type": "boolean"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControlOverlayProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "openadapt.control-overlay-frame/v1",
+          "default": "openadapt.control-overlay-frame/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "state_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "State Id",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Status",
+          "type": "string"
+        },
+        "step": {
+          "$ref": "#/$defs/ControlOverlayStepV1"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "workflow_label": {
+          "$ref": "#/$defs/ControlOverlayWorkflowLabel"
+        }
+      },
+      "required": [
+        "state_id",
+        "event_sequence",
+        "observed_at_unix_ms",
+        "observed_at_monotonic_ms",
+        "visible",
+        "phase",
+        "workflow_label",
+        "mode",
+        "step",
+        "controls",
+        "status"
+      ],
+      "title": "ControlOverlayFrameV1",
+      "type": "object",
+      "x-openadapt-state-id-components": [
+        "visibility",
+        "phase",
+        "mode",
+        "profile",
+        "step.current",
+        "step.total",
+        "controls.pause",
+        "controls.resume",
+        "controls.stop"
+      ],
+      "x-openadapt-status-by-phase": {
+        "completed_unverified": "Completed without sufficient verification",
+        "executing": "Executing with verification gates",
+        "failed": "Execution failed",
+        "halted": "Halted instead of guessing",
+        "idle": "Ready",
+        "observing": "Observing the application",
+        "paused": "Execution paused",
+        "pausing": "Pausing at a safe boundary",
+        "recording": "Watching your demonstration",
+        "resuming": "Resuming at a safe boundary",
+        "rolled_back": "Compensating action completed",
+        "stopping": "Stopping at a safe boundary",
+        "verified": "Outcome verified",
+        "verifying": "Verifying the intended result"
+      },
+      "x-openadapt-terminal-phases": [
+        "completed_unverified",
+        "failed",
+        "halted",
+        "rolled_back",
+        "verified"
+      ],
+      "x-openadapt-workflow-label-by-mode": {
+        "demonstration": "Workflow demonstration",
+        "governed": "Governed workflow",
+        "managed": "Managed workflow",
+        "replay": "Workflow replay"
+      }
+    },
+    "ControlOverlayMode": {
+      "enum": [
+        "demonstration",
+        "replay",
+        "governed",
+        "managed"
+      ],
+      "title": "ControlOverlayMode",
+      "type": "string"
+    },
+    "ControlOverlayPhase": {
+      "description": "Canonical cross-surface execution and terminal states.",
+      "enum": [
+        "idle",
+        "observing",
+        "recording",
+        "executing",
+        "pausing",
+        "paused",
+        "resuming",
+        "stopping",
+        "verifying",
+        "verified",
+        "completed_unverified",
+        "halted",
+        "failed",
+        "rolled_back"
+      ],
+      "title": "ControlOverlayPhase",
+      "type": "string"
+    },
+    "ControlOverlayProfile": {
+      "enum": [
+        "demo",
+        "standard",
+        "regulated"
+      ],
+      "title": "ControlOverlayProfile",
+      "type": "string"
+    },
+    "ControlOverlayStepV1": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        }
+      },
+      "title": "ControlOverlayStepV1",
+      "type": "object"
+    },
+    "ControlOverlayTimelineEventV1": {
+      "additionalProperties": false,
+      "properties": {
+        "at_ms": {
+          "minimum": 0,
+          "title": "At Ms",
+          "type": "integer"
+        },
+        "frame": {
+          "$ref": "#/$defs/ControlOverlayFrameV1"
+        }
+      },
+      "required": [
+        "at_ms",
+        "frame"
+      ],
+      "title": "ControlOverlayTimelineEventV1",
+      "type": "object"
+    },
+    "ControlOverlayWorkflowLabel": {
+      "description": "Closed presentation labels; user-authored workflow names are excluded.",
+      "enum": [
+        "Workflow demonstration",
+        "Workflow replay",
+        "Governed workflow",
+        "Managed workflow"
+      ],
+      "title": "ControlOverlayWorkflowLabel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Presentation frames bound to one exact evidence pack and media clip.",
+  "properties": {
+    "data_classification": {
+      "$ref": "#/$defs/ControlOverlayDataClassification"
+    },
+    "duration_ms": {
+      "exclusiveMinimum": 0,
+      "title": "Duration Ms",
+      "type": "integer"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/ControlOverlayTimelineEventV1"
+      },
+      "minItems": 1,
+      "title": "Events",
+      "type": "array"
+    },
+    "evidence_pack_id": {
+      "maxLength": 96,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$",
+      "title": "Evidence Pack Id",
+      "type": "string"
+    },
+    "media_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Media Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.control-overlay-timeline/v1",
+      "default": "openadapt.control-overlay-timeline/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "data_classification",
+    "evidence_pack_id",
+    "media_sha256",
+    "duration_ms",
+    "events"
+  ],
+  "title": "ControlOverlayTimelineV1",
+  "type": "object"
+}

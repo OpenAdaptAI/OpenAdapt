@@ -58,6 +58,7 @@ Documentation for the whole stack lives at
 | `ActionResult` | Execution outcome with error taxonomy + state delta |
 | `Episode` / `Step` | Complete task trajectory (observation → action → result) |
 | `FailureRecord` | Classified failure for dataset pipelines |
+| `ControlOverlayFrameV1` / `ControlOverlayTimelineV1` | PHI-safe execution overlay state bound to exact evidence media |
 
 ## Quick start
 
@@ -139,6 +140,23 @@ from openadapt_types import ComputerState, Action, Episode
 schema = ComputerState.model_json_schema()
 print(json.dumps(schema, indent=2))
 ```
+
+The same API exports the versioned cross-surface overlay contracts:
+
+```python
+from openadapt_types import ControlOverlayFrameV1, ControlOverlayTimelineV1
+
+frame_schema = ControlOverlayFrameV1.model_json_schema()
+timeline_schema = ControlOverlayTimelineV1.model_json_schema()
+```
+
+The same schemas ship as `openadapt_types/schemas/control-overlay-frame-v1.json`
+and `control-overlay-timeline-v1.json` for TypeScript, Rust, and other consumers.
+
+Overlay schemas reject unknown fields and contain only closed presentation
+labels and canonical statuses. Screenshots, action targets, typed values,
+identities, URLs, logs, report bodies, and user-authored workflow names remain
+outside this public presentation contract.
 
 ## Design principles
 
