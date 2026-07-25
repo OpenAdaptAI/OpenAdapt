@@ -1255,7 +1255,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         return 3
 
     report_md = render_run_report(run_dir)
-    outcome = report.execution_outcome or ("success" if report.success else "FAILED")
+    execution_outcome = getattr(report, "execution_outcome", None)
+    outcome = execution_outcome or ("success" if report.success else "FAILED")
     print(f"Resume {outcome}: {report_md}")
     _maybe_report_run(
         run_dir,
@@ -1263,7 +1264,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         args,
         backend_kind=_report_backend_kind(backend_cfg.kind),
     )
-    if report.execution_profile in {"standard", "regulated"}:
+    if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
 
