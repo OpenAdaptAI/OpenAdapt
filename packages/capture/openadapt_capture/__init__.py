@@ -83,6 +83,20 @@ from openadapt_capture.stats import (
     PerfStat,
     plot_capture_performance,
 )
+from openadapt_capture.structural import (
+    STRUCTURAL_OBSERVATION_SCHEMA_VERSION,
+    StructuralAncestor,
+    StructuralBounds,
+    StructuralCandidateContext,
+    StructuralElement,
+    StructuralObservation,
+    StructuralObservationRequest,
+    StructuralObserver,
+    StructuralProcessIdentity,
+    StructuralWindowIdentity,
+    create_structural_observer,
+    observe_structural_action,
+)
 
 # Visualization
 from openadapt_capture.visualize import create_demo, create_html
@@ -133,6 +147,19 @@ __all__ = [
     "Capture",
     "CaptureSession",
     "Action",
+    # Native structural observation
+    "STRUCTURAL_OBSERVATION_SCHEMA_VERSION",
+    "StructuralAncestor",
+    "StructuralBounds",
+    "StructuralCandidateContext",
+    "StructuralElement",
+    "StructuralObservation",
+    "StructuralObservationRequest",
+    "StructuralObserver",
+    "StructuralProcessIdentity",
+    "StructuralWindowIdentity",
+    "create_structural_observer",
+    "observe_structural_action",
     # Window-scoped capture
     "WindowTarget",
     "TargetWindow",

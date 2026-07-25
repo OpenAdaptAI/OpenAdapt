@@ -147,6 +147,31 @@ def test_setup_events_are_delivered_in_order_only_after_start_commits() -> None:
     assert delivered == observer.events
 
 
+def test_delivery_thread_balances_callback_lifecycle_hooks() -> None:
+    lifecycle: list[tuple[str, int]] = []
+    delivered = threading.Event()
+
+    class Callback:
+        def _openadapt_delivery_thread_start(self) -> None:
+            lifecycle.append(("start", threading.get_ident()))
+
+        def __call__(self, _event) -> None:
+            lifecycle.append(("event", threading.get_ident()))
+            delivered.set()
+
+        def _openadapt_delivery_thread_stop(self) -> None:
+            lifecycle.append(("stop", threading.get_ident()))
+
+    observer = _ReadyObserver(Callback())
+    observer.start()
+    observer._emit(ObservedKey(pressed=True, key_char="a", timestamp=1.0))
+    assert delivered.wait(timeout=1)
+    observer.stop()
+
+    assert [name for name, _thread_id in lifecycle] == ["start", "event", "stop"]
+    assert len({thread_id for _name, thread_id in lifecycle}) == 1
+
+
 def test_setup_events_are_discarded_when_start_fails() -> None:
     delivered = []
     observer = _SetupEmittingObserver(delivered.append, fail_setup=True)
@@ -434,6 +459,19 @@ def test_recorder_uses_one_observer_and_preserves_cross_device_receipt_order(
         ),
     ]
     factory_calls = []
+    structural_lifecycle = []
+
+    class FakeStructuralObserver:
+        def open_current_thread(self) -> None:
+            structural_lifecycle.append("start")
+
+        def close_current_thread(self) -> None:
+            structural_lifecycle.append("stop")
+
+        def observe(self, _request):
+            return None
+
+    structural_observer = FakeStructuralObserver()
 
     class FakeObserver:
         def __init__(self, callback) -> None:
@@ -452,6 +490,8 @@ def test_recorder_uses_one_observer_and_preserves_cross_device_receipt_order(
 
     def create(callback, **kwargs):
         factory_calls.append(kwargs)
+        callback._openadapt_delivery_thread_start()
+        callback._openadapt_delivery_thread_stop()
         return FakeObserver(callback)
 
     monkeypatch.setattr(recorder_module, "create_input_observer", create)
@@ -460,6 +500,7 @@ def test_recorder_uses_one_observer_and_preserves_cross_device_receipt_order(
         terminate,
         SimpleNamespace(timestamp=100.0),
         started,
+        structural_observer=structural_observer,
     )
 
     persisted = [event_q.get_nowait() for _ in range(event_q.qsize())]
@@ -471,6 +512,7 @@ def test_recorder_uses_one_observer_and_preserves_cross_device_receipt_order(
         }
     ]
     assert started.is_set()
+    assert structural_lifecycle == ["start", "stop"]
     assert [event.timestamp for event in persisted] == [100.1, 100.2, 100.3]
     assert [event.data["name"] for event in persisted] == [
         "click",

@@ -54,6 +54,12 @@ from openadapt_capture.input_observer import (
     add_exception_note,
     create_input_observer,
 )
+from openadapt_capture.structural import (
+    StructuralObservationRequest,
+    StructuralObserver,
+    create_structural_observer,
+    observe_structural_action,
+)
 from openadapt_capture.window_capture import (
     WindowCaptureError,
     WindowCaptureScope,
@@ -837,6 +843,7 @@ def trigger_action_event(
     action_event_args: dict[str, Any],
     window_scope: WindowCaptureScope | None = None,
     timestamp: float | None = None,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Triggers an action event and adds it to the event queue.
 
@@ -849,12 +856,29 @@ def trigger_action_event(
             frames directly.
         timestamp: Native event-receipt time. Defaults to the current recording
             clock only for legacy/direct callers.
+        structural_observer: Optional accessibility observer. Evidence is
+            captured against global coordinates before any window translation.
 
     Returns:
         None
     """
+    event_timestamp = utils.get_timestamp() if timestamp is None else timestamp
     x = action_event_args.get("mouse_x")
     y = action_event_args.get("mouse_y")
+    observation = observe_structural_action(
+        structural_observer,
+        StructuralObservationRequest(
+            event_timestamp=event_timestamp,
+            action_name=str(action_event_args.get("name") or "unknown"),
+            x=x,
+            y=y,
+        ),
+    )
+    if observation is not None:
+        action_event_args["structural_observation"] = observation.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
     if x is not None and y is not None:
         if config.RECORD_READ_ACTIVE_ELEMENT_STATE:
             # element lookup needs GLOBAL coordinates: translate afterwards.
@@ -874,7 +898,7 @@ def trigger_action_event(
             action_event_args["mouse_y"] = wy
     event_q.put(
         Event(
-            utils.get_timestamp() if timestamp is None else timestamp,
+            event_timestamp,
             "action",
             action_event_args,
         )
@@ -920,6 +944,7 @@ def on_click(
     pressed: bool,
     injected: bool = False,
     timestamp: float | None = None,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Handles the 'click' event.
 
@@ -948,6 +973,7 @@ def on_click(
             },
             window_scope,
             timestamp,
+            structural_observer if pressed else None,
         )
 
 
@@ -960,6 +986,7 @@ def on_scroll(
     dy: float,
     injected: bool = False,
     timestamp: float | None = None,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Handles the 'scroll' event.
 
@@ -988,12 +1015,14 @@ def on_scroll(
             },
             window_scope,
             timestamp,
+            structural_observer,
         )
 
 
 def handle_key(
     event_q: queue.Queue,
     key: ObservedKey,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Persist a normalized native key transition.
 
@@ -1016,6 +1045,7 @@ def handle_key(
             "canonical_key_vk": key.canonical_key_vk,
         },
         timestamp=key.timestamp,
+        structural_observer=structural_observer if key.pressed else None,
     )
 
 
@@ -1309,6 +1339,7 @@ def read_input_events(
     recording: Recording,
     started_event: threading.Event,
     window_scope: WindowCaptureScope | None = None,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Read globally ordered keyboard and mouse events from one native observer."""
     stop_sequences = [sequence for sequence in config.STOP_SEQUENCES if sequence]
@@ -1335,6 +1366,7 @@ def read_input_events(
                 event.pressed,
                 event.injected,
                 timestamp=event.timestamp,
+                structural_observer=structural_observer,
             )
             return
         if isinstance(event, ObservedMouseScroll):
@@ -1347,13 +1379,14 @@ def read_input_events(
                 event.dy,
                 event.injected,
                 timestamp=event.timestamp,
+                structural_observer=structural_observer,
             )
             return
         if event.injected:
             return
 
         logger.debug(f"{event=}")
-        handle_key(event_q, event)
+        handle_key(event_q, event, structural_observer)
         if not event.pressed:
             return
 
@@ -1376,6 +1409,14 @@ def read_input_events(
                 stop_sequence_indices[index] = 0
                 logger.info("Stop sequence entered! Stopping recording now.")
                 stop_sequence_detected = True
+
+    if structural_observer is not None:
+        start_hook = getattr(structural_observer, "open_current_thread", None)
+        stop_hook = getattr(structural_observer, "close_current_thread", None)
+        if callable(start_hook):
+            setattr(on_observed, "_openadapt_delivery_thread_start", start_hook)
+        if callable(stop_hook):
+            setattr(on_observed, "_openadapt_delivery_thread_stop", stop_hook)
 
     utils.set_start_time(recording.timestamp)
     observer = create_input_observer(
@@ -1625,6 +1666,7 @@ def record(
     send_profile: bool = False,
     window_owner: str | None = None,
     window_title: str | None = None,
+    structural_observer: StructuralObserver | None = None,
 ) -> None:
     """Record Screenshots/ActionEvents/WindowEvents/BrowserEvents.
 
@@ -1640,6 +1682,9 @@ def record(
             ``config.RECORD_WINDOW_OWNER``.
         window_title: Title substring for window-scoped capture. Falls back to
             ``config.RECORD_WINDOW_TITLE``.
+        structural_observer: Optional injected accessibility observer. When
+            omitted, the platform factory follows
+            ``RECORD_STRUCTURAL_OBSERVATIONS``.
     """
     assert config.RECORD_VIDEO or config.RECORD_IMAGES, (
         config.RECORD_VIDEO,
@@ -1685,6 +1730,11 @@ def record(
         logger.info(
             f"window-scoped capture resolved: {window_scope.snapshot()} "
             f"initial frame {initial_window_frame.size}"
+        )
+
+    if structural_observer is None:
+        structural_observer = create_structural_observer(
+            enabled=config.RECORD_STRUCTURAL_OBSERVATIONS,
         )
 
     if capture_dir is None:
@@ -1769,6 +1819,7 @@ def record(
         recording,
         task_started_events.setdefault("input_event_reader", threading.Event()),
         window_scope,
+        structural_observer,
     )
     input_event_reader = threading.Thread(
         target=_run_task_fail_loud,
@@ -2176,6 +2227,7 @@ class Recorder:
         capture_audio: bool | None = None,
         capture_images: bool | None = None,
         capture_window_data: bool | None = None,
+        capture_structural_observations: bool | None = None,
         capture_browser_events: bool | None = None,
         capture_full_video: bool | None = None,
         video_encoding: str | None = None,
@@ -2190,6 +2242,7 @@ class Recorder:
         screen_capture_fps: float | None = None,
         send_profile: bool = False,
         window: dict | None = None,
+        structural_observer: StructuralObserver | None = None,
     ) -> None:
         from pathlib import Path
 
@@ -2209,6 +2262,7 @@ class Recorder:
             capture_audio=capture_audio,
             capture_images=capture_images,
             capture_window_data=capture_window_data,
+            capture_structural_observations=capture_structural_observations,
             capture_browser_events=capture_browser_events,
             capture_full_video=capture_full_video,
             video_encoding=video_encoding,
@@ -2246,6 +2300,7 @@ class Recorder:
         self._capture = None  # lazy CaptureSession
         self._worker_error: BaseException | None = None
         self._worker_error_lock = threading.Lock()
+        self._structural_observer = structural_observer
 
     def _drain_status_pipe(self) -> None:
         """Background thread that reads status messages from record()."""
@@ -2281,6 +2336,7 @@ class Recorder:
                     num_browser_events=self._num_browser_events,
                     num_video_events=self._num_video_events,
                     send_profile=self._send_profile,
+                    structural_observer=self._structural_observer,
                 )
         except BaseException as exc:
             # A setup exception must wake wait_for_ready() and let context-manager

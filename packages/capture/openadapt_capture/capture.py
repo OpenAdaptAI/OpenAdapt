@@ -36,11 +36,23 @@ from openadapt_capture.events import (
     MouseUpEvent,
 )
 from openadapt_capture.processing import process_events
+from openadapt_capture.structural import StructuralObservation
 
 if TYPE_CHECKING:
     from PIL import Image
 
     from openadapt_capture.browser_events import BrowserEvent
+
+
+def _parse_structural_observation(raw: object) -> StructuralObservation | None:
+    """Load optional structural evidence without breaking legacy recordings."""
+
+    if raw is None:
+        return None
+    try:
+        return StructuralObservation.model_validate(raw)
+    except Exception:
+        return None
 
 
 def _convert_action_event(db_event) -> PydanticActionEvent | None:
@@ -52,11 +64,16 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
     Returns:
         Pydantic event or None if unrecognized.
     """
-    ts = db_event.timestamp
+    common = {
+        "timestamp": db_event.timestamp,
+        "structural_observation": _parse_structural_observation(
+            getattr(db_event, "structural_observation", None)
+        ),
+    }
 
     if db_event.name == "move":
         return MouseMoveEvent(
-            timestamp=ts,
+            **common,
             x=db_event.mouse_x or 0,
             y=db_event.mouse_y or 0,
         )
@@ -65,14 +82,14 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
 
         if db_event.mouse_pressed is True:
             return MouseDownEvent(
-                timestamp=ts,
+                **common,
                 x=db_event.mouse_x or 0,
                 y=db_event.mouse_y or 0,
                 button=button,
             )
         elif db_event.mouse_pressed is False:
             return MouseUpEvent(
-                timestamp=ts,
+                **common,
                 x=db_event.mouse_x or 0,
                 y=db_event.mouse_y or 0,
                 button=button,
@@ -81,7 +98,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
             return None
     elif db_event.name == "scroll":
         return MouseScrollEvent(
-            timestamp=ts,
+            **common,
             x=db_event.mouse_x or 0,
             y=db_event.mouse_y or 0,
             dx=db_event.mouse_dx or 0,
@@ -89,7 +106,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
         )
     elif db_event.name == "press":
         return KeyDownEvent(
-            timestamp=ts,
+            **common,
             key_name=db_event.key_name,
             key_char=db_event.key_char,
             key_vk=db_event.key_vk,
@@ -99,7 +116,7 @@ def _convert_action_event(db_event) -> PydanticActionEvent | None:
         )
     elif db_event.name == "release":
         return KeyUpEvent(
-            timestamp=ts,
+            **common,
             key_name=db_event.key_name,
             key_char=db_event.key_char,
             key_vk=db_event.key_vk,
@@ -368,6 +385,11 @@ class Action:
             btn = self.event.button
             return btn.value if hasattr(btn, "value") else str(btn)
         return None
+
+    @property
+    def structural_observation(self) -> StructuralObservation | None:
+        """Accessibility evidence captured at this action, when available."""
+        return self.event.structural_observation
 
     @property
     def screenshot(self) -> "Image" | None:

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Record and replay (from legacy OpenAdapt config.defaults.json)
     RECORD_WINDOW_DATA: bool = False
     RECORD_READ_ACTIVE_ELEMENT_STATE: bool = False
+    # Retain live native accessibility evidence beside actionable input.
+    # The platform factory is a no-op outside Windows.
+    RECORD_STRUCTURAL_OBSERVATIONS: bool = True
     RECORD_VIDEO: bool = True
     RECORD_AUDIO: bool = False
     RECORD_BROWSER_EVENTS: bool = False
@@ -99,6 +102,7 @@ _FIELD_TO_CONFIG_ATTR = {
     "capture_audio": "RECORD_AUDIO",
     "capture_images": "RECORD_IMAGES",
     "capture_window_data": "RECORD_WINDOW_DATA",
+    "capture_structural_observations": "RECORD_STRUCTURAL_OBSERVATIONS",
     "capture_browser_events": "RECORD_BROWSER_EVENTS",
     "window_owner": "RECORD_WINDOW_OWNER",
     "window_title": "RECORD_WINDOW_TITLE",
@@ -124,6 +128,7 @@ class RecordingConfig:
     capture_audio: bool | None = None
     capture_images: bool | None = None
     capture_window_data: bool | None = None
+    capture_structural_observations: bool | None = None
     capture_browser_events: bool | None = None
     # Window-scoped capture selectors (see window_capture.WindowTarget).
     window_owner: str | None = None

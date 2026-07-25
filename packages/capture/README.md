@@ -108,6 +108,7 @@ from openadapt_capture import CaptureSession
 with CaptureSession.load("./my-capture") as capture:
     for action in capture.actions():
         print(action.timestamp, action.type, action.x, action.y)
+        print(action.structural_observation)
         frame = action.screenshot
 ```
 
@@ -135,6 +136,27 @@ path is unavailable. A minimal managed runtime must provide raw-video input
 through a pipe, the selected video encoder, MP4 demuxing/muxing, PNG
 decoding/encoding, the `image2pipe` muxer, and the `select` video filter;
 Desktop provisions and probes that exact closure.
+
+## Native structural observations
+
+On Windows, the recorder can retain a versioned UI Automation observation
+beside the native action that produced it. When UIA exposes the information,
+the observation includes the target's AutomationId, role/control type, name,
+bounds, supported patterns, process/window identity, ancestry, and exact
+candidate cardinality within the top-level window. Unavailable values remain
+absent; capture never infers structural fields from coordinates or pixels.
+
+This evidence is stored in `recording.db`, exposed on raw events and processed
+`Action` objects, and remains optional so existing recordings and non-Windows
+hosts continue to load unchanged. It is enabled by default on Windows and can
+be disabled with
+`Recorder(..., capture_structural_observations=False)`. Applications can inject
+another read-only observer through `Recorder(..., structural_observer=...)`
+using the public `StructuralObserver` protocol.
+
+UIA describes the local Windows accessibility tree. It does not cross an
+RDP/Citrix pixel boundary into the remote application; those demonstrations
+retain window-scoped pixels and coordinates for Flow's remote visual compiler.
 
 ## Window-scoped recording
 
@@ -206,11 +228,11 @@ Capture does not upload a session by default. The sharing command, remote
 transcription, and profiling transfer are explicit opt-in operations. Installing
 the `privacy` extra alone does not automatically scrub a recording.
 
-The current desktop-to-Flow conversion has no field geometry for reliable
-secret redaction and no live UIA locator. `openadapt-flow` therefore refuses its
-desktop `--secret` option, and converted desktop workflows rely on retained
-visual evidence unless a separate structural recording path arms them. Review
-the desktop guide before recording sensitive workflows.
+Structural observations can also contain sensitive control names, window
+titles, and accessibility ancestry. They stay in the same local raw-capture
+boundary. `openadapt-flow` still refuses desktop `--secret` authoring until its
+source-time field-redaction contract can prove that sensitive values were not
+retained. Review the desktop guide before recording sensitive workflows.
 
 The experimental Chrome extension can observe pages across its configured host
 permissions and can emit DOM text and keyboard events to a local WebSocket.
@@ -220,8 +242,8 @@ Treat it as development code; do not deploy it in a sensitive browser profile.
 
 - Native recording requires a visible user session plus the operating system's
   screen-recording and input-monitoring permissions.
-- Desktop capture records pixels and coordinates, not a structural accessibility
-  locator for each demonstrated target.
+- Native Windows capture retains UIA evidence when the application exposes it;
+  opaque remote applications still require Flow's visual and OCR bindings.
 - The Flow adapter rejects unsupported input such as drag, non-left-click, and
   modifier-chord actions instead of silently compiling an incomplete workflow.
 - Browser-extension installation, security hardening, and compiler integration

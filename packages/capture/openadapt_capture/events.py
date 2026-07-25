@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from openadapt_capture.structural import StructuralObservation
+
 
 class EventType(str, Enum):
     """Event type identifiers."""
@@ -62,12 +64,21 @@ class BaseEvent(BaseModel):
     model_config = {"use_enum_values": True}
 
 
+class ActionBaseEvent(BaseEvent):
+    """Base event for native actions with optional structural evidence."""
+
+    structural_observation: StructuralObservation | None = Field(
+        default=None,
+        description="Versioned accessibility evidence observed at action time",
+    )
+
+
 # =============================================================================
 # Mouse Events
 # =============================================================================
 
 
-class MouseMoveEvent(BaseEvent):
+class MouseMoveEvent(ActionBaseEvent):
     """Mouse cursor movement event.
 
     Corresponds to OpenAdapt's ActionEvent with name="move".
@@ -78,7 +89,7 @@ class MouseMoveEvent(BaseEvent):
     y: float = Field(description="Mouse Y position in pixels")
 
 
-class MouseDownEvent(BaseEvent):
+class MouseDownEvent(ActionBaseEvent):
     """Mouse button press event.
 
     Corresponds to OpenAdapt's ActionEvent with name="click" and mouse_pressed=True.
@@ -90,7 +101,7 @@ class MouseDownEvent(BaseEvent):
     button: str = Field(description="Native mouse button name")
 
 
-class MouseUpEvent(BaseEvent):
+class MouseUpEvent(ActionBaseEvent):
     """Mouse button release event.
 
     Corresponds to OpenAdapt's ActionEvent with name="click" and mouse_pressed=False.
@@ -102,7 +113,7 @@ class MouseUpEvent(BaseEvent):
     button: str = Field(description="Native mouse button name")
 
 
-class MouseScrollEvent(BaseEvent):
+class MouseScrollEvent(ActionBaseEvent):
     """Mouse scroll wheel event.
 
     Corresponds to OpenAdapt's ActionEvent with name="scroll".
@@ -120,7 +131,7 @@ class MouseScrollEvent(BaseEvent):
 # =============================================================================
 
 
-class KeyDownEvent(BaseEvent):
+class KeyDownEvent(ActionBaseEvent):
     """Keyboard key press event.
 
     Corresponds to OpenAdapt's ActionEvent with name="press".
@@ -135,7 +146,7 @@ class KeyDownEvent(BaseEvent):
     canonical_key_vk: str | None = Field(default=None, description="Canonical virtual key code")
 
 
-class KeyUpEvent(BaseEvent):
+class KeyUpEvent(ActionBaseEvent):
     """Keyboard key release event.
 
     Corresponds to OpenAdapt's ActionEvent with name="release".
@@ -192,7 +203,7 @@ class AudioChunkEvent(BaseEvent):
 # =============================================================================
 
 
-class MouseClickEvent(BaseEvent):
+class MouseClickEvent(ActionBaseEvent):
     """Combined mouse click event (down + up).
 
     Corresponds to OpenAdapt's ActionEvent with name="singleclick".
@@ -208,7 +219,7 @@ class MouseClickEvent(BaseEvent):
     )
 
 
-class MouseDoubleClickEvent(BaseEvent):
+class MouseDoubleClickEvent(ActionBaseEvent):
     """Double click event.
 
     Corresponds to OpenAdapt's ActionEvent with name="doubleclick".
@@ -224,7 +235,7 @@ class MouseDoubleClickEvent(BaseEvent):
     )
 
 
-class MouseDragEvent(BaseEvent):
+class MouseDragEvent(ActionBaseEvent):
     """Mouse drag event (down + moves + up).
 
     Uses x/y for start position and dx/dy for displacement (like MouseScrollEvent).
@@ -242,7 +253,7 @@ class MouseDragEvent(BaseEvent):
     )
 
 
-class KeyTypeEvent(BaseEvent):
+class KeyTypeEvent(ActionBaseEvent):
     """Sequence of typed characters.
 
     Corresponds to OpenAdapt's ActionEvent with name="type".

@@ -220,32 +220,64 @@ class ThreadedInputObserver(InputObserver):
                 )
             )
             return
-        while True:
-            if (
-                self._delivery_stop_requested.is_set()
-                and self._delivery_queue.empty()
-            ):
-                return
-            try:
-                item = self._delivery_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            try:
-                if item is self._delivery_sentinel:
+        start_hook = getattr(
+            self.callback,
+            "_openadapt_delivery_thread_start",
+            None,
+        )
+        stop_hook = getattr(
+            self.callback,
+            "_openadapt_delivery_thread_stop",
+            None,
+        )
+        try:
+            if callable(start_hook):
+                start_hook()
+            while True:
+                if (
+                    self._delivery_stop_requested.is_set()
+                    and self._delivery_queue.empty()
+                ):
                     return
-                self.callback(item)  # type: ignore[arg-type]
-            except BaseException as exc:
-                failure = (
-                    exc
-                    if isinstance(exc, InputObserverError)
-                    else InputObserverError(
-                        f"{type(self).__name__} input consumer failed: {exc}"
+                try:
+                    item = self._delivery_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                try:
+                    if item is self._delivery_sentinel:
+                        return
+                    self.callback(item)  # type: ignore[arg-type]
+                except BaseException as exc:
+                    failure = (
+                        exc
+                        if isinstance(exc, InputObserverError)
+                        else InputObserverError(
+                            f"{type(self).__name__} input consumer failed: {exc}"
+                        )
                     )
+                    self._fail(failure)
+                    return
+                finally:
+                    self._delivery_queue.task_done()
+        except BaseException as exc:
+            failure = (
+                exc
+                if isinstance(exc, InputObserverError)
+                else InputObserverError(
+                    f"{type(self).__name__} input delivery setup failed: {exc}"
                 )
-                self._fail(failure)
-                return
-            finally:
-                self._delivery_queue.task_done()
+            )
+            self._fail(failure)
+        finally:
+            if callable(stop_hook):
+                try:
+                    stop_hook()
+                except BaseException as exc:
+                    self._fail(
+                        InputObserverError(
+                            f"{type(self).__name__} input delivery cleanup failed: {exc}"
+                        )
+                    )
 
     def _discard_delivery_queue(self) -> None:
         """Discard every event buffered by a startup that did not commit."""

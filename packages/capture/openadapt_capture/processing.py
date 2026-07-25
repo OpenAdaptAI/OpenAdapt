@@ -22,6 +22,7 @@ from openadapt_capture.events import (
     MouseScrollEvent,
     MouseUpEvent,
 )
+from openadapt_capture.structural import StructuralObservation
 
 # Type variable for event types
 E = TypeVar("E", bound=Event)
@@ -36,6 +37,17 @@ MOUSE_MOVE_MERGE_MIN_IDX_DELTA = 5  # minimum events between groups
 DOUBLE_CLICK_INTERVAL_SECONDS = 0.5  # default double-click interval
 DOUBLE_CLICK_DISTANCE_PIXELS = 5.0  # default double-click distance
 KEY_TYPE_MERGE_INTERVAL_SECONDS = 0.5  # merge adjacent KeyTypeEvents within this interval
+
+
+def _first_structural_observation(
+    events: list[ActionEvent],
+) -> StructuralObservation | None:
+    """Retain the first action-time observation when events are merged."""
+
+    for event in events:
+        if event.structural_observation is not None:
+            return event.structural_observation
+    return None
 
 
 # =============================================================================
@@ -162,6 +174,9 @@ def merge_consecutive_keyboard_events(events: list[ActionEvent]) -> list[ActionE
                 timestamp=first_event.timestamp,
                 text=text,
                 children=list(keyboard_buffer),
+                structural_observation=_first_structural_observation(
+                    list(keyboard_buffer)
+                ),
             )
             result.append(type_event)
 
@@ -221,6 +236,9 @@ def merge_consecutive_mouse_move_events(events: list[ActionEvent]) -> list[Actio
                 timestamp=first.timestamp,
                 x=last.x,
                 y=last.y,
+                structural_observation=_first_structural_observation(
+                    list(move_buffer)
+                ),
             )
             result.append(merged)
 
@@ -270,6 +288,9 @@ def merge_consecutive_mouse_scroll_events(events: list[ActionEvent]) -> list[Act
                 y=first.y,
                 dx=total_dx,
                 dy=total_dy,
+                structural_observation=_first_structural_observation(
+                    list(scroll_buffer)
+                ),
             )
             result.append(merged)
 
@@ -374,6 +395,9 @@ def merge_consecutive_mouse_click_events(
                             y=down.y,
                             button=down.button,
                             children=[down, up, next_down, next_up],
+                            structural_observation=_first_structural_observation(
+                                [down, up, next_down, next_up]
+                            ),
                         )
                         result.append(double_click)
                         skip_timestamps.add(up.timestamp)
@@ -388,6 +412,9 @@ def merge_consecutive_mouse_click_events(
                     y=down.y,
                     button=down.button,
                     children=[down, up],
+                    structural_observation=_first_structural_observation(
+                        [down, up]
+                    ),
                 )
                 result.append(single_click)
                 skip_timestamps.add(up.timestamp)
@@ -452,6 +479,9 @@ def detect_drag_events(
                         dy=event.y - down_event.y,
                         button=down_event.button,
                         children=[down_event] + moves + [event],
+                        structural_observation=_first_structural_observation(
+                            [down_event] + moves + [event]
+                        ),
                     )
                     result.append(drag)
                 else:

@@ -124,6 +124,9 @@ class ActionEvent(Base):
     canonical_key_vk = sa.Column(sa.String)
     parent_id = sa.Column(sa.Integer, sa.ForeignKey("action_event.id"))
     element_state = sa.Column(sa.JSON)
+    # Versioned optional accessibility evidence captured at action time.
+    # Nullable + additive migration keep older recording.db files readable.
+    structural_observation = sa.Column(sa.JSON)
     disabled = sa.Column(sa.Boolean, default=False)
 
     children = sa.orm.relationship("ActionEvent")
