@@ -32,6 +32,10 @@
 /openadapt_flow/policy.py                      @abrichr
 /openadapt_flow/policies/                      @abrichr
 
+# Qualification contract -- binds reviewed identity/effect coverage, fault
+# campaigns, environment boundaries, and certification evidence to a workflow.
+/openadapt_flow/qualification.py               @abrichr
+
 # Replayer + resolution ladder -- the halt/postcondition execution core.
 /openadapt_flow/runtime/replayer.py            @abrichr
 /openadapt_flow/runtime/resolver.py            @abrichr
@@ -42,6 +46,7 @@
 # Safety documentation whose claims the gates enforce.
 /docs/LIMITS.md                                @abrichr
 /docs/EFFECT_VERIFIER.md                       @abrichr
+/docs/QUALIFICATION_PROJECT.md                 @abrichr
 /docs/WORKFLOW_PROGRAM_IR.md                   @abrichr
 /docs/phi_at_rest.md                           @abrichr
 /docs/PRIVACY.md                               @abrichr

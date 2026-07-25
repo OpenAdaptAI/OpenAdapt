@@ -160,6 +160,7 @@ jobs:
             --warn-redundant-casts --warn-unused-ignores \
             --disallow-untyped-decorators --extra-checks \
             openadapt_flow/policy.py \
+            openadapt_flow/qualification.py \
             openadapt_flow/runtime/identity.py \
             openadapt_flow/runtime/identity_template.py \
             openadapt_flow/runtime/identity_vlm.py \

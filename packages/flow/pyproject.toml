@@ -319,7 +319,8 @@ indent-style = "space"
 #      Tighten the knobs below over time (they are deliberately off to start).
 #
 #   2. `mypy-strict-safety` job -> a STRICT run scoped to the safety-critical
-#      path ONLY (compiler, identity, effects, policy, replayer, resolver).
+#      path ONLY (compiler, identity, effects, policy, qualification, replayer,
+#      resolver).
 #      It turns ON the highest-value strict knob this config leaves off --
 #      `--check-untyped-defs` (type-check the BODIES of un-annotated functions,
 #      where real safety bugs hide) -- plus no-implicit-optional, strict

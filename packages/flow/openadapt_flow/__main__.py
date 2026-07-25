@@ -33,6 +33,8 @@ imported lazily inside each handler so ``--help`` always works):
   graph spec that the cloud and desktop surfaces render.
 - ``lint`` — report a bundle's coverage gaps (advice; exit code by severity).
 - ``certify`` — enforce a safety policy on a bundle (refuse it if it fails).
+- ``qualify`` — create and edit the versioned qualification project, import
+  customer-controlled case results, explain refusals, and persist certification.
 - ``console`` — serve the localhost-only operator console (a read-first web
   UI over bundles / runs / skill libraries; requires the ``console`` extra).
 - ``emit-skill`` — emit an Agent Skills folder for a bundle.
@@ -1424,6 +1426,287 @@ def _cmd_certify(args: argparse.Namespace) -> int:
     return 0 if report.passed else 2
 
 
+def _qualification_workflow(args: argparse.Namespace):
+    from openadapt_flow.ir import Workflow
+
+    return Workflow.load(Path(args.bundle))
+
+
+def _qualification_policy(args: argparse.Namespace):
+    from openadapt_flow.policy import load_policy
+
+    try:
+        return load_policy(args.policy)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _parse_qualification_signal(
+    raw: str,
+    *,
+    identifier_region: tuple[int, int, int, int] | None,
+):
+    from openadapt_flow.qualification import (
+        IdentityEvidenceSource,
+        IdentityMatchMode,
+        IdentityNormalizer,
+        IdentitySignalPolicy,
+    )
+
+    if "=" not in raw:
+        raise SystemExit("--signal expects FIELD=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+    field, spec = raw.split("=", 1)
+    parts = spec.split(":")
+    if len(parts) not in (2, 3):
+        raise SystemExit("--signal expects FIELD=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+    try:
+        source = IdentityEvidenceSource(parts[0])
+        match = IdentityMatchMode(parts[1])
+        normalizers = (
+            [IdentityNormalizer(value) for value in parts[2].split(",") if value]
+            if len(parts) == 3
+            else []
+        )
+        return IdentitySignalPolicy(
+            field=field,
+            source=source,
+            match=match,
+            normalizers=normalizers,
+            region=(
+                identifier_region
+                if source is IdentityEvidenceSource.IDENTIFIER_REGION
+                else None
+            ),
+        )
+    except ValueError as exc:
+        raise SystemExit(f"invalid --signal {raw!r}: {exc}") from exc
+
+
+def _qualification_report(args: argparse.Namespace):
+    from openadapt_flow.qualification import evaluate_qualification
+
+    workflow = _qualification_workflow(args)
+    policy = _qualification_policy(args) if getattr(args, "policy", None) else None
+    evidence_root = getattr(args, "evidence_root", None)
+    return workflow, evaluate_qualification(
+        workflow,
+        policy=policy,
+        evidence_root=evidence_root,
+    )
+
+
+def _cmd_qualify(args: argparse.Namespace) -> int:
+    import json
+
+    from pydantic import TypeAdapter
+
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        ActionRiskClassification,
+        EnvironmentBoundary,
+        IdentityEnforcement,
+        IdentityPolicy,
+        QualificationCase,
+        QualificationCaseKind,
+        QualificationCaseResult,
+        QualificationOutcome,
+        RequalificationCondition,
+        VerificationTier,
+        add_case,
+        add_requalification_condition,
+        certify_project,
+        init_project,
+        project_schema,
+        record_case_results,
+        save_qualified_workflow,
+        set_action_classification,
+        set_effect_policy,
+        set_identity_policy,
+        set_trusted_runner_key,
+    )
+
+    verb = args.qualify_cmd
+    if verb == "schema":
+        print(json.dumps(project_schema(), indent=2, sort_keys=True))
+        return 0
+
+    workflow = _qualification_workflow(args)
+
+    if verb == "init":
+        environment = EnvironmentBoundary(
+            target_kind=args.target,
+            application=args.application,
+            application_version=args.application_version,
+            environment_digest=args.environment_digest,
+            runtime_version=args.runtime_version or _package_version(),
+            required_capabilities=args.require_capability,
+        )
+        init_project(
+            workflow,
+            environment=environment,
+            minimum_effect_tier=VerificationTier(args.minimum_tier),
+            replace=args.replace,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb in {"inspect", "explain", "report"}:
+        policy = _qualification_policy(args) if getattr(args, "policy", None) else None
+        from openadapt_flow.qualification import evaluate_qualification
+
+        report = evaluate_qualification(
+            workflow,
+            policy=policy,
+            evidence_root=args.evidence_root,
+        )
+        if args.json:
+            payload = {
+                "project": (
+                    workflow.qualification.model_dump(mode="json")
+                    if workflow.qualification
+                    else None
+                ),
+                "report": report.model_dump(mode="json"),
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(report.render())
+        return 0 if report.passed else 2
+
+    if verb == "set-identity":
+        from openadapt_flow.traversal import iter_workflow_steps
+
+        steps = {step.id: step for step in iter_workflow_steps(workflow)}
+        step = steps.get(args.step)
+        if step is None:
+            raise SystemExit(f"unknown step id {args.step!r}")
+        region = step.anchor.identifier_region if step.anchor is not None else None
+        if args.canonical_ladder:
+            if args.signal or args.quorum is not None:
+                raise SystemExit(
+                    "--canonical-ladder cannot be combined with --signal/--quorum"
+                )
+            identity_policy = IdentityPolicy(
+                step_id=args.step,
+                enforcement=IdentityEnforcement.CANONICAL_LADDER,
+            )
+        else:
+            if not args.signal or args.quorum is None:
+                raise SystemExit(
+                    "signal-quorum identity requires --signal and --quorum"
+                )
+            signals = [
+                _parse_qualification_signal(raw, identifier_region=region)
+                for raw in args.signal
+            ]
+            identity_policy = IdentityPolicy(
+                step_id=args.step,
+                enforcement=IdentityEnforcement.SIGNAL_QUORUM,
+                signals=signals,
+                quorum=args.quorum,
+            )
+        set_identity_policy(
+            workflow,
+            identity_policy,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "set-risk":
+        set_action_classification(
+            workflow,
+            ActionRiskClassification(
+                step_id=args.step,
+                classification=ActionRiskClass(args.classification),
+                explanation=args.explanation,
+                operator_confirmed=True,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "trust-runner":
+        set_trusted_runner_key(
+            workflow,
+            key_id=args.key_id,
+            public_key_base64=args.public_key,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "set-effect":
+        set_effect_policy(
+            workflow,
+            step_id=args.step,
+            effect_index=args.effect_index,
+            tier=VerificationTier(args.tier),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "add-case":
+        add_case(
+            workflow,
+            QualificationCase(
+                id=args.case_id,
+                kind=QualificationCaseKind(args.kind),
+                description=args.description,
+                input_ref=args.input_ref,
+                expected_outcome=QualificationOutcome(args.expected_outcome),
+                required=not args.optional,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "add-requalification":
+        add_requalification_condition(
+            workflow,
+            RequalificationCondition(
+                kind=args.kind,
+                description=args.description,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "run":
+        try:
+            raw = json.loads(Path(args.results).read_text(encoding="utf-8"))
+            adapter = TypeAdapter(list[QualificationCaseResult])
+            results = adapter.validate_python(raw if isinstance(raw, list) else [raw])
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"invalid qualification results: {exc}") from exc
+        record_case_results(
+            workflow,
+            results,
+            evidence_root=args.evidence_root,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "certify":
+        policy = _qualification_policy(args)
+        report = certify_project(
+            workflow,
+            policy=policy,
+            evidence_root=args.evidence_root,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(report.model_dump_json(indent=2) if args.json else report.render())
+        return 0 if report.passed else 2
+
+    raise SystemExit(f"unknown qualify command {verb!r}")
+
+
 def _cmd_disambiguate(args: argparse.Namespace) -> int:
     import json
 
@@ -2755,6 +3038,169 @@ def build_parser() -> argparse.ArgumentParser:
         help="Deployment config YAML to read the policy from when --policy is omitted",
     )
     p.set_defaults(func=_cmd_certify)
+
+    p = sub.add_parser(
+        "qualify",
+        help=(
+            "Create, edit, test, explain, and certify the versioned "
+            "qualification project sealed into a workflow bundle"
+        ),
+    )
+    qsub = p.add_subparsers(dest="qualify_cmd", required=True)
+
+    q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser("init", help="Initialize a bundle's qualification project")
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--target",
+        required=True,
+        choices=("web", "windows", "macos", "linux", "rdp", "citrix"),
+    )
+    q.add_argument("--application", required=True)
+    q.add_argument("--application-version", required=True)
+    q.add_argument("--environment-digest", required=True)
+    q.add_argument(
+        "--runtime-version",
+        default=None,
+        help="Exact qualified runtime version (default: installed Flow version)",
+    )
+    q.add_argument("--require-capability", action="append", default=[])
+    q.add_argument("--minimum-tier", type=int, choices=(1, 2, 3, 4), default=3)
+    q.add_argument("--replace", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
+
+    for verb in ("inspect", "explain", "report"):
+        q = qsub.add_parser(verb, help=f"{verb.title()} qualification coverage")
+        q.add_argument("bundle", help="Workflow bundle directory")
+        q.add_argument("--policy", default=None)
+        q.add_argument("--evidence-root", default=None)
+        q.add_argument("--json", action="store_true")
+        q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-identity",
+        help="Set exact/normalized identity fields and their quorum",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument("--canonical-ladder", action="store_true")
+    q.add_argument(
+        "--signal",
+        action="append",
+        metavar="FIELD=SOURCE:MODE[:NORMALIZER,...]",
+    )
+    q.add_argument("--quorum", type=int)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-risk",
+        help="Confirm an action's reviewed business-risk classification",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument(
+        "--classification",
+        required=True,
+        choices=("read_only", "state_changing", "consequential", "irreversible"),
+    )
+    q.add_argument("--explanation", required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "trust-runner",
+        help="Trust an Ed25519 qualification-runner public key",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--key-id", required=True)
+    q.add_argument("--public-key", required=True, help="Raw 32-byte key in base64")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-effect",
+        help="Assign verification-strength tier to an existing effect",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument("--effect-index", type=int, required=True)
+    q.add_argument("--tier", type=int, choices=(1, 2, 3, 4), required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser("add-case", help="Add a representative or fault case")
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--case-id", required=True)
+    q.add_argument(
+        "--kind",
+        required=True,
+        choices=(
+            "representative",
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect",
+        ),
+    )
+    q.add_argument(
+        "--expected-outcome",
+        required=True,
+        choices=(
+            "verified",
+            "completed_unverified",
+            "halted",
+            "failed",
+            "rolled_back",
+        ),
+    )
+    q.add_argument("--description", default="")
+    q.add_argument("--input-ref", default=None)
+    q.add_argument("--optional", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "run",
+        help=(
+            "Import case results produced by the Desktop/local/customer-controlled "
+            "qualification runner"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--results", required=True, metavar="JSON")
+    q.add_argument("--evidence-root", required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "add-requalification",
+        help="Add a condition that requires this workflow to be requalified",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--kind",
+        required=True,
+        choices=(
+            "workflow_changed",
+            "application_version_changed",
+            "environment_changed",
+            "identity_policy_changed",
+            "effect_policy_changed",
+            "runtime_version_changed",
+            "expiry",
+            "operator_requested",
+        ),
+    )
+    q.add_argument("--description", default="")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "certify",
+        help="Persist a combined qualification and existing-policy decision",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--policy", default="clinical-write")
+    q.add_argument("--evidence-root", required=True)
+    q.add_argument("--json", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
 
     p = sub.add_parser(
         "disambiguate",

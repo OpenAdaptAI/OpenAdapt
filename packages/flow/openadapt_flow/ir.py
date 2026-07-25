@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
     # import is at the BOTTOM of this module (see the note there) to avoid a
     # circular import through openadapt_flow.runtime's package init.
+    from openadapt_flow.qualification import QualificationProject
     from openadapt_flow.runtime.effects.effect import Effect
 
 Region = tuple[int, int, int, int]
@@ -1294,6 +1295,12 @@ class Workflow(BaseModel):
     program: Optional["ProgramGraph"] = None
     subflows: dict[str, "ProgramGraph"] = Field(default_factory=dict)
     data_sources: dict[str, "Relation"] = Field(default_factory=dict)
+    # Versioned qualification intent, coverage policy, and case evidence.  The
+    # executable graph/steps/effects above remain canonical; this project
+    # references them rather than copying a second workflow representation.
+    # None for every pre-qualification bundle and omitted from its serialized
+    # bytes by ``_serialize_compatible`` below.
+    qualification: Optional["QualificationProject"] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -1319,6 +1326,8 @@ class Workflow(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if self.qualification is None:
+            data.pop("qualification", None)
         return data
 
     # -- bundle I/O ---------------------------------------------------------
@@ -1913,6 +1922,7 @@ class RunReport(BaseModel):
 # OCR/cv2/model deps) runtime package loads cleanly and Step's schema can be
 # completed. Effect enters this module's globals so ``model_rebuild`` resolves
 # the forward reference; bundles with no effects are unaffected.
+from openadapt_flow.qualification import QualificationProject  # noqa: E402,F401
 from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 
 ApiBinding.model_rebuild()
