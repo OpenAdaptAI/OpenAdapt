@@ -894,11 +894,18 @@ class EngineDispatcher:
         from engine.flow_bridge import FlowBridge
 
         report = FlowBridge.read_report(run_dir)
+        inferred_returncode = 0 if report.get("success") is True else 1
+        classified_outcome = FlowBridge.classify_outcome(inferred_returncode, report)
         if outcome is None:
             # Report-only fallback for older DB rows. A true report can be
             # explicit success evidence; a structured halt remains a halt.
-            inferred_returncode = 0 if report.get("success") is True else 1
-            outcome = FlowBridge.classify_outcome(inferred_returncode, report)
+            outcome = classified_outcome
+        elif outcome != "unknown" and classified_outcome != outcome:
+            outcome = "unknown"
+            error = error or (
+                "The retained report no longer proves the stored execution outcome. "
+                "Inspect the local run evidence before retrying."
+            )
         halt = FlowBridge.read_halt(run_dir)
         halt_state = (
             (halt or {}).get("state_id")

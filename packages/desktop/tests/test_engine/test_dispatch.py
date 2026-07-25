@@ -878,6 +878,36 @@ class TestLibraryCommands:
 
         assert FlowBridge.classify_outcome(0, report) == "unknown"
 
+    def test_stored_verified_outcome_is_revalidated_from_retained_report(
+        self, deps, tmp_path: Path
+    ) -> None:
+        disp, db, _events = deps
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        report = _precise_report(
+            "VERIFIED",
+            production_eligible=True,
+            execution_completed=True,
+        )
+        (run_dir / "report.json").write_text(json.dumps(report))
+        db.insert_run("run-1", str(run_dir), bundle_id=None)
+        db.update_run("run-1", status="VERIFIED")
+
+        report["outcome_envelope"]["compensation_actions"] = 1
+        report["outcome_envelope"]["evidence_classes"].append("compensation")
+        (run_dir / "report.json").write_text(json.dumps(report))
+
+        result = disp._run_report(
+            run_dir,
+            workflow_id=None,
+            run_id="run-1",
+            outcome=db.list_runs(limit=1)[0]["status"],
+        )
+
+        assert result["outcome"] == "unknown"
+        assert result["ok"] is False
+        assert "no longer proves" in result["error"]
+
     def test_invocation_exception_reports_unknown_effect_state(self, deps, tmp_path: Path) -> None:
         disp, db, events = deps
         bundle = tmp_path / "bundle"
