@@ -9,15 +9,19 @@ Generate a new version (never overwrite an existing pack):
 ```bash
 python -m scripts.export_public_demo_evidence \
   --out public-demo/evidence-packs \
-  --pack-id mockmed-triage-v1
+  --pack-id mockmed-triage-v2
 ```
 
 Validate every retained byte and evidence binding:
 
 ```bash
 python -m scripts.export_public_demo_evidence \
-  --validate public-demo/evidence-packs/mockmed-triage-v1
+  --validate public-demo/evidence-packs/mockmed-triage-v2
 ```
+
+`mockmed-triage-v1` remains retained as the immutable first export. The current
+`v2` pack binds the finalized browser actuation guard and record-identity
+semantics to a new source commit instead of rewriting prior evidence.
 
 The target data is first-party synthetic MockMed data. The recording, compiled
 bundle, program graph, qualification project/report, governed run reports,

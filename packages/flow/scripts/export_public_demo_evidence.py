@@ -16,7 +16,7 @@ Usage::
 
     python -m scripts.export_public_demo_evidence \
       --out public-demo/evidence-packs \
-      --pack-id mockmed-triage-v1
+      --pack-id mockmed-triage-v2
 
 The pack directory is created atomically and is never overwritten. Run
 ``--validate <pack-dir>`` to re-check every retained byte, crop binding, case
@@ -1409,7 +1409,7 @@ def _parser() -> argparse.ArgumentParser:
         default=REPO_ROOT / "public-demo" / "evidence-packs",
         help="parent directory for the immutable pack",
     )
-    parser.add_argument("--pack-id", default="mockmed-triage-v1")
+    parser.add_argument("--pack-id", default="mockmed-triage-v2")
     parser.add_argument("--trials", type=int, default=TRIALS_PER_CASE)
     parser.add_argument(
         "--allow-dirty",
