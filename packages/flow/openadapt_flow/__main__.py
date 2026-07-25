@@ -1494,6 +1494,9 @@ def _parse_qualification_signal(
     raw: str,
     *,
     identifier_region: tuple[int, int, int, int] | None,
+    signal_regions: dict[str, tuple[int, int, int, int]] | None = None,
+    signal_params: dict[str, list[str]] | None = None,
+    signal_extracts: dict[str, str] | None = None,
 ):
     from openadapt_flow.qualification import (
         IdentityEvidenceSource,
@@ -1503,11 +1506,11 @@ def _parse_qualification_signal(
     )
 
     if "=" not in raw:
-        raise SystemExit("--signal expects FIELD=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
-    field, spec = raw.split("=", 1)
+        raise SystemExit("--signal expects KEY=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+    key, spec = raw.split("=", 1)
     parts = spec.split(":")
     if len(parts) not in (2, 3):
-        raise SystemExit("--signal expects FIELD=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+        raise SystemExit("--signal expects KEY=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
     try:
         source = IdentityEvidenceSource(parts[0])
         match = IdentityMatchMode(parts[1])
@@ -1516,16 +1519,21 @@ def _parse_qualification_signal(
             if len(parts) == 3
             else []
         )
+        explicit_region = (signal_regions or {}).get(key)
         return IdentitySignalPolicy(
-            field=field,
+            key=key,
             source=source,
             match=match,
             normalizers=normalizers,
             region=(
-                identifier_region
+                explicit_region
+                if explicit_region is not None
+                else identifier_region
                 if source is IdentityEvidenceSource.IDENTIFIER_REGION
                 else None
             ),
+            params=(signal_params or {}).get(key, []),
+            extract_pattern=(signal_extracts or {}).get(key),
         )
     except ValueError as exc:
         raise SystemExit(f"invalid --signal {raw!r}: {exc}") from exc
@@ -1645,8 +1653,60 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
                 raise SystemExit(
                     "signal-quorum identity requires --signal and --quorum"
                 )
+            signal_regions: dict[str, tuple[int, int, int, int]] = {}
+            for raw_region in args.signal_region:
+                try:
+                    key, encoded = raw_region.split("=", 1)
+                    values = [int(item) for item in encoded.split(",")]
+                    if len(values) != 4:
+                        raise ValueError
+                    if key in signal_regions:
+                        raise SystemExit(f"--signal-region repeats signal key {key!r}")
+                    signal_regions[key] = (
+                        values[0],
+                        values[1],
+                        values[2],
+                        values[3],
+                    )
+                except ValueError as exc:
+                    raise SystemExit(
+                        "--signal-region expects KEY=x,y,width,height"
+                    ) from exc
+            signal_params: dict[str, list[str]] = {}
+            for raw_param in args.signal_param:
+                try:
+                    key, name = raw_param.split("=", 1)
+                except ValueError as exc:
+                    raise SystemExit("--signal-param expects KEY=PARAM") from exc
+                signal_params.setdefault(key, []).append(name)
+            signal_extracts: dict[str, str] = {}
+            for raw_extract in args.signal_extract:
+                key, separator, pattern = raw_extract.partition("=")
+                if not separator or not key or not pattern:
+                    raise SystemExit("--signal-extract expects KEY=REGEX")
+                if key in signal_extracts:
+                    raise SystemExit(f"--signal-extract repeats signal key {key!r}")
+                signal_extracts[key] = pattern
+            signal_keys = {raw.split("=", 1)[0] for raw in args.signal if "=" in raw}
+            unknown_options = sorted(
+                (
+                    set(signal_regions) | set(signal_params) | set(signal_extracts)
+                ).difference(signal_keys)
+            )
+            if unknown_options:
+                raise SystemExit(
+                    "--signal-region/--signal-param/--signal-extract references "
+                    "unknown signal "
+                    "key(s): " + ", ".join(unknown_options)
+                )
             signals = [
-                _parse_qualification_signal(raw, identifier_region=region)
+                _parse_qualification_signal(
+                    raw,
+                    identifier_region=region,
+                    signal_regions=signal_regions,
+                    signal_params=signal_params,
+                    signal_extracts=signal_extracts,
+                )
                 for raw in args.signal
             ]
             identity_policy = IdentityPolicy(
@@ -3155,7 +3215,31 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--signal",
         action="append",
-        metavar="FIELD=SOURCE:MODE[:NORMALIZER,...]",
+        metavar="KEY=SOURCE:MODE[:NORMALIZER,...]",
+    )
+    q.add_argument(
+        "--signal-region",
+        action="append",
+        default=[],
+        metavar="KEY=X,Y,W,H",
+        help="Explicit qualified pixel region for a context/identifier signal",
+    )
+    q.add_argument(
+        "--signal-param",
+        action="append",
+        default=[],
+        metavar="KEY=PARAM",
+        help="Bind a complete workflow parameter value to an identity signal",
+    )
+    q.add_argument(
+        "--signal-extract",
+        action="append",
+        default=[],
+        metavar="KEY=REGEX",
+        help=(
+            "Extract one named (?P<value>...) field from a structured or "
+            "captured-context signal"
+        ),
     )
     q.add_argument("--quorum", type=int)
     q.set_defaults(func=_cmd_qualify)

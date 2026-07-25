@@ -31,9 +31,15 @@ from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.risk import classify_step_risk, step_text
 from openadapt_flow.traversal import iter_workflow_steps
 
-# Action kinds that a pre-click / pre-type identity check applies to — kept in
-# lockstep with Replayer._record_identity_coverage (anchored click/type).
-_IDENTITY_ACTIONS = (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+# Action kinds that a pre-actuation identity check applies to — kept in
+# lockstep with the replayer. An anchored KEY (notably Enter/Return submission)
+# can commit the selected record just as surely as a click.
+_IDENTITY_ACTIONS = (
+    ActionKind.CLICK,
+    ActionKind.DOUBLE_CLICK,
+    ActionKind.TYPE,
+    ActionKind.KEY,
+)
 _CLICK_ACTIONS = (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
 # Kinds expected to produce an observable effect worth asserting. SCROLL is
 # excluded by design (the compiler mines no postconditions for it — its effect
@@ -52,8 +58,7 @@ _EFFECT_ACTIONS = (
 
 
 def is_identity_applicable(step: Step) -> bool:
-    """True for anchored click / double-click / TYPE steps — the steps a
-    pre-click identity check can guard (mirrors the replayer)."""
+    """True for anchored actions the runtime can identity-gate."""
     return step.anchor is not None and step.action in _IDENTITY_ACTIONS
 
 

@@ -8,12 +8,20 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Optional
+import hashlib
+import uuid
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
-from openadapt_flow.ir import StructuralHandle, StructuralLocator
+from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
+    StructuralHandle,
+    StructuralLocator,
+)
 
 VIEWPORT: tuple[int, int] = (1280, 800)
 
@@ -46,6 +54,253 @@ _NAMED_KEYS = {
     "arrowleft": "ArrowLeft",
     "arrowright": "ArrowRight",
 }
+
+_TOKEN_ATTRIBUTE_PREFIX = "data-openadapt-actuation-"
+
+# The descriptor stays inside the page-local guard store. It binds the exact
+# actionable node, its ancestry, and the enclosing record row while excluding
+# the target's own cell (the same identity boundary as ``structured_text_at``).
+_DESCRIBE_TARGET_JS = r"""(node) => {
+    const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const row = node.closest('tr, [role="row"], li, [role="listitem"]');
+    const own = node.closest(
+        'td, th, [role="cell"], [role="gridcell"]'
+    ) || node;
+    let rowIdentity = '';
+    if (row) {
+        const path = [];
+        let cursor = own;
+        while (cursor && cursor !== row) {
+            const parent = cursor.parentElement;
+            if (!parent) break;
+            path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
+            cursor = parent;
+        }
+        const clone = row.cloneNode(true);
+        if (cursor === row && own !== row) {
+            let cloneOwn = clone;
+            for (const index of path) {
+                cloneOwn = cloneOwn && cloneOwn.children[index];
+            }
+            if (cloneOwn) cloneOwn.remove();
+        }
+        rowIdentity = clean(
+            (row.getAttribute('aria-label') || '') + ' ' +
+            (clone.textContent || '')
+        );
+    }
+    const ancestry = [];
+    let cursor = node;
+    for (let depth = 0; cursor && depth < 8; depth += 1) {
+        const parent = cursor.parentElement;
+        ancestry.push([
+            cursor.tagName.toLowerCase(),
+            cursor.id || '',
+            cursor.getAttribute('role') || '',
+            parent
+                ? Array.prototype.indexOf.call(parent.children, cursor)
+                : -1,
+        ]);
+        if (cursor === row) break;
+        cursor = parent;
+    }
+    return {
+        descriptor: JSON.stringify([
+            1,
+            [
+                node.tagName.toLowerCase(),
+                node.id || '',
+                node.getAttribute('role') || '',
+                node.getAttribute('aria-label') || '',
+                node.getAttribute('name') || '',
+                node.getAttribute('type') || '',
+                clean(node.textContent).slice(0, 256),
+            ],
+            ancestry,
+            rowIdentity,
+        ]),
+        rowIdentity: rowIdentity,
+        row: row,
+    };
+}"""
+
+_INSTALL_GUARD_BODY_JS = r"""
+    const observed = describe(el);
+    if (args.requireRowIdentity && !observed.rowIdentity) return null;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    if (!el.isConnected || rect.width <= 0 || rect.height <= 0 ||
+            style.visibility === 'hidden' || style.display === 'none' ||
+            Number(style.opacity || '1') === 0) {
+        return null;
+    }
+    const cx = Math.round(rect.x + rect.width / 2);
+    const cy = Math.round(rect.y + rect.height / 2);
+    const ax = Number.isFinite(args.x) ? Math.round(args.x) : cx;
+    const ay = Number.isFinite(args.y) ? Math.round(args.y) : cy;
+    if (ax < 0 || ay < 0 || ax >= window.innerWidth ||
+            ay >= window.innerHeight) {
+        return null;
+    }
+    const top = document.elementFromPoint(ax, ay);
+    if (!top || !(top === el || el.contains(top))) return null;
+    let tokenMap = window[args.storeKey];
+    if (!(tokenMap instanceof Map)) {
+        tokenMap = new Map();
+        Object.defineProperty(window, args.storeKey, {
+            value: tokenMap,
+            configurable: true,
+        });
+    }
+    el.setAttribute(args.tokenAttribute, args.token);
+    const entry = {
+        el: el,
+        descriptor: observed.descriptor,
+        observer: null,
+        focusListener: null,
+    };
+    const invalidate = () => {
+        if (entry.observer) entry.observer.disconnect();
+        if (entry.focusListener) {
+            el.removeEventListener('blur', entry.focusListener, true);
+        }
+        for (const candidate of document.querySelectorAll(
+                '[' + args.tokenAttribute + ']')) {
+            if (candidate.getAttribute(args.tokenAttribute) === args.token) {
+                candidate.removeAttribute(args.tokenAttribute);
+            }
+        }
+        tokenMap.delete(args.token);
+    };
+    // Any mutation in the target's record boundary after arming invalidates
+    // the lease. Descriptor equality is deliberately irrelevant: hidden
+    // attributes and pixel-identical node replacement can still change the
+    // action that a click performs.
+    entry.observer = new MutationObserver(invalidate);
+    entry.observer.observe(observed.row || el, {
+        attributes: true,
+        childList: true,
+        characterData: true,
+        subtree: true,
+    });
+    if (args.requireFocused) {
+        if (document.activeElement !== el) {
+            invalidate();
+            return null;
+        }
+        entry.focusListener = invalidate;
+        el.addEventListener('blur', entry.focusListener, true);
+    }
+    tokenMap.set(args.token, entry);
+    return {
+        point: [ax, ay],
+        offset: [ax - rect.x, ay - rect.y],
+        region: [
+            Math.round(rect.x),
+            Math.round(rect.y),
+            Math.round(rect.width),
+            Math.round(rect.height),
+        ],
+        identity: observed.rowIdentity,
+    };
+"""
+
+_BIND_STRUCTURAL_TARGET_JS = (
+    "(el, args) => { const describe = "
+    + _DESCRIBE_TARGET_JS
+    + ";"
+    + _INSTALL_GUARD_BODY_JS
+    + "}"
+)
+
+_BIND_COORDINATE_TARGET_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const actionable =
+        'button, a[href], input[type="button"], input[type="submit"],' +
+        ' input[type="reset"], input[type="checkbox"], input[type="radio"],' +
+        ' select,' +
+        ' [role="button"], [role="link"], [role="menuitem"],' +
+        ' [role="tab"], [role="option"], [role="checkbox"],' +
+        ' [role="radio"], [role="switch"]';
+    const editable =
+        ', input:not([type]), input[type="text"], input[type="search"],' +
+        ' input[type="email"], input[type="url"], input[type="tel"],' +
+        ' input[type="password"], input[type="number"], input[type="date"],' +
+        ' input[type="time"], input[type="datetime-local"],' +
+        ' input[type="month"], input[type="week"], textarea,' +
+        ' [contenteditable=""], [contenteditable="true"], [role="textbox"]';
+    const el = hit.closest(
+        actionable + (args.allowEditable ? editable : '')
+    );
+    // Canvas/maps, sliders/ranges, text-editing caret positions, and generic
+    // onclick regions are coordinate-semantic. They cannot be upgraded into
+    // an element-level identity-bound click and must remain refused.
+    if (!el || el.matches('canvas, input[type="range"], [role="slider"]')) {
+        return null;
+    }
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + ";"
+    + _INSTALL_GUARD_BODY_JS
+    + "}"
+)
+
+_BIND_FOCUSED_TARGET_JS = (
+    r"""(args) => {
+    const el = document.activeElement;
+    if (!el || el === document.body || el === document.documentElement) {
+        return null;
+    }
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + ";"
+    + _INSTALL_GUARD_BODY_JS
+    + "}"
+)
+
+_STRUCTURED_TEXT_AT_JS = (
+    r"""([px, py]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el) return null;
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + r""";
+    return describe(el).rowIdentity || null;
+}"""
+)
+
+_GUARD_CURRENT_JS = (
+    "(el, args) => { const describe = "
+    + _DESCRIBE_TARGET_JS
+    + r""";
+    const tokenMap = window[args.storeKey];
+    const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    return Boolean(
+        entry && entry.el === el &&
+        el.getAttribute(args.tokenAttribute) === args.token &&
+        (!args.requireFocused || document.activeElement === el) &&
+        entry.descriptor === describe(el).descriptor
+    );
+}"""
+)
+
+_CLEAN_GUARD_JS = r"""(args) => {
+    const tokenMap = window[args.storeKey];
+    const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    if (entry && entry.observer) entry.observer.disconnect();
+    if (entry && entry.focusListener && entry.el) {
+        entry.el.removeEventListener('blur', entry.focusListener, true);
+    }
+    for (const candidate of document.querySelectorAll(
+            '[' + args.tokenAttribute + ']')) {
+        if (candidate.getAttribute(args.tokenAttribute) === args.token) {
+            candidate.removeAttribute(args.tokenAttribute);
+        }
+    }
+    if (tokenMap instanceof Map) tokenMap.delete(args.token);
+}"""
 
 
 def _normalize_chord(key: str) -> str:
@@ -88,6 +343,15 @@ class PlaywrightBackend:
             page: A page created with viewport 1280x800, deviceScaleFactor=1.
         """
         self.page = page
+        # Opaque per-backend key keeps the WeakMap private from ordinary page
+        # code. Python retains only token material keyed by the public
+        # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
+        self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
+        self._structural_tokens: dict[str, str] = {}
+        self._guarded_coordinate: Optional[
+            tuple[tuple[int, int], str, str, tuple[float, float], bool]
+        ] = None
+        self._guarded_keyboard: Optional[tuple[str, str]] = None
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -156,49 +420,7 @@ class PlaywrightBackend:
         """
         try:
             result = self.page.evaluate(
-                """([px, py]) => {
-                    const el = document.elementFromPoint(px, py);
-                    if (!el) return null;
-                    // Identity is a REPEATED-STRUCTURE (record-list) concept:
-                    // only a genuine row-like container carries it. A
-                    // standalone control (a Save button) has no row ancestor;
-                    // its own text is a MUTABLE label the resolution ladder
-                    // heals through, so we return null and leave it to the OCR
-                    // / heal path -- mirroring the OCR band excluding the
-                    // target's own label.
-                    const row = el.closest(
-                        'tr, [role="row"], li, [role="listitem"]'
-                    );
-                    if (!row) return null;
-                    // Exclude the CLICKED target's own cell/subtree: its label
-                    // is the mutable evidence the ladder heals through (an
-                    // Open->View relabel of the clicked control must NOT change
-                    // identity), mirroring the OCR band excluding the target's
-                    // own crop. Identity rests on the row's OTHER cells.
-                    const own = el.closest(
-                        'td, th, [role="cell"], [role="gridcell"]'
-                    ) || el;
-                    own.setAttribute('data-oaflow-own', '1');
-                    let body = '';
-                    try {
-                        const clone = row.cloneNode(true);
-                        const marked = clone.querySelector(
-                            '[data-oaflow-own="1"]'
-                        );
-                        if (marked) marked.remove();
-                        body = clone.textContent || '';
-                    } finally {
-                        own.removeAttribute('data-oaflow-own');
-                    }
-                    const parts = [];
-                    const aria = row.getAttribute
-                        ? row.getAttribute('aria-label') : null;
-                    if (aria) parts.push(aria);
-                    if (body) parts.push(body);
-                    const joined = parts.join(' ')
-                        .replace(/\\s+/g, ' ').trim();
-                    return joined || null;
-                }""",
+                _STRUCTURED_TEXT_AT_JS,
                 [int(x), int(y)],
             )
         except Exception:
@@ -327,54 +549,454 @@ class PlaywrightBackend:
         """Locate ``locator``'s element in the live DOM; return its center.
 
         Resolves by the recorded ``selector`` first, else by ``role`` +
-        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match: a missing,
-        ambiguous, off-viewport, or COVERED element (a modal / click-shield over
-        it -- the hit test at its center returns another node) returns None so
-        the resolver falls through to the visual ladder (and, for off-screen,
-        its scroll-and-retry; for an opaque cover, a safe halt). The returned
-        point is the element's center in :meth:`click` coordinate space, so the
-        pre-click identity gate re-reads the SAME element there.
+        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing,
+        off-viewport, or covered element returns None; ambiguity is an explicit
+        structural refusal and cannot fall through to a weaker pixel match.
+        The returned handle binds an opaque one-shot token to the exact Element
+        and its enclosing-row identity for same-operation delivery.
         """
         try:
-            loc = None
-            if locator.selector:
-                loc = self.page.locator(locator.selector)
-            elif locator.role and locator.name:
-                loc = self.page.get_by_role(locator.role, name=locator.name, exact=True)
+            loc = self._locator(locator)
             if loc is None:
                 return None
-            if loc.count() != 1:
+            candidate_count = loc.count()
+            if candidate_count == 0:
                 return None
-            box = loc.bounding_box()
-            if not box or box["width"] <= 0 or box["height"] <= 0:
-                return None
-            cx = int(round(box["x"] + box["width"] / 2))
-            cy = int(round(box["y"] + box["height"] / 2))
-            vw, vh = self.viewport
-            if not (0 <= cx < vw and 0 <= cy < vh):
-                return None
-            # OCCLUSION / actionability gate: a stable DOM identity is NOT a
-            # licence to click something the user could not. If the element is
-            # covered (a modal, an opaque or transparent click-shield), the hit
-            # test at its center returns some OTHER node, and we return None so
-            # resolution falls through to the visual ladder (which also fails on
-            # an opaque cover -> safe halt, no click). Only when the element --
-            # or a descendant of it -- is the topmost node at the action point
-            # do we resolve. This preserves the occlusion-safe-halt invariant
-            # (tests/e2e/test_chaos.py) that structural coordinates would
-            # otherwise bypass.
-            topmost = loc.evaluate(
-                "(el, pt) => {"
-                " const n = document.elementFromPoint(pt[0], pt[1]);"
-                " return !!n && (n === el || el.contains(n));"
-                "}",
-                [cx, cy],
+            if candidate_count != 1:
+                raise StructuralResolutionRefused(
+                    f"DOM locator is ambiguous: candidate_count={candidate_count}"
+                )
+            token = uuid.uuid4().hex
+            observed = loc.evaluate(
+                _BIND_STRUCTURAL_TARGET_JS,
+                {
+                    "storeKey": self._structural_store_key,
+                    "tokenAttribute": self._token_attribute(token),
+                    "token": token,
+                    "requireRowIdentity": False,
+                },
             )
-            if not topmost:
+            if not isinstance(observed, dict):
                 return None
-            return StructuralHandle(point=(cx, cy))
+            point = observed.get("point")
+            region = observed.get("region")
+            if (
+                not isinstance(point, list)
+                or len(point) != 2
+                or not all(isinstance(value, int) for value in point)
+                or not isinstance(region, list)
+                or len(region) != 4
+                or not all(isinstance(value, int) for value in region)
+            ):
+                return None
+            fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+            # Bound Python-side token retention. Page-side entries are weak and
+            # disappear with their DOM nodes; an evicted token is unusable.
+            if len(self._structural_tokens) >= 128:
+                evicted = self._structural_tokens.pop(
+                    next(iter(self._structural_tokens))
+                )
+                self._cleanup_guard(evicted)
+            self._structural_tokens[fingerprint] = token
+            return StructuralHandle(
+                point=(point[0], point[1]),
+                region=(region[0], region[1], region[2], region[3]),
+                target_fingerprint=fingerprint,
+                supported_operations=["dom_click", "dom_double_click"],
+            )
+        except StructuralResolutionRefused:
+            raise
         except Exception:
             return None
+
+    def _locator(self, locator: StructuralLocator) -> Any:
+        if locator.selector:
+            return self.page.locator(locator.selector)
+        if locator.role and locator.name:
+            return self.page.get_by_role(locator.role, name=locator.name, exact=True)
+        return None
+
+    @staticmethod
+    def _token_attribute(token: str) -> str:
+        return f"{_TOKEN_ATTRIBUTE_PREFIX}{token}"
+
+    def _cleanup_guard(self, token: str) -> None:
+        try:
+            self.page.evaluate(
+                _CLEAN_GUARD_JS,
+                {
+                    "storeKey": self._structural_store_key,
+                    "tokenAttribute": self._token_attribute(token),
+                    "token": token,
+                },
+            )
+        except Exception:
+            # Navigation destroys the page-local store and is cleanup itself.
+            pass
+
+    def _cancel_structural_guards(self) -> None:
+        """Clean element-resolution guards no keyboard action will consume."""
+
+        tokens = list(self._structural_tokens.values())
+        self._structural_tokens.clear()
+        for token in tokens:
+            self._cleanup_guard(token)
+
+    def cancel_pending_structural_guards(self) -> None:
+        """Discard handles that an immediate fresh re-resolution replaces."""
+
+        self._cancel_structural_guards()
+
+    def _token_locator(self, token: str) -> Any:
+        return self.page.locator(f"[{self._token_attribute(token)}]")
+
+    def _guard_is_current(
+        self,
+        locator: Any,
+        token: str,
+        *,
+        require_focused: bool = False,
+    ) -> bool:
+        try:
+            return bool(
+                locator.evaluate(
+                    _GUARD_CURRENT_JS,
+                    {
+                        "storeKey": self._structural_store_key,
+                        "tokenAttribute": self._token_attribute(token),
+                        "token": token,
+                        "requireFocused": require_focused,
+                    },
+                )
+            )
+        except Exception:
+            return False
+
+    def act_structural(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Atomically verify and click the exact DOM target resolved earlier.
+
+        A strict locator must still resolve to the token-bound Element and its
+        unchanged target/row descriptor. A short-lived MutationObserver removes
+        the token on intervening identity mutation. The final action is a
+        Playwright click/dblclick on that unique random-token locator, preserving
+        Playwright's native pointer sequence and actionability checks rather
+        than synthesizing DOM events. A replacement element or changed record
+        row is a refusal, never a coordinate fallback.
+        """
+
+        fingerprint = handle.target_fingerprint
+        if not fingerprint:
+            raise StructuralResolutionRefused(
+                "guarded DOM actuation requires a target fingerprint"
+            )
+        token = self._structural_tokens.pop(fingerprint, None)
+        if token is None:
+            raise StructuralResolutionRefused(
+                "guarded DOM actuation token is missing, stale, or already consumed"
+            )
+        loc = self._locator(locator)
+        if loc is None:
+            self._cleanup_guard(token)
+            raise StructuralResolutionRefused(
+                "guarded DOM actuation requires an exact structural locator"
+            )
+        try:
+            if loc.count() != 1 or not self._guard_is_current(loc, token):
+                raise StructuralResolutionRefused(
+                    "guarded DOM target or record identity changed before delivery"
+                )
+            token_locator = self._token_locator(token)
+            if token_locator.count() != 1:
+                raise StructuralResolutionRefused(
+                    "guarded DOM token is missing or ambiguous at delivery"
+                )
+            if double:
+                token_locator.dblclick(timeout=1000)
+            else:
+                token_locator.click(timeout=1000)
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "guarded DOM target changed or became unactionable before delivery"
+            ) from exc
+        finally:
+            self._cleanup_guard(token)
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-{uuid.uuid4().hex}",
+            operation="dom_double_click" if double else "dom_click",
+            native=False,
+            target_fingerprint=fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _arm_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        allow_editable: bool,
+    ) -> None:
+        self.cancel_guarded_coordinate()
+        point = (int(x), int(y))
+        token = uuid.uuid4().hex
+        try:
+            observed = self.page.evaluate(
+                _BIND_COORDINATE_TARGET_JS,
+                {
+                    "storeKey": self._structural_store_key,
+                    "tokenAttribute": self._token_attribute(token),
+                    "token": token,
+                    "x": point[0],
+                    "y": point[1],
+                    "requireRowIdentity": True,
+                    "allowEditable": allow_editable,
+                },
+            )
+            if not isinstance(observed, dict):
+                raise StructuralResolutionRefused(
+                    "visual point is not an identity-bearing actionable DOM element"
+                )
+            offset = observed.get("offset")
+            if (
+                not isinstance(offset, list)
+                or len(offset) != 2
+                or not all(isinstance(value, (int, float)) for value in offset)
+            ):
+                raise StructuralResolutionRefused(
+                    "visual DOM actuation could not bind the resolved point"
+                )
+            fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+            self._guarded_coordinate = (
+                point,
+                fingerprint,
+                token,
+                (float(offset[0]), float(offset[1])),
+                allow_editable,
+            )
+        except Exception:
+            self._cleanup_guard(token)
+            raise
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind an actionable visual point before identity readback."""
+
+        self._arm_guarded_coordinate(x, y, allow_editable=False)
+
+    def arm_guarded_editable_coordinate(self, x: int, y: int) -> None:
+        """Bind an editable field for an identity-gated focusing click."""
+
+        self._arm_guarded_coordinate(x, y, allow_editable=True)
+
+    def cancel_guarded_coordinate(self) -> None:
+        """Cancel and clean the current one-shot visual DOM binding."""
+
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is not None:
+            self._cleanup_guard(pending[2])
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Consume the target binding armed before the fresh identity read.
+
+        Screenshot equality remains an additional exact-frame check. The
+        already-armed MutationObserver covers hidden mutations, pixel-identical
+        node replacement, and every target/row subtree change from before the
+        identity observation through Playwright's real pointer delivery.
+        """
+
+        point = (int(x), int(y))
+        pending = self._guarded_coordinate
+        self._guarded_coordinate = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "visual DOM actuation has no pre-identity target binding"
+            )
+        armed_point, fingerprint, token, offset, editable = pending
+        try:
+            if armed_point != point:
+                raise StructuralResolutionRefused(
+                    "visual DOM actuation point changed after target binding"
+                )
+            current_frame = (
+                self.guarded_keyboard_frame() if editable else self.screenshot()
+            )
+            if hashlib.sha256(current_frame).hexdigest() != expected_frame_sha256:
+                raise StructuralResolutionRefused(
+                    "visual frame changed after identity verification"
+                )
+            token_locator = self._token_locator(token)
+            if token_locator.count() != 1 or not self._guard_is_current(
+                token_locator, token
+            ):
+                raise StructuralResolutionRefused(
+                    "visual target or record identity changed before delivery"
+                )
+            position = {"x": offset[0], "y": offset[1]}
+            if double:
+                token_locator.dblclick(position=position, timeout=1000)
+            else:
+                token_locator.click(position=position, timeout=1000)
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "identity-bound visual target became unactionable before delivery"
+            ) from exc
+        finally:
+            self._cleanup_guard(token)
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-coordinate-{uuid.uuid4().hex}",
+            operation=(
+                "guarded_coordinate_double_click"
+                if double
+                else "guarded_coordinate_click"
+            ),
+            native=False,
+            target_fingerprint=fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Lease the exact focused element/record before identity readback."""
+
+        # KEY delivery and the post-focus TYPE phase do not consume a structural
+        # click handle. Remove those now-unused observers before adding the
+        # keyboard token so the guards cannot invalidate one another merely by
+        # cleaning their private DOM attributes.
+        self.cancel_pending_structural_guards()
+        self.cancel_guarded_keyboard()
+        token = uuid.uuid4().hex
+        try:
+            observed = self.page.evaluate(
+                _BIND_FOCUSED_TARGET_JS,
+                {
+                    "storeKey": self._structural_store_key,
+                    "tokenAttribute": self._token_attribute(token),
+                    "token": token,
+                    "x": int(x),
+                    "y": int(y),
+                    "requireRowIdentity": True,
+                    "requireFocused": True,
+                },
+            )
+            if not isinstance(observed, dict):
+                raise StructuralResolutionRefused(
+                    "consequential keyboard action has no focused "
+                    "identity-bearing DOM target at the resolved point"
+                )
+            fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+            self._guarded_keyboard = (fingerprint, token)
+        except Exception:
+            self._cleanup_guard(token)
+            raise
+
+    def cancel_guarded_keyboard(self) -> None:
+        """Cancel and clean the current one-shot focused-element lease."""
+
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is not None:
+            self._cleanup_guard(pending[1])
+
+    def guarded_keyboard_frame(self) -> bytes:
+        """Capture without Playwright's temporary caret-hiding DOM mutation."""
+
+        return self.page.screenshot(
+            type="png",
+            full_page=False,
+            caret="initial",
+        )
+
+    def _act_guarded_keyboard(
+        self,
+        *,
+        expected_frame_sha256: str,
+        operation: str,
+        deliver: Callable[[Any], None],
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "keyboard actuation has no pre-identity focused-element lease"
+            )
+        fingerprint, token = pending
+        try:
+            if (
+                hashlib.sha256(self.guarded_keyboard_frame()).hexdigest()
+                != expected_frame_sha256
+            ):
+                raise StructuralResolutionRefused(
+                    "keyboard target frame changed after identity verification"
+                )
+            token_locator = self._token_locator(token)
+            if token_locator.count() != 1 or not self._guard_is_current(
+                token_locator,
+                token,
+                require_focused=True,
+            ):
+                raise StructuralResolutionRefused(
+                    "focused keyboard target or record changed before delivery"
+                )
+            deliver(token_locator)
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "identity-bound keyboard target became unactionable before delivery"
+            ) from exc
+        finally:
+            self._cleanup_guard(token)
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-keyboard-{uuid.uuid4().hex}",
+            operation=operation,
+            native=False,
+            target_fingerprint=fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Press a key/chord through the pre-identity focused-element lease."""
+
+        chord = _normalize_chord(key)
+        return self._act_guarded_keyboard(
+            expected_frame_sha256=expected_frame_sha256,
+            operation="guarded_dom_key",
+            deliver=lambda locator: locator.press(chord, timeout=1000),
+        )
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Type through the pre-identity focused-element lease."""
+
+        return self._act_guarded_keyboard(
+            expected_frame_sha256=expected_frame_sha256,
+            operation="guarded_dom_type",
+            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+        )
 
     def screenshot(self) -> bytes:
         """Return the current full-viewport frame as PNG bytes."""

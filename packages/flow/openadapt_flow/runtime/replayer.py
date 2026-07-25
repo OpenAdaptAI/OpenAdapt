@@ -37,25 +37,35 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Literal, Optional, cast
+from urllib.parse import urlsplit
 
 from openadapt_flow.backend import (
     Backend,
+    GuardedCoordinateActionBackend,
+    GuardedKeyboardActionBackend,
     RemoteActuationBackend,
     StructuralResolutionRefused,
 )
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
+from openadapt_flow.identity_signals import (
+    normalize_signal_text,
+    parameterize_identity_text,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
+    ApiBinding,
     EffectVerificationEvidence,
     ExecutionTargetKind,
     HaltObservation,
     IdentityCheck,
+    IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
     LoopSpec,
@@ -880,8 +890,8 @@ class Replayer:
         """Record the bundle's identity-protection coverage on the report.
 
         Computed over the WHOLE workflow at run start (not just executed
-        steps): every anchored click / double-click / TYPE step is
-        identity-applicable; it is ARMED when the pre-click identity gate
+        steps): every anchored click / double-click / TYPE / KEY step is
+        identity-applicable; it is ARMED when the pre-actuation identity gate
         will actually run (``anchor.context_text`` present — the ground
         truth the gate itself keys on). Unarmed steps proceed with NO
         identity verification (docs/LIMITS.md), so each one is listed by
@@ -896,6 +906,7 @@ class Replayer:
                 ActionKind.CLICK,
                 ActionKind.DOUBLE_CLICK,
                 ActionKind.TYPE,
+                ActionKind.KEY,
             ):
                 continue
             report.identity_applicable_steps += 1
@@ -903,6 +914,7 @@ class Replayer:
                 step.anchor.context_text
                 or step.anchor.structured_identity
                 or step.anchor.identity_template
+                or step.anchor.identifier_crop
             ):
                 report.identity_armed_steps += 1
             else:
@@ -2663,7 +2675,7 @@ class Replayer:
                     matched_region,
                     before_png,
                     error,
-                ) = self._revalidate_remote_actuation(
+                ) = self._revalidate_consequential_actuation(
                     step,
                     resolution,
                     matched_region,
@@ -2672,6 +2684,7 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
+                    arm_keyboard=step.action is ActionKind.KEY,
                 )
                 result.resolution = resolution
                 if before_png is not last_frame:
@@ -2692,6 +2705,10 @@ class Replayer:
                         result.safety_halt = True
                         result.failure_category = "governed_refusal"
                         result.effect_results.append(error)
+
+            if error is not None:
+                self._cancel_guarded_coordinate()
+                self._cancel_guarded_keyboard()
 
             if error is None:
                 # Structural postconditions compare against the final observed
@@ -2811,6 +2828,8 @@ class Replayer:
                     error = heal_outcome.halt_reason
                     result.error = error
         except OcrResolutionRefused as exc:
+            self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             # Repeated target/landmark OCR is a deterministic ambiguity, not a
             # transient absence. Surface it as a typed operator-visible safety
             # halt immediately; never retry into weaker evidence or actuation.
@@ -2822,6 +2841,8 @@ class Replayer:
                 f"({step.intent}): {exc} — no action was admitted"
             )
         except StructuralResolutionRefused as exc:
+            self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             # Ambiguity, disappearance, or a stale resolve->act fingerprint is
             # an intentional fail-closed refusal. Record it as a safety halt,
             # never as an incidental backend crash and never retry via pixels.
@@ -2833,6 +2854,8 @@ class Replayer:
                 f"({step.intent}): {exc} — no action was admitted"
             )
         except Exception as exc:  # defensive: report, don't crash the run
+            self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             result.ok = False
             result.failure_category = "runtime_failure"
             result.error = f"Step '{step.id}' raised {type(exc).__name__}: {exc}"
@@ -2856,6 +2879,183 @@ class Replayer:
         return result
 
     # -- API/tool actuation tier (top of the capability ladder) -----------------
+
+    @staticmethod
+    def _template_mentions_param(value: Any, param: str) -> bool:
+        """Whether an API request template contains the exact ``{param}`` token."""
+
+        needle = "{" + param + "}"
+        if isinstance(value, str):
+            return needle in value
+        if isinstance(value, dict):
+            return any(
+                Replayer._template_mentions_param(item, param)
+                for item in value.values()
+            )
+        if isinstance(value, (list, tuple)):
+            return any(Replayer._template_mentions_param(item, param) for item in value)
+        return False
+
+    @staticmethod
+    def _url_path_targets_param(url_template: str, param: str) -> bool:
+        """Require the identity placeholder as one whole URL path segment."""
+
+        token = "{" + param + "}"
+        return token in [
+            segment for segment in urlsplit(url_template).path.split("/") if segment
+        ]
+
+    @staticmethod
+    def _api_request_pointer_value(binding: ApiBinding, pointer: str) -> Any:
+        """Resolve one admitted target-bearing pointer without consulting headers."""
+
+        if pointer.startswith("/url/"):
+            return binding.url_template
+        root_name, *tokens = pointer.lstrip("/").split("/")
+        if root_name == "body":
+            value: Any = binding.body_template
+        elif root_name == "query":
+            value = binding.query
+        else:
+            return None
+        for token in tokens:
+            decoded = token.replace("~1", "/").replace("~0", "~")
+            if isinstance(value, dict):
+                if decoded not in value:
+                    return None
+                value = value[decoded]
+            elif isinstance(value, list):
+                try:
+                    index = int(decoded)
+                except ValueError:
+                    return None
+                if index < 0 or index >= len(value):
+                    return None
+                value = value[index]
+            else:
+                return None
+        return value
+
+    @staticmethod
+    def _api_request_pointer_field_path(pointer: str) -> tuple[str, ...]:
+        """Return the fully decoded target-field path after the request root."""
+
+        return tuple(
+            token.replace("~1", "/").replace("~0", "~")
+            for token in pointer.lstrip("/").split("/")[1:]
+        )
+
+    def _api_identity_refusal(
+        self,
+        step: Step,
+        params: dict[str, str],
+        workflow: Workflow,
+        effects: list["Effect"],
+        result: StepResult,
+    ) -> Optional[str]:
+        """Validate an exact qualified identity binding before an API write."""
+
+        authorization_requires = (
+            self.governed_authorization is not None
+            and self.governed_authorization.requires_verified_identity(step.id)
+        )
+        project = workflow.qualification
+        policy = project.identity_policies.get(step.id) if project is not None else None
+        if not authorization_requires and policy is None:
+            return None
+
+        binding = step.api_binding
+        assert binding is not None
+        if not binding.identity:
+            return (
+                f"API identity verification HALTED step '{step.id}' "
+                f"({step.intent}): the qualified action has no exact "
+                "api_binding.identity contract — refusing to send the request"
+            )
+
+        allowed_keys: Optional[set[str]] = None
+        required = 1
+        if policy is not None and policy.enforcement.value == "signal_quorum":
+            allowed_keys = {signal.key.value for signal in policy.signals}
+            required = policy.quorum
+
+        evidence: list[IdentitySignalEvidence] = []
+        for identity in binding.identity:
+            if allowed_keys is not None and identity.key not in allowed_keys:
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): semantic signal {identity.key!r} is not "
+                    "part of the qualified identity policy"
+                )
+            value = params.get(identity.param)
+            if value is None or value == "":
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): required identity parameter "
+                    f"{identity.param!r} is missing"
+                )
+            pointed_templates = [
+                self._api_request_pointer_value(binding, pointer)
+                for pointer in identity.request_pointers
+            ]
+            exact_token = "{" + identity.param + "}"
+            effect_target_path = tuple(identity.effect_field.split("."))
+            pointers_are_bound = all(
+                template is not None
+                and self._api_request_pointer_field_path(pointer) == effect_target_path
+                and (
+                    isinstance(template, str)
+                    and self._url_path_targets_param(template, identity.param)
+                    if pointer.startswith("/url/")
+                    else isinstance(template, str) and template == exact_token
+                )
+                for pointer, template in zip(
+                    identity.request_pointers, pointed_templates, strict=True
+                )
+            )
+            if not pointers_are_bound:
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): identity parameter {identity.param!r} is "
+                    "not bound at every declared target-bearing request pointer"
+                )
+            effect_exprs = [
+                effect.match.get(identity.effect_field) for effect in effects
+            ]
+            if not any(
+                expr is not None and expr.param == identity.param
+                for expr in effect_exprs
+            ):
+                return (
+                    f"API identity verification HALTED step '{step.id}' "
+                    f"({step.intent}): effect selector {identity.effect_field!r} "
+                    f"is not bound to identity parameter {identity.param!r}"
+                )
+            evidence.append(
+                IdentitySignalEvidence(
+                    signal=identity.key,
+                    source="api_parameter",
+                    verdict="verified",
+                    evidence_class="api_request_effect_binding",
+                    match="exact",
+                )
+            )
+
+        if len(evidence) < required:
+            return (
+                f"API identity verification HALTED step '{step.id}' "
+                f"({step.intent}): {len(evidence)}/{required} exact qualified "
+                "identity bindings verified — refusing to send the request"
+            )
+        result.identity = IdentityCheck(
+            status="verified",
+            mode="signal_quorum",
+            coverage=1.0,
+            signal_evidence=evidence,
+            quorum_required=required,
+            quorum_verified=len(evidence),
+        )
+        return None
 
     def _try_api_tier(
         self,
@@ -2913,6 +3113,19 @@ class Replayer:
                 "must be verifiable; refusing to actuate "
                 "(deployment/configuration error); run aborted"
             )
+            return True
+        identity_refusal = self._api_identity_refusal(
+            step,
+            params,
+            workflow,
+            effects,
+            result,
+        )
+        if identity_refusal is not None:
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = identity_refusal
             return True
         if self.effect_verifier is None:
             result.effect_verified = False
@@ -3255,7 +3468,12 @@ class Replayer:
         """Run the target-identity contract on one exact observed frame."""
         if (
             step.action
-            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+            not in (
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.TYPE,
+                ActionKind.KEY,
+            )
             or step.anchor is None
             or not (
                 step.anchor.context_text
@@ -3274,7 +3492,27 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
-        if check.status == "mismatch":
+        signal_quorum = check.mode == "signal_quorum"
+        if signal_quorum and check.status == "mismatch":
+            conflicts = [
+                f"{item.signal}/{item.source}"
+                for item in check.signal_evidence
+                if item.verdict == "conflict"
+            ]
+            error = (
+                f"Identity signal quorum conflicted for step '{step.id}' "
+                f"({step.intent}): "
+                + ", ".join(conflicts)
+                + " — refusing to act; run aborted"
+            )
+        elif signal_quorum and check.status != "verified":
+            error = (
+                f"Identity signal quorum was not reached for step '{step.id}' "
+                f"({step.intent}): {check.quorum_verified or 0}/"
+                f"{check.quorum_required or 0} independent signals verified "
+                "on the fresh frame — refusing to act; run aborted"
+            )
+        elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
                 f"({step.intent}): a target was found positionally "
@@ -3311,18 +3549,88 @@ class Replayer:
             )
         else:
             error = None
-        if error is not None and governed:
+        if error is not None and (governed or signal_quorum):
             result.safety_halt = True
         return error
 
-    def _remote_step_is_consequential(self, step: Step) -> bool:
+    def _step_is_consequential(self, step: Step) -> bool:
         authorization = self.governed_authorization
         return is_consequential(step) or (
             authorization is not None
             and authorization.requires_verified_identity(step.id)
         )
 
-    def _revalidate_remote_actuation(
+    def _step_has_identity_contract(self, step: Step, workflow: Workflow) -> bool:
+        """Whether this step carries identity evidence or an explicit mandate."""
+        authorization = self.governed_authorization
+        if authorization is not None and authorization.requires_verified_identity(
+            step.id
+        ):
+            return True
+        qualification = workflow.qualification
+        if qualification is not None and step.id in qualification.identity_policies:
+            return True
+        anchor = step.anchor
+        return anchor is not None and bool(
+            anchor.context_text
+            or anchor.structured_identity
+            or anchor.identity_template
+            or anchor.identifier_crop
+        )
+
+    def _step_needs_consequential_revalidation(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether delivery needs a second, immediately fresh observation.
+
+        Opaque remote surfaces always use the two-phase lease for a
+        consequential action. Browser/native surfaces use the same pre-delivery
+        refresh when identity is part of the action contract.
+        """
+        return self._step_is_consequential(step) and (
+            isinstance(self.backend, RemoteActuationBackend)
+            or self._step_has_identity_contract(step, workflow)
+        )
+
+    def _requires_atomic_identity_pointer(self, step: Step, workflow: Workflow) -> bool:
+        """Whether a pointer edge may not cross an unleased identity boundary.
+
+        An anchored TYPE has a focusing click before keyboard delivery.  That
+        first input edge needs the same target/record lease as a consequential
+        CLICK; otherwise a visually identical replacement can receive its
+        handler before the later keyboard lease notices the change.
+        """
+
+        return (
+            step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.TYPE)
+            and self._step_is_consequential(step)
+            and self._step_has_identity_contract(step, workflow)
+        )
+
+    def _requires_atomic_identity_keyboard(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether keyboard delivery must stay bound to the verified focus."""
+
+        return (
+            step.action in (ActionKind.KEY, ActionKind.TYPE)
+            and self._step_is_consequential(step)
+            and self._step_has_identity_contract(step, workflow)
+        )
+
+    def _cancel_guarded_coordinate(self) -> None:
+        """Clean an unconsumed local coordinate lease, if one was armed."""
+
+        if isinstance(self.backend, GuardedCoordinateActionBackend):
+            self.backend.cancel_guarded_coordinate()
+
+    def _cancel_guarded_keyboard(self) -> None:
+        """Clean an unconsumed local focused-element lease, if one was armed."""
+
+        if isinstance(self.backend, GuardedKeyboardActionBackend):
+            self.backend.cancel_guarded_keyboard()
+
+    def _revalidate_consequential_actuation(
         self,
         step: Step,
         resolution: Optional[Resolution],
@@ -3332,26 +3640,57 @@ class Replayer:
         workflow: Workflow,
         bundle_dir: Path,
         result: StepResult,
+        *,
+        arm_keyboard: bool = False,
     ) -> tuple[
         Optional[Resolution],
         Optional[Region],
         bytes,
         Optional[str],
     ]:
-        """Acquire, re-resolve, and identity-check a consequential remote step.
+        """Freshly re-resolve and identity-check a consequential GUI step.
 
-        ``RemoteActuationBackend`` arms a one-shot exact-frame lease.  Its input
-        method captures once more under the backend lock and refuses before the
-        first input edge if the frame changed after this method returned.
-        Reversible remote actions retain the ordinary replay path.
+        Browser/native backends provide a fresh screenshot immediately before
+        delivery. ``RemoteActuationBackend`` additionally arms a one-shot
+        exact-frame lease and refuses if pixels change before the first input
+        edge. Reversible actions retain the ordinary replay path.
         """
-        if not self._remote_step_is_consequential(step) or not isinstance(
-            self.backend, RemoteActuationBackend
-        ):
+        if not self._step_needs_consequential_revalidation(step, workflow):
             return resolution, matched_region, before_png, None
 
+        guarded_keyboard_backend = (
+            arm_keyboard
+            and self._requires_atomic_identity_keyboard(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+        guarded_type_pointer_backend = (
+            step.action is ActionKind.TYPE
+            and self._requires_atomic_identity_pointer(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedCoordinateActionBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+        if guarded_type_pointer_backend and not arm_keyboard:
+            cancel_stale_structural = getattr(
+                self.backend,
+                "cancel_pending_structural_guards",
+                None,
+            )
+            if callable(cancel_stale_structural):
+                cancel_stale_structural()
         try:
-            fresh_png = self.backend.acquire_actuation_frame()
+            fresh_png = (
+                self.backend.acquire_actuation_frame()
+                if isinstance(self.backend, RemoteActuationBackend)
+                else (
+                    cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).guarded_keyboard_frame()
+                    if guarded_keyboard_backend or guarded_type_pointer_backend
+                    else self.backend.screenshot()
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - backend boundary must halt
             if self.governed_authorization is not None:
                 result.safety_halt = True
@@ -3360,7 +3699,7 @@ class Replayer:
                 resolution,
                 matched_region,
                 before_png,
-                "Remote actuation preflight HALTED before input for step "
+                "Actuation preflight HALTED before input for step "
                 f"'{step.id}' ({step.intent}): {detail}",
             )
 
@@ -3371,16 +3710,63 @@ class Replayer:
             if self.governed_authorization is not None:
                 result.safety_halt = True
             return fresh_resolution, fresh_region, fresh_png, error
-        if fresh_resolution is not None:
-            error = self._identity_gate_error(
-                step,
-                fresh_resolution,
-                fresh_png,
-                params,
-                workflow,
-                bundle_dir,
-                result,
+        identity_required = (
+            self.governed_authorization is not None
+            and self.governed_authorization.requires_verified_identity(step.id)
+        ) or (
+            workflow.qualification is not None
+            and step.id in workflow.qualification.identity_policies
+        )
+        if fresh_resolution is None and identity_required:
+            error = (
+                f"Step '{step.id}' ({step.intent}) requires verified identity "
+                "but no exact target observation was available immediately "
+                "before actuation — refusing to act; run aborted"
             )
+        elif fresh_resolution is not None:
+            guarded_coordinate = (
+                self._requires_atomic_identity_pointer(step, workflow)
+                and not (arm_keyboard and step.action is ActionKind.TYPE)
+                and fresh_resolution.rung != "structural"
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedCoordinateActionBackend)
+            )
+            if guarded_coordinate:
+                coordinate_backend = cast(GuardedCoordinateActionBackend, self.backend)
+                editable_arm = getattr(
+                    coordinate_backend,
+                    "arm_guarded_editable_coordinate",
+                    None,
+                )
+                if step.action is ActionKind.TYPE and callable(editable_arm):
+                    editable_arm(*fresh_resolution.point)
+                else:
+                    coordinate_backend.arm_guarded_coordinate(*fresh_resolution.point)
+            guarded_keyboard = guarded_keyboard_backend
+            if guarded_keyboard:
+                cast(GuardedKeyboardActionBackend, self.backend).arm_guarded_keyboard(
+                    *fresh_resolution.point
+                )
+            try:
+                error = self._identity_gate_error(
+                    step,
+                    fresh_resolution,
+                    fresh_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                )
+            except Exception:
+                if guarded_coordinate:
+                    self._cancel_guarded_coordinate()
+                if guarded_keyboard:
+                    self._cancel_guarded_keyboard()
+                raise
+            if error is not None and guarded_coordinate:
+                self._cancel_guarded_coordinate()
+            if error is not None and guarded_keyboard:
+                self._cancel_guarded_keyboard()
         return fresh_resolution, fresh_region, fresh_png, error
 
     def _resolve_step(
@@ -3485,6 +3871,9 @@ class Replayer:
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
             native_act = getattr(self.backend, "act_structural", None)
+            requires_atomic_identity = self._requires_atomic_identity_pointer(
+                step, workflow
+            )
             if (
                 resolution.rung == "structural"
                 and resolution.structural_handle is not None
@@ -3492,14 +3881,58 @@ class Replayer:
                 and step.anchor.structural is not None
                 and callable(native_act)
             ):
-                result.delivery_receipt = native_act(
+                if (
+                    requires_atomic_identity
+                    and resolution.structural_handle.target_fingerprint is None
+                ):
+                    result.safety_halt = True
+                    result.failure_category = "safety_halt"
+                    return (
+                        f"Step '{step.id}' ({step.intent}) is a consequential "
+                        "identity-gated click, but its structural target has no "
+                        "fresh actuation fingerprint — refusing raw coordinate "
+                        "delivery; run aborted"
+                    )
+                delivery_receipt = native_act(
                     step.anchor.structural,
                     resolution.structural_handle,
                     double=step.action is ActionKind.DOUBLE_CLICK,
                 )
-                result.actuation = "uia"
+                result.delivery_receipt = delivery_receipt
+                result.actuation = "uia" if delivery_receipt.native else "dom"
             else:
-                self.backend.click(x, y, double=step.action is ActionKind.DOUBLE_CLICK)
+                if requires_atomic_identity:
+                    if isinstance(self.backend, RemoteActuationBackend):
+                        self.backend.click(
+                            x,
+                            y,
+                            double=step.action is ActionKind.DOUBLE_CLICK,
+                        )
+                    elif isinstance(self.backend, GuardedCoordinateActionBackend):
+                        result.delivery_receipt = self.backend.act_guarded_coordinate(
+                            x,
+                            y,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                            double=step.action is ActionKind.DOUBLE_CLICK,
+                        )
+                        result.actuation = "guarded_coordinate"
+                    else:
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                        return (
+                            f"Step '{step.id}' ({step.intent}) is a consequential "
+                            "identity-gated click, but this backend cannot bind "
+                            "identity verification to the same actuation operation "
+                            "— refusing raw coordinate delivery; run aborted"
+                        )
+                else:
+                    self.backend.click(
+                        x,
+                        y,
+                        double=step.action is ActionKind.DOUBLE_CLICK,
+                    )
             self._last_click_point = (x, y)
             self._last_click_region = (
                 resolution.structural_handle.region
@@ -3553,6 +3986,9 @@ class Replayer:
                 # Anchored TYPE: click to focus the field first.
                 x, y = resolution.point
                 native_act = getattr(self.backend, "act_structural", None)
+                requires_atomic_identity = self._requires_atomic_identity_pointer(
+                    step, workflow
+                )
                 if (
                     resolution.rung == "structural"
                     and resolution.structural_handle is not None
@@ -3566,7 +4002,21 @@ class Replayer:
                     )
                     result.actuation = "uia"
                 else:
-                    self.backend.click(x, y)
+                    if (
+                        requires_atomic_identity
+                        and not isinstance(self.backend, RemoteActuationBackend)
+                        and isinstance(self.backend, GuardedCoordinateActionBackend)
+                    ):
+                        result.delivery_receipt = self.backend.act_guarded_coordinate(
+                            x,
+                            y,
+                            expected_frame_sha256=hashlib.sha256(
+                                before_png
+                            ).hexdigest(),
+                        )
+                        result.actuation = "guarded_coordinate"
+                    else:
+                        self.backend.click(x, y)
                 field_point = (x, y)
                 field_region = (
                     resolution.structural_handle.region
@@ -3579,15 +4029,13 @@ class Replayer:
                 # is a second input gesture after that click, so reacquire and
                 # re-run target/identity before typing; the focusing click
                 # consumed the first one-shot remote lease.
-                if self._remote_step_is_consequential(step) and isinstance(
-                    self.backend, RemoteActuationBackend
-                ):
+                if self._step_needs_consequential_revalidation(step, workflow):
                     (
                         refreshed,
                         refreshed_region,
                         before_png,
                         remote_error,
-                    ) = self._revalidate_remote_actuation(
+                    ) = self._revalidate_consequential_actuation(
                         step,
                         resolution,
                         field_region,
@@ -3596,6 +4044,7 @@ class Replayer:
                         workflow,
                         bundle_dir,
                         result,
+                        arm_keyboard=True,
                     )
                     if remote_error is not None:
                         return remote_error
@@ -3612,7 +4061,21 @@ class Replayer:
             baseline_field_value = self._text_value_at(field_point)
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
-            self.backend.type_text(text)
+            guarded_type = (
+                self._requires_atomic_identity_keyboard(step, workflow)
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedKeyboardActionBackend)
+            )
+            if guarded_type:
+                result.delivery_receipt = cast(
+                    GuardedKeyboardActionBackend, self.backend
+                ).type_text_guarded(
+                    text,
+                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                )
+                result.actuation = "guarded_keyboard"
+            else:
+                self.backend.type_text(text)
             if not text:
                 return None  # nothing typed, nothing to verify
             return self._verify_typed_input(
@@ -3624,12 +4087,27 @@ class Replayer:
                 field_region=field_region,
                 baseline_field_value=baseline_field_value,
                 allow_masked=step.secret,
+                allow_retry=not guarded_type,
             )
 
         if step.action is ActionKind.KEY:
             if not step.key:
                 return f"Step '{step.id}' ({step.intent}) is a KEY step with no key"
-            self.backend.press(step.key)
+            guarded_key = (
+                self._requires_atomic_identity_keyboard(step, workflow)
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedKeyboardActionBackend)
+            )
+            if guarded_key:
+                result.delivery_receipt = cast(
+                    GuardedKeyboardActionBackend, self.backend
+                ).press_guarded(
+                    step.key,
+                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                )
+                result.actuation = "guarded_keyboard"
+            else:
+                self.backend.press(step.key)
             return None
 
         if step.action is ActionKind.WAIT:
@@ -4327,6 +4805,429 @@ class Replayer:
 
     # -- identity verification (pre-click) --------------------------------------
 
+    @staticmethod
+    def _qualified_signal_evidence(
+        signal: Any,
+        verdict: Literal["verified", "conflict", "unverifiable"],
+    ) -> IdentitySignalEvidence:
+        source = signal.source.value
+        evidence_class = cast(
+            Literal[
+                "application_structured_text",
+                "recorded_and_live_region",
+                "captured_context_ocr",
+                "application_identity",
+                "session_identity",
+                "workflow_state_identity",
+            ],
+            {
+                "structured": "application_structured_text",
+                "identifier_region": "recorded_and_live_region",
+                "captured_context": "captured_context_ocr",
+                "application": "application_identity",
+                "session": "session_identity",
+                "workflow_state": "workflow_state_identity",
+            }[source],
+        )
+        return IdentitySignalEvidence(
+            signal=signal.key.value,
+            source=source,
+            verdict=verdict,
+            evidence_class=evidence_class,
+            match=signal.match.value,
+        )
+
+    @staticmethod
+    def _compare_qualified_signal_text(
+        *,
+        signal: Any,
+        anchor: Anchor,
+        live: Optional[str],
+        params: dict[str, str],
+        workflow: Workflow,
+    ) -> Literal["verified", "conflict", "unverifiable"]:
+        """Compare one live source without returning or logging identity values."""
+
+        if live is None or not live.strip():
+            return "unverifiable"
+        source = signal.source.value
+        recorded = (
+            anchor.structured_identity
+            if source == "structured"
+            else anchor.context_text
+        )
+        extract_pattern = getattr(signal, "extract_pattern", None)
+        if extract_pattern is not None:
+            # Field labels are presentation text and may change case under an
+            # explicitly normalized policy. Preserve the captured value's
+            # original characters so the configured match mode, not the
+            # extractor, decides whether values compare equal.
+            compiled = re.compile(extract_pattern, re.IGNORECASE)
+            recorded_match = compiled.search(recorded or "")
+            live_match = compiled.search(live)
+            if recorded_match is None or live_match is None:
+                return "unverifiable"
+            recorded = recorded_match.group("value")
+            live = live_match.group("value")
+        if recorded is not None:
+            expected_form, parameter_names = parameterize_identity_text(
+                recorded,
+                workflow.params,
+                names=signal.params,
+                minimum_chars=identity_mod.MIN_PARAM_CHARS,
+                case_sensitive=True,
+            )
+            if set(parameter_names) != set(signal.params):
+                return "unverifiable"
+            live_values = {**workflow.params, **params}
+            live_form, used = parameterize_identity_text(
+                live,
+                live_values,
+                names=parameter_names,
+                minimum_chars=identity_mod.MIN_PARAM_CHARS,
+                case_sensitive=not (
+                    signal.match.value == "normalized"
+                    and "casefold"
+                    in {getattr(item, "value", item) for item in signal.normalizers}
+                ),
+            )
+            if set(used) != set(parameter_names):
+                return "conflict"
+            if signal.match.value == "normalized":
+                expected_form = normalize_signal_text(expected_form, signal.normalizers)
+                live_form = normalize_signal_text(live_form, signal.normalizers)
+            if expected_form != live_form:
+                return "conflict"
+            if source == "captured_context" and (
+                identity_mod.identity_rests_on_confusable_identifier(recorded)
+                or identity_mod.identity_rests_on_confusable_identifier(live)
+            ):
+                return "unverifiable"
+            return "verified"
+
+        from openadapt_flow.runtime import identity_template as itmpl
+
+        result = itmpl.verify_signal_template(
+            anchor.identity_template,
+            source=source,
+            match=signal.match.value,
+            normalizers=signal.normalizers,
+            live=live,
+            params=params,
+            param_examples=workflow.params,
+            parameter_names=signal.params,
+        )
+        if result is None:
+            return "unverifiable"
+        if (
+            result
+            and source == "captured_context"
+            and anchor.identity_template is not None
+            and anchor.identity_template.rests_on_confusable_identifier
+        ):
+            return "unverifiable"
+        return "verified" if result else "conflict"
+
+    def _verify_dedicated_identity_signal(
+        self,
+        *,
+        source: str,
+        signal: Any,
+        workflow: Workflow,
+    ) -> Literal["verified", "conflict", "unverifiable"]:
+        """Compare a non-record identity against its dedicated live observer."""
+
+        qualification = workflow.qualification
+        if qualification is None:
+            return "unverifiable"
+        expected = signal.expected_value
+        if not isinstance(expected, str):
+            return "unverifiable"
+        getter = getattr(self.backend, f"{source}_identity", None)
+        live: Optional[str] = None
+        if callable(getter):
+            try:
+                observed = getter()
+                live = observed if isinstance(observed, str) else None
+            except Exception:
+                live = None
+        if not live:
+            return "unverifiable"
+        if signal.match.value == "normalized":
+            expected = normalize_signal_text(expected, signal.normalizers)
+            live = normalize_signal_text(live, signal.normalizers)
+        return "verified" if expected == live else "conflict"
+
+    def _captured_context_observations(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        qualified_region: Region,
+    ) -> list[str]:
+        """Read one explicitly qualified context region at native and 2x scale."""
+
+        assert step.anchor is not None
+        anchor = step.anchor
+        band = (
+            resolution.point[0] + (qualified_region[0] - anchor.click_point[0]),
+            resolution.point[1] + (qualified_region[1] - anchor.click_point[1]),
+            qualified_region[2],
+            qualified_region[3],
+        )
+        exclude = (
+            resolution.point[0] + (anchor.region[0] - anchor.click_point[0]),
+            resolution.point[1] + (anchor.region[1] - anchor.click_point[1]),
+            anchor.region[2],
+            anchor.region[3],
+        )
+        today = date.today()
+
+        def observe(
+            png: bytes,
+            region: Optional[Region],
+            point_y: int,
+            exclude_region: Region,
+        ) -> str:
+            lines = [
+                line
+                for line in self.vision.ocr(png, region=region)
+                if line.text.strip()
+                and not identity_mod.regions_intersect(line.region, exclude_region)
+                and not identity_mod.is_volatile_line(line.text, reference_date=today)
+            ]
+            lines = identity_mod.lines_near_point(lines, point_y)
+            return " ".join(line.text.strip() for line in lines)
+
+        observations = [observe(before_png, band, resolution.point[1], exclude)]
+        upscaled = identity_mod.upscale_crop(before_png, band)
+        if upscaled is not None:
+            factor = 2
+            local_exclude = (
+                (exclude[0] - band[0]) * factor,
+                (exclude[1] - band[1]) * factor,
+                exclude[2] * factor,
+                exclude[3] * factor,
+            )
+            observations.append(
+                observe(
+                    upscaled,
+                    None,
+                    (resolution.point[1] - band[1]) * factor,
+                    local_exclude,
+                )
+            )
+        return observations
+
+    def _verify_signal_quorum(
+        self,
+        *,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        params: dict[str, str],
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+        policy: Any,
+    ) -> IdentityCheck:
+        """Enforce one qualified signal quorum on the fresh pre-action frame."""
+
+        from openadapt_flow.qualification import (
+            identity_policy_independence_errors,
+            identity_signal_runtime_available,
+        )
+
+        anchor = step.anchor
+        assert anchor is not None
+        evidence: list[IdentitySignalEvidence] = []
+        if identity_policy_independence_errors(policy):
+            evidence = [
+                self._qualified_signal_evidence(signal, "unverifiable")
+                for signal in policy.signals
+            ]
+            return IdentityCheck(
+                status="unreadable",
+                mode="signal_quorum",
+                signal_evidence=evidence,
+                quorum_required=policy.quorum,
+                quorum_verified=0,
+            )
+
+        for signal in policy.signals:
+            if not identity_signal_runtime_available(step, signal):
+                evidence.append(self._qualified_signal_evidence(signal, "unverifiable"))
+                continue
+            source = signal.source.value
+            if source == "structured":
+                getter = getattr(self.backend, "structured_text_at", None)
+                live = None
+                if getter is not None:
+                    try:
+                        live = getter(
+                            int(resolution.point[0]), int(resolution.point[1])
+                        )
+                    except Exception:
+                        live = None
+                verdict = self._compare_qualified_signal_text(
+                    signal=signal,
+                    anchor=anchor,
+                    live=live,
+                    params=params,
+                    workflow=workflow,
+                )
+            elif source in {"application", "session", "workflow_state"}:
+                verdict = self._verify_dedicated_identity_signal(
+                    source=source,
+                    signal=signal,
+                    workflow=workflow,
+                )
+            elif source == "captured_context":
+                assert signal.region is not None
+                attempts = self._captured_context_observations(
+                    step, resolution, before_png, signal.region
+                )
+                verdicts = [
+                    self._compare_qualified_signal_text(
+                        signal=signal,
+                        anchor=anchor,
+                        live=observed,
+                        params=params,
+                        workflow=workflow,
+                    )
+                    for observed in attempts
+                    if observed.strip()
+                ]
+                if not verdicts:
+                    verdict = "unverifiable"
+                elif "verified" in verdicts and "conflict" in verdicts:
+                    verdict = "unverifiable"
+                elif "verified" in verdicts:
+                    verdict = "verified"
+                elif all(item == "conflict" for item in verdicts):
+                    verdict = "conflict"
+                else:
+                    verdict = "unverifiable"
+            else:
+                recorded_png, live_png = self._identifier_crops(
+                    anchor,
+                    resolution,
+                    before_png,
+                    bundle_dir,
+                    workflow=workflow,
+                )
+                recorded_text = self._ocr_identity_crop(recorded_png)
+                live_text = self._ocr_identity_crop(live_png)
+                text_verdict, parameterized = self._compare_direct_signal_text(
+                    signal,
+                    recorded_text,
+                    live_text,
+                    params=params,
+                    workflow=workflow,
+                )
+                pixel = identity_mod.verify_pixel_identity(
+                    recorded_png,
+                    live_png,
+                    enable_verify=True,
+                )
+                if text_verdict == "conflict":
+                    verdict = "conflict"
+                elif text_verdict == "unverifiable":
+                    verdict = "unverifiable"
+                elif parameterized:
+                    # A run-bound record value is expected to render different
+                    # pixels than the demonstration. Exact/explicitly normalized
+                    # OCR may verify it only when the expected value does not
+                    # occupy the known glyph-confusable identifier class.
+                    live_values = {**workflow.params, **params}
+                    vulnerable = any(
+                        identity_mod.identity_rests_on_confusable_identifier(
+                            live_values.get(name)
+                        )
+                        for name in parameterized
+                    )
+                    verdict = "unverifiable" if vulnerable else "verified"
+                elif pixel is not None and pixel.status == "mismatch":
+                    verdict = "conflict"
+                elif pixel is None or pixel.status != "verified":
+                    verdict = "unverifiable"
+                else:
+                    verdict = "verified"
+            evidence.append(self._qualified_signal_evidence(signal, verdict))
+
+        conflicts = [item for item in evidence if item.verdict == "conflict"]
+        verified = sum(item.verdict == "verified" for item in evidence)
+        status: Literal["verified", "mismatch", "unreadable"] = (
+            "mismatch"
+            if conflicts
+            else "verified"
+            if verified >= policy.quorum
+            else "unreadable"
+        )
+        return IdentityCheck(
+            status=status,
+            mode="signal_quorum",
+            coverage=(verified / len(evidence)) if evidence else 0.0,
+            signal_evidence=evidence,
+            quorum_required=policy.quorum,
+            quorum_verified=verified,
+        )
+
+    def _ocr_identity_crop(self, png: Optional[bytes]) -> Optional[str]:
+        if not png:
+            return None
+        try:
+            lines = [line for line in self.vision.ocr(png) if line.text.strip()]
+        except Exception:
+            return None
+        if not lines:
+            return None
+        lines.sort(key=lambda line: (line.region[1], line.region[0]))
+        return " ".join(line.text.strip() for line in lines)
+
+    @staticmethod
+    def _compare_direct_signal_text(
+        signal: Any,
+        recorded: Optional[str],
+        live: Optional[str],
+        *,
+        params: dict[str, str],
+        workflow: Workflow,
+    ) -> tuple[
+        Literal["verified", "conflict", "unverifiable"],
+        list[str],
+    ]:
+        if not recorded or not live:
+            return "unverifiable", []
+        recorded, parameter_names = parameterize_identity_text(
+            recorded,
+            workflow.params,
+            names=signal.params,
+            minimum_chars=identity_mod.MIN_PARAM_CHARS,
+            case_sensitive=True,
+        )
+        if set(parameter_names) != set(signal.params):
+            return "unverifiable", signal.params
+        live, used = parameterize_identity_text(
+            live,
+            {**workflow.params, **params},
+            names=parameter_names,
+            minimum_chars=identity_mod.MIN_PARAM_CHARS,
+            case_sensitive=not (
+                signal.match.value == "normalized"
+                and "casefold"
+                in {getattr(item, "value", item) for item in signal.normalizers}
+            ),
+        )
+        if set(used) != set(parameter_names):
+            return "conflict", parameter_names
+        if signal.match.value == "normalized":
+            recorded = normalize_signal_text(recorded, signal.normalizers)
+            live = normalize_signal_text(live, signal.normalizers)
+        return (
+            "verified" if recorded == live else "conflict",
+            parameter_names,
+        )
+
     def _verify_identity(
         self,
         step: Step,
@@ -4375,6 +5276,22 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
+        project = getattr(workflow, "qualification", None)
+        if project is not None:
+            identity_policy = project.identity_policies.get(step.id)
+            if (
+                identity_policy is not None
+                and identity_policy.enforcement.value == "signal_quorum"
+            ):
+                return self._verify_signal_quorum(
+                    step=step,
+                    resolution=resolution,
+                    before_png=before_png,
+                    params=params,
+                    workflow=workflow,
+                    bundle_dir=bundle_dir,
+                    policy=identity_policy,
+                )
 
         def structured_tier() -> Optional[IdentityCheck]:
             # PHI-free bundles carry a salted-hash identity_template instead of
@@ -4802,6 +5719,7 @@ class Replayer:
         field_region: Optional[Region] = None,
         baseline_field_value: Optional[str] = None,
         allow_masked: bool = False,
+        allow_retry: bool = True,
     ) -> Optional[str]:
         """Verify a TYPE action landed; one guarded refocus-and-retype retry.
 
@@ -4837,6 +5755,13 @@ class Replayer:
                 "value is not readable there (something else rendered over "
                 "or instead of the input) — retyping is unsafe in this "
                 "state; run aborted"
+            )
+        if not allow_retry:
+            result.input_verified = False
+            return (
+                f"Typed input could not be verified for step '{step.id}' "
+                f"({step.intent}): the identity-bound browser field showed no "
+                "confirmed change; refusing an unleased refocus/retype retry"
             )
         result.input_retried = True
         if field_point is not None:

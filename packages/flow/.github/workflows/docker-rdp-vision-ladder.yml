@@ -24,6 +24,7 @@ on:
       - "openadapt_flow/compiler/compile.py"
       - "openadapt_flow/deployment.py"
       - "openadapt_flow/ir.py"
+      - "openadapt_flow/identity_signals.py"
       - "openadapt_flow/policy.py"
       - "openadapt_flow/recorder.py"
       - "openadapt_flow/run_gate.py"

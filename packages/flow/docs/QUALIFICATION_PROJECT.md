@@ -57,6 +57,17 @@ openadapt-flow qualify set-identity bundle \
   --step save \
   --canonical-ladder
 
+# Or require two independent retained sources with explicit comparisons:
+openadapt-flow qualify set-identity bundle \
+  --step save \
+  --signal record_id=structured:exact \
+  --signal secondary_identifier=captured_context:normalized:unicode_nfkc,collapse_whitespace \
+  --signal-region secondary_identifier=40,20,240,48 \
+  --signal-extract 'record_id=Record ID:\s*(?P<value>[A-Za-z0-9._-]+)' \
+  --signal-extract 'secondary_identifier=DOB:\s*(?P<value>[0-9/-]+)' \
+  --signal-param record_id=patient_id \
+  --quorum 2
+
 openadapt-flow qualify set-effect bundle \
   --step save \
   --effect-index 0 \
@@ -95,11 +106,34 @@ customer-controlled executor. Unsigned, stale, missing, symlinked, or
 hash-mismatched evidence is refused. Raw parameters, screenshots, credentials,
 and system-of-record records do not belong in the qualification project.
 
-The current runtime-enforced identity choice is `--canonical-ladder`.
-Signal/quorum policies remain representable for qualification UI work, but
-certification refuses them until the runtime consumes those exact semantics.
-This prevents reviewed field/quorum intent from being mistaken for executable
-behavior.
+Both `--canonical-ladder` and named signal quorums are runtime-enforced.
+Quorum signals must use independent retained sources; giving one source two
+labels cannot create two votes, and overlapping pixel regions are refused.
+Pixel signals use explicit qualified regions rather than arbitrary broad
+context bands. A definitive conflict halts even after the numeric quorum has
+been reached, while an unavailable signal can abstain only when the remaining
+independent signals still satisfy the quorum.
+Comparisons are either byte-exact or use only the explicitly listed
+normalizers. Structured and captured-context signals require an explicit
+`--signal-extract KEY=REGEX` with exactly one named `value` group, so only the
+intended field can cast a vote. Parameter substitution is explicit
+(`--signal-param`) and matches only complete values, so `John` cannot bind
+inside `Johnson`. Reports retain a closed semantic signal key, source, evidence
+class, and verdict, not the observed identity value; arbitrary patient/account
+labels cannot enter the bundle or report.
+
+When a qualified consequential action uses an `api_binding`, the binding must
+map the qualified semantic identity key to a workflow parameter, reference that
+parameter in the outgoing request template, and bind the same parameter in the
+declared effect selector. The runtime checks this request/effect identity proof
+before sending the request; API actuation cannot bypass the GUI identity
+contract.
+
+PHI-free bundles compiled with this runtime carry salted full-source hashes for
+the exact and supported explicit-normalization contracts. A bundle compiled
+before those hashes existed must be recompiled before its hashed evidence can
+be assigned to a signal quorum; qualification refuses an unavailable
+comparison rather than silently falling back to different semantics.
 
 ## Python API
 

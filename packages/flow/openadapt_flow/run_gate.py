@@ -59,7 +59,7 @@ from openadapt_flow.execution_profiles import (
     ExecutionProfileContract,
     required_effect_tier,
 )
-from openadapt_flow.ir import Interstitial, Step, Workflow
+from openadapt_flow.ir import ActionKind, Interstitial, Step, Workflow
 from openadapt_flow.policy import (
     has_screen_postcondition,
     has_system_effect,
@@ -144,6 +144,10 @@ def must_be_identity_armed(step: Step) -> bool:
     on a specific on-screen entity (the wrong-entity surface). These are the
     steps that must never act without a verified target identity.
     """
+    if step.action is ActionKind.KEY and is_consequential(step):
+        # A consequential keyboard submission with no retained anchor is an
+        # identity-coverage defect, not a reason to exempt the action.
+        return True
     if not is_identity_applicable(step):
         return False
     return is_consequential(step) or "entity_navigation" in step_tags(step)

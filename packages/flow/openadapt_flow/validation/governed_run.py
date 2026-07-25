@@ -14,6 +14,7 @@ Run::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import tempfile
@@ -22,7 +23,13 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
+from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
+    ActionKind,
+    Anchor,
+    Step,
+    Workflow,
+)
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     runtime_inputs_digest,
@@ -43,6 +50,9 @@ class _Backend:
         self.structured_identity = structured_identity
         self.actual_entity = actual_entity
         self.actions: list[tuple] = []
+        self._guarded_point: tuple[int, int] | None = None
+        self._guarded_frame_sha256: str | None = None
+        self._receipt_count = 0
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -53,6 +63,43 @@ class _Backend:
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         self.actions.append(("click", self.actual_entity, x, y, double))
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        self.cancel_guarded_coordinate()
+        self._guarded_point = (int(x), int(y))
+        self._guarded_frame_sha256 = hashlib.sha256(self.screenshot()).hexdigest()
+
+    def cancel_guarded_coordinate(self) -> None:
+        self._guarded_point = None
+        self._guarded_frame_sha256 = None
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        armed_point = self._guarded_point
+        armed_frame_sha256 = self._guarded_frame_sha256
+        self.cancel_guarded_coordinate()
+        if armed_point != (int(x), int(y)):
+            raise RuntimeError("guarded coordinate target was not pre-armed")
+        current_frame_sha256 = hashlib.sha256(self.screenshot()).hexdigest()
+        if (
+            armed_frame_sha256 != expected_frame_sha256
+            or current_frame_sha256 != expected_frame_sha256
+        ):
+            raise RuntimeError("guarded coordinate frame changed")
+        self.click(x, y, double=double)
+        self._receipt_count += 1
+        return ActionDeliveryReceipt(
+            receipt_id=f"governed-run-probe-{self._receipt_count}",
+            operation="guarded_coordinate_click",
+            native=False,
+            delivered_at="2026-07-25T00:00:00+00:00",
+        )
 
     def type_text(self, text: str) -> None:
         self.actions.append(("type", text))

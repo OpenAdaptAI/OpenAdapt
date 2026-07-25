@@ -28,6 +28,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    field_validator,
     model_serializer,
     model_validator,
 )
@@ -219,6 +220,20 @@ class IdentityTemplate(BaseModel):
             "hashing; replay substitutes the run's value before exact compare."
         ),
     )
+    signal_hashes: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Salted hashes of strict exact/explicitly-normalized full-source "
+            "identity evidence. Keys are produced by identity_signals."
+        ),
+    )
+    context_params: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Workflow parameters replaced by fixed sentinels before the "
+            "captured-context signal hashes were computed."
+        ),
+    )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
     rests_on_confusable_identifier: bool = False
 
@@ -235,6 +250,10 @@ class IdentityTemplate(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.structured_params:
             data.pop("structured_params", None)
+        if not self.signal_hashes:
+            data.pop("signal_hashes", None)
+        if not self.context_params:
+            data.pop("context_params", None)
         return data
 
 
@@ -379,6 +398,61 @@ class Postcondition(BaseModel):
     )
 
 
+IdentitySignalKeyValue = Literal[
+    "subject_name",
+    "record_id",
+    "secondary_identifier",
+    "application",
+    "session",
+    "workflow_state",
+]
+
+
+class ApiIdentityBinding(BaseModel):
+    """Exact API request/effect binding for one qualified identity signal.
+
+    ``param`` must be referenced by the outgoing request template and by
+    ``effect_field`` through ``ValueExpr(param=...)``. Runtime validates both
+    sides before any request is sent, so an API optimization cannot bypass the
+    qualified identity contract that guards the equivalent GUI action.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: IdentitySignalKeyValue
+    param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+    effect_field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
+    request_pointers: list[str] = Field(
+        min_length=1,
+        max_length=8,
+        description=(
+            "Explicit target-bearing JSON pointers in the request template. "
+            "Supported roots are /url/<effect-field>, /body/..., and /query/...; "
+            "the terminal pointer segment must name the bound effect field, and "
+            "headers are never accepted as target identity."
+        ),
+    )
+
+    @field_validator("request_pointers")
+    @classmethod
+    def _validate_request_pointers(cls, pointers: list[str]) -> list[str]:
+        if len(pointers) != len(set(pointers)):
+            raise ValueError("API identity request pointers must be unique")
+        for pointer in pointers:
+            if (
+                (pointer.startswith("/body/") and len(pointer) > len("/body/"))
+                or (pointer.startswith("/query/") and len(pointer) > len("/query/"))
+                or (pointer.startswith("/url/") and len(pointer) > len("/url/"))
+            ):
+                continue
+            raise ValueError(
+                "API identity request pointers must target /url/<effect-field>, "
+                "/body/..., or /query/...; headers and whole request objects "
+                "are not valid"
+            )
+        return pointers
+
+
 class ApiBinding(BaseModel):
     """A declarative API/tool call that performs a step's write WITHOUT the GUI.
 
@@ -457,6 +531,21 @@ class ApiBinding(BaseModel):
             " confirmable, exactly as a GUI write with declared effects is)."
         ),
     )
+    identity: list[ApiIdentityBinding] = Field(
+        default_factory=list,
+        description=(
+            "Exact run-parameter bindings that prove qualified record identity "
+            "for API actuation. Each binding must occur in both the request "
+            "template and an effect selector before the request may be sent."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _unique_identity_bindings(self) -> "ApiBinding":
+        keys = [binding.key for binding in self.identity]
+        if len(keys) != len(set(keys)):
+            raise ValueError("API identity semantic keys must be unique")
+        return self
 
 
 # -- Workflow-program IR, Phase 1 (RFC docs/design/WORKFLOW_PROGRAM_IR.md §6) --
@@ -1633,6 +1722,32 @@ class ActionDeliveryReceipt(BaseModel):
     outcome_verified: Literal[False] = False
 
 
+class IdentitySignalEvidence(BaseModel):
+    """PHI-free audit evidence for one qualified identity signal."""
+
+    signal: IdentitySignalKeyValue
+    source: Literal[
+        "structured",
+        "identifier_region",
+        "captured_context",
+        "application",
+        "session",
+        "workflow_state",
+        "api_parameter",
+    ]
+    verdict: Literal["verified", "conflict", "unverifiable"]
+    evidence_class: Literal[
+        "application_structured_text",
+        "recorded_and_live_region",
+        "captured_context_ocr",
+        "application_identity",
+        "session_identity",
+        "workflow_state_identity",
+        "api_request_effect_binding",
+    ]
+    match: Literal["exact", "normalized"]
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -1648,7 +1763,9 @@ class IdentityCheck(BaseModel):
             found no usable text in the live band; identity could not be
             judged). ``abstain`` and ``unreadable`` both mean "could not
             certify": the step proceeds flagged, and irreversible steps refuse.
-        mode: ``structured`` compares the recorded DOM/a11y identity text
+        mode: ``signal_quorum`` evaluates independently named, qualified
+            retained sources and records only bounded, non-value evidence;
+            ``structured`` compares the recorded DOM/a11y identity text
             against the live structured text at the resolved point (the
             highest-fidelity tier -- no OCR ambiguity); ``pixel`` compares the
             recorded vs live identifier-crop PIXELS (catches the O/0 glyph
@@ -1667,11 +1784,21 @@ class IdentityCheck(BaseModel):
     """
 
     status: Literal["verified", "mismatch", "abstain", "unreadable"]
-    mode: Literal["context", "param", "structured", "pixel", "vlm"] = "context"
+    mode: Literal[
+        "context",
+        "param",
+        "structured",
+        "pixel",
+        "vlm",
+        "signal_quorum",
+    ] = "context"
     coverage: float = 0.0
     expected: str = ""
     observed: str = ""
     param: Optional[str] = None
+    signal_evidence: list[IdentitySignalEvidence] = Field(default_factory=list)
+    quorum_required: Optional[int] = Field(default=None, ge=1)
+    quorum_verified: Optional[int] = Field(default=None, ge=0)
 
 
 class HealEvent(BaseModel):

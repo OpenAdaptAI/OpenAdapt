@@ -144,6 +144,23 @@ class IdentityBackend(Protocol):
 
 
 @runtime_checkable
+class ExecutionContextIdentityBackend(Protocol):
+    """Optional live identities that cannot be inferred from record-row text."""
+
+    def application_identity(self) -> Optional[str]:
+        """Return the current application/window identity."""
+        ...
+
+    def session_identity(self) -> Optional[str]:
+        """Return the current runner/remote-session identity digest."""
+        ...
+
+    def workflow_state_identity(self) -> Optional[str]:
+        """Return the current application workflow-state identity."""
+        ...
+
+
+@runtime_checkable
 class StructuralActionBackend(Protocol):
     """Optional STRUCTURAL action capability a backend MAY expose.
 
@@ -223,6 +240,79 @@ class NativeStructuralActionBackend(Protocol):
         double: bool = False,
     ) -> "ActionDeliveryReceipt":
         """Deliver a native action to the same unique structural candidate."""
+        ...
+
+
+@runtime_checkable
+class GuardedCoordinateActionBackend(Protocol):
+    """Optional atomic local coordinate actuation.
+
+    A backend implementing this seam must bind the identity-verified target to
+    delivery and reject a changed frame/element/record before the first input
+    edge. A pixel backend can compare the expected frame under its input lock; a
+    DOM backend can use an opaque element token plus a mutation guard and retain
+    its native pointer-event semantics. This is the local counterpart to a
+    remote backend's one-shot actuation lease.
+    """
+
+    def arm_guarded_coordinate(self, x: int, y: int) -> None:
+        """Bind one identity-bearing actionable target before identity readback."""
+        ...
+
+    def cancel_guarded_coordinate(self) -> None:
+        """Cancel and clean any unconsumed guarded-coordinate binding."""
+        ...
+
+    def act_guarded_coordinate(
+        self,
+        x: int,
+        y: int,
+        *,
+        expected_frame_sha256: str,
+        double: bool = False,
+    ) -> "ActionDeliveryReceipt":
+        """Verify the exact frame and deliver one coordinate action atomically."""
+        ...
+
+
+@runtime_checkable
+class GuardedKeyboardActionBackend(Protocol):
+    """Optional browser-local focus/record lease for consequential keyboard I/O.
+
+    The backend arms the exact focused element and its identity-bearing record
+    before the runtime's final identity observation. Focus changes or any
+    target/record mutation invalidate the one-shot lease before a key or text
+    input can be delivered.
+    """
+
+    def guarded_keyboard_frame(self) -> bytes:
+        """Capture the exact frame without mutating focused-element caret state."""
+        ...
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Bind the focused element at the freshly resolved identity point."""
+        ...
+
+    def cancel_guarded_keyboard(self) -> None:
+        """Cancel and clean any unconsumed guarded-keyboard binding."""
+        ...
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt":
+        """Deliver one key/chord to the pre-identity focused-element lease."""
+        ...
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt":
+        """Type into the pre-identity focused-element lease."""
         ...
 
 

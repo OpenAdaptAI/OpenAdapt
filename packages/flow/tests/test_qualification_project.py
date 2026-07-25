@@ -198,8 +198,9 @@ def _record_passing_campaign(workflow: Workflow, evidence_root: Path) -> None:
 def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
     with pytest.raises(ValueError, match="requires at least one"):
         IdentitySignalPolicy(
-            field="name",
+            key="subject_name",
             source="structured",
+            extract_pattern=r"^(?P<value>.+?) account ",
             match="normalized",
         )
     with pytest.raises(ValueError, match="cannot exceed"):
@@ -207,8 +208,9 @@ def test_identity_normalization_is_explicit_and_quorum_is_bounded() -> None:
             step_id="save",
             signals=[
                 IdentitySignalPolicy(
-                    field="id",
+                    key="record_id",
                     source="structured",
+                    extract_pattern=r"record (?P<value>identity)",
                     match="exact",
                 )
             ],
@@ -355,7 +357,7 @@ def test_effect_policy_is_bound_to_exact_contract_hash() -> None:
     }
 
 
-def test_signal_quorum_intent_cannot_certify_until_runtime_enforces_it() -> None:
+def test_signal_quorum_is_executable_qualification_identity_coverage() -> None:
     workflow = _workflow()
     init_project(workflow, environment=_environment())
     set_action_classification(
@@ -374,8 +376,9 @@ def test_signal_quorum_intent_cannot_certify_until_runtime_enforces_it() -> None
             enforcement="signal_quorum",
             signals=[
                 IdentitySignalPolicy(
-                    field="record_id",
+                    key="record_id",
                     source="structured",
+                    extract_pattern=r"record (?P<value>identity)",
                     match="exact",
                 )
             ],
@@ -383,9 +386,10 @@ def test_signal_quorum_intent_cannot_certify_until_runtime_enforces_it() -> None
         ),
     )
     report = evaluate_qualification(workflow)
-    assert QualificationRefusalCode.IDENTITY_POLICY_UNENFORCED in {
+    assert QualificationRefusalCode.IDENTITY_POLICY_UNENFORCED not in {
         refusal.code for refusal in report.refusals
     }
+    assert report.identity_covered_action_count == 1
 
 
 def test_state_changing_is_not_mislabeled_or_identity_gated() -> None:
@@ -699,3 +703,105 @@ def test_cli_initializes_project_without_raw_manifest_editing(
     assert main(["qualify", "explain", str(bundle), "--json"]) == 2
     payload = capsys.readouterr().out
     assert '"representative_case_missing"' in payload
+
+
+def test_cli_identity_extract_pattern_round_trips_exactly(tmp_path: Path) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+    pattern = r"record (?P<value>identity)(?=$)"
+
+    assert (
+        main(
+            [
+                "qualify",
+                "set-identity",
+                str(bundle),
+                "--step",
+                "save",
+                "--signal",
+                "record_id=structured:exact",
+                "--signal-extract",
+                f"record_id={pattern}",
+                "--quorum",
+                "1",
+            ]
+        )
+        == 0
+    )
+
+    loaded = Workflow.load(bundle)
+    assert loaded.qualification is not None
+    policy = loaded.qualification.identity_policies["save"]
+    assert policy.signals[0].extract_pattern == pattern
+
+
+@pytest.mark.parametrize(
+    ("signal", "extract_args", "message"),
+    [
+        (
+            "record_id=structured:exact",
+            ["--signal-extract", "unknown=(?P<value>.+)"],
+            "unknown signal",
+        ),
+        (
+            "record_id=structured:exact",
+            [
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+            ],
+            "repeats signal key",
+        ),
+        (
+            "record_id=structured:exact",
+            ["--signal-extract", "record_id"],
+            "expects KEY=REGEX",
+        ),
+        (
+            "record_id=structured:exact",
+            [],
+            "structured/context identity signals require extract_pattern",
+        ),
+        (
+            "record_id=identifier_region:exact",
+            [
+                "--signal-region",
+                "record_id=10,10,20,20",
+                "--signal-extract",
+                "record_id=(?P<value>.+)",
+            ],
+            "extract_pattern applies only",
+        ),
+    ],
+)
+def test_cli_identity_extract_rejects_invalid_bindings(
+    tmp_path: Path,
+    signal: str,
+    extract_args: list[str],
+    message: str,
+) -> None:
+    workflow = _workflow()
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    init_project(workflow, environment=_environment())
+    workflow.save(bundle)
+
+    with pytest.raises(SystemExit, match=message):
+        main(
+            [
+                "qualify",
+                "set-identity",
+                str(bundle),
+                "--step",
+                "save",
+                "--signal",
+                signal,
+                *extract_args,
+                "--quorum",
+                "1",
+            ]
+        )
