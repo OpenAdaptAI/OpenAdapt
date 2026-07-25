@@ -42,8 +42,14 @@ var LABEL_TRIAGE = DRIFT.has('typelabel') ? 'Triage Assessment' : 'Triage';
 // than the on-screen banner. With no ?fault query this is inert and Save
 // behaves byte-for-byte as before (the normal benchmark is unaffected).
 var FAULT = (new URLSearchParams(location.search).get('fault') || '').trim();
-// A stable idempotency key for this page load; only sent in ?fault=idempotent.
-var FAULT_KEY = 'enc-' + Math.random().toString(36).slice(2);
+// The explicit public-demo mode uses a stable logical-operation key so a
+// demonstration can observe and compile a real at-most-once contract. The
+// existing fault=idempotent benchmark retains its per-page key.
+var DEMO_IDEMPOTENCY =
+  new URLSearchParams(location.search).get('idempotency') === 'demo';
+var FAULT_KEY = DEMO_IDEMPOTENCY
+  ? 'mockmed-triage-p1-v1'
+  : 'enc-' + Math.random().toString(36).slice(2);
 
 var PATIENTS = [
   { id: 'p1', name: 'Jane Sample', dob: '1980-01-01',
@@ -61,6 +67,9 @@ var PATIENTS = [
 //    recorded target lands directly above it — the pixels around its Open
 //    button are identical to the recorded crop (the patient name column is
 //    outside the 160 px template), at exactly the recorded position.
+//  - ambiguous: the source system returned the same referral twice. Both rows
+//    carry the same durable DOM id and record identity, so structural target
+//    uniqueness is false and the governed runtime must refuse.
 //  - missing: the recorded target's referral is gone; similar rows remain.
 //  - empty: no referrals at all.
 if (DRIFT.has('grow')) {
@@ -80,6 +89,9 @@ if (DRIFT.has('lookalike')) {
     { id: 'p0', name: 'Taylor Duplicate', dob: '1982-12-12',
       reason: 'Knee pain referral', priority: 'High' }
   ].concat(PATIENTS);
+}
+if (DRIFT.has('ambiguous')) {
+  PATIENTS = [Object.assign({}, PATIENTS[0])].concat(PATIENTS);
 }
 if (DRIFT.has('missing')) {
   PATIENTS = PATIENTS.filter(function (p) { return p.id !== 'p1'; });
@@ -202,13 +214,18 @@ function renderPatient(id) {
     encHtml = '<p id="no-encounters">No encounters yet.</p>';
   }
 
+  var patientIdentity = p.name + ' — MRN ' +
+    p.id.toUpperCase() + ' — DOB ' + p.dob;
   app.innerHTML =
+    '<section id="patient-record" role="listitem" aria-label="' +
+    esc(patientIdentity) + '">' +
     '<div id="patient-banner">' + esc(p.name) + ' — MRN ' +
     esc(p.id.toUpperCase()) + ' — DOB ' + esc(p.dob) + '</div>' +
     bannerHtml +
     '<div class="actions movable">' +
     '<button id="new-encounter">New Encounter</button></div>' +
-    '<h2>Encounters</h2>' + encHtml;
+    '<h2>Encounters</h2>' + encHtml +
+    '</section>';
 
   document.getElementById('new-encounter')
     .addEventListener('click', function () {
@@ -257,7 +274,9 @@ function showSaveError(msg) {
 function saveViaBackend(pid, note) {
   var payload = { patient_id: pid, type: state.encounterType || 'Triage',
     note: note };
-  if (FAULT === 'idempotent') { payload.key = FAULT_KEY; }
+  if (DEMO_IDEMPOTENCY || FAULT === 'idempotent') {
+    payload.key = FAULT_KEY;
+  }
   var url = '/api/encounter?fault=' + encodeURIComponent(FAULT);
 
   function post(withTimeout) {
@@ -313,6 +332,16 @@ function renderEncounter() {
   if (!state.currentPatientId) { state.currentPatientId = PATIENTS[0].id; }
   state.encounterType = null;
   state.acuity = null;
+  var activePatient = null;
+  for (var p = 0; p < PATIENTS.length; p++) {
+    if (PATIENTS[p].id === state.currentPatientId) {
+      activePatient = PATIENTS[p];
+      break;
+    }
+  }
+  if (!activePatient) { activePatient = PATIENTS[0]; }
+  var patientIdentity = activePatient.name + ' — MRN ' +
+    activePatient.id.toUpperCase() + ' — DOB ' + activePatient.dob;
 
   // "reqfield" drift: the form gains a required Acuity field between the
   // note and the save button; saving without a selection shows an inline
@@ -332,6 +361,9 @@ function renderEncounter() {
     ? consultBtn + triageBtn   // swapped order under "typelabel" drift
     : triageBtn + consultBtn;
   app.innerHTML =
+    '<section id="encounter-record" role="listitem" aria-label="' +
+    esc(patientIdentity) + '">' +
+    '<div id="patient-banner">' + esc(patientIdentity) + '</div>' +
     '<h1>New Encounter</h1>' +
     '<label id="type-label">Encounter Type</label>' +
     '<div class="segmented" id="type-seg">' + segButtons + '</div>' +
@@ -340,7 +372,8 @@ function renderEncounter() {
     acuityHtml +
     '<div id="save-error"></div>' +
     '<div class="actions movable">' +
-    '<button id="save-encounter">' + LABEL_SAVE + '</button></div>';
+    '<button id="save-encounter">' + LABEL_SAVE + '</button></div>' +
+    '</section>';
 
   if (DRIFT.has('reqfield')) {
     ['routine', 'urgent'].forEach(function (level) {

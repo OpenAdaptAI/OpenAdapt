@@ -377,6 +377,92 @@ def test_playwright_visual_fallback_uses_identity_bound_dom_click(tmp_path) -> N
     assert clicked == 1
 
 
+def test_structural_revalidation_replaces_stale_guard(tmp_path) -> None:
+    """A fresh pre-delivery structural guard must not invalidate itself."""
+
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(
+            """<!doctype html><html><body>
+            <table><tbody><tr>
+              <td>MRN-1</td><td>Jane Sample</td>
+              <td><button id="target"
+                onclick="window.clicked += 1">Submit</button></td>
+            </tr></tbody></table>
+            <script>window.clicked = 0;</script>
+            </body></html>"""
+        )
+        backend = PlaywrightBackend(page)
+        vision, bundle, step = _visual_case(tmp_path, page)
+        assert step.anchor is not None
+        step.anchor.structural = StructuralLocator(
+            selector="#target",
+            role="button",
+            name="Submit",
+        )
+
+        report = Replayer(backend, vision=vision, use_structural=True).run(
+            Workflow(name="structural-fresh-guard", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        clicked = page.evaluate("window.clicked")
+        browser.close()
+
+    assert report.success is True
+    assert report.results[0].actuation == "dom"
+    assert report.results[0].delivery_receipt is not None
+    assert clicked == 1
+
+
+def test_guarded_button_ignores_screenshot_caret_side_effects(tmp_path) -> None:
+    """A focused field in the same record must not invalidate a stable button."""
+
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(
+            """<!doctype html><html><body>
+            <section role="listitem">
+              <div>MRN-1Jane Sample</div>
+              <textarea id="field"></textarea>
+              <button id="target"
+                onclick="window.clicked += 1">Submit</button>
+            </section>
+            <script>window.clicked = 0;</script>
+            </body></html>"""
+        )
+        page.locator("#field").fill("synthetic note")
+        page.locator("#field").focus()
+        backend = PlaywrightBackend(page)
+        vision, bundle, step = _visual_case(tmp_path, page)
+
+        report = Replayer(backend, vision=vision, use_structural=False).run(
+            Workflow(name="guarded-button-focused-field", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        clicked = page.evaluate("window.clicked")
+        browser.close()
+
+    assert report.success is True
+    assert report.results[0].actuation == "guarded_coordinate"
+    assert clicked == 1
+
+
 def test_guarded_visual_type_refuses_replacement_before_focus_click(tmp_path) -> None:
     sync = pytest.importorskip("playwright.sync_api")
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend

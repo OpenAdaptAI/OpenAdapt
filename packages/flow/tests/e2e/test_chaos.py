@@ -117,15 +117,15 @@ class TestBlockingModalMidRun:
         assert failed.resolution is None  # halted BEFORE acting
         assert "Could not resolve" in (failed.error or "")
 
-    def test_invisible_click_shield_before_save_halts_after_wasted_click(
+    def test_invisible_click_shield_before_save_halts_without_write(
         self, bundle, mockmed_url, _browser, tmp_path
     ) -> None:
-        """SAFE-HALT (with one neutralized click). A fully transparent
-        overlay intercepts pointer events. Vision sees an unchanged screen,
-        resolves the save button, and clicks — into the shield. Nothing
-        happens, postconditions fail, the run aborts. No state was written,
-        but note the runtime cannot tell 'button clicked and app ignored
-        it' from 'click never reached the app'."""
+        """A transparent overlay introduced before Save must prevent a write.
+
+        The runtime may refuse either during fresh-frame revalidation or after
+        an intercepted click fails its postcondition. The durable contract is
+        the same: the run halts with a reason and no encounter is saved.
+        """
 
         def inject(page):
             page.evaluate(
@@ -148,8 +148,7 @@ class TestBlockingModalMidRun:
         failed = failing_step(report)
         assert failed is not None
         assert failed.step_id == "step_010", describe(report, state)
-        assert failed.resolution is not None  # it DID click
-        assert failed.postconditions_ok is False
+        assert failed.error
 
 
 class TestLayoutSwapMidRun:

@@ -110,8 +110,16 @@ def expects_effect(step: Step) -> bool:
 
 
 def is_vacuous(step: Step) -> bool:
-    """True when an effect-expecting step asserts NOTHING (empty ``expect``) —
-    it will pass vacuously at replay (``docs/LIMITS.md``)."""
+    """True when an effect-expecting step can pass with no outcome evidence.
+
+    TYPE is not vacuous merely because ``expect`` is empty: replay has an
+    intrinsic, fail-closed typed-input read-back and records
+    ``StepResult.input_verified``. Parameterized values are deliberately
+    excluded from static visual postconditions. Other effect-expecting actions
+    still require an authored or compiler-mined postcondition.
+    """
+    if step.action is ActionKind.TYPE:
+        return False
     return expects_effect(step) and not step.expect
 
 
@@ -155,9 +163,10 @@ def step_confidence(step: Step) -> float:
     Deterministic, non-anchored actuations (key, scroll, un-anchored type)
     replay exactly and score ``1.0``. An anchored step scores by how much
     redundant evidence it carries for locating and verifying its target:
-    ``+0.5`` a template crop, ``+0.3`` an OCR label, ``+0.2`` an armed identity
-    band — so a fully-evidenced click reaches ``1.0`` and a template-only click
-    (no label, no identity) sits at ``0.5``. Used only by the
+    ``+0.5`` a template crop, ``+0.3`` a deterministic structural locator or
+    OCR label, ``+0.2`` an armed identity band — so a fully-evidenced click
+    reaches ``1.0`` and a template-only click (no locator/label, no identity)
+    sits at ``0.5``. Used only by the
     ``require_human_approval_below_confidence`` rule to flag thinly-evidenced
     steps for human sign-off before unattended deployment.
     """
@@ -167,7 +176,7 @@ def step_confidence(step: Step) -> float:
     score = 0.0
     if a.template:
         score += 0.5
-    if a.ocr_text:
+    if a.structural is not None or a.ocr_text:
         score += 0.3
     if a.context_text or a.structured_identity or a.identity_template:
         score += 0.2

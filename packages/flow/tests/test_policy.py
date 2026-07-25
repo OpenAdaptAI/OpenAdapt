@@ -13,6 +13,7 @@ from openadapt_flow.ir import (
     Postcondition,
     PostconditionKind,
     Step,
+    StructuralLocator,
     Workflow,
 )
 from openadapt_flow.policy import (
@@ -20,6 +21,7 @@ from openadapt_flow.policy import (
     builtin_policy_names,
     evaluate_policy,
     is_identity_armed,
+    is_vacuous,
     lint_workflow,
     load_policy,
     step_confidence,
@@ -142,6 +144,16 @@ STRICT = Policy(
 
 
 class TestCertify:
+    def test_parameterized_type_has_intrinsic_input_verification(self):
+        step = Step(
+            id="step_000",
+            intent="type <note>",
+            action=ActionKind.TYPE,
+            text="synthetic",
+            param="note",
+        )
+        assert not is_vacuous(step)
+
     def test_legacy_identifier_crop_is_identity_armed(self):
         step = _click("step_000", "click 'Remote row'", armed=False)
         step.identity_armed = None
@@ -191,6 +203,20 @@ class TestCertify:
         report = evaluate_policy(wf, pol)
         assert not report.passed
         assert report.violations[0].rule == "require_human_approval_below_confidence"
+
+    def test_structural_locator_counts_as_deterministic_target_evidence(self):
+        step = Step(
+            id="step_000",
+            intent="click note field",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="t.png",
+                structural=StructuralLocator(selector="#note-label"),
+                region=(0, 0, 10, 10),
+                click_point=(5, 5),
+            ),
+        )
+        assert step_confidence(step) == pytest.approx(0.8)
 
 
 # --- policy loading / example policies --------------------------------------

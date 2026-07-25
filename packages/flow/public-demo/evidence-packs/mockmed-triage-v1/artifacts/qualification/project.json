@@ -1,0 +1,482 @@
+{
+  "action_classifications": {
+    "step_000": {
+      "classification": "read_only",
+      "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+      "operator_confirmed": true,
+      "step_id": "step_000"
+    },
+    "step_001": {
+      "classification": "read_only",
+      "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+      "operator_confirmed": true,
+      "step_id": "step_001"
+    },
+    "step_002": {
+      "classification": "read_only",
+      "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+      "operator_confirmed": true,
+      "step_id": "step_002"
+    },
+    "step_003": {
+      "classification": "read_only",
+      "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+      "operator_confirmed": true,
+      "step_id": "step_003"
+    },
+    "step_004": {
+      "classification": "read_only",
+      "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+      "operator_confirmed": true,
+      "step_id": "step_004"
+    },
+    "step_005": {
+      "classification": "irreversible",
+      "explanation": "compiler classified this as an irreversible system-of-record write",
+      "operator_confirmed": true,
+      "step_id": "step_005"
+    }
+  },
+  "cases": [
+    {
+      "description": "Deterministic ambiguity refusal case",
+      "expected_outcome": "halted",
+      "id": "fault-ambiguity",
+      "input_ref": null,
+      "kind": "ambiguity",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "uUOmnr5pj1EwomCLOUi0WZ/TLTQQXTRZEV1P8jtIU3G8UTez1MCOlN48TEsmBe7yZAeg+Vo7cBVGAsPsvDm2Aw==",
+          "case_id": "fault-ambiguity",
+          "completed_at": "2026-07-25T17:47:15.124958+00:00",
+          "detail_code": "fault-ambiguity.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json",
+              "sha256": "74986c72b6d04c81ec3ec781a9d6f203553d5657c114a9649734da5489161b67"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json",
+              "sha256": "58866879d1f61049927609ec341871ef90396aca07996c04504d153d92b675c4"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json",
+              "sha256": "2a3cc12faaee8987c9e3c20b7575935e09ddff7e9426b4121336160b57422ea4"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-02/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-ambiguity/trial-03/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            }
+          ],
+          "observed_outcome": "halted",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    },
+    {
+      "description": "Deterministic wrong identity refusal case",
+      "expected_outcome": "halted",
+      "id": "fault-wrong-identity",
+      "input_ref": null,
+      "kind": "wrong_identity",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "I6QAlPrY221zJSiTdVkOPOaTQLo1VV4NhEeq6OetnTzX+Jqns700/I6LE0qONP2OZgz6UuboViDSyVgGq9UuCQ==",
+          "case_id": "fault-wrong-identity",
+          "completed_at": "2026-07-25T17:47:19.037898+00:00",
+          "detail_code": "fault-wrong-identity.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json",
+              "sha256": "ed06ffa2c5bacce6f323ce0c64fc8af3d1b5c4039c50bff45b2626c465ceb387"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json",
+              "sha256": "7689976a15d82fba1c2392121b740d8863c4ff7a9302e756605f1aa4dd016993"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json",
+              "sha256": "2d5f01bd01327a391083494abffbd6473358c58a82f1dff0ff8dda5fedfc5ff2"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            }
+          ],
+          "observed_outcome": "halted",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    },
+    {
+      "description": "Deterministic stale identity refusal case",
+      "expected_outcome": "halted",
+      "id": "fault-stale-identity",
+      "input_ref": null,
+      "kind": "stale_identity",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "ertXCxc9VbirZiOyf2O6edXZUYz2yGnf5bxB16DCQtkJPH055n8GaxTkJKCdnzOwWtYYsMKLiAMwOGn3PyG+Aw==",
+          "case_id": "fault-stale-identity",
+          "completed_at": "2026-07-25T17:47:23.543249+00:00",
+          "detail_code": "fault-stale-identity.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json",
+              "sha256": "48a3419a3b9ae758aeddebc180905c67e0b867775a438466677f3005fafaeb29"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json",
+              "sha256": "4d97a3f308a1f911ea1f61ce46f086d96aeed89e93d2c4477f48cbbab6a6f0dc"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json",
+              "sha256": "537ba9ee1244a5d915efa4976ffdf595a1eb8e2e09dffb42f25417e68dd8fd53"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-01/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-02/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-stale-identity/trial-03/oracle.json",
+              "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f"
+            }
+          ],
+          "observed_outcome": "halted",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    },
+    {
+      "description": "Deterministic weak effect refusal case",
+      "expected_outcome": "halted",
+      "id": "fault-weak-effect",
+      "input_ref": null,
+      "kind": "weak_effect",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "+cxapJEWNvtP0ZZF//MrmEk0MFWw3EGnFkfXgDrZbMDTmearuMGn2JLDmYdV/Wx7MmrN1TcYSPVFWjkPYT7RBw==",
+          "case_id": "fault-weak-effect",
+          "completed_at": "2026-07-25T17:47:54.956121+00:00",
+          "detail_code": "fault-weak-effect.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json",
+              "sha256": "81c547d418928f12689060ca9894f2527cfdc5e868535598ffbadd5bbebed1c0"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json",
+              "sha256": "a62ded23484e7eb555b1f3041503bdb78ed6ff4cdab009a16cb796b21f1bcda3"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json",
+              "sha256": "367862f0153857358692edd1dc5c7bc1ccdc7588b93156ef658905634d1c937b"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-01/oracle.json",
+              "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-02/oracle.json",
+              "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-weak-effect/trial-03/oracle.json",
+              "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4"
+            }
+          ],
+          "observed_outcome": "halted",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    },
+    {
+      "description": "Deterministic missing effect refusal case",
+      "expected_outcome": "halted",
+      "id": "fault-missing-effect",
+      "input_ref": null,
+      "kind": "missing_effect",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "u0ezOXM8QT39GwkaRmWJvGG2D2FSW/rJEWBKt/oi7ecDdkAoAe7YS+faqoG/KTaO1qn2dIJxpscucK1LuMKVDw==",
+          "case_id": "fault-missing-effect",
+          "completed_at": "2026-07-25T17:48:25.038175+00:00",
+          "detail_code": "fault-missing-effect.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json",
+              "sha256": "6ee3f3a9d4885fc985459db9bf61428ffef3093cb0530c1c744e922b3dd8e0f7"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json",
+              "sha256": "6afd1bdbebe933411661dfbab4dd87d18e88f6e014ec9137dd2c16f0db786e53"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json",
+              "sha256": "8db86671e4a201a7f5e23b8ab18227273c786c01e167370c5ce93a7bbc161a40"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-01/oracle.json",
+              "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-02/oracle.json",
+              "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/fault-missing-effect/trial-03/oracle.json",
+              "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad"
+            }
+          ],
+          "observed_outcome": "halted",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    },
+    {
+      "description": "Recorded workflow under its qualified application boundary",
+      "expected_outcome": "verified",
+      "id": "representative",
+      "input_ref": null,
+      "kind": "representative",
+      "required": true,
+      "results": [
+        {
+          "attestation_key_id": "public-demo-headless-runner",
+          "attestation_signature": "MqR0qSXD5tFzV4v65S1PrXqPB3ZEV4+C9BA/oiye1jJk6yqPlW9uwwVbbxVSTtg7m0b1J6oxVnYCXfYFxiFWDg==",
+          "case_id": "representative",
+          "completed_at": "2026-07-25T17:47:11.543347+00:00",
+          "detail_code": "representative.three-trial-contract",
+          "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+          "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+          "evidence": [
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/representative/trial-01/run/report.json",
+              "sha256": "79bd5810918bb6e71951dd7ce159736f31844b94333e249e5b001de5a5162672"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/representative/trial-02/run/report.json",
+              "sha256": "cd2fb589653040363ddde5ca0b162811c3be97ec03e7bcd0b555967fdee5218b"
+            },
+            {
+              "kind": "run_report",
+              "relative_path": "artifacts/cases/representative/trial-03/run/report.json",
+              "sha256": "f7f3c4cd74903f3e5d48767dd4f24dfe5eaf1d3289f42e073e56399fcb4bf31b"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/representative/trial-01/oracle.json",
+              "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/representative/trial-02/oracle.json",
+              "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+            },
+            {
+              "kind": "effect",
+              "relative_path": "artifacts/cases/representative/trial-03/oracle.json",
+              "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987"
+            }
+          ],
+          "observed_outcome": "verified",
+          "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+          "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+          "project_revision": 12,
+          "runner_capabilities": [
+            "headless_chromium",
+            "independent_system_of_record",
+            "playwright_dom"
+          ],
+          "runner_id": "openadapt-flow/public-demo-headless",
+          "runtime_version": "1.22.0",
+          "status": "passed",
+          "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-07-25T17:46:57.746347+00:00",
+  "effect_policies": [
+    {
+      "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+      "effect_index": 0,
+      "step_id": "step_005",
+      "tier": 1
+    },
+    {
+      "effect_contract_hash": "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053",
+      "effect_index": 1,
+      "step_id": "step_005",
+      "tier": 1
+    }
+  ],
+  "environment": {
+    "application": "OpenAdapt MockMed synthetic reference",
+    "application_version": "sha256:bcb53cc684cbca1af364f2ca4764e25b1c55ed9465a9cd3a50ac47a1b146827a",
+    "environment_digest": "db025fcd37b0fbe101df8223be2efc720f0032f353a5ebd23c5b938c1c3a627a",
+    "required_capabilities": [
+      "headless_chromium",
+      "independent_system_of_record",
+      "playwright_dom"
+    ],
+    "runtime_version": "1.22.0",
+    "target_kind": "web"
+  },
+  "exclusions": [],
+  "identity_policies": {
+    "step_005": {
+      "enforcement": "canonical_ladder",
+      "quorum": 0,
+      "signals": [],
+      "step_id": "step_005"
+    }
+  },
+  "last_certification": {
+    "certified_at": "2026-07-25T17:48:25.066701+00:00",
+    "environment_contract_sha256": "48d59d31aa59a1d09938dd326925f77cefb5725165cde5bd3b1cbc5c7d3d7958",
+    "passed": true,
+    "policy_name": "clinical-write",
+    "project_contract_sha256": "431e77cccd12cbc41c14d45d76a2dc2bd024f25e57a6f97ebbfae2137788138e",
+    "project_revision": 12,
+    "report_sha256": "d17eadf90cedc84c71fa64a8a236f85c8ef6b9087350cd97d60aca4f81d220db",
+    "workflow_contract_sha256": "9b77723879ba5d9acba4e6bf9584c5f3b9287d8495d399f9166b3a2fd27e51ee"
+  },
+  "minimum_effect_tier": 1,
+  "previous_revision_sha256": "daef0cc2110ecad3d241c1d099b617778236d81b2722fc5ea0100f4964e193e6",
+  "project_id": "2651b592-1745-4d44-988e-dd8c92abaef2",
+  "requalification_conditions": [],
+  "revision": 12,
+  "schema_version": "openadapt.qualification-project/v1",
+  "trusted_runner_keys": {
+    "public-demo-headless-runner": "mrUFxhq05PCi7y0ovSawDo+I5I60abxxM0oRSHtgC6k="
+  },
+  "updated_at": "2026-07-25T17:48:25.057173+00:00"
+}

@@ -136,6 +136,22 @@ def test_recorder_scroll_event(tmp_path: Path) -> None:
     assert backend.calls == [("scroll", 0, 400), ("scroll", -30, -120)]
 
 
+def test_recorder_can_capture_a_separate_read_only_effect_observer(
+    tmp_path: Path,
+) -> None:
+    records: list[dict[str, str]] = []
+    rec = Recorder(
+        FakeBackend(),
+        tmp_path / "rec",
+        system_of_record_reader=lambda: list(records),
+    )
+    rec.click(10, 20)
+    events = _read_events(rec.finish())
+
+    assert events[0]["sor_before"] == []
+    assert events[0]["sor_after"] == []
+
+
 def test_recorder_settle_timeout_on_unstable_screen(tmp_path: Path) -> None:
     """A constantly-changing screen must not hang the recorder."""
 

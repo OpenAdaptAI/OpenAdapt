@@ -102,6 +102,12 @@ _INIT_JS = r"""
       if (!el) return null;
       const row = el.closest('tr, [role="row"], li, [role="listitem"]');
       if (!row) return null;
+      const declared = (
+        row.getAttribute('data-openadapt-identity')
+        || row.getAttribute('aria-label')
+        || ''
+      ).replace(/\s+/g, ' ').trim();
+      if (declared) return declared;
       const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
       own.setAttribute('data-oaflow-own', '1');
       let body = '';
@@ -113,11 +119,7 @@ _INIT_JS = r"""
       } finally {
         own.removeAttribute('data-oaflow-own');
       }
-      const parts = [];
-      const aria = row.getAttribute ? row.getAttribute('aria-label') : null;
-      if (aria) parts.push(aria);
-      if (body) parts.push(body);
-      const joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+      const joined = body.replace(/\s+/g, ' ').trim();
       return joined || null;
     } catch (e) { return null; }
   }
