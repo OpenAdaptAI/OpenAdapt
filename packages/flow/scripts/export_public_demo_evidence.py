@@ -189,6 +189,10 @@ def _tree_digest(root: Path) -> str:
     return _sha256_bytes(_canonical_json(rows))
 
 
+def _is_pack_control(root: Path, path: Path) -> bool:
+    return path.relative_to(root).as_posix() in {"manifest.json", "manifest.sha256"}
+
+
 def _http_json(url: str, *, method: str = "GET", body: Any = None) -> Any:
     data = _canonical_json(body) if body is not None else None
     headers = {"Content-Type": "application/json"} if data is not None else {}
@@ -894,7 +898,7 @@ def _assemble_manifest(
         (
             path
             for path in root.rglob("*")
-            if path.is_file() and path.name not in {"manifest.json", "manifest.sha256"}
+            if path.is_file() and not _is_pack_control(root, path)
         ),
         key=lambda path: path.relative_to(root).as_posix(),
     )
@@ -1285,7 +1289,7 @@ def validate_pack(pack_dir: Path | str) -> dict[str, Any]:
     actual_payloads = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and path.name not in {"manifest.json", "manifest.sha256"}
+        if path.is_file() and not _is_pack_control(root, path)
     }
     for path in actual_payloads:
         _reject_run_authority(path)
