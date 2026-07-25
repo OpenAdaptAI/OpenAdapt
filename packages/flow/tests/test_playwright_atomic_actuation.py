@@ -51,6 +51,66 @@ def _visual_case(tmp_path, page):
     return vision, bundle, step
 
 
+def _focused_keyboard_case(tmp_path, page, action):
+    box = page.locator("#target").bounding_box()
+    assert box is not None
+    point = (
+        int(round(box["x"] + box["width"] / 2)),
+        int(round(box["y"] + box["height"] / 2)),
+    )
+    region = (
+        int(round(box["x"])),
+        int(round(box["y"])),
+        int(round(box["width"])),
+        int(round(box["height"])),
+    )
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=point, region=region, confidence=0.99)
+        for _ in range(3 if action is ActionKind.TYPE else 2)
+    ]
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    (bundle / "templates" / "field.png").write_bytes(make_png((20, 10)))
+    step = Step(
+        id="keyboard-write",
+        intent="submit or edit the patient record",
+        action=action,
+        key="Enter" if action is ActionKind.KEY else None,
+        text="North" if action is ActionKind.TYPE else None,
+        risk="irreversible",
+        anchor=Anchor(
+            template="templates/field.png",
+            structural=StructuralLocator(
+                selector="#target",
+                role="textbox",
+                name="Patient value",
+            ),
+            region=region,
+            click_point=point,
+            ocr_text="Patient value",
+            structured_identity="MRN-1Jane Sample",
+        ),
+    )
+    return vision, bundle, step
+
+
+_FOCUSED_ROWS_HTML = """<!doctype html><html><head>
+<style>input:focus { outline: none; }</style></head><body>
+<table><tbody>
+  <tr><td>MRN-1</td><td>Jane Sample</td><td>
+    <input id="target" aria-label="Patient value"
+      onkeydown="if(event.key === 'Enter') window.actions.push('correct')">
+  </td></tr>
+  <tr><td>MRN-2</td><td>Taylor Duplicate</td><td>
+    <input id="wrong" aria-label="Patient value"
+      onkeydown="if(event.key === 'Enter') window.actions.push('wrong')">
+  </td></tr>
+</tbody></table>
+<script>window.actions = [];</script>
+</body></html>"""
+
+
 @pytest.mark.parametrize("mutation", ["target", "row"])
 def test_playwright_refuses_mutation_after_fresh_identity(
     mutation,
@@ -224,3 +284,86 @@ def test_playwright_visual_fallback_uses_identity_bound_dom_click(tmp_path) -> N
     assert report.results[0].actuation == "guarded_coordinate"
     assert report.results[0].delivery_receipt is not None
     assert clicked == 1
+
+
+@pytest.mark.parametrize("action", [ActionKind.KEY, ActionKind.TYPE])
+def test_guarded_keyboard_refuses_post_identity_focus_theft(
+    tmp_path,
+    action,
+) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    class FocusStealingBackend(PlaywrightBackend):
+        identity_reads = 0
+
+        def structured_text_at(self, x, y):
+            observed = super().structured_text_at(x, y)
+            self.identity_reads += 1
+            final_read = 3 if action is ActionKind.TYPE else 2
+            if self.identity_reads == final_read:
+                self.page.locator("#wrong").focus()
+            return observed
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(_FOCUSED_ROWS_HTML)
+        page.locator("#target").focus()
+        backend = FocusStealingBackend(page)
+        vision, bundle, step = _focused_keyboard_case(tmp_path, page, action)
+        report = Replayer(backend, vision=vision, use_structural=True).run(
+            Workflow(name="guarded-keyboard-race", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        actions = page.evaluate("window.actions")
+        values = page.locator("input").evaluate_all(
+            "(inputs) => inputs.map((input) => input.value)"
+        )
+        browser.close()
+
+    assert report.success is False
+    assert report.results[0].safety_halt is True
+    assert actions == []
+    assert values == ["", ""]
+
+
+@pytest.mark.parametrize("action", [ActionKind.KEY, ActionKind.TYPE])
+def test_guarded_keyboard_stable_delivery_once(tmp_path, action) -> None:
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 800, "height": 400},
+            device_scale_factor=1,
+        )
+        page.set_content(_FOCUSED_ROWS_HTML)
+        page.locator("#target").focus()
+        backend = PlaywrightBackend(page)
+        vision, bundle, step = _focused_keyboard_case(tmp_path, page, action)
+        report = Replayer(backend, vision=vision, use_structural=True).run(
+            Workflow(name="guarded-keyboard-stable", steps=[step]),
+            bundle_dir=bundle,
+            run_dir=tmp_path / "run",
+        )
+        actions = page.evaluate("window.actions")
+        values = page.locator("input").evaluate_all(
+            "(inputs) => inputs.map((input) => input.value)"
+        )
+        browser.close()
+
+    assert report.success is True
+    assert report.results[0].actuation == "guarded_keyboard"
+    assert report.results[0].delivery_receipt is not None
+    if action is ActionKind.KEY:
+        assert actions == ["correct"]
+        assert values == ["", ""]
+    else:
+        assert actions == []
+        assert values == ["North", ""]

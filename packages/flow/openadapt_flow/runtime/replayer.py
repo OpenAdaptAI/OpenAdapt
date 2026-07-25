@@ -48,6 +48,7 @@ from urllib.parse import urlsplit
 from openadapt_flow.backend import (
     Backend,
     GuardedCoordinateActionBackend,
+    GuardedKeyboardActionBackend,
     RemoteActuationBackend,
     StructuralResolutionRefused,
 )
@@ -2683,6 +2684,7 @@ class Replayer:
                     workflow,
                     bundle_dir,
                     result,
+                    arm_keyboard=step.action is ActionKind.KEY,
                 )
                 result.resolution = resolution
                 if before_png is not last_frame:
@@ -2706,6 +2708,7 @@ class Replayer:
 
             if error is not None:
                 self._cancel_guarded_coordinate()
+                self._cancel_guarded_keyboard()
 
             if error is None:
                 # Structural postconditions compare against the final observed
@@ -2826,6 +2829,7 @@ class Replayer:
                     result.error = error
         except OcrResolutionRefused as exc:
             self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             # Repeated target/landmark OCR is a deterministic ambiguity, not a
             # transient absence. Surface it as a typed operator-visible safety
             # halt immediately; never retry into weaker evidence or actuation.
@@ -2838,6 +2842,7 @@ class Replayer:
             )
         except StructuralResolutionRefused as exc:
             self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             # Ambiguity, disappearance, or a stale resolve->act fingerprint is
             # an intentional fail-closed refusal. Record it as a safety halt,
             # never as an incidental backend crash and never retry via pixels.
@@ -2850,6 +2855,7 @@ class Replayer:
             )
         except Exception as exc:  # defensive: report, don't crash the run
             self._cancel_guarded_coordinate()
+            self._cancel_guarded_keyboard()
             result.ok = False
             result.failure_category = "runtime_failure"
             result.error = f"Step '{step.id}' raised {type(exc).__name__}: {exc}"
@@ -3595,11 +3601,28 @@ class Replayer:
             and self._step_has_identity_contract(step, workflow)
         )
 
+    def _requires_atomic_identity_keyboard(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        """Whether keyboard delivery must stay bound to the verified focus."""
+
+        return (
+            step.action in (ActionKind.KEY, ActionKind.TYPE)
+            and self._step_is_consequential(step)
+            and self._step_has_identity_contract(step, workflow)
+        )
+
     def _cancel_guarded_coordinate(self) -> None:
         """Clean an unconsumed local coordinate lease, if one was armed."""
 
         if isinstance(self.backend, GuardedCoordinateActionBackend):
             self.backend.cancel_guarded_coordinate()
+
+    def _cancel_guarded_keyboard(self) -> None:
+        """Clean an unconsumed local focused-element lease, if one was armed."""
+
+        if isinstance(self.backend, GuardedKeyboardActionBackend):
+            self.backend.cancel_guarded_keyboard()
 
     def _revalidate_consequential_actuation(
         self,
@@ -3611,6 +3634,8 @@ class Replayer:
         workflow: Workflow,
         bundle_dir: Path,
         result: StepResult,
+        *,
+        arm_keyboard: bool = False,
     ) -> tuple[
         Optional[Resolution],
         Optional[Region],
@@ -3627,11 +3652,23 @@ class Replayer:
         if not self._step_needs_consequential_revalidation(step, workflow):
             return resolution, matched_region, before_png, None
 
+        guarded_keyboard_backend = (
+            arm_keyboard
+            and self._requires_atomic_identity_keyboard(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
         try:
             fresh_png = (
                 self.backend.acquire_actuation_frame()
                 if isinstance(self.backend, RemoteActuationBackend)
-                else self.backend.screenshot()
+                else (
+                    cast(
+                        GuardedKeyboardActionBackend, self.backend
+                    ).guarded_keyboard_frame()
+                    if guarded_keyboard_backend
+                    else self.backend.screenshot()
+                )
             )
         except Exception as exc:  # noqa: BLE001 - backend boundary must halt
             if self.governed_authorization is not None:
@@ -3676,6 +3713,11 @@ class Replayer:
                 cast(
                     GuardedCoordinateActionBackend, self.backend
                 ).arm_guarded_coordinate(*fresh_resolution.point)
+            guarded_keyboard = guarded_keyboard_backend
+            if guarded_keyboard:
+                cast(GuardedKeyboardActionBackend, self.backend).arm_guarded_keyboard(
+                    *fresh_resolution.point
+                )
             try:
                 error = self._identity_gate_error(
                     step,
@@ -3689,9 +3731,13 @@ class Replayer:
             except Exception:
                 if guarded_coordinate:
                     self._cancel_guarded_coordinate()
+                if guarded_keyboard:
+                    self._cancel_guarded_keyboard()
                 raise
             if error is not None and guarded_coordinate:
                 self._cancel_guarded_coordinate()
+            if error is not None and guarded_keyboard:
+                self._cancel_guarded_keyboard()
         return fresh_resolution, fresh_region, fresh_png, error
 
     def _resolve_step(
@@ -3952,6 +3998,7 @@ class Replayer:
                         workflow,
                         bundle_dir,
                         result,
+                        arm_keyboard=True,
                     )
                     if remote_error is not None:
                         return remote_error
@@ -3968,7 +4015,21 @@ class Replayer:
             baseline_field_value = self._text_value_at(field_point)
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
-            self.backend.type_text(text)
+            guarded_type = (
+                self._requires_atomic_identity_keyboard(step, workflow)
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedKeyboardActionBackend)
+            )
+            if guarded_type:
+                result.delivery_receipt = cast(
+                    GuardedKeyboardActionBackend, self.backend
+                ).type_text_guarded(
+                    text,
+                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                )
+                result.actuation = "guarded_keyboard"
+            else:
+                self.backend.type_text(text)
             if not text:
                 return None  # nothing typed, nothing to verify
             return self._verify_typed_input(
@@ -3980,12 +4041,27 @@ class Replayer:
                 field_region=field_region,
                 baseline_field_value=baseline_field_value,
                 allow_masked=step.secret,
+                allow_retry=not guarded_type,
             )
 
         if step.action is ActionKind.KEY:
             if not step.key:
                 return f"Step '{step.id}' ({step.intent}) is a KEY step with no key"
-            self.backend.press(step.key)
+            guarded_key = (
+                self._requires_atomic_identity_keyboard(step, workflow)
+                and not isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, GuardedKeyboardActionBackend)
+            )
+            if guarded_key:
+                result.delivery_receipt = cast(
+                    GuardedKeyboardActionBackend, self.backend
+                ).press_guarded(
+                    step.key,
+                    expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+                )
+                result.actuation = "guarded_keyboard"
+            else:
+                self.backend.press(step.key)
             return None
 
         if step.action is ActionKind.WAIT:
@@ -5597,6 +5673,7 @@ class Replayer:
         field_region: Optional[Region] = None,
         baseline_field_value: Optional[str] = None,
         allow_masked: bool = False,
+        allow_retry: bool = True,
     ) -> Optional[str]:
         """Verify a TYPE action landed; one guarded refocus-and-retype retry.
 
@@ -5632,6 +5709,13 @@ class Replayer:
                 "value is not readable there (something else rendered over "
                 "or instead of the input) — retyping is unsafe in this "
                 "state; run aborted"
+            )
+        if not allow_retry:
+            result.input_verified = False
+            return (
+                f"Typed input could not be verified for step '{step.id}' "
+                f"({step.intent}): the identity-bound browser field showed no "
+                "confirmed change; refusing an unleased refocus/retype retry"
             )
         result.input_retried = True
         if field_point is not None:

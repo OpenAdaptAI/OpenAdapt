@@ -276,6 +276,47 @@ class GuardedCoordinateActionBackend(Protocol):
 
 
 @runtime_checkable
+class GuardedKeyboardActionBackend(Protocol):
+    """Optional browser-local focus/record lease for consequential keyboard I/O.
+
+    The backend arms the exact focused element and its identity-bearing record
+    before the runtime's final identity observation. Focus changes or any
+    target/record mutation invalidate the one-shot lease before a key or text
+    input can be delivered.
+    """
+
+    def guarded_keyboard_frame(self) -> bytes:
+        """Capture the exact frame without mutating focused-element caret state."""
+        ...
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Bind the focused element at the freshly resolved identity point."""
+        ...
+
+    def cancel_guarded_keyboard(self) -> None:
+        """Cancel and clean any unconsumed guarded-keyboard binding."""
+        ...
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt":
+        """Deliver one key/chord to the pre-identity focused-element lease."""
+        ...
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> "ActionDeliveryReceipt":
+        """Type into the pre-identity focused-element lease."""
+        ...
+
+
+@runtime_checkable
 class TextValueBackend(Protocol):
     """Optional exact readback for the editable control under a point.
 

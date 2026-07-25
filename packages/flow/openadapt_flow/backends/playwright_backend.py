@@ -157,9 +157,13 @@ _INSTALL_GUARD_BODY_JS = r"""
         el: el,
         descriptor: observed.descriptor,
         observer: null,
+        focusListener: null,
     };
     const invalidate = () => {
         if (entry.observer) entry.observer.disconnect();
+        if (entry.focusListener) {
+            el.removeEventListener('blur', entry.focusListener, true);
+        }
         for (const candidate of document.querySelectorAll(
                 '[' + args.tokenAttribute + ']')) {
             if (candidate.getAttribute(args.tokenAttribute) === args.token) {
@@ -179,6 +183,14 @@ _INSTALL_GUARD_BODY_JS = r"""
         characterData: true,
         subtree: true,
     });
+    if (args.requireFocused) {
+        if (document.activeElement !== el) {
+            invalidate();
+            return null;
+        }
+        entry.focusListener = invalidate;
+        el.addEventListener('blur', entry.focusListener, true);
+    }
     tokenMap.set(args.token, entry);
     return {
         point: [ax, ay],
@@ -226,6 +238,19 @@ _BIND_COORDINATE_TARGET_JS = (
     + "}"
 )
 
+_BIND_FOCUSED_TARGET_JS = (
+    r"""(args) => {
+    const el = document.activeElement;
+    if (!el || el === document.body || el === document.documentElement) {
+        return null;
+    }
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + ";"
+    + _INSTALL_GUARD_BODY_JS
+    + "}"
+)
+
 _STRUCTURED_TEXT_AT_JS = (
     r"""([px, py]) => {
     const el = document.elementFromPoint(px, py);
@@ -246,6 +271,7 @@ _GUARD_CURRENT_JS = (
     return Boolean(
         entry && entry.el === el &&
         el.getAttribute(args.tokenAttribute) === args.token &&
+        (!args.requireFocused || document.activeElement === el) &&
         entry.descriptor === describe(el).descriptor
     );
 }"""
@@ -255,6 +281,9 @@ _CLEAN_GUARD_JS = r"""(args) => {
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
     if (entry && entry.observer) entry.observer.disconnect();
+    if (entry && entry.focusListener && entry.el) {
+        entry.el.removeEventListener('blur', entry.focusListener, true);
+    }
     for (const candidate of document.querySelectorAll(
             '[' + args.tokenAttribute + ']')) {
         if (candidate.getAttribute(args.tokenAttribute) === args.token) {
@@ -313,6 +342,7 @@ class PlaywrightBackend:
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], str, str, tuple[float, float]]
         ] = None
+        self._guarded_keyboard: Optional[tuple[str, str]] = None
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -595,10 +625,24 @@ class PlaywrightBackend:
             # Navigation destroys the page-local store and is cleanup itself.
             pass
 
+    def _cancel_structural_guards(self) -> None:
+        """Clean element-resolution guards no keyboard action will consume."""
+
+        tokens = list(self._structural_tokens.values())
+        self._structural_tokens.clear()
+        for token in tokens:
+            self._cleanup_guard(token)
+
     def _token_locator(self, token: str) -> Any:
         return self.page.locator(f"[{self._token_attribute(token)}]")
 
-    def _guard_is_current(self, locator: Any, token: str) -> bool:
+    def _guard_is_current(
+        self,
+        locator: Any,
+        token: str,
+        *,
+        require_focused: bool = False,
+    ) -> bool:
         try:
             return bool(
                 locator.evaluate(
@@ -607,6 +651,7 @@ class PlaywrightBackend:
                         "storeKey": self._structural_store_key,
                         "tokenAttribute": self._token_attribute(token),
                         "token": token,
+                        "requireFocused": require_focused,
                     },
                 )
             )
@@ -790,6 +835,134 @@ class PlaywrightBackend:
             native=False,
             target_fingerprint=fingerprint,
             delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def arm_guarded_keyboard(self, x: int, y: int) -> None:
+        """Lease the exact focused element/record before identity readback."""
+
+        # KEY delivery and the post-focus TYPE phase do not consume a structural
+        # click handle. Remove those now-unused observers before adding the
+        # keyboard token so the guards cannot invalidate one another merely by
+        # cleaning their private DOM attributes.
+        self._cancel_structural_guards()
+        self.cancel_guarded_keyboard()
+        token = uuid.uuid4().hex
+        try:
+            observed = self.page.evaluate(
+                _BIND_FOCUSED_TARGET_JS,
+                {
+                    "storeKey": self._structural_store_key,
+                    "tokenAttribute": self._token_attribute(token),
+                    "token": token,
+                    "x": int(x),
+                    "y": int(y),
+                    "requireRowIdentity": True,
+                    "requireFocused": True,
+                },
+            )
+            if not isinstance(observed, dict):
+                raise StructuralResolutionRefused(
+                    "consequential keyboard action has no focused "
+                    "identity-bearing DOM target at the resolved point"
+                )
+            fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+            self._guarded_keyboard = (fingerprint, token)
+        except Exception:
+            self._cleanup_guard(token)
+            raise
+
+    def cancel_guarded_keyboard(self) -> None:
+        """Cancel and clean the current one-shot focused-element lease."""
+
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is not None:
+            self._cleanup_guard(pending[1])
+
+    def guarded_keyboard_frame(self) -> bytes:
+        """Capture without Playwright's temporary caret-hiding DOM mutation."""
+
+        return self.page.screenshot(
+            type="png",
+            full_page=False,
+            caret="initial",
+        )
+
+    def _act_guarded_keyboard(
+        self,
+        *,
+        expected_frame_sha256: str,
+        operation: str,
+        deliver: Callable[[Any], None],
+    ) -> ActionDeliveryReceipt:
+        pending = self._guarded_keyboard
+        self._guarded_keyboard = None
+        if pending is None:
+            raise StructuralResolutionRefused(
+                "keyboard actuation has no pre-identity focused-element lease"
+            )
+        fingerprint, token = pending
+        try:
+            if (
+                hashlib.sha256(self.guarded_keyboard_frame()).hexdigest()
+                != expected_frame_sha256
+            ):
+                raise StructuralResolutionRefused(
+                    "keyboard target frame changed after identity verification"
+                )
+            token_locator = self._token_locator(token)
+            if token_locator.count() != 1 or not self._guard_is_current(
+                token_locator,
+                token,
+                require_focused=True,
+            ):
+                raise StructuralResolutionRefused(
+                    "focused keyboard target or record changed before delivery"
+                )
+            deliver(token_locator)
+        except StructuralResolutionRefused:
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "identity-bound keyboard target became unactionable before delivery"
+            ) from exc
+        finally:
+            self._cleanup_guard(token)
+        return ActionDeliveryReceipt(
+            receipt_id=f"playwright-keyboard-{uuid.uuid4().hex}",
+            operation=operation,
+            native=False,
+            target_fingerprint=fingerprint,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def press_guarded(
+        self,
+        key: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Press a key/chord through the pre-identity focused-element lease."""
+
+        chord = _normalize_chord(key)
+        return self._act_guarded_keyboard(
+            expected_frame_sha256=expected_frame_sha256,
+            operation="guarded_dom_key",
+            deliver=lambda locator: locator.press(chord, timeout=1000),
+        )
+
+    def type_text_guarded(
+        self,
+        text: str,
+        *,
+        expected_frame_sha256: str,
+    ) -> ActionDeliveryReceipt:
+        """Type through the pre-identity focused-element lease."""
+
+        return self._act_guarded_keyboard(
+            expected_frame_sha256=expected_frame_sha256,
+            operation="guarded_dom_type",
+            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
 
     def screenshot(self) -> bytes:
