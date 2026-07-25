@@ -186,3 +186,9 @@ def test_v2_json_schemas_are_deterministic_packaged_contracts() -> None:
         ControlOverlayTimelineV2.model_json_schema()["x-openadapt-target-validity"]
         == "exact_decoded_media_frame_only"
     )
+    assert (
+        ControlOverlayFrameV2.model_json_schema()["$defs"][
+            "ControlOverlayTargetTrackingV2"
+        ]["x-openadapt-source-scope"]
+        == "browser_top_level_css_viewport"
+    )

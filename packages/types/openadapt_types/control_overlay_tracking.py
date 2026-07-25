@@ -1,7 +1,8 @@
 """Exact, privacy-safe target tracking for control-overlay presentation.
 
 Version 2 is additive: the version 1 control-state and timeline contracts stay
-unchanged.  This module carries only source geometry and viewport metadata.
+unchanged.  It carries browser top-level CSS-viewport geometry and metadata;
+native and RDP device-pixel coordinate spaces are intentionally out of scope.
 It deliberately excludes selectors, accessibility content, typed values, URLs,
 screenshots, identities, report text, and other customer data.
 
@@ -52,6 +53,7 @@ _TARGET_TRACKING_JSON_SCHEMA_EXTRA = {
     "x-openadapt-missing-binding-behavior": "omit_target",
     "x-openadapt-runtime-resolution-replay": False,
     "x-openadapt-renderer-mapping": "actual_content_box",
+    "x-openadapt-source-scope": "browser_top_level_css_viewport",
 }
 
 _TARGET_TIMELINE_JSON_SCHEMA_EXTRA = {
@@ -101,7 +103,11 @@ class ControlOverlayNormalizedRectV2(_StrictContract):
 
 
 class ControlOverlaySourceViewportV2(_StrictContract):
-    """Source viewport used when the runtime resolved the target."""
+    """Browser top-level CSS viewport used to resolve the target.
+
+    Native and RDP device-pixel dimensions must not be placed in these fields.
+    Those coordinate spaces require a separate future contract.
+    """
 
     width_css_px: StrictInt = Field(gt=0, le=32768)
     height_css_px: StrictInt = Field(gt=0, le=32768)
@@ -142,12 +148,16 @@ ControlOverlayTargetBindingV2 = Annotated[
 
 
 class ControlOverlayTargetTrackingV2(_StrictContract):
-    """Exact geometry for presentation, never target-resolution evidence."""
+    """Exact browser CSS-viewport geometry, never resolution evidence."""
 
     model_config = ConfigDict(json_schema_extra=_TARGET_TRACKING_JSON_SCHEMA_EXTRA)
 
-    coordinate_space: Literal["top_level_viewport_normalized"] = (
-        "top_level_viewport_normalized"
+    coordinate_space: Literal["top_level_viewport_normalized"] = Field(
+        default="top_level_viewport_normalized",
+        description=(
+            "Normalized browser top-level CSS viewport; not native or RDP "
+            "device-pixel coordinates"
+        ),
     )
     rect: ControlOverlayNormalizedRectV2
     source_viewport: ControlOverlaySourceViewportV2

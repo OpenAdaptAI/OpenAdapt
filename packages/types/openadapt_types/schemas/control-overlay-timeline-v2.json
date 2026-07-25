@@ -262,7 +262,7 @@
     },
     "ControlOverlaySourceViewportV2": {
       "additionalProperties": false,
-      "description": "Source viewport used when the runtime resolved the target.",
+      "description": "Browser top-level CSS viewport used to resolve the target.\n\nNative and RDP device-pixel dimensions must not be placed in these fields.\nThose coordinate spaces require a separate future contract.",
       "properties": {
         "device_pixel_ratio": {
           "exclusiveMinimum": 0,
@@ -344,7 +344,7 @@
     },
     "ControlOverlayTargetTrackingV2": {
       "additionalProperties": false,
-      "description": "Exact geometry for presentation, never target-resolution evidence.",
+      "description": "Exact browser CSS-viewport geometry, never resolution evidence.",
       "properties": {
         "action_kind": {
           "anyOf": [
@@ -378,6 +378,7 @@
         "coordinate_space": {
           "const": "top_level_viewport_normalized",
           "default": "top_level_viewport_normalized",
+          "description": "Normalized browser top-level CSS viewport; not native or RDP device-pixel coordinates",
           "title": "Coordinate Space",
           "type": "string"
         },
@@ -398,7 +399,8 @@
       "x-openadapt-missing-binding-behavior": "omit_target",
       "x-openadapt-render-only-on-exact-binding": true,
       "x-openadapt-renderer-mapping": "actual_content_box",
-      "x-openadapt-runtime-resolution-replay": false
+      "x-openadapt-runtime-resolution-replay": false,
+      "x-openadapt-source-scope": "browser_top_level_css_viewport"
     },
     "ControlOverlayTimelineEventV2": {
       "additionalProperties": false,

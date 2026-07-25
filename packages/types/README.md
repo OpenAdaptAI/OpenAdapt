@@ -165,9 +165,11 @@ viewport and DPR, and an exact observation or decoded-media-frame binding
 without changing V1.
 
 Overlay schemas reject unknown fields and contain only closed presentation
-labels and canonical statuses. Screenshots, action targets, typed values,
-identities, URLs, logs, report bodies, and user-authored workflow names remain
-outside this public presentation contract.
+labels and canonical statuses. Screenshot payloads, action-target selectors,
+accessible names, text and values, typed input, identities, URLs, logs, report
+bodies, and user-authored workflow names remain outside this public contract.
+V2 may carry only normalized target geometry from a browser top-level CSS
+viewport. Native and RDP device-pixel geometry is not part of this V2 schema.
 
 Target geometry never carries locators, accessible names, values, URLs, or
 screenshots. A private live observation uses a run/export-scoped HMAC reference
