@@ -89,14 +89,16 @@ export function WatchRun({
   );
   const [deploymentConfig, setDeploymentConfig] = useState("");
   const stepsRef = useRef<RunStep[]>([]);
+  const reportGenerationRef = useRef(0);
   const fieldPrefix = useId();
 
-  async function load() {
+  async function load(generation: number) {
     const next = await engineTry<RunReport | null>(
       CMD.GET_RUN_REPORT,
       { workflow_id: workflowId },
       null,
     );
+    if (generation !== reportGenerationRef.current) return;
     if (next) {
       setReport(next);
       stepsRef.current = next.steps ?? [];
@@ -105,7 +107,8 @@ export function WatchRun({
   }
 
   useEffect(() => {
-    void load();
+    const generation = ++reportGenerationRef.current;
+    void load(generation);
     const unsubs = [
       onEngineEvent(EVT.LOG_LINE, (step: RunStep | { line: string }) => {
         if (!("index" in step)) return;
@@ -127,15 +130,32 @@ export function WatchRun({
         if (status.workflow_id === workflowId) setRuntime(status);
       }),
     ];
-    return () => unsubs.forEach((promise) => promise.then((u) => u()).catch(() => {}));
+    return () => {
+      reportGenerationRef.current += 1;
+      unsubs.forEach((promise) => promise.then((u) => u()).catch(() => {}));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId]);
 
   async function execute(mode: ExecuteMode) {
+    reportGenerationRef.current += 1;
     setRunning(true);
     setRunIssue(null);
     stepsRef.current = [];
-    setReport((current) => (current ? { ...current, steps: [] } : current));
+    setReport((current) =>
+      current
+        ? {
+            ...current,
+            ok: false,
+            outcome: "unknown",
+            error: undefined,
+            steps: [],
+            halt: null,
+            metrics: null,
+            outcome_details: null,
+          }
+        : current,
+    );
     try {
       const response = await engineInvoke<ExecutionResponse>(
         mode === "run" ? CMD.RUN_WORKFLOW : CMD.REPLAY_WORKFLOW,

@@ -134,6 +134,11 @@ def _valid_precise_envelope(report: dict, envelope: dict, outcome: object) -> bo
         or envelope.get("external_network_calls") not in {"none", "observed", "unknown"}
     ):
         return False
+    if "external_network_calls" in report and (
+        report.get("external_network_calls") not in {"none", "observed", "unknown"}
+        or report.get("external_network_calls") != envelope.get("external_network_calls")
+    ):
+        return False
     if outcome in {"VERIFIED", "COMPLETED_UNVERIFIED"} and completed is not True:
         return False
     if outcome == "VERIFIED":
