@@ -137,6 +137,25 @@ def test_resolution_ladder_top_rung() -> None:
     assert spec.nodes[1].resolution.top_rung == "template"
 
 
+def test_coordinate_intent_is_rendered_as_evidence_resolved_target() -> None:
+    workflow = Workflow(
+        name="recorded-target",
+        steps=[
+            Step(
+                id="s0",
+                intent="click at (214, 195)",
+                action=ActionKind.CLICK,
+                anchor=_anchor(ocr_text=None),
+            )
+        ],
+    )
+    spec = build_program_graph(workflow)
+    assert spec.nodes[0].title == "click recorded visual target"
+    mermaid = render_mermaid(spec)
+    assert "(214, 195)" not in mermaid
+    assert "visual template + 1 OCR landmarks" in mermaid
+
+
 def test_identity_gate_projection() -> None:
     spec = build_program_graph(_mixed_workflow())
     armed = spec.nodes[0].identity

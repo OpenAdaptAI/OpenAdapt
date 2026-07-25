@@ -11,6 +11,7 @@ summaries. It never fabricates structure that the compiler did not produce.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Callable, Optional
 
 from openadapt_flow.visualize.spec import (
@@ -49,6 +50,38 @@ _RUNG_LABELS: list[tuple[str, str]] = [
     ("ocr", "OCR text match"),
     ("landmarks", "Nearby-landmark geometry"),
 ]
+
+_COORDINATE_CLICK_RE = re.compile(
+    r"^(?:double-)?click at \(\s*-?\d+\s*,\s*-?\d+\s*\)$",
+    re.IGNORECASE,
+)
+
+
+def _action_title(step: "Step") -> str:
+    """Describe the compiled action without presenting recorded coordinates as
+    its durable target identity.
+
+    Coordinates remain part of the anchor's diagnostic evidence, but replay
+    resolves the target from the retained structural/visual ladder. A
+    coordinate-shaped recorder intent is therefore a misleading primary label
+    in a program graph: it describes where the demonstration happened, not how
+    the compiled program will find the target again.
+    """
+    intent = step.intent.strip()
+    if not _COORDINATE_CLICK_RE.fullmatch(intent) or step.anchor is None:
+        return step.intent
+
+    anchor = step.anchor
+    structural = anchor.structural
+    if structural is not None:
+        name = (structural.name or "").strip()
+        role = (structural.role or "target").strip().replace("_", " ")
+        if name:
+            return f"{step.action.value.replace('_', ' ')} {role} {name!r}"
+        return f"{step.action.value.replace('_', ' ')} accessibility target"
+    if anchor.ocr_text:
+        return f"{step.action.value.replace('_', ' ')} {anchor.ocr_text!r}"
+    return f"{step.action.value.replace('_', ' ')} recorded visual target"
 
 
 def _predicate_summary(pred: Optional["Predicate"]) -> Optional[str]:
@@ -221,7 +254,7 @@ def _action_node(step: "Step", index: int, node_id: str, kind: NodeKind) -> Grap
         id=node_id,
         index=index,
         kind=kind,
-        title=step.intent,
+        title=_action_title(step),
         action=step.action.value,
         risk=step.risk,
         param=step.param,
