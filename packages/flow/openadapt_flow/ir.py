@@ -219,6 +219,20 @@ class IdentityTemplate(BaseModel):
             "hashing; replay substitutes the run's value before exact compare."
         ),
     )
+    signal_hashes: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Salted hashes of strict exact/explicitly-normalized full-source "
+            "identity evidence. Keys are produced by identity_signals."
+        ),
+    )
+    context_params: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Workflow parameters replaced by fixed sentinels before the "
+            "captured-context signal hashes were computed."
+        ),
+    )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
     rests_on_confusable_identifier: bool = False
 
@@ -235,6 +249,10 @@ class IdentityTemplate(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.structured_params:
             data.pop("structured_params", None)
+        if not self.signal_hashes:
+            data.pop("signal_hashes", None)
+        if not self.context_params:
+            data.pop("context_params", None)
         return data
 
 
@@ -1633,6 +1651,20 @@ class ActionDeliveryReceipt(BaseModel):
     outcome_verified: Literal[False] = False
 
 
+class IdentitySignalEvidence(BaseModel):
+    """PHI-free audit evidence for one qualified identity signal."""
+
+    name: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
+    source: Literal["structured", "identifier_region", "captured_context"]
+    verdict: Literal["verified", "conflict", "unverifiable"]
+    evidence_class: Literal[
+        "application_structured_text",
+        "recorded_and_live_region",
+        "captured_context_ocr",
+    ]
+    match: Literal["exact", "normalized"]
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -1648,7 +1680,9 @@ class IdentityCheck(BaseModel):
             found no usable text in the live band; identity could not be
             judged). ``abstain`` and ``unreadable`` both mean "could not
             certify": the step proceeds flagged, and irreversible steps refuse.
-        mode: ``structured`` compares the recorded DOM/a11y identity text
+        mode: ``signal_quorum`` evaluates independently named, qualified
+            retained sources and records only bounded, non-value evidence;
+            ``structured`` compares the recorded DOM/a11y identity text
             against the live structured text at the resolved point (the
             highest-fidelity tier -- no OCR ambiguity); ``pixel`` compares the
             recorded vs live identifier-crop PIXELS (catches the O/0 glyph
@@ -1667,11 +1701,21 @@ class IdentityCheck(BaseModel):
     """
 
     status: Literal["verified", "mismatch", "abstain", "unreadable"]
-    mode: Literal["context", "param", "structured", "pixel", "vlm"] = "context"
+    mode: Literal[
+        "context",
+        "param",
+        "structured",
+        "pixel",
+        "vlm",
+        "signal_quorum",
+    ] = "context"
     coverage: float = 0.0
     expected: str = ""
     observed: str = ""
     param: Optional[str] = None
+    signal_evidence: list[IdentitySignalEvidence] = Field(default_factory=list)
+    quorum_required: Optional[int] = Field(default=None, ge=1)
+    quorum_verified: Optional[int] = Field(default=None, ge=0)
 
 
 class HealEvent(BaseModel):

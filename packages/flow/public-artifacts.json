@@ -80,7 +80,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "6915653b301956ec2a3c9222db9ea4237628990a10275af68443fc0f07c90acc"
+      "sha256": "7e607c7e6117b6d40777ba0c365d2615f94d0a254b90e61394989a902e643edc"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -88,7 +88,7 @@
     },
     {
       "path": ".github/workflows/docker-rdp-vision-ladder.yml",
-      "sha256": "bf53a9a348f6c1b539e33826530cd78287047799583dce180622a0a56ee303fb"
+      "sha256": "2e3cb3bf866e710312e3e4470a76fbc781d3387ad7b41533d1d55f43c143c664"
     },
     {
       "path": ".github/workflows/paper.yml",

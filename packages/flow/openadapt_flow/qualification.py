@@ -31,6 +31,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.identity_signals import canonical_normalizers, signal_hash_key
 from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -42,6 +43,7 @@ QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
     "openadapt.qualification-project/v1"
 )
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SIGNAL_FIELD_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 
 
 def _now() -> str:
@@ -90,8 +92,12 @@ class IdentitySignalPolicy(BaseModel):
     @classmethod
     def _clean_field(cls, value: str) -> str:
         value = value.strip()
-        if not value:
-            raise ValueError("identity field cannot be blank")
+        if not _SIGNAL_FIELD_RE.fullmatch(value):
+            raise ValueError(
+                "identity field must be a PHI-free logical key beginning with "
+                "an ASCII letter and containing only letters, digits, '.', "
+                "'_', or '-'"
+            )
         return value
 
     @model_validator(mode="after")
@@ -102,6 +108,7 @@ class IdentitySignalPolicy(BaseModel):
             raise ValueError(
                 "normalized identity matching requires at least one explicit normalizer"
             )
+        canonical_normalizers(self.normalizers)
         if self.source is IdentityEvidenceSource.IDENTIFIER_REGION:
             if self.region is None:
                 raise ValueError(
@@ -147,7 +154,7 @@ class IdentityPolicy(BaseModel):
         if self.quorum > len(self.signals):
             raise ValueError("identity quorum cannot exceed the number of signals")
         fields = [signal.field for signal in self.signals]
-        if len(fields) != len(set(fields)):
+        if len(fields) != len({field.casefold() for field in fields}):
             raise ValueError("identity signal field names must be unique")
         return self
 
@@ -467,6 +474,7 @@ class QualificationRefusalCode(str, Enum):
     STEP_IDENTITY_UNARMED = "step_identity_unarmed"
     IDENTITY_POLICY_MISSING = "identity_policy_missing"
     IDENTITY_POLICY_UNENFORCED = "identity_policy_unenforced"
+    IDENTITY_SIGNALS_NOT_INDEPENDENT = "identity_signals_not_independent"
     IDENTITY_SIGNAL_UNAVAILABLE = "identity_signal_unavailable"
     EFFECT_CONTRACT_MISSING = "effect_contract_missing"
     EFFECT_POLICY_MISSING = "effect_policy_missing"
@@ -642,6 +650,64 @@ def available_identity_sources(step: "Step") -> set[IdentityEvidenceSource]:
     return out
 
 
+def identity_policy_independence_errors(policy: IdentityPolicy) -> list[str]:
+    """Return fail-closed reasons when quorum votes reuse one observation.
+
+    Each currently retained source is one observation channel per action:
+    application structured text, one identifier crop/region, or one captured
+    context band. Giving the same channel two field labels must not create two
+    quorum votes.
+    """
+
+    if policy.enforcement is not IdentityEnforcement.SIGNAL_QUORUM:
+        return []
+    seen: set[IdentityEvidenceSource] = set()
+    errors: list[str] = []
+    for signal in policy.signals:
+        if signal.source in seen:
+            errors.append(
+                f"source {signal.source.value!r} is reused by multiple signals"
+            )
+        seen.add(signal.source)
+    return errors
+
+
+def identity_signal_runtime_available(
+    step: "Step",
+    signal: IdentitySignalPolicy,
+) -> bool:
+    """Whether the shipped runtime can compare this exact retained signal."""
+
+    anchor = step.anchor
+    if anchor is None:
+        return False
+    if signal.source is IdentityEvidenceSource.IDENTIFIER_REGION:
+        return bool(
+            anchor.identifier_crop
+            and anchor.identifier_region
+            and signal.region == anchor.identifier_region
+        )
+    if signal.source is IdentityEvidenceSource.STRUCTURED:
+        if anchor.structured_identity:
+            return True
+        template = anchor.identity_template
+        return bool(
+            template
+            and signal_hash_key(signal.source, signal.match, signal.normalizers)
+            in template.signal_hashes
+        )
+    if signal.source is IdentityEvidenceSource.CAPTURED_CONTEXT:
+        if anchor.context_text:
+            return True
+        template = anchor.identity_template
+        return bool(
+            template
+            and signal_hash_key(signal.source, signal.match, signal.normalizers)
+            in template.signal_hashes
+        )
+    return False
+
+
 def _invalidate_certification(workflow: "Workflow") -> None:
     if workflow.qualification is not None:
         workflow.qualification.last_certification = None
@@ -731,6 +797,12 @@ def set_identity_policy(
                 "canonical identity ladder is not armed with retained evidence"
             )
     else:
+        independence_errors = identity_policy_independence_errors(policy)
+        if independence_errors:
+            raise QualificationError(
+                "identity quorum signals are not independent: "
+                + "; ".join(independence_errors)
+            )
         unavailable = sorted(
             {signal.source for signal in policy.signals} - available,
             key=lambda source: source.value,
@@ -739,6 +811,20 @@ def set_identity_policy(
             raise QualificationError(
                 "identity policy references unavailable evidence: "
                 + ", ".join(source.value for source in unavailable)
+            )
+        runtime_unavailable = [
+            signal
+            for signal in policy.signals
+            if not identity_signal_runtime_available(step, signal)
+        ]
+        if runtime_unavailable:
+            raise QualificationError(
+                "identity policy references retained evidence without the "
+                "requested executable comparison: "
+                + ", ".join(
+                    f"{signal.field} ({signal.source.value})"
+                    for signal in runtime_unavailable
+                )
             )
     if project.identity_policies.get(policy.step_id) == policy:
         return project
@@ -1251,19 +1337,7 @@ def evaluate_qualification(
                     message="consequential action has no identity match policy",
                 )
             )
-        elif identity_policy.enforcement is not IdentityEnforcement.CANONICAL_LADDER:
-            refusals.append(
-                QualificationRefusal(
-                    code=QualificationRefusalCode.IDENTITY_POLICY_UNENFORCED,
-                    path=f"qualification.identity_policies.{step.id}",
-                    step_id=step.id,
-                    message=(
-                        "signal/quorum identity intent is not part of the current "
-                        "executable Flow identity contract"
-                    ),
-                )
-            )
-        else:
+        elif identity_policy.enforcement is IdentityEnforcement.CANONICAL_LADDER:
             available = available_identity_sources(step)
             if not available:
                 refusals.append(
@@ -1275,6 +1349,52 @@ def evaluate_qualification(
                     )
                 )
             elif is_identity_armed(step):
+                identity_covered += 1
+        else:
+            independence_errors = identity_policy_independence_errors(identity_policy)
+            if independence_errors:
+                refusals.append(
+                    QualificationRefusal(
+                        code=(
+                            QualificationRefusalCode.IDENTITY_SIGNALS_NOT_INDEPENDENT
+                        ),
+                        path=f"qualification.identity_policies.{step.id}.signals",
+                        step_id=step.id,
+                        message=(
+                            "identity quorum signals reuse correlated retained evidence"
+                        ),
+                        details={"error_count": len(independence_errors)},
+                    )
+                )
+            unavailable_signals = [
+                signal
+                for signal in identity_policy.signals
+                if not identity_signal_runtime_available(step, signal)
+            ]
+            for signal in unavailable_signals:
+                refusals.append(
+                    QualificationRefusal(
+                        code=QualificationRefusalCode.IDENTITY_SIGNAL_UNAVAILABLE,
+                        path=(
+                            f"qualification.identity_policies.{step.id}."
+                            f"signals.{signal.field}"
+                        ),
+                        step_id=step.id,
+                        message=(
+                            "qualified identity signal has no executable retained "
+                            "comparison"
+                        ),
+                        details={
+                            "signal": signal.field,
+                            "source": signal.source.value,
+                        },
+                    )
+                )
+            if (
+                is_identity_armed(step)
+                and not independence_errors
+                and not unavailable_signals
+            ):
                 identity_covered += 1
 
     effect_required_steps = state_changing_steps + consequential_steps

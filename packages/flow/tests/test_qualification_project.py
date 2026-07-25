@@ -355,7 +355,7 @@ def test_effect_policy_is_bound_to_exact_contract_hash() -> None:
     }
 
 
-def test_signal_quorum_intent_cannot_certify_until_runtime_enforces_it() -> None:
+def test_signal_quorum_is_executable_qualification_identity_coverage() -> None:
     workflow = _workflow()
     init_project(workflow, environment=_environment())
     set_action_classification(
@@ -383,9 +383,10 @@ def test_signal_quorum_intent_cannot_certify_until_runtime_enforces_it() -> None
         ),
     )
     report = evaluate_qualification(workflow)
-    assert QualificationRefusalCode.IDENTITY_POLICY_UNENFORCED in {
+    assert QualificationRefusalCode.IDENTITY_POLICY_UNENFORCED not in {
         refusal.code for refusal in report.refusals
     }
+    assert report.identity_covered_action_count == 1
 
 
 def test_state_changing_is_not_mislabeled_or_identity_gated() -> None:

@@ -49,6 +49,12 @@ import re
 from collections import Counter
 from typing import Optional
 
+from openadapt_flow.identity_signals import (
+    normalize_signal_text,
+    parameterize_identity_text,
+    signal_hash_key,
+    supported_normalizer_sets,
+)
 from openadapt_flow.ir import (
     ConcatTemplate,
     IdentityCheck,
@@ -85,6 +91,12 @@ def _hash(salt: bytes, text: str) -> str:
     ]
 
 
+def _signal_hash(salt: bytes, text: str) -> str:
+    """Full-width HMAC for a signal that can authorize an action."""
+
+    return hmac.new(salt, text.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def new_salt_hex() -> str:
     """Fresh per-bundle salt (hex). Empty when an external env salt is set, so
     the bundle stores no salt and the hashes are one-way without the secret."""
@@ -117,6 +129,7 @@ def _parameterize_structured(
     values: dict[str, str],
     *,
     names: Optional[list[str]] = None,
+    case_sensitive: bool = False,
 ) -> tuple[str, list[str]]:
     """Replace exact structured parameter values with non-PHI sentinels.
 
@@ -125,24 +138,41 @@ def _parameterize_structured(
     shorter parameter claiming a substring of another.  The resulting string
     is only an intermediate input to the salted hash; it is never persisted.
     """
-    result = text
-    candidates = names if names is not None else list(values)
-    candidates = sorted(
-        candidates,
-        key=lambda name: len(str(values.get(name, ""))),
-        reverse=True,
+    return parameterize_identity_text(
+        text,
+        values,
+        names=names,
+        minimum_chars=_id.MIN_PARAM_CHARS,
+        case_sensitive=case_sensitive,
     )
-    used: list[str] = []
-    for name in candidates:
-        value = str(values.get(name, ""))
-        if len(_id.squash(value)) < _id.MIN_PARAM_CHARS:
-            continue
-        pattern = re.compile(re.escape(value), re.IGNORECASE)
-        if not pattern.search(result):
-            continue
-        result = pattern.sub(f"__OPENADAPT_PARAM_{name}__", result)
-        used.append(name)
-    return result, used
+
+
+def _add_signal_hashes(
+    tmpl: IdentityTemplate,
+    *,
+    source: str,
+    text: str,
+    param_examples: dict[str, str],
+    names: Optional[list[str]] = None,
+) -> list[str]:
+    """Persist strict full-source hashes for every explicit comparison mode."""
+
+    parameterized, used = _parameterize_structured(
+        text,
+        param_examples,
+        names=names,
+    )
+    salt = _salt_bytes(tmpl.salt)
+    tmpl.signal_hashes[signal_hash_key(source, "exact")] = _signal_hash(
+        salt, parameterized
+    )
+    for normalizers in supported_normalizer_sets():
+        key = signal_hash_key(source, "normalized", normalizers)
+        tmpl.signal_hashes[key] = _signal_hash(
+            salt,
+            normalize_signal_text(parameterized, normalizers),
+        )
+    return used
 
 
 def build_identity_template(
@@ -179,11 +209,26 @@ def build_identity_template(
         )
         tmpl.structured = _hash(salt, _id.normalize_structured(structured_form))
         tmpl.structured_params = structured_params
+        _add_signal_hashes(
+            tmpl,
+            source="structured",
+            text=structured_identity,
+            param_examples=param_examples,
+            names=structured_params,
+        )
 
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any
     # sibling row sharing the generic columns would otherwise verify).
     if context_text and len(_id.squash(context_text)) >= _id.MIN_CONTEXT_CHARS:
+        context_names = _id.embedded_params(context_text, param_examples)
+        tmpl.context_params = _add_signal_hashes(
+            tmpl,
+            source="captured_context",
+            text=context_text,
+            param_examples=param_examples,
+            names=context_names,
+        )
         squashed_tokens = _id.tokenize(context_text)
         tmpl.band_len = len(_id.squash(context_text))
         tmpl.tokens = [_token_template(salt, t) for t in squashed_tokens]
@@ -688,4 +733,48 @@ def verify_structured_template(
         expected="<structured identity template>",
         observed=live,
         param=tmpl.structured_params[0] if tmpl.structured_params else None,
+    )
+
+
+def verify_signal_template(
+    tmpl: Optional[IdentityTemplate],
+    *,
+    source: str,
+    match: str,
+    normalizers: list[object],
+    live: Optional[str],
+    params: Optional[dict[str, str]] = None,
+    param_examples: Optional[dict[str, str]] = None,
+) -> Optional[bool]:
+    """Verify one strict full-source signal hash without exposing its value.
+
+    ``None`` means the bundle predates the requested signal hash or the live
+    source was not observed. ``False`` is a definitive comparison conflict.
+    """
+
+    if tmpl is None or live is None:
+        return None
+    key = signal_hash_key(source, match, normalizers)
+    expected = tmpl.signal_hashes.get(key)
+    if expected is None:
+        return None
+    names = tmpl.structured_params if source == "structured" else tmpl.context_params
+    live_form = live
+    if names:
+        values = {**(param_examples or {}), **(params or {})}
+        live_form, used = _parameterize_structured(
+            live,
+            values,
+            names=names,
+            case_sensitive=not (
+                match == "normalized"
+                and "casefold" in {getattr(item, "value", item) for item in normalizers}
+            ),
+        )
+        if set(used) != set(names):
+            return False
+    if match == "normalized":
+        live_form = normalize_signal_text(live_form, normalizers)
+    return hmac.compare_digest(
+        expected, _signal_hash(_salt_bytes(tmpl.salt), live_form)
     )

@@ -57,6 +57,13 @@ openadapt-flow qualify set-identity bundle \
   --step save \
   --canonical-ladder
 
+# Or require two independent retained sources with explicit comparisons:
+openadapt-flow qualify set-identity bundle \
+  --step save \
+  --signal patient_record=structured:exact \
+  --signal patient_banner=captured_context:normalized:unicode_nfkc,collapse_whitespace \
+  --quorum 2
+
 openadapt-flow qualify set-effect bundle \
   --step save \
   --effect-index 0 \
@@ -95,11 +102,22 @@ customer-controlled executor. Unsigned, stale, missing, symlinked, or
 hash-mismatched evidence is refused. Raw parameters, screenshots, credentials,
 and system-of-record records do not belong in the qualification project.
 
-The current runtime-enforced identity choice is `--canonical-ladder`.
-Signal/quorum policies remain representable for qualification UI work, but
-certification refuses them until the runtime consumes those exact semantics.
-This prevents reviewed field/quorum intent from being mistaken for executable
-behavior.
+Both `--canonical-ladder` and named signal quorums are runtime-enforced.
+Quorum signals must use independent retained sources; giving one source two
+field labels cannot create two votes. A definitive conflict halts even after
+the numeric quorum has been reached, while an unavailable signal can abstain
+only when the remaining independent signals still satisfy the quorum.
+Comparisons are either byte-exact or use only the explicitly listed
+normalizers. Reports retain signal name, source, evidence class, and verdict,
+not the observed identity value. Signal names are PHI-free logical keys
+beginning with an ASCII letter; patient or account values are rejected as
+labels.
+
+PHI-free bundles compiled with this runtime carry salted full-source hashes for
+the exact and supported explicit-normalization contracts. A bundle compiled
+before those hashes existed must be recompiled before its hashed evidence can
+be assigned to a signal quorum; qualification refuses an unavailable
+comparison rather than silently falling back to different semantics.
 
 ## Python API
 

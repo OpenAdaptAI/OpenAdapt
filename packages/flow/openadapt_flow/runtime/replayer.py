@@ -41,7 +41,7 @@ import time
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Literal, Optional, cast
 
 from openadapt_flow.backend import (
     Backend,
@@ -49,6 +49,10 @@ from openadapt_flow.backend import (
     StructuralResolutionRefused,
 )
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
+from openadapt_flow.identity_signals import (
+    normalize_signal_text,
+    parameterize_identity_text,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -56,6 +60,7 @@ from openadapt_flow.ir import (
     ExecutionTargetKind,
     HaltObservation,
     IdentityCheck,
+    IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
     LoopSpec,
@@ -3274,7 +3279,27 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
-        if check.status == "mismatch":
+        signal_quorum = check.mode == "signal_quorum"
+        if signal_quorum and check.status == "mismatch":
+            conflicts = [
+                f"{item.name}/{item.source}"
+                for item in check.signal_evidence
+                if item.verdict == "conflict"
+            ]
+            error = (
+                f"Identity signal quorum conflicted for step '{step.id}' "
+                f"({step.intent}): "
+                + ", ".join(conflicts)
+                + " — refusing to act; run aborted"
+            )
+        elif signal_quorum and check.status != "verified":
+            error = (
+                f"Identity signal quorum was not reached for step '{step.id}' "
+                f"({step.intent}): {check.quorum_verified or 0}/"
+                f"{check.quorum_required or 0} independent signals verified "
+                "on the fresh frame — refusing to act; run aborted"
+            )
+        elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
                 f"({step.intent}): a target was found positionally "
@@ -3311,7 +3336,7 @@ class Replayer:
             )
         else:
             error = None
-        if error is not None and governed:
+        if error is not None and (governed or signal_quorum):
             result.safety_halt = True
         return error
 
@@ -4327,6 +4352,362 @@ class Replayer:
 
     # -- identity verification (pre-click) --------------------------------------
 
+    @staticmethod
+    def _qualified_signal_evidence(
+        signal: Any,
+        verdict: Literal["verified", "conflict", "unverifiable"],
+    ) -> IdentitySignalEvidence:
+        source = signal.source.value
+        evidence_class = cast(
+            Literal[
+                "application_structured_text",
+                "recorded_and_live_region",
+                "captured_context_ocr",
+            ],
+            {
+                "structured": "application_structured_text",
+                "identifier_region": "recorded_and_live_region",
+                "captured_context": "captured_context_ocr",
+            }[source],
+        )
+        return IdentitySignalEvidence(
+            name=signal.field,
+            source=source,
+            verdict=verdict,
+            evidence_class=evidence_class,
+            match=signal.match.value,
+        )
+
+    @staticmethod
+    def _compare_qualified_signal_text(
+        *,
+        signal: Any,
+        anchor: Anchor,
+        live: Optional[str],
+        params: dict[str, str],
+        workflow: Workflow,
+    ) -> Literal["verified", "conflict", "unverifiable"]:
+        """Compare one live source without returning or logging identity values."""
+
+        if live is None or not live.strip():
+            return "unverifiable"
+        source = signal.source.value
+        recorded = (
+            anchor.structured_identity
+            if source == "structured"
+            else anchor.context_text
+        )
+        if recorded is not None:
+            expected_form, parameter_names = parameterize_identity_text(
+                recorded,
+                workflow.params,
+                minimum_chars=identity_mod.MIN_PARAM_CHARS,
+                case_sensitive=True,
+            )
+            live_values = {**workflow.params, **params}
+            live_form, used = parameterize_identity_text(
+                live,
+                live_values,
+                names=parameter_names,
+                minimum_chars=identity_mod.MIN_PARAM_CHARS,
+                case_sensitive=not (
+                    signal.match.value == "normalized"
+                    and "casefold"
+                    in {getattr(item, "value", item) for item in signal.normalizers}
+                ),
+            )
+            if set(used) != set(parameter_names):
+                return "conflict"
+            if signal.match.value == "normalized":
+                expected_form = normalize_signal_text(expected_form, signal.normalizers)
+                live_form = normalize_signal_text(live_form, signal.normalizers)
+            if expected_form != live_form:
+                return "conflict"
+            if source == "captured_context" and (
+                identity_mod.identity_rests_on_confusable_identifier(recorded)
+                or identity_mod.identity_rests_on_confusable_identifier(live)
+            ):
+                return "unverifiable"
+            return "verified"
+
+        from openadapt_flow.runtime import identity_template as itmpl
+
+        result = itmpl.verify_signal_template(
+            anchor.identity_template,
+            source=source,
+            match=signal.match.value,
+            normalizers=signal.normalizers,
+            live=live,
+            params=params,
+            param_examples=workflow.params,
+        )
+        if result is None:
+            return "unverifiable"
+        if (
+            result
+            and source == "captured_context"
+            and anchor.identity_template is not None
+            and anchor.identity_template.rests_on_confusable_identifier
+        ):
+            return "unverifiable"
+        return "verified" if result else "conflict"
+
+    def _captured_context_observations(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+    ) -> list[str]:
+        """Read the qualified context source at native and, if needed, 2x scale."""
+
+        assert step.anchor is not None
+        anchor = step.anchor
+        band = identity_mod.band_region(
+            resolution.point, anchor.region[3], self.backend.viewport
+        )
+        exclude = (
+            resolution.point[0] + (anchor.region[0] - anchor.click_point[0]),
+            resolution.point[1] + (anchor.region[1] - anchor.click_point[1]),
+            anchor.region[2],
+            anchor.region[3],
+        )
+        today = date.today()
+
+        def observe(
+            png: bytes,
+            region: Optional[Region],
+            point_y: int,
+            exclude_region: Region,
+        ) -> str:
+            lines = [
+                line
+                for line in self.vision.ocr(png, region=region)
+                if line.text.strip()
+                and not identity_mod.regions_intersect(line.region, exclude_region)
+                and not identity_mod.is_volatile_line(line.text, reference_date=today)
+            ]
+            lines = identity_mod.lines_near_point(lines, point_y)
+            return " ".join(line.text.strip() for line in lines)
+
+        observations = [observe(before_png, band, resolution.point[1], exclude)]
+        upscaled = identity_mod.upscale_crop(before_png, band)
+        if upscaled is not None:
+            factor = 2
+            local_exclude = (
+                (exclude[0] - band[0]) * factor,
+                (exclude[1] - band[1]) * factor,
+                exclude[2] * factor,
+                exclude[3] * factor,
+            )
+            observations.append(
+                observe(
+                    upscaled,
+                    None,
+                    (resolution.point[1] - band[1]) * factor,
+                    local_exclude,
+                )
+            )
+        return observations
+
+    def _verify_signal_quorum(
+        self,
+        *,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        params: dict[str, str],
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+        policy: Any,
+    ) -> IdentityCheck:
+        """Enforce one qualified signal quorum on the fresh pre-action frame."""
+
+        from openadapt_flow.qualification import (
+            identity_policy_independence_errors,
+            identity_signal_runtime_available,
+        )
+
+        anchor = step.anchor
+        assert anchor is not None
+        evidence: list[IdentitySignalEvidence] = []
+        if identity_policy_independence_errors(policy):
+            evidence = [
+                self._qualified_signal_evidence(signal, "unverifiable")
+                for signal in policy.signals
+            ]
+            return IdentityCheck(
+                status="unreadable",
+                mode="signal_quorum",
+                signal_evidence=evidence,
+                quorum_required=policy.quorum,
+                quorum_verified=0,
+            )
+
+        for signal in policy.signals:
+            if not identity_signal_runtime_available(step, signal):
+                evidence.append(self._qualified_signal_evidence(signal, "unverifiable"))
+                continue
+            source = signal.source.value
+            if source == "structured":
+                getter = getattr(self.backend, "structured_text_at", None)
+                live = None
+                if getter is not None:
+                    try:
+                        live = getter(
+                            int(resolution.point[0]), int(resolution.point[1])
+                        )
+                    except Exception:
+                        live = None
+                verdict = self._compare_qualified_signal_text(
+                    signal=signal,
+                    anchor=anchor,
+                    live=live,
+                    params=params,
+                    workflow=workflow,
+                )
+            elif source == "captured_context":
+                attempts = self._captured_context_observations(
+                    step, resolution, before_png
+                )
+                verdicts = [
+                    self._compare_qualified_signal_text(
+                        signal=signal,
+                        anchor=anchor,
+                        live=observed,
+                        params=params,
+                        workflow=workflow,
+                    )
+                    for observed in attempts
+                    if observed.strip()
+                ]
+                if not verdicts:
+                    verdict = "unverifiable"
+                elif "verified" in verdicts and "conflict" in verdicts:
+                    verdict = "unverifiable"
+                elif "verified" in verdicts:
+                    verdict = "verified"
+                elif all(item == "conflict" for item in verdicts):
+                    verdict = "conflict"
+                else:
+                    verdict = "unverifiable"
+            else:
+                recorded_png, live_png = self._identifier_crops(
+                    anchor,
+                    resolution,
+                    before_png,
+                    bundle_dir,
+                    workflow=workflow,
+                )
+                recorded_text = self._ocr_identity_crop(recorded_png)
+                live_text = self._ocr_identity_crop(live_png)
+                text_verdict, parameterized = self._compare_direct_signal_text(
+                    signal,
+                    recorded_text,
+                    live_text,
+                    params=params,
+                    workflow=workflow,
+                )
+                pixel = identity_mod.verify_pixel_identity(
+                    recorded_png,
+                    live_png,
+                    enable_verify=True,
+                )
+                if text_verdict == "conflict":
+                    verdict = "conflict"
+                elif text_verdict == "unverifiable":
+                    verdict = "unverifiable"
+                elif parameterized:
+                    # A run-bound record value is expected to render different
+                    # pixels than the demonstration. Exact/explicitly normalized
+                    # OCR may verify it only when the expected value does not
+                    # occupy the known glyph-confusable identifier class.
+                    live_values = {**workflow.params, **params}
+                    vulnerable = any(
+                        identity_mod.identity_rests_on_confusable_identifier(
+                            live_values.get(name)
+                        )
+                        for name in parameterized
+                    )
+                    verdict = "unverifiable" if vulnerable else "verified"
+                elif pixel is not None and pixel.status == "mismatch":
+                    verdict = "conflict"
+                elif pixel is None or pixel.status != "verified":
+                    verdict = "unverifiable"
+                else:
+                    verdict = "verified"
+            evidence.append(self._qualified_signal_evidence(signal, verdict))
+
+        conflicts = [item for item in evidence if item.verdict == "conflict"]
+        verified = sum(item.verdict == "verified" for item in evidence)
+        status: Literal["verified", "mismatch", "unreadable"] = (
+            "mismatch"
+            if conflicts
+            else "verified"
+            if verified >= policy.quorum
+            else "unreadable"
+        )
+        return IdentityCheck(
+            status=status,
+            mode="signal_quorum",
+            coverage=(verified / len(evidence)) if evidence else 0.0,
+            signal_evidence=evidence,
+            quorum_required=policy.quorum,
+            quorum_verified=verified,
+        )
+
+    def _ocr_identity_crop(self, png: Optional[bytes]) -> Optional[str]:
+        if not png:
+            return None
+        try:
+            lines = [line for line in self.vision.ocr(png) if line.text.strip()]
+        except Exception:
+            return None
+        if not lines:
+            return None
+        lines.sort(key=lambda line: (line.region[1], line.region[0]))
+        return " ".join(line.text.strip() for line in lines)
+
+    @staticmethod
+    def _compare_direct_signal_text(
+        signal: Any,
+        recorded: Optional[str],
+        live: Optional[str],
+        *,
+        params: dict[str, str],
+        workflow: Workflow,
+    ) -> tuple[
+        Literal["verified", "conflict", "unverifiable"],
+        list[str],
+    ]:
+        if not recorded or not live:
+            return "unverifiable", []
+        recorded, parameter_names = parameterize_identity_text(
+            recorded,
+            workflow.params,
+            minimum_chars=identity_mod.MIN_PARAM_CHARS,
+            case_sensitive=True,
+        )
+        live, used = parameterize_identity_text(
+            live,
+            {**workflow.params, **params},
+            names=parameter_names,
+            minimum_chars=identity_mod.MIN_PARAM_CHARS,
+            case_sensitive=not (
+                signal.match.value == "normalized"
+                and "casefold"
+                in {getattr(item, "value", item) for item in signal.normalizers}
+            ),
+        )
+        if set(used) != set(parameter_names):
+            return "conflict", parameter_names
+        if signal.match.value == "normalized":
+            recorded = normalize_signal_text(recorded, signal.normalizers)
+            live = normalize_signal_text(live, signal.normalizers)
+        return (
+            "verified" if recorded == live else "conflict",
+            parameter_names,
+        )
+
     def _verify_identity(
         self,
         step: Step,
@@ -4375,6 +4756,22 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
+        project = getattr(workflow, "qualification", None)
+        if project is not None:
+            identity_policy = project.identity_policies.get(step.id)
+            if (
+                identity_policy is not None
+                and identity_policy.enforcement.value == "signal_quorum"
+            ):
+                return self._verify_signal_quorum(
+                    step=step,
+                    resolution=resolution,
+                    before_png=before_png,
+                    params=params,
+                    workflow=workflow,
+                    bundle_dir=bundle_dir,
+                    policy=identity_policy,
+                )
 
         def structured_tier() -> Optional[IdentityCheck]:
             # PHI-free bundles carry a salted-hash identity_template instead of

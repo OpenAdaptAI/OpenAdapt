@@ -159,6 +159,7 @@ jobs:
             --check-untyped-defs --no-implicit-optional --strict-equality \
             --warn-redundant-casts --warn-unused-ignores \
             --disallow-untyped-decorators --extra-checks \
+            openadapt_flow/identity_signals.py \
             openadapt_flow/policy.py \
             openadapt_flow/qualification.py \
             openadapt_flow/runtime/identity.py \
@@ -361,7 +362,7 @@ jobs:
       - name: Coverage floor (safety path, required)
         run: |
           coverage report --fail-under=85 \
-            --include='openadapt_flow/compiler/*,openadapt_flow/runtime/identity*,openadapt_flow/runtime/replayer.py,openadapt_flow/runtime/resolver.py,openadapt_flow/policy.py,openadapt_flow/runtime/effects/*'
+            --include='openadapt_flow/compiler/*,openadapt_flow/identity_signals.py,openadapt_flow/runtime/identity*,openadapt_flow/runtime/replayer.py,openadapt_flow/runtime/resolver.py,openadapt_flow/policy.py,openadapt_flow/runtime/effects/*'
 
       - name: Upload run artifacts
         if: always()

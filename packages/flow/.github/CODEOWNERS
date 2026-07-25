@@ -21,6 +21,7 @@
 
 # Pre-action identity gate (template + VLM tiers) -- the never-false-accept
 # check that decides whether a click is allowed to fire.
+/openadapt_flow/identity_signals.py             @abrichr
 /openadapt_flow/runtime/identity.py            @abrichr
 /openadapt_flow/runtime/identity_template.py   @abrichr
 /openadapt_flow/runtime/identity_vlm.py        @abrichr
